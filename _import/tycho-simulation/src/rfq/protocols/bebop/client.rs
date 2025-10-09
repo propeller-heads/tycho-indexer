@@ -322,14 +322,24 @@ impl RFQClient for BebopClient {
                                             ];
 
                                             let mut quote_price_data: Option<BebopPriceData> = None;
+                                            let mut is_quote_price_inverted = false;
                                             // The quote token is not one of the approved quote tokens
                                             // Get the price, so we can normalize our TVL calculation
                                             if !client.quote_tokens.contains(&quote_bytes) {
                                                 for approved_quote_token in &client.quote_tokens {
                                                     // Look for the quote pair in the same protobuf update
+                                                    // First try to find QUOTE/APPROVED
                                                     if let Some(quote_data) = protobuf_update.pairs.iter()
                                                         .find(|p| p.base == quote_bytes.as_ref() && p.quote == approved_quote_token.as_ref()) {
                                                         quote_price_data = Some(quote_data.clone());
+                                                        is_quote_price_inverted = false;
+                                                        break;
+                                                    }
+                                                    // If not found, try to find APPROVED/QUOTE (inverted)
+                                                    else if let Some(quote_data) = protobuf_update.pairs.iter()
+                                                        .find(|p| p.quote == quote_bytes.as_ref() && p.base == approved_quote_token.as_ref()) {
+                                                        quote_price_data = Some(quote_data.clone());
+                                                        is_quote_price_inverted = true;
                                                         break;
                                                     }
                                                 }
@@ -337,12 +347,12 @@ impl RFQClient for BebopClient {
                                                 // Quote token doesn't have price levels in approved quote tokens.
                                                 // Skip.
                                                 if quote_price_data.is_none() {
-                                                    warn!("Quote token does not have price levels in approved quote token. Skipping.");
+                                                    warn!("Quote token {} does not have price levels in approved quote token. Skipping.", hex::encode(&quote_bytes));
                                                     continue;
                                                 }
                                             }
 
-                                            let tvl = price_data.calculate_tvl(quote_price_data);
+                                            let tvl = price_data.calculate_tvl(quote_price_data, is_quote_price_inverted);
                                             if tvl < tvl_threshold {
                                                 continue;
                                             }
@@ -491,7 +501,7 @@ mod tests {
     use crate::rfq::constants::get_bebop_auth;
 
     #[tokio::test]
-    #[ignore] // Requires network access and setting proper env vars
+    // #[ignore] // Requires network access and setting proper env vars
     async fn test_bebop_websocket_connection() {
         // We test with quote tokens that are not USDC in order to ensure our normalization works
         // fine
