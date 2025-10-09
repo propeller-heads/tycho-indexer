@@ -754,7 +754,8 @@ impl EVMBalanceSlotDetector {
 
         for (id, (slots, metadata)) in slots_to_test.iter().enumerate() {
             let ((storage_addr, slot), _value) = slots
-                .last()
+                .iter()
+                .min_by_key(|(_, value)| value.abs_diff(metadata.original_balance))
                 .ok_or(BalanceSlotError::TokenNotInTrace)?;
 
             let calldata = encode_balance_of_calldata(owner);
@@ -821,7 +822,8 @@ impl EVMBalanceSlotDetector {
                     }
 
                     let ((storage_addr, slot), _value) = all_slots
-                        .last()
+                        .iter()
+                        .min_by_key(|(_, value)| value.abs_diff(metadata.original_balance))
                         .cloned()
                         .expect("all_slots should not be empty");
 
@@ -842,7 +844,7 @@ impl EVMBalanceSlotDetector {
                                 );
                                 results.insert(metadata.token, Ok((storage_addr, slot)));
                             } else {
-                                all_slots.pop();
+                                all_slots.retain(|s| s.0 != (storage_addr.clone(), slot.clone()));
                                 if !all_slots.is_empty() {
                                     warn!("Storage slot test failed - trying next slot");
                                     retry_data.push((all_slots, metadata.clone()));
