@@ -10,8 +10,6 @@ library UniswapV4Utils {
         bool zeroForOne,
         RestrictTransferFrom.TransferType transferType,
         address receiver,
-        address hook,
-        bytes memory hookData,
         UniswapV4Executor.UniswapV4Pool[] memory pools
     ) public pure returns (bytes memory) {
         require(pools.length > 0, "Must have at least one pool");
@@ -19,7 +17,10 @@ library UniswapV4Utils {
         bytes memory firstPool = abi.encodePacked(
             pools[0].intermediaryToken,
             bytes3(pools[0].fee),
-            pools[0].tickSpacing
+            pools[0].tickSpacing,
+            pools[0].hook,
+            bytes2(uint16(pools[0].hookData.length)),
+            pools[0].hookData
         );
 
         bytes[] memory encodedExtraPools = new bytes[](pools.length - 1);
@@ -27,7 +28,10 @@ library UniswapV4Utils {
             encodedExtraPools[i - 1] = abi.encodePacked(
                 pools[i].intermediaryToken,
                 bytes3(pools[i].fee),
-                pools[i].tickSpacing
+                pools[i].tickSpacing,
+                pools[i].hook,
+                bytes2(uint16(pools[i].hookData.length)),
+                pools[i].hookData
             );
         }
 
@@ -37,10 +41,8 @@ library UniswapV4Utils {
             zeroForOne,
             transferType,
             receiver,
-            hook,
             firstPool,
-            pleEncode(encodedExtraPools),
-            hookData
+            pleEncode(encodedExtraPools)
         );
     }
 

@@ -1247,22 +1247,28 @@ mod tests {
                     "01",
                     // receiver
                     "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
-                    // hook address (not set, so zero)
-                    "0000000000000000000000000000000000000000",
                     // first pool intermediary token (ETH)
                     "0000000000000000000000000000000000000000",
                     // fee
                     "000bb8",
                     // tick spacing
                     "00003c",
+                    // hook address (not set, so zero)
+                    "0000000000000000000000000000000000000000",
+                    // hook data length (0)
+                    "0000",
                     // ple encoding
-                    "001a",
+                    "0030",
                     // second pool intermediary token (PEPE)
                     "6982508145454ce325ddbe47a25d4ec3d2311933",
                     // fee
                     "0061a8",
                     // tick spacing
-                    "0001f4"
+                    "0001f4",
+                    // hook address (not set, so zero)
+                    "0000000000000000000000000000000000000000",
+                    // hook data length (0)
+                    "0000",
                 ))
             );
         }

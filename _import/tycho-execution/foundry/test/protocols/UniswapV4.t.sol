@@ -24,8 +24,6 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
             bool zeroForOne,
             RestrictTransferFrom.TransferType transferType,
             address receiver,
-            address hook,
-            bytes memory hookData,
             UniswapV4Pool[] memory pools
         )
     {
@@ -61,12 +59,16 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         pools[0] = UniswapV4Executor.UniswapV4Pool({
             intermediaryToken: USDT_ADDR,
             fee: pool1Fee,
-            tickSpacing: tickSpacing1
+            tickSpacing: tickSpacing1,
+            hook: address(0),
+            hookData: bytes("")
         });
         pools[1] = UniswapV4Executor.UniswapV4Pool({
             intermediaryToken: USDE_ADDR,
             fee: pool2Fee,
-            tickSpacing: tickSpacing2
+            tickSpacing: tickSpacing2,
+            hook: address(0),
+            hookData: bytes("0x12345")
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
@@ -75,8 +77,6 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             zeroForOne,
             RestrictTransferFrom.TransferType.Transfer,
             ALICE,
-            address(0),
-            bytes(""),
             pools
         );
 
@@ -86,8 +86,6 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             bool zeroForOneDecoded,
             RestrictTransferFrom.TransferType transferType,
             address receiver,
-            address hook,
-            bytes memory hookData,
             UniswapV4Executor.UniswapV4Pool[] memory decodedPools
         ) = uniswapV4Exposed.decodeData(data);
 
@@ -99,7 +97,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             uint8(RestrictTransferFrom.TransferType.Transfer)
         );
         assertEq(receiver, ALICE);
-        assertEq(hook, address(0));
+        assertEq(decodedPools[0].hook, address(0));
         assertEq(decodedPools.length, 2);
         assertEq(decodedPools[0].intermediaryToken, USDT_ADDR);
         assertEq(decodedPools[0].fee, pool1Fee);
@@ -107,6 +105,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         assertEq(decodedPools[1].intermediaryToken, USDE_ADDR);
         assertEq(decodedPools[1].fee, pool2Fee);
         assertEq(decodedPools[1].tickSpacing, tickSpacing2);
+        assertEq(decodedPools[1].hookData, bytes("0x12345"));
     }
 
     function testSingleSwap() public {
@@ -121,7 +120,9 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         pools[0] = UniswapV4Executor.UniswapV4Pool({
             intermediaryToken: USDT_ADDR,
             fee: uint24(100),
-            tickSpacing: int24(1)
+            tickSpacing: int24(1),
+            hook: address(0),
+            hookData: bytes("")
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
@@ -130,8 +131,6 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             true,
             RestrictTransferFrom.TransferType.Transfer,
             ALICE,
-            address(0),
-            bytes(""),
             pools
         );
 
@@ -175,12 +174,16 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         pools[0] = UniswapV4Executor.UniswapV4Pool({
             intermediaryToken: USDT_ADDR,
             fee: uint24(100),
-            tickSpacing: int24(1)
+            tickSpacing: int24(1),
+            hook: address(0),
+            hookData: bytes("")
         });
         pools[1] = UniswapV4Executor.UniswapV4Pool({
             intermediaryToken: WBTC_ADDR,
             fee: uint24(3000),
-            tickSpacing: int24(60)
+            tickSpacing: int24(60),
+            hook: address(0),
+            hookData: bytes("")
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
@@ -189,8 +192,6 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             true,
             RestrictTransferFrom.TransferType.Transfer,
             ALICE,
-            address(0),
-            bytes(""),
             pools
         );
 
@@ -237,7 +238,9 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         pools[0] = UniswapV4Executor.UniswapV4Pool({
             intermediaryToken: WETH_ADDR,
             fee: uint24(500),
-            tickSpacing: int24(1)
+            tickSpacing: int24(1),
+            hook: hook,
+            hookData: bytes("")
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
@@ -246,8 +249,6 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             true,
             RestrictTransferFrom.TransferType.Transfer,
             ALICE,
-            hook,
-            bytes(""),
             pools
         );
 
@@ -295,15 +296,15 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
         deal(RLUSD_ADDR, address(uniswapV4Exposed), amountIn);
         address eulerProxy = 0xe1Ce9AF672f8854845E5474400B6ddC7AE458a10;
         uint256 rlusdEulerBalanceBefore = RLUSD.balanceOf(eulerProxy);
-        uint256 rlusdBalanceBeforeSwapExecutor =
-            RLUSD.balanceOf(address(uniswapV4Exposed));
 
         UniswapV4Executor.UniswapV4Pool[] memory pools =
             new UniswapV4Executor.UniswapV4Pool[](1);
         pools[0] = UniswapV4Executor.UniswapV4Pool({
             intermediaryToken: USDT_ADDR,
             fee: uint24(50),
-            tickSpacing: int24(1)
+            tickSpacing: int24(1),
+            hook: address(0xF87ACF8428F2f9403AAA0256A7272d6549ECa8A8),
+            hookData: bytes("")
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
@@ -312,8 +313,6 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
             true,
             RestrictTransferFrom.TransferType.Transfer,
             ALICE,
-            address(0xF87ACF8428F2f9403AAA0256A7272d6549ECa8A8),
-            bytes(""),
             pools
         );
 
@@ -340,7 +339,9 @@ contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
         pools[0] = UniswapV4Executor.UniswapV4Pool({
             intermediaryToken: USDT_ADDR,
             fee: uint24(100),
-            tickSpacing: int24(1)
+            tickSpacing: int24(1),
+            hook: address(0),
+            hookData: bytes("")
         });
 
         bytes memory protocolData = UniswapV4Utils.encodeExactInput(
@@ -349,8 +350,6 @@ contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
             true,
             RestrictTransferFrom.TransferType.TransferFrom,
             ALICE,
-            address(0),
-            bytes(""),
             pools
         );
 
@@ -385,12 +384,16 @@ contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
         pools[0] = UniswapV4Executor.UniswapV4Pool({
             intermediaryToken: USDT_ADDR,
             fee: uint24(100),
-            tickSpacing: int24(1)
+            tickSpacing: int24(1),
+            hook: address(0),
+            hookData: bytes("")
         });
         pools[1] = UniswapV4Executor.UniswapV4Pool({
             intermediaryToken: WBTC_ADDR,
             fee: uint24(3000),
-            tickSpacing: int24(60)
+            tickSpacing: int24(60),
+            hook: address(0),
+            hookData: bytes("")
         });
 
         bytes memory protocolData = UniswapV4Utils.encodeExactInput(
@@ -399,8 +402,6 @@ contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
             true,
             RestrictTransferFrom.TransferType.TransferFrom,
             ALICE,
-            address(0),
-            bytes(""),
             pools
         );
 
