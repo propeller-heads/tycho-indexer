@@ -28,14 +28,14 @@ use tycho_common::simulation::protocol_sim::ProtocolSim;
 use tycho_simulation::{
     protocol::models::ProtocolComponent,
     rfq::protocols::hashflow::client::HashflowClient,
-    tycho_common::models::{token::Token, Chain},
+    tycho_common::models::Chain,
     utils::{get_default_url, load_all_tokens},
 };
 
 use crate::{
     stream_processor::{
         protocol_stream_processor::ProtocolStreamProcessor,
-        rfq_stream_processor::RfqStreamProcessor, StreamUpdate, UpdateType,
+        rfq_stream_processor::RFQStreamProcessor, StreamUpdate, UpdateType,
     },
     swap_simulation::{encode_swap, simulate_swap_transaction},
 };
@@ -152,7 +152,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
             .run_stream(&all_tokens, tx.clone())
             .await?;
     }
-    if let Ok(rfq_stream_processor) = RfqStreamProcessor::new(
+    if let Ok(rfq_stream_processor) = RFQStreamProcessor::new(
         chain,
         cli.tvl_threshold,
         cli.max_n_simulations,
@@ -272,7 +272,7 @@ async fn process_update_state(
     }
     // Get all the possible swap directions
     // For protocols supporting only one direction, use the first and last tokens
-    let protocols_supporting_one_direction_only = vec![HashflowClient::PROTOCOL_SYSTEM];
+    let protocols_supporting_one_direction_only = [HashflowClient::PROTOCOL_SYSTEM];
     let swap_directions =
         if protocols_supporting_one_direction_only.contains(&component.protocol_system.as_str()) {
             // Return the first and the last tokens

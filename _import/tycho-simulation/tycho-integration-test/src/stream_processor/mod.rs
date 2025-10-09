@@ -22,7 +22,7 @@ impl Display for UpdateType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             UpdateType::Protocol => write!(f, "Protocol"),
-            UpdateType::Rfq => write!(f, "Rfq"),
+            UpdateType::Rfq => write!(f, "RFQ"),
         }
     }
 }

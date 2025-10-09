@@ -24,30 +24,30 @@ use tycho_simulation::rfq::{
 use crate::stream_processor::{StreamUpdate, UpdateType};
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub enum RfqProtocol {
+pub enum RFQProtocol {
     Bebop,
     Hashflow,
 }
 
-impl Display for RfqProtocol {
+impl Display for RFQProtocol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RfqProtocol::Bebop => write!(f, "{}", BebopClient::PROTOCOL_SYSTEM),
-            RfqProtocol::Hashflow => write!(f, "{}", HashflowClient::PROTOCOL_SYSTEM),
+            RFQProtocol::Bebop => write!(f, "{}", BebopClient::PROTOCOL_SYSTEM),
+            RFQProtocol::Hashflow => write!(f, "{}", HashflowClient::PROTOCOL_SYSTEM),
         }
     }
 }
 
-pub struct RfqStreamProcessor {
+pub struct RFQStreamProcessor {
     chain: Chain,
     tvl_threshold: f64,
-    rfq_credentials: HashMap<RfqProtocol, (String, String)>,
+    rfq_credentials: HashMap<RFQProtocol, (String, String)>,
     sample_size: usize,
     /// The protocol's stream will skip messages for this duration after processing a message
     skip_messages_duration: Duration,
 }
 
-impl RfqStreamProcessor {
+impl RFQStreamProcessor {
     pub fn new(
         chain: Chain,
         tvl_threshold: f64,
@@ -58,7 +58,7 @@ impl RfqStreamProcessor {
         let (bebop_user, bebop_key) = (env::var("BEBOP_USER").ok(), env::var("BEBOP_KEY").ok());
         if let (Some(user), Some(key)) = (bebop_user, bebop_key) {
             info!("Bebop RFQ credentials found");
-            rfq_credentials.insert(RfqProtocol::Bebop, (user, key));
+            rfq_credentials.insert(RFQProtocol::Bebop, (user, key));
         } else {
             info!("Bebop RFQ credentials not found. Expected environment variables: BEBOP_USER, BEBOP_KEY");
         }
@@ -66,7 +66,7 @@ impl RfqStreamProcessor {
             (env::var("HASHFLOW_USER").ok(), env::var("HASHFLOW_KEY").ok());
         if let (Some(user), Some(key)) = (hashflow_user, hashflow_key) {
             info!("Hashflow RFQ credentials found");
-            rfq_credentials.insert(RfqProtocol::Hashflow, (user, key));
+            rfq_credentials.insert(RFQProtocol::Hashflow, (user, key));
         } else {
             info!("Hashflow RFQ credentials not found. Expected environment variables: HASHFLOW_USER, HASHFLOW_KEY");
         }
@@ -89,7 +89,7 @@ impl RfqStreamProcessor {
         for (protocol, (user, key)) in &self.rfq_credentials {
             info!("Adding {protocol} RFQ client...");
             match protocol {
-                RfqProtocol::Bebop => {
+                RFQProtocol::Bebop => {
                     let bebop_client =
                         BebopClientBuilder::new(self.chain, user.clone(), key.clone())
                             .tokens(rfq_tokens.clone())
@@ -100,7 +100,7 @@ impl RfqStreamProcessor {
                     rfq_stream_builder = rfq_stream_builder
                         .add_client::<BebopState>("bebop", Box::new(bebop_client));
                 }
-                RfqProtocol::Hashflow => {
+                RFQProtocol::Hashflow => {
                     let hashflow_client = HashflowClient::new(
                         self.chain,
                         rfq_tokens.clone(),
