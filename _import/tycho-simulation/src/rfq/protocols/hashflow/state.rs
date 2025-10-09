@@ -51,7 +51,7 @@ impl HashflowState {
             token_address_out == &self.quote_token.address)
         {
             Err(SimulationError::InvalidInput(
-                format!("Invalid token addresses: {token_address_in}, {token_address_out}"),
+                format!("Invalid token addresses. Got in={token_address_in}, out={token_address_out}, expected in={}, out={}", self.base_token.address, self.quote_token.address),
                 None,
             ))
         } else {

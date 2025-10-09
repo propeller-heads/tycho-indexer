@@ -27,6 +27,7 @@ use tracing_subscriber::EnvFilter;
 use tycho_common::simulation::protocol_sim::ProtocolSim;
 use tycho_simulation::{
     protocol::models::ProtocolComponent,
+    rfq::protocols::hashflow::client::HashflowClient,
     tycho_common::models::{token::Token, Chain},
     utils::{get_default_url, load_all_tokens},
 };
@@ -256,17 +257,42 @@ async fn process_update_state(
             }
         },
     };
+    info!(
+        "Component has tokens: {}",
+        component
+            .tokens
+            .iter()
+            .map(|t| t.symbol.as_str())
+            .join(", ")
+    );
     let tokens_len = component.tokens.len();
     if tokens_len < 2 {
         error!("Component has less than 2 tokens, skipping...");
         return;
     }
-    let swap_directions: Vec<(Token, Token)> = component
-        .tokens
-        .iter()
-        .permutations(2)
-        .map(|perm| (perm[0].clone(), perm[1].clone()))
-        .collect();
+    // Get all the possible swap directions
+    // For protocols supporting only one direction, use the first and last tokens
+    let protocols_supporting_one_direction_only = vec![HashflowClient::PROTOCOL_SYSTEM];
+    let swap_directions =
+        if protocols_supporting_one_direction_only.contains(&component.protocol_system.as_str()) {
+            // Return the first and the last tokens
+            vec![(
+                // We can safely unwrap here because we checked there are at least 2 tokens
+                component
+                    .tokens
+                    .first()
+                    .unwrap()
+                    .clone(),
+                component.tokens.last().unwrap().clone(),
+            )]
+        } else {
+            component
+                .tokens
+                .iter()
+                .permutations(2)
+                .map(|perm| (perm[0].clone(), perm[1].clone()))
+                .collect()
+        };
     for (token_in, token_out) in swap_directions.iter() {
         info!(
             "Processing {} pool {state_id}, from {} to {}",
