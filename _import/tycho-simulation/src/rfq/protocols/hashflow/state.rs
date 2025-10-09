@@ -30,7 +30,6 @@ pub struct HashflowState {
 }
 
 impl HashflowState {
-    #![allow(dead_code)] // TODO remove this
     pub fn new(
         base_token: Token,
         quote_token: Token,

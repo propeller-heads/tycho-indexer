@@ -396,10 +396,7 @@ mod tests {
         },
         protocol::{
             uniswap_v4::{
-                hooks::{
-                    constants::POOL_MANAGER_BYTECODE,
-                    models::{BalanceDelta, BeforeSwapDelta, StateContext},
-                },
+                hooks::models::{BalanceDelta, BeforeSwapDelta, StateContext},
                 state::UniswapV4Fees,
             },
             vm::constants::MAX_BALANCE,
@@ -513,7 +510,8 @@ mod tests {
         let pool_manager = Address::from_str("0x000000000004444c5dc75cB358380D2e3dE08A90")
             .expect("Invalid pool manager address");
 
-        let pool_manager_bytecode = Bytecode::new_raw(POOL_MANAGER_BYTECODE.into());
+        let pool_manager_bytecode =
+            Bytecode::new_raw(include_bytes!("assets/pool_manager_bytecode.bin").into());
 
         engine.state.init_account(
             pool_manager,

@@ -1,6 +1,3 @@
-// TODO: remove this
-#![allow(dead_code)]
-
 use std::collections::HashMap;
 
 use futures::{stream::select_all, StreamExt};
