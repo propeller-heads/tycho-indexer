@@ -154,11 +154,12 @@ where
             HashMap::new();
         for (entrypoint_id, tracing_params) in new_entrypoint_params.iter() {
             for (tx, param) in tracing_params.iter() {
-                // Skip if we already have a trace for this entrypoint + params pair.
-                if self
+                // Skip if we already have a successful trace for this entrypoint + params pair.
+                // Only skip if we have Some(result), not if we have None (failed trace).
+                if let Some(Some(_)) = self
                     .cache
                     .entrypoint_results
-                    .contains_key(&(entrypoint_id.clone(), param.clone()))
+                    .get(&(entrypoint_id.clone(), param.clone()))
                 {
                     continue;
                 }
@@ -246,8 +247,8 @@ where
             }
 
             let ep_ids_to_pause = failed_entrypoints
-                .into_iter()
-                .map(|(ep, tx)| (ep.entry_point.external_id, tx))
+                .iter()
+                .map(|(ep, tx)| (ep.entry_point.external_id.clone(), *tx))
                 .collect::<HashSet<_>>();
 
             let mut component_ids_to_pause = HashMap::new();
@@ -476,6 +477,23 @@ where
             self.update_cache(&block_changes.block, &traced_entry_points)?;
             drop(_span);
 
+            // Store failed traces as None in the cache
+            for (failed_ep, _) in failed_entrypoints.iter() {
+                self.cache
+                    .entrypoint_results
+                    .insert_pending(
+                        block_changes.block.clone(),
+                        (
+                            failed_ep
+                                .entry_point
+                                .external_id
+                                .clone(),
+                            failed_ep.params.clone(),
+                        ),
+                        None,
+                    )?;
+            }
+
             // Update the block changes with the traced entrypoints
             block_changes.trace_results = traced_entry_points;
         }
@@ -630,6 +648,19 @@ where
                     }),
             );
 
+        // First, populate all TracingParams with None
+        for (entrypoint_id, params_set) in entrypoints_with_params.iter() {
+            for entrypoint_with_params in params_set.iter() {
+                self.cache
+                    .entrypoint_results
+                    .insert_permanent(
+                        (entrypoint_id.clone(), entrypoint_with_params.params.clone()),
+                        None,
+                    );
+            }
+        }
+
+        // Then update with actual results where available
         for (entrypoint_id, params_results_map) in entrypoint_results.into_iter() {
             for (param, result) in params_results_map.into_iter() {
                 for location in result.retriggers.clone() {
@@ -667,7 +698,7 @@ where
 
                 self.cache
                     .entrypoint_results
-                    .insert_permanent((entrypoint_id.clone(), param), result);
+                    .insert_permanent((entrypoint_id.clone(), param), Some(result));
             }
         }
 
@@ -857,11 +888,11 @@ where
         let min_length = offset + self.address_byte_len;
         let value_len = change.value.len();
         if value_len < min_length {
-            return Err(ExtractionError::SubstreamsError(format!("Received bad storage value! Offset implies minimum length: {min_length} but value was: {value_len}")))
+            return Err(ExtractionError::SubstreamsError(format!("Received bad storage value! Offset implies minimum length: {min_length} but value was: {value_len}")));
         }
         let previous_len = change.previous.len();
         if previous_len < min_length {
-            return Err(ExtractionError::SubstreamsError(format!("Received bad storage previous value! Offset implies minimum length: {min_length} but value was: {previous_len}")))
+            return Err(ExtractionError::SubstreamsError(format!("Received bad storage previous value! Offset implies minimum length: {min_length} but value was: {previous_len}")));
         }
 
         let previous_address = &change.previous[offset..offset + self.address_byte_len];
@@ -929,9 +960,11 @@ where
                             .params
                             .clone(),
                     ),
-                    traced_entry_point
-                        .tracing_result
-                        .clone(),
+                    Some(
+                        traced_entry_point
+                            .tracing_result
+                            .clone(),
+                    ),
                 )?;
         }
 
@@ -1375,9 +1408,11 @@ mod tests {
                 .entrypoint_results
                 .get_full_permanent_state(),
             &HashMap::from([
-                (("entrypoint_1".to_string(), get_tracing_params(1)), get_tracing_result(1)),
-                (("entrypoint_2".to_string(), get_tracing_params(3)), get_tracing_result(2)),
-                (("entrypoint_4".to_string(), get_tracing_params(1)), get_tracing_result(1)),
+                (("entrypoint_1".to_string(), get_tracing_params(1)), Some(get_tracing_result(1))),
+                (("entrypoint_1".to_string(), get_tracing_params(2)), None), /* No result for
+                                                                              * this param */
+                (("entrypoint_2".to_string(), get_tracing_params(3)), Some(get_tracing_result(2))),
+                (("entrypoint_4".to_string(), get_tracing_params(1)), Some(get_tracing_result(1))),
             ])
         );
         assert_eq!(

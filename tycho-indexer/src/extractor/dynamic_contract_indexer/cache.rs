@@ -37,7 +37,9 @@ pub(super) struct DCICache {
     /// Maps entry point IDs to entry point definitions.
     pub(super) ep_id_to_entrypoint: VersionedCache<EntryPointId, EntryPoint>,
     /// Stores tracing results for entry points paired with specific tracing parameters.
-    pub(super) entrypoint_results: VersionedCache<(EntryPointId, TracingParams), TracingResult>,
+    /// None indicates that the TracingParams exist but have no results (e.g., failed traces).
+    pub(super) entrypoint_results:
+        VersionedCache<(EntryPointId, TracingParams), Option<TracingResult>>,
     /// Maps a storage location to entry points that should be retriggered when that location
     /// changes and the address storage offset for packed slots.
     pub(super) retriggers:
@@ -809,7 +811,7 @@ mod tests {
             .insert_pending(
                 block1.clone(),
                 (entrypoint.external_id.clone(), tracing_params.clone()),
-                tracing_result.clone(),
+                Some(tracing_result.clone()),
             )
             .unwrap();
         cache
