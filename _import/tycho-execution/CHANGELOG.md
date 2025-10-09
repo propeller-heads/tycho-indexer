@@ -1,3 +1,10 @@
+## [0.130.1](https://github.com/propeller-heads/tycho-execution/compare/0.130.0...0.130.1) (2025-10-09)
+
+
+### Bug Fixes
+
+* Add new address of uniswapv4 executor ([8c3483e](https://github.com/propeller-heads/tycho-execution/commit/8c3483e971e2fa5099fc2c5dcac2220791eeeba4))
+
 ## [0.130.0](https://github.com/propeller-heads/tycho-execution/compare/0.129.3...0.130.0) (2025-10-09)
 
 
