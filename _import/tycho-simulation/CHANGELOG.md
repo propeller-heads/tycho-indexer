@@ -1,3 +1,10 @@
+## [0.179.0](https://github.com/propeller-heads/tycho-simulation/compare/0.178.0...0.179.0) (2025-10-09)
+
+
+### Features
+
+* Define tycho deps in integration test the same way as in sim ([66c8b2a](https://github.com/propeller-heads/tycho-simulation/commit/66c8b2ae0a1f0122eb979b28f45c3c91ae9c861f))
+
 ## [0.178.0](https://github.com/propeller-heads/tycho-simulation/compare/0.177.0...0.178.0) (2025-10-09)
 
 
