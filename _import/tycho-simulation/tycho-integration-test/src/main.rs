@@ -205,6 +205,10 @@ async fn run(cli: Cli) -> miette::Result<()> {
         };
 
         if let UpdateType::Protocol = update.update_type {
+            let block_delay = block
+                .header
+                .number
+                .abs_diff(update.update.block_number_or_timestamp);
             // Consume messages that are older than the current block, to give the stream a chance
             // to catch up
             if update.update.block_number_or_timestamp < block.header.number {
@@ -215,6 +219,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 metrics::record_skipped_update();
                 continue;
             }
+            metrics::record_block_delay(block_delay);
 
             for (id, comp) in update.update.new_pairs.iter() {
                 protocol_pairs
