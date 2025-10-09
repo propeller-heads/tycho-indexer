@@ -25,10 +25,10 @@ tracing = "0.1.41"
 metrics = "0.24"
 metrics-exporter-prometheus = "0.16"
 actix-web = "4.11.0"
-tycho-client = "0.91.0"
-tycho-common = "0.91.0"
-tycho-ethereum = { version = "0.91.0", features = ["onchain_data"] }
-tycho-execution = "0.129.0"
+tycho-client = ">=0.91.0"
+tycho-common = ">=0.91.0"
+tycho-ethereum = { version = ">=0.91.0", features = ["onchain_data"] }
+tycho-execution = ">=0.129.1"
 tycho-simulation = { path = "..", features = ["evm"] }
 urlencoding = "2.1"
 tracing-subscriber = "0.3.17"
