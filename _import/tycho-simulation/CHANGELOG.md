@@ -1,3 +1,11 @@
+## [0.178.0](https://github.com/propeller-heads/tycho-simulation/compare/0.177.0...0.178.0) (2025-10-09)
+
+
+### Features
+
+* add metric to record skipped updates ([ed22f7d](https://github.com/propeller-heads/tycho-simulation/commit/ed22f7d4e113e894f04135e8246e6b05eb10d8c5))
+* record block delay metric ([c57f162](https://github.com/propeller-heads/tycho-simulation/commit/c57f16260c34c104e786b707677babaf7ec0b68f))
+
 ## [0.177.0](https://github.com/propeller-heads/tycho-simulation/compare/0.176.0...0.177.0) (2025-10-09)
 
 
