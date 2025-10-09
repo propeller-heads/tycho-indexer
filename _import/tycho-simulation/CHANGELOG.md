@@ -1,3 +1,27 @@
+## [0.177.0](https://github.com/propeller-heads/tycho-simulation/compare/0.176.0...0.177.0) (2025-10-09)
+
+
+### Features
+
+* add `skip_messages_duration` arg to the Cli ([6f960d0](https://github.com/propeller-heads/tycho-simulation/commit/6f960d038266a64b036514c85e1bff695374df8a))
+* add support for RFQ protocols in integration test ([41fcb48](https://github.com/propeller-heads/tycho-simulation/commit/41fcb48a3b2a25a3eb2fe66568a737735a5029b3))
+* bubble up errors from stream processors ([ff62af2](https://github.com/propeller-heads/tycho-simulation/commit/ff62af2d764e9f4c5a0d0a2d95a8d81f2526d051))
+* don't switch swap directions when simulating hashflow ([d09bfe6](https://github.com/propeller-heads/tycho-simulation/commit/d09bfe62ba4e333949f194d9497bd7557e59037f))
+* increase RFQ's stream sleep to 10 mins ([7aad48a](https://github.com/propeller-heads/tycho-simulation/commit/7aad48a43352bec58dd83be48da361aee893f0d6))
+* log unconfigured RFQ protocols ([821abb0](https://github.com/propeller-heads/tycho-simulation/commit/821abb0c93b8ca9b131266ace7d8b00989df9b69))
+* post rebase main ([eb5bddc](https://github.com/propeller-heads/tycho-simulation/commit/eb5bddc9f487fe00edf154b243f75736f941497d))
+* post rebase main ([1c16a8b](https://github.com/propeller-heads/tycho-simulation/commit/1c16a8b6a5df19d5b9010c5f8552aca3c26af157))
+* process rfq's stream sleep times individually for each protocol ([3198ba7](https://github.com/propeller-heads/tycho-simulation/commit/3198ba7b40d8dfee5c4c7c27269cc8ff54552636))
+
+
+### Bug Fixes
+
+* actix + tungstenite versions/features ([6912ce6](https://github.com/propeller-heads/tycho-simulation/commit/6912ce67c8cebc2e52f640176516535713299464))
+* don't fail if no rfq credentials are passed ([3168dbf](https://github.com/propeller-heads/tycho-simulation/commit/3168dbfc5aecddbe5bc8eb1264d66b8843fd2080))
+* is_first_update init value ([1f3df01](https://github.com/propeller-heads/tycho-simulation/commit/1f3df011b67123af27587d64b5e2df57c76c04e8))
+* log encode_swap error details ([f89860b](https://github.com/propeller-heads/tycho-simulation/commit/f89860bae1258c3c9da90bf34842616f2da48f8f))
+* swap encoding for rfq ([b18eb9d](https://github.com/propeller-heads/tycho-simulation/commit/b18eb9d9ebefd389aa1121514bcb871e41977598))
+
 ## [0.176.0](https://github.com/propeller-heads/tycho-simulation/compare/0.175.0...0.176.0) (2025-10-08)
 
 
