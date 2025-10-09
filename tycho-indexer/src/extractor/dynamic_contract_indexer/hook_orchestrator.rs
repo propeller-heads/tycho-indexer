@@ -59,11 +59,21 @@ pub trait HookOrchestrator: Send + Sync {
 pub struct HookOrchestratorRegistry {
     hooks: HashMap<Address, Box<dyn HookOrchestrator>>,
     hook_identifiers: HashMap<String, Box<dyn HookOrchestrator>>,
+    default_orchestrator: Option<Box<dyn HookOrchestrator>>,
 }
 
 impl HookOrchestratorRegistry {
     pub fn new() -> Self {
-        Self { hooks: HashMap::new(), hook_identifiers: HashMap::new() }
+        Self {
+            hooks: HashMap::new(),
+            hook_identifiers: HashMap::new(),
+            default_orchestrator: None,
+        }
+    }
+
+    /// Sets a default orchestrator to use when no specific orchestrator is found for a component
+    pub fn set_default_orchestrator(&mut self, orchestrator: Box<dyn HookOrchestrator>) {
+        self.default_orchestrator = Some(orchestrator);
     }
 
     #[allow(dead_code)]
@@ -93,7 +103,7 @@ impl HookOrchestratorRegistry {
             .static_attributes
             .get("hooks")?;
 
-        // Priority: hook address first, then hook identifier
+        // Priority: hook address first, then hook identifier, then default orchestrator
         match self.hooks.get(hook_address) {
             Some(orchestrator) => Some(orchestrator.as_ref()),
             None => {
@@ -103,13 +113,16 @@ impl HookOrchestratorRegistry {
                     .get("hook_identifier")
                 {
                     if let Ok(identifier) = String::from_utf8(hook_identifier_bytes.to_vec()) {
-                        return self
-                            .hook_identifiers
-                            .get(&identifier)
-                            .map(|o| o.as_ref());
+                        if let Some(orchestrator) = self.hook_identifiers.get(&identifier) {
+                            return Some(orchestrator.as_ref());
+                        }
                     }
                 }
-                None
+
+                // Fall back to default orchestrator if no specific one found
+                self.default_orchestrator
+                    .as_ref()
+                    .map(|o| o.as_ref())
             }
         }
     }
@@ -1016,4 +1029,143 @@ mod tests {
     //     // This would require mocking UniswapV4DefaultHookEntrypointGenerator and its
     // dependencies     // The actual functionality is verified through the hook_dci integration
     // test }
+
+    // Tests for HookOrchestratorRegistry
+    #[test]
+    fn test_hook_orchestrator_registry_default_orchestrator() {
+        let mut registry = HookOrchestratorRegistry::new();
+
+        // Create a mock orchestrator to use as default
+        let mut default_mock = MockHookOrchestrator::new();
+        default_mock
+            .expect_update_components()
+            .returning(|_, _, _, _| Ok(()));
+
+        registry.set_default_orchestrator(Box::new(default_mock));
+
+        // Create a component without a specific orchestrator registered
+        let component = create_test_component(
+            "test_comp",
+            vec![Address::from("0x1111111111111111111111111111111111111111")],
+        );
+
+        // Should return the default orchestrator
+        let orchestrator = registry.get_orchestrator_for_component(&component);
+        assert!(
+            orchestrator.is_some(),
+            "Should return default orchestrator when no specific one is registered"
+        );
+    }
+
+    #[test]
+    fn test_hook_orchestrator_registry_no_default() {
+        let registry = HookOrchestratorRegistry::new();
+
+        // Create a component without a specific orchestrator registered
+        let component = create_test_component(
+            "test_comp",
+            vec![Address::from("0x1111111111111111111111111111111111111111")],
+        );
+
+        // Should return None when no default is set
+        let orchestrator = registry.get_orchestrator_for_component(&component);
+        assert!(
+            orchestrator.is_none(),
+            "Should return None when no orchestrator is registered and no default is set"
+        );
+    }
+
+    #[test]
+    fn test_hook_orchestrator_registry_specific_over_default() {
+        let mut registry = HookOrchestratorRegistry::new();
+
+        // Create and set a default orchestrator
+        let mut default_mock = MockHookOrchestrator::new();
+        default_mock
+            .expect_update_components()
+            .returning(|_, _, _, _| Ok(()));
+        registry.set_default_orchestrator(Box::new(default_mock));
+
+        // Create and register a specific orchestrator for a hook address
+        let hook_address = Address::from("0x1234567890123456789012345678901234567890");
+        let mut specific_mock = MockHookOrchestrator::new();
+        specific_mock
+            .expect_update_components()
+            .returning(|_, _, _, _| Ok(()));
+        registry.register_hook_orchestrator(hook_address.clone(), Box::new(specific_mock));
+
+        // Create a component with the specific hook address
+        let mut static_attributes = HashMap::new();
+        static_attributes.insert("hooks".to_string(), hook_address);
+        let component = ProtocolComponent {
+            id: "test_comp".to_string(),
+            protocol_system: "uniswap_v4".to_string(),
+            protocol_type_name: "pool".to_string(),
+            chain: Chain::Ethereum,
+            tokens: vec![],
+            contract_addresses: vec![],
+            static_attributes,
+            change: ChangeType::Creation,
+            creation_tx: Bytes::default(),
+            created_at: chrono::DateTime::from_timestamp(1719849000, 0)
+                .unwrap()
+                .naive_utc(),
+        };
+
+        // Should return the specific orchestrator, not the default
+        let orchestrator = registry.get_orchestrator_for_component(&component);
+        assert!(
+            orchestrator.is_some(),
+            "Should return specific orchestrator when one is registered for the hook address"
+        );
+    }
+
+    #[test]
+    fn test_hook_orchestrator_registry_hook_identifier_over_default() {
+        let mut registry = HookOrchestratorRegistry::new();
+
+        // Create and set a default orchestrator
+        let mut default_mock = MockHookOrchestrator::new();
+        default_mock
+            .expect_update_components()
+            .returning(|_, _, _, _| Ok(()));
+        registry.set_default_orchestrator(Box::new(default_mock));
+
+        // Create and register an orchestrator for a hook identifier
+        let mut identifier_mock = MockHookOrchestrator::new();
+        identifier_mock
+            .expect_update_components()
+            .returning(|_, _, _, _| Ok(()));
+        registry.register_hook_identifier("euler_v1".to_string(), Box::new(identifier_mock));
+
+        // Create a component with hook identifier
+        let hook_address = Address::from("0x1234567890123456789012345678901234567890");
+        let mut static_attributes = HashMap::new();
+        static_attributes.insert("hooks".to_string(), hook_address);
+        static_attributes.insert(
+            "hook_identifier".to_string(),
+            Bytes::from("euler_v1".as_bytes().to_vec()),
+        );
+        let component = ProtocolComponent {
+            id: "test_comp".to_string(),
+            protocol_system: "uniswap_v4".to_string(),
+            protocol_type_name: "pool".to_string(),
+            chain: Chain::Ethereum,
+            tokens: vec![],
+            contract_addresses: vec![],
+            static_attributes,
+            change: ChangeType::Creation,
+            creation_tx: Bytes::default(),
+            created_at: chrono::DateTime::from_timestamp(1719849000, 0)
+                .unwrap()
+                .naive_utc(),
+        };
+
+        // Should return the identifier-specific orchestrator, not the default
+        let orchestrator = registry.get_orchestrator_for_component(&component);
+        assert!(
+            orchestrator.is_some(),
+            "Should return hook identifier orchestrator when one is registered"
+        );
+    }
 }
