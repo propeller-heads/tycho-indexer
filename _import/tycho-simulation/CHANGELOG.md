@@ -1,3 +1,10 @@
+## [0.180.0](https://github.com/propeller-heads/tycho-simulation/compare/0.179.0...0.180.0) (2025-10-09)
+
+
+### Features
+
+* Call getAmountOut on UniV4 decoding to fail on decoding for failing pools ([6a40999](https://github.com/propeller-heads/tycho-simulation/commit/6a4099911c801a897fd9084ab63c92aa34aaeeaa))
+
 ## [0.179.0](https://github.com/propeller-heads/tycho-simulation/compare/0.178.0...0.179.0) (2025-10-09)
 
 
