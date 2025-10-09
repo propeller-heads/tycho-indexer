@@ -275,16 +275,11 @@ contract UniswapV4Executor is
         address receiver,
         bytes calldata hookData
     ) external returns (uint128) {
+        Currency currencyIn = zeroForOne ? poolKey.currency0 : poolKey.currency1;
+        _settle(currencyIn, amountIn, transferType);
         uint128 amountOut = _swap(
             poolKey, zeroForOne, -int256(uint256(amountIn)), hookData
         ).toUint128();
-
-        Currency currencyIn = zeroForOne ? poolKey.currency0 : poolKey.currency1;
-        uint256 amount = _getFullDebt(currencyIn);
-        if (amount > amountIn) {
-            revert UniswapV4Executor__V4TooMuchRequested(amountIn, amount);
-        }
-        _settle(currencyIn, amount, transferType);
 
         Currency currencyOut =
             zeroForOne ? poolKey.currency1 : poolKey.currency0;

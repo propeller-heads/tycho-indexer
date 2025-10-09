@@ -11,8 +11,8 @@ import {SafeCallback} from "@uniswap/v4-periphery/src/base/SafeCallback.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
 
 contract UniswapV4ExecutorExposed is UniswapV4Executor {
-    constructor(IPoolManager _poolManager, address _permit2)
-        UniswapV4Executor(_poolManager, _permit2)
+    constructor(IPoolManager _POOL_MANAGER, address _permit2)
+        UniswapV4Executor(_POOL_MANAGER, _permit2)
     {}
 
     function decodeData(bytes calldata data)
@@ -41,13 +41,11 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
     IERC20 USDT = IERC20(USDT_ADDR);
     IERC20 USDC = IERC20(USDC_ADDR);
 
-    address poolManager = 0x000000000004444c5dc75cB358380D2e3dE08A90;
-
     function setUp() public {
         uint256 forkBlock = 22689128;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
         uniswapV4Exposed = new UniswapV4ExecutorExposed(
-            IPoolManager(poolManager), PERMIT2_ADDRESS
+            IPoolManager(POOL_MANAGER), PERMIT2_ADDRESS
         );
     }
 
@@ -114,7 +112,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
     function testSingleSwap() public {
         uint256 amountIn = 100 ether;
         deal(USDE_ADDR, address(uniswapV4Exposed), amountIn);
-        uint256 usdeBalanceBeforePool = USDE.balanceOf(poolManager);
+        uint256 usdeBalanceBeforePool = USDE.balanceOf(POOL_MANAGER);
         uint256 usdeBalanceBeforeSwapExecutor =
             USDE.balanceOf(address(uniswapV4Exposed));
 
@@ -138,7 +136,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         );
 
         uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
-        assertEq(USDE.balanceOf(poolManager), usdeBalanceBeforePool + amountIn);
+        assertEq(USDE.balanceOf(POOL_MANAGER), usdeBalanceBeforePool + amountIn);
         assertEq(
             USDE.balanceOf(address(uniswapV4Exposed)),
             usdeBalanceBeforeSwapExecutor - amountIn
@@ -152,12 +150,12 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             loadCallDataFromFile("test_encode_uniswap_v4_simple_swap");
         uint256 amountIn = 100 ether;
         deal(USDE_ADDR, address(uniswapV4Exposed), amountIn);
-        uint256 usdeBalanceBeforePool = USDE.balanceOf(poolManager);
+        uint256 usdeBalanceBeforePool = USDE.balanceOf(POOL_MANAGER);
         uint256 usdeBalanceBeforeSwapExecutor =
             USDE.balanceOf(address(uniswapV4Exposed));
 
         uint256 amountOut = uniswapV4Exposed.swap(amountIn, protocolData);
-        assertEq(USDE.balanceOf(poolManager), usdeBalanceBeforePool + amountIn);
+        assertEq(USDE.balanceOf(POOL_MANAGER), usdeBalanceBeforePool + amountIn);
         assertEq(
             USDE.balanceOf(ALICE), usdeBalanceBeforeSwapExecutor - amountIn
         );
@@ -168,7 +166,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         // USDE -> USDT -> WBTC
         uint256 amountIn = 100 ether;
         deal(USDE_ADDR, address(uniswapV4Exposed), amountIn);
-        uint256 usdeBalanceBeforePool = USDE.balanceOf(poolManager);
+        uint256 usdeBalanceBeforePool = USDE.balanceOf(POOL_MANAGER);
         uint256 usdeBalanceBeforeSwapExecutor =
             USDE.balanceOf(address(uniswapV4Exposed));
 
@@ -197,7 +195,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         );
 
         uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
-        assertEq(USDE.balanceOf(poolManager), usdeBalanceBeforePool + amountIn);
+        assertEq(USDE.balanceOf(POOL_MANAGER), usdeBalanceBeforePool + amountIn);
         assertEq(
             USDE.balanceOf(address(uniswapV4Exposed)),
             usdeBalanceBeforeSwapExecutor - amountIn
@@ -212,12 +210,12 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
 
         uint256 amountIn = 100 ether;
         deal(USDE_ADDR, address(uniswapV4Exposed), amountIn);
-        uint256 usdeBalanceBeforePool = USDE.balanceOf(poolManager);
+        uint256 usdeBalanceBeforePool = USDE.balanceOf(POOL_MANAGER);
         uint256 usdeBalanceBeforeSwapExecutor =
             USDE.balanceOf(address(uniswapV4Exposed));
 
         uint256 amountOut = uniswapV4Exposed.swap(amountIn, protocolData);
-        assertEq(USDE.balanceOf(poolManager), usdeBalanceBeforePool + amountIn);
+        assertEq(USDE.balanceOf(POOL_MANAGER), usdeBalanceBeforePool + amountIn);
         assertEq(
             USDE.balanceOf(address(uniswapV4Exposed)),
             usdeBalanceBeforeSwapExecutor - amountIn
@@ -264,6 +262,66 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
 
     function testExportContract() public {
         exportRuntimeBytecode(address(uniswapV4Exposed), "UniswapV4");
+    }
+}
+
+contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
+    /* These tests are necessary because Euler works a little differently from general UniswapV4 logic.
+    In the previous version of the UniswapV4Executor we are only sending the user's tokens into the Pool Manager
+    after we call swap on it. This is ok because the Pool Manager tracks the debts and accepts everything as long
+    as the tokens are transfers inside of the unlock callback. However, Euler expects the funds to already be
+    in the Pool Manager when beforeSwap is called. This is not a problem for tokens that the Pool Manager has a
+    lot of, but for tokens with low balances this makes the tx fail. We need to transfer the tokens into
+    the Pool Manager before we call swap on it.
+    The only risk here is that we are assuming that the amount_in will never change. In the previous version, we
+    were confirming this amount with the currencyDelta of the Pool Manager. Now we pray.
+    */
+    using SafeERC20 for IERC20;
+
+    UniswapV4ExecutorExposed uniswapV4Exposed;
+    IERC20 USDT = IERC20(USDT_ADDR);
+    IERC20 RLUSD = IERC20(RLUSD_ADDR);
+
+    function setUp() public {
+        uint256 forkBlock = 23535338;
+        vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
+        uniswapV4Exposed = new UniswapV4ExecutorExposed(
+            IPoolManager(POOL_MANAGER), PERMIT2_ADDRESS
+        );
+    }
+
+    function testSingleSwapEulerLowBalance() public {
+        uint256 amountIn = 134187695711754971245517404;
+        deal(RLUSD_ADDR, address(uniswapV4Exposed), amountIn);
+        address eulerProxy = 0xe1Ce9AF672f8854845E5474400B6ddC7AE458a10;
+        uint256 rlusdEulerBalanceBefore = RLUSD.balanceOf(eulerProxy);
+        uint256 rlusdBalanceBeforeSwapExecutor =
+            RLUSD.balanceOf(address(uniswapV4Exposed));
+
+        UniswapV4Executor.UniswapV4Pool[] memory pools =
+            new UniswapV4Executor.UniswapV4Pool[](1);
+        pools[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: USDT_ADDR,
+            fee: uint24(50),
+            tickSpacing: int24(1)
+        });
+
+        bytes memory data = UniswapV4Utils.encodeExactInput(
+            RLUSD_ADDR,
+            USDT_ADDR,
+            true,
+            RestrictTransferFrom.TransferType.Transfer,
+            ALICE,
+            address(0xF87ACF8428F2f9403AAA0256A7272d6549ECa8A8),
+            bytes(""),
+            pools
+        );
+
+        uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
+        assertEq(
+            RLUSD.balanceOf(eulerProxy), rlusdEulerBalanceBefore + amountIn
+        );
+        assertTrue(USDT.balanceOf(ALICE) == amountOut);
     }
 }
 
