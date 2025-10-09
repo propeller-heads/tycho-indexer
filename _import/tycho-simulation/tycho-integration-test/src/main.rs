@@ -27,7 +27,7 @@ use tracing_subscriber::EnvFilter;
 use tycho_common::simulation::protocol_sim::ProtocolSim;
 use tycho_simulation::{
     protocol::models::ProtocolComponent,
-    rfq::protocols::hashflow::client::HashflowClient,
+    rfq::protocols::hashflow::{client::HashflowClient, state::HashflowState},
     tycho_common::models::Chain,
     utils::{get_default_url, load_all_tokens},
 };
@@ -271,28 +271,30 @@ async fn process_update_state(
         return;
     }
     // Get all the possible swap directions
-    // For protocols supporting only one direction, use the first and last tokens
-    let protocols_supporting_one_direction_only = [HashflowClient::PROTOCOL_SYSTEM];
-    let swap_directions =
-        if protocols_supporting_one_direction_only.contains(&component.protocol_system.as_str()) {
-            // Return the first and the last tokens
-            vec![(
-                // We can safely unwrap here because we checked there are at least 2 tokens
-                component
-                    .tokens
-                    .first()
-                    .unwrap()
-                    .clone(),
-                component.tokens.last().unwrap().clone(),
-            )]
-        } else {
-            component
-                .tokens
-                .iter()
-                .permutations(2)
-                .map(|perm| (perm[0].clone(), perm[1].clone()))
-                .collect()
-        };
+    let swap_directions = match component.protocol_system.as_str() {
+        HashflowClient::PROTOCOL_SYSTEM => {
+            // Hashflow only supports swaps between the requested base and quote tokens
+            // WARN: we read from state because the component.tokens original order
+            // is modified here: src/protocol/models.rs: ProtocolComponent::from_with_tokens
+            let state = match state
+                .as_any()
+                .downcast_ref::<HashflowState>()
+            {
+                Some(s) => s.clone(),
+                None => {
+                    warn!("Failed to downcast state to HashflowState");
+                    return;
+                }
+            };
+            vec![(state.base_token, state.quote_token)]
+        }
+        _ => component
+            .tokens
+            .iter()
+            .permutations(2)
+            .map(|perm| (perm[0].clone(), perm[1].clone()))
+            .collect(),
+    };
     for (token_in, token_out) in swap_directions.iter() {
         info!(
             "Processing {} pool {state_id}, from {} to {}",
