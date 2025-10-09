@@ -115,7 +115,7 @@ fn wrapped_native_eth(chain: Chain, address: &str) -> Token {
     Token::new(&Bytes::from_str(address).unwrap(), "WETH", 18, 0, &[Some(2300)], chain, 100)
 }
 
-fn wrapped_native_ebsc(chain: Chain, address: &str) -> Token {
+fn wrapped_native_bsc(chain: Chain, address: &str) -> Token {
     Token::new(&Bytes::from_str(address).unwrap(), "WBNB", 18, 0, &[Some(2300)], chain, 100)
 }
 
