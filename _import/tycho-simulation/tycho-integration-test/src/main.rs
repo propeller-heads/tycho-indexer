@@ -372,7 +372,7 @@ async fn process_update_state(
                     );
                     amount
                 }
-                Err((e, state_overwrites)) => {
+                Err((e, state_overwrites, metadata)) => {
                     let error_msg = e.to_string();
                     error!("Failed to simulate swap: {error_msg}");
 
@@ -388,15 +388,19 @@ async fn process_update_state(
                     // Extract error name (first word or function signature)
                     let error_name = extract_error_name(revert_reason);
 
-                    // Generate Tenderly URL for debugging with state overrides
+                    // Generate Tenderly URL for debugging without state overrides
                     let tenderly_url = tenderly::build_tenderly_url(
                         &tenderly::TenderlySimParams::default(),
                         Some(&transaction),
                         Some(block),
                         Address::from_slice(&solution.sender[..20]),
-                        state_overwrites.as_ref(),
                     );
-                    info!("Tenderly simulation URL: {}", tenderly_url);
+                    // Generate overwrites string with metadata
+                    let overwrites_string = if let Some(overwrites) = state_overwrites.as_ref() {
+                        tenderly::get_overwites_string(overwrites, metadata.as_ref())
+                    } else {
+                        String::new()
+                    };
 
                     metrics::record_simulation_execution_failure(revert_reason);
                     metrics::record_simulation_execution_failure_detailed(
@@ -405,6 +409,8 @@ async fn process_update_state(
                         block.header.number,
                         revert_reason,
                         &error_name,
+                        &tenderly_url,
+                        &overwrites_string,
                     );
 
                     continue;
