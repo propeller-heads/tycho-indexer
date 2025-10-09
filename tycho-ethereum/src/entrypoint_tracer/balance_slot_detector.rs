@@ -1463,7 +1463,7 @@ mod tests {
     }
 
     #[tokio::test]
-    // #[ignore = "require RPC connection"]
+    #[ignore = "require RPC connection"]
     async fn test_detect_slots_integration() {
         let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
         println!("Using RPC URL: {}", rpc_url);
