@@ -103,6 +103,7 @@ impl TychoStreamBuilder {
             Chain::ZkSync => (3, 12, 50),
             Chain::Arbitrum => (1, 2, 100), // Typically closer to 0.25s
             Chain::Base => (2, 12, 50),
+            Chain::Bsc => (1, 12, 50),
             Chain::Unichain => (1, 10, 100),
         }
     }

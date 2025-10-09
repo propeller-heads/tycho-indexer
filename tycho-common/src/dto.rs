@@ -54,6 +54,7 @@ pub enum Chain {
     ZkSync,
     Arbitrum,
     Base,
+    Bsc,
     Unichain,
 }
 
@@ -87,6 +88,7 @@ impl From<models::Chain> for Chain {
             models::Chain::ZkSync => Chain::ZkSync,
             models::Chain::Arbitrum => Chain::Arbitrum,
             models::Chain::Base => Chain::Base,
+            models::Chain::Bsc => Chain::Bsc,
             models::Chain::Unichain => Chain::Unichain,
         }
     }

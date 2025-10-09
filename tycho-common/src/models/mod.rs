@@ -69,6 +69,7 @@ pub enum Chain {
     ZkSync,
     Arbitrum,
     Base,
+    Bsc,
     Unichain,
 }
 
@@ -80,6 +81,7 @@ impl From<dto::Chain> for Chain {
             dto::Chain::ZkSync => Chain::ZkSync,
             dto::Chain::Arbitrum => Chain::Arbitrum,
             dto::Chain::Base => Chain::Base,
+            dto::Chain::Bsc => Chain::Bsc,
             dto::Chain::Unichain => Chain::Unichain,
         }
     }
@@ -97,8 +99,24 @@ fn native_eth(chain: Chain) -> Token {
     )
 }
 
+fn native_bsc(chain: Chain) -> Token {
+    Token::new(
+        &Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
+        "BNB",
+        18,
+        0,
+        &[Some(2300)],
+        chain,
+        100,
+    )
+}
+
 fn wrapped_native_eth(chain: Chain, address: &str) -> Token {
     Token::new(&Bytes::from_str(address).unwrap(), "WETH", 18, 0, &[Some(2300)], chain, 100)
+}
+
+fn wrapped_native_ebsc(chain: Chain, address: &str) -> Token {
+    Token::new(&Bytes::from_str(address).unwrap(), "WBNB", 18, 0, &[Some(2300)], chain, 100)
 }
 
 impl Chain {
@@ -109,6 +127,7 @@ impl Chain {
             Chain::Arbitrum => 42161,
             Chain::Starknet => 0,
             Chain::Base => 8453,
+            Chain::Bsc => 56,
             Chain::Unichain => 130,
         }
     }
@@ -123,6 +142,7 @@ impl Chain {
             Chain::ZkSync => native_eth(Chain::ZkSync),
             Chain::Arbitrum => native_eth(Chain::Arbitrum),
             Chain::Base => native_eth(Chain::Base),
+            Chain::Bsc => native_bsc(Chain::Bsc),
             Chain::Unichain => native_eth(Chain::Unichain),
         }
     }
@@ -145,6 +165,9 @@ impl Chain {
             }
             Chain::Base => {
                 wrapped_native_eth(Chain::Base, "0x4200000000000000000000000000000000000006")
+            }
+            Chain::Bsc => {
+                wrapped_native_bsc(Chain::Bsc, "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c")
             }
             Chain::Unichain => {
                 wrapped_native_eth(Chain::Unichain, "0x4200000000000000000000000000000000000006")
