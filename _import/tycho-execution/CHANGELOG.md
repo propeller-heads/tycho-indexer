@@ -1,3 +1,5 @@
+## [0.129.2](https://github.com/propeller-heads/tycho-execution/compare/0.129.1...0.129.2) (2025-10-09)
+
 ## [0.129.1](https://github.com/propeller-heads/tycho-execution/compare/0.129.0...0.129.1) (2025-10-07)
 
 
