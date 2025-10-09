@@ -282,6 +282,7 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
     UniswapV4ExecutorExposed uniswapV4Exposed;
     IERC20 USDT = IERC20(USDT_ADDR);
     IERC20 RLUSD = IERC20(RLUSD_ADDR);
+    IERC20 WBTC = IERC20(WBTC_ADDR);
 
     function setUp() public {
         uint256 forkBlock = 23535338;
@@ -320,6 +321,82 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
         assertEq(
             RLUSD.balanceOf(eulerProxy), rlusdEulerBalanceBefore + amountIn
         );
+        assertTrue(USDT.balanceOf(ALICE) == amountOut);
+    }
+
+    function testMultipleSwapEulerLowBalance() public {
+        // RLUSD -(euler)-> USDT -> WBTC
+        uint256 amountIn = 134187695711754971245517404;
+        deal(RLUSD_ADDR, address(uniswapV4Exposed), amountIn);
+        address eulerProxy = 0xe1Ce9AF672f8854845E5474400B6ddC7AE458a10;
+        uint256 rlusdEulerBalanceBefore = RLUSD.balanceOf(eulerProxy);
+
+        UniswapV4Executor.UniswapV4Pool[] memory pools =
+            new UniswapV4Executor.UniswapV4Pool[](2);
+        pools[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: USDT_ADDR,
+            fee: uint24(50),
+            tickSpacing: int24(1),
+            hook: address(0xF87ACF8428F2f9403AAA0256A7272d6549ECa8A8),
+            hookData: bytes("")
+        });
+        pools[1] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: WBTC_ADDR,
+            fee: uint24(3000),
+            tickSpacing: int24(60),
+            hook: address(0),
+            hookData: bytes("")
+        });
+
+        bytes memory data = UniswapV4Utils.encodeExactInput(
+            RLUSD_ADDR,
+            WBTC_ADDR,
+            true,
+            RestrictTransferFrom.TransferType.Transfer,
+            ALICE,
+            pools
+        );
+
+        uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
+        assertEq(
+            RLUSD.balanceOf(eulerProxy), rlusdEulerBalanceBefore + amountIn
+        );
+        assertTrue(WBTC.balanceOf(ALICE) == amountOut);
+    }
+
+    function testMultipleSwapLastSwapEuler() public {
+        // USDC -> RLUSD -(euler)- > USDT
+        // Sanity check to see if a grouped swap with Euler in the last hop works
+        uint256 amountIn = 134187695711754971245517404;
+        deal(USDC_ADDR, address(uniswapV4Exposed), amountIn);
+
+        UniswapV4Executor.UniswapV4Pool[] memory pools =
+            new UniswapV4Executor.UniswapV4Pool[](2);
+        pools[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: RLUSD_ADDR,
+            fee: uint24(500),
+            tickSpacing: int24(10),
+            hook: address(0),
+            hookData: bytes("")
+        });
+        pools[1] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: USDT_ADDR,
+            fee: uint24(50),
+            tickSpacing: int24(1),
+            hook: address(0xF87ACF8428F2f9403AAA0256A7272d6549ECa8A8),
+            hookData: bytes("")
+        });
+
+        bytes memory data = UniswapV4Utils.encodeExactInput(
+            USDC_ADDR,
+            USDT_ADDR,
+            false,
+            RestrictTransferFrom.TransferType.Transfer,
+            ALICE,
+            pools
+        );
+
+        uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
         assertTrue(USDT.balanceOf(ALICE) == amountOut);
     }
 }

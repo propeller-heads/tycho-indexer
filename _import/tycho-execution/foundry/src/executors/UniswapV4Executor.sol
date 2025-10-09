@@ -332,6 +332,7 @@ contract UniswapV4Executor is
         uint128 amountOut = 0;
         Currency swapCurrencyIn = currencyIn;
         uint256 swapAmountIn = amountIn;
+        _settle(currencyIn, amountIn, transferType);
         unchecked {
             uint256 pathLength = path.length;
             PathKey calldata pathKey;
@@ -352,12 +353,6 @@ contract UniswapV4Executor is
                 swapCurrencyIn = pathKey.intermediateCurrency;
             }
         }
-
-        uint256 amount = _getFullDebt(currencyIn);
-        if (amount > amountIn) {
-            revert UniswapV4Executor__V4TooMuchRequested(amountIn, amount);
-        }
-        _settle(currencyIn, amount, transferType);
 
         _take(
             swapCurrencyIn, // at the end of the loop this is actually currency out
@@ -407,21 +402,6 @@ contract UniswapV4Executor is
         // If the amount is negative, it should be settled not taken.
         if (_amount < 0) revert UniswapV4Executor__DeltaNotPositive(currency);
         amount = uint256(_amount);
-    }
-
-    /// @notice Obtain the full amount owed by this contract (negative delta)
-    /// @param currency Currency to get the delta for
-    /// @return amount The amount owed by this contract as a uint256
-    function _getFullDebt(Currency currency)
-        internal
-        view
-        returns (uint256 amount)
-    {
-        int256 _amount = poolManager.currencyDelta(address(this), currency);
-        // If the amount is positive, it should be taken not settled.
-        if (_amount > 0) revert UniswapV4Executor__DeltaNotNegative(currency);
-        // Casting is safe due to limits on the total supply of a pool
-        amount = uint256(-_amount);
     }
 
     /**
