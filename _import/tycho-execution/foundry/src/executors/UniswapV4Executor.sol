@@ -59,6 +59,8 @@ contract UniswapV4Executor is
         address intermediaryToken;
         uint24 fee;
         int24 tickSpacing;
+        address hook;
+        bytes hookData;
     }
 
     constructor(IPoolManager _poolManager, address _permit2)
@@ -89,8 +91,6 @@ contract UniswapV4Executor is
             bool zeroForOne,
             TransferType transferType,
             address receiver,
-            address hook,
-            bytes memory hookData,
             UniswapV4Executor.UniswapV4Pool[] memory pools
         ) = _decodeData(data);
         bytes memory swapData;
@@ -100,7 +100,7 @@ contract UniswapV4Executor is
                 currency1: Currency.wrap(zeroForOne ? tokenOut : tokenIn),
                 fee: pools[0].fee,
                 tickSpacing: pools[0].tickSpacing,
-                hooks: IHooks(hook)
+                hooks: IHooks(pools[0].hook)
             });
             swapData = abi.encodeWithSelector(
                 this.swapExactInputSingle.selector,
@@ -109,7 +109,7 @@ contract UniswapV4Executor is
                 amountIn,
                 transferType,
                 receiver,
-                hookData
+                pools[0].hookData
             );
         } else {
             PathKey[] memory path = new PathKey[](pools.length);
@@ -118,8 +118,8 @@ contract UniswapV4Executor is
                     intermediateCurrency: Currency.wrap(pools[i].intermediaryToken),
                     fee: pools[i].fee,
                     tickSpacing: pools[i].tickSpacing,
-                    hooks: IHooks(hook),
-                    hookData: hookData
+                    hooks: IHooks(pools[i].hook),
+                    hookData: pools[i].hookData
                 });
             }
 
@@ -149,8 +149,6 @@ contract UniswapV4Executor is
             bool zeroForOne,
             TransferType transferType,
             address receiver,
-            address hook,
-            bytes memory hookData,
             UniswapV4Pool[] memory pools
         )
     {
@@ -163,42 +161,71 @@ contract UniswapV4Executor is
         zeroForOne = data[40] != 0;
         transferType = TransferType(uint8(data[41]));
         receiver = address(bytes20(data[42:62]));
-        hook = address(bytes20(data[62:82]));
 
-        bytes calldata remaining = data[82:];
+        bytes calldata remaining = data[62:];
+
+        // Decode first pool with hook data
+        if (remaining.length < 48) {
+            // 20 + 3 + 3 + 20 + 2 = 48 minimum
+            revert UniswapV4Executor__InvalidDataLength();
+        }
+
         address firstToken = address(bytes20(remaining[0:20]));
         uint24 firstFee = uint24(bytes3(remaining[20:23]));
         int24 firstTickSpacing = int24(uint24(bytes3(remaining[23:26])));
-        UniswapV4Pool memory firstPool =
-            UniswapV4Pool(firstToken, firstFee, firstTickSpacing);
+        address firstHook = address(bytes20(remaining[26:46]));
+        uint16 firstHookDataLength = uint16(bytes2(remaining[46:48]));
+
+        uint256 firstPoolTotalLength = 48 + firstHookDataLength;
+        if (remaining.length < firstPoolTotalLength) {
+            revert UniswapV4Executor__InvalidDataLength();
+        }
+
+        bytes memory firstHookData = remaining[48:48 + firstHookDataLength];
 
         // Remaining after first pool are ple encoded
-        bytes[] memory encodedPools =
-            LibPrefixLengthEncodedByteArray.toArray(remaining[26:]);
+        bytes[] memory encodedPools = LibPrefixLengthEncodedByteArray.toArray(
+            remaining[firstPoolTotalLength:]
+        );
 
         pools = new UniswapV4Pool[](1 + encodedPools.length);
-        pools[0] = firstPool;
+        pools[0] = UniswapV4Pool(
+            firstToken, firstFee, firstTickSpacing, firstHook, firstHookData
+        );
 
-        uint256 encodedPoolsLength = 26;
-        uint256 plePoolsTotalLength;
-
+        // Decode subsequent pools
         for (uint256 i = 0; i < encodedPools.length; i++) {
-            bytes memory poolsData = encodedPools[i];
+            bytes memory poolData = encodedPools[i];
+
             address intermediaryToken;
             uint24 fee;
             int24 tickSpacing;
+            address hook;
+            uint16 hookDataLength;
 
             // slither-disable-next-line assembly
             assembly {
-                intermediaryToken := mload(add(poolsData, add(0, 20)))
-                fee := shr(232, mload(add(poolsData, add(0, 52))))
-                tickSpacing := shr(232, mload(add(poolsData, add(0, 55))))
+                let dataPtr := add(poolData, 0x20)
+                intermediaryToken := shr(96, mload(dataPtr))
+                fee := and(shr(232, mload(add(dataPtr, 20))), 0xffffff)
+                tickSpacing := and(shr(208, mload(add(dataPtr, 20))), 0xffffff)
+                hook := shr(96, mload(add(dataPtr, 26)))
+                hookDataLength := and(shr(240, mload(add(dataPtr, 46))), 0xffff)
             }
-            pools[i + 1] = UniswapV4Pool(intermediaryToken, fee, tickSpacing);
-            plePoolsTotalLength += 2 + encodedPoolsLength; // 2 bytes prefix + data
-        }
 
-        hookData = remaining[26 + plePoolsTotalLength:];
+            if (poolData.length < 48 + hookDataLength) {
+                revert UniswapV4Executor__InvalidDataLength();
+            }
+
+            bytes memory hookData = new bytes(hookDataLength);
+            for (uint256 j = 0; j < hookDataLength; j++) {
+                hookData[j] = poolData[48 + j];
+            }
+
+            pools[i + 1] = UniswapV4Pool(
+                intermediaryToken, fee, tickSpacing, hook, hookData
+            );
+        }
     }
 
     /**
@@ -275,16 +302,11 @@ contract UniswapV4Executor is
         address receiver,
         bytes calldata hookData
     ) external returns (uint128) {
+        Currency currencyIn = zeroForOne ? poolKey.currency0 : poolKey.currency1;
+        _settle(currencyIn, amountIn, transferType);
         uint128 amountOut = _swap(
             poolKey, zeroForOne, -int256(uint256(amountIn)), hookData
         ).toUint128();
-
-        Currency currencyIn = zeroForOne ? poolKey.currency0 : poolKey.currency1;
-        uint256 amount = _getFullDebt(currencyIn);
-        if (amount > amountIn) {
-            revert UniswapV4Executor__V4TooMuchRequested(amountIn, amount);
-        }
-        _settle(currencyIn, amount, transferType);
 
         Currency currencyOut =
             zeroForOne ? poolKey.currency1 : poolKey.currency0;
@@ -310,6 +332,7 @@ contract UniswapV4Executor is
         uint128 amountOut = 0;
         Currency swapCurrencyIn = currencyIn;
         uint256 swapAmountIn = amountIn;
+        _settle(currencyIn, amountIn, transferType);
         unchecked {
             uint256 pathLength = path.length;
             PathKey calldata pathKey;
@@ -330,12 +353,6 @@ contract UniswapV4Executor is
                 swapCurrencyIn = pathKey.intermediateCurrency;
             }
         }
-
-        uint256 amount = _getFullDebt(currencyIn);
-        if (amount > amountIn) {
-            revert UniswapV4Executor__V4TooMuchRequested(amountIn, amount);
-        }
-        _settle(currencyIn, amount, transferType);
 
         _take(
             swapCurrencyIn, // at the end of the loop this is actually currency out
@@ -385,21 +402,6 @@ contract UniswapV4Executor is
         // If the amount is negative, it should be settled not taken.
         if (_amount < 0) revert UniswapV4Executor__DeltaNotPositive(currency);
         amount = uint256(_amount);
-    }
-
-    /// @notice Obtain the full amount owed by this contract (negative delta)
-    /// @param currency Currency to get the delta for
-    /// @return amount The amount owed by this contract as a uint256
-    function _getFullDebt(Currency currency)
-        internal
-        view
-        returns (uint256 amount)
-    {
-        int256 _amount = poolManager.currencyDelta(address(this), currency);
-        // If the amount is positive, it should be taken not settled.
-        if (_amount > 0) revert UniswapV4Executor__DeltaNotNegative(currency);
-        // Casting is safe due to limits on the total supply of a pool
-        amount = uint256(-_amount);
     }
 
     /**

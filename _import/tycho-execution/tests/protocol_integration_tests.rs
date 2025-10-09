@@ -357,7 +357,7 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
 
     let expected_swaps = String::from(concat!(
         // length of ple encoded swaps without padding
-        "000000000000000000000000000000000000000000000000000000000000009c",
+        "00000000000000000000000000000000000000000000000000000000000000b4",
         // Swap data header
         "f62849f9a0b5bf2913b396098f7c7019b51a820a", // executor address
         // Protocol data
@@ -366,18 +366,21 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
         "00",                                       // zero2one
         "00",                                       // transfer type TransferFrom
         "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-        "0000000000000000000000000000000000000000", // hook address
         // First pool params
         "0000000000000000000000000000000000000000", // intermediary token (ETH)
         "000bb8",                                   // fee
         "00003c",                                   // tick spacing
+        "0000000000000000000000000000000000000000", // hook address
+        "0000",                                     // hook data length
         // ple encoding
-        "001a",
+        "0030",
         // Second pool params
         "6982508145454ce325ddbe47a25d4ec3d2311933", // intermediary token (PEPE)
         "0061a8",                                   // fee
         "0001f4",                                   // tick spacing
-        "00000000"                                  // padding
+        "0000000000000000000000000000000000000000", // hook address
+        "0000",                                     // hook data length
+        "000000000000000000000000"                  // padding
     ));
 
     let hex_calldata = encode(&calldata);

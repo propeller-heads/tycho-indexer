@@ -189,23 +189,24 @@ impl SwapEncoder for UniswapV4SwapEncoder {
             Ok(hook) => Address::from_slice(&hook),
             Err(_) => Address::ZERO,
         };
-        let mut hook_data = AlloyBytes::new();
-        if encoding_context.group_token_out == swap.token_out {
-            // Add hook data if it's only the last swap
-            hook_data = AlloyBytes::from(
-                swap.user_data
-                    .clone()
-                    .unwrap_or_default()
-                    .to_vec(),
-            );
-        }
+
+        let hook_data = swap
+            .user_data
+            .clone()
+            .unwrap_or_default()
+            .to_vec();
+
+        let hook_data_length = (hook_data.len() as u16).to_be_bytes();
+
         // Early check if this is not the first swap
         if encoding_context.group_token_in != swap.token_in {
             return Ok((
                 bytes_to_address(&swap.token_out)?,
                 pool_fee_u24,
                 pool_tick_spacing_u24,
-                hook_data,
+                hook_address,
+                hook_data_length,
+                AlloyBytes::from(hook_data),
             )
                 .abi_encode_packed());
         }
@@ -218,8 +219,15 @@ impl SwapEncoder for UniswapV4SwapEncoder {
 
         let zero_to_one = Self::get_zero_to_one(token_in_address, token_out_address);
 
-        let pool_params =
-            (token_out_address, pool_fee_u24, pool_tick_spacing_u24).abi_encode_packed();
+        let pool_params = (
+            token_out_address,
+            pool_fee_u24,
+            pool_tick_spacing_u24,
+            hook_address,
+            hook_data_length,
+            AlloyBytes::from(hook_data),
+        )
+            .abi_encode_packed();
 
         let args = (
             group_token_in_address,
@@ -227,9 +235,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
             zero_to_one,
             (encoding_context.transfer_type as u8).to_be_bytes(),
             bytes_to_address(&encoding_context.receiver)?,
-            hook_address,
             pool_params,
-            hook_data,
         );
 
         Ok(args.abi_encode_packed())
@@ -1249,15 +1255,17 @@ mod tests {
                     "01",
                     // receiver
                     "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
-                    // hook address (not set, so zero)
-                    "0000000000000000000000000000000000000000",
                     // pool params:
                     // - intermediary token
                     "dac17f958d2ee523a2206206994597c13d831ec7",
                     // - fee
                     "000064",
                     // - tick spacing
-                    "000001"
+                    "000001",
+                    // hook address (not set, so zero)
+                    "0000000000000000000000000000000000000000",
+                    // hook data length (0)
+                    "0000"
                 ))
             );
             write_calldata_to_file("test_encode_uniswap_v4_simple_swap", hex_swap.as_str());
@@ -1315,7 +1323,11 @@ mod tests {
                     // - fee (3 bytes)
                     "000bb8",
                     // - tick spacing (3 bytes)
-                    "00003c"
+                    "00003c",
+                    // hook address (not set, so zero)
+                    "0000000000000000000000000000000000000000",
+                    // hook data length (0)
+                    "0000"
                 ))
             );
         }
@@ -1414,8 +1426,6 @@ mod tests {
                     "01",
                     // receiver
                     "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
-                    // hook address (not set, so zero)
-                    "0000000000000000000000000000000000000000",
                     // pool params:
                     // - intermediary token USDT
                     "dac17f958d2ee523a2206206994597c13d831ec7",
@@ -1423,15 +1433,23 @@ mod tests {
                     "000064",
                     // - tick spacing
                     "000001",
+                    // hook address (not set, so zero)
+                    "0000000000000000000000000000000000000000",
+                    // hook data length (0)
+                    "0000",
                     // Second swap
                     // ple encoding
-                    "001a",
+                    "0030",
                     // - intermediary token WBTC
                     "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
                     // - fee
                     "000bb8",
                     // - tick spacing
-                    "00003c"
+                    "00003c",
+                    // hook address (not set, so zero)
+                    "0000000000000000000000000000000000000000",
+                    // hook data length (0)
+                    "0000"
                 ))
             );
             write_calldata_to_file("test_encode_uniswap_v4_sequential_swap", combined_hex.as_str());

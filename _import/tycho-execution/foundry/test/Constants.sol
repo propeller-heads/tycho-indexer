@@ -56,6 +56,7 @@ contract Constants is Test, BaseConstants {
     address BSGG_ADDR = address(0xdA16Cf041E2780618c49Dbae5d734B89a6Bac9b3);
     address GHO_ADDR = address(0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f);
     address ONDO_ADDR = address(0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3);
+    address RLUSD_ADDR = address(0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD);
 
     // Maverick v2
     address MAVERICK_V2_FACTORY = 0x0A7e848Aca42d879EF06507Fca0E7b33A0a63c1e;
@@ -145,6 +146,9 @@ contract Constants is Test, BaseConstants {
 
     // Curve meta registry
     address CURVE_META_REGISTRY = 0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC;
+
+    // Uniswap v4 pool manager
+    address POOL_MANAGER = 0x000000000004444c5dc75cB358380D2e3dE08A90;
 
     /**
      * @dev Deploys a dummy contract with non-empty bytecode
