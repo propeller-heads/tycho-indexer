@@ -57,17 +57,21 @@ impl RfqStreamProcessor {
         let mut rfq_credentials = HashMap::new();
         let (bebop_user, bebop_key) = (env::var("BEBOP_USER").ok(), env::var("BEBOP_KEY").ok());
         if let (Some(user), Some(key)) = (bebop_user, bebop_key) {
-            info!("Bebop RFQ credentials found.");
+            info!("Bebop RFQ credentials found");
             rfq_credentials.insert(RfqProtocol::Bebop, (user, key));
+        } else {
+            info!("Bebop RFQ credentials not found. Expected environment variables: BEBOP_USER, BEBOP_KEY");
         }
         let (hashflow_user, hashflow_key) =
             (env::var("HASHFLOW_USER").ok(), env::var("HASHFLOW_KEY").ok());
         if let (Some(user), Some(key)) = (hashflow_user, hashflow_key) {
-            info!("Hashflow RFQ credentials found.");
+            info!("Hashflow RFQ credentials found");
             rfq_credentials.insert(RfqProtocol::Hashflow, (user, key));
+        } else {
+            info!("Hashflow RFQ credentials not found. Expected environment variables: HASHFLOW_USER, HASHFLOW_KEY");
         }
         if rfq_credentials.is_empty() {
-            return Err(miette!("No RFQ credentials found. Please set BEBOP_USER and BEBOP_KEY or HASHFLOW_USER and HASHFLOW_KEY environment variables."));
+            return Err(miette!("No RFQ credentials found. Please set BEBOP_USER and BEBOP_KEY or HASHFLOW_USER and HASHFLOW_KEY environment variables"));
         }
         Ok(Self { chain, tvl_threshold, rfq_credentials, sample_size, skip_messages_duration })
     }
