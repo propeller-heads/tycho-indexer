@@ -1,3 +1,16 @@
+## [0.130.0](https://github.com/propeller-heads/tycho-execution/compare/0.129.3...0.130.0) (2025-10-09)
+
+
+### Features
+
+* Support Euler low balance single swaps (univ4) ([f82ae3b](https://github.com/propeller-heads/tycho-execution/commit/f82ae3b92a82b27981f7178ec5d3c4cc7ec1329a))
+
+
+### Bug Fixes
+
+* Hook and hook data are per pool! not per swap ([d13b4d8](https://github.com/propeller-heads/tycho-execution/commit/d13b4d8586b8371ffd16100695aee80665000cd9))
+* Support Euler in swapExactInput ([b83f7c4](https://github.com/propeller-heads/tycho-execution/commit/b83f7c41f6eef289d2aa7a3e953124d184bdd785))
+
 ## [0.129.3](https://github.com/propeller-heads/tycho-execution/compare/0.129.2...0.129.3) (2025-10-09)
 
 ## [0.129.2](https://github.com/propeller-heads/tycho-execution/compare/0.129.1...0.129.2) (2025-10-09)
