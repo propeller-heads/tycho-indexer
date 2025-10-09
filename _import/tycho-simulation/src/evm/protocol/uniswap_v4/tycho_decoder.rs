@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
 use alloy::primitives::{Address, U256};
+use itertools::Itertools;
 use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
-use tycho_common::{models::token::Token, Bytes};
+use tycho_common::{models::token::Token, simulation::protocol_sim::ProtocolSim, Bytes};
 
 use super::state::UniswapV4State;
 use crate::{
@@ -134,7 +135,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
                 } else {
                     return Err(InvalidSnapshotError::MissingAttribute(
                         "tick_liquidities".to_string(),
-                    ))
+                    ));
                 }
             }
         };
@@ -165,7 +166,24 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
 
             let hook_handler = instantiate_hook_handler(&hook_address, hook_params)?;
             state.set_hook_handler(hook_handler);
+        };
+
+        for tokens in snapshot
+            .component
+            .tokens
+            .iter()
+            .permutations(2)
+        {
+            let (t0, t1) = (tokens[0], tokens[1]);
+            let token_in = all_tokens.get(t0).ok_or_else(|| {
+                InvalidSnapshotError::ValueError("Failed to get token".to_string())
+            })?;
+            let token_out = all_tokens.get(t1).ok_or_else(|| {
+                InvalidSnapshotError::ValueError("Failed to get token".to_string())
+            })?;
+            state.spot_price(token_in, token_out)?;
         }
+
         Ok(state)
     }
 }
