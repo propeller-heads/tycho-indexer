@@ -127,7 +127,7 @@ impl UniswapV4State {
                 liquidity: self.liquidity,
                 tick: self.tick,
                 gas_used: U256::from(3_000), // baseline gas cost for no-op swap
-            })
+            });
         }
 
         if self.liquidity == 0 {
@@ -485,7 +485,7 @@ impl ProtocolSim for UniswapV4State {
                     if amount_to_swap > I256::ZERO {
                         return Err(SimulationError::FatalError(
                             "Hook delta exceeds swap amount".into(),
-                        ))
+                        ));
                     }
                 }
 
@@ -939,16 +939,6 @@ mod tests {
             timestamp: 0,
         };
 
-        let usv4_state = UniswapV4State::try_from_with_header(
-            state,
-            block,
-            &Default::default(),
-            &Default::default(),
-            &DecoderContext::new(),
-        )
-        .await
-        .unwrap();
-
         let t0 = Token::new(
             &Bytes::from_str("0x647e32181a64f4ffd4f0b0b4b052ec05b277729c").unwrap(),
             "T0",
@@ -967,6 +957,21 @@ mod tests {
             Chain::Ethereum,
             100,
         );
+
+        let all_tokens = [t0.clone(), t1.clone()]
+            .iter()
+            .map(|t| (t.address.clone(), t.clone()))
+            .collect();
+
+        let usv4_state = UniswapV4State::try_from_with_header(
+            state,
+            block,
+            &Default::default(),
+            &all_tokens,
+            &DecoderContext::new(),
+        )
+        .await
+        .unwrap();
 
         let res = usv4_state
             .get_amount_out(BigUint::from_u64(1000000000000000000).unwrap(), &t0, &t1)
@@ -1021,16 +1026,6 @@ mod tests {
         let state: ComponentWithState = serde_json::from_value(data)
             .expect("Expected json to match ComponentWithState structure");
 
-        let usv4_state = UniswapV4State::try_from_with_header(
-            state,
-            block,
-            &Default::default(),
-            &Default::default(),
-            &DecoderContext::new(),
-        )
-        .await
-        .unwrap();
-
         let t0 = Token::new(
             &Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap(),
             "WBTC",
@@ -1049,6 +1044,21 @@ mod tests {
             Chain::Ethereum,
             100,
         );
+
+        let all_tokens = [t0.clone(), t1.clone()]
+            .iter()
+            .map(|t| (t.address.clone(), t.clone()))
+            .collect();
+
+        let usv4_state = UniswapV4State::try_from_with_header(
+            state,
+            block,
+            &Default::default(),
+            &all_tokens,
+            &DecoderContext::new(),
+        )
+        .await
+        .unwrap();
 
         let res = usv4_state
             .get_limits(t0.address.clone(), t1.address.clone())
