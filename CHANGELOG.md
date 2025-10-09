@@ -1,3 +1,16 @@
+## [0.95.0](https://github.com/propeller-heads/tycho-indexer/compare/0.94.1...0.95.0) (2025-10-09)
+
+
+### Features
+
+* add bsc chain ([a8d3973](https://github.com/propeller-heads/tycho-indexer/commit/a8d39731e51115a081c23ae8224b18a8c5b2f780))
+* add bsc chain ([#724](https://github.com/propeller-heads/tycho-indexer/issues/724)) ([0a8d4bf](https://github.com/propeller-heads/tycho-indexer/commit/0a8d4bfc31c5345867b6f9c06fb4cdd47f02abec))
+
+
+### Bug Fixes
+
+* function name typo ([e8da824](https://github.com/propeller-heads/tycho-indexer/commit/e8da824904e3325c685fc7b85242e4d3f02d62b6))
+
 ## [0.94.1](https://github.com/propeller-heads/tycho-indexer/compare/0.94.0...0.94.1) (2025-10-08)
 
 ## [0.94.0](https://github.com/propeller-heads/tycho-indexer/compare/0.93.1...0.94.0) (2025-10-07)
