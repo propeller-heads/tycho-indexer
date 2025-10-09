@@ -64,9 +64,9 @@ impl BebopPriceData {
     /// Note: This calculation normalizes the quote token in case quote_price_data is passed.
     ///
     /// # Parameters
-    /// - `quote_price_data`: Optional price data for converting the quote token to an approved token
-    /// - `is_inverted`: If true, the quote_price_data represents APPROVED/QUOTE instead of QUOTE/APPROVED
-    pub fn calculate_tvl(&self, quote_price_data: Option<BebopPriceData>, is_inverted: bool) -> f64 {
+    /// - `quote_price_data`: Optional price data for converting the quote token to an approved
+    ///   token
+    pub fn calculate_tvl(&self, quote_price_data: Option<&BebopPriceData>) -> f64 {
         let bid_tvl: f64 = self
             .get_bids()
             .iter()
@@ -84,49 +84,40 @@ impl BebopPriceData {
         // If quote price data is provided, we need to normalize the TVL to be in
         // one of the approved token (for example USDC)
         if let Some(quote_data) = quote_price_data {
-            if is_inverted {
-                // get_mid_price with inverted=true returns total output amount
-                if let Some(approved_amount) = quote_data.get_mid_price(total_tvl, true) {
-                    total_tvl = approved_amount;
-                } else {
-                    return 0.0;
-                }
+            // Convert our quote token amount to the approved token
+            // The quote_data pair contains our quote token and an approved token
+            // get_mid_price automatically figures out which direction to convert
+            if let Some(price) = quote_data.get_mid_price(total_tvl, &self.quote) {
+                total_tvl *= price;
             } else {
-                // get_mid_price with inverted=false returns rate, so multiply by amount
-                if let Some(price_rate) = quote_data.get_mid_price(total_tvl, false) {
-                    total_tvl *= price_rate;
-                } else {
-                    return 0.0;
-                }
+                // Quote token has no TVL in one of the approved tokens (for normalizations)
+                return 0.0;
             }
         }
         total_tvl
     }
 
-    /// Gets the mid price **rate** or total amount
+    /// Gets the mid price by averaging bid and ask
     ///
     /// # Parameters
-    /// - `amount`: The amount of tokens to price
-    /// - `inverted`: If true, we have quote tokens and want base tokens, returns total output amount
-    ///              If false, returns the price rate (output per input unit)
+    /// - `amount`: The amount of tokens to convert
+    /// - `sell_token`: The token we're selling
     ///
     /// # Returns
-    /// - When inverted=false: The mid price rate (e.g., USDC per WETH)
-    /// - When inverted=true: The total output amount (e.g., total USDC for given WETH amount)
-    pub fn get_mid_price(&self, amount: f64, inverted: bool) -> Option<f64> {
-        let sell_output = self.get_price(amount, true, inverted)?;
-        let buy_output = self.get_price(amount, false, inverted)?;
-
-        if !inverted {
-            // Normal case: get_price returns rate, return average rate
-            Some((sell_output + buy_output) / 2.0)
-        } else {
-            // Inverted case: get_price returns total amount, return average total
-            Some((sell_output + buy_output) / 2.0)
+    /// The average price from using both bids and asks
+    pub fn get_mid_price(&self, amount: f64, sell_token: &[u8]) -> Option<f64> {
+        // Check if sell_token matches either base or quote
+        if sell_token != self.base.as_slice() && sell_token != self.quote.as_slice() {
+            return None;
         }
+
+        let inverse = sell_token == self.quote.as_slice();
+        let asks_price = self.get_price_for_levels(amount, self.get_asks(), inverse)?;
+        let bids_price = self.get_price_for_levels(amount, self.get_bids(), inverse)?;
+        Some((asks_price + bids_price) / 2.0)
     }
 
-    /// Calculate output token amount for trading input tokens using price levels
+    /// Calculate price for trading input tokens using price levels
     ///
     /// NOTE: This method is meant just to be used as an estimate - as it does not
     /// error or return None if there is not enough liquidity to cover token amount.
@@ -134,88 +125,48 @@ impl BebopPriceData {
     ///
     /// # Parameters
     /// - `amount_in`: The amount of input tokens to trade
-    /// - `sell`: True for selling base (use bids), false for buying base (use asks)
-    /// - `inverted`: If true, we're trading quote->base instead of base->quote
+    /// - `sell_token`: The token being sold (must be either base or quote of this pair)
     ///
     /// # Returns
-    /// Amount of output tokens at the given price levels
-    pub fn get_price(&self, amount_in: f64, sell: bool, inverted: bool) -> Option<f64> {
+    /// Price (output tokens per input token)
+    pub fn get_price(&self, amount_in: f64, sell_token: &[u8]) -> Option<f64> {
         // Price levels are already sorted: https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/rfq-api-endpoints/pricing#interpreting-price-levels
 
-        if !inverted {
-            // Normal case: trading base for quote
-            // If selling AAA for USDC, we need to look at [AAA/USDC].bids
-            // If buying AAA with USDC, we need to look at [AAA/USDC].asks
-            let price_levels = if sell { self.get_bids() } else { self.get_asks() };
-
-            if price_levels.is_empty() {
-                return None;
-            }
-
-            let (total_quote_token, remaining_base_token) =
-                self.get_amount_out_from_levels(amount_in, price_levels);
-
-            // If we can't fill the whole order (ran out of liquidity), calculate the price based on
-            // the amount that we could fill, in order to have at least some price estimate
-            Some(total_quote_token / (amount_in - remaining_base_token))
+        if sell_token == self.base.as_slice() {
+            // Selling base for quote: use bids
+            self.get_price_for_levels(amount_in, self.get_bids(), false)
+        } else if sell_token == self.quote.as_slice() {
+            // Selling quote for base: use asks inverted
+            self.get_price_for_levels(amount_in, self.get_asks(), true)
         } else {
-            // Inverted case: trading quote for base (e.g., have WETH, want USDC from USDC/WETH pair)
-            // To buy base with quote, we need to use the opposite price levels:
-            // - If "selling" (from inverted perspective), we use asks to buy base
-            // - If "buying" (from inverted perspective), we use bids to buy base
-            let price_levels = if sell { self.get_asks() } else { self.get_bids() };
-
-            if price_levels.is_empty() {
-                return None;
-            }
-
-            let (base_amount_out, _remaining_quote) =
-                Self::get_inverted_amount_out(amount_in, price_levels);
-
-            Some(base_amount_out)
+            // Token not in this pair
+            None
         }
     }
 
-    /// Helper function to calculate base token output when we have quote tokens and want to trade inverted
+    /// Helper to calculate price from specific price levels
     ///
     /// # Parameters
-    /// - `quote_amount_in`: Amount of quote tokens we want to trade
-    /// - `price_levels`: Price levels as (price_quote_per_base, base_size)
+    /// - `amount_in`: Amount of input tokens
+    /// - `price_levels`: Price levels to use
+    /// - `invert`: Whether to invert the price levels (for quote->base trades)
     ///
     /// # Returns
-    /// (base_amount_out, remaining_quote_amount)
-    fn get_inverted_amount_out(
-        quote_amount_in: f64,
+    /// Price (output per input)
+    fn get_price_for_levels(
+        &self,
+        amount_in: f64,
         price_levels: Vec<(f64, f64)>,
-    ) -> (f64, f64) {
-        let mut remaining_quote = quote_amount_in;
-        let mut base_out = 0.0;
-
-        for (price_quote_per_base, base_available) in price_levels.iter() {
-            if remaining_quote <= 0.0 {
-                break;
-            }
-
-            if *price_quote_per_base <= 0.0 {
-                continue;
-            }
-
-            // How much quote do we need to buy this much base?
-            let quote_needed = base_available * price_quote_per_base;
-
-            if remaining_quote >= quote_needed {
-                // We can afford all of this level
-                base_out += base_available;
-                remaining_quote -= quote_needed;
-            } else {
-                // We can only afford part of this level
-                let base_we_can_buy = remaining_quote / price_quote_per_base;
-                base_out += base_we_can_buy;
-                remaining_quote = 0.0;
-            }
+        invert: bool,
+    ) -> Option<f64> {
+        if price_levels.is_empty() {
+            return None;
         }
 
-        (base_out, remaining_quote)
+        let levels = if invert { Self::invert_price_levels(price_levels) } else { price_levels };
+
+        let (amount_out, remaining_in) = self.get_amount_out_from_levels(amount_in, levels);
+        Some(amount_out / (amount_in - remaining_in))
     }
 
     /// Calculates the total token output for a given token input using provided price levels.
@@ -258,6 +209,35 @@ impl BebopPriceData {
             remaining_amount_in -= amount_in_available_to_trade;
         }
         (amount_out, remaining_amount_in)
+    }
+
+    /// Inverts price levels for quote-to-base conversions
+    ///
+    /// Converts price levels from `(quote_per_base, base_size)` format to `(base_per_quote,
+    /// quote_size)` format. This allows reusing `get_amount_out_from_levels` for inverted
+    /// trading directions.
+    ///
+    /// # Parameters
+    /// - `price_levels`: Vector of `(quote_per_base, base_size)` tuples
+    ///
+    /// # Returns
+    /// Vector of `(base_per_quote, quote_size)` tuples with zero prices filtered out
+    ///
+    /// # Example
+    /// ```
+    /// // Input: (0.11 TAMARA/USDC, 3000 USDC)
+    /// // Output: (9.09 USDC/TAMARA, 330 TAMARA)
+    /// ```
+    fn invert_price_levels(price_levels: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
+        price_levels
+            .iter()
+            .filter(|(price, _)| *price > 0.0)
+            .map(|(price_quote_per_base, base_available)| {
+                let price_base_per_quote = 1.0 / price_quote_per_base;
+                let quote_size = base_available * price_quote_per_base;
+                (price_base_per_quote, quote_size)
+            })
+            .collect()
     }
 }
 
@@ -405,7 +385,7 @@ mod tests {
             asks: vec![2001.0f32, 1.5f32, 2002.0f32, 1.0f32],
         };
 
-        let tvl = price_data.calculate_tvl(None, false);
+        let tvl = price_data.calculate_tvl(None);
 
         // Expected calculation:
         // Bid TVL: (2000.0 * 1.0) + (1999.0 * 2.0) = 2000.0 + 3998.0 = 5998.0
@@ -433,7 +413,7 @@ mod tests {
             asks: vec![11.0f32, 300.0f32, 12.0f32, 300.0f32],
         };
 
-        let tvl = price_data_eth_tamara.calculate_tvl(Some(price_data_tamara_usdc), false);
+        let tvl = price_data_eth_tamara.calculate_tvl(Some(&price_data_tamara_usdc));
 
         // Expected calculation:
         // TVL of ETH in TAMARA = (99 * 1 + 98 * 2 + 101 * 1 + 102 * 2) / 2 = 300
@@ -463,11 +443,13 @@ mod tests {
             last_update_ts: 1234567890,
             // Price in TAMARA per USDC
             // 1 USDC = ~0.1 TAMARA, so we use smaller numbers
-            bids: vec![0.09f32, 3000.0f32, 0.08f32, 3000.0f32], // Selling USDC gets us 0.09-0.08 TAMARA per USDC
-            asks: vec![0.11f32, 3000.0f32, 0.12f32, 3000.0f32], // Buying USDC costs us 0.11-0.12 TAMARA per USDC
+            bids: vec![0.09f32, 3000.0f32, 0.08f32, 3000.0f32], /* Selling USDC gets us 0.09-0.08
+                                                                 * TAMARA per USDC */
+            asks: vec![0.11f32, 3000.0f32, 0.12f32, 3000.0f32], /* Buying USDC costs us 0.11-0.12
+                                                                 * TAMARA per USDC */
         };
 
-        let tvl = price_data_eth_tamara.calculate_tvl(Some(price_data_usdc_tamara), true);
+        let tvl = price_data_eth_tamara.calculate_tvl(Some(&price_data_usdc_tamara));
 
         // Expected calculation:
         // TVL of ETH in TAMARA = (99 * 1 + 98 * 2 + 101 * 1 + 102 * 2) / 2 = 300 TAMARA
@@ -489,52 +471,129 @@ mod tests {
     }
 
     #[test]
-    fn test_get_mid_price() {
+    fn test_get_mid_price_bidirectional() {
+        // Test normal direction: base -> quote
+        let weth_addr = hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
+        let usdc_addr = hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
+
         let price_data = BebopPriceData {
-            base: hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(), // WETH
-            quote: hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(), // USDC
+            base: weth_addr.clone(),
+            quote: usdc_addr.clone(),
             last_update_ts: 1234567890,
             bids: vec![2000.0f32, 2.0f32, 1999.0f32, 3.0f32],
             asks: vec![2001.0f32, 3.0f32, 2002.0f32, 1.0f32],
         };
 
-        // Test mid price for larger amount spanning multiple levels
-        let mid_price_large = price_data.get_mid_price(3.0, false);
-        // Sell 3.0 tokens: 2.0 at 2000.0 + 1.0 at 1999.0 = 4000.0 + 1999.0 = 5999.0
-        // Buy 3.0 tokens: 3.0 at 2001.0 = 6003.0
-        // Mid = (5999.0 + 6003.0) / 2 = 6001.0
-        assert_eq!(mid_price_large, Some(2000.3333333333335));
+        // Get price for selling 3 WETH for USDC
+        let usdc_price = price_data.get_mid_price(3.0, &weth_addr);
+        // Sell 3.0 tokens: 2.0 at 2000.0 + 1.0 at 1999.0 = 5999.0 total, rate = 5999/3 = 1999.67
+        // Buy 3.0 tokens: 3.0 at 2001.0 = 6003.0 total, rate = 6003/3 = 2001.0
+        // Mid price = (1999.67 + 2001.0) / 2 = 2000.33 USDC per WETH
+        assert!((usdc_price.unwrap() - 2000.3333333333335).abs() < 0.01);
+
+        // Test inverted direction: quote -> base
+        // Get price for selling USDC for WETH
+        let weth_price = price_data.get_mid_price(6000.0, &usdc_addr);
+        // This should be roughly 1/2000 = 0.0005 WETH per USDC
+        assert!(weth_price.is_some());
+        let price = weth_price.unwrap();
+        assert!((price - 0.0005).abs() < 0.0001);
+
+        // Test with non-matching tokens
+        let dai_addr = hex::decode("6B175474E89094C44Da98b954EedeAC495271d0F").unwrap();
+        let result = price_data.get_mid_price(100.0, &dai_addr);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_get_mid_price() {
+        let weth_addr = hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(); // WETH
+        let usdc_addr = hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(); // USDC
+
+        let price_data = BebopPriceData {
+            base: weth_addr.clone(),
+            quote: usdc_addr.clone(),
+            last_update_ts: 1234567890,
+            bids: vec![2000.0f32, 2.0f32, 1999.0f32, 3.0f32],
+            asks: vec![2001.0f32, 3.0f32, 2002.0f32, 1.0f32],
+        };
+
+        // Test mid price for larger amount spanning multiple levels (selling WETH for USDC)
+        let mid_price_large = price_data.get_mid_price(3.0, &weth_addr);
+        // Sell 3.0 tokens: 2.0 at 2000.0 + 1.0 at 1999.0 = 5999.0 total, rate = 5999/3 = 1999.67
+        // Buy 3.0 tokens: 3.0 at 2001.0 = 6003.0 total, rate = 6003/3 = 2001.0
+        // Mid price = (1999.67 + 2001.0) / 2 = 2000.33 USDC per WETH
+        assert!((mid_price_large.unwrap() - 2000.3333333333335).abs() < 0.01);
 
         // Test missing bids. Token considered untradeable.
         let price_data = BebopPriceData {
-            base: hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(), // WETH
-            quote: hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(), // USDC
+            base: weth_addr.clone(),
+            quote: usdc_addr.clone(),
             last_update_ts: 1234567890,
             bids: vec![],
             asks: vec![2001.0f32, 3.0f32, 2002.0f32, 1.0f32],
         };
-        assert_eq!(price_data.get_mid_price(3.0, false), None);
+        assert_eq!(price_data.get_mid_price(3.0, &weth_addr), None);
 
         // Test missing asks. Token considered untradeable.
         let price_data = BebopPriceData {
-            base: hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(), // WETH
-            quote: hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(), // USDC
+            base: weth_addr.clone(),
+            quote: usdc_addr.clone(),
             last_update_ts: 1234567890,
             bids: vec![2000.0f32, 2.0f32, 1999.0f32, 3.0f32],
             asks: vec![],
         };
-        assert_eq!(price_data.get_mid_price(3.0, false), None);
+        assert_eq!(price_data.get_mid_price(3.0, &weth_addr), None);
 
         // Test not enough liquidity (give estimate based on existing liquidity)
         let price_data = BebopPriceData {
-            base: hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(), // WETH
-            quote: hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(), // USDC
+            base: weth_addr.clone(),
+            quote: usdc_addr.clone(),
             last_update_ts: 1234567890,
             bids: vec![2000.0f32, 2.0f32, 1999.0f32, 3.0f32],
             asks: vec![2001.0f32, 3.0f32, 2002.0f32, 1.0f32],
         };
-        let insufficient_mid = price_data.get_mid_price(10.0, false);
+        let insufficient_mid = price_data.get_mid_price(10.0, &weth_addr);
+        // With 10 WETH but only 5 WETH liquidity, we get partial fills
+        // The price returned is still an average price
         assert_eq!(insufficient_mid, Some(2000.325));
+    }
+
+    #[test]
+    fn test_invert_price_levels() {
+        // Test case: USDC/TAMARA pair with asks
+        // Original: (0.11 TAMARA/USDC, 3000 USDC available)
+        // Inverted: (9.09 USDC/TAMARA, 330 TAMARA available)
+        let price_levels = vec![(0.11, 3000.0), (0.12, 3000.0)];
+
+        let inverted = BebopPriceData::invert_price_levels(price_levels);
+
+        assert_eq!(inverted.len(), 2);
+
+        // First level: 1/0.11 = 9.09 USDC/TAMARA, 3000 * 0.11 = 330 TAMARA
+        assert!((inverted[0].0 - 9.090909090909092).abs() < 0.0001);
+        assert!((inverted[0].1 - 330.0).abs() < 0.0001);
+
+        // Second level: 1/0.12 = 8.33 USDC/TAMARA, 3000 * 0.12 = 360 TAMARA
+        assert!((inverted[1].0 - 8.333333333333334).abs() < 0.0001);
+        assert!((inverted[1].1 - 360.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_invert_price_levels_filters_zero() {
+        // Test that zero prices are filtered out
+        let price_levels = vec![
+            (0.11, 3000.0),
+            (0.0, 5000.0), // Should be filtered
+            (0.12, 3000.0),
+        ];
+
+        let inverted = BebopPriceData::invert_price_levels(price_levels);
+
+        // Only 2 levels should remain (zero price filtered out)
+        assert_eq!(inverted.len(), 2);
+        assert!((inverted[0].0 - 9.090909090909092).abs() < 0.0001);
+        assert!((inverted[1].0 - 8.333333333333334).abs() < 0.0001);
     }
 
     #[cfg(test)]
