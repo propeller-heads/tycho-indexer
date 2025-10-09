@@ -6,7 +6,7 @@ use num_bigint::{BigInt, BigUint};
 use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 use tycho_execution::encoding::{
     evm::utils::write_calldata_to_file,
-    models::{NativeAction, Solution, Swap, UserTransferType},
+    models::{NativeAction, Solution, SwapBuilder, UserTransferType},
 };
 
 use crate::common::{
@@ -27,32 +27,26 @@ fn test_sequential_swap_strategy_encoder() {
     let wbtc = wbtc();
     let usdc = usdc();
 
-    let swap_weth_wbtc = Swap {
-        component: ProtocolComponent {
+    let swap_weth_wbtc = SwapBuilder::new(
+        ProtocolComponent {
             id: "0xBb2b8038a1640196FbE3e38816F3e67Cba72D940".to_string(),
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        token_in: weth.clone(),
-        token_out: wbtc.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
-    let swap_wbtc_usdc = Swap {
-        component: ProtocolComponent {
+        weth.clone(),
+        wbtc.clone(),
+    )
+    .build();
+    let swap_wbtc_usdc = SwapBuilder::new(
+        ProtocolComponent {
             id: "0x004375Dff511095CC5A197A54140a24eFEF3A416".to_string(),
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        token_in: wbtc.clone(),
-        token_out: usdc.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
+        wbtc.clone(),
+        usdc.clone(),
+    )
+    .build();
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
     let solution = Solution {
@@ -97,32 +91,26 @@ fn test_sequential_swap_strategy_encoder_no_permit2() {
     let wbtc = wbtc();
     let usdc = usdc();
 
-    let swap_weth_wbtc = Swap {
-        component: ProtocolComponent {
+    let swap_weth_wbtc = SwapBuilder::new(
+        ProtocolComponent {
             id: "0xBb2b8038a1640196FbE3e38816F3e67Cba72D940".to_string(),
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        token_in: weth.clone(),
-        token_out: wbtc.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
-    let swap_wbtc_usdc = Swap {
-        component: ProtocolComponent {
+        weth.clone(),
+        wbtc.clone(),
+    )
+    .build();
+    let swap_wbtc_usdc = SwapBuilder::new(
+        ProtocolComponent {
             id: "0x004375Dff511095CC5A197A54140a24eFEF3A416".to_string(),
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        token_in: wbtc.clone(),
-        token_out: usdc.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
+        wbtc.clone(),
+        usdc.clone(),
+    )
+    .build();
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
     let solution = Solution {
@@ -206,8 +194,8 @@ fn test_sequential_strategy_cyclic_swap() {
 
     // Create two Uniswap V3 pools for the cyclic swap
     // USDC -> WETH (Pool 1)
-    let swap_usdc_weth = Swap {
-        component: ProtocolComponent {
+    let swap_usdc_weth = SwapBuilder::new(
+        ProtocolComponent {
             id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(), /* USDC-WETH USV3
                                                                            * Pool 1 */
             protocol_system: "uniswap_v3".to_string(),
@@ -219,17 +207,14 @@ fn test_sequential_strategy_cyclic_swap() {
             },
             ..Default::default()
         },
-        token_in: usdc.clone(),
-        token_out: weth.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
+        usdc.clone(),
+        weth.clone(),
+    )
+    .build();
 
     // WETH -> USDC (Pool 2)
-    let swap_weth_usdc = Swap {
-        component: ProtocolComponent {
+    let swap_weth_usdc = SwapBuilder::new(
+        ProtocolComponent {
             id: "0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8".to_string(), /* USDC-WETH USV3
                                                                            * Pool 2 */
             protocol_system: "uniswap_v3".to_string(),
@@ -243,13 +228,10 @@ fn test_sequential_strategy_cyclic_swap() {
             },
             ..Default::default()
         },
-        token_in: weth.clone(),
-        token_out: usdc.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
+        weth.clone(),
+        usdc.clone(),
+    )
+    .build();
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
@@ -337,32 +319,26 @@ fn test_sequential_swap_strategy_encoder_unwrap() {
     let wbtc = wbtc();
     let usdc = usdc();
 
-    let swap_usdc_wbtc = Swap {
-        component: ProtocolComponent {
+    let swap_usdc_wbtc = SwapBuilder::new(
+        ProtocolComponent {
             id: "0x004375Dff511095CC5A197A54140a24eFEF3A416".to_string(),
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        token_in: usdc.clone(),
-        token_out: wbtc.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
-    let swap_wbtc_weth = Swap {
-        component: ProtocolComponent {
+        usdc.clone(),
+        wbtc.clone(),
+    )
+    .build();
+    let swap_wbtc_weth = SwapBuilder::new(
+        ProtocolComponent {
             id: "0xBb2b8038a1640196FbE3e38816F3e67Cba72D940".to_string(),
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        token_in: wbtc.clone(),
-        token_out: weth.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
+        wbtc.clone(),
+        weth.clone(),
+    )
+    .build();
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
     let solution = Solution {

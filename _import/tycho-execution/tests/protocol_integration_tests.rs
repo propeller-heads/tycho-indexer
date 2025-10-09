@@ -38,15 +38,7 @@ fn test_single_encoding_strategy_ekubo() {
         ..Default::default()
     };
 
-    let swap = Swap {
-        component,
-        token_in: token_in.clone(),
-        token_out: token_out.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
+    let swap = SwapBuilder::new(component, token_in.clone(), token_out.clone()).build();
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -92,15 +84,7 @@ fn test_single_encoding_strategy_maverick() {
     };
     let token_in = Bytes::from("0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f");
     let token_out = usdc();
-    let swap = Swap {
-        component: maverick_pool,
-        token_in: token_in.clone(),
-        token_out: token_out.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
+    let swap = SwapBuilder::new(maverick_pool, token_in.clone(), token_out.clone()).build();
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 

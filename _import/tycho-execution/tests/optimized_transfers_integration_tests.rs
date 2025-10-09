@@ -8,7 +8,7 @@ use tycho_execution::encoding::{
         testing_utils::MockRFQState,
         utils::{biguint_to_u256, write_calldata_to_file},
     },
-    models::{Solution, Swap, SwapBuilder, UserTransferType},
+    models::{Solution, SwapBuilder, UserTransferType},
 };
 
 use crate::common::{
@@ -34,8 +34,8 @@ fn test_uniswap_v3_uniswap_v2() {
     let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
     let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
 
-    let swap_weth_wbtc = Swap {
-        component: ProtocolComponent {
+    let swap_weth_wbtc = SwapBuilder::new(
+        ProtocolComponent {
             id: "0xCBCdF9626bC03E24f779434178A73a0B4bad62eD".to_string(),
             protocol_system: "uniswap_v3".to_string(),
             static_attributes: {
@@ -48,26 +48,20 @@ fn test_uniswap_v3_uniswap_v2() {
             },
             ..Default::default()
         },
-        token_in: weth.clone(),
-        token_out: wbtc.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
-    let swap_wbtc_usdc = Swap {
-        component: ProtocolComponent {
+        weth.clone(),
+        wbtc.clone(),
+    )
+    .build();
+    let swap_wbtc_usdc = SwapBuilder::new(
+        ProtocolComponent {
             id: "0x004375Dff511095CC5A197A54140a24eFEF3A416".to_string(),
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        token_in: wbtc.clone(),
-        token_out: usdc.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
+        wbtc.clone(),
+        usdc.clone(),
+    )
+    .build();
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
     let solution = Solution {
@@ -117,8 +111,8 @@ fn test_uniswap_v3_uniswap_v3() {
     let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
     let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
 
-    let swap_weth_wbtc = Swap {
-        component: ProtocolComponent {
+    let swap_weth_wbtc = SwapBuilder::new(
+        ProtocolComponent {
             id: "0xCBCdF9626bC03E24f779434178A73a0B4bad62eD".to_string(),
             protocol_system: "uniswap_v3".to_string(),
             static_attributes: {
@@ -131,15 +125,12 @@ fn test_uniswap_v3_uniswap_v3() {
             },
             ..Default::default()
         },
-        token_in: weth.clone(),
-        token_out: wbtc.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
-    let swap_wbtc_usdc = Swap {
-        component: ProtocolComponent {
+        weth.clone(),
+        wbtc.clone(),
+    )
+    .build();
+    let swap_wbtc_usdc = SwapBuilder::new(
+        ProtocolComponent {
             id: "0x99ac8cA7087fA4A2A1FB6357269965A2014ABc35".to_string(),
             protocol_system: "uniswap_v3".to_string(),
             static_attributes: {
@@ -152,13 +143,10 @@ fn test_uniswap_v3_uniswap_v3() {
             },
             ..Default::default()
         },
-        token_in: wbtc.clone(),
-        token_out: usdc.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
+        wbtc.clone(),
+        usdc.clone(),
+    )
+    .build();
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
     let solution = Solution {
@@ -207,8 +195,8 @@ fn test_uniswap_v3_curve() {
     let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
     let usdt = Bytes::from_str("0xdAC17F958D2ee523a2206206994597C13D831ec7").unwrap();
 
-    let swap_weth_wbtc = Swap {
-        component: ProtocolComponent {
+    let swap_weth_wbtc = SwapBuilder::new(
+        ProtocolComponent {
             id: "0xCBCdF9626bC03E24f779434178A73a0B4bad62eD".to_string(),
             protocol_system: "uniswap_v3".to_string(),
             static_attributes: {
@@ -221,16 +209,13 @@ fn test_uniswap_v3_curve() {
             },
             ..Default::default()
         },
-        token_in: weth.clone(),
-        token_out: wbtc.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
+        weth.clone(),
+        wbtc.clone(),
+    )
+    .build();
 
-    let swap_wbtc_usdt = Swap {
-        component: ProtocolComponent {
+    let swap_wbtc_usdt = SwapBuilder::new(
+        ProtocolComponent {
             id: String::from("0xD51a44d3FaE010294C616388b506AcdA1bfAAE46"),
             protocol_system: String::from("vm:curve"),
             static_attributes: {
@@ -252,13 +237,9 @@ fn test_uniswap_v3_curve() {
             },
             ..Default::default()
         },
-        token_in: wbtc.clone(),
-        token_out: usdt.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
+        wbtc.clone(),
+        usdt.clone(),
+    ).build();
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
     let solution = Solution {
@@ -307,33 +288,27 @@ fn test_balancer_v2_uniswap_v2() {
     let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
     let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
 
-    let swap_weth_wbtc = Swap {
-        component: ProtocolComponent {
+    let swap_weth_wbtc = SwapBuilder::new(
+        ProtocolComponent {
             id: "0xa6f548df93de924d73be7d25dc02554c6bd66db500020000000000000000000e".to_string(),
             protocol_system: "vm:balancer_v2".to_string(),
             ..Default::default()
         },
-        token_in: weth.clone(),
-        token_out: wbtc.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
+        weth.clone(),
+        wbtc.clone(),
+    )
+    .build();
 
-    let swap_wbtc_usdc = Swap {
-        component: ProtocolComponent {
+    let swap_wbtc_usdc = SwapBuilder::new(
+        ProtocolComponent {
             id: "0x004375Dff511095CC5A197A54140a24eFEF3A416".to_string(),
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        token_in: wbtc.clone(),
-        token_out: usdc.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
+        wbtc.clone(),
+        usdc.clone(),
+    )
+    .build();
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
     let solution = Solution {
@@ -385,36 +360,30 @@ fn test_multi_protocol() {
     let usdt = Bytes::from_str("0xdAC17F958D2ee523a2206206994597C13D831ec7").unwrap();
     let dai = Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap();
 
-    let usv2_swap_dai_weth = Swap {
-        component: ProtocolComponent {
+    let usv2_swap_dai_weth = SwapBuilder::new(
+        ProtocolComponent {
             id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        token_in: dai.clone(),
-        token_out: weth.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
+        dai.clone(),
+        weth.clone(),
+    )
+    .build();
 
-    let balancer_swap_weth_wbtc = Swap {
-        component: ProtocolComponent {
+    let balancer_swap_weth_wbtc = SwapBuilder::new(
+        ProtocolComponent {
             id: "0xa6f548df93de924d73be7d25dc02554c6bd66db500020000000000000000000e".to_string(),
             protocol_system: "vm:balancer_v2".to_string(),
             ..Default::default()
         },
-        token_in: weth.clone(),
-        token_out: wbtc.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
+        weth.clone(),
+        wbtc.clone(),
+    )
+    .build();
 
-    let curve_swap_wbtc_usdt = Swap {
-        component: ProtocolComponent {
+    let curve_swap_wbtc_usdt = SwapBuilder::new(
+        ProtocolComponent {
             id: String::from("0xD51a44d3FaE010294C616388b506AcdA1bfAAE46"),
             protocol_system: String::from("vm:curve"),
             static_attributes: {
@@ -436,13 +405,9 @@ fn test_multi_protocol() {
             },
             ..Default::default()
         },
-        token_in: wbtc.clone(),
-        token_out: usdt.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
+        wbtc.clone(),
+        usdt.clone(),
+    ).build();
 
     // Ekubo
 
@@ -458,15 +423,7 @@ fn test_multi_protocol() {
         ]),
         ..Default::default()
     };
-    let ekubo_swap_usdt_usdc = Swap {
-        component,
-        token_in: usdt.clone(),
-        token_out: usdc.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
+    let ekubo_swap_usdt_usdc = SwapBuilder::new(component, usdt.clone(), usdc.clone()).build();
 
     // USV4
     // Fee and tick spacing information for this test is obtained by querying the
@@ -478,20 +435,17 @@ fn test_multi_protocol() {
     static_attributes_usdc_eth.insert("key_lp_fee".into(), pool_fee_usdc_eth);
     static_attributes_usdc_eth.insert("tick_spacing".into(), tick_spacing_usdc_eth);
 
-    let usv4_swap_usdc_eth = Swap {
-        component: ProtocolComponent {
+    let usv4_swap_usdc_eth = SwapBuilder::new(
+        ProtocolComponent {
             id: "0xdce6394339af00981949f5f3baf27e3610c76326a700af57e4b3e3ae4977f78d".to_string(),
             protocol_system: "uniswap_v4".to_string(),
             static_attributes: static_attributes_usdc_eth,
             ..Default::default()
         },
-        token_in: usdc.clone(),
-        token_out: eth.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
+        usdc.clone(),
+        eth.clone(),
+    )
+    .build();
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
@@ -545,8 +499,8 @@ fn test_uniswap_v3_balancer_v3() {
     let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
     let qnt = Bytes::from_str("0x4a220e6096b25eadb88358cb44068a3248254675").unwrap();
 
-    let swap_weth_wbtc = Swap {
-        component: ProtocolComponent {
+    let swap_weth_wbtc = SwapBuilder::new(
+        ProtocolComponent {
             id: "0xCBCdF9626bC03E24f779434178A73a0B4bad62eD".to_string(),
             protocol_system: "uniswap_v3".to_string(),
             static_attributes: {
@@ -559,26 +513,20 @@ fn test_uniswap_v3_balancer_v3() {
             },
             ..Default::default()
         },
-        token_in: weth.clone(),
-        token_out: wbtc.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
-    let swap_wbtc_qnt = Swap {
-        component: ProtocolComponent {
+        weth.clone(),
+        wbtc.clone(),
+    )
+    .build();
+    let swap_wbtc_qnt = SwapBuilder::new(
+        ProtocolComponent {
             id: "0x571bea0e99e139cd0b6b7d9352ca872dfe0d72dd".to_string(),
             protocol_system: "vm:balancer_v3".to_string(),
             ..Default::default()
         },
-        token_in: wbtc.clone(),
-        token_out: qnt.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-        estimated_amount_in: None,
-    };
+        wbtc.clone(),
+        qnt.clone(),
+    )
+    .build();
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
     let solution = Solution {
