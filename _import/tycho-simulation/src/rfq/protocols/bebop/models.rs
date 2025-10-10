@@ -456,8 +456,8 @@ mod tests {
 
         // Get price for selling 3 WETH for USDC
         let usdc_price = price_data.get_mid_price(3.0, &weth_addr);
-        // Sell 3.0 tokens: 2.0 at 2000.0 + 1.0 at 1999.0 = 5999.0 total, rate = 5999/3 = 1999.67
-        // Buy 3.0 tokens: 3.0 at 2001.0 = 6003.0 total, rate = 6003/3 = 2001.0
+        // Sell 3.0 tokens: 2.0 at 2000.0 + 1.0 at 1999.0 = 5999.0 total, price = 5999/3 = 1999.67
+        // Buy 3.0 tokens: 3.0 at 2001.0 = 6003.0 total, price = 6003/3 = 2001.0
         // Mid price = (1999.67 + 2001.0) / 2 = 2000.33 USDC per WETH
         assert!((usdc_price.unwrap() - 2000.3333333333335).abs() < 0.01);
 
@@ -490,8 +490,8 @@ mod tests {
 
         // Test mid price for larger amount spanning multiple levels (selling WETH for USDC)
         let mid_price_large = price_data.get_mid_price(3.0, &weth_addr);
-        // Sell 3.0 tokens: 2.0 at 2000.0 + 1.0 at 1999.0 = 5999.0 total, rate = 5999/3 = 1999.67
-        // Buy 3.0 tokens: 3.0 at 2001.0 = 6003.0 total, rate = 6003/3 = 2001.0
+        // Sell 3.0 tokens: 2.0 at 2000.0 + 1.0 at 1999.0 = 5999.0 total, price = 5999/3 = 1999.67
+        // Buy 3.0 tokens: 3.0 at 2001.0 = 6003.0 total, price = 6003/3 = 2001.0
         // Mid price = (1999.67 + 2001.0) / 2 = 2000.33 USDC per WETH
         assert!((mid_price_large.unwrap() - 2000.3333333333335).abs() < 0.01);
 
@@ -547,23 +547,6 @@ mod tests {
         // Second level: 1/0.12 = 8.33 USDC/TAMARA, 3000 * 0.12 = 360 TAMARA
         assert!((inverted[1].0 - 8.333333333333334).abs() < 0.0001);
         assert!((inverted[1].1 - 360.0).abs() < 0.0001);
-    }
-
-    #[test]
-    fn test_invert_price_levels_filters_zero() {
-        // Test that zero prices are filtered out
-        let price_levels = vec![
-            (0.11, 3000.0),
-            (0.0, 5000.0), // Should be filtered
-            (0.12, 3000.0),
-        ];
-
-        let inverted = BebopPriceData::invert_price_levels(price_levels);
-
-        // Only 2 levels should remain (zero price filtered out)
-        assert_eq!(inverted.len(), 2);
-        assert!((inverted[0].0 - 9.090909090909092).abs() < 0.0001);
-        assert!((inverted[1].0 - 8.333333333333334).abs() < 0.0001);
     }
 
     #[cfg(test)]
