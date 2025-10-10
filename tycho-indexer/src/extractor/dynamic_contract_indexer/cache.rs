@@ -54,6 +54,9 @@ pub(super) struct DCICache {
     pub(super) blacklisted_addresses: VersionedCache<Address, bool>,
     /// Maps an entry point id to the component ids that use it.
     pub(super) ep_id_to_component_id: VersionedCache<EntryPointId, HashSet<ComponentId>>,
+    /// Maps component IDs to their associated entrypoint params for retry logic.
+    pub(super) component_id_to_entrypoint_params:
+        VersionedCache<ComponentId, HashSet<EntryPointWithTracingParams>>,
 }
 
 impl DCICache {
@@ -66,6 +69,7 @@ impl DCICache {
             erc20_addresses: VersionedCache::new(),
             blacklisted_addresses: VersionedCache::new(),
             ep_id_to_component_id: VersionedCache::new(),
+            component_id_to_entrypoint_params: VersionedCache::new(),
         }
     }
 
@@ -93,6 +97,8 @@ impl DCICache {
         self.blacklisted_addresses
             .revert_to(block)?;
         self.ep_id_to_component_id
+            .revert_to(block)?;
+        self.component_id_to_entrypoint_params
             .revert_to(block)?;
 
         Ok(())
@@ -153,6 +159,18 @@ impl DCICache {
                     },
                 )),
             )?;
+        self.component_id_to_entrypoint_params
+            .handle_finality(
+                finalized_block_height,
+                MergeStrategy::Custom(Box::new(
+                    |existing: &HashSet<EntryPointWithTracingParams>,
+                     new: HashSet<EntryPointWithTracingParams>| {
+                        let mut merged = existing.clone();
+                        merged.extend(new);
+                        merged
+                    },
+                )),
+            )?;
 
         Ok(())
     }
@@ -183,6 +201,8 @@ impl DCICache {
         self.erc20_addresses
             .validate_and_ensure_block_layer_internal(block)?;
         self.blacklisted_addresses
+            .validate_and_ensure_block_layer_internal(block)?;
+        self.component_id_to_entrypoint_params
             .validate_and_ensure_block_layer_internal(block)?;
 
         Ok(())

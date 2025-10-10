@@ -146,6 +146,67 @@ where
             }), "DCI: Entrypoints params");
         }
 
+        let params_to_retry: HashMap<EntryPointId, Vec<(Transaction, TracingParams)>> = {
+            let mut retry_params: HashMap<EntryPointId, Vec<(Transaction, TracingParams)>> =
+                HashMap::new();
+
+            // Check for components with state updates that have failed traces to retry
+            let updated_components: HashMap<&ComponentId, Transaction> = block_changes
+                .txs_with_update
+                .iter()
+                .flat_map(|tx| {
+                    tx.state_updates
+                        .keys()
+                        .map(|pc| (pc, tx.tx.clone()))
+                })
+                .collect::<HashMap<_, _>>();
+
+            for (component_id, tx) in updated_components.iter() {
+                if let Some(entrypoint_params_set) = self
+                    .cache
+                    .component_id_to_entrypoint_params
+                    .get(component_id)
+                {
+                    for entrypoint_with_params in entrypoint_params_set {
+                        let key = (
+                            entrypoint_with_params
+                                .entry_point
+                                .external_id
+                                .clone(),
+                            entrypoint_with_params.params.clone(),
+                        );
+
+                        // If we have None (failed trace) for this key, retry it
+                        if let Some(None) = self.cache.entrypoint_results.get(&key) {
+                            retry_params
+                                .entry(
+                                    entrypoint_with_params
+                                        .entry_point
+                                        .external_id
+                                        .clone(),
+                                )
+                                .or_default()
+                                .push((tx.clone(), entrypoint_with_params.params.clone()));
+                        }
+                    }
+                }
+            }
+
+            retry_params
+        };
+
+        if !params_to_retry.is_empty() {
+            debug!("Will retry {:?} parameters", params_to_retry.len());
+        }
+
+        // Merge retry params into new_entrypoint_params
+        for (ep_id, retry_params) in params_to_retry {
+            new_entrypoint_params
+                .entry(ep_id)
+                .or_default()
+                .extend(retry_params);
+        }
+
         // Select for analysis the newly detected EntryPointsWithData that haven't been analyzed
         // yet. This filter prevents us from re-analyzing entrypoints that have already been
         // analyzed, which can be a case if all the components have the same entrypoint. This is
@@ -180,6 +241,21 @@ where
 
                 let entrypoint_with_params =
                     EntryPointWithTracingParams::new(entrypoint.clone(), param.clone());
+
+                // Update the component_id_to_entrypoint_params cache
+                if let Some(component_ids) = self
+                    .cache
+                    .ep_id_to_component_id
+                    .get(entrypoint_id)
+                {
+                    for component_id in component_ids {
+                        self.cache
+                            .component_id_to_entrypoint_params
+                            .pending_entry(&block_changes.block, component_id)?
+                            .or_insert(HashSet::new())
+                            .insert(entrypoint_with_params.clone());
+                    }
+                }
 
                 // If the same params appear twice in the block, we link them to the first
                 // transaction.
@@ -709,6 +785,34 @@ where
                 .insert_permanent(address.clone(), true);
         }
 
+        // Build and populate component_id_to_entrypoint_params mapping
+        let mut component_to_entrypoint_params: HashMap<
+            ComponentId,
+            HashSet<EntryPointWithTracingParams>,
+        > = HashMap::new();
+
+        for (entrypoint_id, params_set) in entrypoints_with_params.iter() {
+            // Get all components that use this entrypoint
+            if let Some(component_ids) = self
+                .cache
+                .ep_id_to_component_id
+                .get(entrypoint_id)
+            {
+                for component_id in component_ids {
+                    for entrypoint_with_params in params_set.iter() {
+                        component_to_entrypoint_params
+                            .entry(component_id.clone())
+                            .or_insert_with(HashSet::new)
+                            .insert(entrypoint_with_params.clone());
+                    }
+                }
+            }
+        }
+
+        self.cache
+            .component_id_to_entrypoint_params
+            .extend_permanent(component_to_entrypoint_params);
+
         // Load known tokens from database
         let quality_range = QualityRange::min_only(0);
         match self
@@ -1072,6 +1176,7 @@ mod tests {
                 TracingParams, Transaction, TxWithChanges,
             },
             contract::{AccountDelta, ContractChanges},
+            protocol::ProtocolComponentStateDelta,
             Chain, ChangeType, EntryPointId,
         },
         storage::WithTotal,
@@ -1093,6 +1198,10 @@ mod tests {
             Some(Bytes::from(version).lpad(20, 0)),
             version as u64,
         )
+    }
+
+    fn gateway_response<T>(entity: T) -> WithTotal<T> {
+        WithTotal { entity, total: None }
     }
 
     fn get_block_changes(version: u8) -> BlockChanges {
@@ -3065,5 +3174,494 @@ mod tests {
         );
         assert_eq!(contract_22_delta.chain, Chain::Ethereum);
         assert_eq!(contract_22_delta.change_type(), ChangeType::Update);
+    }
+
+    #[tokio::test]
+    async fn test_retry_failed_traces_on_component_state_update() {
+        // This test verifies that when a component receives a state update,
+        // any EntryPointWithTracingParams that have failed traces (None) are retried
+        let gateway = get_mock_gateway();
+        let mut account_extractor = MockAccountExtractor::new();
+        let mut entrypoint_tracer = MockEntryPointTracer::new();
+
+        // Setup: Component has an entrypoint with failed trace
+        let component_id = "component_1".to_string();
+        let entrypoint_id = "entrypoint_1".to_string();
+        let entrypoint = EntryPoint::new(
+            entrypoint_id.clone(),
+            Bytes::from(1_u8),
+            "test_entrypoint".to_string(),
+        );
+        let tracing_params = get_tracing_params(1);
+
+        // First trace attempt fails (will be stored as None)
+        entrypoint_tracer
+            .expect_trace()
+            .times(1)
+            .with(
+                eq(Bytes::from(1_u8).lpad(32, 0)),
+                eq(vec![EntryPointWithTracingParams::new(
+                    entrypoint.clone(),
+                    tracing_params.clone(),
+                )]),
+            )
+            .return_once(|_, _| vec![Err("Trace failed temporarily".to_string())]);
+
+        // Second trace attempt succeeds (when retrying due to state update)
+        let entrypoint_for_retry = entrypoint.clone();
+        let tracing_params_for_retry = tracing_params.clone();
+        entrypoint_tracer
+            .expect_trace()
+            .times(1)
+            .with(
+                eq(Bytes::from(2_u8).lpad(32, 0)),
+                eq(vec![EntryPointWithTracingParams::new(
+                    entrypoint.clone(),
+                    tracing_params.clone(),
+                )]),
+            )
+            .return_once(move |_, _| {
+                vec![Ok(TracedEntryPoint::new(
+                    EntryPointWithTracingParams::new(
+                        entrypoint_for_retry,
+                        tracing_params_for_retry,
+                    ),
+                    Bytes::zero(32),
+                    get_tracing_result(1),
+                ))]
+            });
+
+        account_extractor
+            .expect_get_accounts_at_block()
+            .returning(|_, requests| {
+                let mut result = HashMap::new();
+                for request in requests {
+                    let slots: HashMap<Bytes, Option<Bytes>> = request
+                        .slots
+                        .clone()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|slot| (slot, None))
+                        .collect();
+
+                    result.insert(
+                        request.address.clone(),
+                        AccountDelta::new(
+                            Chain::Ethereum,
+                            request.address.clone(),
+                            slots,
+                            None, // balance
+                            None, // code
+                            ChangeType::Update,
+                        ),
+                    );
+                }
+                Ok(result)
+            });
+
+        let mut dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        // Initialize cache with component-to-entrypoint mapping
+        dci.cache
+            .ep_id_to_component_id
+            .insert_permanent(entrypoint_id.clone(), HashSet::from([component_id.clone()]));
+        dci.cache
+            .component_id_to_entrypoint_params
+            .insert_permanent(
+                component_id.clone(),
+                HashSet::from([EntryPointWithTracingParams::new(
+                    entrypoint.clone(),
+                    tracing_params.clone(),
+                )]),
+            );
+        dci.cache
+            .ep_id_to_entrypoint
+            .insert_permanent(entrypoint_id.clone(), entrypoint.clone());
+
+        // Block 1: Initial entrypoint params that fail to trace
+        let mut block_changes = get_block_changes(1);
+        block_changes.txs_with_update = vec![TxWithChanges {
+            tx: get_transaction(1),
+            entrypoint_params: HashMap::from([(
+                entrypoint_id.clone(),
+                HashSet::from([(tracing_params.clone(), None)]),
+            )]),
+            ..Default::default()
+        }];
+
+        dci.process_block_update(&mut block_changes)
+            .await
+            .unwrap();
+
+        // Verify failed trace is stored as None
+        assert_eq!(
+            dci.cache
+                .entrypoint_results
+                .get(&(entrypoint_id.clone(), tracing_params.clone())),
+            Some(&None)
+        );
+
+        // Block 2: Component receives state update, should trigger retry
+        let mut block_changes_2 = get_block_changes(2);
+        block_changes_2.txs_with_update = vec![TxWithChanges {
+            tx: get_transaction(2),
+            state_updates: HashMap::from([(
+                component_id.clone(),
+                ProtocolComponentStateDelta {
+                    component_id: component_id.clone(),
+                    updated_attributes: HashMap::from([(
+                        "key".to_string(),
+                        Bytes::from(1u64).lpad(32, 0),
+                    )]),
+                    deleted_attributes: HashSet::new(),
+                },
+            )]),
+            ..Default::default()
+        }];
+
+        dci.process_block_update(&mut block_changes_2)
+            .await
+            .unwrap();
+
+        // Verify the failed trace was retried and now has a result
+        assert!(matches!(
+            dci.cache
+                .entrypoint_results
+                .get(&(entrypoint_id, tracing_params)),
+            Some(Some(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_successful_traces_not_retried() {
+        // This test verifies that successful traces (Some(result)) are not retried
+        // even when the component receives a state update
+        let gateway = get_mock_gateway();
+        let mut account_extractor = MockAccountExtractor::new();
+        let mut entrypoint_tracer = MockEntryPointTracer::new();
+
+        let component_id = "component_1".to_string();
+        let entrypoint_id = "entrypoint_1".to_string();
+        let entrypoint = EntryPoint::new(
+            entrypoint_id.clone(),
+            Bytes::from(1_u8),
+            "test_entrypoint".to_string(),
+        );
+        let tracing_params = get_tracing_params(1);
+
+        // Only expect one trace call (initial successful trace)
+        let entrypoint_for_trace = entrypoint.clone();
+        let tracing_params_for_trace = tracing_params.clone();
+        entrypoint_tracer
+            .expect_trace()
+            .times(1)
+            .with(
+                eq(Bytes::from(1_u8).lpad(32, 0)),
+                eq(vec![EntryPointWithTracingParams::new(
+                    entrypoint.clone(),
+                    tracing_params.clone(),
+                )]),
+            )
+            .return_once(move |_, _| {
+                vec![Ok(TracedEntryPoint::new(
+                    EntryPointWithTracingParams::new(
+                        entrypoint_for_trace,
+                        tracing_params_for_trace,
+                    ),
+                    Bytes::zero(32),
+                    get_tracing_result(1),
+                ))]
+            });
+
+        account_extractor
+            .expect_get_accounts_at_block()
+            .returning(|_, requests| {
+                let mut result = HashMap::new();
+                for request in requests {
+                    let slots: HashMap<Bytes, Option<Bytes>> = request
+                        .slots
+                        .clone()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|slot| (slot, None))
+                        .collect();
+
+                    result.insert(
+                        request.address.clone(),
+                        AccountDelta::new(
+                            Chain::Ethereum,
+                            request.address.clone(),
+                            slots,
+                            None, // balance
+                            None, // code
+                            ChangeType::Update,
+                        ),
+                    );
+                }
+                Ok(result)
+            });
+
+        let mut dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        // Initialize cache
+        dci.cache
+            .ep_id_to_component_id
+            .insert_permanent(entrypoint_id.clone(), HashSet::from([component_id.clone()]));
+        dci.cache
+            .component_id_to_entrypoint_params
+            .insert_permanent(
+                component_id.clone(),
+                HashSet::from([EntryPointWithTracingParams::new(
+                    entrypoint.clone(),
+                    tracing_params.clone(),
+                )]),
+            );
+        dci.cache
+            .ep_id_to_entrypoint
+            .insert_permanent(entrypoint_id.clone(), entrypoint.clone());
+
+        // Block 1: Initial successful trace
+        let mut block_changes = get_block_changes(1);
+        block_changes.txs_with_update = vec![TxWithChanges {
+            tx: get_transaction(1),
+            entrypoint_params: HashMap::from([(
+                entrypoint_id.clone(),
+                HashSet::from([(tracing_params.clone(), None)]),
+            )]),
+            ..Default::default()
+        }];
+
+        dci.process_block_update(&mut block_changes)
+            .await
+            .unwrap();
+
+        // Verify successful trace is stored
+        assert!(matches!(
+            dci.cache
+                .entrypoint_results
+                .get(&(entrypoint_id.clone(), tracing_params.clone())),
+            Some(Some(_))
+        ));
+
+        // Block 2: Component receives state update
+        // Should NOT trigger retry since trace was successful
+        let mut block_changes_2 = get_block_changes(2);
+        block_changes_2.txs_with_update = vec![TxWithChanges {
+            tx: get_transaction(2),
+            state_updates: HashMap::from([(
+                component_id.clone(),
+                ProtocolComponentStateDelta {
+                    component_id: component_id.clone(),
+                    updated_attributes: HashMap::from([(
+                        "key".to_string(),
+                        Bytes::from(1u64).lpad(32, 0),
+                    )]),
+                    deleted_attributes: HashSet::new(),
+                },
+            )]),
+            ..Default::default()
+        }];
+
+        // This should succeed without calling trace again
+        dci.process_block_update(&mut block_changes_2)
+            .await
+            .unwrap();
+
+        // Verify the trace result is still there (not retried)
+        assert!(matches!(
+            dci.cache
+                .entrypoint_results
+                .get(&(entrypoint_id, tracing_params)),
+            Some(Some(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_component_id_to_entrypoint_params_cache_population() {
+        // This test verifies that the component_id_to_entrypoint_params cache
+        // is properly populated during initialization and when processing new entrypoints
+        let mut gateway = MockGateway::new();
+        let account_extractor = MockAccountExtractor::new();
+        let entrypoint_tracer = MockEntryPointTracer::new();
+
+        let component_id = "component_1".to_string();
+        let entrypoint_id = "entrypoint_1".to_string();
+        let entrypoint = get_entrypoint(1);
+        let tracing_params = get_tracing_params(1);
+
+        // Mock gateway responses for initialization
+        let entrypoint_id_clone = entrypoint_id.clone();
+        let entrypoint_clone = entrypoint.clone();
+        let tracing_params_clone = tracing_params.clone();
+        gateway
+            .expect_get_entry_points_tracing_params()
+            .return_once(move |_, _| {
+                Box::pin(async move {
+                    Ok(gateway_response(HashMap::from([(
+                        entrypoint_id_clone,
+                        HashSet::from([EntryPointWithTracingParams::new(
+                            entrypoint_clone,
+                            tracing_params_clone,
+                        )]),
+                    )])))
+                })
+            });
+
+        let component_id_clone = component_id.clone();
+        let entrypoint_clone2 = entrypoint.clone();
+        gateway
+            .expect_get_entry_points()
+            .return_once(move |_, _| {
+                Box::pin(async move {
+                    Ok(gateway_response(HashMap::from([(
+                        component_id_clone,
+                        HashSet::from([entrypoint_clone2]),
+                    )])))
+                })
+            });
+
+        gateway
+            .expect_get_traced_entry_points()
+            .return_once(|_| Box::pin(async { Ok(HashMap::new()) }));
+
+        gateway
+            .expect_get_tokens()
+            .return_once(|_, _, _, _, _| Box::pin(async { Ok(gateway_response(vec![])) }));
+
+        let mut dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        // Initialize the DCI
+        dci.initialize().await.unwrap();
+
+        // Verify component_id_to_entrypoint_params cache was populated
+        let cached_params = dci
+            .cache
+            .component_id_to_entrypoint_params
+            .get(&component_id);
+        assert!(cached_params.is_some());
+
+        let params_set = cached_params.unwrap();
+        assert_eq!(params_set.len(), 1);
+        assert!(params_set.contains(&EntryPointWithTracingParams::new(entrypoint, tracing_params,)));
+    }
+
+    #[tokio::test]
+    async fn test_component_cache_updated_on_new_entrypoint_params() {
+        // Test that component_id_to_entrypoint_params cache is updated
+        // when processing new entrypoint params in a block
+        let gateway = get_mock_gateway();
+        let mut account_extractor = MockAccountExtractor::new();
+        let mut entrypoint_tracer = MockEntryPointTracer::new();
+
+        let component_id = "component_1".to_string();
+        let entrypoint_id = "entrypoint_1".to_string();
+        let entrypoint = EntryPoint::new(
+            entrypoint_id.clone(),
+            Bytes::from(1_u8),
+            "test_entrypoint".to_string(),
+        );
+        let tracing_params = get_tracing_params(1);
+
+        let entrypoint_for_trace = entrypoint.clone();
+        let tracing_params_for_trace = tracing_params.clone();
+        entrypoint_tracer
+            .expect_trace()
+            .return_once(move |_, _| {
+                vec![Ok(TracedEntryPoint::new(
+                    EntryPointWithTracingParams::new(
+                        entrypoint_for_trace,
+                        tracing_params_for_trace,
+                    ),
+                    Bytes::zero(32),
+                    get_tracing_result(1),
+                ))]
+            });
+
+        account_extractor
+            .expect_get_accounts_at_block()
+            .returning(|_, requests| {
+                let mut result = HashMap::new();
+                for request in requests {
+                    let slots: HashMap<Bytes, Option<Bytes>> = request
+                        .slots
+                        .clone()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|slot| (slot, None))
+                        .collect();
+
+                    result.insert(
+                        request.address.clone(),
+                        AccountDelta::new(
+                            Chain::Ethereum,
+                            request.address.clone(),
+                            slots,
+                            None, // balance
+                            None, // code
+                            ChangeType::Update,
+                        ),
+                    );
+                }
+                Ok(result)
+            });
+
+        let mut dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        // Pre-populate ep_id_to_component_id mapping
+        dci.cache
+            .ep_id_to_component_id
+            .insert_permanent(entrypoint_id.clone(), HashSet::from([component_id.clone()]));
+        dci.cache
+            .ep_id_to_entrypoint
+            .insert_permanent(entrypoint_id.clone(), entrypoint.clone());
+
+        // Process block with new entrypoint params
+        let mut block_changes = get_block_changes(1);
+        block_changes.txs_with_update = vec![TxWithChanges {
+            tx: get_transaction(1),
+            entrypoint_params: HashMap::from([(
+                entrypoint_id.clone(),
+                HashSet::from([(tracing_params.clone(), None)]),
+            )]),
+            ..Default::default()
+        }];
+
+        dci.process_block_update(&mut block_changes)
+            .await
+            .unwrap();
+
+        // Verify component_id_to_entrypoint_params was updated
+        let cached_params = dci
+            .cache
+            .component_id_to_entrypoint_params
+            .get(&component_id);
+        assert!(cached_params.is_some());
+
+        let params_set = cached_params.unwrap();
+        assert!(params_set.contains(&EntryPointWithTracingParams::new(entrypoint, tracing_params,)));
     }
 }
