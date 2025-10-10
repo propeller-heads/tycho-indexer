@@ -62,6 +62,14 @@ struct Cli {
     #[arg(long, env = "RPC_URL")]
     rpc_url: String,
 
+    /// Disable on-chain protocols
+    #[arg(long, default_value_t = false)]
+    disable_onchain: bool,
+
+    /// Disable RFQ protocols
+    #[arg(long, default_value_t = false)]
+    disable_rfq: bool,
+
     /// Port for the Prometheus metrics server
     #[arg(long, default_value_t = 9898)]
     metrics_port: u16,
@@ -152,25 +160,29 @@ async fn run(cli: Cli) -> miette::Result<()> {
 
     // Run streams in background tasks
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
-    if let Ok(protocol_stream_processor) = ProtocolStreamProcessor::new(
-        chain,
-        tycho_url.clone(),
-        cli.tycho_api_key.clone(),
-        cli.tvl_threshold,
-    ) {
-        protocol_stream_processor
-            .run_stream(&all_tokens, tx.clone())
-            .await?;
+    if !cli.disable_onchain {
+        if let Ok(protocol_stream_processor) = ProtocolStreamProcessor::new(
+            chain,
+            tycho_url.clone(),
+            cli.tycho_api_key.clone(),
+            cli.tvl_threshold,
+        ) {
+            protocol_stream_processor
+                .run_stream(&all_tokens, tx.clone())
+                .await?;
+        }
     }
-    if let Ok(rfq_stream_processor) = RFQStreamProcessor::new(
-        chain,
-        cli.tvl_threshold,
-        cli.max_n_simulations,
-        Duration::from_secs(cli.skip_messages_duration),
-    ) {
-        rfq_stream_processor
-            .run_stream(&all_tokens, tx)
-            .await?;
+    if !cli.disable_rfq {
+        if let Ok(rfq_stream_processor) = RFQStreamProcessor::new(
+            chain,
+            cli.tvl_threshold,
+            cli.max_simulations,
+            Duration::from_secs(cli.skip_messages_duration),
+        ) {
+            rfq_stream_processor
+                .run_stream(&all_tokens, tx)
+                .await?;
+        }
     }
 
     // Process streams updates
