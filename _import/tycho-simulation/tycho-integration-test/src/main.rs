@@ -22,7 +22,7 @@ use itertools::Itertools;
 use miette::{miette, IntoDiagnostic, NarratableReportHandler, WrapErr};
 use num_bigint::BigUint;
 use num_traits::{ToPrimitive, Zero};
-use tracing::{error, info, trace, warn};
+use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 use tycho_common::simulation::protocol_sim::ProtocolSim;
 use tycho_simulation::{
@@ -174,7 +174,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
             }
         };
         info!(
-            "Got protocol update with block {}, {} new pairs, and {} states",
+            "Got protocol update with block/timestamp {}, {} new pairs, and {} states",
             update.update.block_number_or_timestamp,
             update.update.new_pairs.len(),
             update.update.states.len()
@@ -204,7 +204,13 @@ async fn run(cli: Cli) -> miette::Result<()> {
             }
         };
 
-        if let UpdateType::Protocol = update.update_type {
+        for (id, comp) in update.update.new_pairs.iter() {
+            protocol_pairs
+                .entry(id.clone())
+                .or_insert_with(|| comp.clone());
+        }
+
+        if update.update_type == UpdateType::Protocol {
             let block_delay = block
                 .header
                 .number
@@ -221,19 +227,14 @@ async fn run(cli: Cli) -> miette::Result<()> {
             }
             metrics::record_block_delay(block_delay);
 
-            for (id, comp) in update.update.new_pairs.iter() {
-                protocol_pairs
-                    .entry(id.clone())
-                    .or_insert_with(|| comp.clone());
-            }
             if update.is_first_update {
                 info!("Skipping simulation on first protocol update...");
                 continue;
             }
-        }
 
-        for (protocol, sync_state) in update.update.sync_states.iter() {
-            metrics::record_protocol_sync_state(protocol, sync_state);
+            for (protocol, sync_state) in update.update.sync_states.iter() {
+                metrics::record_protocol_sync_state(protocol, sync_state);
+            }
         }
 
         for (id, state) in update
@@ -263,14 +264,14 @@ async fn process_update_state(
         UpdateType::Protocol => match protocol_pairs.get(state_id) {
             Some(comp) => comp.clone(),
             None => {
-                trace!("Component not found in protocol pairs");
+                warn!("Component {state_id:?} not found in protocol pairs");
                 return;
             }
         },
         UpdateType::Rfq => match update.update.new_pairs.get(state_id) {
             Some(comp) => comp.clone(),
             None => {
-                trace!("Component not found in RFQ pairs");
+                warn!("Component not found in RFQ pairs");
                 return;
             }
         },
