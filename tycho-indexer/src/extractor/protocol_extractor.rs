@@ -1441,7 +1441,7 @@ impl ExtractorGateway for ExtractorPgGateway {
                 .values()
                 .cloned()
                 .collect::<Vec<_>>();
-            debug!(new_tokens=?new_tokens.iter().map(|t| &t.address).collect::<Vec<_>>(), "NewTokens");
+            debug!(new_tokens=?new_tokens.iter().map(|t| &t.address).collect::<Vec<_>>(), block_number=changes.block.number, "NewTokens");
             self.state_gateway
                 .add_tokens(&new_tokens)
                 .await?;
@@ -1575,6 +1575,7 @@ impl ExtractorGateway for ExtractorPgGateway {
                     .iter()
                     .map(|pc| &pc.id)
                     .collect::<Vec<_>>(),
+                block_number = changes.block.number,
                 "NewProtocolComponents"
             );
             self.state_gateway
