@@ -16,7 +16,7 @@ use tokio::{
     task::JoinHandle,
 };
 use tokio_stream::StreamExt;
-use tracing::{debug, error, info, instrument, trace, warn, Instrument};
+use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 use tycho_common::{
     models::{Address, Chain, ExtractorIdentity, FinancialType, ImplementationType, ProtocolType},
     Bytes,
@@ -218,7 +218,7 @@ impl ExtractorRunner {
                                 },
                             }
                         }
-                        val = self.substreams.next() => {
+                        val = self.substreams.next().instrument(info_span!("substreams_waiting")) => {
                             match val {
                                 None => {
                                     error!("stream ended");

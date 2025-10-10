@@ -374,8 +374,7 @@ impl StreamHandler<Result<(Uuid, BlockChanges), ws::ProtocolError>> for WsActor 
 /// Handle incoming messages from the WS connection
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsActor {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
-        debug!("WsActor {}: StreamHandler::handle called", self.id);
-        trace!("Websocket message received");
+        trace!("WsActor {}: StreamHandler::handle called", self.id);
         match msg {
             Ok(ws::Message::Ping(msg)) => {
                 trace!("Websocket ping message received");
