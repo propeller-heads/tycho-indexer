@@ -57,6 +57,9 @@ pub(super) struct DCICache {
     /// Maps component IDs to their associated entrypoint params for retry logic.
     pub(super) component_id_to_entrypoint_params:
         VersionedCache<ComponentId, HashSet<EntryPointWithTracingParams>>,
+    /// Tracks the number of retry attempts for each failed tracing params.
+    /// Used to cap retries at a maximum number of attempts (e.g., 5).
+    pub(super) tracing_retry_counts: VersionedCache<(EntryPointId, TracingParams), u32>,
 }
 
 impl DCICache {
@@ -70,6 +73,7 @@ impl DCICache {
             blacklisted_addresses: VersionedCache::new(),
             ep_id_to_component_id: VersionedCache::new(),
             component_id_to_entrypoint_params: VersionedCache::new(),
+            tracing_retry_counts: VersionedCache::new(),
         }
     }
 
@@ -99,6 +103,8 @@ impl DCICache {
         self.ep_id_to_component_id
             .revert_to(block)?;
         self.component_id_to_entrypoint_params
+            .revert_to(block)?;
+        self.tracing_retry_counts
             .revert_to(block)?;
 
         Ok(())
@@ -171,6 +177,8 @@ impl DCICache {
                     },
                 )),
             )?;
+        self.tracing_retry_counts
+            .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
 
         Ok(())
     }
@@ -203,6 +211,8 @@ impl DCICache {
         self.blacklisted_addresses
             .validate_and_ensure_block_layer_internal(block)?;
         self.component_id_to_entrypoint_params
+            .validate_and_ensure_block_layer_internal(block)?;
+        self.tracing_retry_counts
             .validate_and_ensure_block_layer_internal(block)?;
 
         Ok(())
