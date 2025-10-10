@@ -36,7 +36,7 @@ use tycho_simulation::{
 use crate::{
     stream_processor::{
         protocol_stream_processor::ProtocolStreamProcessor,
-        rfq_stream_processor::RFQStreamProcessor, UpdateType,
+        rfq_stream_processor::RFQStreamProcessor, StreamUpdate, UpdateType,
     },
     swap_simulation::{encode_swap, simulate_swap_transaction},
 };
@@ -66,9 +66,17 @@ struct Cli {
     #[arg(long, default_value_t = 9898)]
     metrics_port: u16,
 
+    /// Maximum number of updates to process in parallel
+    #[arg(long, default_value_t = 5)]
+    parallel_updates: usize,
+
+    /// Maximum number of simulations to run in parallel
+    #[arg(short, default_value_t = 5)]
+    parallel_simulations: usize,
+
     /// Maximum number of simulations to run per protocol update
-    #[arg(short, default_value_t = 10)]
-    max_n_simulations: usize,
+    #[arg(long, default_value_t = 10)]
+    max_simulations: usize,
 
     /// The RFQ stream will skip messages for this duration (in seconds) after processing a message
     #[arg(long, default_value_t = 600)]
@@ -119,6 +127,7 @@ async fn main() -> miette::Result<()> {
 async fn run(cli: Cli) -> miette::Result<()> {
     info!("Starting integration test");
 
+    let cli = Arc::new(cli);
     let chain = cli.chain;
 
     let provider: RootProvider<Ethereum> = ProviderBuilder::default()
@@ -166,131 +175,153 @@ async fn run(cli: Cli) -> miette::Result<()> {
 
     // Process streams updates
     info!("Waiting for first protocol update...");
+    let semaphore = Arc::new(Semaphore::new(cli.parallel_updates));
     let protocol_pairs = Arc::new(std::sync::RwLock::new(HashMap::new()));
     while let Some(update) = rx.recv().await {
-        let update = match update {
-            Ok(u) => Arc::new(u),
-            Err(e) => {
+        let semaphore = semaphore.clone();
+        let cli = cli.clone();
+        let provider = provider.clone();
+        let protocol_pairs = protocol_pairs.clone();
+        tokio::spawn(async move {
+            let update = match update {
+                Ok(u) => Arc::new(u),
+                Err(e) => {
+                    warn!("{e:?}");
+                    return;
+                }
+            };
+            let _permit = semaphore.acquire().await.unwrap();
+            if let Err(e) = process_update(cli, chain, provider, protocol_pairs, &update).await {
                 warn!("{e:?}");
-                continue;
             }
-        };
-        info!(
-            "Got protocol update with block {}, {} new pairs, and {} states",
-            update.update.block_number_or_timestamp,
-            update.update.new_pairs.len(),
-            update.update.states.len()
-        );
+        });
+    }
 
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .into_diagnostic()?
-            .as_secs();
-        let block = match provider
-            .get_block_by_number(BlockNumberOrTag::Latest)
-            .await
-            .into_diagnostic()
-            .wrap_err("Failed to fetch latest block")
-            .ok()
-            .flatten()
+    Ok(())
+}
+
+async fn process_update(
+    cli: Arc<Cli>,
+    chain: Chain,
+    provider: RootProvider<Ethereum>,
+    protocol_pairs: Arc<std::sync::RwLock<HashMap<String, ProtocolComponent>>>,
+    update: &StreamUpdate,
+) -> miette::Result<()> {
+    info!(
+        "Got protocol update with block {}, {} new pairs, and {} states",
+        update.update.block_number_or_timestamp,
+        update.update.new_pairs.len(),
+        update.update.states.len()
+    );
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .into_diagnostic()?
+        .as_secs();
+    let block = match provider
+        .get_block_by_number(BlockNumberOrTag::Latest)
+        .await
+        .into_diagnostic()
+        .wrap_err("Failed to fetch latest block")
+        .ok()
+        .flatten()
+    {
+        Some(b) => Arc::new(b),
+        None => {
+            warn!("Failed to retrieve last block, continuing to next message...");
+            return Ok(());
+        }
+    };
+
+    // Record block processing latency
+    let latency_seconds = (now as i64 - block.header.timestamp as i64).abs() as f64;
+    metrics::record_block_processing_latency(latency_seconds);
+
+    if let UpdateType::Protocol = update.update_type {
+        let block_delay = block
+            .header
+            .number
+            .abs_diff(update.update.block_number_or_timestamp);
+        // Consume messages that are older than the current block, to give the stream a chance
+        // to catch up
+        if update.update.block_number_or_timestamp < block.header.number {
+            warn!(
+                "Update block ({}) is behind the current block ({}), skipping to catch up.",
+                update.update.block_number_or_timestamp, block.header.number
+            );
+            metrics::record_skipped_update();
+            return Ok(());
+        }
+        metrics::record_block_delay(block_delay);
+
         {
-            Some(b) => Arc::new(b),
-            None => {
-                warn!("Failed to retrieve last block, continuing to next message...");
-                continue;
+            let mut pairs = protocol_pairs.write().map_err(|e| {
+                miette::miette!("Failed to acquire write lock on protocol pairs: {e}")
+            })?;
+            for (id, comp) in update.update.new_pairs.iter() {
+                pairs
+                    .entry(id.clone())
+                    .or_insert_with(|| comp.clone());
             }
-        };
+        }
+        if update.is_first_update {
+            info!("Skipping simulation on first protocol update...");
+            return Ok(());
+        }
+    }
 
-        // Record block processing latency
-        let latency_seconds = (now as i64 - block.header.timestamp as i64).abs() as f64;
-        metrics::record_block_processing_latency(latency_seconds);
+    for (protocol, sync_state) in update.update.sync_states.iter() {
+        metrics::record_protocol_sync_state(protocol, sync_state);
+    }
 
-        if let UpdateType::Protocol = update.update_type {
-            let block_delay = block
-                .header
-                .number
-                .abs_diff(update.update.block_number_or_timestamp);
-            // Consume messages that are older than the current block, to give the stream a chance
-            // to catch up
-            if update.update.block_number_or_timestamp < block.header.number {
-                warn!(
-                    "Update block ({}) is behind the current block ({}), skipping to catch up.",
-                    update.update.block_number_or_timestamp, block.header.number
-                );
-                metrics::record_skipped_update();
-                continue;
-            }
-            metrics::record_block_delay(block_delay);
-
-            {
-                let mut pairs = protocol_pairs.write().map_err(|e| {
-                    miette::miette!("Failed to acquire write lock on protocol pairs: {e}")
+    // Process states in parallel
+    let semaphore = Arc::new(Semaphore::new(cli.parallel_simulations));
+    for (id, state) in update
+        .update
+        .states
+        .iter()
+        .take(cli.max_simulations)
+    {
+        let component = match update.update_type {
+            UpdateType::Protocol => {
+                let pairs = protocol_pairs.read().map_err(|e| {
+                    miette::miette!("Failed to acquire read lock on protocol pairs: {e}")
                 })?;
-                for (id, comp) in update.update.new_pairs.iter() {
-                    pairs
-                        .entry(id.clone())
-                        .or_insert_with(|| comp.clone());
-                }
-            }
-            if update.is_first_update {
-                info!("Skipping simulation on first protocol update...");
-                continue;
-            }
-        }
-
-        for (protocol, sync_state) in update.update.sync_states.iter() {
-            metrics::record_protocol_sync_state(protocol, sync_state);
-        }
-
-        // Process states in parallel
-        let semaphore = Arc::new(Semaphore::new(5));
-        for (id, state) in update
-            .update
-            .states
-            .iter()
-            .take(cli.max_n_simulations)
-        {
-            let component = match update.update_type {
-                UpdateType::Protocol => {
-                    let pairs = protocol_pairs.read().map_err(|e| {
-                        miette::miette!("Failed to acquire read lock on protocol pairs: {e}")
-                    })?;
-                    match pairs.get(id) {
-                        Some(comp) => comp.clone(),
-                        None => {
-                            trace!("Component not found in protocol pairs");
-                            continue;
-                        }
-                    }
-                }
-                UpdateType::Rfq => match update.update.new_pairs.get(id) {
+                match pairs.get(id) {
                     Some(comp) => comp.clone(),
                     None => {
-                        trace!("Component not found in RFQ pairs");
+                        trace!("Component not found in protocol pairs");
                         continue;
                     }
-                },
-            };
-            let semaphore = semaphore.clone();
-            let cli = cli.clone();
-            let block = block.clone();
-            let state_id = id.clone();
-            let state = state.clone_box();
-            tokio::spawn(async move {
-                let _permit = semaphore.acquire().await.unwrap();
-                process_update_state(cli, chain, component, block, state_id, state).await;
-            });
-        }
+                }
+            }
+            UpdateType::Rfq => match update.update.new_pairs.get(id) {
+                Some(comp) => comp.clone(),
+                None => {
+                    trace!("Component not found in RFQ pairs");
+                    continue;
+                }
+            },
+        };
+        let semaphore = semaphore.clone();
+        let cli = cli.clone();
+        let block = block.clone();
+        let state_id = id.clone();
+        let state = state.clone_box();
+        tokio::spawn(async move {
+            let _permit = semaphore.acquire().await.unwrap();
+            process_update_state(&cli, chain, component, &block, state_id, state).await;
+        });
     }
 
     Ok(())
 }
 
 async fn process_update_state(
-    cli: Cli,
+    cli: &Cli,
     chain: Chain,
     component: ProtocolComponent,
-    block: Arc<Block>,
+    block: &Block,
     state_id: String,
     state: Box<dyn ProtocolSim>,
 ) {
@@ -427,7 +458,7 @@ async fn process_update_state(
             }
         };
         let simulated_amount_out =
-            match simulate_swap_transaction(&cli.rpc_url, &solution, &transaction, &block).await {
+            match simulate_swap_transaction(&cli.rpc_url, &solution, &transaction, block).await {
                 Ok(amount) => {
                     metrics::record_simulation_execution_success();
                     metrics::record_simulation_execution_success_detailed(
@@ -457,7 +488,7 @@ async fn process_update_state(
                     let tenderly_url = tenderly::build_tenderly_url(
                         &tenderly::TenderlySimParams::default(),
                         Some(&transaction),
-                        Some(&block),
+                        Some(block),
                         Address::from_slice(&solution.sender[..20]),
                     );
                     // Generate overwrites string with metadata
