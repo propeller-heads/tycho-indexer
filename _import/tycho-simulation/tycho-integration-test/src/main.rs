@@ -83,16 +83,16 @@ struct Cli {
     /// Maximum number of updates to process in parallel.
     /// Set to 1 to process sequentially.
     #[arg(long, default_value_t = 5, value_parser = clap::value_parser!(u8).range(1..))]
-    parallel_updates: usize,
+    parallel_updates: u8,
 
     /// Maximum number of simulations to run in parallel
     /// Set to 1 to process sequentially.
     #[arg(short, default_value_t = 5, value_parser = clap::value_parser!(u8).range(1..))]
-    parallel_simulations: usize,
+    parallel_simulations: u8,
 
     /// Maximum number of simulations to run per protocol update
     #[arg(long, default_value_t = 10, value_parser = clap::value_parser!(u8).range(1..))]
-    max_simulations: usize,
+    max_simulations: u8,
 
     /// The RFQ stream will skip messages for this duration (in seconds) after processing a message
     #[arg(long, default_value_t = 600)]
@@ -184,7 +184,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
         if let Ok(rfq_stream_processor) = RFQStreamProcessor::new(
             chain,
             cli.tvl_threshold,
-            cli.max_simulations,
+            cli.max_simulations as usize,
             Duration::from_secs(cli.skip_messages_duration),
         ) {
             rfq_stream_processor
@@ -201,7 +201,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
 
     // Process streams updates
     info!("Waiting for first protocol update...");
-    let semaphore = Arc::new(Semaphore::new(cli.parallel_updates));
+    let semaphore = Arc::new(Semaphore::new(cli.parallel_updates as usize));
     while let Some(update) = rx.recv().await {
         let semaphore = semaphore.clone();
         let cli = cli.clone();
@@ -299,12 +299,12 @@ async fn process_update(
     }
 
     // Process states in parallel
-    let semaphore = Arc::new(Semaphore::new(cli.parallel_simulations));
+    let semaphore = Arc::new(Semaphore::new(cli.parallel_simulations as usize));
     for (id, state) in update
         .update
         .states
         .iter()
-        .take(cli.max_simulations)
+        .take(cli.max_simulations as usize)
     {
         let component = match update.update_type {
             UpdateType::Protocol => {
