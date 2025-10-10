@@ -1,3 +1,10 @@
+## [0.180.3](https://github.com/propeller-heads/tycho-simulation/compare/0.180.2...0.180.3) (2025-10-10)
+
+
+### Bug Fixes
+
+* Increase ETH balance overwrite ([45e3bea](https://github.com/propeller-heads/tycho-simulation/commit/45e3beaad32cdc329f849c9fb45aa8267137cf1a))
+
 ## [0.180.2](https://github.com/propeller-heads/tycho-simulation/compare/0.180.1...0.180.2) (2025-10-10)
 
 
