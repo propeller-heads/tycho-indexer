@@ -7,7 +7,7 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::{Duration, NaiveDateTime};
-use metrics::{counter, gauge};
+use metrics::{counter, gauge, histogram};
 use mockall::automock;
 use prost::Message;
 use tokio::{sync::Mutex, task::JoinHandle};
@@ -798,9 +798,20 @@ where
         // spawn a new task that will commit the new blocks and update the committed block height.
         if let Some(last_block) = blocks_to_commit.last() {
             let mut commit_handle_guard = self.gateway.commit_handle.lock().await;
+            let gateway = self.gateway.inner.clone();
+            let committed_block_height = self
+                .gateway
+                .committed_block_height
+                .clone();
+            let last_block_height = last_block.block_update.block.number;
+            let batch_size = blocks_to_commit.len();
+            let (extractor_name, chain) = (self.name.clone(), self.chain);
 
             // Consume the previous commit handle, leaving None in its place
             if let Some(db_commit_handle_to_join) = commit_handle_guard.take() {
+                let awaited_commit = !db_commit_handle_to_join.is_finished();
+                let now = chrono::Utc::now().naive_utc();
+
                 match db_commit_handle_to_join.await {
                     Ok(Ok(())) => {}
                     Ok(Err(storage_err)) => {
@@ -812,18 +823,19 @@ where
                         ))));
                     }
                 }
-            }
 
-            let gateway = self.gateway.inner.clone();
-            let committed_block_height = self
-                .gateway
-                .committed_block_height
-                .clone();
-            let last_block_height = last_block.block_update.block.number;
-            let batch_size = blocks_to_commit.len();
+                if awaited_commit {
+                    let wait_time = chrono::Utc::now()
+                        .naive_utc()
+                        .signed_duration_since(now);
+                    debug!(batch_size, block_height = last_block_height, extractor_id = self.name.clone(), chain = %self.chain, wait_time = %wait_time, "CommitTaskAwaited");
+                }
+            }
 
             // Spawn a new task to commit the new blocks and update the committed block height
             let new_handle = tokio::spawn(async move {
+                let now = std::time::Instant::now();
+
                 let mut it = blocks_to_commit.iter().peekable();
                 while let Some(block) = it.next() {
                     // Force a database commit if we're not syncing and this is the last block
@@ -840,14 +852,19 @@ where
                 let mut committed_hieght_guard = committed_block_height.lock().await;
                 *committed_hieght_guard = Some(last_block_height);
 
-                debug!(batch_size, block_height = last_block_height, "CommitTaskCompleted");
+                debug!(batch_size, block_height = last_block_height, extractor_id = extractor_name, chain = %chain, "CommitTaskCompleted");
+
+                histogram!(
+                    "database_commit_duration_ms", "chain" => chain.to_string(), "extractor" => extractor_name
+                )
+                .record(now.elapsed().as_millis() as f64);
 
                 Ok(())
             });
 
             *commit_handle_guard = Some(new_handle);
 
-            debug!(batch_size, block_height = last_block_height, "CommitTaskQueued");
+            debug!(batch_size, block_height = last_block_height, extractor_id = self.name.clone(), chain = %self.chain, "CommitTaskQueued");
         };
 
         self.update_last_processed_block(msg.block.clone())
