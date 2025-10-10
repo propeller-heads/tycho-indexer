@@ -23,7 +23,7 @@ use miette::{miette, IntoDiagnostic, NarratableReportHandler, WrapErr};
 use num_bigint::BigUint;
 use num_traits::{ToPrimitive, Zero};
 use tokio::sync::Semaphore;
-use tracing::{error, info, trace, warn};
+use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 use tycho_common::simulation::protocol_sim::ProtocolSim;
 use tycho_simulation::{
@@ -222,11 +222,22 @@ async fn process_update(
     update: &StreamUpdate,
 ) -> miette::Result<()> {
     info!(
-        "Got protocol update with block {}, {} new pairs, and {} states",
+        "Got protocol update with block/timestamp {}, {} new pairs, and {} states",
         update.update.block_number_or_timestamp,
         update.update.new_pairs.len(),
         update.update.states.len()
     );
+
+    {
+        let mut pairs = protocol_pairs
+            .write()
+            .map_err(|e| miette!("Failed to acquire write lock on protocol pairs: {e}"))?;
+        for (id, comp) in update.update.new_pairs.iter() {
+            pairs
+                .entry(id.clone())
+                .or_insert_with(|| comp.clone());
+        }
+    }
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -268,16 +279,6 @@ async fn process_update(
         }
         metrics::record_block_delay(block_delay);
 
-        {
-            let mut pairs = protocol_pairs.write().map_err(|e| {
-                miette::miette!("Failed to acquire write lock on protocol pairs: {e}")
-            })?;
-            for (id, comp) in update.update.new_pairs.iter() {
-                pairs
-                    .entry(id.clone())
-                    .or_insert_with(|| comp.clone());
-            }
-        }
         if update.is_first_update {
             info!("Skipping simulation on first protocol update...");
             return Ok(());
@@ -298,13 +299,13 @@ async fn process_update(
     {
         let component = match update.update_type {
             UpdateType::Protocol => {
-                let pairs = protocol_pairs.read().map_err(|e| {
-                    miette::miette!("Failed to acquire read lock on protocol pairs: {e}")
-                })?;
+                let pairs = protocol_pairs
+                    .read()
+                    .map_err(|e| miette!("Failed to acquire read lock on protocol pairs: {e}"))?;
                 match pairs.get(id) {
                     Some(comp) => comp.clone(),
                     None => {
-                        trace!("Component not found in protocol pairs");
+                        warn!("Component {id:?} not found in protocol pairs");
                         continue;
                     }
                 }
@@ -312,7 +313,7 @@ async fn process_update(
             UpdateType::Rfq => match update.update.new_pairs.get(id) {
                 Some(comp) => comp.clone(),
                 None => {
-                    trace!("Component not found in RFQ pairs");
+                    warn!("Component not found in RFQ pairs");
                     continue;
                 }
             },
