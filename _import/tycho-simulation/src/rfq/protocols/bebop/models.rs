@@ -84,11 +84,8 @@ impl BebopPriceData {
         // If quote price data is provided, we need to normalize the TVL to be in
         // one of the approved token (for example USDC)
         if let Some(quote_data) = quote_price_data {
-            // Convert our quote token amount to the approved token
-            // The quote_data pair contains our quote token and an approved token
-            // get_mid_price automatically figures out which direction to convert
-            if let Some(price) = quote_data.get_mid_price(total_tvl, &self.quote) {
-                total_tvl *= price;
+            if let Some(price_of_quote_token) = quote_data.get_mid_price(total_tvl, &self.quote) {
+                total_tvl *= price_of_quote_token;
             } else {
                 // Quote token has no TVL in one of the approved tokens (for normalizations)
                 return 0.0;
@@ -115,33 +112,6 @@ impl BebopPriceData {
         let asks_price = self.get_price_for_levels(amount, self.get_asks(), inverse)?;
         let bids_price = self.get_price_for_levels(amount, self.get_bids(), inverse)?;
         Some((asks_price + bids_price) / 2.0)
-    }
-
-    /// Calculate price for trading input tokens using price levels
-    ///
-    /// NOTE: This method is meant just to be used as an estimate - as it does not
-    /// error or return None if there is not enough liquidity to cover token amount.
-    /// This method will only return None if there are absolutely no bids or asks.
-    ///
-    /// # Parameters
-    /// - `amount_in`: The amount of input tokens to trade
-    /// - `sell_token`: The token being sold (must be either base or quote of this pair)
-    ///
-    /// # Returns
-    /// Price (output tokens per input token)
-    pub fn get_price(&self, amount_in: f64, sell_token: &[u8]) -> Option<f64> {
-        // Price levels are already sorted: https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/rfq-api-endpoints/pricing#interpreting-price-levels
-
-        if sell_token == self.base.as_slice() {
-            // Selling base for quote: use bids
-            self.get_price_for_levels(amount_in, self.get_bids(), false)
-        } else if sell_token == self.quote.as_slice() {
-            // Selling quote for base: use asks inverted
-            self.get_price_for_levels(amount_in, self.get_asks(), true)
-        } else {
-            // Token not in this pair
-            None
-        }
     }
 
     /// Helper to calculate price from specific price levels
