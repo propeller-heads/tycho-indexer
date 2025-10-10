@@ -254,10 +254,10 @@ async fn setup_user_overwrites(
     let mut overwrites = AddressHashMap::default();
     let mut metadata = tenderly::OverwriteMetadata::new();
     let token_address = Address::from_slice(&solution.given_token[..20]);
-    // If given token is ETH, add the given amount + 1 ETH for gas
+    // If given token is ETH, add the given amount + 10 ETH for gas
     if solution.given_token == Bytes::zero(20) {
         let eth_balance = biguint_to_u256(&solution.given_amount) +
-            U256::from_str("1000000000000000000").unwrap(); // given_amount + 1 ETH for gas
+            U256::from_str("10000000000000000000").unwrap(); // given_amount + 1 ETH for gas
         overwrites.insert(user_address, AccountOverride::default().with_balance(eth_balance));
     // if the given token is not ETH, do balance and allowance slots overwrites
     } else {
@@ -364,8 +364,8 @@ async fn setup_user_overwrites(
             );
         }
 
-        // Add 1 ETH for gas for non-ETH token swaps
-        let eth_balance = U256::from_str("1000000000000000000").unwrap(); // 1 ETH for gas
+        // Add 10 ETH for gas for non-ETH token swaps
+        let eth_balance = U256::from_str("10000000000000000000").unwrap(); // 1 ETH for gas
         overwrites.insert(user_address, AccountOverride::default().with_balance(eth_balance));
         info!("Setting ETH balance override for user {user_address}: {eth_balance} (for gas)");
     }
