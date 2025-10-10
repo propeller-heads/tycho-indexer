@@ -74,16 +74,18 @@ struct Cli {
     #[arg(long, default_value_t = 9898)]
     metrics_port: u16,
 
-    /// Maximum number of updates to process in parallel
-    #[arg(long, default_value_t = 5)]
+    /// Maximum number of updates to process in parallel.
+    /// Set to 1 to process sequentially.
+    #[arg(long, default_value_t = 5, value_parser = clap::value_parser!(u8).range(1..))]
     parallel_updates: usize,
 
     /// Maximum number of simulations to run in parallel
-    #[arg(short, default_value_t = 5)]
+    /// Set to 1 to process sequentially.
+    #[arg(short, default_value_t = 5, value_parser = clap::value_parser!(u8).range(1..))]
     parallel_simulations: usize,
 
     /// Maximum number of simulations to run per protocol update
-    #[arg(long, default_value_t = 10)]
+    #[arg(long, default_value_t = 10, value_parser = clap::value_parser!(u8).range(1..))]
     max_simulations: usize,
 
     /// The RFQ stream will skip messages for this duration (in seconds) after processing a message
