@@ -12,7 +12,7 @@ pub struct StreamUpdate {
     pub is_first_update: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum UpdateType {
     Protocol,
     Rfq,
