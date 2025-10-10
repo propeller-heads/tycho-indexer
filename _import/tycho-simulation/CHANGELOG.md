@@ -1,3 +1,10 @@
+## [0.180.2](https://github.com/propeller-heads/tycho-simulation/compare/0.180.1...0.180.2) (2025-10-10)
+
+
+### Bug Fixes
+
+* Bebop quote token filtering ([38c0e9d](https://github.com/propeller-heads/tycho-simulation/commit/38c0e9d01a2a5f8fc876362695f9b2b15500ea9a))
+
 ## [0.180.1](https://github.com/propeller-heads/tycho-simulation/compare/0.180.0...0.180.1) (2025-10-10)
 
 
