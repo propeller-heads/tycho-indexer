@@ -321,15 +321,19 @@ impl RFQClient for BebopClient {
                                                 base_bytes.clone(), quote_bytes.clone()
                                             ];
 
-                                            let mut quote_price_data: Option<BebopPriceData> = None;
+                                            let mut quote_price_data: Option<&BebopPriceData> = None;
                                             // The quote token is not one of the approved quote tokens
                                             // Get the price, so we can normalize our TVL calculation
                                             if !client.quote_tokens.contains(&quote_bytes) {
                                                 for approved_quote_token in &client.quote_tokens {
-                                                    // Look for the quote pair in the same protobuf update
+                                                    // Look for a pair containing both our quote token and an approved token
+                                                    // Can be either QUOTE/APPROVED or APPROVED/QUOTE
                                                     if let Some(quote_data) = protobuf_update.pairs.iter()
-                                                        .find(|p| p.base == quote_bytes.as_ref() && p.quote == approved_quote_token.as_ref()) {
-                                                        quote_price_data = Some(quote_data.clone());
+                                                        .find(|p| {
+                                                            (p.base == quote_bytes.as_ref() && p.quote == approved_quote_token.as_ref()) ||
+                                                            (p.quote == quote_bytes.as_ref() && p.base == approved_quote_token.as_ref())
+                                                        }) {
+                                                        quote_price_data = Some(quote_data);
                                                         break;
                                                     }
                                                 }
@@ -337,7 +341,7 @@ impl RFQClient for BebopClient {
                                                 // Quote token doesn't have price levels in approved quote tokens.
                                                 // Skip.
                                                 if quote_price_data.is_none() {
-                                                    warn!("Quote token does not have price levels in approved quote token. Skipping.");
+                                                    warn!("Quote token {} does not have price levels in approved quote token. Skipping.", hex::encode(&quote_bytes));
                                                     continue;
                                                 }
                                             }
