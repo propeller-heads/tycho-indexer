@@ -187,10 +187,11 @@ pub async fn simulate_swap_transaction(
             .map_err(|e| (e, None, None))?;
 
     // Use debug_traceCall from the start with retry logic
+    // Worst case, it will take ~100s (20 retries with max 5s delay)
     let retry_strategy = ExponentialFactorBackoff::from_millis(1000, 2.)
-        .max_delay_millis(10000)
+        .max_delay_millis(5000)
         .map(jitter)
-        .take(10);
+        .take(20);
 
     // Clone state_overwrites before moving into closure
     let state_overwrites_for_retry = state_overwrites.clone();

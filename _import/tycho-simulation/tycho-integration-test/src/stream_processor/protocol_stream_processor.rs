@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use futures::{Stream, StreamExt};
 use miette::{miette, IntoDiagnostic, WrapErr};
 use tokio::{sync::mpsc::Sender, task::JoinHandle};
-use tracing::warn;
+use tracing::{info, warn};
 use tycho_client::feed::component_tracker::ComponentFilter;
 use tycho_common::{
     models::{token::Token, Chain},
@@ -54,8 +54,10 @@ impl ProtocolStreamProcessor {
         all_tokens: &HashMap<Bytes, Token>,
         tx: Sender<miette::Result<StreamUpdate>>,
     ) -> miette::Result<JoinHandle<()>> {
+        info!("Starting protocol stream processor for chain {:?}", self.chain);
         let mut stream = self.build_stream(all_tokens).await?;
         let handle = tokio::spawn(async move {
+            info!("Protocol stream processor started");
             let mut is_first_update = true;
             while let Some(res) = stream.next().await {
                 let update = match res {

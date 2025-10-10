@@ -22,7 +22,8 @@ use itertools::Itertools;
 use miette::{miette, IntoDiagnostic, NarratableReportHandler, WrapErr};
 use num_bigint::BigUint;
 use num_traits::{ToPrimitive, Zero};
-use tracing::{error, info, warn};
+use tokio::sync::Semaphore;
+use tracing::{error, info, trace, warn};
 use tracing_subscriber::EnvFilter;
 use tycho_common::simulation::protocol_sim::ProtocolSim;
 use tycho_simulation::{
@@ -35,7 +36,7 @@ use tycho_simulation::{
 use crate::{
     stream_processor::{
         protocol_stream_processor::ProtocolStreamProcessor,
-        rfq_stream_processor::RFQStreamProcessor, StreamUpdate, UpdateType,
+        rfq_stream_processor::RFQStreamProcessor, UpdateType,
     },
     swap_simulation::{encode_swap, simulate_swap_transaction},
 };
@@ -164,17 +165,18 @@ async fn run(cli: Cli) -> miette::Result<()> {
     }
 
     // Process streams updates
-    let mut protocol_pairs: HashMap<String, ProtocolComponent> = HashMap::new();
+    info!("Waiting for first protocol update...");
+    let protocol_pairs = Arc::new(std::sync::RwLock::new(HashMap::new()));
     while let Some(update) = rx.recv().await {
         let update = match update {
-            Ok(u) => u,
+            Ok(u) => Arc::new(u),
             Err(e) => {
                 warn!("{e:?}");
                 continue;
             }
         };
         info!(
-            "Got protocol update with block/timestamp {}, {} new pairs, and {} states",
+            "Got protocol update with block {}, {} new pairs, and {} states",
             update.update.block_number_or_timestamp,
             update.update.new_pairs.len(),
             update.update.states.len()
@@ -192,25 +194,18 @@ async fn run(cli: Cli) -> miette::Result<()> {
             .ok()
             .flatten()
         {
-            Some(b) => {
-                // Record block processing latency
-                let latency_seconds = (now as i64 - b.header.timestamp as i64).abs() as f64;
-                metrics::record_block_processing_latency(latency_seconds);
-                b
-            }
+            Some(b) => Arc::new(b),
             None => {
                 warn!("Failed to retrieve last block, continuing to next message...");
                 continue;
             }
         };
 
-        for (id, comp) in update.update.new_pairs.iter() {
-            protocol_pairs
-                .entry(id.clone())
-                .or_insert_with(|| comp.clone());
-        }
+        // Record block processing latency
+        let latency_seconds = (now as i64 - block.header.timestamp as i64).abs() as f64;
+        metrics::record_block_processing_latency(latency_seconds);
 
-        if update.update_type == UpdateType::Protocol {
+        if let UpdateType::Protocol = update.update_type {
             let block_delay = block
                 .header
                 .number
@@ -227,24 +222,64 @@ async fn run(cli: Cli) -> miette::Result<()> {
             }
             metrics::record_block_delay(block_delay);
 
+            {
+                let mut pairs = protocol_pairs.write().map_err(|e| {
+                    miette::miette!("Failed to acquire write lock on protocol pairs: {e}")
+                })?;
+                for (id, comp) in update.update.new_pairs.iter() {
+                    pairs
+                        .entry(id.clone())
+                        .or_insert_with(|| comp.clone());
+                }
+            }
             if update.is_first_update {
                 info!("Skipping simulation on first protocol update...");
                 continue;
             }
-
-            for (protocol, sync_state) in update.update.sync_states.iter() {
-                metrics::record_protocol_sync_state(protocol, sync_state);
-            }
         }
 
+        for (protocol, sync_state) in update.update.sync_states.iter() {
+            metrics::record_protocol_sync_state(protocol, sync_state);
+        }
+
+        // Process states in parallel
+        let semaphore = Arc::new(Semaphore::new(5));
         for (id, state) in update
             .update
             .states
             .iter()
             .take(cli.max_n_simulations)
         {
-            process_update_state(&cli, chain, &protocol_pairs, &block, &update, id, state.as_ref())
-                .await;
+            let component = match update.update_type {
+                UpdateType::Protocol => {
+                    let pairs = protocol_pairs.read().map_err(|e| {
+                        miette::miette!("Failed to acquire read lock on protocol pairs: {e}")
+                    })?;
+                    match pairs.get(id) {
+                        Some(comp) => comp.clone(),
+                        None => {
+                            trace!("Component not found in protocol pairs");
+                            continue;
+                        }
+                    }
+                }
+                UpdateType::Rfq => match update.update.new_pairs.get(id) {
+                    Some(comp) => comp.clone(),
+                    None => {
+                        trace!("Component not found in RFQ pairs");
+                        continue;
+                    }
+                },
+            };
+            let semaphore = semaphore.clone();
+            let cli = cli.clone();
+            let block = block.clone();
+            let state_id = id.clone();
+            let state = state.clone_box();
+            tokio::spawn(async move {
+                let _permit = semaphore.acquire().await.unwrap();
+                process_update_state(cli, chain, component, block, state_id, state).await;
+            });
         }
     }
 
@@ -252,30 +287,13 @@ async fn run(cli: Cli) -> miette::Result<()> {
 }
 
 async fn process_update_state(
-    cli: &Cli,
+    cli: Cli,
     chain: Chain,
-    protocol_pairs: &HashMap<String, ProtocolComponent>,
-    block: &Block,
-    update: &StreamUpdate,
-    state_id: &str,
-    state: &dyn ProtocolSim,
+    component: ProtocolComponent,
+    block: Arc<Block>,
+    state_id: String,
+    state: Box<dyn ProtocolSim>,
 ) {
-    let component = match update.update_type {
-        UpdateType::Protocol => match protocol_pairs.get(state_id) {
-            Some(comp) => comp.clone(),
-            None => {
-                warn!("Component {state_id:?} not found in protocol pairs");
-                return;
-            }
-        },
-        UpdateType::Rfq => match update.update.new_pairs.get(state_id) {
-            Some(comp) => comp.clone(),
-            None => {
-                warn!("Component not found in RFQ pairs");
-                return;
-            }
-        },
-    };
     info!(
         "Component has tokens: {}",
         component
@@ -333,7 +351,7 @@ async fn process_update_state(
                 warn!("{e:?}");
                 metrics::record_get_limits_failures(
                     &component.protocol_system,
-                    state_id,
+                    &state_id,
                     block.header.number,
                     &token_in.address,
                     &token_out.address,
@@ -374,7 +392,7 @@ async fn process_update_state(
                 warn!("{e}");
                 metrics::record_get_amount_out_failures(
                     &component.protocol_system,
-                    state_id,
+                    &state_id,
                     block.header.number,
                     &token_in.address,
                     &token_out.address,
@@ -387,7 +405,7 @@ async fn process_update_state(
         metrics::record_get_amount_out_duration(
             &component.protocol_system,
             start_time.elapsed().as_secs_f64(),
-            state_id,
+            &state_id,
         );
         let expected_amount_out = amount_out_result.amount;
         info!("Calculated amount_out: {expected_amount_out} {}", token_out.symbol);
@@ -409,12 +427,12 @@ async fn process_update_state(
             }
         };
         let simulated_amount_out =
-            match simulate_swap_transaction(&cli.rpc_url, &solution, &transaction, block).await {
+            match simulate_swap_transaction(&cli.rpc_url, &solution, &transaction, &block).await {
                 Ok(amount) => {
                     metrics::record_simulation_execution_success();
                     metrics::record_simulation_execution_success_detailed(
                         &component.protocol_system,
-                        state_id,
+                        &state_id,
                         block.header.number,
                     );
                     amount
@@ -439,7 +457,7 @@ async fn process_update_state(
                     let tenderly_url = tenderly::build_tenderly_url(
                         &tenderly::TenderlySimParams::default(),
                         Some(&transaction),
-                        Some(block),
+                        Some(&block),
                         Address::from_slice(&solution.sender[..20]),
                     );
                     // Generate overwrites string with metadata
@@ -452,7 +470,7 @@ async fn process_update_state(
                     metrics::record_simulation_execution_failure(revert_reason);
                     metrics::record_simulation_execution_failure_detailed(
                         &component.protocol_system,
-                        state_id,
+                        &state_id,
                         block.header.number,
                         revert_reason,
                         &error_name,
@@ -478,7 +496,7 @@ async fn process_update_state(
         metrics::record_slippage(
             block.header.number,
             &component.protocol_system,
-            state_id,
+            &state_id,
             slippage,
         );
         info!("Slippage: {:.2}%", slippage);

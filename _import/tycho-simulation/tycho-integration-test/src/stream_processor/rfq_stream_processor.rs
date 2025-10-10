@@ -81,6 +81,7 @@ impl RFQStreamProcessor {
         all_tokens: &HashMap<Bytes, Token>,
         stream_tx: Sender<miette::Result<StreamUpdate>>,
     ) -> miette::Result<JoinHandle<()>> {
+        info!("Starting RFQ stream processor for chain {:?}", self.chain);
         // Set up RFQ stream
         let rfq_tokens: HashSet<Bytes> = all_tokens.keys().cloned().collect();
         let mut rfq_stream_builder = RFQStreamBuilder::new()
@@ -130,6 +131,7 @@ impl RFQStreamProcessor {
             .map(|protocol| (protocol.to_string(), tokio::time::Instant::now()))
             .collect();
         let handle = tokio::spawn(async move {
+            info!("RFQ stream processor started");
             while let Some(mut update) = rx.recv().await {
                 // Handle throttling for the update's protocol
                 if let Some((_, component)) = update.new_pairs.iter().next() {
