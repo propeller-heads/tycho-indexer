@@ -291,6 +291,21 @@ impl EVMEntrypointService {
                 ))
             })?;
 
+        if access_list_data.get("error").is_some() {
+            return Err(RPCError::UnknownError(format!(
+                "eth_createAccessList failed for {target} (block: {block_hash}, params: {params}): {access_list_data:?}",
+            )));
+        }
+
+        if access_list_data
+            .get("accessList")
+            .is_none()
+        {
+            return Err(RPCError::UnknownError(format!(
+                "Missing accessList field in access list response for {target} (block: {block_hash}, params: {params}): {access_list_data:?}",
+            )));
+        }
+
         let access_list: AccessListResult = serde_json::from_value(access_list_data.clone())
             .map_err(|e| {
                 RPCError::SerializeError(SerdeJsonError {
