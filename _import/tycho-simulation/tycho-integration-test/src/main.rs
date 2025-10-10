@@ -6,7 +6,12 @@ mod swap_simulation;
 mod tenderly;
 mod traces;
 
-use std::{collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
+use std::{
+    fmt::Debug,
+    num::NonZeroUsize,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 
 use alloy::{
     eips::BlockNumberOrTag,
@@ -19,6 +24,7 @@ use alloy_chains::NamedChain;
 use clap::Parser;
 use dotenv::dotenv;
 use itertools::Itertools;
+use lru::LruCache;
 use miette::{miette, IntoDiagnostic, NarratableReportHandler, WrapErr};
 use num_bigint::BigUint;
 use num_traits::{ToPrimitive, Zero};
@@ -187,10 +193,15 @@ async fn run(cli: Cli) -> miette::Result<()> {
         }
     }
 
+    // Assuming a big ProtocolComponent instance can be around 1KB,
+    // 10,000 entries would use 10MB of memory.
+    let protocol_pairs = Arc::new(RwLock::new(LruCache::new(
+        NonZeroUsize::new(10_000).ok_or_else(|| miette!("Invalid NonZeroUsize"))?,
+    )));
+
     // Process streams updates
     info!("Waiting for first protocol update...");
     let semaphore = Arc::new(Semaphore::new(cli.parallel_updates));
-    let protocol_pairs = Arc::new(std::sync::RwLock::new(HashMap::new()));
     while let Some(update) = rx.recv().await {
         let semaphore = semaphore.clone();
         let cli = cli.clone();
@@ -218,7 +229,7 @@ async fn process_update(
     cli: Arc<Cli>,
     chain: Chain,
     provider: RootProvider<Ethereum>,
-    protocol_pairs: Arc<std::sync::RwLock<HashMap<String, ProtocolComponent>>>,
+    protocol_pairs: Arc<RwLock<LruCache<String, ProtocolComponent>>>,
     update: &StreamUpdate,
 ) -> miette::Result<()> {
     info!(
@@ -233,9 +244,7 @@ async fn process_update(
             .write()
             .map_err(|e| miette!("Failed to acquire write lock on protocol pairs: {e}"))?;
         for (id, comp) in update.update.new_pairs.iter() {
-            pairs
-                .entry(id.clone())
-                .or_insert_with(|| comp.clone());
+            pairs.get_or_insert(id.clone(), || comp.clone());
         }
     }
 
@@ -299,8 +308,8 @@ async fn process_update(
     {
         let component = match update.update_type {
             UpdateType::Protocol => {
-                let pairs = protocol_pairs
-                    .read()
+                let mut pairs = protocol_pairs
+                    .write()
                     .map_err(|e| miette!("Failed to acquire read lock on protocol pairs: {e}"))?;
                 match pairs.get(id) {
                     Some(comp) => comp.clone(),

@@ -12,6 +12,7 @@ colored = "2.1"
 dotenv = "0.15.0"
 futures = "0.3.31"
 itertools = "0.10.5"
+lru = "0.16.1"
 num-bigint = { version = "0.4.6", features = ["serde"] }
 num-traits = "0.2.17"
 miette = { version = "7.6.0" }

@@ -5553,6 +5553,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lru"
+version = "0.16.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bfe949189f46fabb938b3a9a0be30fdd93fd8a09260da863399a8cf3db756ec8"
+dependencies = [
+ "hashbrown 0.15.5",
+]
+
+[[package]]
 name = "lru-slab"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9672,6 +9681,7 @@ dependencies = [
  "dotenv",
  "futures 0.3.31",
  "itertools 0.10.5",
+ "lru 0.16.1",
  "metrics",
  "metrics-exporter-prometheus",
  "miette",
