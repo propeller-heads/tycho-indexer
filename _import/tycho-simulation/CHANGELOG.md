@@ -1,3 +1,10 @@
+## [0.180.1](https://github.com/propeller-heads/tycho-simulation/compare/0.180.0...0.180.1) (2025-10-10)
+
+
+### Bug Fixes
+
+* Always process new_pairs even if the block is late ([7ce3fbe](https://github.com/propeller-heads/tycho-simulation/commit/7ce3fbefc65481f94adfe3e07b2e26a13fb1165f))
+
 ## [0.180.0](https://github.com/propeller-heads/tycho-simulation/compare/0.179.0...0.180.0) (2025-10-09)
 
 
