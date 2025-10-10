@@ -703,6 +703,7 @@ where
     /// let mut dci = DynamicContractIndexer::new(...);
     /// dci.with_max_retry_count(10); // Allow up to 10 retries
     /// ```
+    #[allow(dead_code)]
     pub fn with_max_retry_count(&mut self, count: u32) {
         self.max_retry_count = count;
     }
@@ -1169,8 +1170,8 @@ where
                     slot_updates.retain(|slot, _| tracked_keys.contains(slot));
                 }
 
-                if !slot_updates.is_empty()
-                    || contract_changes
+                if !slot_updates.is_empty() ||
+                    contract_changes
                         .native_balance
                         .is_some()
                 {
@@ -1670,11 +1671,11 @@ mod tests {
             .with(
                 eq(testing::block(2)),
                 predicate::function(|requests: &[StorageSnapshotRequest]| {
-                    requests.len() == 2
-                        && requests
+                    requests.len() == 2 &&
+                        requests
                             .iter()
-                            .any(|r| r.address == Bytes::from("0x09"))
-                        && requests
+                            .any(|r| r.address == Bytes::from("0x09")) &&
+                        requests
                             .iter()
                             .any(|r| r.address == Bytes::from("0x99"))
                 }),
@@ -1830,14 +1831,14 @@ mod tests {
                 eq(Bytes::from(4_u8).lpad(32, 0)),
                 // Entrypoints to trace
                 predicate::function(|ep_with_params: &Vec<EntryPointWithTracingParams>| {
-                    ep_with_params.len() == 2
-                        && ep_with_params.iter().any(|ep| {
+                    ep_with_params.len() == 2 &&
+                        ep_with_params.iter().any(|ep| {
                             ep == &EntryPointWithTracingParams::new(
                                 get_entrypoint(1),
                                 get_tracing_params(1),
                             )
-                        })
-                        && ep_with_params.iter().any(|ep| {
+                        }) &&
+                        ep_with_params.iter().any(|ep| {
                             ep == &EntryPointWithTracingParams::new(
                                 get_entrypoint(4),
                                 get_tracing_params(1),
@@ -1867,11 +1868,11 @@ mod tests {
             .with(
                 eq(testing::block(4)),
                 predicate::function(|requests: &[StorageSnapshotRequest]| {
-                    requests.len() == 2
-                        && requests
+                    requests.len() == 2 &&
+                        requests
                             .iter()
-                            .any(|r| r.address == Bytes::from("0x05"))
-                        && requests
+                            .any(|r| r.address == Bytes::from("0x05")) &&
+                        requests
                             .iter()
                             .any(|r| r.address == Bytes::from("0x55"))
                 }),
@@ -2016,16 +2017,16 @@ mod tests {
                 predicate::function({
                     let token_address = token_address.clone();
                     move |requests: &[StorageSnapshotRequest]| {
-                        requests.len() == 1
-                            && requests[0].address == token_address
-                            && requests[0].slots.is_some()
-                            && requests[0]
+                        requests.len() == 1 &&
+                            requests[0].address == token_address &&
+                            requests[0].slots.is_some() &&
+                            requests[0]
                                 .slots
                                 .as_ref()
                                 .unwrap()
-                                .len()
-                                == 1
-                            && requests[0]
+                                .len() ==
+                                1 &&
+                            requests[0]
                                 .slots
                                 .as_ref()
                                 .unwrap()
@@ -2114,16 +2115,16 @@ mod tests {
             .with(
                 eq(testing::block(2)),
                 predicate::function(move |requests: &[StorageSnapshotRequest]| {
-                    requests.len() == 1
-                        && requests[0].address == blacklisted_address_for_predicate
-                        && requests[0].slots.is_some()
-                        && requests[0]
+                    requests.len() == 1 &&
+                        requests[0].address == blacklisted_address_for_predicate &&
+                        requests[0].slots.is_some() &&
+                        requests[0]
                             .slots
                             .as_ref()
                             .unwrap()
-                            .len()
-                            == 1
-                        && requests[0]
+                            .len() ==
+                            1 &&
+                        requests[0]
                             .slots
                             .as_ref()
                             .unwrap()
@@ -2202,9 +2203,9 @@ mod tests {
             .with(
                 eq(testing::block(2)),
                 predicate::function(move |requests: &[StorageSnapshotRequest]| {
-                    requests.len() == 1
-                        && requests[0].address == normal_address_for_predicate
-                        && requests[0].slots.is_none()
+                    requests.len() == 1 &&
+                        requests[0].address == normal_address_for_predicate &&
+                        requests[0].slots.is_none()
                 }),
             )
             .return_once(move |_, _| {
@@ -2472,9 +2473,9 @@ mod tests {
                 predicate::function({
                     let tracked_address = tracked_address.clone();
                     move |requests: &[StorageSnapshotRequest]| {
-                        requests.len() == 1
-                            && requests[0].address == tracked_address
-                            && requests[0].slots.is_none() // Should request all slots for non-tokens
+                        requests.len() == 1 &&
+                            requests[0].address == tracked_address &&
+                            requests[0].slots.is_none() // Should request all slots for non-tokens
                     }
                 }),
             )
@@ -2558,16 +2559,16 @@ mod tests {
                     let token_address = token_address.clone();
                     let new_slot = new_slot.clone();
                     move |requests: &[StorageSnapshotRequest]| {
-                        requests.len() == 1
-                            && requests[0].address == token_address
-                            && requests[0].slots.is_some()
-                            && requests[0]
+                        requests.len() == 1 &&
+                            requests[0].address == token_address &&
+                            requests[0].slots.is_some() &&
+                            requests[0]
                                 .slots
                                 .as_ref()
                                 .unwrap()
-                                .len()
-                                == 1
-                            && requests[0]
+                                .len() ==
+                                1 &&
+                            requests[0]
                                 .slots
                                 .as_ref()
                                 .unwrap()
@@ -2660,10 +2661,10 @@ mod tests {
                 predicate::function({
                     let new_account = new_account.clone();
                     move |requests: &[StorageSnapshotRequest]| {
-                        requests.len() == 1
-                            && requests[0].address == new_account
-                            && requests[0].slots.is_none() // Should request all slots for new
-                                                           // non-token account
+                        requests.len() == 1 &&
+                            requests[0].address == new_account &&
+                            requests[0].slots.is_none() // Should request all slots for new
+                                                        // non-token account
                     }
                 }),
             )
@@ -2994,11 +2995,11 @@ mod tests {
             .with(
                 eq(Bytes::from(2_u8).lpad(32, 0)),
                 predicate::function(|entrypoints: &Vec<EntryPointWithTracingParams>| {
-                    entrypoints.len() == 2
-                        && entrypoints
+                    entrypoints.len() == 2 &&
+                        entrypoints
                             .iter()
-                            .any(|ep| ep.entry_point.external_id == "entrypoint_9")
-                        && entrypoints
+                            .any(|ep| ep.entry_point.external_id == "entrypoint_9") &&
+                        entrypoints
                             .iter()
                             .any(|ep| ep.entry_point.external_id == "entrypoint_10")
                 }),
@@ -3031,11 +3032,11 @@ mod tests {
             .with(
                 eq(testing::block(2)),
                 predicate::function(|requests: &[StorageSnapshotRequest]| {
-                    requests.len() == 2
-                        && requests
+                    requests.len() == 2 &&
+                        requests
                             .iter()
-                            .any(|r| r.address == Bytes::from("0x09"))
-                        && requests
+                            .any(|r| r.address == Bytes::from("0x09")) &&
+                        requests
                             .iter()
                             .any(|r| r.address == Bytes::from("0x99"))
                 }),
