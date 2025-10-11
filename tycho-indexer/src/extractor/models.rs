@@ -1,6 +1,7 @@
 #![allow(deprecated)]
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 
+use deepsize::DeepSizeOf;
 use tycho_common::{
     models::{
         blockchain::{
@@ -138,13 +139,13 @@ impl BlockScoped for BlockEntityChanges {
 }
 
 /// Storage changes grouped by transaction
-#[derive(Debug, PartialEq, Default, Clone)]
+#[derive(Debug, PartialEq, Default, Clone, DeepSizeOf)]
 pub struct TxWithContractChanges {
     pub tx: Transaction,
     pub contract_changes: AccountToContractChanges,
 }
 
-#[derive(Debug, PartialEq, Default, Clone)]
+#[derive(Debug, PartialEq, Default, Clone, DeepSizeOf)]
 pub struct BlockChanges {
     extractor: String,
     chain: Chain,

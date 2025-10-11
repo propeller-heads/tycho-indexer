@@ -1,6 +1,7 @@
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use chrono::NaiveDateTime;
+use deepsize::{Context, DeepSizeOf};
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
@@ -67,6 +68,25 @@ impl ProtocolComponent {
     }
 }
 
+impl DeepSizeOf for ProtocolComponent {
+    fn deep_size_of_children(&self, ctx: &mut Context) -> usize {
+        self.id.deep_size_of_children(ctx) +
+            self.protocol_system
+                .deep_size_of_children(ctx) +
+            self.protocol_type_name
+                .deep_size_of_children(ctx) +
+            self.chain.deep_size_of_children(ctx) +
+            self.tokens.deep_size_of_children(ctx) +
+            self.contract_addresses
+                .deep_size_of_children(ctx) +
+            self.static_attributes
+                .deep_size_of_children(ctx) +
+            self.change.deep_size_of_children(ctx) +
+            self.creation_tx
+                .deep_size_of_children(ctx)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProtocolComponentState {
     pub component_id: ComponentId,
@@ -124,7 +144,7 @@ impl ProtocolComponentState {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, DeepSizeOf)]
 pub struct ProtocolComponentStateDelta {
     pub component_id: ComponentId,
     pub updated_attributes: HashMap<AttrStoreKey, StoreVal>,
@@ -173,7 +193,7 @@ impl ProtocolComponentStateDelta {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, DeepSizeOf)]
 pub struct ComponentBalance {
     pub token: Address,
     pub balance: Balance,

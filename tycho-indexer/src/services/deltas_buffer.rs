@@ -1,9 +1,12 @@
 use std::{
     collections::{HashMap, HashSet},
     sync::{mpsc::SyncSender, Arc, Mutex},
+    time::Duration,
 };
 
+use deepsize::DeepSizeOf;
 use futures03::{stream, StreamExt};
+use metrics::gauge;
 use thiserror::Error;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, error, instrument, trace, Level};
@@ -31,7 +34,7 @@ use crate::extractor::{
 ///   fetched from the database.
 /// - Retrieving commit status for blocks, which is used to determine whether to fetch data from the
 ///   database and/or from the buffer.
-#[derive(Default, Clone)]
+#[derive(Default, Clone, DeepSizeOf)]
 pub struct PendingDeltas {
     // Map with the protocol system name as key and a `ReorgBuffer` as value.
     buffers: HashMap<String, Arc<Mutex<ReorgBuffer<BlockAggregatedChanges>>>>,
@@ -258,6 +261,16 @@ impl PendingDeltas {
         start_tx
             .send(())
             .map_err(|_| anyhow::anyhow!("Failed to send PendingDeltas start signal"))?;
+
+        // Start a reporting task to log buffer sizes every 60 seconds
+        let self_clone = self.clone();
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(60));
+            loop {
+                tick.tick().await;
+                gauge!("pending_deltas_buffer_size").set(self_clone.deep_size_of() as f64);
+            }
+        });
 
         let all_messages = stream::select_all(rxs);
 

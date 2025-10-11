@@ -6,6 +6,7 @@ use std::{
     str::FromStr,
 };
 
+use deepsize::{Context, DeepSizeOf};
 #[cfg(feature = "diesel")]
 use diesel::{
     deserialize::{self, FromSql, FromSqlRow},
@@ -25,6 +26,13 @@ use crate::serde_primitives::hex_bytes;
 #[cfg_attr(feature = "diesel", derive(AsExpression, FromSqlRow,))]
 #[cfg_attr(feature = "diesel", diesel(sql_type = Binary))]
 pub struct Bytes(#[serde(with = "hex_bytes")] pub bytes::Bytes);
+
+impl DeepSizeOf for Bytes {
+    fn deep_size_of_children(&self, _ctx: &mut Context) -> usize {
+        // approximate owned heap memory with possible double counting
+        self.0.len()
+    }
+}
 
 fn bytes_to_hex(b: &Bytes) -> String {
     hex::encode(b.0.as_ref())

@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use chrono::NaiveDateTime;
+use deepsize::DeepSizeOf;
 use tracing::{debug, error, instrument, trace, warn, Level};
 use tycho_common::{
     models::{
@@ -54,7 +55,11 @@ impl TryFrom<BlockOrTimestamp> for BlockNumberOrTimestamp {
 /// they are drained to the database.
 ///
 /// In case of a chain reorg, we can just purge this buffer up to the common ancestor block.
-pub(crate) struct ReorgBuffer<B: BlockScoped> {
+#[derive(DeepSizeOf)]
+pub(crate) struct ReorgBuffer<B>
+where
+    B: BlockScoped + DeepSizeOf,
+{
     block_messages: VecDeque<B>,
     strict: bool,
 }
@@ -72,7 +77,7 @@ pub enum CommitStatus {
 
 impl<B> ReorgBuffer<B>
 where
-    B: BlockScoped + std::fmt::Debug,
+    B: BlockScoped + std::fmt::Debug + DeepSizeOf,
 {
     pub(crate) fn new() -> Self {
         Self { block_messages: VecDeque::new(), strict: false }
@@ -316,7 +321,7 @@ pub(crate) trait StateUpdateBufferEntry: std::fmt::Debug {
 
 impl<B> ReorgBuffer<B>
 where
-    B: BlockScoped + StateUpdateBufferEntry,
+    B: BlockScoped + StateUpdateBufferEntry + DeepSizeOf,
 {
     /// Looks up buffered protocol state updates for the provided keys. Returns a map of updates and
     /// a list of keys for which updates were not found in the buffered blocks.

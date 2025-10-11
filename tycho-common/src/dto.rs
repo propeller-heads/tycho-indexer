@@ -12,6 +12,7 @@ use std::{
 };
 
 use chrono::{NaiveDateTime, Utc};
+use deepsize::{Context, DeepSizeOf};
 use serde::{de, Deserialize, Deserializer, Serialize};
 use strum_macros::{Display, EnumString};
 use thiserror::Error;
@@ -26,7 +27,6 @@ use crate::{
     serde_primitives::{
         hex_bytes, hex_bytes_option, hex_hashmap_key, hex_hashmap_key_value, hex_hashmap_value,
     },
-    traits::MemorySize,
     Bytes,
 };
 
@@ -44,6 +44,7 @@ use crate::{
     Display,
     Default,
     ToSchema,
+    DeepSizeOf,
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
@@ -95,7 +96,17 @@ impl From<models::Chain> for Chain {
 }
 
 #[derive(
-    Debug, PartialEq, Default, Copy, Clone, Deserialize, Serialize, ToSchema, EnumString, Display,
+    Debug,
+    PartialEq,
+    Default,
+    Copy,
+    Clone,
+    Deserialize,
+    Serialize,
+    ToSchema,
+    EnumString,
+    Display,
+    DeepSizeOf,
 )]
 pub enum ChangeType {
     #[default]
@@ -221,7 +232,7 @@ pub struct Block {
     pub ts: NaiveDateTime,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash, DeepSizeOf)]
 #[serde(deny_unknown_fields)]
 pub struct BlockParam {
     #[schema(value_type=Option<String>)]
@@ -627,6 +638,25 @@ pub struct ProtocolComponent {
     pub created_at: NaiveDateTime,
 }
 
+impl DeepSizeOf for ProtocolComponent {
+    fn deep_size_of_children(&self, ctx: &mut Context) -> usize {
+        self.id.deep_size_of_children(ctx) +
+            self.protocol_system
+                .deep_size_of_children(ctx) +
+            self.protocol_type_name
+                .deep_size_of_children(ctx) +
+            self.chain.deep_size_of_children(ctx) +
+            self.tokens.deep_size_of_children(ctx) +
+            self.contract_ids
+                .deep_size_of_children(ctx) +
+            self.static_attributes
+                .deep_size_of_children(ctx) +
+            self.change.deep_size_of_children(ctx) +
+            self.creation_tx
+                .deep_size_of_children(ctx)
+    }
+}
+
 impl From<models::protocol::ProtocolComponent> for ProtocolComponent {
     fn from(value: models::protocol::ProtocolComponent) -> Self {
         Self {
@@ -720,7 +750,9 @@ impl ProtocolStateDelta {
 }
 
 /// Maximum page size for this endpoint is 100
-#[derive(Clone, Serialize, Debug, Default, Deserialize, PartialEq, ToSchema, Eq, Hash)]
+#[derive(
+    Clone, Serialize, Debug, Default, Deserialize, PartialEq, ToSchema, Eq, Hash, DeepSizeOf,
+)]
 #[serde(deny_unknown_fields)]
 pub struct StateRequestBody {
     /// Filters response by contract addresses
@@ -772,7 +804,7 @@ impl StateRequestBody {
 }
 
 /// Response from Tycho server for a contract state request.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, DeepSizeOf)]
 pub struct StateRequestResponse {
     pub accounts: Vec<ResponseAccount>,
     pub pagination: PaginationResponse,
@@ -784,56 +816,7 @@ impl StateRequestResponse {
     }
 }
 
-impl MemorySize for StateRequestResponse {
-    fn memory_size(&self) -> usize {
-        let mut size = 0usize;
-
-        // Base struct size: Vec pointer + capacity + len + pagination struct
-        size += std::mem::size_of::<Vec<ResponseAccount>>();
-        size += std::mem::size_of::<PaginationResponse>();
-
-        // Account data size
-        for account in &self.accounts {
-            // Base account struct overhead (rough estimate for all fixed fields)
-            size += 200; // Conservative estimate for struct overhead + enum + fixed Bytes
-
-            // Variable-length byte fields
-            size += account.address.len();
-            size += account.title.capacity(); // String allocates capacity, not just len
-            size += account.native_balance.len();
-            size += account.code.len();
-            size += account.code_hash.len();
-            size += account.balance_modify_tx.len();
-            size += account.code_modify_tx.len();
-
-            // Creation tx (optional)
-            if let Some(ref creation_tx) = account.creation_tx {
-                size += creation_tx.len();
-            }
-
-            // Storage slots HashMap - this is likely the largest contributor
-            size += account.slots.capacity() * 64; // For the `Bytes` values in the HashMap (they are 4 usize fields, so 32 bytes each)
-            for (key, value) in &account.slots {
-                // Account for the `Bytes` heap allocation
-                size += key.len(); //
-                size += value.len();
-            }
-
-            // Token balances HashMap
-            size += account.token_balances.capacity() * 64; // For the `Bytes` values in the HashMap (they are 4 usize fields, so 32 bytes each)
-            for (key, value) in &account.token_balances {
-                // Account for the `Bytes` heap allocation
-                size += key.len();
-                size += value.len();
-            }
-        }
-
-        // Ensure minimum reasonable size
-        size.max(128)
-    }
-}
-
-#[derive(PartialEq, Clone, Serialize, Deserialize, Default, ToSchema)]
+#[derive(PartialEq, Clone, Serialize, Deserialize, Default, ToSchema, DeepSizeOf)]
 #[serde(rename = "Account")]
 /// Account struct for the response from Tycho server for a contract state request.
 ///
@@ -984,6 +967,16 @@ pub struct VersionParam {
     pub block: Option<BlockParam>,
 }
 
+impl DeepSizeOf for VersionParam {
+    fn deep_size_of_children(&self, ctx: &mut Context) -> usize {
+        if let Some(block) = &self.block {
+            return block.deep_size_of_children(ctx);
+        }
+
+        0
+    }
+}
+
 impl VersionParam {
     pub fn new(timestamp: Option<NaiveDateTime>, block: Option<BlockParam>) -> Self {
         Self { timestamp, block }
@@ -1041,7 +1034,9 @@ impl StateRequestParameters {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Hash, Clone)]
+#[derive(
+    Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Hash, Clone, DeepSizeOf,
+)]
 #[serde(deny_unknown_fields)]
 pub struct TokensRequestBody {
     /// Filters tokens by addresses
@@ -1069,7 +1064,7 @@ pub struct TokensRequestBody {
 }
 
 /// Response from Tycho server for a tokens request.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash, DeepSizeOf)]
 pub struct TokensRequestResponse {
     pub tokens: Vec<ResponseToken>,
     pub pagination: PaginationResponse,
@@ -1082,7 +1077,7 @@ impl TokensRequestResponse {
 }
 
 /// Pagination parameter
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash, DeepSizeOf)]
 #[serde(deny_unknown_fields)]
 pub struct PaginationParams {
     /// What page to retrieve
@@ -1106,7 +1101,7 @@ impl Default for PaginationParams {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash, DeepSizeOf)]
 #[serde(deny_unknown_fields)]
 pub struct PaginationResponse {
     pub page: i64,
@@ -1127,7 +1122,9 @@ impl PaginationResponse {
     }
 }
 
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Default, ToSchema, Eq, Hash)]
+#[derive(
+    PartialEq, Debug, Clone, Serialize, Deserialize, Default, ToSchema, Eq, Hash, DeepSizeOf,
+)]
 #[serde(rename = "Token")]
 /// Token struct for the response from Tycho server for a tokens request.
 pub struct ResponseToken {
@@ -1169,7 +1166,7 @@ impl From<models::token::Token> for ResponseToken {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, ToSchema, Clone)]
+#[derive(Serialize, Deserialize, Debug, Default, ToSchema, Clone, DeepSizeOf)]
 #[serde(deny_unknown_fields)]
 pub struct ProtocolComponentsRequestBody {
     /// Filters by protocol, required to correctly apply unconfirmed state from
@@ -1286,7 +1283,7 @@ impl ProtocolComponentRequestParameters {
 }
 
 /// Response from Tycho server for a protocol components request.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, DeepSizeOf)]
 pub struct ProtocolComponentRequestResponse {
     pub protocol_components: Vec<ProtocolComponent>,
     pub pagination: PaginationResponse,
@@ -1322,7 +1319,7 @@ impl AsRef<str> for ProtocolId {
 }
 
 /// Protocol State struct for the response from Tycho server for a protocol state request.
-#[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize, ToSchema, DeepSizeOf)]
 pub struct ResponseProtocolState {
     /// Component id this state belongs to
     pub component_id: String,
@@ -1352,7 +1349,7 @@ fn default_include_balances_flag() -> bool {
 }
 
 /// Max page size supported is 100
-#[derive(Clone, Debug, Serialize, PartialEq, ToSchema, Default, Eq, Hash)]
+#[derive(Clone, Debug, Serialize, PartialEq, ToSchema, Default, Eq, Hash, DeepSizeOf)]
 #[serde(deny_unknown_fields)]
 pub struct ProtocolStateRequestBody {
     /// Filters response by protocol components ids
@@ -1493,7 +1490,7 @@ impl<'de> Deserialize<'de> for ProtocolStateRequestBody {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, DeepSizeOf)]
 pub struct ProtocolStateRequestResponse {
     pub states: Vec<ResponseProtocolState>,
     pub pagination: PaginationResponse,
@@ -1637,7 +1634,9 @@ impl ComponentTvlRequestResponse {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Hash, Clone)]
+#[derive(
+    Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Hash, Clone, DeepSizeOf,
+)]
 pub struct TracedEntryPointRequestBody {
     #[serde(default)]
     pub chain: Chain,
@@ -1651,7 +1650,7 @@ pub struct TracedEntryPointRequestBody {
     pub pagination: PaginationParams,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash, DeepSizeOf)]
 pub struct EntryPoint {
     #[schema(example = "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()")]
     /// Entry point id.
@@ -1665,7 +1664,7 @@ pub struct EntryPoint {
     pub signature: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, Eq, Hash, DeepSizeOf)]
 pub enum StorageOverride {
     /// Applies changes incrementally to the existing account storage.
     /// Only modifies the specific storage slots provided in the map while
@@ -1693,7 +1692,7 @@ impl From<models::blockchain::StorageOverride> for StorageOverride {
 ///
 /// Used to modify account state. Commonly used for testing contract interactions with specific
 /// state conditions or simulating transactions with modified balances/code.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, Eq, Hash, DeepSizeOf)]
 pub struct AccountOverrides {
     /// Storage slots to override
     pub slots: Option<StorageOverride>,
@@ -1713,7 +1712,7 @@ impl From<models::blockchain::AccountOverrides> for AccountOverrides {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash, DeepSizeOf)]
 pub struct RPCTracerParams {
     /// The caller address of the transaction, if not provided tracing uses the default value
     /// for an address defined by the VM.
@@ -1749,7 +1748,7 @@ impl From<models::blockchain::RPCTracerParams> for RPCTracerParams {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone, Hash, DeepSizeOf)]
 #[serde(tag = "method", rename_all = "lowercase")]
 pub enum TracingParams {
     /// Uses RPC calls to retrieve the called addresses and retriggers
@@ -1772,7 +1771,7 @@ impl From<models::blockchain::EntryPoint> for EntryPoint {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, ToSchema, Eq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, ToSchema, Eq, Clone, DeepSizeOf)]
 pub struct EntryPointWithTracingParams {
     /// The entry point object
     pub entry_point: EntryPoint,
@@ -1786,7 +1785,9 @@ impl From<models::blockchain::EntryPointWithTracingParams> for EntryPointWithTra
     }
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash, Serialize, Deserialize, DeepSizeOf,
+)]
 pub struct AddressStorageLocation {
     pub key: StoreKey,
     pub offset: u8,
@@ -1846,7 +1847,7 @@ fn deserialize_retriggers_from_value(
     Ok(result)
 }
 
-#[derive(Serialize, Debug, Default, PartialEq, ToSchema, Eq, Clone)]
+#[derive(Serialize, Debug, Default, PartialEq, ToSchema, Eq, Clone, DeepSizeOf)]
 pub struct TracingResult {
     #[schema(value_type=HashSet<(String, String)>)]
     pub retriggers: HashSet<(StoreKey, AddressStorageLocation)>,
@@ -1902,7 +1903,7 @@ impl From<models::blockchain::TracingResult> for TracingResult {
     }
 }
 
-#[derive(Serialize, PartialEq, ToSchema, Eq, Clone, Debug, Deserialize)]
+#[derive(Serialize, PartialEq, ToSchema, Eq, Clone, Debug, Deserialize, DeepSizeOf)]
 pub struct TracedEntryPointRequestResponse {
     /// Map of protocol component id to a list of a tuple containing each entry point with its
     /// tracing parameters and its corresponding tracing results.
@@ -3022,10 +3023,10 @@ mod memory_size_tests {
             pagination: PaginationResponse::new(1, 10, 0),
         };
 
-        let size = response.memory_size();
+        let size = response.deep_size_of();
 
         // Should at least include base struct sizes
-        assert!(size >= 128, "Empty response should have minimum size of 128 bytes, got {}", size);
+        assert!(size >= 48, "Empty response should have minimum size of 48 bytes, got {}", size);
         assert!(size < 200, "Empty response should not be too large, got {}", size);
     }
 
@@ -3062,8 +3063,8 @@ mod memory_size_tests {
         let small_response = create_response_with_slots(10);
         let large_response = create_response_with_slots(100);
 
-        let small_size = small_response.memory_size();
-        let large_size = large_response.memory_size();
+        let small_size = small_response.deep_size_of();
+        let large_size = large_response.deep_size_of();
 
         // Large response should be significantly bigger
         assert!(

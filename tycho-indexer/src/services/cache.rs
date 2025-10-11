@@ -1,10 +1,10 @@
 use std::{error::Error, fmt::Debug, hash::Hash, sync::Arc};
 
+use deepsize::DeepSizeOf;
 use futures03::Future;
-use metrics::counter;
+use metrics::{counter, gauge};
 use mini_moka::sync::Cache;
 use tracing::{debug, instrument, trace, Level};
-use tycho_common::traits::MemorySize;
 
 pub struct RpcCache<R, V> {
     name: String,
@@ -23,26 +23,18 @@ pub struct RpcCacheBuilder<R, V> {
 
 impl<R, V> RpcCacheBuilder<R, V>
 where
-    R: Clone + Hash + Eq + Send + Sync + Debug + 'static,
-    V: Clone + Send + Sync + 'static,
+    R: Clone + Hash + Eq + Send + Sync + Debug + DeepSizeOf + 'static,
+    V: Clone + Send + Sync + DeepSizeOf + 'static,
 {
     pub fn new(name: &str, capacity: u64, ttl: u64) -> Self {
         Self { name: name.to_string(), capacity, ttl, weigher: None }
     }
 
     /// Convenience method for values that implement MemorySize
-    pub fn with_memory_size(mut self) -> Self
-    where
-        V: MemorySize,
-    {
-        self.weigher = Some(Box::new(|_key, value_wrapper| {
-            if let Ok(guard) = value_wrapper.try_lock() {
-                if let Some(value) = guard.as_ref() {
-                    return value
-                        .memory_size()
-                        .try_into()
-                        .unwrap_or(u32::MAX); // We stay conservative if it overflows u32
-                }
+    pub fn with_memory_size(mut self) -> Self {
+        self.weigher = Some(Box::new(|key, value_wrapper| {
+            if let Ok(value_guard) = value_wrapper.try_lock() {
+                return (key.deep_size_of() + value_guard.deep_size_of()) as u32;
             }
             // Conservative size if we can't lock or there's no value
             u32::MAX
@@ -66,8 +58,8 @@ where
 
 impl<R, V> RpcCache<R, V>
 where
-    R: Clone + Hash + Eq + Send + Sync + Debug + 'static,
-    V: Clone + Send + Sync + 'static,
+    R: Clone + Hash + Eq + Send + Sync + Debug + DeepSizeOf + 'static,
+    V: Clone + Send + Sync + DeepSizeOf + 'static,
 {
     pub fn new(name: &str, capacity: u64, ttl: u64) -> Self {
         let cache = Arc::new(
@@ -122,6 +114,7 @@ where
         let weighted_size = self.cache.weighted_size();
         tracing::Span::current().record("weighted_size", weighted_size);
         debug!(weighted_size, name = self.name, "CacheWeightedSize");
+        gauge!("rpc_cache_weighted_size", "name" => self.name.clone()).set(weighted_size as f64);
 
         let lock = Arc::new(tokio::sync::Mutex::new(None));
         let mut guard = lock.lock().await;

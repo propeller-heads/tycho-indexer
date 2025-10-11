@@ -88,6 +88,13 @@ impl ExtractorExtension for DCIPlugin {
             }
         }
     }
+
+    fn cache_size(&self) -> usize {
+        match self {
+            DCIPlugin::Standard(dci) => dci.cache_size(),
+            DCIPlugin::UniswapV4Hooks(hooks_dci) => hooks_dci.cache_size(),
+        }
+    }
 }
 pub enum ControlMessage {
     Stop,

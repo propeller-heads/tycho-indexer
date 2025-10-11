@@ -7,6 +7,7 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::{Duration, NaiveDateTime};
+use deepsize::DeepSizeOf;
 use metrics::{counter, gauge, histogram};
 use mockall::automock;
 use prost::Message;
@@ -204,62 +205,108 @@ where
     }
 
     /// Reports sync progress if a minute has passed since the last report.
-    async fn maybe_report_progress(&self, block: &Block) {
+    async fn report_sync_progress(
+        &self,
+        block: &Block,
+        last_report_block_number: u64,
+        time_passed: i64,
+    ) {
+        let current_block = self.chain_state.current_block().await;
+        let distance_to_current = current_block - block.number;
+        let blocks_processed = block.number - last_report_block_number;
+        let blocks_per_minute = blocks_processed as f64 * 60.0 / time_passed as f64;
+
+        let extractor_id = self.get_id();
+        gauge!(
+            "extractor_sync_block_rate",
+            "chain" => extractor_id.chain.to_string(),
+            "extractor" => extractor_id.name.to_string(),
+        )
+        .set(blocks_per_minute);
+
+        if let Some(time_remaining) =
+            Duration::try_minutes((distance_to_current as f64 / blocks_per_minute) as i64)
+        {
+            let hours = time_remaining.num_hours();
+            let minutes = (time_remaining.num_minutes()) % 60;
+            info!(
+                extractor_id = self.name,
+                blocks_per_minute = format!("{blocks_per_minute:.2}"),
+                blocks_processed,
+                height = block.number,
+                estimated_current = current_block,
+                time_remaining = format!("{:02}h{:02}m", hours, minutes),
+                name = "SyncProgress"
+            );
+        } else {
+            warn!(
+                "Failed to convert {} to a duration",
+                (distance_to_current as f64 / blocks_per_minute) as i64,
+            );
+            info!(
+                extractor_id = self.name,
+                blocks_per_minute = format!("{blocks_per_minute:.2}"),
+                blocks_processed,
+                height = block.number,
+                estimated_current = current_block,
+                name = "SyncProgress"
+            );
+        }
+    }
+
+    async fn periodically_report_metrics(&self, msg: &mut BlockChanges, is_syncing: bool) {
         let mut state = self.inner.lock().await;
         let now = chrono::Local::now().naive_utc();
+
+        // On the first call, initialize the last report time and block number
         if state.last_report_block_number == 0 {
-            // On startup, initialize state and exit
             state.last_report_ts = now;
-            state.last_report_block_number = block.number;
+            state.last_report_block_number = msg.block.number;
             return;
         }
+
         let time_passed = now
             .signed_duration_since(state.last_report_ts)
             .num_seconds();
+
         if time_passed >= 60 {
-            let current_block = self.chain_state.current_block().await;
-            let distance_to_current = current_block - block.number;
-            let blocks_processed = block.number - state.last_report_block_number;
-            let blocks_per_minute = blocks_processed as f64 * 60.0 / time_passed as f64;
-
-            let extractor_id = self.get_id();
-            gauge!(
-                "extractor_sync_block_rate",
-                "chain" => extractor_id.chain.to_string(),
-                "extractor" => extractor_id.name.to_string(),
-            )
-            .set(blocks_per_minute);
-
-            if let Some(time_remaining) = chrono::Duration::try_minutes(
-                (distance_to_current as f64 / blocks_per_minute) as i64,
-            ) {
-                let hours = time_remaining.num_hours();
-                let minutes = (time_remaining.num_minutes()) % 60;
-                info!(
-                    extractor_id = self.name,
-                    blocks_per_minute = format!("{blocks_per_minute:.2}"),
-                    blocks_processed,
-                    height = block.number,
-                    estimated_current = current_block,
-                    time_remaining = format!("{:02}h{:02}m", hours, minutes),
-                    name = "SyncProgress"
-                );
-            } else {
-                warn!(
-                    "Failed to convert {} to a duration",
-                    (distance_to_current as f64 / blocks_per_minute) as i64,
-                );
-                info!(
-                    extractor_id = self.name,
-                    blocks_per_minute = format!("{blocks_per_minute:.2}"),
-                    blocks_processed,
-                    height = block.number,
-                    estimated_current = current_block,
-                    name = "SyncProgress"
-                );
-            }
             state.last_report_ts = now;
-            state.last_report_block_number = block.number;
+            state.last_report_block_number = msg.block.number;
+
+            if is_syncing {
+                self.report_sync_progress(&msg.block, state.last_report_block_number, time_passed)
+                    .await;
+            }
+            drop(state); // Release the lock before doing potentially slow operations
+
+            // Report the memory usage for all buffers and caches
+            gauge!(
+                "extractor_reorg_buffer_size",
+                "chain" => self.chain.to_string(),
+                "extractor" => self.name.clone(),
+            )
+            .set(
+                self.reorg_buffer
+                    .lock()
+                    .await
+                    .deep_size_of() as f64,
+            );
+
+            gauge!(
+                "protocol_cache_size",
+                "chain" => self.chain.to_string(),
+                "extractor" => self.name.clone(),
+            )
+            .set(self.protocol_cache.size_of().await as f64);
+
+            if let Some(dci_plugin) = &self.dci_plugin {
+                gauge!(
+                    "dci_cache_size",
+                    "chain" => self.chain.to_string(),
+                    "extractor" => self.name.clone(),
+                )
+                .set(dci_plugin.lock().await.cache_size() as f64);
+            }
         }
     }
 
@@ -870,10 +917,8 @@ where
         self.update_last_processed_block(msg.block.clone())
             .await;
 
-        if is_syncing {
-            self.maybe_report_progress(&msg.block)
-                .await;
-        }
+        self.periodically_report_metrics(&mut msg, is_syncing)
+            .await;
 
         self.update_cursor(inp.cursor).await;
 

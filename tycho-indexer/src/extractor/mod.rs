@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
+use deepsize::DeepSizeOf;
 use mockall::automock;
 use prost::DecodeError;
 use thiserror::Error;
@@ -114,16 +115,19 @@ pub trait ExtractorExtension: Send + Sync {
 
     /// Process a revert
     async fn process_revert(&mut self, target_block: &BlockHash) -> Result<(), ExtractionError>;
+
+    /// Returns the approximate size of the internal cache used by this extension, in bytes.
+    fn cache_size(&self) -> usize;
 }
 
 /// Wrapper to carry a cursor along with another struct.
-#[derive(Debug)]
+#[derive(Debug, DeepSizeOf)]
 pub(crate) struct BlockUpdateWithCursor<B: std::fmt::Debug> {
     block_update: B,
     cursor: String,
 }
 
-impl<B: std::fmt::Debug> BlockUpdateWithCursor<B> {
+impl<B: std::fmt::Debug + DeepSizeOf> BlockUpdateWithCursor<B> {
     pub(crate) fn new(block_update: B, cursor: String) -> Self {
         Self { block_update, cursor }
     }

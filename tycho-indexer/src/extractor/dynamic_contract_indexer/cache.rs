@@ -3,6 +3,7 @@ use std::{
     hash::Hash,
 };
 
+use deepsize::DeepSizeOf;
 use thiserror::Error;
 use tracing::{debug, trace, warn};
 use tycho_common::models::{
@@ -32,7 +33,7 @@ pub(super) enum MergeStrategy<V> {
 }
 
 /// Central data cache used by the Dynamic Contract Indexer (DCI).
-#[derive(Debug)]
+#[derive(Debug, DeepSizeOf)]
 pub(super) struct DCICache {
     /// Maps entry point IDs to entry point definitions.
     pub(super) ep_id_to_entrypoint: VersionedCache<EntryPointId, EntryPoint>,
@@ -188,7 +189,7 @@ impl DCICache {
 }
 
 /// Central data cache used by the Hooks Dynamic Contract Indexer (HooksDCI).
-#[derive(Debug)]
+#[derive(Debug, DeepSizeOf)]
 pub(super) struct HooksDCICache {
     /// Maps component IDs to their processing state.
     pub(super) component_states: VersionedCache<ComponentId, ComponentProcessingState>,
@@ -267,8 +268,8 @@ pub enum DCICacheError {
 /// A versioned data container scoped to a specific block.
 ///
 /// Stores key-value pairs for a block, used in the pending portion of a cache.
-#[derive(Clone, Debug)]
-struct BlockScopedMap<K, V> {
+#[derive(Clone, Debug, DeepSizeOf)]
+struct BlockScopedMap<K: DeepSizeOf + Eq + Hash, V: DeepSizeOf> {
     /// Block metadata for this layer.
     block: Block,
     /// Key-value store scoped to the block.
@@ -280,8 +281,8 @@ struct BlockScopedMap<K, V> {
 /// It contains:
 /// - Permanent data that is not revertable.
 /// - Pending data organized in layers per block, supporting reverts.
-#[derive(Debug)]
-pub(super) struct VersionedCache<K, V> {
+#[derive(Debug, DeepSizeOf)]
+pub(super) struct VersionedCache<K: DeepSizeOf + Hash + Eq, V: DeepSizeOf> {
     /// Entries that are permanent and not affected by block reverts.
     permanent: HashMap<K, V>,
     /// Stack of pending block-scoped layers. These can be reverted.
@@ -289,8 +290,8 @@ pub(super) struct VersionedCache<K, V> {
 }
 impl<K, V> VersionedCache<K, V>
 where
-    K: Eq + Hash + Clone + std::fmt::Debug,
-    V: Clone + std::fmt::Debug,
+    K: Eq + Hash + Clone + std::fmt::Debug + DeepSizeOf,
+    V: Clone + std::fmt::Debug + DeepSizeOf,
 {
     pub(super) fn new() -> Self {
         Self { permanent: HashMap::new(), pending: VecDeque::new() }

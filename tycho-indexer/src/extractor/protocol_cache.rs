@@ -1,7 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
-use chrono::{Local, NaiveDateTime};
+use chrono::{Duration, Local, NaiveDateTime};
+use deepsize::DeepSizeOf;
 use tokio::sync::RwLock;
 use tracing::{debug, info, instrument};
 use tycho_common::{
@@ -126,6 +127,24 @@ impl ProtocolMemoryCache {
         debug!(last_price_update = ?token_prices.last_price_update, ?n_fetched, resource = "prices", "CacheMiss");
         token_prices.last_price_update = Local::now().naive_utc();
         Ok(n_fetched)
+    }
+
+    /// Returns the approximate size of the cache in bytes.
+    pub async fn size_of(&self) -> usize {
+        self.chain.deep_size_of() +
+            self.tokens.read().await.deep_size_of() +
+            self.token_prices
+                .read()
+                .await
+                .prices
+                .deep_size_of() +
+            size_of::<NaiveDateTime>() +
+            self.components
+                .read()
+                .await
+                .deep_size_of() +
+            size_of::<Duration>() +
+            size_of_val(&self.gateway)
     }
 }
 

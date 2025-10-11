@@ -1,6 +1,7 @@
 use std::collections::{hash_map::Entry, BTreeMap, HashMap, HashSet};
 
 use chrono::NaiveDateTime;
+use deepsize::DeepSizeOf;
 use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 use tracing::warn;
 
@@ -39,7 +40,18 @@ impl Block {
     }
 }
 
-#[derive(Clone, Default, PartialEq, Debug, Eq, Hash)]
+impl DeepSizeOf for Block {
+    fn deep_size_of_children(&self, context: &mut deepsize::Context) -> usize {
+        size_of::<u64>() +
+            self.chain
+                .deep_size_of_children(context) +
+            self.hash.deep_size_of_children(context) +
+            self.parent_hash
+                .deep_size_of_children(context)
+    }
+}
+
+#[derive(Clone, Default, PartialEq, Debug, Eq, Hash, DeepSizeOf)]
 pub struct Transaction {
     pub hash: Bytes,
     pub block_hash: Bytes,
@@ -71,7 +83,7 @@ pub struct TransactionDeltaGroup<T> {
     tx: Transaction,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, DeepSizeOf)]
 pub struct BlockAggregatedChanges {
     pub extractor: String,
     pub chain: Chain,
@@ -179,7 +191,7 @@ impl From<dto::Block> for Block {
     }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, DeepSizeOf)]
 pub struct DCIUpdate {
     pub new_entrypoints: HashMap<ComponentId, HashSet<EntryPoint>>,
     pub new_entrypoint_params: HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
@@ -187,7 +199,7 @@ pub struct DCIUpdate {
 }
 
 /// Changes grouped by their respective transaction.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, DeepSizeOf)]
 pub struct TxWithChanges {
     pub tx: Transaction,
     pub protocol_components: HashMap<ComponentId, ProtocolComponent>,
@@ -374,7 +386,7 @@ pub enum BlockTag {
     /// Block by number
     Number(u64),
 }
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, DeepSizeOf)]
 pub struct EntryPoint {
     /// Entry point id
     pub external_id: String,
@@ -397,7 +409,7 @@ impl From<dto::EntryPoint> for EntryPoint {
 }
 
 /// A struct that combines an entry point with its associated tracing params.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, DeepSizeOf)]
 pub struct EntryPointWithTracingParams {
     /// The entry point to trace, containing the target contract address and function signature
     pub entry_point: EntryPoint,
@@ -447,7 +459,7 @@ impl std::fmt::Display for EntryPointWithTracingParams {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, DeepSizeOf)]
 /// An entry point to trace. Different types of entry points tracing will be supported in the
 /// future. Like RPC debug tracing, symbolic execution, etc.
 pub enum TracingParams {
@@ -473,7 +485,7 @@ impl From<dto::TracingParams> for TracingParams {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, DeepSizeOf)]
 pub enum StorageOverride {
     Diff(BTreeMap<StoreKey, StoreVal>),
     Replace(BTreeMap<StoreKey, StoreVal>),
@@ -488,7 +500,7 @@ impl From<dto::StorageOverride> for StorageOverride {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, DeepSizeOf)]
 pub struct AccountOverrides {
     pub slots: Option<StorageOverride>,
     pub native_balance: Option<Balance>,
@@ -505,7 +517,7 @@ impl From<dto::AccountOverrides> for AccountOverrides {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Eq, Hash, DeepSizeOf)]
 pub struct RPCTracerParams {
     /// The caller address of the transaction, if not provided tracing will use the default value
     /// for an address defined by the VM.
@@ -610,7 +622,9 @@ impl Serialize for RPCTracerParams {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, DeepSizeOf,
+)]
 pub struct AddressStorageLocation {
     pub key: StoreKey,
     pub offset: u8,
@@ -622,7 +636,7 @@ impl AddressStorageLocation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default, DeepSizeOf)]
 pub struct TracingResult {
     /// A set of (address, storage slot) pairs representing state that contain a called address.
     /// If any of these storage slots change, the execution path might change.
@@ -654,7 +668,7 @@ impl TracingResult {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, DeepSizeOf)]
 /// Represents a traced entry point and the results of the tracing operation.
 pub struct TracedEntryPoint {
     /// The combined entry point and tracing params that was traced
