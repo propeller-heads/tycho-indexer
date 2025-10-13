@@ -5,6 +5,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use deepsize::DeepSizeOf;
 use tracing::{debug, info, instrument, span, trace, warn, Instrument, Level};
 use tycho_common::{
     models::{
@@ -538,6 +539,10 @@ where
     async fn process_revert(&mut self, target_block: &BlockHash) -> Result<(), ExtractionError> {
         self.cache.revert_to(target_block)?;
         Ok(())
+    }
+
+    fn cache_size(&self) -> usize {
+        self.cache.deep_size_of()
     }
 }
 

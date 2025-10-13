@@ -3,6 +3,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
+use deepsize::DeepSizeOf;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 
@@ -15,7 +16,7 @@ pub type TransferCost = u64;
 /// Tax related to a token transfer. Should be given in Basis Points (1/100th of a percent)
 pub type TransferTax = u64;
 
-#[derive(Debug, Clone, Deserialize, Serialize, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, Eq, DeepSizeOf)]
 pub struct Token {
     pub address: Bytes,
     pub symbol: String,

@@ -52,6 +52,7 @@ tycho-client = { path = "./tycho-client", version = "0.95.2" }
 futures03 = { version = "0.3.1", package = "futures", features = ["compat"] }
 thiserror = "1"
 tracing = "0.1.37"
+deepsize = "0.2.0"
 async-trait = "0.1.73"
 tokio = { version = "1.27", features = [
     "time",

@@ -188,12 +188,6 @@ pub trait BalanceSlotDetector: Send + Sync {
     ) -> HashMap<Address, Result<(Address, Bytes), Self::Error>>;
 }
 
-/// Trait for calculating the memory weight/size of values for caching purposes
-pub trait MemorySize {
-    /// Returns the approximate memory size in bytes
-    fn memory_size(&self) -> usize;
-}
-
 /// Trait for detecting storage slots that contain ERC20 token allowances
 #[cfg_attr(feature = "test-utils", mockall::automock(type Error = String;))]
 #[async_trait]

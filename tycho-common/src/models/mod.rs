@@ -6,6 +6,7 @@ pub mod token;
 
 use std::{collections::HashMap, fmt::Display, str::FromStr};
 
+use deepsize::DeepSizeOf;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use thiserror::Error;
@@ -58,7 +59,18 @@ pub type ProtocolSystem = String;
 pub type EntryPointId = String;
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, EnumString, Display, Default,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    EnumString,
+    Display,
+    Default,
+    DeepSizeOf,
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
@@ -268,7 +280,7 @@ impl ProtocolType {
     }
 }
 
-#[derive(Debug, PartialEq, Default, Copy, Clone, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Default, Copy, Clone, Deserialize, Serialize, DeepSizeOf)]
 pub enum ChangeType {
     #[default]
     Update,

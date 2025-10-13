@@ -3,6 +3,7 @@
 
 use std::{collections::HashMap, slice};
 
+use deepsize::DeepSizeOf;
 use tonic::async_trait;
 use tracing::{debug, error, info, instrument, span, warn, Level};
 #[cfg(test)]
@@ -600,14 +601,14 @@ where
 }
 
 // Component state tracking
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, DeepSizeOf)]
 pub struct ComponentProcessingState {
     pub status: ProcessingStatus,
     pub retry_count: u32,
     pub last_error: Option<ProcessingError>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, DeepSizeOf)]
 pub enum ProcessingStatus {
     Unprocessed,     // Never processed or needs full processing
     TracingComplete, // Has entrypoints generated, only needs balance updates
@@ -615,7 +616,7 @@ pub enum ProcessingStatus {
 }
 
 // TODO: Use anyhow error
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, DeepSizeOf)]
 pub enum ProcessingError {
     MetadataError(String), // Before entrypoint generation
     TracingError(String),  // During/after entrypoint generation
@@ -1037,6 +1038,11 @@ where
 
         info!("Revert processing completed successfully");
         Ok(())
+    }
+
+    /// Returns the approximate size of the internal cache used by this extension, in bytes.
+    fn cache_size(&self) -> usize {
+        self.cache.deep_size_of()
     }
 }
 

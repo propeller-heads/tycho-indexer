@@ -1,5 +1,6 @@
 use std::collections::{hash_map::Entry, HashMap};
 
+use deepsize::DeepSizeOf;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
@@ -92,7 +93,7 @@ impl Account {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default, DeepSizeOf)]
 pub struct AccountDelta {
     pub chain: Chain,
     pub address: Address,
@@ -296,7 +297,7 @@ impl From<Account> for AccountDelta {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, DeepSizeOf)]
 pub struct AccountBalance {
     pub account: Address,
     pub token: Address,
@@ -485,7 +486,7 @@ impl From<&AccountChangesWithTx> for Vec<Account> {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, DeepSizeOf)]
 pub struct ContractStorageChange {
     pub value: Bytes,
     pub previous: Bytes,
@@ -501,7 +502,7 @@ impl ContractStorageChange {
     }
 }
 
-#[derive(Debug, PartialEq, Default, Clone)]
+#[derive(Debug, PartialEq, Default, Clone, DeepSizeOf)]
 pub struct ContractChanges {
     pub account: Address,
     pub slots: HashMap<StoreKey, ContractStorageChange>,
