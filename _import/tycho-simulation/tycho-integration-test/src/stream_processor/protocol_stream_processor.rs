@@ -16,7 +16,8 @@ use tycho_simulation::{
         protocol::{
             ekubo::state::EkuboState,
             filters::{
-                balancer_v2_pool_filter, curve_pool_filter, uniswap_v4_pool_with_hook_filter,
+                balancer_v2_pool_filter, curve_pool_filter, uniswap_v4_pool_with_euler_hook_filter,
+                uniswap_v4_pool_with_hook_filter,
             },
             pancakeswap_v2::state::PancakeswapV2State,
             uniswap_v2::state::UniswapV2State,
@@ -116,6 +117,11 @@ impl ProtocolStreamProcessor {
                         "vm:curve",
                         tvl_filter.clone(),
                         Some(curve_pool_filter),
+                    )
+                    .exchange::<UniswapV4State>(
+                        "uniswap_v4_hooks",
+                        tvl_filter.clone(),
+                        Some(uniswap_v4_pool_with_euler_hook_filter),
                     );
             }
             Chain::Base => {
