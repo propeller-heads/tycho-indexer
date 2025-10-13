@@ -40,6 +40,7 @@ impl Block {
     }
 }
 
+// Manual impl as `NaiveDateTime` structure referenced in `ts` does not implement DeepSizeOf
 impl DeepSizeOf for Block {
     fn deep_size_of_children(&self, context: &mut deepsize::Context) -> usize {
         size_of::<u64>() +

@@ -29,7 +29,8 @@ pub struct Bytes(#[serde(with = "hex_bytes")] pub bytes::Bytes);
 
 impl DeepSizeOf for Bytes {
     fn deep_size_of_children(&self, _ctx: &mut Context) -> usize {
-        // approximate owned heap memory with possible double counting
+        // Note: This may overcount memory if the underlying bytes are shared (e.g. via Arc).
+        // We cannot detect shared ownership here because Context’s internal tracking is private
         self.0.len()
     }
 }

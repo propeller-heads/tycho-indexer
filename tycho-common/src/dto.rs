@@ -638,6 +638,7 @@ pub struct ProtocolComponent {
     pub created_at: NaiveDateTime,
 }
 
+// Manual impl as `NaiveDateTime` structure referenced in `created_at` does not implement DeepSizeOf
 impl DeepSizeOf for ProtocolComponent {
     fn deep_size_of_children(&self, ctx: &mut Context) -> usize {
         self.id.deep_size_of_children(ctx) +
