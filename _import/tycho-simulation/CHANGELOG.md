@@ -1,3 +1,20 @@
+## [0.181.0](https://github.com/propeller-heads/tycho-simulation/compare/0.180.4...0.181.0) (2025-10-13)
+
+
+### Features
+
+* add args to not use onchain/rfq protocols in the test ([ebe5be2](https://github.com/propeller-heads/tycho-simulation/commit/ebe5be2e60fdf80a6bd3956e780642a4d91d6bd3))
+* add validations for parallel cli args ([cc96186](https://github.com/propeller-heads/tycho-simulation/commit/cc9618624938e989b8ed5c4f1649c453fef23208))
+* process update states in parallel ([a9f5852](https://github.com/propeller-heads/tycho-simulation/commit/a9f5852385725e39fcc5ebd40b18d26df145adc4))
+* process updates in parallel ([4ee02fd](https://github.com/propeller-heads/tycho-simulation/commit/4ee02fdf872b760bd95ad4018f5d019dffced308))
+* use an LRU to store the protocol_pairs cache and limit its memory footprint ([dacd03e](https://github.com/propeller-heads/tycho-simulation/commit/dacd03efa0d904cc8d70276047eb1263a94f1527))
+
+
+### Bug Fixes
+
+* post-rebase changes ([8c49227](https://github.com/propeller-heads/tycho-simulation/commit/8c4922712a11099d10b1e44d8a4049909bb4ae3c))
+* u8 to usize conversion in cli args ([84902c4](https://github.com/propeller-heads/tycho-simulation/commit/84902c41987af6780c7e76fc0d979b57ad1c6bd0))
+
 ## [0.180.4](https://github.com/propeller-heads/tycho-simulation/compare/0.180.3...0.180.4) (2025-10-13)
 
 
