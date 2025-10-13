@@ -193,8 +193,10 @@ async fn run(cli: Cli) -> miette::Result<()> {
         }
     }
 
-    // Assuming a big ProtocolComponent instance can be around 1KB,
-    // 250,000 entries would use 250MB of memory.
+    // Assuming a ProtocolComponent instance can be around 1KB (2 tokens, 2 contract_ids, 6 static
+    // attributes) 250,000 entries would use 250MB of memory.
+    // In a 25min test, the cache increased at a rate of ~2 items/minute, or ~3k items/day, so it
+    // would take ~80 days to get full and start dropping the least used items.
     let protocol_pairs = Arc::new(RwLock::new(LruCache::new(
         NonZeroUsize::new(250_000).ok_or_else(|| miette!("Invalid NonZeroUsize"))?,
     )));
@@ -334,14 +336,14 @@ async fn process_update(
         let state = state.clone_box();
         tokio::spawn(async move {
             let _permit = semaphore.acquire().await.unwrap();
-            process_update_state(&cli, chain, component, &block, state_id, state).await;
+            process_state(&cli, chain, component, &block, state_id, state).await;
         });
     }
 
     Ok(())
 }
 
-async fn process_update_state(
+async fn process_state(
     cli: &Cli,
     chain: Chain,
     component: ProtocolComponent,
