@@ -36,7 +36,7 @@ use tycho_simulation::{
     protocol::models::ProtocolComponent,
     rfq::protocols::hashflow::{client::HashflowClient, state::HashflowState},
     tycho_common::models::Chain,
-    utils::{get_default_url, load_all_tokens},
+    utils::load_all_tokens,
 };
 
 use crate::{
@@ -64,6 +64,9 @@ struct Cli {
         hide_default_value = true
     )]
     tycho_api_key: String,
+
+    #[arg(long, env = "TYCHO_URL")]
+    tycho_url: String,
 
     #[arg(long, env = "RPC_URL")]
     rpc_url: String,
@@ -105,6 +108,7 @@ impl Debug for Cli {
             .field("tvl_threshold", &self.tvl_threshold)
             .field("chain", &self.chain)
             .field("tycho_api_key", &"****")
+            .field("tycho_url", &self.tycho_url)
             .field("rpc_url", &self.rpc_url)
             .field("metrics_port", &self.metrics_port)
             .finish()
@@ -158,20 +162,18 @@ async fn run(cli: Cli) -> miette::Result<()> {
         .wrap_err("Failed to connect to provider")?;
 
     // Load tokens from Tycho
-    let tycho_url =
-        get_default_url(&chain).ok_or_else(|| miette!("No default Tycho URL for chain {chain}"))?;
-    info!(%tycho_url, "Loading tokens...");
+    info!(%cli.tycho_url, "Loading tokens...");
     let all_tokens =
-        load_all_tokens(&tycho_url, false, Some(cli.tycho_api_key.as_str()), chain, None, None)
+        load_all_tokens(&cli.tycho_url, false, Some(cli.tycho_api_key.as_str()), chain, None, None)
             .await;
-    info!(%tycho_url, "Loaded tokens");
+    info!(%cli.tycho_url, "Loaded tokens");
 
     // Run streams in background tasks
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     if !cli.disable_onchain {
         if let Ok(protocol_stream_processor) = ProtocolStreamProcessor::new(
             chain,
-            tycho_url.clone(),
+            cli.tycho_url.clone(),
             cli.tycho_api_key.clone(),
             cli.tvl_threshold,
         ) {
