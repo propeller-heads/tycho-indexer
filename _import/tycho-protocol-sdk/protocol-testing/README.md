@@ -6,21 +6,27 @@ docs [here](https://docs.propellerheads.xyz/tycho/for-dexs/protocol-integration/
 ## How to Run Locally
 
 ```bash
-# Setup Environment Variables
+# Ensure PostgreSQL is running or start it via Docker
+docker buildx build -f protocol-testing/postgres.Dockerfile -t protocol-testing-db:latest --load .
+docker compose up db -d
+
+# Export necessary env vars
 export RPC_URL=..
 export SUBSTREAMS_API_TOKEN=..
-export RUST_LOG=protocol_testing=info,tycho_client=error
 
-# Build Substreams wasm for BalancerV2
-cd substreams
-cargo build --release --package ethereum-balancer-v2 --target wasm32-unknown-unknown
-cd ../protocol-testing
+# If you use a local PostgreSQL instance, set the connection string if necessary
+# By default, the binary will use `postgres://postgres:mypassword@localhost:5431/tycho_indexer_0`
+# export DATABASE_URL=postgresql://postgres:password@localhost:5432/postgres
 
-# Run Postgres DB using Docker compose
-docker compose -f ./docker-compose.yaml up -d db
+# Run the tests for a specific package, defined in their integration_test.tycho.yaml file
+# This type of tests are constrained to a specific block range defined
+cargo run -- range --package "ethereum-balancer-v2"
 
-# Run test
-cargo run -- --package ethereum-balancer-v2 
+# To run the full test, that will index from the protocol creation block to the latest:
+cargo run -- full --package "ethereum-balancer-v2"
+
+# Clean up
+docker compose down
 ```
 
 ## How to Run with Docker

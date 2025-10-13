@@ -33,7 +33,7 @@ impl TychoRunner {
         protocol_system: &str,
         module_name: Option<String>,
     ) -> miette::Result<()> {
-        info!("Running Tycho indexer from block {start_block} to {end_block}...");
+        info!("Running Tycho indexer from block {start_block} to {end_block}...",);
 
         let mut cmd = Command::new("tycho-indexer");
         cmd.env("RUST_LOG", std::env::var("RUST_LOG").unwrap_or("tycho_indexer=info".to_string()))
@@ -101,7 +101,7 @@ impl TychoRunner {
         let db_url = self.db_url.clone();
 
         // Start the RPC server in a separate thread
-        let rpc_thread = thread::spawn(move || {
+        let thread_handle = thread::spawn(move || {
             let mut cmd = Command::new("tycho-indexer")
                 .args(["--database-url", db_url.as_str(), "rpc"])
                 .stdout(Stdio::piped())
@@ -134,7 +134,7 @@ impl TychoRunner {
         // Give the RPC server time to start
         thread::sleep(Duration::from_secs(3));
 
-        Ok(TychoRpcServer { sender: tx, thread_handle: rpc_thread })
+        Ok(TychoRpcServer { sender: tx, thread_handle })
     }
 
     pub fn stop_rpc_server(&self, server: TychoRpcServer) -> miette::Result<()> {

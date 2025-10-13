@@ -17,6 +17,7 @@ num-rational = "0.4.2"
 alloy = { version = "1.0.30", features = ["arbitrary", "json", "dyn-abi", "sol-types", "contract", "provider-http", "providers", "signer-local", "rpc-types-eth", "rpc-types-trace"] }
 reqwest = { version = "0.12", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
+tokio-retry2 = { version = "0.6.0", features = ["jitter"] }
 serde_json = "1.0.140"
 clap = "4.5.31"
 figment = { version = "0.10.19", features = ["yaml"] }
@@ -31,3 +32,4 @@ colored = "3.0.0"
 similar = "2.7.0"
 termsize = "0.1.9"
 itertools = "0.14.0"
+regex = "1.11.1"

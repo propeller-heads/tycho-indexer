@@ -19,6 +19,7 @@ use num_bigint::{BigInt, BigUint};
 use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive, Zero};
 use postgres::{Client, Error, NoTls};
+use regex::Regex;
 use tokio::runtime::Runtime;
 use tracing::{debug, error, info, warn};
 use tycho_execution::encoding::evm::utils::bytes_to_address;
@@ -58,26 +59,41 @@ static CLONE_TO_BASE_PROTOCOL: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| 
     ])
 });
 
+pub enum TestType {
+    Full(TestTypeFull),
+    Range(TestTypeRange),
+}
+
+pub struct TestTypeFull {
+    pub initial_block: Option<u64>,
+    pub stop_block: Option<u64>,
+}
+
+pub struct TestTypeRange {
+    pub match_test: Option<String>,
+}
+
 pub struct TestRunner {
+    test_type: TestType,
     db_url: String,
-    vm_simulation_traces: bool,
     substreams_path: PathBuf,
-    adapter_contract_builder: AdapterContractBuilder,
-    match_test: Option<String>,
     config_file_path: PathBuf,
+    vm_simulation_traces: bool,
+    adapter_contract_builder: AdapterContractBuilder,
     runtime: Runtime,
     rpc_provider: RPCProvider,
 }
 
 impl TestRunner {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
+        test_type: TestType,
         root_path: PathBuf,
         protocol: String,
-        match_test: Option<String>,
         db_url: String,
-        vm_traces: bool,
-        execution_traces: bool,
         rpc_url: String,
+        vm_simulation_traces: bool,
+        execution_traces: bool,
     ) -> miette::Result<Self> {
         let base_protocol = CLONE_TO_BASE_PROTOCOL
             .get(protocol.as_str())
@@ -108,18 +124,18 @@ impl TestRunner {
         let runtime = Runtime::new().into_diagnostic()?;
 
         Ok(Self {
+            test_type,
             db_url,
-            vm_simulation_traces: vm_traces,
+            substreams_path,
+            config_file_path,
+            vm_simulation_traces,
+            adapter_contract_builder,
             runtime,
             rpc_provider,
-            substreams_path,
-            adapter_contract_builder,
-            match_test,
-            config_file_path,
         })
     }
 
-    pub fn run_tests(&self) -> miette::Result<()> {
+    pub fn run(&self) -> miette::Result<()> {
         let terminal_width = termsize::get()
             .map(|size| size.cols as usize - 35) // Remove length of log prefix (35)
             .unwrap_or(80);
@@ -147,7 +163,112 @@ impl TestRunner {
             return Ok(());
         }
 
-        let tests = match &self.match_test {
+        match &self.test_type {
+            TestType::Full(test_type) => {
+                self.run_full_test(config, &substreams_yaml_path, test_type)?;
+            }
+            TestType::Range(test_type) => {
+                self.run_tests_in_range(config, &substreams_yaml_path, test_type, terminal_width)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn parse_config(config_yaml_path: &PathBuf) -> miette::Result<IntegrationTestsConfig> {
+        info!("Parsing config YAML at {}", config_yaml_path.display());
+        let yaml = Yaml::file(config_yaml_path);
+        let figment = Figment::new().merge(yaml);
+        let config = figment
+            .extract::<IntegrationTestsConfig>()
+            .into_diagnostic()
+            .wrap_err("Failed to load test configuration:")?;
+        Ok(config)
+    }
+
+    fn run_full_test(
+        &self,
+        config: IntegrationTestsConfig,
+        substreams_yaml_path: &PathBuf,
+        test_type: &TestTypeFull,
+    ) -> miette::Result<()> {
+        let start_block = match &test_type.initial_block {
+            Some(b) => *b,
+            None => {
+                let content = std::fs::read_to_string(substreams_yaml_path).into_diagnostic()?;
+                let re = Regex::new(r"initialBlock:\s*(\d+)").unwrap();
+                re.captures(&content)
+                    .and_then(|cap| cap.get(1))
+                    .and_then(|m| m.as_str().parse::<u64>().ok())
+                    .ok_or_else(|| {
+                        miette!("Failed to extract initialBlock from substreams.yaml. Please specify it explicitly.")
+                    })?
+            }
+        };
+        let spkg_path =
+            build_spkg(substreams_yaml_path, start_block).wrap_err("Failed to build spkg")?;
+        let initialized_accounts = config
+            .initialized_accounts
+            .clone()
+            .unwrap_or_default();
+        let tycho_runner = self.tycho_runner(initialized_accounts.clone())?;
+        let stop_block = match &test_type.stop_block {
+            Some(b) => *b,
+            None => {
+                let rpc_server = tycho_runner.start_rpc_server()?;
+                let block = self
+                    .runtime
+                    .block_on(self.rpc_provider.get_current_block())
+                    .wrap_err("Failed to get current block number");
+                tycho_runner.stop_rpc_server(rpc_server)?;
+                match block {
+                    Ok(b) => b.header.number,
+                    Err(e) => {
+                        return Err(e);
+                    }
+                }
+            }
+        };
+        tycho_runner
+            .run_tycho(
+                &spkg_path,
+                start_block,
+                stop_block,
+                &config.protocol_type_names,
+                &config.protocol_system,
+                config.module_name.clone(),
+            )
+            .wrap_err("Failed to run Tycho")?;
+        let test = IntegrationTest {
+            name: "full_run".to_string(),
+            start_block,
+            stop_block,
+            expected_components: vec![],
+            initialized_accounts: Some(initialized_accounts),
+        };
+        let rpc_server = tycho_runner.start_rpc_server()?;
+        let res = match self.run_test(&test, &config, stop_block) {
+            Ok(_) => {
+                info!("✅ {} passed\n", test.name);
+                Ok(())
+            }
+            Err(e) => {
+                error!("❗️{} failed: {:?}\n", test.name, e);
+                Err(e)
+            }
+        };
+        tycho_runner.stop_rpc_server(rpc_server)?;
+        res
+    }
+
+    fn run_tests_in_range(
+        &self,
+        config: IntegrationTestsConfig,
+        substreams_yaml_path: &PathBuf,
+        test_type: &TestTypeRange,
+        terminal_width: usize,
+    ) -> miette::Result<()> {
+        let tests = match &test_type.match_test {
             Some(filter) => config
                 .tests
                 .iter()
@@ -167,17 +288,39 @@ impl TestRunner {
 
         for test in &tests {
             info!("TEST {}: {}", count, test.name);
-
-            match self.run_test(test, &config) {
+            let mut initialized_accounts = config
+                .initialized_accounts
+                .clone()
+                .unwrap_or_default();
+            initialized_accounts.extend(
+                test.initialized_accounts
+                    .clone()
+                    .unwrap_or_default(),
+            );
+            let tycho_runner = self.tycho_runner(initialized_accounts)?;
+            let spkg_path = build_spkg(substreams_yaml_path, test.start_block)
+                .wrap_err("Failed to build spkg")?;
+            tycho_runner
+                .run_tycho(
+                    &spkg_path,
+                    test.start_block,
+                    test.stop_block,
+                    &config.protocol_type_names,
+                    &config.protocol_system,
+                    config.module_name.clone(),
+                )
+                .wrap_err("Failed to run Tycho")?;
+            let rpc_server = tycho_runner.start_rpc_server()?;
+            match self.run_test(test, &config, test.stop_block) {
                 Ok(_) => {
                     info!("✅ {} passed\n", test.name);
                 }
                 Err(e) => {
                     failed_tests.push(test.name.clone());
-                    error!("❗️{} failed: {:?}\n", test.name, e);
+                    error!("❗️{} failed: {e}\n", test.name);
                 }
             }
-
+            tycho_runner.stop_rpc_server(rpc_server)?;
             info!("{}\n", "-".repeat(terminal_width));
             count += 1;
         }
@@ -191,64 +334,18 @@ impl TestRunner {
         }
     }
 
-    fn parse_config(config_yaml_path: &PathBuf) -> miette::Result<IntegrationTestsConfig> {
-        info!("Parsing config YAML at {}", config_yaml_path.display());
-        let yaml = Yaml::file(config_yaml_path);
-        let figment = Figment::new().merge(yaml);
-        let config = figment
-            .extract::<IntegrationTestsConfig>()
-            .into_diagnostic()
-            .wrap_err("Failed to load test configuration:")?;
-        Ok(config)
-    }
-
     fn run_test(
         &self,
         test: &IntegrationTest,
         config: &IntegrationTestsConfig,
+        stop_block: u64,
     ) -> miette::Result<()> {
-        self.empty_database()
-            .into_diagnostic()
-            .wrap_err("Failed to empty the database")?;
-
-        let substreams_yaml_path = self
-            .substreams_path
-            .join(&config.substreams_yaml_path);
-
-        let mut initialized_accounts = config
-            .initialized_accounts
-            .clone()
-            .unwrap_or_default();
-        initialized_accounts.extend(
-            test.initialized_accounts
-                .clone()
-                .unwrap_or_default(),
-        );
-
-        let spkg_path =
-            build_spkg(&substreams_yaml_path, test.start_block).wrap_err("Failed to build spkg")?;
-
-        let tycho_runner = TychoRunner::new(self.db_url.clone(), initialized_accounts);
-
-        tycho_runner
-            .run_tycho(
-                spkg_path.as_str(),
-                test.start_block,
-                test.stop_block,
-                &config.protocol_type_names,
-                &config.protocol_system,
-                config.module_name.clone(),
-            )
-            .wrap_err("Failed to run Tycho")?;
-
-        let rpc_server = tycho_runner.start_rpc_server()?;
-
+        // Fetch protocol data from Tycho RPC
         let expected_ids = test
             .expected_components
             .iter()
             .map(|c| c.base.id.to_lowercase())
             .collect::<Vec<String>>();
-
         let (update, component_tokens, response_protocol_states_by_id, block) = self
             .fetch_from_tycho_rpc(
                 &config.protocol_system,
@@ -257,11 +354,14 @@ impl TestRunner {
                 &config.adapter_build_signature,
                 &config.adapter_build_args,
                 self.vm_simulation_traces,
-                test.stop_block,
+                stop_block,
             )?;
+        if update.states.is_empty() {
+            return Err(miette!("No protocol states were found on Tycho"));
+        }
 
         // Step 1: Validate that all expected components are present on Tycho after indexing
-        self.validate_state(&test.expected_components, update.clone())?;
+        self.validate_state(&test.expected_components, &update)?;
 
         // Step 2: Validate Token Balances
         match config.skip_balance_check {
@@ -270,20 +370,14 @@ impl TestRunner {
                 self.validate_token_balances(
                     &component_tokens,
                     &response_protocol_states_by_id,
-                    test.stop_block,
+                    stop_block,
                 )?;
                 info!("All token balances match the values found onchain")
             }
         }
-        // Step 3: Run Tycho Simulation and Execution
-        self.simulate_and_execute(
-            update,
-            &component_tokens,
-            block,
-            Some(test.expected_components.clone()),
-        )?;
 
-        tycho_runner.stop_rpc_server(rpc_server)?;
+        // Step 3: Run Tycho Simulation and Execution
+        self.simulate_and_execute(&update, &component_tokens, &block, &test.expected_components)?;
 
         Ok(())
     }
@@ -301,6 +395,13 @@ impl TestRunner {
         client.execute("CREATE DATABASE \"tycho_indexer_0\"", &[])?;
 
         Ok(())
+    }
+
+    fn tycho_runner(&self, initialized_accounts: Vec<String>) -> miette::Result<TychoRunner> {
+        self.empty_database()
+            .into_diagnostic()
+            .wrap_err("Failed to empty the database")?;
+        Ok(TychoRunner::new(self.db_url.to_string(), initialized_accounts))
     }
 
     /// Fetches protocol data from the Tycho RPC server and prepares it for validation and
@@ -341,6 +442,8 @@ impl TestRunner {
         HashMap<String, ResponseProtocolState>,
         Block,
     )> {
+        info!("Fetching protocol data from Tycho with stop block {}...", stop_block);
+
         // Create Tycho client for the RPC server
         let tycho_client = TychoClient::new("http://localhost:4242")
             .into_diagnostic()
@@ -355,6 +458,16 @@ impl TestRunner {
             .block_on(tycho_client.get_protocol_components(protocol_system, chain))
             .into_diagnostic()
             .wrap_err("Failed to get protocol components")?;
+
+        // If no expected component IDs are provided, use all components from the protocol
+        let expected_component_ids = if expected_component_ids.is_empty() {
+            protocol_components
+                .iter()
+                .map(|c| c.id.to_lowercase())
+                .collect::<Vec<String>>()
+        } else {
+            expected_component_ids
+        };
 
         let protocol_states = self
             .runtime
@@ -527,6 +640,8 @@ impl TestRunner {
             .block_on(decoder.decode(&message))
             .into_diagnostic()
             .wrap_err("Failed to decode message")?;
+        debug!("Decoded message for block {}", block_msg.block_number_or_timestamp);
+        debug!("Update contains {} component states", block_msg.states.len());
 
         let mut component_tokens: HashMap<String, Vec<Token>> = HashMap::new();
 
@@ -535,6 +650,7 @@ impl TestRunner {
                 .entry(id.clone())
                 .or_insert_with(|| comp.tokens.clone());
         }
+        debug!("Mapped tokens for {} components", component_tokens.len());
 
         Ok((block_msg, component_tokens, protocol_states_by_id, block_header))
     }
@@ -562,8 +678,13 @@ impl TestRunner {
     fn validate_state(
         &self,
         expected_components: &Vec<ProtocolComponentWithTestConfig>,
-        block_msg: Update,
+        block_msg: &Update,
     ) -> miette::Result<()> {
+        if expected_components.is_empty() {
+            debug!("No expected components defined for this test. Skipping state validation.");
+            return Ok(());
+        }
+
         debug!("Validating {:?} expected components", expected_components.len());
         for expected_component in expected_components {
             let component_id = expected_component
@@ -631,25 +752,21 @@ impl TestRunner {
     /// in the test configuration.
     fn simulate_and_execute(
         &self,
-        update: Update,
+        update: &Update,
         component_tokens: &HashMap<String, Vec<Token>>,
-        block: Block,
-        expected_components: Option<Vec<ProtocolComponentWithTestConfig>>,
+        block: &Block,
+        expected_components: &[ProtocolComponentWithTestConfig],
     ) -> miette::Result<()> {
-        let mut skip_simulation = HashSet::new();
-        let mut skip_execution = HashSet::new();
-        if let Some(components) = expected_components {
-            skip_simulation = components
-                .iter()
-                .filter(|c| c.skip_simulation)
-                .map(|c| c.base.id.to_lowercase())
-                .collect();
-            skip_execution = components
-                .iter()
-                .filter(|c| c.skip_execution)
-                .map(|c| c.base.id.to_lowercase())
-                .collect();
-        }
+        let skip_simulation: HashSet<_> = expected_components
+            .iter()
+            .filter(|c| c.skip_simulation)
+            .map(|c| c.base.id.to_lowercase())
+            .collect();
+        let skip_execution: HashSet<_> = expected_components
+            .iter()
+            .filter(|c| c.skip_execution)
+            .map(|c| c.base.id.to_lowercase())
+            .collect();
 
         for (id, state) in update.states.iter() {
             if skip_simulation.contains(id) {
@@ -748,7 +865,7 @@ impl TestRunner {
                                     &self.rpc_provider,
                                     &calldata,
                                     &solution,
-                                    &block,
+                                    block,
                                 ));
 
                         match execution_amount_out {
@@ -902,13 +1019,13 @@ mod tests {
         let rpc_url = env::var("RPC_URL").unwrap();
         let current_dir = std::env::current_dir().unwrap();
         TestRunner::new(
+            TestType::Range(TestTypeRange { match_test: None }),
             current_dir,
             "test-protocol".to_string(),
-            None,
             "".to_string(),
-            false,
-            false,
             rpc_url,
+            false,
+            false,
         )
         .unwrap()
     }

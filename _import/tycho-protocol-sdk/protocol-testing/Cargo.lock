@@ -6139,6 +6139,7 @@ dependencies = [
  "num-rational",
  "num-traits",
  "postgres",
+ "regex",
  "reqwest 0.12.23",
  "serde",
  "serde_json",
@@ -6146,6 +6147,7 @@ dependencies = [
  "similar",
  "termsize",
  "tokio",
+ "tokio-retry2",
  "tracing",
  "tracing-subscriber 0.3.20",
  "tycho-execution",
@@ -8251,6 +8253,17 @@ dependencies = [
  "tokio",
  "tokio-util",
  "whoami",
+]
+
+[[package]]
+name = "tokio-retry2"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7de2537bbad4f8b2d4237cdab9e7c4948a1f74744e45f54144eeccd05d3ad955"
+dependencies = [
+ "pin-project 1.1.10",
+ "rand 0.9.2",
+ "tokio",
 ]
 
 [[package]]

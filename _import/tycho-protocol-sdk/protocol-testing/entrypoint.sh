@@ -34,8 +34,8 @@ for test in "${args[@]}"; do
 	filter="${test#*=}"
 	echo "Running tests for protocol: $protocol with filter: $filter"
 	if [[ "$test" == *"="* ]]; then
-		tycho-protocol-sdk --package "$protocol" --db-url "$DATABASE_URL" --match-test "$filter"
+		tycho-protocol-sdk range --package "$protocol" --db-url "$DATABASE_URL" --match-test "$filter"
 	else
-	  tycho-protocol-sdk --package "$protocol" --db-url "$DATABASE_URL"
+	  tycho-protocol-sdk range --package "$protocol" --db-url "$DATABASE_URL"
 	fi
 done
