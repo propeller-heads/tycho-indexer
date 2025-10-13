@@ -91,8 +91,8 @@ struct Cli {
     parallel_simulations: u8,
 
     /// Maximum number of simulations to run per protocol update
-    #[arg(long, default_value_t = 10, value_parser = clap::value_parser!(u8).range(1..))]
-    max_simulations: u8,
+    #[arg(long, default_value_t = 10, value_parser = clap::value_parser!(u16).range(1..))]
+    max_simulations: u16,
 
     /// The RFQ stream will skip messages for this duration (in seconds) after processing a message
     #[arg(long, default_value_t = 600)]
@@ -194,9 +194,9 @@ async fn run(cli: Cli) -> miette::Result<()> {
     }
 
     // Assuming a big ProtocolComponent instance can be around 1KB,
-    // 10,000 entries would use 10MB of memory.
+    // 250,000 entries would use 250MB of memory.
     let protocol_pairs = Arc::new(RwLock::new(LruCache::new(
-        NonZeroUsize::new(10_000).ok_or_else(|| miette!("Invalid NonZeroUsize"))?,
+        NonZeroUsize::new(250_000).ok_or_else(|| miette!("Invalid NonZeroUsize"))?,
     )));
 
     // Process streams updates
