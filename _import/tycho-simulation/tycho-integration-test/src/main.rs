@@ -1,10 +1,6 @@
-mod execution_simulator;
-mod four_byte_client;
+mod execution;
 mod metrics;
 mod stream_processor;
-mod swap_simulation;
-mod tenderly;
-mod traces;
 
 use std::{
     fmt::Debug,
@@ -40,11 +36,11 @@ use tycho_simulation::{
 };
 
 use crate::{
+    execution::{encoding::encode_swap, simulate_swap_transaction, tenderly},
     stream_processor::{
         protocol_stream_processor::ProtocolStreamProcessor,
         rfq_stream_processor::RFQStreamProcessor, StreamUpdate, UpdateType,
     },
-    swap_simulation::{encode_swap, simulate_swap_transaction},
 };
 
 #[derive(Parser, Clone)]

@@ -6,10 +6,6 @@ use alloy::{
 };
 use miette::{miette, IntoDiagnostic, WrapErr};
 use num_bigint::BigUint;
-use tokio_retry2::{
-    strategy::{jitter, ExponentialFactorBackoff},
-    Retry, RetryError,
-};
 use tracing::info;
 use tycho_common::{
     models::{token::Token, Chain},
@@ -33,7 +29,7 @@ use tycho_simulation::{
     protocol::models::ProtocolComponent,
 };
 
-use crate::{execution_simulator, execution_simulator::ExecutionSimulator, tenderly};
+use crate::execution::tenderly::OverwriteMetadata;
 
 pub fn encode_swap(
     component: &ProtocolComponent,
@@ -149,7 +145,7 @@ fn encoded_transaction(
 }
 
 /// Encodes the input data for a function call to the given function selector.
-pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
+fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
     let mut hasher = Keccak256::new();
     hasher.update(selector.as_bytes());
     let selector_bytes = &hasher.finalize()[..4];
@@ -170,90 +166,19 @@ pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
     call_data
 }
 
-pub async fn simulate_swap_transaction(
-    rpc_url: &str,
-    solution: &Solution,
-    transaction: &Transaction,
-    block: &Block,
-) -> Result<
-    BigUint,
-    (miette::Error, Option<AddressHashMap<AccountOverride>>, Option<tenderly::OverwriteMetadata>),
-> {
-    let user_address = Address::from_slice(&solution.sender[..20]);
-    let request = swap_request(transaction, block, user_address).map_err(|e| (e, None, None))?;
-    let (state_overwrites, metadata) =
-        setup_user_overwrites(rpc_url, solution, transaction, block, user_address)
-            .await
-            .map_err(|e| (e, None, None))?;
-
-    // Use debug_traceCall from the start with retry logic
-    // Worst case, it will take ~100s (20 retries with max 5s delay)
-    let retry_strategy = ExponentialFactorBackoff::from_millis(1000, 2.)
-        .max_delay_millis(5000)
-        .map(jitter)
-        .take(20);
-
-    // Clone state_overwrites before moving into closure
-    let state_overwrites_for_retry = state_overwrites.clone();
-    let result = Retry::spawn(retry_strategy, move || {
-        let mut simulator = ExecutionSimulator::new(rpc_url.to_string().clone());
-        let request = request.clone();
-        let state_overwrites = state_overwrites_for_retry.clone();
-
-        async move {
-            match simulator
-                .simulate_with_trace(request, Some(state_overwrites), block.number())
-                .await
-            {
-                Ok(res) => Ok(res),
-                Err(e) => Err(RetryError::transient(e)),
-            }
-        }
-    })
-    .await
-    .map_err(|e| {
-        (
-            miette!("Failed to simulate transaction after retries: {e}"),
-            Some(state_overwrites.clone()),
-            Some(metadata.clone()),
-        )
-    })?;
-
-    match result {
-        execution_simulator::SimulationResult::Success { return_data, gas_used } => {
-            info!("Transaction succeeded, gas used: {gas_used}");
-            let amount_out = U256::abi_decode(&return_data).map_err(|e| {
-                (
-                    miette!("Failed to decode swap amount: {e:?}"),
-                    Some(state_overwrites.clone()),
-                    Some(metadata.clone()),
-                )
-            })?;
-            BigUint::from_str(amount_out.to_string().as_str())
-                .into_diagnostic()
-                .map_err(|e| (e, Some(state_overwrites.clone()), Some(metadata.clone())))
-        }
-        execution_simulator::SimulationResult::Revert { reason } => Err((
-            miette!("Transaction reverted: {}", reason),
-            Some(state_overwrites),
-            Some(metadata),
-        )),
-    }
-}
-
 /// Set up all state overrides needed for simulation.
 ///
 /// This includes balance overrides and allowance overrides of the sell token for the sender.
 /// Returns both the overwrites and metadata for human-readable logging.
-async fn setup_user_overwrites(
+pub(crate) async fn setup_user_overwrites(
     rpc_url: &str,
     solution: &Solution,
     transaction: &Transaction,
     block: &Block,
     user_address: Address,
-) -> miette::Result<(AddressHashMap<AccountOverride>, tenderly::OverwriteMetadata)> {
+) -> miette::Result<(AddressHashMap<AccountOverride>, OverwriteMetadata)> {
     let mut overwrites = AddressHashMap::default();
-    let mut metadata = tenderly::OverwriteMetadata::new();
+    let mut metadata = OverwriteMetadata::new();
     let token_address = Address::from_slice(&solution.given_token[..20]);
     // If given token is ETH, add the given amount + 10 ETH for gas
     if solution.given_token == Bytes::zero(20) {
@@ -374,7 +299,7 @@ async fn setup_user_overwrites(
     Ok((overwrites, metadata))
 }
 
-fn swap_request(
+pub(crate) fn swap_request(
     transaction: &Transaction,
     block: &Block,
     user_address: Address,

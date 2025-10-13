@@ -11,7 +11,7 @@ use colored::Colorize;
 use serde_json::Value;
 use tycho_simulation::foundry_evm::traces::identifier::SignaturesIdentifier;
 
-use crate::execution_simulator::{ExecutionSimulator, SolidityError};
+use crate::execution::execution_simulator::{ExecutionSimulator, SolidityError};
 
 /// Decode method selectors and return function info
 pub async fn decode_method_selector_with_info(input: &str) -> Option<(String, Vec<DynSolType>)> {

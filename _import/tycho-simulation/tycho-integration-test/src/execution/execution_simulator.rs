@@ -14,7 +14,7 @@ use alloy_rpc_types_trace::geth::{
 use serde_json::Value;
 use tracing::{error, warn};
 
-use crate::four_byte_client::FourByteClient;
+use crate::execution::four_byte_client::FourByteClient;
 
 const KNOWN_SIGNATURES: &[&str] =
     &["Error(string)", "Panic(uint256)", "TychoRouter__NegativeSlippage(uint256,uint256)"];
@@ -214,7 +214,7 @@ impl ExecutionSimulator {
         // Check for error in response, print the full trace only on failure
         if let Some(error) = trace_result.get("error") {
             error!("=== Transaction Trace (FAILURE) ===");
-            crate::traces::print_call_trace(&trace_result, 0).await;
+            crate::execution::traces::print_call_trace(&trace_result, 0).await;
             error!("=== End Trace ===");
 
             // Try to find the deepest revert reason in the trace
