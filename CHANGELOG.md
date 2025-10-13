@@ -1,3 +1,10 @@
+## [0.96.0](https://github.com/propeller-heads/tycho-indexer/compare/0.95.2...0.96.0) (2025-10-13)
+
+
+### Features
+
+* integrate `deepsize` for memory usage reporting ([#729](https://github.com/propeller-heads/tycho-indexer/issues/729)) ([b194f84](https://github.com/propeller-heads/tycho-indexer/commit/b194f8424290548da36b7f2f0bb303ef5e901337))
+
 ## [0.95.2](https://github.com/propeller-heads/tycho-indexer/compare/0.95.1...0.95.2) (2025-10-10)
 
 ## [0.95.1](https://github.com/propeller-heads/tycho-indexer/compare/0.95.0...0.95.1) (2025-10-10)
