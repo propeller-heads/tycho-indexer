@@ -1,3 +1,15 @@
+## [0.96.1](https://github.com/propeller-heads/tycho-indexer/compare/0.96.0...0.96.1) (2025-10-13)
+
+
+### Bug Fixes
+
+* Revert "chore: monitoring and logging ([#723](https://github.com/propeller-heads/tycho-indexer/issues/723))" ([#730](https://github.com/propeller-heads/tycho-indexer/issues/730)) ([003656d](https://github.com/propeller-heads/tycho-indexer/commit/003656dc567e53cd6943d9b1089962425d24f08c))
+
+
+### Reverts
+
+* Revert "chore: monitoring and logging (#723)" ([d2b7406](https://github.com/propeller-heads/tycho-indexer/commit/d2b7406885a66159cecede50057778c8161b4f58)), closes [#723](https://github.com/propeller-heads/tycho-indexer/issues/723)
+
 ## [0.96.0](https://github.com/propeller-heads/tycho-indexer/compare/0.95.2...0.96.0) (2025-10-13)
 
 
