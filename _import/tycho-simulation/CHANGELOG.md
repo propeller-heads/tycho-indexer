@@ -1,3 +1,10 @@
+## [0.180.4](https://github.com/propeller-heads/tycho-simulation/compare/0.180.3...0.180.4) (2025-10-13)
+
+
+### Bug Fixes
+
+* Add uniswap v4 hooks to integration test ([6430a01](https://github.com/propeller-heads/tycho-simulation/commit/6430a015b9e037496d69cab464e328d41849f873))
+
 ## [0.180.3](https://github.com/propeller-heads/tycho-simulation/compare/0.180.2...0.180.3) (2025-10-10)
 
 
