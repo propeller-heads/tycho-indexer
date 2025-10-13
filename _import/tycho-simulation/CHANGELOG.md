@@ -1,3 +1,10 @@
+## [0.181.1](https://github.com/propeller-heads/tycho-simulation/compare/0.181.0...0.181.1) (2025-10-13)
+
+
+### Bug Fixes
+
+* Pass TYCHO_URL as env var ([da64de6](https://github.com/propeller-heads/tycho-simulation/commit/da64de69c95d03eac173e5aef4357b0cb49596fb))
+
 ## [0.181.0](https://github.com/propeller-heads/tycho-simulation/compare/0.180.4...0.181.0) (2025-10-13)
 
 
