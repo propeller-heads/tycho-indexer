@@ -7,7 +7,7 @@ use std::{
 };
 
 use actix_cors::Cors;
-use actix_web::{dev::ServerHandle, http, middleware as actix_middleware, web, App, HttpServer};
+use actix_web::{dev::ServerHandle, http, web, App, HttpServer};
 use actix_web_opentelemetry::RequestTracing;
 use deltas_buffer::PendingDeltasBuffer;
 use futures03::future::try_join_all;
@@ -35,13 +35,12 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     extractor::{runner::ExtractorHandle, ExtractionError},
-    services::{deltas_buffer::PendingDeltas, middleware::rpc_metrics_middleware},
+    services::deltas_buffer::PendingDeltas,
 };
 
 mod access_control;
 mod cache;
 mod deltas_buffer;
-mod middleware;
 mod rpc;
 mod ws;
 
@@ -257,8 +256,6 @@ where
 
             let mut app = App::new()
                 .wrap(cors)
-                .wrap(actix_middleware::from_fn(rpc_metrics_middleware))
-                .wrap(RequestTracing::new())
                 .app_data(rpc_data.clone())
                 .service(
                     web::resource(format!("/{}/contract_state", self.prefix))
@@ -298,6 +295,7 @@ where
                     web::resource(format!("/{}/component_tvl", self.prefix))
                         .route(web::post().to(rpc::component_tvl::<G, EVMEntrypointService>)),
                 )
+                .wrap(RequestTracing::new())
                 .service(
                     SwaggerUi::new("/docs/{_:.*}").url("/api-docs/openapi.json", openapi.clone()),
                 );
