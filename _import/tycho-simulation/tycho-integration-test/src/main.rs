@@ -28,6 +28,10 @@ use tokio::sync::Semaphore;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 use tycho_common::simulation::protocol_sim::ProtocolSim;
+use tycho_ethereum::entrypoint_tracer::{
+    allowance_slot_detector::{AllowanceSlotDetectorConfig, EVMAllowanceSlotDetector},
+    balance_slot_detector::{BalanceSlotDetectorConfig, EVMBalanceSlotDetector},
+};
 use tycho_simulation::{
     protocol::models::ProtocolComponent,
     rfq::protocols::hashflow::{client::HashflowClient, state::HashflowState},
@@ -146,16 +150,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
     let cli = Arc::new(cli);
     let chain = cli.chain;
 
-    let provider: RootProvider<Ethereum> = ProviderBuilder::default()
-        .with_chain(
-            NamedChain::try_from(chain.id())
-                .into_diagnostic()
-                .wrap_err("Invalid chain")?,
-        )
-        .connect(&cli.rpc_url)
-        .await
-        .into_diagnostic()
-        .wrap_err("Failed to connect to provider")?;
+    let tools_clients = ToolsClients::new(&cli.rpc_url, &chain).await?;
 
     // Load tokens from Tycho
     info!(%cli.tycho_url, "Loading tokens...");
@@ -205,7 +200,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
     while let Some(update) = rx.recv().await {
         let semaphore = semaphore.clone();
         let cli = cli.clone();
-        let provider = provider.clone();
+        let tools_clients = tools_clients.clone();
         let protocol_pairs = protocol_pairs.clone();
         tokio::spawn(async move {
             let update = match update {
@@ -216,7 +211,8 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 }
             };
             let _permit = semaphore.acquire().await.unwrap();
-            if let Err(e) = process_update(cli, chain, provider, protocol_pairs, &update).await {
+            if let Err(e) = process_update(cli, chain, tools_clients, protocol_pairs, &update).await
+            {
                 warn!("{e:?}");
             }
         });
@@ -228,7 +224,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
 async fn process_update(
     cli: Arc<Cli>,
     chain: Chain,
-    provider: RootProvider<Ethereum>,
+    tools_clients: ToolsClients,
     protocol_pairs: Arc<RwLock<LruCache<String, ProtocolComponent>>>,
     update: &StreamUpdate,
 ) -> miette::Result<()> {
@@ -243,7 +239,8 @@ async fn process_update(
         .duration_since(std::time::UNIX_EPOCH)
         .into_diagnostic()?
         .as_secs();
-    let block = match provider
+    let block = match tools_clients
+        .provider
         .get_block_by_number(BlockNumberOrTag::Latest)
         .await
         .into_diagnostic()
@@ -327,13 +324,13 @@ async fn process_update(
             },
         };
         let semaphore = semaphore.clone();
-        let cli = cli.clone();
+        let tools_clients = tools_clients.clone();
         let block = block.clone();
         let state_id = id.clone();
         let state = state.clone_box();
         tokio::spawn(async move {
             let _permit = semaphore.acquire().await.unwrap();
-            process_state(&cli, chain, component, &block, state_id, state).await;
+            process_state(tools_clients, chain, component, &block, state_id, state).await;
         });
     }
 
@@ -341,7 +338,7 @@ async fn process_update(
 }
 
 async fn process_state(
-    cli: &Cli,
+    tools_clients: ToolsClients,
     chain: Chain,
     component: ProtocolComponent,
     block: &Block,
@@ -496,7 +493,7 @@ async fn process_state(
             }
         };
         let simulated_amount_out = match simulate_swap_transaction(
-            &cli.rpc_url,
+            &tools_clients,
             &simulation_id,
             &solution,
             &transaction,
@@ -607,5 +604,48 @@ fn extract_error_name(revert_reason: &str) -> String {
     } else {
         // Return the whole message for simple errors
         revert_reason.trim().to_string()
+    }
+}
+
+#[derive(Clone)]
+struct ToolsClients {
+    rpc_url: String,
+    provider: RootProvider<Ethereum>,
+    evm_balance_slot_detector: Arc<EVMBalanceSlotDetector>,
+    evm_allowance_slot_detector: Arc<EVMAllowanceSlotDetector>,
+}
+
+impl ToolsClients {
+    pub async fn new(rpc_url: &str, chain: &Chain) -> miette::Result<Self> {
+        let provider: RootProvider<Ethereum> = ProviderBuilder::default()
+            .with_chain(
+                NamedChain::try_from(chain.id())
+                    .into_diagnostic()
+                    .wrap_err("Invalid chain")?,
+            )
+            .connect(rpc_url)
+            .await
+            .into_diagnostic()
+            .wrap_err("Failed to connect to provider")?;
+        let evm_balance_slot_detector = Arc::new(
+            EVMBalanceSlotDetector::new(BalanceSlotDetectorConfig {
+                rpc_url: rpc_url.to_string(),
+                ..Default::default()
+            })
+            .into_diagnostic()?,
+        );
+        let evm_allowance_slot_detector = Arc::new(
+            EVMAllowanceSlotDetector::new(AllowanceSlotDetectorConfig {
+                rpc_url: rpc_url.to_string(),
+                ..Default::default()
+            })
+            .into_diagnostic()?,
+        );
+        Ok(Self {
+            rpc_url: rpc_url.to_string(),
+            provider,
+            evm_balance_slot_detector,
+            evm_allowance_slot_detector,
+        })
     }
 }

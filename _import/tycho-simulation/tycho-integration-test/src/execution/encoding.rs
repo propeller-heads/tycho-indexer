@@ -13,10 +13,6 @@ use tycho_common::{
     traits::{AllowanceSlotDetector, BalanceSlotDetector},
     Bytes,
 };
-use tycho_ethereum::entrypoint_tracer::{
-    allowance_slot_detector::{AllowanceSlotDetectorConfig, EVMAllowanceSlotDetector},
-    balance_slot_detector::{BalanceSlotDetectorConfig, EVMBalanceSlotDetector},
-};
 use tycho_execution::encoding::{
     evm::encoder_builders::TychoRouterEncoderBuilder,
     models::{EncodedSolution, Solution, SwapBuilder, Transaction, UserTransferType},
@@ -29,7 +25,7 @@ use tycho_simulation::{
     protocol::models::ProtocolComponent,
 };
 
-use crate::execution::tenderly::OverwriteMetadata;
+use crate::{execution::tenderly::OverwriteMetadata, ToolsClients};
 
 pub fn encode_swap(
     component: &ProtocolComponent,
@@ -171,7 +167,7 @@ fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
 /// This includes balance overrides and allowance overrides of the sell token for the sender.
 /// Returns both the overwrites and metadata for human-readable logging.
 pub(crate) async fn setup_user_overwrites(
-    rpc_url: &str,
+    tools_clients: &ToolsClients,
     solution: &Solution,
     transaction: &Transaction,
     block: &Block,
@@ -187,13 +183,8 @@ pub(crate) async fn setup_user_overwrites(
         overwrites.insert(user_address, AccountOverride::default().with_balance(eth_balance));
     // if the given token is not ETH, do balance and allowance slots overwrites
     } else {
-        let detector = EVMBalanceSlotDetector::new(BalanceSlotDetectorConfig {
-            rpc_url: rpc_url.to_string(),
-            ..Default::default()
-        })
-        .into_diagnostic()?;
-
-        let results = detector
+        let results = tools_clients
+            .evm_balance_slot_detector
             .detect_balance_slots(
                 std::slice::from_ref(&solution.given_token),
                 (**user_address).into(),
@@ -208,13 +199,8 @@ pub(crate) async fn setup_user_overwrites(
                 return Err(miette!("Couldn't find balance storage slot for token {token_address}"));
             };
 
-        let detector = EVMAllowanceSlotDetector::new(AllowanceSlotDetectorConfig {
-            rpc_url: rpc_url.to_string(),
-            ..Default::default()
-        })
-        .into_diagnostic()?;
-
-        let results = detector
+        let results = tools_clients
+            .evm_allowance_slot_detector
             .detect_allowance_slots(
                 std::slice::from_ref(&solution.given_token),
                 (**user_address).into(),
