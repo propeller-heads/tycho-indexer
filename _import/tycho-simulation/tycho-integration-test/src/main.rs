@@ -265,7 +265,7 @@ async fn process_update(
                 .write()
                 .map_err(|e| miette!("Failed to acquire write lock on protocol pairs: {e}"))?;
             for (id, comp) in update.update.new_pairs.iter() {
-                pairs.get_or_insert(id.clone(), || comp.clone());
+                pairs.put(id.clone(), comp.clone());
             }
         }
         // Record block processing latency
