@@ -89,3 +89,33 @@ jobs:
       aws_region: ${{ secrets.aws_region }}
       repository_url: ${{ secrets.repository_url }}
       domain_owner: ${{ secrets.domain_owner }}
+
+  deploy-dev:
+    needs:
+      - build-and-push-integration-test
+    if: ${{ github.event_name != 'workflow_dispatch' }}
+    uses: propeller-heads/ci-cd-templates/.github/workflows/promote-to-dev.yaml@main
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      image_name: tycho-integration-test
+      image_tag: ${{ needs.generate-tag.outputs.image_tag }}
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }} 
+
+  deploy-prod:
+    needs:
+      - build-and-push-integration-test
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    uses: propeller-heads/ci-cd-templates/.github/workflows/promote-to-production.yaml@main
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      image_name: tycho-integration-test
+      image_tag: ${{ needs.generate-tag.outputs.image_tag }}
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
