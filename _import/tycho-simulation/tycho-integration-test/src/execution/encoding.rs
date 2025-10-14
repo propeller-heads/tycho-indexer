@@ -25,7 +25,7 @@ use tycho_simulation::{
     protocol::models::ProtocolComponent,
 };
 
-use crate::{execution::tenderly::OverwriteMetadata, ToolsClients};
+use crate::{execution::tenderly::OverwriteMetadata, RPCTools};
 
 pub fn encode_swap(
     component: &ProtocolComponent,
@@ -167,7 +167,7 @@ fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
 /// This includes balance overrides and allowance overrides of the sell token for the sender.
 /// Returns both the overwrites and metadata for human-readable logging.
 pub(crate) async fn setup_user_overwrites(
-    tools_clients: &ToolsClients,
+    rpc_tools: &RPCTools,
     solution: &Solution,
     transaction: &Transaction,
     block: &Block,
@@ -183,7 +183,7 @@ pub(crate) async fn setup_user_overwrites(
         overwrites.insert(user_address, AccountOverride::default().with_balance(eth_balance));
     // if the given token is not ETH, do balance and allowance slots overwrites
     } else {
-        let results = tools_clients
+        let results = rpc_tools
             .evm_balance_slot_detector
             .detect_balance_slots(
                 std::slice::from_ref(&solution.given_token),
@@ -199,7 +199,7 @@ pub(crate) async fn setup_user_overwrites(
                 return Err(miette!("Couldn't find balance storage slot for token {token_address}"));
             };
 
-        let results = tools_clients
+        let results = rpc_tools
             .evm_allowance_slot_detector
             .detect_allowance_slots(
                 std::slice::from_ref(&solution.given_token),

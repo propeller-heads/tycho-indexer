@@ -14,7 +14,7 @@ use tracing::info;
 use tycho_execution::encoding::models::{Solution, Transaction};
 use tycho_simulation::foundry_evm::revm::primitives::{map::AddressHashMap, Address, U256};
 
-use crate::{execution::execution_simulator::ExecutionSimulator, ToolsClients};
+use crate::{execution::execution_simulator::ExecutionSimulator, RPCTools};
 
 pub mod encoding;
 mod execution_simulator;
@@ -23,7 +23,7 @@ pub mod tenderly;
 mod traces;
 
 pub async fn simulate_swap_transaction(
-    tools_clients: &ToolsClients,
+    rpc_tools: &RPCTools,
     simulation_id: &str,
     solution: &Solution,
     transaction: &Transaction,
@@ -36,7 +36,7 @@ pub async fn simulate_swap_transaction(
     let request =
         encoding::swap_request(transaction, block, user_address).map_err(|e| (e, None, None))?;
     let (state_overwrites, metadata) =
-        encoding::setup_user_overwrites(tools_clients, solution, transaction, block, user_address)
+        encoding::setup_user_overwrites(rpc_tools, solution, transaction, block, user_address)
             .await
             .map_err(|e| (e, None, None))?;
 
@@ -50,7 +50,7 @@ pub async fn simulate_swap_transaction(
     // Clone state_overwrites before moving into closure
     let state_overwrites_for_retry = state_overwrites.clone();
     let result = Retry::spawn(retry_strategy, move || {
-        let mut simulator = ExecutionSimulator::new(tools_clients.rpc_url.clone());
+        let mut simulator = ExecutionSimulator::new(rpc_tools.rpc_url.clone());
         let request = request.clone();
         let state_overwrites = state_overwrites_for_retry.clone();
 

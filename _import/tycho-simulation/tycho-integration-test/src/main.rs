@@ -150,7 +150,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
     let cli = Arc::new(cli);
     let chain = cli.chain;
 
-    let tools_clients = ToolsClients::new(&cli.rpc_url, &chain).await?;
+    let rpc_tools = RPCTools::new(&cli.rpc_url, &chain).await?;
 
     // Load tokens from Tycho
     info!(%cli.tycho_url, "Loading tokens...");
@@ -200,7 +200,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
     while let Some(update) = rx.recv().await {
         let semaphore = semaphore.clone();
         let cli = cli.clone();
-        let tools_clients = tools_clients.clone();
+        let rpc_tools = rpc_tools.clone();
         let protocol_pairs = protocol_pairs.clone();
         tokio::spawn(async move {
             let update = match update {
@@ -211,8 +211,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 }
             };
             let _permit = semaphore.acquire().await.unwrap();
-            if let Err(e) = process_update(cli, chain, tools_clients, protocol_pairs, &update).await
-            {
+            if let Err(e) = process_update(cli, chain, rpc_tools, protocol_pairs, &update).await {
                 warn!("{e:?}");
             }
         });
@@ -224,7 +223,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
 async fn process_update(
     cli: Arc<Cli>,
     chain: Chain,
-    tools_clients: ToolsClients,
+    rpc_tools: RPCTools,
     protocol_pairs: Arc<RwLock<LruCache<String, ProtocolComponent>>>,
     update: &StreamUpdate,
 ) -> miette::Result<()> {
@@ -239,7 +238,7 @@ async fn process_update(
         .duration_since(std::time::UNIX_EPOCH)
         .into_diagnostic()?
         .as_secs();
-    let block = match tools_clients
+    let block = match rpc_tools
         .provider
         .get_block_by_number(BlockNumberOrTag::Latest)
         .await
@@ -324,13 +323,13 @@ async fn process_update(
             },
         };
         let semaphore = semaphore.clone();
-        let tools_clients = tools_clients.clone();
+        let rpc_tools = rpc_tools.clone();
         let block = block.clone();
         let state_id = id.clone();
         let state = state.clone_box();
         tokio::spawn(async move {
             let _permit = semaphore.acquire().await.unwrap();
-            process_state(tools_clients, chain, component, &block, state_id, state).await;
+            process_state(rpc_tools, chain, component, &block, state_id, state).await;
         });
     }
 
@@ -338,7 +337,7 @@ async fn process_update(
 }
 
 async fn process_state(
-    tools_clients: ToolsClients,
+    rpc_tools: RPCTools,
     chain: Chain,
     component: ProtocolComponent,
     block: &Block,
@@ -493,7 +492,7 @@ async fn process_state(
             }
         };
         let simulated_amount_out = match simulate_swap_transaction(
-            &tools_clients,
+            &rpc_tools,
             &simulation_id,
             &solution,
             &transaction,
@@ -608,14 +607,14 @@ fn extract_error_name(revert_reason: &str) -> String {
 }
 
 #[derive(Clone)]
-struct ToolsClients {
+struct RPCTools {
     rpc_url: String,
     provider: RootProvider<Ethereum>,
     evm_balance_slot_detector: Arc<EVMBalanceSlotDetector>,
     evm_allowance_slot_detector: Arc<EVMAllowanceSlotDetector>,
 }
 
-impl ToolsClients {
+impl RPCTools {
     pub async fn new(rpc_url: &str, chain: &Chain) -> miette::Result<Self> {
         let provider: RootProvider<Ethereum> = ProviderBuilder::default()
             .with_chain(
