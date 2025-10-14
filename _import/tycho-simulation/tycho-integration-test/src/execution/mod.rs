@@ -67,7 +67,7 @@ pub async fn simulate_swap_transaction(
     .await
     .map_err(|e| {
         (
-            miette!("[{simulation_id}] Failed to simulate transaction after retries: {e}"),
+            miette!("Failed to simulate transaction after retries: {e}"),
             Some(state_overwrites.clone()),
             Some(metadata.clone()),
         )
@@ -78,7 +78,7 @@ pub async fn simulate_swap_transaction(
             info!("[{simulation_id}] Transaction succeeded, gas used: {gas_used}");
             let amount_out = U256::abi_decode(&return_data).map_err(|e| {
                 (
-                    miette!("[{simulation_id}] Failed to decode swap amount: {e:?}"),
+                    miette!("Failed to decode swap amount: {e:?}"),
                     Some(state_overwrites.clone()),
                     Some(metadata.clone()),
                 )
@@ -88,7 +88,7 @@ pub async fn simulate_swap_transaction(
                 .map_err(|e| (e, Some(state_overwrites.clone()), Some(metadata.clone())))
         }
         execution_simulator::SimulationResult::Revert { reason } => Err((
-            miette!("[{simulation_id}] Transaction reverted: {}", reason),
+            miette!("Transaction reverted: {}", reason),
             Some(state_overwrites),
             Some(metadata),
         )),
