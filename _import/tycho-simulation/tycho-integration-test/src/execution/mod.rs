@@ -67,7 +67,7 @@ pub async fn simulate_swap_transaction(
     .await
     .map_err(|e| {
         (
-            miette!("Failed to simulate transaction after retries: {e}"),
+            miette!("{e}").wrap_err("Failed to simulate transaction after retries"),
             Some(state_overwrites.clone()),
             Some(metadata.clone()),
         )

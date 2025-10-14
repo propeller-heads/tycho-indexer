@@ -453,7 +453,7 @@ async fn process_state(
             )) {
             Ok(res) => res,
             Err(e) => {
-                warn!("[{}] {e}", simulation_id);
+                warn!("[{}] {e:?}", simulation_id);
                 metrics::record_get_amount_out_failure(
                     &simulation_id,
                     &component.protocol_system,
