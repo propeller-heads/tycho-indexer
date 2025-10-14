@@ -1,3 +1,10 @@
+## [0.181.5](https://github.com/propeller-heads/tycho-simulation/compare/0.181.4...0.181.5) (2025-10-14)
+
+
+### Bug Fixes
+
+* Don't add RFQ states to protocol_pairs ([dcd51da](https://github.com/propeller-heads/tycho-simulation/commit/dcd51dae63b8b50973677b204ea7be12f20a51e8))
+
 ## [0.181.4](https://github.com/propeller-heads/tycho-simulation/compare/0.181.3...0.181.4) (2025-10-14)
 
 
