@@ -1,3 +1,10 @@
+## [0.181.4](https://github.com/propeller-heads/tycho-simulation/compare/0.181.3...0.181.4) (2025-10-14)
+
+
+### Bug Fixes
+
+* Don't add simulation id in failed simulations errors ([dd08f60](https://github.com/propeller-heads/tycho-simulation/commit/dd08f6074f11834a59335aa8b89c59e065ca924f))
+
 ## [0.181.3](https://github.com/propeller-heads/tycho-simulation/compare/0.181.2...0.181.3) (2025-10-14)
 
 
