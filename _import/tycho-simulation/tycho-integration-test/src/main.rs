@@ -239,15 +239,6 @@ async fn process_update(
         update.update.states.len()
     );
 
-    {
-        let mut pairs = protocol_pairs
-            .write()
-            .map_err(|e| miette!("Failed to acquire write lock on protocol pairs: {e}"))?;
-        for (id, comp) in update.update.new_pairs.iter() {
-            pairs.get_or_insert(id.clone(), || comp.clone());
-        }
-    }
-
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .into_diagnostic()?
@@ -267,11 +258,19 @@ async fn process_update(
         }
     };
 
-    // Record block processing latency
-    let latency_seconds = (now as i64 - block.header.timestamp as i64).abs() as f64;
-    metrics::record_block_processing_duration(latency_seconds);
-
     if let UpdateType::Protocol = update.update_type {
+        {
+            let mut pairs = protocol_pairs
+                .write()
+                .map_err(|e| miette!("Failed to acquire write lock on protocol pairs: {e}"))?;
+            for (id, comp) in update.update.new_pairs.iter() {
+                pairs.get_or_insert(id.clone(), || comp.clone());
+            }
+        }
+        // Record block processing latency
+        let latency_seconds = (now as i64 - block.header.timestamp as i64).abs() as f64;
+        metrics::record_block_processing_duration(latency_seconds);
+
         let block_delay = block
             .header
             .number
