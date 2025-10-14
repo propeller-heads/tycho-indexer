@@ -90,7 +90,7 @@ struct Cli {
 
     /// Maximum number of simulations to run in parallel
     /// Set to 1 to process sequentially.
-    #[arg(short, default_value_t = 5, value_parser = clap::value_parser!(u8).range(1..))]
+    #[arg(long, default_value_t = 5, value_parser = clap::value_parser!(u8).range(1..))]
     parallel_simulations: u8,
 
     /// Maximum number of simulations to run per protocol update
