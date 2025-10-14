@@ -1,3 +1,12 @@
+## [0.181.6](https://github.com/propeller-heads/tycho-simulation/compare/0.181.5...0.181.6) (2025-10-14)
+
+
+### Bug Fixes
+
+* format miette's reports as a single line ([98f5530](https://github.com/propeller-heads/tycho-simulation/commit/98f5530c20c6578c186a442da5ace7590509c3de))
+* log miette report as debug to log the entire error chain ([74b3ff0](https://github.com/propeller-heads/tycho-simulation/commit/74b3ff085075f7cb5214cab4140b6fc3bbfcb9e1))
+* use `long` in parallel_simulations cli arg ([ff8423b](https://github.com/propeller-heads/tycho-simulation/commit/ff8423b247abcd5574138862dbd05f45175101a5))
+
 ## [0.181.5](https://github.com/propeller-heads/tycho-simulation/compare/0.181.4...0.181.5) (2025-10-14)
 
 
