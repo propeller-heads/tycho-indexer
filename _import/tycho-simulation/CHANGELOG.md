@@ -1,3 +1,11 @@
+## [0.181.7](https://github.com/propeller-heads/tycho-simulation/compare/0.181.6...0.181.7) (2025-10-14)
+
+
+### Bug Fixes
+
+* acquire semaphore permit before spawning the tokio task ([4967648](https://github.com/propeller-heads/tycho-simulation/commit/496764837a29cd84a68252248f52e5f002d14eb1))
+* use `put` instead of `get_or_insert` in the LRU to properly update the items ordering ([634016e](https://github.com/propeller-heads/tycho-simulation/commit/634016e8eb49fe174765eafbf14aa192c347c479))
+
 ## [0.181.6](https://github.com/propeller-heads/tycho-simulation/compare/0.181.5...0.181.6) (2025-10-14)
 
 
