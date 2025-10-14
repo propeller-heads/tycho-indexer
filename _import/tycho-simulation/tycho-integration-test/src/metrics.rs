@@ -8,122 +8,120 @@ use tycho_client::feed::SynchronizerState;
 use tycho_common::Bytes;
 
 /// Initialize the metrics registry and describe all metrics
-pub fn init_metrics() {
+pub fn initialize_metrics() {
     describe_histogram!(
-        "block_processing_latency_seconds",
+        "tycho_integration_block_processing_duration_seconds",
         "Time between block timestamp and when protocol components are received"
     );
-    describe_counter!("get_limits_failures_total", "Total number of failed get limits");
-    describe_counter!("get_amount_out_failures_total", "Total number of failed get amount out");
-    describe_histogram!(
-        "get_amount_out_duration_seconds",
-        "Time taken to execute get_amount_out for each protocol"
+    describe_counter!(
+        "tycho_integration_simulation_get_limits_failures_total",
+        "Total number of failed get_limits operations"
     );
     describe_counter!(
-        "simulation_execution_success_total",
-        "Total number of successful simulations of execution"
-    );
-    describe_counter!(
-        "simulation_execution_failure_total",
-        "Total number of failed simulations of execution with revert reason as label"
-    );
-    describe_counter!(
-        "simulation_execution_success_by_protocol",
-        "Total number of successful simulations of execution by protocol, component, and block"
-    );
-    describe_counter!(
-        "simulation_execution_failure_by_protocol",
-        "Total number of failed simulations of execution by protocol with detailed error information"
+        "tycho_integration_simulation_get_amount_out_failures_total",
+        "Total number of failed get_amount_out operations"
     );
     describe_histogram!(
-        "slippage_between_simulation_and_execution",
-        "Slippage between simulated amount out and simulated execution amount out"
+        "tycho_integration_simulation_get_amount_out_duration_seconds",
+        "Time taken to execute get_amount_out operations"
+    );
+    describe_counter!(
+        "tycho_integration_simulation_execution_success_total",
+        "Total number of successful execution simulations"
+    );
+    describe_counter!(
+        "tycho_integration_simulation_execution_failures_total",
+        "Total number of failed execution simulations"
+    );
+    describe_histogram!(
+        "tycho_integration_simulation_execution_slippage_ratio",
+        "Slippage ratio between simulated and actual execution amounts"
     );
     describe_gauge!(
-        "protocol_sync_state_current",
-        "Current sync state per protocol as numeric value"
+        "tycho_integration_protocol_sync_state",
+        "Current synchronization state per protocol (1=Started, 2=Ready, 3=Delayed, 4=Stale, 5=Advanced, 6=Ended)"
     );
     describe_counter!(
-        "skipped_updates_total",
-        "Total number of updates skipped because they are behind the current block"
+        "tycho_integration_protocol_updates_skipped_total",
+        "Total number of protocol updates skipped due to being behind current block"
     );
     describe_histogram!(
-        "block_delay",
-        "The amount of blocks behind that we receive protocol updates"
+        "tycho_integration_protocol_update_block_delay_blocks",
+        "Number of blocks behind current that protocol updates are received"
     );
 }
 
-/// Record the latency between block timestamp and component receipt
-pub fn record_block_processing_latency(latency_seconds: f64) {
-    histogram!("block_processing_latency_seconds").record(latency_seconds);
+/// Record the duration between block timestamp and component receipt
+pub fn record_block_processing_duration(duration_seconds: f64) {
+    histogram!("tycho_integration_block_processing_duration_seconds").record(duration_seconds);
 }
 
-pub fn record_get_limits_failures(
+/// Record a failed get_limits operation
+pub fn record_get_limits_failure(
     protocol: &str,
     component_id: &str,
     block_number: u64,
     token_in: &Bytes,
     token_out: &Bytes,
-    error_msg: String,
+    error_message: String,
 ) {
-    counter!("get_limits_failures_total", "protocol" => protocol.to_string(),
+    counter!(
+        "tycho_integration_simulation_get_limits_failures_total",
+        "protocol" => protocol.to_string(),
         "component_id" => component_id.to_string(),
         "block" => block_number.to_string(),
         "token_in" => token_in.to_string(),
         "token_out" => token_out.to_string(),
-        "error_msg" => error_msg,
+        "error_message" => error_message,
     )
     .increment(1);
 }
 
-pub fn record_get_amount_out_failures(
+/// Record a failed get_amount_out operation
+pub fn record_get_amount_out_failure(
     protocol: &str,
     component_id: &str,
     block_number: u64,
     token_in: &Bytes,
     token_out: &Bytes,
     amount_in: &BigUint,
-    error_msg: String,
+    error_message: String,
 ) {
-    counter!("get_amount_out_failures_total", "protocol" => protocol.to_string(),
+    counter!(
+        "tycho_integration_simulation_get_amount_out_failures_total",
+        "protocol" => protocol.to_string(),
         "component_id" => component_id.to_string(),
-        "block" => block_number.to_string() ,       "token_in" => token_in.to_string(),
+        "block" => block_number.to_string(),
+        "token_in" => token_in.to_string(),
         "token_out" => token_out.to_string(),
         "amount_in" => amount_in.to_string(),
-        "error_msg" => error_msg,
+        "error_message" => error_message,
     )
     .increment(1);
 }
 
-/// Record the time taken to execute get_amount_out
-pub fn record_get_amount_out_duration(protocol: &str, duration_seconds: f64, component_id: &str) {
+/// Record the duration of a get_amount_out operation
+pub fn record_get_amount_out_duration(
+    protocol: &str,
+    component_id: &str,
+    duration_seconds: f64,
+) {
     histogram!(
-        "get_amount_out_duration_seconds",
+        "tycho_integration_simulation_get_amount_out_duration_seconds",
         "protocol" => protocol.to_string(),
         "component_id" => component_id.to_string()
     )
     .record(duration_seconds);
 }
 
-/// Record a successful simulation
-pub fn record_simulation_execution_success() {
-    counter!("simulation_execution_success_total").increment(1);
-}
-
-/// Record a failed simulation with the revert reason
-pub fn record_simulation_execution_failure(revert_reason: &str) {
-    counter!("simulation_execution_failure_total", "reason" => revert_reason.to_string())
-        .increment(1);
-}
-
-/// Record a successful simulation with detailed protocol information
-pub fn record_simulation_execution_success_detailed(
+/// Record a successful execution simulation
+pub fn record_simulation_execution_success(
     protocol: &str,
     component_id: &str,
     block_number: u64,
 ) {
     counter!(
-        "simulation_execution_success_by_protocol",
+        "tycho_integration_simulation_execution_success_total",
         "protocol" => protocol.to_string(),
         "component_id" => component_id.to_string(),
         "block" => block_number.to_string()
@@ -131,8 +129,8 @@ pub fn record_simulation_execution_success_detailed(
     .increment(1);
 }
 
-/// Record a failed simulation with detailed protocol and error information
-pub fn record_simulation_execution_failure_detailed(
+/// Record a failed execution simulation
+pub fn record_simulation_execution_failure(
     protocol: &str,
     component_id: &str,
     block_number: u64,
@@ -142,7 +140,7 @@ pub fn record_simulation_execution_failure_detailed(
     overwrites: &str,
 ) {
     counter!(
-        "simulation_execution_failure_by_protocol",
+        "tycho_integration_simulation_execution_failures_total",
         "protocol" => protocol.to_string(),
         "component_id" => component_id.to_string(),
         "block" => block_number.to_string(),
@@ -154,11 +152,23 @@ pub fn record_simulation_execution_failure_detailed(
     .increment(1);
 }
 
-pub fn record_slippage(block_number: u64, protocol: &str, component_id: &str, slippage: f64) {
-    histogram!("slippage_between_simulation_and_execution","block" => block_number.to_string(), "protocol"=>protocol.to_string(), "component_id" => component_id.to_string(),)
-        .record(slippage);
+/// Record slippage between simulation and execution
+pub fn record_execution_slippage(
+    protocol: &str,
+    component_id: &str,
+    block_number: u64,
+    slippage_ratio: f64,
+) {
+    histogram!(
+        "tycho_integration_simulation_execution_slippage_ratio",
+        "protocol" => protocol.to_string(),
+        "component_id" => component_id.to_string(),
+        "block" => block_number.to_string(),
+    )
+    .record(slippage_ratio);
 }
 
+/// Record the current synchronization state of a protocol
 pub fn record_protocol_sync_state(protocol: &str, sync_state: &SynchronizerState) {
     let state_value = match sync_state {
         SynchronizerState::Started => 1.0,
@@ -168,17 +178,21 @@ pub fn record_protocol_sync_state(protocol: &str, sync_state: &SynchronizerState
         SynchronizerState::Advanced(_) => 5.0,
         SynchronizerState::Ended(_) => 6.0,
     };
-    gauge!("protocol_sync_state_current", "protocol" => protocol.to_string()).set(state_value);
+    gauge!(
+        "tycho_integration_protocol_sync_state",
+        "protocol" => protocol.to_string()
+    )
+    .set(state_value);
 }
 
-/// Record when an update is skipped because it's behind the current block
-pub fn record_skipped_update() {
-    counter!("skipped_updates_total").increment(1);
+/// Record when a protocol update is skipped because it's behind the current block
+pub fn record_protocol_update_skipped() {
+    counter!("tycho_integration_protocol_updates_skipped_total").increment(1);
 }
 
-/// Record block delay of protocol updates
-pub fn record_block_delay(block_delay: u64) {
-    histogram!("block_delay").record(block_delay as f64);
+/// Record the block delay of protocol updates
+pub fn record_protocol_update_block_delay(block_delay: u64) {
+    histogram!("tycho_integration_protocol_update_block_delay_blocks").record(block_delay as f64);
 }
 
 /// Creates and runs the Prometheus metrics exporter using Actix Web.

@@ -121,7 +121,7 @@ async fn main() -> miette::Result<()> {
     let cli = Cli::parse();
 
     // Initialize and start Prometheus metrics
-    metrics::init_metrics();
+    metrics::initialize_metrics();
     let metrics_task = metrics::create_metrics_exporter(cli.metrics_port).await?;
 
     // Run the main application logic and metrics server in parallel
@@ -269,7 +269,7 @@ async fn process_update(
 
     // Record block processing latency
     let latency_seconds = (now as i64 - block.header.timestamp as i64).abs() as f64;
-    metrics::record_block_processing_latency(latency_seconds);
+    metrics::record_block_processing_duration(latency_seconds);
 
     if let UpdateType::Protocol = update.update_type {
         let block_delay = block
@@ -283,10 +283,10 @@ async fn process_update(
                 "Update block ({}) is behind the current block ({}), skipping to catch up.",
                 update.update.block_number_or_timestamp, block.header.number
             );
-            metrics::record_skipped_update();
+            metrics::record_protocol_update_skipped();
             return Ok(());
         }
-        metrics::record_block_delay(block_delay);
+        metrics::record_protocol_update_block_delay(block_delay);
 
         if update.is_first_update {
             info!("Skipping simulation on first protocol update...");
@@ -404,7 +404,7 @@ async fn process_state(
             Ok(limits) => limits,
             Err(e) => {
                 warn!("{e:?}");
-                metrics::record_get_limits_failures(
+                metrics::record_get_limits_failure(
                     &component.protocol_system,
                     &state_id,
                     block.header.number,
@@ -445,7 +445,7 @@ async fn process_state(
             Ok(res) => res,
             Err(e) => {
                 warn!("{e}");
-                metrics::record_get_amount_out_failures(
+                metrics::record_get_amount_out_failure(
                     &component.protocol_system,
                     &state_id,
                     block.header.number,
@@ -459,8 +459,8 @@ async fn process_state(
         };
         metrics::record_get_amount_out_duration(
             &component.protocol_system,
-            start_time.elapsed().as_secs_f64(),
             &state_id,
+            start_time.elapsed().as_secs_f64(),
         );
         let expected_amount_out = amount_out_result.amount;
         info!("Calculated amount_out: {expected_amount_out} {}", token_out.symbol);
@@ -484,8 +484,7 @@ async fn process_state(
         let simulated_amount_out =
             match simulate_swap_transaction(&cli.rpc_url, &solution, &transaction, block).await {
                 Ok(amount) => {
-                    metrics::record_simulation_execution_success();
-                    metrics::record_simulation_execution_success_detailed(
+                    metrics::record_simulation_execution_success(
                         &component.protocol_system,
                         &state_id,
                         block.header.number,
@@ -522,8 +521,7 @@ async fn process_state(
                         String::new()
                     };
 
-                    metrics::record_simulation_execution_failure(revert_reason);
-                    metrics::record_simulation_execution_failure_detailed(
+                    metrics::record_simulation_execution_failure(
                         &component.protocol_system,
                         &state_id,
                         block.header.number,
@@ -548,10 +546,10 @@ async fn process_state(
         };
         let slippage = slippage.to_f64().unwrap_or(0.0) / 100.0;
 
-        metrics::record_slippage(
-            block.header.number,
+        metrics::record_execution_slippage(
             &component.protocol_system,
             &state_id,
+            block.header.number,
             slippage,
         );
         info!("Slippage: {:.2}%", slippage);
