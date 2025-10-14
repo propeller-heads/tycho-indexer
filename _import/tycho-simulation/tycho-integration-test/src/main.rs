@@ -198,22 +198,27 @@ async fn run(cli: Cli) -> miette::Result<()> {
     info!("Waiting for first protocol update...");
     let semaphore = Arc::new(Semaphore::new(cli.parallel_updates as usize));
     while let Some(update) = rx.recv().await {
-        let semaphore = semaphore.clone();
+        let update = match update {
+            Ok(u) => Arc::new(u),
+            Err(e) => {
+                warn!("{}", format_error_chain(&e));
+                continue;
+            }
+        };
+
         let cli = cli.clone();
         let rpc_tools = rpc_tools.clone();
         let protocol_pairs = protocol_pairs.clone();
+        let permit = semaphore
+            .clone()
+            .acquire_owned()
+            .await
+            .unwrap();
         tokio::spawn(async move {
-            let update = match update {
-                Ok(u) => Arc::new(u),
-                Err(e) => {
-                    warn!("{}", format_error_chain(&e));
-                    return;
-                }
-            };
-            let _permit = semaphore.acquire().await.unwrap();
             if let Err(e) = process_update(cli, chain, rpc_tools, protocol_pairs, &update).await {
                 warn!("{}", format_error_chain(&e));
             }
+            drop(permit);
         });
     }
 
@@ -322,14 +327,18 @@ async fn process_update(
                 }
             },
         };
-        let semaphore = semaphore.clone();
         let rpc_tools = rpc_tools.clone();
         let block = block.clone();
         let state_id = id.clone();
         let state = state.clone_box();
+        let permit = semaphore
+            .clone()
+            .acquire_owned()
+            .await
+            .unwrap();
         tokio::spawn(async move {
-            let _permit = semaphore.acquire().await.unwrap();
             process_state(rpc_tools, chain, component, &block, state_id, state).await;
+            drop(permit);
         });
     }
 
