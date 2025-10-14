@@ -58,6 +58,7 @@ pub fn record_block_processing_duration(duration_seconds: f64) {
 
 /// Record a failed get_limits operation
 pub fn record_get_limits_failure(
+    simulation_id: &str,
     protocol: &str,
     component_id: &str,
     block_number: u64,
@@ -67,6 +68,7 @@ pub fn record_get_limits_failure(
 ) {
     counter!(
         "tycho_integration_simulation_get_limits_failures_total",
+        "simulation_id" => simulation_id.to_string(),
         "protocol" => protocol.to_string(),
         "component_id" => component_id.to_string(),
         "block" => block_number.to_string(),
@@ -78,7 +80,9 @@ pub fn record_get_limits_failure(
 }
 
 /// Record a failed get_amount_out operation
+#[allow(clippy::too_many_arguments)]
 pub fn record_get_amount_out_failure(
+    simulation_id: &str,
     protocol: &str,
     component_id: &str,
     block_number: u64,
@@ -89,6 +93,7 @@ pub fn record_get_amount_out_failure(
 ) {
     counter!(
         "tycho_integration_simulation_get_amount_out_failures_total",
+        "simulation_id" => simulation_id.to_string(),
         "protocol" => protocol.to_string(),
         "component_id" => component_id.to_string(),
         "block" => block_number.to_string(),
@@ -102,12 +107,14 @@ pub fn record_get_amount_out_failure(
 
 /// Record the duration of a get_amount_out operation
 pub fn record_get_amount_out_duration(
+    simulation_id: &str,
     protocol: &str,
     component_id: &str,
     duration_seconds: f64,
 ) {
     histogram!(
         "tycho_integration_simulation_get_amount_out_duration_seconds",
+        "simulation_id" => simulation_id.to_string(),
         "protocol" => protocol.to_string(),
         "component_id" => component_id.to_string()
     )
@@ -116,12 +123,14 @@ pub fn record_get_amount_out_duration(
 
 /// Record a successful execution simulation
 pub fn record_simulation_execution_success(
+    simulation_id: &str,
     protocol: &str,
     component_id: &str,
     block_number: u64,
 ) {
     counter!(
         "tycho_integration_simulation_execution_success_total",
+        "simulation_id" => simulation_id.to_string(),
         "protocol" => protocol.to_string(),
         "component_id" => component_id.to_string(),
         "block" => block_number.to_string()
@@ -130,7 +139,9 @@ pub fn record_simulation_execution_success(
 }
 
 /// Record a failed execution simulation
+#[allow(clippy::too_many_arguments)]
 pub fn record_simulation_execution_failure(
+    simulation_id: &str,
     protocol: &str,
     component_id: &str,
     block_number: u64,
@@ -141,6 +152,7 @@ pub fn record_simulation_execution_failure(
 ) {
     counter!(
         "tycho_integration_simulation_execution_failures_total",
+        "simulation_id" => simulation_id.to_string(),
         "protocol" => protocol.to_string(),
         "component_id" => component_id.to_string(),
         "block" => block_number.to_string(),
@@ -154,6 +166,7 @@ pub fn record_simulation_execution_failure(
 
 /// Record slippage between simulation and execution
 pub fn record_execution_slippage(
+    simulation_id: &str,
     protocol: &str,
     component_id: &str,
     block_number: u64,
@@ -161,6 +174,7 @@ pub fn record_execution_slippage(
 ) {
     histogram!(
         "tycho_integration_simulation_execution_slippage_ratio",
+        "simulation_id" => simulation_id.to_string(),
         "protocol" => protocol.to_string(),
         "component_id" => component_id.to_string(),
         "block" => block_number.to_string(),

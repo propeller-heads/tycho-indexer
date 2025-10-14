@@ -6,7 +6,7 @@ use alloy::{
 };
 use miette::{miette, IntoDiagnostic, WrapErr};
 use num_bigint::BigUint;
-use tracing::info;
+use tracing::debug;
 use tycho_common::{
     models::{token::Token, Chain},
     simulation::protocol_sim::ProtocolSim,
@@ -242,7 +242,7 @@ pub(crate) async fn setup_user_overwrites(
         let allowance_slot_b256 = alloy::primitives::B256::from_slice(allowance_slot);
         let spender_address = Address::from_slice(&transaction.to[..20]);
 
-        info!(
+        debug!(
             "Setting token override for {token_address}: balance={}, allowance={}, balance_storage={}, allowance_storage={}",
             token_balance, token_allowance, balance_storage_address, allowance_storage_address
         );
@@ -293,7 +293,7 @@ pub(crate) async fn setup_user_overwrites(
         // Add 10 ETH for gas for non-ETH token swaps
         let eth_balance = U256::from_str("10000000000000000000").unwrap(); // 1 ETH for gas
         overwrites.insert(user_address, AccountOverride::default().with_balance(eth_balance));
-        info!("Setting ETH balance override for user {user_address}: {eth_balance} (for gas)");
+        debug!("Setting ETH balance override for user {user_address}: {eth_balance} (for gas)");
     }
 
     Ok((overwrites, metadata))
@@ -333,7 +333,7 @@ fn calculate_gas_fees(block: &Block) -> miette::Result<(U256, U256)> {
     let max_priority_fee_per_gas = U256::from(2_000_000_000u64);
     // Set max_fee_per_gas to base_fee * 2 + max_priority_fee_per_gas to handle fee fluctuations
     let max_fee_per_gas = U256::from(base_fee) * U256::from(2u64) + max_priority_fee_per_gas;
-    info!(
+    debug!(
         "Gas pricing: base_fee={}, max_priority_fee_per_gas={}, max_fee_per_gas={}",
         base_fee, max_priority_fee_per_gas, max_fee_per_gas
     );

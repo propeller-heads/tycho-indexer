@@ -349,8 +349,17 @@ async fn process_state(
     state_id: String,
     state: Box<dyn ProtocolSim>,
 ) {
+    // Generate unique simulation ID
+    let random_number: u32 = rand::random::<u32>() % 90000 + 10000; // Range 10000-99999
+    let component_prefix = state_id
+        .chars()
+        .take(8)
+        .collect::<String>();
+    let simulation_id =
+        format!("{}_{}_{}", component.protocol_system, component_prefix, random_number);
     info!(
-        "Component has tokens: {}",
+        "[{}] Component has tokens: {}",
+        simulation_id,
         component
             .tokens
             .iter()
@@ -359,7 +368,7 @@ async fn process_state(
     );
     let tokens_len = component.tokens.len();
     if tokens_len < 2 {
-        error!("Component has less than 2 tokens, skipping...");
+        error!("[{}] Component has less than 2 tokens, skipping...", simulation_id);
         return;
     }
     // Get all the possible swap directions
@@ -374,7 +383,7 @@ async fn process_state(
             {
                 Some(s) => s.clone(),
                 None => {
-                    warn!("Failed to downcast state to HashflowState");
+                    warn!("[{}] Failed to downcast state to HashflowState", simulation_id);
                     return;
                 }
             };
@@ -389,8 +398,8 @@ async fn process_state(
     };
     for (token_in, token_out) in swap_directions.iter() {
         info!(
-            "Processing {} pool {state_id}, from {} to {}",
-            component.protocol_system, token_in.symbol, token_out.symbol
+            "[{}] Processing {} pool {state_id}, from {} to {}",
+            simulation_id, component.protocol_system, token_in.symbol, token_out.symbol
         );
 
         // Get max input/output limits
@@ -403,8 +412,9 @@ async fn process_state(
             )) {
             Ok(limits) => limits,
             Err(e) => {
-                warn!("{e:?}");
+                warn!("[{}] {e:?}", simulation_id);
                 metrics::record_get_limits_failure(
+                    &simulation_id,
                     &component.protocol_system,
                     &state_id,
                     block.header.number,
@@ -416,8 +426,8 @@ async fn process_state(
             }
         };
         info!(
-            "Retrieved limits: max input {max_input} {}; max output {max_output} {}",
-            token_in.symbol, token_out.symbol
+            "[{}] Retrieved limits: max input {max_input} {}; max output {max_output} {}",
+            simulation_id, token_in.symbol, token_out.symbol
         );
 
         // Calculate amount_in as 0.1% of max_input
@@ -427,10 +437,10 @@ async fn process_state(
         let thousand = BigUint::from(1000u32);
         let amount_in = (&max_input * &percentage_biguint) / &thousand;
         if amount_in.is_zero() {
-            warn!("Calculated amount_in is zero, skipping...");
+            warn!("[{}] Calculated amount_in is zero, skipping...", simulation_id);
             continue;
         }
-        info!("Calculated amount_in: {amount_in} {}", token_in.symbol);
+        info!("[{}] Calculated amount_in: {amount_in} {}", simulation_id, token_in.symbol);
 
         // Get expected amount out using tycho-simulation and measure duration
         let start_time = std::time::Instant::now();
@@ -444,8 +454,9 @@ async fn process_state(
             )) {
             Ok(res) => res,
             Err(e) => {
-                warn!("{e}");
+                warn!("[{}] {e}", simulation_id);
                 metrics::record_get_amount_out_failure(
+                    &simulation_id,
                     &component.protocol_system,
                     &state_id,
                     block.header.number,
@@ -458,12 +469,16 @@ async fn process_state(
             }
         };
         metrics::record_get_amount_out_duration(
+            &simulation_id,
             &component.protocol_system,
             &state_id,
             start_time.elapsed().as_secs_f64(),
         );
         let expected_amount_out = amount_out_result.amount;
-        info!("Calculated amount_out: {expected_amount_out} {}", token_out.symbol);
+        info!(
+            "[{}] Calculated amount_out: {expected_amount_out} {}",
+            simulation_id, token_out.symbol
+        );
 
         // Simulate execution amount out against the RPC
         let (solution, transaction) = match encode_swap(
@@ -477,64 +492,76 @@ async fn process_state(
         ) {
             Ok(res) => res,
             Err(e) => {
-                warn!("{e:?}");
+                warn!("[{}] {e:?}", simulation_id);
                 continue;
             }
         };
-        let simulated_amount_out =
-            match simulate_swap_transaction(&cli.rpc_url, &solution, &transaction, block).await {
-                Ok(amount) => {
-                    metrics::record_simulation_execution_success(
-                        &component.protocol_system,
-                        &state_id,
-                        block.header.number,
-                    );
-                    amount
-                }
-                Err((e, state_overwrites, metadata)) => {
-                    let error_msg = e.to_string();
-                    error!("Failed to simulate swap: {error_msg}");
+        let simulated_amount_out = match simulate_swap_transaction(
+            &cli.rpc_url,
+            &simulation_id,
+            &solution,
+            &transaction,
+            block,
+        )
+        .await
+        {
+            Ok(amount) => {
+                metrics::record_simulation_execution_success(
+                    &simulation_id,
+                    &component.protocol_system,
+                    &state_id,
+                    block.header.number,
+                );
+                amount
+            }
+            Err((e, state_overwrites, metadata)) => {
+                let error_msg = e.to_string();
+                error!("[{}] Failed to simulate swap: {error_msg}", simulation_id);
 
-                    // Extract revert reason from error message
-                    // Error format is typically "Transaction reverted: <reason>"
-                    let revert_reason =
-                        if let Some(reason) = error_msg.strip_prefix("Transaction reverted: ") {
-                            reason
-                        } else {
-                            &error_msg
-                        };
-
-                    // Extract error name (first word or function signature)
-                    let error_name = extract_error_name(revert_reason);
-
-                    // Generate Tenderly URL for debugging without state overrides
-                    let tenderly_url = tenderly::build_tenderly_url(
-                        &tenderly::TenderlySimParams::default(),
-                        Some(&transaction),
-                        Some(block),
-                        Address::from_slice(&solution.sender[..20]),
-                    );
-                    // Generate overwrites string with metadata
-                    let overwrites_string = if let Some(overwrites) = state_overwrites.as_ref() {
-                        tenderly::get_overwites_string(overwrites, metadata.as_ref())
+                // Extract revert reason from error message
+                // Error format is typically "Transaction reverted: <reason>"
+                let revert_reason =
+                    if let Some(reason) = error_msg.strip_prefix("Transaction reverted: ") {
+                        reason
                     } else {
-                        String::new()
+                        &error_msg
                     };
 
-                    metrics::record_simulation_execution_failure(
-                        &component.protocol_system,
-                        &state_id,
-                        block.header.number,
-                        revert_reason,
-                        &error_name,
-                        &tenderly_url,
-                        &overwrites_string,
-                    );
+                // Extract error name (first word or function signature)
+                let error_name = extract_error_name(revert_reason);
 
-                    continue;
-                }
-            };
-        info!("Simulated amount_out: {simulated_amount_out} {}", token_out.symbol);
+                // Generate Tenderly URL for debugging without state overrides
+                let tenderly_url = tenderly::build_tenderly_url(
+                    &tenderly::TenderlySimParams::default(),
+                    Some(&transaction),
+                    Some(block),
+                    Address::from_slice(&solution.sender[..20]),
+                );
+                // Generate overwrites string with metadata
+                let overwrites_string = if let Some(overwrites) = state_overwrites.as_ref() {
+                    tenderly::get_overwites_string(overwrites, metadata.as_ref())
+                } else {
+                    String::new()
+                };
+
+                metrics::record_simulation_execution_failure(
+                    &simulation_id,
+                    &component.protocol_system,
+                    &state_id,
+                    block.header.number,
+                    revert_reason,
+                    &error_name,
+                    &tenderly_url,
+                    &overwrites_string,
+                );
+
+                continue;
+            }
+        };
+        info!(
+            "[{}] Simulated amount_out: {simulated_amount_out} {}",
+            simulation_id, token_out.symbol
+        );
 
         // Calculate slippage
         let slippage = if simulated_amount_out > expected_amount_out {
@@ -547,16 +574,17 @@ async fn process_state(
         let slippage = slippage.to_f64().unwrap_or(0.0) / 100.0;
 
         metrics::record_execution_slippage(
+            &simulation_id,
             &component.protocol_system,
             &state_id,
             block.header.number,
             slippage,
         );
-        info!("Slippage: {:.2}%", slippage);
+        info!("[{}] Slippage: {:.2}%", simulation_id, slippage);
 
         info!(
-            "{} pool processed {state_id} from {} to {}",
-            component.protocol_system, token_in.symbol, token_out.symbol
+            "[{}] {} pool processed {state_id} from {} to {}",
+            simulation_id, component.protocol_system, token_in.symbol, token_out.symbol
         );
     }
 }

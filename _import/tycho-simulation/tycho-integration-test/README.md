@@ -4,7 +4,7 @@ A comprehensive integration test that validates the Tycho system by performing e
 This test runs continuously in the cluster but it can also be run locally for debugging.
 
 1. **Stream Processing**: Connects to Tycho indexer and receives live protocol state updates
-2. **State Validation**: For each protocol update (after the first one):
+2. **State Validation**: For each protocol update (after the first one) and for each swap direction:
     1. **Get Limits**: Retrieves maximum input/output limits for token pairs
     2. **Simulate Swap**: Calls `get_amount_out` with 0.1% of max input amount
     3. **Encode Transaction**: Builds the actual swap transaction via TychoRouter
