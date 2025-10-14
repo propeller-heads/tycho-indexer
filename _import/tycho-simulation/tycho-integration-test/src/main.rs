@@ -206,13 +206,13 @@ async fn run(cli: Cli) -> miette::Result<()> {
             let update = match update {
                 Ok(u) => Arc::new(u),
                 Err(e) => {
-                    warn!("{e:?}");
+                    warn!("{}", format_error_chain(&e));
                     return;
                 }
             };
             let _permit = semaphore.acquire().await.unwrap();
             if let Err(e) = process_update(cli, chain, rpc_tools, protocol_pairs, &update).await {
-                warn!("{e:?}");
+                warn!("{}", format_error_chain(&e));
             }
         });
     }
@@ -407,7 +407,7 @@ async fn process_state(
             )) {
             Ok(limits) => limits,
             Err(e) => {
-                warn!("[{}] {e:?}", simulation_id);
+                warn!("[{}] {}", simulation_id, format_error_chain(&e));
                 metrics::record_get_limits_failure(
                     &simulation_id,
                     &component.protocol_system,
@@ -449,7 +449,7 @@ async fn process_state(
             )) {
             Ok(res) => res,
             Err(e) => {
-                warn!("[{}] {e:?}", simulation_id);
+                warn!("[{}] {}", simulation_id, format_error_chain(&e));
                 metrics::record_get_amount_out_failure(
                     &simulation_id,
                     &component.protocol_system,
@@ -487,7 +487,7 @@ async fn process_state(
         ) {
             Ok(res) => res,
             Err(e) => {
-                warn!("[{}] {e:?}", simulation_id);
+                warn!("[{}] {}", simulation_id, format_error_chain(&e));
                 continue;
             }
         };
@@ -647,4 +647,13 @@ impl RPCTools {
             evm_allowance_slot_detector,
         })
     }
+}
+
+/// Format the full error chain into a single string, without newlines
+fn format_error_chain(e: &miette::Error) -> String {
+    let mut chain = vec![];
+    for cause in e.chain() {
+        chain.push(format!("{cause}"));
+    }
+    chain.join(" -> ")
 }
