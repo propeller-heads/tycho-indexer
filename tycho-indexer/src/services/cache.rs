@@ -114,7 +114,7 @@ where
         let weighted_size = self.cache.weighted_size();
         tracing::Span::current().record("weighted_size", weighted_size);
         debug!(weighted_size, name = self.name, "CacheWeightedSize");
-        gauge!("rpc_cache_weighted_size", "name" => self.name.clone()).set(weighted_size as f64);
+        gauge!("rpc_cache_weighted_size", "cache" => self.name.clone()).set(weighted_size as f64);
 
         let lock = Arc::new(tokio::sync::Mutex::new(None));
         let mut guard = lock.lock().await;
