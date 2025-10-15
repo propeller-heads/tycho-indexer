@@ -83,10 +83,10 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
             .map(|bytes: &Bytes| Address::from_slice(bytes.as_ref()))
             .collect::<HashSet<Address>>();
 
-        let potential_rebasing_tokens: HashSet<Address> = if let Some(bytes) = snapshot
+        let potential_rebase_tokens: HashSet<Address> = if let Some(bytes) = snapshot
             .component
             .static_attributes
-            .get("rebasing_tokens")
+            .get("rebase_tokens")
         {
             if let Ok(vecs) = json_deserialize_address_list(bytes) {
                 vecs.into_iter()
@@ -166,7 +166,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
         let mut pool_state_builder =
             EVMPoolStateBuilder::new(id.clone(), tokens.clone(), adapter_contract_address)
                 .balances(component_balances)
-                .disable_overwrite_tokens(potential_rebasing_tokens)
+                .disable_overwrite_tokens(potential_rebase_tokens)
                 .account_balances(account_balances)
                 .adapter_contract_bytecode(adapter_bytecode)
                 .involved_contracts(involved_contracts)
