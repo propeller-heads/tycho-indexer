@@ -32,7 +32,6 @@ use crate::{
     services::{
         cache::RpcCache,
         deltas_buffer::{PendingDeltasBuffer, PendingDeltasError},
-        rpc::RpcError::Pagination,
     },
 };
 
@@ -1097,7 +1096,7 @@ pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("protocol_system", &body.protocol_system);
 
     if body.pagination.page_size > 100 {
-        return Err(Pagination(100));
+        return Err(RpcError::Pagination(100));
     }
 
     // Call the handler to get the state
@@ -1140,7 +1139,7 @@ pub async fn tokens<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("page_size", body.pagination.page_size);
 
     if body.pagination.page_size > 3000 {
-        return Err(Pagination(3000))
+        return Err(RpcError::Pagination(3000))
     }
 
     // Call the handler to get tokens
@@ -1184,7 +1183,7 @@ pub async fn protocol_components<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("protocol_system", &body.protocol_system);
 
     if body.pagination.page_size > 500 {
-        return Err(Pagination(500));
+        return Err(RpcError::Pagination(500));
     }
 
     // Call the handler to get tokens
@@ -1227,7 +1226,7 @@ pub async fn protocol_state<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("protocol_system", &body.protocol_system);
 
     if body.pagination.page_size > 100 {
-        return Err(Pagination(100));
+        return Err(RpcError::Pagination(100));
     }
 
     // Call the handler to get protocol states
@@ -1269,7 +1268,7 @@ pub async fn protocol_systems<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("page_size", body.pagination.page_size);
 
     if body.pagination.page_size > 100 {
-        return Err(Pagination(100));
+        return Err(RpcError::Pagination(100));
     }
 
     // Call the handler to get protocol systems
@@ -1349,7 +1348,7 @@ pub async fn traced_entry_points<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("page_size", body.pagination.page_size);
 
     if body.pagination.page_size > 100 {
-        return Err(Pagination(100));
+        return Err(RpcError::Pagination(100));
     }
 
     // Call the handler to get traced entry points
