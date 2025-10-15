@@ -818,8 +818,9 @@ impl TestRunner {
 
                         // Skip if amount is zero
                         if amount_in.is_zero() {
-                            info!("Amount in multiplied by percentage {percentage} is zero. Skipping pool {id}.");
-                            continue;
+                            return Err(miette!(
+                                "Amount in multiplied by percentage {percentage} is zero for pool {id}."
+                            ));
                         }
 
                         let amount_out_result = state
