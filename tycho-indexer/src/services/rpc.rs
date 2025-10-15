@@ -1294,9 +1294,9 @@ pub async fn protocol_systems<G: Gateway, T: EntryPointTracer>(
     post,
     path = "/v1/component_tvl",
     responses(
-        (status = 200, description = "OK", body = ProtocolComponentTvlRequestResponse),
+        (status = 200, description = "OK", body = ComponentTvlRequestResponse),
     ),
-    request_body = ProtocolComponentTvlRequestBody,
+    request_body = ComponentTvlRequestBody,
     security(
          ("apiKey" = [])
     ),

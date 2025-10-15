@@ -15,14 +15,15 @@ use tokio::task::JoinHandle;
 use tracing::info;
 use tycho_common::{
     dto::{
-        AccountUpdate, BlockParam, Chain, ChangeType, ComponentTvlRequestBody,
-        ComponentTvlRequestResponse, ContractId, Health, PaginationParams, PaginationResponse,
-        ProtocolComponent, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
-        ProtocolId, ProtocolStateDelta, ProtocolStateRequestBody, ProtocolStateRequestResponse,
-        ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse, ResponseAccount,
-        ResponseProtocolState, ResponseToken, StateRequestBody, StateRequestResponse,
-        TokensRequestBody, TokensRequestResponse, TracedEntryPointRequestBody,
-        TracedEntryPointRequestResponse, VersionParam,
+        AccountOverrides, AccountUpdate, BlockParam, Chain, ChangeType, ComponentTvlRequestBody,
+        ComponentTvlRequestResponse, ContractId, EntryPoint, EntryPointWithTracingParams, Health,
+        PaginationParams, PaginationResponse, ProtocolComponent, ProtocolComponentRequestResponse,
+        ProtocolComponentsRequestBody, ProtocolId, ProtocolStateDelta, ProtocolStateRequestBody,
+        ProtocolStateRequestResponse, ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse,
+        RPCTracerParams, ResponseAccount, ResponseProtocolState, ResponseToken, StateRequestBody,
+        StateRequestResponse, StorageOverride, TokensRequestBody, TokensRequestResponse,
+        TracedEntryPointRequestBody, TracedEntryPointRequestResponse, TracingParams, TracingResult,
+        VersionParam,
     },
     storage::Gateway,
 };
@@ -154,6 +155,13 @@ where
                 schemas(ProtocolSystemsRequestResponse),
                 schemas(ComponentTvlRequestBody),
                 schemas(ComponentTvlRequestResponse),
+                schemas(EntryPoint),
+                schemas(EntryPointWithTracingParams),
+                schemas(TracingParams),
+                schemas(TracingResult),
+                schemas(RPCTracerParams),
+                schemas(AccountOverrides),
+                schemas(StorageOverride),
             ),
             modifiers(&SecurityAddon),
         )]

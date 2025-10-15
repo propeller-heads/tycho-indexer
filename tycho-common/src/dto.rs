@@ -1189,6 +1189,7 @@ pub struct ProtocolComponentsRequestBody {
     /// ReorgBuffers
     pub protocol_system: String,
     /// Filter by component ids
+    #[schema(value_type=Option<Vec<String>>)]
     #[serde(alias = "componentAddresses")]
     pub component_ids: Option<Vec<ComponentId>>,
     /// The minimum TVL of the protocol components to return, denoted in the chain's
@@ -1660,6 +1661,7 @@ pub struct TracedEntryPointRequestBody {
     /// ReorgBuffers
     pub protocol_system: String,
     /// Filter by component ids
+    #[schema(value_type = Option<Vec<String>>)]
     pub component_ids: Option<Vec<ComponentId>>,
     /// Max page size supported is 100
     #[serde(default)]
@@ -1685,11 +1687,13 @@ pub enum StorageOverride {
     /// Applies changes incrementally to the existing account storage.
     /// Only modifies the specific storage slots provided in the map while
     /// preserving all other storage slots.
+    #[schema(value_type=HashMap<String, String>)]
     Diff(BTreeMap<StoreKey, StoreVal>),
 
     /// Completely replaces the account's storage state.
     /// Only the storage slots provided in the map will exist after the operation,
     /// and any existing storage slots not included will be cleared/zeroed.
+    #[schema(value_type=HashMap<String, String>)]
     Replace(BTreeMap<StoreKey, StoreVal>),
 }
 
@@ -1712,8 +1716,10 @@ impl From<models::blockchain::StorageOverride> for StorageOverride {
 pub struct AccountOverrides {
     /// Storage slots to override
     pub slots: Option<StorageOverride>,
+    #[schema(value_type=Option<String>)]
     /// Native token balance override
     pub native_balance: Option<Balance>,
+    #[schema(value_type=Option<String>)]
     /// Contract code override
     pub code: Option<Code>,
 }
@@ -1764,7 +1770,7 @@ impl From<models::blockchain::RPCTracerParams> for RPCTracerParams {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone, Hash, DeepSizeOf)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone, Hash, DeepSizeOf, ToSchema)]
 #[serde(tag = "method", rename_all = "lowercase")]
 pub enum TracingParams {
     /// Uses RPC calls to retrieve the called addresses and retriggers
@@ -1923,6 +1929,7 @@ impl From<models::blockchain::TracingResult> for TracingResult {
 pub struct TracedEntryPointRequestResponse {
     /// Map of protocol component id to a list of a tuple containing each entry point with its
     /// tracing parameters and its corresponding tracing results.
+    #[schema(value_type = HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>)]
     pub traced_entry_points:
         HashMap<ComponentId, Vec<(EntryPointWithTracingParams, TracingResult)>>,
     pub pagination: PaginationResponse,
@@ -1987,6 +1994,7 @@ pub struct AddEntryPointRequestBody {
     #[serde(default)]
     pub block_hash: Bytes,
     /// The map of component ids to their tracing params to insert
+    #[schema(value_type = Vec<(String, Vec<EntryPointWithTracingParams>)>)]
     pub entry_points_with_tracing_data: Vec<(ComponentId, Vec<EntryPointWithTracingParams>)>,
 }
 
@@ -1994,6 +2002,7 @@ pub struct AddEntryPointRequestBody {
 pub struct AddEntryPointRequestResponse {
     /// Map of protocol component id to a list of a tuple containing each entry point with its
     /// tracing parameters and its corresponding tracing results.
+    #[schema(value_type = HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>)]
     pub traced_entry_points:
         HashMap<ComponentId, Vec<(EntryPointWithTracingParams, TracingResult)>>,
 }
