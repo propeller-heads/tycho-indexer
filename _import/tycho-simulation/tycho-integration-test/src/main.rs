@@ -426,7 +426,7 @@ async fn process_state(
                     block.header.number,
                     &token_in.address,
                     &token_out.address,
-                    e.to_string(),
+                    format_error_chain(&e),
                 );
                 continue;
             }
@@ -477,7 +477,7 @@ async fn process_state(
                     &token_in.address,
                     &token_out.address,
                     &amount_in,
-                    e.to_string(),
+                    format_error_chain(&e),
                 );
                 continue;
             }
