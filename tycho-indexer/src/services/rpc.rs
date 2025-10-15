@@ -110,36 +110,38 @@ where
         pending_deltas: Option<Arc<dyn PendingDeltasBuffer + Send + Sync>>,
         tracer: T,
     ) -> Self {
+        const ONE_MB: u64 = 1_024 * 1_024;
+        const HUNDRED_MB: u64 = ONE_MB * 100;
+        const ONE_GB: u64 = ONE_MB * 1_024;
+
         let token_cache = RpcCache::<dto::TokensRequestBody, dto::TokensRequestResponse>::new(
             "token",
-            50,
+            ONE_GB,
             7 * 60,
         );
 
         // Create contract storage cache with a weigher to limit memory usage
         let contract_storage_cache =
-            RpcCache::<dto::StateRequestBody, dto::StateRequestResponse>::builder(
+            RpcCache::<dto::StateRequestBody, dto::StateRequestResponse>::new(
                 "contract_storage",
-                1024 * 1024 * 1024, // 1 GiB capacity in bytes
+                ONE_GB,
                 7 * 60,
-            )
-            .with_memory_size()
-            .build();
+            );
 
         let protocol_state_cache = RpcCache::<
             dto::ProtocolStateRequestBody,
             dto::ProtocolStateRequestResponse,
-        >::new("protocol_state", 20, 7 * 60);
+        >::new("protocol_state", HUNDRED_MB, 7 * 60);
 
         let component_cache = RpcCache::<
             dto::ProtocolComponentsRequestBody,
             dto::ProtocolComponentRequestResponse,
-        >::new("protocol_components", 100, 7 * 60);
+        >::new("protocol_components", ONE_GB, 7 * 60);
 
         let traced_entry_point_cache = RpcCache::<
             dto::TracedEntryPointRequestBody,
             dto::TracedEntryPointRequestResponse,
-        >::new("traced_entry_points", 100, 7 * 60);
+        >::new("traced_entry_points", HUNDRED_MB, 7 * 60);
 
         Self {
             db_gateway,
@@ -157,7 +159,7 @@ where
     async fn get_contract_state(
         &self,
         request: &dto::StateRequestBody,
-    ) -> Result<dto::StateRequestResponse, RpcError> {
+    ) -> Result<Arc<dto::StateRequestResponse>, RpcError> {
         if let Some(ref contract_ids) = request.contract_ids {
             info!(
                 n_contract_ids = contract_ids.len(),
@@ -376,7 +378,7 @@ where
     async fn get_protocol_state(
         &self,
         request: &dto::ProtocolStateRequestBody,
-    ) -> Result<dto::ProtocolStateRequestResponse, RpcError> {
+    ) -> Result<Arc<dto::ProtocolStateRequestResponse>, RpcError> {
         if let Some(ref component_ids) = request.protocol_ids {
             info!(
                 n_component_ids = component_ids.len(),
@@ -588,7 +590,7 @@ where
     async fn get_tokens(
         &self,
         request: &dto::TokensRequestBody,
-    ) -> Result<dto::TokensRequestResponse, RpcError> {
+    ) -> Result<Arc<dto::TokensRequestResponse>, RpcError> {
         let response = self
             .token_cache
             .get(request.clone(), |r: dto::TokensRequestBody| async {
@@ -668,7 +670,7 @@ where
     async fn get_protocol_components(
         &self,
         request: &dto::ProtocolComponentsRequestBody,
-    ) -> Result<dto::ProtocolComponentRequestResponse, RpcError> {
+    ) -> Result<Arc<dto::ProtocolComponentRequestResponse>, RpcError> {
         if let Some(ref component_ids) = request.component_ids {
             info!(
                 n_component_ids = component_ids.len(),
@@ -827,7 +829,7 @@ where
     async fn get_traced_entry_points(
         &self,
         request: &dto::TracedEntryPointRequestBody,
-    ) -> Result<dto::TracedEntryPointRequestResponse, RpcError> {
+    ) -> Result<Arc<dto::TracedEntryPointRequestResponse>, RpcError> {
         if let Some(ref component_ids) = request.component_ids {
             info!(
                 n_component_ids = component_ids.len(),
@@ -2305,7 +2307,9 @@ mod tests {
         let mut traced_entry_points = req_handler
             .get_traced_entry_points(&request)
             .await
-            .unwrap();
+            .unwrap()
+            .as_ref()
+            .clone();
 
         let expected_rpc_result = HashMap::from([(
             component_id_a.clone(),
@@ -2366,7 +2370,9 @@ mod tests {
         let mut traced_entry_points_second_request = req_handler
             .get_traced_entry_points(&request)
             .await
-            .unwrap();
+            .unwrap()
+            .as_ref()
+            .clone();
 
         // One protocol component returned
         assert_eq!(
@@ -2497,7 +2503,9 @@ mod tests {
         let mut traced_entry_points = req_handler
             .get_traced_entry_points(&request)
             .await
-            .unwrap();
+            .unwrap()
+            .as_ref()
+            .clone();
 
         let expected_rpc_result = HashMap::from([(
             component_id_a.clone(),
