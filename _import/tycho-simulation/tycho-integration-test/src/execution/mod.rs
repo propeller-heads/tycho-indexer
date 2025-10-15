@@ -24,7 +24,6 @@ mod traces;
 
 pub async fn simulate_swap_transaction(
     rpc_tools: &RPCTools,
-    simulation_id: &str,
     solution: &Solution,
     transaction: &Transaction,
     block: &Block,
@@ -75,7 +74,7 @@ pub async fn simulate_swap_transaction(
 
     match result {
         execution_simulator::SimulationResult::Success { return_data, gas_used } => {
-            info!("[{simulation_id}] Transaction succeeded, gas used: {gas_used}");
+            info!("Transaction succeeded, gas used: {gas_used}");
             let amount_out = U256::abi_decode(&return_data).map_err(|e| {
                 (
                     miette!("Failed to decode swap amount: {e:?}"),
