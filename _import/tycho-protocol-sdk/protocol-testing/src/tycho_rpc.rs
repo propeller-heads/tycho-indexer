@@ -106,20 +106,35 @@ impl TychoClient {
         protocol_system: &str,
         chain: Chain,
     ) -> Result<Vec<ResponseAccount>, RpcError> {
-        let request_body = StateRequestBody {
-            contract_ids: None,
-            protocol_system: protocol_system.to_string(),
-            version: Default::default(),
-            chain,
-            pagination: PaginationParams { page: 0, page_size: 100 },
-        };
+        let mut all_accounts = Vec::new();
+        let mut page = 0;
+        let page_size = 100;
 
-        let contract_states = self
-            .http_client
-            .get_contract_state(&request_body)
-            .await?;
+        loop {
+            let request_body = StateRequestBody {
+                contract_ids: None,
+                protocol_system: protocol_system.to_string(),
+                version: Default::default(),
+                chain,
+                pagination: PaginationParams { page, page_size },
+            };
 
-        Ok(contract_states.accounts)
+            let response = self
+                .http_client
+                .get_contract_state(&request_body)
+                .await?;
+
+            let returned_count = response.accounts.len();
+            all_accounts.extend(response.accounts);
+
+            if returned_count < page_size as usize {
+                break;
+            }
+
+            page += 1;
+        }
+
+        Ok(all_accounts)
     }
 
     pub async fn get_tokens(
