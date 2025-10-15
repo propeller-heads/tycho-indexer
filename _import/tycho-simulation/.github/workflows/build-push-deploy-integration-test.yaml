@@ -1,4 +1,4 @@
-name: Build and Push Integration Test
+name: Build, Push and Deploy Integration Test
 
 on:
   workflow_dispatch:
