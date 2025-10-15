@@ -13,38 +13,22 @@ use deltas_buffer::PendingDeltasBuffer;
 use futures03::future::try_join_all;
 use tokio::task::JoinHandle;
 use tracing::info;
-use tycho_common::{
-    dto::{
-        AccountOverrides, AccountUpdate, BlockParam, Chain, ChangeType, ComponentTvlRequestBody,
-        ComponentTvlRequestResponse, ContractId, EntryPoint, EntryPointWithTracingParams, Health,
-        PaginationParams, PaginationResponse, ProtocolComponent, ProtocolComponentRequestResponse,
-        ProtocolComponentsRequestBody, ProtocolId, ProtocolStateDelta, ProtocolStateRequestBody,
-        ProtocolStateRequestResponse, ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse,
-        RPCTracerParams, ResponseAccount, ResponseProtocolState, ResponseToken, StateRequestBody,
-        StateRequestResponse, StorageOverride, TokensRequestBody, TokensRequestResponse,
-        TracedEntryPointRequestBody, TracedEntryPointRequestResponse, TracingParams, TracingResult,
-        VersionParam,
-    },
-    storage::Gateway,
-};
+use tycho_common::storage::Gateway;
 use tycho_ethereum::{
     rpc::EthereumRpcClient, services::entrypoint_tracer::tracer::EVMEntrypointService,
 };
-use utoipa::{
-    openapi::security::{ApiKey, ApiKeyValue, SecurityScheme},
-    Modify, OpenApi,
-};
+use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     extractor::{runner::ExtractorHandle, ExtractionError},
     services::{
-        deltas_buffer::PendingDeltas,
-        middleware::{compression_middleware, rpc_metrics_middleware},
+        api_docs::ApiDoc, deltas_buffer::PendingDeltas, middleware::{compression_middleware, rpc_metrics_middleware},
     },
 };
 
 mod access_control;
+mod api_docs;
 mod cache;
 mod deltas_buffer;
 mod middleware;
@@ -112,76 +96,6 @@ where
     pub fn run(
         self,
     ) -> Result<(ServerHandle, JoinHandle<Result<(), ExtractionError>>), ExtractionError> {
-        #[derive(OpenApi)]
-        #[openapi(
-            info(title = "Tycho-Indexer RPC",),
-            paths(
-                rpc::health,
-                rpc::protocol_systems,
-                rpc::tokens,
-                rpc::protocol_components,
-                rpc::traced_entry_points,
-                rpc::protocol_state,
-                rpc::contract_state,
-                rpc::component_tvl,
-            ),
-            components(
-                schemas(VersionParam),
-                schemas(BlockParam),
-                schemas(ContractId),
-                schemas(StateRequestResponse),
-                schemas(StateRequestBody),
-                schemas(Chain),
-                schemas(ResponseAccount),
-                schemas(TokensRequestBody),
-                schemas(TokensRequestResponse),
-                schemas(PaginationParams),
-                schemas(PaginationResponse),
-                schemas(ResponseToken),
-                schemas(ProtocolComponentsRequestBody),
-                schemas(ProtocolComponentRequestResponse),
-                schemas(ProtocolComponent),
-                schemas(ProtocolStateRequestBody),
-                schemas(TracedEntryPointRequestBody),
-                schemas(TracedEntryPointRequestResponse),
-                schemas(ProtocolStateRequestResponse),
-                schemas(AccountUpdate),
-                schemas(ProtocolId),
-                schemas(ResponseProtocolState),
-                schemas(ChangeType),
-                schemas(ProtocolStateDelta),
-                schemas(Health),
-                schemas(ProtocolSystemsRequestBody),
-                schemas(ProtocolSystemsRequestResponse),
-                schemas(ComponentTvlRequestBody),
-                schemas(ComponentTvlRequestResponse),
-                schemas(EntryPoint),
-                schemas(EntryPointWithTracingParams),
-                schemas(TracingParams),
-                schemas(TracingResult),
-                schemas(RPCTracerParams),
-                schemas(AccountOverrides),
-                schemas(StorageOverride),
-            ),
-            modifiers(&SecurityAddon),
-        )]
-        struct ApiDoc;
-
-        struct SecurityAddon;
-
-        impl Modify for SecurityAddon {
-            fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-                let components = openapi.components.as_mut().unwrap();
-                components.add_security_scheme(
-                    "apiKey",
-                    SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::with_description(
-                        "authorization",
-                        "Use 'sampletoken' as value for testing",
-                    ))),
-                );
-            }
-        }
-
         let open_api = ApiDoc::openapi();
 
         // If no extractors are registered, run the server without spawning extractor-related tasks.
