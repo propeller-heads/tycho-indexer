@@ -64,6 +64,17 @@ impl From<anyhow::Error> for RpcError {
 }
 
 impl ResponseError for RpcError {
+    fn status_code(&self) -> StatusCode {
+        match self {
+            RpcError::Storage(_) => StatusCode::NOT_FOUND,
+            RpcError::Parse(_) => StatusCode::BAD_REQUEST,
+            RpcError::Connection(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            RpcError::DeltasError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            RpcError::Pagination(_) => StatusCode::BAD_REQUEST,
+            RpcError::Unknown(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+
     fn error_response(&self) -> HttpResponse {
         match self {
             RpcError::Storage(e) => HttpResponse::NotFound().body(e.to_string()),
@@ -73,17 +84,6 @@ impl ResponseError for RpcError {
             RpcError::Pagination(e) => HttpResponse::BadRequest()
                 .body(format!("Page size must be less than or equal to {e}.")),
             RpcError::Unknown(e) => HttpResponse::InternalServerError().body(e.to_string()),
-        }
-    }
-
-    fn status_code(&self) -> StatusCode {
-        match self {
-            RpcError::Storage(_) => StatusCode::NOT_FOUND,
-            RpcError::Parse(_) => StatusCode::BAD_REQUEST,
-            RpcError::Connection(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            RpcError::DeltasError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            RpcError::Pagination(_) => StatusCode::BAD_REQUEST,
-            RpcError::Unknown(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
