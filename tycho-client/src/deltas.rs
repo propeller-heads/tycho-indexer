@@ -171,7 +171,7 @@ pub struct WsDeltasClient {
     /// The client will buffer this many messages incoming from the websocket
     /// before starting to drop them.
     ws_buffer_size: usize,
-    /// The client will buffer that many messages for each subscription before it starts droppping
+    /// The client will buffer that many messages for each subscription before it starts dropping
     /// them.
     subscription_buffer_size: usize,
     /// Notify tasks waiting for a connection to be established.
