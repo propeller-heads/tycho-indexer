@@ -120,7 +120,7 @@ mod tests {
     }
 
     #[test]
-    fn openapi_has_no_unresolved_refs() {
+    fn test_openapi_has_no_unresolved_refs() {
         let doc = ApiDoc::openapi();
         let json =
             serde_json::to_value(&doc).expect("OpenAPI document should serialize to JSON value");
