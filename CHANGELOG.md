@@ -1,3 +1,10 @@
+## [0.97.0](https://github.com/propeller-heads/tycho-indexer/compare/0.96.2...0.97.0) (2025-10-16)
+
+
+### Features
+
+* logging middleware ([#732](https://github.com/propeller-heads/tycho-indexer/issues/732)) ([6624db9](https://github.com/propeller-heads/tycho-indexer/commit/6624db9b628e6c721ba381827f574358db1d3add))
+
 ## [0.96.2](https://github.com/propeller-heads/tycho-indexer/compare/0.96.1...0.96.2) (2025-10-16)
 
 
