@@ -148,16 +148,16 @@ pub async fn run_cli() -> Result<(), String> {
     tracing::subscriber::set_global_default(subscriber)
         .map_err(|e| format!("Failed to set up logging subscriber: {e}"))?;
 
-    // Runs example if flag is set.
-    if args.example {
-        // Run a simple example of a block synchronizer.
-        //
-        // You need to port-forward tycho before running this:
+    // Build the list of exchanges.  When --example is provided, we seed the list with a fixed
+    // pair of well-known pools, otherwise we parse user supplied values (either plain exchange
+    // names or exchange-pool pairs in the {exchange}-{pool_address} format).
+    let exchanges: Vec<(String, Option<String>)> = if args.example {
+        // You will need to port-forward tycho to run the example:
         //
         // ```bash
         // kubectl port-forward -n dev-tycho deploy/tycho-indexer 8888:4242
         // ```
-        let exchanges = vec![
+        vec![
             (
                 "uniswap_v3".to_string(),
                 Some("0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640".to_string()),
@@ -166,29 +166,25 @@ pub async fn run_cli() -> Result<(), String> {
                 "uniswap_v2".to_string(),
                 Some("0xa478c2975ab1ea89e8196811f51a7b7ade33eb11".to_string()),
             ),
-        ];
-        run(exchanges, args).await?;
-        return Ok(());
-    }
-
-    // Parse exchange name and addresses from {exchange}-{pool_address} format.
-    let exchanges: Vec<(String, Option<String>)> = args
-        .exchange
-        .iter()
-        .filter_map(|e| {
-            if e.contains('-') {
-                let parts: Vec<&str> = e.split('-').collect();
-                if parts.len() == 2 {
-                    Some((parts[0].to_string(), Some(parts[1].to_string())))
+        ]
+    } else {
+        args.exchange
+            .iter()
+            .filter_map(|e| {
+                if e.contains('-') {
+                    let parts: Vec<&str> = e.split('-').collect();
+                    if parts.len() == 2 {
+                        Some((parts[0].to_string(), Some(parts[1].to_string())))
+                    } else {
+                        warn!("Ignoring invalid exchange format: {}", e);
+                        None
+                    }
                 } else {
-                    warn!("Ignoring invalid exchange format: {}", e);
-                    None
+                    Some((e.to_string(), None))
                 }
-            } else {
-                Some((e.to_string(), None))
-            }
-        })
-        .collect();
+            })
+            .collect()
+    };
 
     info!("Running with exchanges: {:?}", exchanges);
 
