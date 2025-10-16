@@ -112,13 +112,16 @@ struct CliArgs {
 impl CliArgs {
     fn validate(&self) -> Result<(), String> {
         // TVL thresholds must be set together - either both or neither
-        if self.remove_tvl_threshold.is_some() != self.add_tvl_threshold.is_some() {
-            return Err("Both remove_tvl_threshold and add_tvl_threshold must be set.".to_string());
-        } else if self.remove_tvl_threshold.is_some() &&
-            self.add_tvl_threshold.is_some() &&
-            self.remove_tvl_threshold.unwrap() >= self.add_tvl_threshold.unwrap()
-        {
-            return Err("remove_tvl_threshold must be less than add_tvl_threshold".to_string());
+        match (self.remove_tvl_threshold, self.add_tvl_threshold) {
+            (Some(remove), Some(add)) if remove >= add => {
+                return Err("remove_tvl_threshold must be less than add_tvl_threshold".to_string());
+            }
+            (Some(_), None) | (None, Some(_)) => {
+                return Err(
+                    "Both remove_tvl_threshold and add_tvl_threshold must be set.".to_string()
+                );
+            }
+            _ => {}
         }
 
         Ok(())
