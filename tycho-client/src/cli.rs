@@ -301,22 +301,20 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
 
     // Monitor the WebSocket, BlockSynchronizer and message printer futures.
     tokio::select! {
-        res = ws_jh => {
-            if let Err(e) = res {
-                error!("WebSocket connection dropped unexpectedly: {}", e);
-            }
-        }
-        res = sync_jh => {
-            if let Err(e) = res {
-                error!("BlockSynchronizer stopped unexpectedly: {}", e);
-            }
-        }
-        res = msg_printer => {
-            if let Err(e) = res {
-                error!("Message printer stopped unexpectedly: {}", e);
-            }
-        }
-    }
+        res = ws_jh => match res {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(e)) => Err(format!("WebSocket connection dropped unexpectedly: {e}")),
+            Err(join_err) => Err(format!("WebSocket task panicked: {join_err}")),
+        },
+        res = sync_jh => match res {
+            Ok(()) => Ok(()),
+            Err(join_err) => Err(format!("BlockSynchronizer task panicked: {join_err}")),
+        },
+        res = msg_printer => match res {
+            Ok(()) => Ok(()),
+            Err(join_err) => Err(format!("Message printer task panicked: {join_err}")),
+        },
+    }?;
 
     debug!("RX closed");
     Ok(())
