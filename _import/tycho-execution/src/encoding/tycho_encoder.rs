@@ -25,7 +25,7 @@ use crate::encoding::{
 /// Tycho is only responsible for generating the internal swap plan. **The user must encode the
 /// outer function call arguments themselves** and verify that they enforce correct and secure
 /// behavior.
-pub trait TychoEncoder {
+pub trait TychoEncoder: Send + Sync {
     /// Encodes a list of [`Solution`]s into [`EncodedSolution`]s, which include the function
     /// signature and internal swap call data.
     ///
