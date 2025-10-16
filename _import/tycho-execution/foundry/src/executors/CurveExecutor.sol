@@ -55,7 +55,9 @@ contract CurveExecutor is IExecutor, RestrictTransferFrom {
         payable
         returns (uint256)
     {
-        if (data.length != 85) revert CurveExecutor__InvalidDataLength();
+        if (data.length != 85) {
+            revert CurveExecutor__InvalidDataLength();
+        }
 
         (
             address tokenIn,
@@ -91,13 +93,15 @@ contract CurveExecutor is IExecutor, RestrictTransferFrom {
             // crypto or llamma
             if (tokenIn == nativeToken || tokenOut == nativeToken) {
                 // slither-disable-next-line arbitrary-send-eth
-                CryptoPoolETH(pool).exchange{value: ethAmount}(
-                    uint256(int256(i)), uint256(int256(j)), amountIn, 0, true
-                );
+                CryptoPoolETH(pool)
+                .exchange{
+                    value: ethAmount
+                }(uint256(int256(i)), uint256(int256(j)), amountIn, 0, true);
             } else {
-                CryptoPool(pool).exchange(
-                    uint256(int256(i)), uint256(int256(j)), amountIn, 0
-                );
+                CryptoPool(pool)
+                    .exchange(
+                        uint256(int256(i)), uint256(int256(j)), amountIn, 0
+                    );
             }
         }
 
@@ -149,11 +153,7 @@ contract CurveExecutor is IExecutor, RestrictTransferFrom {
         require(msg.sender.code.length != 0);
     }
 
-    function _balanceOf(address token)
-        internal
-        view
-        returns (uint256 balance)
-    {
+    function _balanceOf(address token) internal view returns (uint256 balance) {
         balance = token == nativeToken
             ? address(this).balance
             : IERC20(token).balanceOf(address(this));

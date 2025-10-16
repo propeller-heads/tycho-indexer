@@ -37,7 +37,9 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
         address _reactor,
         address _native_address
     ) {
-        if (_tychoRouter == address(0)) revert UniswapXFiller__AddressZero();
+        if (_tychoRouter == address(0)) {
+            revert UniswapXFiller__AddressZero();
+        }
         if (_reactor == address(0)) revert UniswapXFiller__AddressZero();
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -73,9 +75,8 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
         // The TychoRouter will take the input tokens from the filler
         if (tokenInApprovalNeeded) {
             // Native ETH input is not supported by UniswapX
-            IERC20(order.input.token).forceApprove(
-                tychoRouter, type(uint256).max
-            );
+            IERC20(order.input.token)
+                .forceApprove(tychoRouter, type(uint256).max);
         }
 
         // slither-disable-next-line low-level-calls
@@ -125,7 +126,9 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        if (receiver == address(0)) revert UniswapXFiller__AddressZero();
+        if (receiver == address(0)) {
+            revert UniswapXFiller__AddressZero();
+        }
 
         for (uint256 i = 0; i < tokens.length; i++) {
             // slither-disable-next-line calls-loop
@@ -144,7 +147,9 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        if (receiver == address(0)) revert UniswapXFiller__AddressZero();
+        if (receiver == address(0)) {
+            revert UniswapXFiller__AddressZero();
+        }
 
         uint256 amount = address(this).balance;
         if (amount > 0) {

@@ -2,8 +2,9 @@
 pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
-import {LibPrefixLengthEncodedByteArray} from
-    "../lib/bytes/LibPrefixLengthEncodedByteArray.sol";
+import {
+    LibPrefixLengthEncodedByteArray
+} from "../lib/bytes/LibPrefixLengthEncodedByteArray.sol";
 
 contract LibPrefixLengthEncodedByteArrayTest is Test {
     using LibPrefixLengthEncodedByteArray for bytes;
