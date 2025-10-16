@@ -155,7 +155,7 @@ mod tests {
     }
 
     #[actix_web::test]
-    async fn middleware_records_success_metrics_and_passes_response() {
+    async fn test_middleware_rpc_success() {
         let snapshotter = init_metrics();
 
         let app = test::init_service(
@@ -203,7 +203,7 @@ mod tests {
     }
 
     #[actix_web::test]
-    async fn middleware_recovers_from_handler_errors_and_records_failures() {
+    async fn test_middleware_rpc_failer() {
         let snapshotter = init_metrics();
 
         let expected_error = RpcError::Pagination(100);
