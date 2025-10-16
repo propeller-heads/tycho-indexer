@@ -292,10 +292,10 @@ where
                     .deep_size_of() as f64,
             );
 
+            // As the protocol cache is shared with other extractors, we only index it by chain
             gauge!(
                 "protocol_cache_size",
                 "chain" => self.chain.to_string(),
-                "extractor" => self.name.clone(),
             )
             .set(self.protocol_cache.size_of().await as f64);
 
