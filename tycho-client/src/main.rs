@@ -2,8 +2,8 @@ use tycho_client::cli::run_cli;
 
 #[tokio::main]
 async fn main() {
-    run_cli().await.unwrap_or_else(|e| {
+    if let Err(e) = run_cli().await {
         eprintln!("Error: {e}");
         std::process::exit(1);
-    });
+    }
 }
