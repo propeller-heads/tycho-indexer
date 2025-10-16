@@ -11,8 +11,7 @@ RUN ARCH=$(echo $TARGETPLATFORM | sed -e 's/\//_/g') && \
     curl -L  $LINK  | tar zxf - -C /usr/local/bin/
 RUN cargo install cargo-chef
 COPY rust-toolchain.toml .
-RUN rustup update 1.82
-RUN rustup set profile minimal && rustup install stable
+RUN rustup set profile minimal
 
 FROM chef AS planner
 COPY . .
