@@ -1,4 +1,4 @@
-FROM rust:1.82-bookworm AS chef
+FROM rust:1.88-bookworm AS chef
 ARG TARGETPLATFORM=linux/amd64
 WORKDIR /build
 RUN apt-get update && apt-get install -y libpq-dev jq
