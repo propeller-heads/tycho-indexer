@@ -362,7 +362,15 @@ async fn process_update(
     Ok(())
 }
 
-#[tracing::instrument(skip_all, fields(simulation_id=%simulation_id))]
+#[tracing::instrument(
+    skip_all,
+    fields(
+        simulation_id = %simulation_id,
+        protocol = %component.protocol_system,
+        component_id = %state_id,
+        block_number = %block.header.number,
+    )
+)]
 async fn process_state(
     simulation_id: &str,
     rpc_tools: RPCTools,
@@ -424,25 +432,19 @@ async fn process_state(
                 "Error getting limits for token_in: {}, and token_out: {}",
                 token_in.symbol, token_out.symbol
             )) {
-            Ok(limits) => limits,
+            Ok(limits) => {
+                metrics::record_get_limits_success(&component.protocol_system);
+                limits
+            }
             Err(e) => {
-                warn!(
-                    protocol = %component.protocol_system,
-                    component_id = %state_id,
-                    block = %block.header.number,
+                error!(
+                    event_type = "get_limits_failure",
                     token_in = %token_in.address,
                     token_out = %token_out.address,
-                    "{}", format_error_chain(&e)
+                    error = %format_error_chain(&e),
+                    "Get limits operation failed: {}", format_error_chain(&e)
                 );
-                metrics::record_get_limits_failure(
-                    simulation_id,
-                    &component.protocol_system,
-                    &state_id,
-                    block.header.number,
-                    &token_in.address,
-                    &token_out.address,
-                    format_error_chain(&e),
-                );
+                metrics::record_get_limits_failure(&component.protocol_system);
                 continue;
             }
         };
@@ -473,36 +475,33 @@ async fn process_state(
                 percentage * 100.0,
                 token_in.symbol,
             )) {
-            Ok(res) => res,
+            Ok(res) => {
+                metrics::record_get_amount_out_success(&component.protocol_system);
+                res
+            }
             Err(e) => {
-                warn!(
-                    protocol = %component.protocol_system,
-                    component_id = %state_id,
-                    block = %block.header.number,
+                error!(
+                    event_type = "get_amount_out_failure",
                     token_in = %token_in.address,
                     token_out = %token_out.address,
                     amount_in = %amount_in,
-                    "{}", format_error_chain(&e)
+                    error = %format_error_chain(&e),
+                    "Get amount out operation failed: {}", format_error_chain(&e)
                 );
-                metrics::record_get_amount_out_failure(
-                    simulation_id,
-                    &component.protocol_system,
-                    &state_id,
-                    block.header.number,
-                    &token_in.address,
-                    &token_out.address,
-                    &amount_in,
-                    format_error_chain(&e),
-                );
+                metrics::record_get_amount_out_failure(&component.protocol_system);
                 continue;
             }
         };
-        metrics::record_get_amount_out_duration(
-            simulation_id,
-            &component.protocol_system,
-            &state_id,
-            start_time.elapsed().as_secs_f64(),
+        let duration_seconds = start_time.elapsed().as_secs_f64();
+        info!(
+            event_type = "get_amount_out_duration",
+            token_in = %token_in.address,
+            token_out = %token_out.address,
+            amount_in = %amount_in,
+            duration_seconds = duration_seconds,
+            "Get amount out operation completed in {:.3}ms", duration_seconds * 1000.0
         );
+        metrics::record_get_amount_out_duration(&component.protocol_system, duration_seconds);
         let expected_amount_out = amount_out_result.amount;
         info!("Calculated amount_out: {expected_amount_out} {}", token_out.symbol);
 
@@ -525,12 +524,11 @@ async fn process_state(
         let simulated_amount_out =
             match simulate_swap_transaction(&rpc_tools, &solution, &transaction, block).await {
                 Ok(amount) => {
-                    metrics::record_simulation_execution_success(
-                        simulation_id,
-                        &component.protocol_system,
-                        &state_id,
-                        block.header.number,
+                    info!(
+                        event_type = "simulation_execution_success",
+                        "Simulation execution succeeded"
                     );
+                    metrics::record_simulation_execution_success(&component.protocol_system);
                     amount
                 }
                 Err((e, state_overwrites, metadata)) => {
@@ -563,9 +561,7 @@ async fn process_state(
                     };
 
                     error!(
-                        protocol = %component.protocol_system,
-                        component_id = %state_id,
-                        block = %block.header.number,
+                        event_type = "simulation_execution_failure",
                         error_message = %revert_reason,
                         error_name = %error_name,
                         tenderly_url = %tenderly_url,
@@ -573,14 +569,8 @@ async fn process_state(
                         "Failed to simulate swap: {error_msg}"
                     );
                     metrics::record_simulation_execution_failure(
-                        simulation_id,
                         &component.protocol_system,
-                        &state_id,
-                        block.header.number,
-                        revert_reason,
                         &error_name,
-                        &tenderly_url,
-                        &overwrites_string,
                     );
 
                     continue;
@@ -598,14 +588,13 @@ async fn process_state(
         };
         let slippage = slippage.to_f64().unwrap_or(0.0) / 100.0;
 
-        metrics::record_execution_slippage(
-            simulation_id,
-            &component.protocol_system,
-            &state_id,
-            block.header.number,
-            slippage,
+        info!(
+            event_type = "execution_slippage",
+            slippage_ratio = slippage,
+            "Execution slippage: {:.2}%",
+            slippage
         );
-        info!("Slippage: {:.2}%", slippage);
+        metrics::record_execution_slippage(&component.protocol_system, slippage);
 
         info!(
             "{} pool processed {state_id} from {} to {}",
