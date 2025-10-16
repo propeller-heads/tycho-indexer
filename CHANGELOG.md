@@ -1,3 +1,10 @@
+## [0.96.2](https://github.com/propeller-heads/tycho-indexer/compare/0.96.1...0.96.2) (2025-10-16)
+
+
+### Bug Fixes
+
+* RPC cache weighting and tidy memory metrics ([#731](https://github.com/propeller-heads/tycho-indexer/issues/731)) ([40a21f0](https://github.com/propeller-heads/tycho-indexer/commit/40a21f0d2ed29f20154d69389db15c9488f34f3b))
+
 ## [0.96.1](https://github.com/propeller-heads/tycho-indexer/compare/0.96.0...0.96.1) (2025-10-13)
 
 
