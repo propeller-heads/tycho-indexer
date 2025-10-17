@@ -1,3 +1,10 @@
+## [0.98.0](https://github.com/propeller-heads/tycho-indexer/compare/0.97.0...0.98.0) (2025-10-17)
+
+
+### Features
+
+* add cache entry count metric to RPC monitoring ([b6eb0b7](https://github.com/propeller-heads/tycho-indexer/commit/b6eb0b7b23866009f5d29eea82a7e89db80408e0))
+
 ## [0.97.0](https://github.com/propeller-heads/tycho-indexer/compare/0.96.2...0.97.0) (2025-10-16)
 
 
