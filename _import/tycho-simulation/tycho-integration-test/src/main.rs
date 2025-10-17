@@ -213,7 +213,8 @@ async fn run(cli: Cli) -> miette::Result<()> {
             .clone()
             .acquire_owned()
             .await
-            .unwrap();
+            .into_diagnostic()
+            .wrap_err("Failed to acquire permit")?;
         tokio::spawn(async move {
             if let Err(e) = process_update(cli, chain, rpc_tools, protocol_pairs, &update).await {
                 warn!("{}", format_error_chain(&e));
@@ -348,7 +349,8 @@ async fn process_update(
             .clone()
             .acquire_owned()
             .await
-            .unwrap();
+            .into_diagnostic()
+            .wrap_err("Failed to acquire permit")?;
         tokio::spawn(async move {
             let simulation_id = generate_simulation_id(&component.protocol_system, &state_id);
             process_state(&simulation_id, rpc_tools, chain, component, &block, state_id, state)
