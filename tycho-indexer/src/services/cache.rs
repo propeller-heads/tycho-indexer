@@ -115,6 +115,8 @@ where
         debug!(cache_weighted_size, name = self.name, "CacheWeightedSize");
         gauge!("rpc_cache_weighted_size", "cache" => self.name.clone())
             .set(cache_weighted_size as f64);
+        gauge!("rpc_cache_entry_count", "cache" => self.name.clone())
+            .set(self.cache.entry_count() as f64);
 
         let value = Arc::new(ValueWithSize::placeholder().await);
         let value_update_guard = value.value.lock().await;
