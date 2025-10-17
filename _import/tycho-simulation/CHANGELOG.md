@@ -1,3 +1,24 @@
+## [0.182.0](https://github.com/propeller-heads/tycho-simulation/compare/0.181.9...0.182.0) (2025-10-17)
+
+
+### Features
+
+* add more context to the "component not found" logs and when updating the protocols_pairs cache ([58e9bd2](https://github.com/propeller-heads/tycho-simulation/commit/58e9bd27f3ec315cdb4711e53af65f80a890398b))
+
+
+### Bug Fixes
+
+* handle semaphore acquire error ([2ebb0b6](https://github.com/propeller-heads/tycho-simulation/commit/2ebb0b609341ed1b684b90a91730a9a28324a525))
+
+## [0.181.9](https://github.com/propeller-heads/tycho-simulation/compare/0.181.8...0.181.9) (2025-10-15)
+
+
+### Bug Fixes
+
+* pass the full formatted error to the metrics ([5d6688f](https://github.com/propeller-heads/tycho-simulation/commit/5d6688f957e3bcf2a02000baa9d2130f2446ed76))
+
+## [0.181.8](https://github.com/propeller-heads/tycho-simulation/compare/0.181.7...0.181.8) (2025-10-15)
+
 ## [0.181.7](https://github.com/propeller-heads/tycho-simulation/compare/0.181.6...0.181.7) (2025-10-14)
 
 
