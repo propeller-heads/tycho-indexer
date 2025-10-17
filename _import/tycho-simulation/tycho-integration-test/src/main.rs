@@ -264,8 +264,18 @@ async fn process_update(
             let mut pairs = protocol_pairs
                 .write()
                 .map_err(|e| miette!("Failed to acquire write lock on protocol pairs: {e}"))?;
+            let prev_size = pairs.len();
             for (id, comp) in update.update.new_pairs.iter() {
                 pairs.put(id.clone(), comp.clone());
+            }
+            let new_size = pairs.len();
+            let cap = pairs.cap().get();
+            if new_size != prev_size {
+                info!(size=%new_size, capacity=%cap, "Protocol components cache updated");
+            }
+            if new_size == cap {
+                warn!(size=%new_size, capacity=%cap, "Protocol components cache reached capacity, \
+                least recently used items will be evicted on new insertions");
             }
         }
         // Record block processing latency
@@ -314,7 +324,9 @@ async fn process_update(
                 match pairs.get(id) {
                     Some(comp) => comp.clone(),
                     None => {
-                        warn!("Component {id:?} not found in protocol pairs");
+                        warn!(id=%id, "Component not found in cached protocol pairs. Potential causes: \
+                        there was an error decoding the component, the component was evicted from the cache, \
+                        or the component was never added to the cache. Skipping...");
                         continue;
                     }
                 }
@@ -322,7 +334,8 @@ async fn process_update(
             UpdateType::Rfq => match update.update.new_pairs.get(id) {
                 Some(comp) => comp.clone(),
                 None => {
-                    warn!("Component not found in RFQ pairs");
+                    warn!(id=%id, "Component not found in update's new pairs. Potential cause: \
+                    the `states` and `new_pairs` lists don't contain the same items. Skipping...");
                     continue;
                 }
             },
