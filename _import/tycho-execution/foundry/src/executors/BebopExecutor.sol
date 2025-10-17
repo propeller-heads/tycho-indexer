@@ -29,7 +29,9 @@ contract BebopExecutor is IExecutor, RestrictTransferFrom {
     constructor(address _bebopSettlement, address _permit2)
         RestrictTransferFrom(_permit2)
     {
-        if (_bebopSettlement == address(0)) revert BebopExecutor__ZeroAddress();
+        if (_bebopSettlement == address(0)) {
+            revert BebopExecutor__ZeroAddress();
+        }
         bebopSettlement = _bebopSettlement;
     }
 

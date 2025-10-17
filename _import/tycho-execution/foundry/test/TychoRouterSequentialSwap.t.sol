@@ -183,16 +183,13 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
 
         IAllowanceTransfer.PermitSingle memory emptyPermitSingle =
-        IAllowanceTransfer.PermitSingle({
-            details: IAllowanceTransfer.PermitDetails({
-                token: address(0),
-                amount: 0,
-                expiration: 0,
-                nonce: 0
-            }),
-            spender: address(0),
-            sigDeadline: 0
-        });
+            IAllowanceTransfer.PermitSingle({
+                details: IAllowanceTransfer.PermitDetails({
+                    token: address(0), amount: 0, expiration: 0, nonce: 0
+                }),
+                spender: address(0),
+                sigDeadline: 0
+            });
 
         bytes[] memory swaps = new bytes[](2);
         // WETH -> DAI
@@ -219,7 +216,9 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             )
         );
 
-        uint256 amountOut = tychoRouter.sequentialSwapPermit2{value: amountIn}(
+        uint256 amountOut = tychoRouter.sequentialSwapPermit2{
+            value: amountIn
+        }(
             amountIn,
             address(0),
             USDC_ADDR,
@@ -502,8 +501,9 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         // Approve permit2
         vm.startPrank(ALICE);
         IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
-        bytes memory callData =
-            loadCallDataFromFile("test_sequential_swap_strategy_encoder_unwrap");
+        bytes memory callData = loadCallDataFromFile(
+            "test_sequential_swap_strategy_encoder_unwrap"
+        );
         (bool success,) = tychoRouterAddr.call(callData);
 
         vm.stopPrank();

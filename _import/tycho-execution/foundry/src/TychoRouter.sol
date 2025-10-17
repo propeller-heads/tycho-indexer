@@ -93,9 +93,7 @@ contract TychoRouter is
         address indexed token, uint256 amount, address indexed receiver
     );
 
-    constructor(address _permit2, address weth)
-        RestrictTransferFrom(_permit2)
-    {
+    constructor(address _permit2, address weth) RestrictTransferFrom(_permit2) {
         if (_permit2 == address(0) || weth == address(0)) {
             revert TychoRouter__AddressZero();
         }
@@ -808,6 +806,7 @@ contract TychoRouter is
     /**
      * @dev Gets balance of a token for a given address. Supports both native ETH and ERC20 tokens.
      */
+    // forgefmt: disable-start
     function _balanceOf(address token, address owner)
         internal
         view
@@ -815,7 +814,7 @@ contract TychoRouter is
     {
         return
             token == address(0) ? owner.balance : IERC20(token).balanceOf(owner);
-    }
+    }// forgefmt: disable-end
 
     /**
      * @dev Verifies that the expected amount of output tokens was received by the receiver.
