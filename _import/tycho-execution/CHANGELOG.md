@@ -1,3 +1,11 @@
+## [0.130.2](https://github.com/propeller-heads/tycho-execution/compare/0.130.1...0.130.2) (2025-10-17)
+
+
+### Bug Fixes
+
+* Forge fmt was going crazy in this function ([40ea447](https://github.com/propeller-heads/tycho-execution/commit/40ea447d2dd2fedc9972d9fcd2cb8f56b9e44f8c))
+* Make TychoEncode Send + Sync ([ef0f9ab](https://github.com/propeller-heads/tycho-execution/commit/ef0f9ab959514e2c6dcb545cad2edbfeee863c15))
+
 ## [0.130.1](https://github.com/propeller-heads/tycho-execution/compare/0.130.0...0.130.1) (2025-10-09)
 
 
