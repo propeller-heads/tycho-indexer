@@ -227,7 +227,6 @@ impl TychoStreamBuilder {
         };
 
         // Initialize the WebSocket client
-        #[allow(unreachable_patterns)]
         let ws_client = match &self.websockets_retry_config {
             RetryConfiguration::Constant(config) => WsDeltasClient::new_with_reconnects(
                 &tycho_ws_url,
@@ -235,11 +234,6 @@ impl TychoStreamBuilder {
                 config.max_attempts,
                 config.cooldown,
             ),
-            _ => {
-                return Err(StreamError::SetUpError(
-                    "Unknown websocket configuration variant!".to_string(),
-                ));
-            }
         }
         .map_err(|e| StreamError::SetUpError(e.to_string()))?;
         let rpc_client = HttpRPCClient::new(&tycho_rpc_url, auth_key.as_deref())
@@ -263,7 +257,6 @@ impl TychoStreamBuilder {
         for (name, filter) in self.exchanges {
             info!("Registering exchange: {}", name);
             let id = ExtractorIdentity { chain: self.chain, name: name.clone() };
-            #[allow(unreachable_patterns)]
             let sync = match &self.state_sync_retry_config {
                 RetryConfiguration::Constant(retry_config) => ProtocolStateSynchronizer::new(
                     id.clone(),
@@ -277,11 +270,6 @@ impl TychoStreamBuilder {
                     ws_client.clone(),
                     self.block_time + self.timeout,
                 ),
-                _ => {
-                    return Err(StreamError::SetUpError(
-                        "Unknown state synchronizer configuration variant!".to_string(),
-                    ));
-                }
             };
             block_sync = block_sync.register_synchronizer(id, sync);
         }
