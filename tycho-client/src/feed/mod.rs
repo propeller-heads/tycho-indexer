@@ -698,8 +698,9 @@ where
                     debug!(%extractor_id, height=?&msg.header.number, "Synchronizer started successfully!");
                     // initially default all synchronizers to Ready
                     synchronizer.mark_ready(&msg.header);
-                    ready_sync_msgs.insert(extractor_id.name.clone(), msg.clone());
-                    Some(msg.header)
+                    let header = msg.header.clone();
+                    ready_sync_msgs.insert(extractor_id.name.clone(), msg);
+                    Some(header)
                 }
                 Ok(Some(Err(e))) => {
                     synchronizer.mark_errored(e);
