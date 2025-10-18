@@ -23,7 +23,9 @@ use utoipa_swagger_ui::SwaggerUi;
 use crate::{
     extractor::{runner::ExtractorHandle, ExtractionError},
     services::{
-        api_docs::ApiDoc, deltas_buffer::PendingDeltas, middleware::{compression_middleware, rpc_metrics_middleware},
+        api_docs::ApiDoc,
+        deltas_buffer::PendingDeltas,
+        middleware::{compression_middleware, rpc_metrics_middleware},
     },
 };
 
