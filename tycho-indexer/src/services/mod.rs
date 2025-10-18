@@ -20,7 +20,9 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     extractor::{runner::ExtractorHandle, ExtractionError},
-    services::{api_docs::ApiDoc, deltas_buffer::PendingDeltas, middleware::rpc_metrics_middleware},
+    services::{
+        api_docs::ApiDoc, deltas_buffer::PendingDeltas, middleware::rpc_metrics_middleware,
+    },
 };
 
 mod access_control;
