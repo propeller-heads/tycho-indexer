@@ -302,24 +302,35 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
     });
 
     // Monitor the WebSocket, BlockSynchronizer and message printer futures.
-    tokio::select! {
-        res = ws_jh => match res {
-            Ok(Ok(())) => Ok(()),
-            Ok(Err(e)) => Err(format!("WebSocket connection dropped unexpectedly: {e}")),
-            Err(join_err) => Err(format!("WebSocket task panicked: {join_err}")),
-        },
-        res = sync_jh => match res {
-            Ok(()) => Ok(()),
-            Err(join_err) => Err(format!("BlockSynchronizer task panicked: {join_err}")),
-        },
-        res = msg_printer => match res {
-            Ok(()) => Ok(()),
-            Err(join_err) => Err(format!("Message printer task panicked: {join_err}")),
-        },
-    }?;
+    let (failed_task, shutdown_reason) = tokio::select! {
+        res = ws_jh => (
+            "WebSocket",
+            extract_nested_error(res)
+        ),
+        res = sync_jh => (
+            "BlockSynchronizer",
+            extract_nested_error::<_, _, String>(Ok(res))
+            ),
+        res = msg_printer => (
+            "MessagePrinter",
+            extract_nested_error(res)
+        )
+    };
 
     debug!("RX closed");
-    Ok(())
+    Err(format!(
+        "{failed_task} task terminated: {}",
+        shutdown_reason.unwrap_or("unknown reason".to_string())
+    ))
+}
+
+#[inline]
+fn extract_nested_error<T, E1: ToString, E2: ToString>(
+    res: Result<Result<T, E1>, E2>,
+) -> Option<String> {
+    res.map_err(|e| e.to_string())
+        .and_then(|r| r.map_err(|e| e.to_string()))
+        .err()
 }
 
 #[cfg(test)]
