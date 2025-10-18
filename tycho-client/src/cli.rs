@@ -286,13 +286,19 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
         .map_err(|e| format!("Failed to start block synchronizer: {e}"))?;
 
     let msg_printer = tokio::spawn(async move {
-        while let Some(Ok(msg)) = rx.recv().await {
+        while let Some(result) = rx.recv().await {
+            let msg =
+                result.map_err(|e| format!("Message printer received synchronizer error: {e}"))?;
+
             if let Ok(msg_json) = serde_json::to_string(&msg) {
                 println!("{msg_json}");
             } else {
+                // Log the error but continue processing further messages.
                 error!("Failed to serialize FeedMessage");
-            }
+            };
         }
+
+        Ok::<(), String>(())
     });
 
     // Monitor the WebSocket, BlockSynchronizer and message printer futures.
