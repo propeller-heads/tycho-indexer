@@ -182,21 +182,17 @@ where
 
     /// Update the tracked contracts list with contracts associated with the given components
     fn update_contracts(&mut self, components: Vec<ComponentId>) {
-        // Only process components that are actually being tracked. Convert to HashSet for
-        // efficient lookup.
-        let tracked_component_ids = components
-            .into_iter()
-            .filter(|id| self.components.contains_key(id))
-            .collect::<HashSet<_>>();
+        // Only process components that are actually being tracked.
+        let mut tracked_component_ids = HashSet::new();
 
         // Add contracts from the components
-        for comp in &tracked_component_ids {
-            let component = self
-                .components
-                .get(comp)
-                .expect("Component should exist as it was filtered above");
-            self.contracts
-                .extend(component.contract_ids.iter().cloned());
+        for comp in components {
+            if let Some(component) = self.components.get(&comp) {
+                self.contracts
+                    .extend(component.contract_ids.iter().cloned());
+                tracked_component_ids.insert(comp);
+                continue;
+            }
         }
 
         // Identify entrypoints linked to the given components
