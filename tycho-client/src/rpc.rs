@@ -694,7 +694,7 @@ impl HttpRPCClient {
     /// If the error is RateLimited, this method will set the self.retry_after value so
     /// future requests wait until the rate limit has been reset.
     async fn handle_error_for_backoff(&self, e: RPCError) -> backoff::Error<RPCError> {
-        match &e {
+        match e {
             RPCError::ServerUnreachable(_) => {
                 backoff::Error::retry_after(e, self.server_restart_duration)
             }
@@ -702,8 +702,8 @@ impl HttpRPCClient {
                 let mut retry_after_guard = self.retry_after.write().await;
                 *retry_after_guard = Some(
                     retry_after_guard
-                        .unwrap_or(*until)
-                        .max(*until),
+                        .unwrap_or(until)
+                        .max(until),
                 );
 
                 if let Ok(duration) = until.duration_since(SystemTime::now()) {
