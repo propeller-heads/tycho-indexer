@@ -375,7 +375,7 @@ impl SynchronizerStream {
                         "Tried to poll from closed synchronizer during catch up.",
                     );
                     self.mark_closed();
-                    return Ok(None)
+                    return Ok(None);
                 }
                 Err(_) => {
                     debug!(%extractor_id, "Timed out waiting for catch-up");
