@@ -732,6 +732,7 @@ where
         // Determine the starting header for synchronization
         let start_header = block_history
             .latest()
+            // Safe, as we have checked this invariant with `check_streams`
             .ok_or(BlockHistoryError::EmptyHistory)?;
         info!(
             start_block=%start_header,
@@ -882,7 +883,7 @@ where
                 .iter()
                 .filter_map(SynchronizerStream::get_current_header)
                 .max_by_key(|b| b.number)
-                // We have checked this invariant with `check_streams`
+                // Safe, as we have checked this invariant with `check_streams`
                 .ok_or(BlockSynchronizerError::NoReadySynchronizers(
                     "Expected to have at least one synchronizer that is not stale or ended"
                         .to_string(),
