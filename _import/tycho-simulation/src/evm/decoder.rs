@@ -321,10 +321,11 @@ where
                     .snapshots
                     .get_vm_storage()
                     .iter()
-                    .map(|(key, value)| {
+                    .map(|(key, value)| -> Result<(Address, ResponseAccount), StreamDecodeError> {
                         let mut account: ResponseAccount = value.clone().into();
 
                         if state_guard.tokens.contains_key(key) {
+                            let original_address = account.address;
                             // To work with Tycho's token overwrites system, if we get account
                             // snapshots for a token we must handle them
                             // with a proxy/wrapper contract.
@@ -335,40 +336,45 @@ where
                             // Get or create a new token address
                             let proxy_addr = if !state_guard
                                 .proxy_token_addresses
-                                .contains_key(&account.address)
+                                .contains_key(&original_address)
                             {
                                 // Token does not have a proxy contract yet, create one
 
                                 // Assign original token contract to new address
                                 let new_address = generate_proxy_token_address(
                                     state_guard.proxy_token_addresses.len() as u32,
-                                );
+                                )?;
                                 state_guard
                                     .proxy_token_addresses
-                                    .insert(account.address, new_address);
+                                    .insert(original_address, new_address);
 
                                 // Add proxy token contract at original token address
                                 let proxy_state = create_proxy_token_account(
-                                    account.address,
+                                    original_address,
                                     new_address,
                                     &account.slots,
                                     value.chain.into(),
                                 );
-                                token_proxy_accounts.insert(account.address, proxy_state);
+                                token_proxy_accounts.insert(original_address, proxy_state);
                                 new_address
                             } else {
-                                *state_guard
+                                state_guard
                                     .proxy_token_addresses
-                                    .get(&account.address)
-                                    .unwrap()
+                                    .get(&original_address)
+                                    .copied()
+                                    .ok_or_else(|| {
+                                        StreamDecodeError::Fatal(
+                                            "Missing proxy token address".to_string(),
+                                        )
+                                    })?
                             };
 
                             // assign original token contract to new address
                             account.address = proxy_addr;
                         };
-                        (account.address, account)
+                        Ok((account.address, account))
                     })
-                    .collect();
+                    .collect::<Result<HashMap<_, _>, StreamDecodeError>>()?;
 
                 info!("Updating engine with {} contracts from snapshots", storage_by_address.len());
                 update_engine(
@@ -563,47 +569,53 @@ where
                 let account_update_by_address: HashMap<Address, AccountUpdate> = deltas
                     .account_updates
                     .iter()
-                    .map(|(key, value)| {
+                    .map(|(key, value)| -> Result<(Address, AccountUpdate), StreamDecodeError> {
                         let mut update: AccountUpdate = value.clone().into();
 
                         // TODO: Unify this different initialisation if we receive
                         //  state updates for the token with the usual case. Also
                         //  switch the if cases.
                         if state_guard.tokens.contains_key(key) {
+                            let original_address = update.address;
                             // If the account is a token, we need to handle it with a proxy contract
 
                             // Get or create a new token address
                             let proxy_addr = if !state_guard
                                 .proxy_token_addresses
-                                .contains_key(&update.address)
+                                .contains_key(&original_address)
                             {
                                 // Token does not have a proxy contract yet, create one
 
                                 // Assign original token contract to new address
                                 let new_address = generate_proxy_token_address(
                                     state_guard.proxy_token_addresses.len() as u32,
-                                );
+                                )?;
                                 state_guard
                                     .proxy_token_addresses
-                                    .insert(update.address, new_address);
+                                    .insert(original_address, new_address);
 
                                 // Create proxy token account
                                 let proxy_state = create_proxy_token_account(
-                                    update.address,
+                                    original_address,
                                     new_address,
                                     &update.slots,
                                     update.chain,
                                 );
-                                token_proxy_accounts.insert(update.address, proxy_state);
+                                token_proxy_accounts.insert(original_address, proxy_state);
 
                                 new_address
                             } else {
                                 // Token already has a proxy contract, update the original token
                                 // contract
-                                *state_guard
+                                state_guard
                                     .proxy_token_addresses
-                                    .get(&update.address)
-                                    .unwrap()
+                                    .get(&original_address)
+                                    .copied()
+                                    .ok_or_else(|| {
+                                        StreamDecodeError::Fatal(
+                                            "Missing proxy token address".to_string(),
+                                        )
+                                    })?
                             };
 
                             // TEMP PATCH (ENG-4993)
@@ -624,9 +636,9 @@ where
                             // assign original token contract to new address
                             update.address = proxy_addr;
                         };
-                        (update.address, update)
+                        Ok((update.address, update))
                     })
-                    .collect();
+                    .collect::<Result<HashMap<_, _>, StreamDecodeError>>()?;
                 drop(state_guard);
 
                 token_proxy_accounts.extend(account_update_by_address);
@@ -838,11 +850,24 @@ where
 }
 
 /// Generate a proxy token address for a given token index
-fn generate_proxy_token_address(idx: u32) -> Address {
+fn generate_proxy_token_address(idx: u32) -> Result<Address, StreamDecodeError> {
     let padded_idx = format!("{idx:x}");
     let padded_zeroes = "0".repeat(33 - padded_idx.len());
     let proxy_token_address = format!("{padded_zeroes}{padded_idx}BAdbaBe");
-    Address::from_slice(&hex::decode(proxy_token_address).expect("Should be a valid address"))
+    let decoded = hex::decode(proxy_token_address).map_err(|e| {
+        StreamDecodeError::Fatal(format!("Invalid proxy token address encoding: {e}"))
+    })?;
+
+    const ADDRESS_LENGTH: usize = 20;
+    if decoded.len() != ADDRESS_LENGTH {
+        return Err(StreamDecodeError::Fatal(format!(
+            "Invalid proxy token address length: expected {}, got {}",
+            ADDRESS_LENGTH,
+            decoded.len(),
+        )));
+    }
+
+    Ok(Address::from_slice(&decoded))
 }
 
 /// Create a proxy token account for a token at a given address
@@ -1152,11 +1177,13 @@ mod tests {
     #[test]
     fn test_generate_proxy_token_address() {
         let idx = 1;
-        let generated_address = generate_proxy_token_address(idx);
+        let generated_address =
+            generate_proxy_token_address(idx).expect("proxy token address should be valid");
         assert_eq!(generated_address, address!("000000000000000000000000000000001badbabe"));
 
         let idx = 123456;
-        let generated_address = generate_proxy_token_address(idx);
+        let generated_address =
+            generate_proxy_token_address(idx).expect("proxy token address should be valid");
         assert_eq!(generated_address, address!("00000000000000000000000000001e240badbabe"));
     }
 }
