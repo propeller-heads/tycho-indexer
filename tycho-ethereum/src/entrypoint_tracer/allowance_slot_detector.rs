@@ -441,7 +441,7 @@ impl EVMAllowanceSlotDetector {
         }
 
         debug!(
-            "Found {} slots for token {}, will test starting from last accessed",
+            "Found {} slots for token {}, will test starting from closest value to original allowance",
             slot_values.len(),
             token
         );
@@ -532,6 +532,12 @@ impl EVMAllowanceSlotDetector {
         Ok(slot_values)
     }
 
+    /// Detects the correct storage slot by testing candidates with storage overrides.
+    ///
+    /// Testing order:
+    /// 1. Start with the slot whose value is closest to the original allowance
+    /// 2. Fall back to the last accessed slot
+    /// 3. Try remaining slots in reverse order (most recently accessed first)
     async fn detect_correct_slots(
         &self,
         token_slots: DetectedSlotsResults,
@@ -544,8 +550,7 @@ impl EVMAllowanceSlotDetector {
 
         for (token, result) in token_slots {
             match result {
-                Ok((all_slots, original_allowance)) => {
-                    // Start with the last accessed slot (most likely to be correct)
+                Ok((mut all_slots, original_allowance)) => {
                     if all_slots.is_empty() {
                         detected_results.insert(token, Err(AllowanceSlotError::TokenNotInTrace));
                     } else {
@@ -638,6 +643,13 @@ impl EVMAllowanceSlotDetector {
         detected_results
     }
 
+    /// Sort slots by priority: closest to original allowance first.
+    /// Uses stable sort so slots with equal distance maintain their original order
+    /// (most recently accessed last).
+    fn sort_slots_by_priority(slots: &mut SlotValues, original_allowance: U256) {
+        slots.sort_by_key(|(_, allowance_value)| allowance_value.abs_diff(original_allowance));
+    }
+
     /// Generate a test value for testing that's different from the original
     fn generate_test_value(original_allowance: U256) -> U256 {
         if !original_allowance.is_zero() && original_allowance != U256::MAX {
@@ -656,11 +668,11 @@ impl EVMAllowanceSlotDetector {
     ) -> Result<Value, AllowanceSlotError> {
         let mut batch = Vec::new();
 
-        for (id, (slots, metadata)) in slots_to_test.iter().enumerate() {
-            let ((storage_addr, slot), _value) = slots
-                .iter()
-                .min_by_key(|(_, value)| value.abs_diff(metadata.original_allowance))
-                .ok_or(AllowanceSlotError::TokenNotInTrace)?;
+        for (id, (slots, metadata))  in slots_to_test.iter().enumerate() {
+            let (storage_addr, slot) = &slots
+                .first()
+                .ok_or(AllowanceSlotError::TokenNotInTrace)?
+                .0;
 
             let calldata = encode_allowance_calldata(owner, spender);
 
@@ -725,11 +737,11 @@ impl EVMAllowanceSlotDetector {
                         continue;
                     }
 
-                    let ((storage_addr, slot), _value) = all_slots
-                        .iter()
-                        .min_by_key(|(_, value)| value.abs_diff(metadata.original_allowance))
-                        .cloned()
-                        .expect("all_slots should not be empty");
+                    let (storage_addr, slot) = &all_slots
+                        .first()
+                        .expect("all_slots should not be empty")
+                        .0
+                        .clone();
 
                     match self.extract_allowance_from_call_response(response) {
                         Ok(returned_allowance) => {

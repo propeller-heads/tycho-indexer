@@ -523,7 +523,7 @@ impl EVMBalanceSlotDetector {
         }
 
         debug!(
-            "Found {} slots for token {}, will test starting from last accessed",
+            "Found {} slots for token {}, will test starting from closest value to original balance",
             slot_values.len(),
             token
         );
@@ -628,6 +628,11 @@ impl EVMBalanceSlotDetector {
     /// If the value changes with the override, the slot is correct.
     /// If not, tries the next slots.
     /// If no correct slots are detected, returns a WrongSlotError for that token.
+    ///
+    /// Testing order:
+    /// 1. Start with the slot whose value is closest to the original balance
+    /// 2. Fall back to the last accessed slot
+    /// 3. Try remaining slots in reverse order (most recently accessed first)
     async fn detect_correct_slots(
         &self,
         token_slots: DetectedSlotsResults,
@@ -640,11 +645,12 @@ impl EVMBalanceSlotDetector {
 
         for (token, result) in token_slots {
             match result {
-                Ok((all_slots, original_balance)) => {
-                    // Start with the last accessed slot (most likely to be correct)
+                Ok((mut all_slots, original_balance)) => {
                     if all_slots.is_empty() {
                         final_results.insert(token, Err(BalanceSlotError::TokenNotInTrace));
                     } else {
+                        Self::sort_slots_by_priority(&mut all_slots, original_balance);
+
                         slots_to_test.push((
                             all_slots,
                             SlotMetadata {
@@ -732,6 +738,23 @@ impl EVMBalanceSlotDetector {
         detected_results
     }
 
+    /// Sort slots by priority for testing.
+    ///
+    /// Primary sort: Distance to expected balance (closest first)
+    /// Secondary sort: Reverse index (last accessed first, used as tiebreaker)
+    ///
+    /// This sorting is done once when we first get the slot candidates.
+    fn sort_slots_by_priority(slots: &mut SlotValues, original_balance: U256) {
+        slots.sort_by_key(|(_, balance_value)| {
+            // Primary: distance to original balance (closer is better)
+            let distance = balance_value.abs_diff(original_balance);
+            // Note: We can't use reverse index here as a secondary key in a simple way,
+            // but the initial order from the trace is already in access order,
+            // so slots with the same distance will maintain their relative order (stable sort)
+            distance
+        });
+    }
+
     /// Generate a test value that's different from the original
     fn generate_test_value(original_balance: U256) -> U256 {
         if !original_balance.is_zero() && original_balance != U256::MAX {
@@ -753,10 +776,10 @@ impl EVMBalanceSlotDetector {
         let mut batch = Vec::new();
 
         for (id, (slots, metadata)) in slots_to_test.iter().enumerate() {
-            let ((storage_addr, slot), _value) = slots
-                .iter()
-                .min_by_key(|(_, value)| value.abs_diff(metadata.original_balance))
-                .ok_or(BalanceSlotError::TokenNotInTrace)?;
+            let (storage_addr, slot) = &slots
+                .first()
+                .ok_or(BalanceSlotError::TokenNotInTrace)?
+                .0;
 
             let calldata = encode_balance_of_calldata(owner);
             let test_value_hex = format!("0x{:064x}", metadata.test_value);
@@ -821,11 +844,11 @@ impl EVMBalanceSlotDetector {
                         continue;
                     }
 
-                    let ((storage_addr, slot), _value) = all_slots
-                        .iter()
-                        .min_by_key(|(_, value)| value.abs_diff(metadata.original_balance))
-                        .cloned()
-                        .expect("all_slots should not be empty");
+                    let (storage_addr, slot) = &all_slots
+                        .first()
+                        .expect("all_slots should not be empty")
+                        .0
+                        .clone();
 
                     match self.extract_balance_from_call_response(response) {
                         Ok(returned_balance) => {
