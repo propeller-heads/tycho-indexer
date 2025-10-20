@@ -1,3 +1,10 @@
+## [0.182.1](https://github.com/propeller-heads/tycho-simulation/compare/0.182.0...0.182.1) (2025-10-20)
+
+
+### Bug Fixes
+
+* Reduce cardinality of metrics and use structured logs for debugging ([5debef1](https://github.com/propeller-heads/tycho-simulation/commit/5debef1053c5f84866117e502fe4649d09d8fa6a))
+
 ## [0.182.0](https://github.com/propeller-heads/tycho-simulation/compare/0.181.9...0.182.0) (2025-10-17)
 
 
