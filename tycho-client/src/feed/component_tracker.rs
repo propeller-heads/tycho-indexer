@@ -191,7 +191,6 @@ where
                 self.contracts
                     .extend(component.contract_ids.iter().cloned());
                 tracked_component_ids.insert(comp);
-                continue;
             }
         }
 
