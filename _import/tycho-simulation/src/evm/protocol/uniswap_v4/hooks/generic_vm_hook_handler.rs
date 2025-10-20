@@ -300,12 +300,18 @@ where
                 storage_overwrites.insert(U256::from(0), original_contract_u256);
                 overwrites = Some(HashMap::from([(lens_address, storage_overwrites)]));
 
-                self.contract.engine.state.init_account(
-                    lens_address,
-                    info,
-                    None,
-                    true, // mocked
-                );
+                self.contract
+                    .engine
+                    .state
+                    .init_account(
+                        lens_address,
+                        info,
+                        None,
+                        true, // mocked
+                    )
+                    .map_err(|e| {
+                        SimulationError::FatalError(format!("Failed to initialize contract: {e:?}"))
+                    })?;
                 TychoSimulationContract::new(lens_address, self.contract.engine.clone())?
             } else {
                 TychoSimulationContract::new(contract_address, self.contract.engine.clone())?

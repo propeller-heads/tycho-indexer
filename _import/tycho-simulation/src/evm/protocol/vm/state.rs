@@ -853,7 +853,9 @@ mod tests {
     #[tokio::test]
     async fn test_init() {
         // Clear DB from this test to prevent interference from other tests
-        SHARED_TYCHO_DB.clear();
+        SHARED_TYCHO_DB
+            .clear()
+            .expect("Failed to cleared SHARED TX");
         let pool_state = setup_pool_state().await;
 
         let expected_capabilities = vec![
