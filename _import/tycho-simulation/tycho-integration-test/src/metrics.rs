@@ -2,10 +2,8 @@ use actix_web::{rt::System, web, App, HttpResponse, HttpServer, Responder};
 use metrics::{counter, describe_counter, describe_gauge, describe_histogram, gauge, histogram};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use miette::{Context, IntoDiagnostic, Result};
-use num_bigint::BigUint;
 use tracing::info;
 use tycho_client::feed::SynchronizerState;
-use tycho_common::Bytes;
 
 /// Initialize the metrics registry and describe all metrics
 pub fn initialize_metrics() {
@@ -18,8 +16,16 @@ pub fn initialize_metrics() {
         "Total number of failed get_limits operations"
     );
     describe_counter!(
+        "tycho_integration_simulation_get_limits_success_total",
+        "Total number of successful get_limits operations"
+    );
+    describe_counter!(
         "tycho_integration_simulation_get_amount_out_failures_total",
         "Total number of failed get_amount_out operations"
+    );
+    describe_counter!(
+        "tycho_integration_simulation_get_amount_out_success_total",
+        "Total number of successful get_amount_out operations"
     );
     describe_histogram!(
         "tycho_integration_simulation_get_amount_out_duration_seconds",
@@ -57,127 +63,81 @@ pub fn record_block_processing_duration(duration_seconds: f64) {
 }
 
 /// Record a failed get_limits operation
-pub fn record_get_limits_failure(
-    simulation_id: &str,
-    protocol: &str,
-    component_id: &str,
-    block_number: u64,
-    token_in: &Bytes,
-    token_out: &Bytes,
-    error_message: String,
-) {
+pub fn record_get_limits_failure(protocol: &str) {
     counter!(
         "tycho_integration_simulation_get_limits_failures_total",
-        "simulation_id" => simulation_id.to_string(),
         "protocol" => protocol.to_string(),
-        "component_id" => component_id.to_string(),
-        "block" => block_number.to_string(),
-        "token_in" => token_in.to_string(),
-        "token_out" => token_out.to_string(),
-        "error_message" => error_message,
+    )
+    .increment(1);
+}
+
+/// Record a successful get_limits operation
+pub fn record_get_limits_success(protocol: &str) {
+    counter!(
+        "tycho_integration_simulation_get_limits_success_total",
+        "protocol" => protocol.to_string(),
     )
     .increment(1);
 }
 
 /// Record a failed get_amount_out operation
-#[allow(clippy::too_many_arguments)]
-pub fn record_get_amount_out_failure(
-    simulation_id: &str,
-    protocol: &str,
-    component_id: &str,
-    block_number: u64,
-    token_in: &Bytes,
-    token_out: &Bytes,
-    amount_in: &BigUint,
-    error_message: String,
-) {
+pub fn record_get_amount_out_failure(protocol: &str) {
     counter!(
         "tycho_integration_simulation_get_amount_out_failures_total",
-        "simulation_id" => simulation_id.to_string(),
         "protocol" => protocol.to_string(),
-        "component_id" => component_id.to_string(),
-        "block" => block_number.to_string(),
-        "token_in" => token_in.to_string(),
-        "token_out" => token_out.to_string(),
-        "amount_in" => amount_in.to_string(),
-        "error_message" => error_message,
+    )
+    .increment(1);
+}
+
+/// Record a successful get_amount_out operation
+pub fn record_get_amount_out_success(protocol: &str) {
+    counter!(
+        "tycho_integration_simulation_get_amount_out_success_total",
+        "protocol" => protocol.to_string(),
     )
     .increment(1);
 }
 
 /// Record the duration of a get_amount_out operation
-pub fn record_get_amount_out_duration(
-    simulation_id: &str,
-    protocol: &str,
-    component_id: &str,
-    duration_seconds: f64,
-) {
+pub fn record_get_amount_out_duration(protocol: &str, duration_seconds: f64) {
     histogram!(
         "tycho_integration_simulation_get_amount_out_duration_seconds",
-        "simulation_id" => simulation_id.to_string(),
         "protocol" => protocol.to_string(),
-        "component_id" => component_id.to_string()
     )
     .record(duration_seconds);
 }
 
 /// Record a successful execution simulation
-pub fn record_simulation_execution_success(
-    simulation_id: &str,
-    protocol: &str,
-    component_id: &str,
-    block_number: u64,
-) {
+pub fn record_simulation_execution_success(protocol: &str) {
     counter!(
         "tycho_integration_simulation_execution_success_total",
-        "simulation_id" => simulation_id.to_string(),
         "protocol" => protocol.to_string(),
-        "component_id" => component_id.to_string(),
-        "block" => block_number.to_string()
     )
     .increment(1);
 }
 
 /// Record a failed execution simulation
-#[allow(clippy::too_many_arguments)]
-pub fn record_simulation_execution_failure(
-    simulation_id: &str,
-    protocol: &str,
-    component_id: &str,
-    block_number: u64,
-    error_message: &str,
-    error_name: &str,
-    tenderly_url: &str,
-    overwrites: &str,
-) {
+pub fn record_simulation_execution_failure(protocol: &str, error_name: &str) {
+    // We can add more categories here when we find new meaningful ones
+    let error_category = match error_name {
+        e if e.contains("Couldn't find balance storage slot") => "Storage slot not found",
+        e if e.contains("TychoRouter__NegativeSlippage") => "TychoRouter__NegativeSlippage",
+        _ => "other",
+    };
+
     counter!(
         "tycho_integration_simulation_execution_failures_total",
-        "simulation_id" => simulation_id.to_string(),
         "protocol" => protocol.to_string(),
-        "component_id" => component_id.to_string(),
-        "block" => block_number.to_string(),
-        "error_message" => error_message.to_string(),
-        "error_name" => error_name.to_string(),
-        "tenderly_url" => tenderly_url.to_string(),
-        "overwrites" => overwrites.to_string()
+        "error_category" => error_category.to_string(),
     )
     .increment(1);
 }
 
 /// Record slippage between simulation and execution
-pub fn record_execution_slippage(
-    simulation_id: &str,
-    protocol: &str,
-    component_id: &str,
-    block_number: u64,
-    slippage_ratio: f64,
-) {
+pub fn record_execution_slippage(protocol: &str, slippage_ratio: f64) {
     histogram!(
         "tycho_integration_simulation_execution_slippage_ratio",
-        "simulation_id" => simulation_id.to_string(),
         "protocol" => protocol.to_string(),
-        "component_id" => component_id.to_string(),
-        "block" => block_number.to_string(),
     )
     .record(slippage_ratio);
 }
