@@ -164,10 +164,10 @@ impl App {
                                 price: price.to_string(),
                             });
                         }
-                        Err(_) => {
+                        Err(e) => {
                             // Skip pools with spot_price errors
                             warn!(
-                                "Skipping pool {comp_id} due to spot_price error",
+                                "Skipping pool {comp_id} due to spot_price error: {e:?}",
                                 comp_id = comp.id
                             );
                         }

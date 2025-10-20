@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
 use alloy::primitives::{Address, U256};
+use itertools::Itertools;
 use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
-use tycho_common::{models::token::Token, Bytes};
+use tycho_common::{models::token::Token, simulation::protocol_sim::ProtocolSim, Bytes};
 
 use super::state::UniswapV4State;
 use crate::{
@@ -26,10 +27,10 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
     /// if the snapshot is missing any required attributes.
     async fn try_from_with_header(
         snapshot: ComponentWithState,
-        block: BlockHeader,
+        _block: BlockHeader,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
-        _decoder_context: &DecoderContext,
+        decoder_context: &DecoderContext,
     ) -> Result<Self, Self::Error> {
         let liq = snapshot
             .state
@@ -134,22 +135,14 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
                 } else {
                     return Err(InvalidSnapshotError::MissingAttribute(
                         "tick_liquidities".to_string(),
-                    ))
+                    ));
                 }
             }
         };
 
         ticks.sort_by_key(|tick| tick.index);
 
-        let mut state = UniswapV4State::new(
-            liquidity,
-            sqrt_price,
-            fees,
-            tick,
-            tick_spacing,
-            ticks,
-            block.clone(),
-        );
+        let mut state = UniswapV4State::new(liquidity, sqrt_price, fees, tick, tick_spacing, ticks);
 
         if let Some(hook_address) = hook_address {
             let hook_address = Address::from_slice(&hook_address.0);
@@ -162,18 +155,35 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
             merged_attributes.extend(snapshot.state.attributes.clone());
 
             let hook_params = HookCreationParams::new(
-                block,
                 hook_address,
                 account_balances,
                 all_tokens,
                 state.clone(),
                 &merged_attributes,
                 &snapshot.state.balances,
+                decoder_context.vm_traces,
             );
 
             let hook_handler = instantiate_hook_handler(&hook_address, hook_params)?;
             state.set_hook_handler(hook_handler);
+        };
+
+        for tokens in snapshot
+            .component
+            .tokens
+            .iter()
+            .permutations(2)
+        {
+            let (t0, t1) = (tokens[0], tokens[1]);
+            let token_in = all_tokens.get(t0).ok_or_else(|| {
+                InvalidSnapshotError::ValueError("Failed to get token".to_string())
+            })?;
+            let token_out = all_tokens.get(t1).ok_or_else(|| {
+                InvalidSnapshotError::ValueError("Failed to get token".to_string())
+            })?;
+            state.spot_price(token_in, token_out)?;
         }
+
         Ok(state)
     }
 }
@@ -262,17 +272,6 @@ mod tests {
         .await
         .unwrap();
 
-        let block = BlockHeader {
-            number: 22689129,
-            hash: Bytes::from_str(
-                "0x7763ea30d11aef68da729b65250c09a88ad00458c041064aad8c9a9dbf17adde",
-            )
-            .expect("Invalid block hash"),
-            parent_hash: Bytes::from(vec![0; 32]),
-            revert: false,
-            timestamp: 0,
-        };
-
         let fees = UniswapV4Fees::new(0, 0, 500);
         let expected = UniswapV4State::new(
             100,
@@ -281,7 +280,6 @@ mod tests {
             300,
             60,
             vec![TickInfo::new(60, 400)],
-            block,
         );
         assert_eq!(result, expected);
     }

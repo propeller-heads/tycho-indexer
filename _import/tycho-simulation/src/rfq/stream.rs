@@ -1,6 +1,3 @@
-// TODO: remove this
-#![allow(dead_code)]
-
 use std::collections::HashMap;
 
 use futures::{stream::select_all, StreamExt};
@@ -78,14 +75,12 @@ impl RFQStreamBuilder {
                             sync_states: HashMap::new(),
                         })
                         .await
-                        .map_err(|err| {
-                            SimulationError::FatalError(format!(
-                                "Failed to decode RFQ update from `{provider}`: {err}"
-                            ))
+                        .map_err(|e| {
+                            SimulationError::RecoverableError(format!("Decoding error: {e}"))
                         })?;
-                    tx.send(update).await.map_err(|err| {
-                        SimulationError::FatalError(format!(
-                            "Failed to forward RFQ update from `{provider}`: {err}"
+                    tx.send(update).await.map_err(|e| {
+                        SimulationError::RecoverableError(format!(
+                            "Failed to send update through channel: {e}"
                         ))
                     })?;
                 }
@@ -96,6 +91,7 @@ impl RFQStreamBuilder {
                 }
             }
         }
+
         Ok(())
     }
 
@@ -228,7 +224,7 @@ mod tests {
                         if error_at_time == current_time {
                             return Err(RFQError::FatalError(format!(
                                 "{name} stream is dying and can't go on"
-                            )));
+                            )))
                         };
                     };
                     let protocol_component =

@@ -1,4 +1,4 @@
-use std::{collections::HashSet, env, str::FromStr, sync::Arc};
+use std::{collections::HashSet, env, str::FromStr, sync::Arc, time::Duration};
 
 use alloy::{
     eips::BlockNumberOrTag,
@@ -187,7 +187,7 @@ async fn main() {
             Default::default(),
             user,
             key,
-            5u64,
+            Duration::from_secs(5),
         )
         .expect("Failed to create Hashflow RFQ client");
         rfq_stream_builder =

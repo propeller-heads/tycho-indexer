@@ -1,10 +1,8 @@
-#![allow(dead_code)]
 use std::{collections::HashMap, sync::RwLock};
 
 use alloy::primitives::{Address, U256};
 use lazy_static::lazy_static;
 use revm::{primitives::KECCAK_EMPTY, state::AccountInfo};
-use tycho_client::feed::BlockHeader;
 use tycho_common::{models::token::Token, simulation::errors::SimulationError, Bytes};
 
 use crate::{
@@ -23,30 +21,34 @@ use crate::{
 
 /// Parameters for creating a HookHandler.
 pub struct HookCreationParams<'a> {
-    block: BlockHeader,
     hook_address: Address,
     account_balances: &'a HashMap<Bytes, HashMap<Bytes, Bytes>>,
     all_tokens: &'a HashMap<Bytes, Token>,
+    #[allow(dead_code)]
     state: UniswapV4State,
     /// Attributes of the component. If an attribute's value is a `bigint`,
     /// it will be encoded as a big endian signed hex string. See ResponseProtocolState for more
     /// details.
     pub(crate) attributes: &'a HashMap<String, Bytes>,
+    #[allow(dead_code)]
     /// Mapping from token address to big-endian encoded balance for this component.
     balances: &'a HashMap<Bytes, Bytes>,
+    /// Show vm traces in simulations or not
+    vm_traces: Option<bool>,
 }
 
 impl<'a> HookCreationParams<'a> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        block: BlockHeader,
         hook_address: Address,
         account_balances: &'a HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &'a HashMap<Bytes, Token>,
         state: UniswapV4State,
         attributes: &'a HashMap<String, Bytes>,
         balances: &'a HashMap<Bytes, Bytes>,
+        vm_traces: Option<bool>,
     ) -> Self {
-        Self { block, hook_address, account_balances, all_tokens, state, attributes, balances }
+        Self { hook_address, account_balances, all_tokens, state, attributes, balances, vm_traces }
     }
 }
 
@@ -78,7 +80,19 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
             .get("limits_entrypoint")
             .and_then(|bytes| String::from_utf8(bytes.0.to_vec()).ok());
 
-        let engine = create_engine(SHARED_TYCHO_DB.clone(), false).map_err(|e| {
+        let is_euler = params
+            .attributes
+            .get("hook_identifier")
+            .and_then(|bytes| String::from_utf8(bytes.0.to_vec()).ok())
+            .unwrap_or_default() ==
+            "euler_v1";
+
+        let mut trace = false;
+        if let Some(vm_traces) = params.vm_traces {
+            trace = vm_traces
+        }
+
+        let engine = create_engine(SHARED_TYCHO_DB.clone(), trace).map_err(|e| {
             InvalidSnapshotError::VMError(SimulationError::FatalError(format!(
                 "Failed to create engine: {e:?}"
             )))
@@ -107,6 +121,7 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
             params.all_tokens.clone(),
             params.account_balances.clone(),
             limits_entrypoint,
+            is_euler,
         )
         .map_err(InvalidSnapshotError::VMError)?;
 

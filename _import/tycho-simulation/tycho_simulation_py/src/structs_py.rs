@@ -38,10 +38,6 @@ use tycho_simulation::{
 ///     simulation. It's a ``dict[account_address, dict[storage_slot, storage_value]]``.
 /// gas_limit: Optional[int]
 ///     Limit of gas to be used by the transaction
-/// block_number: int
-///     Block number available to the transaction
-/// timestamp: int
-///     Timestamp value available to the transaction
 #[pyclass]
 #[derive(Clone, Debug)]
 pub struct SimulationParameters {
@@ -57,18 +53,12 @@ pub struct SimulationParameters {
     pub overrides: Option<HashMap<String, HashMap<BigUint, BigUint>>>,
     #[pyo3(get)]
     pub gas_limit: Option<u64>,
-    #[pyo3(get)]
-    pub block_number: Option<u64>,
-    #[pyo3(get)]
-    pub timestamp: Option<u64>,
 }
 
 #[pymethods]
 impl SimulationParameters {
     #[new]
-    #[pyo3(
-        text_signature = "(caller, to, data, value, overrides=None, gas_limit=None, block_number=0, timestamp=0)"
-    )]
+    #[pyo3(text_signature = "(caller, to, data, value, overrides=None, gas_limit=None)")]
     #[allow(clippy::too_many_arguments)]
     fn new(
         caller: String,
@@ -77,10 +67,8 @@ impl SimulationParameters {
         value: BigUint,
         overrides: Option<HashMap<String, HashMap<BigUint, BigUint>>>,
         gas_limit: Option<u64>,
-        block_number: Option<u64>,
-        timestamp: Option<u64>,
     ) -> Self {
-        Self { caller, to, data, value, overrides, gas_limit, block_number, timestamp }
+        Self { caller, to, data, value, overrides, gas_limit }
     }
 
     fn __repr__(&self) -> String {
@@ -117,8 +105,6 @@ impl From<SimulationParameters> for simulation::SimulationParameters {
             value: U256::from_be_slice(params.value.to_bytes_be().as_slice()),
             overrides,
             gas_limit: params.gas_limit,
-            block_number: params.block_number.unwrap_or(0),
-            timestamp: params.timestamp.unwrap_or(0),
             transient_storage: None,
         }
     }

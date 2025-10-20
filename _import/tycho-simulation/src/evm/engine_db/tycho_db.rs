@@ -298,6 +298,10 @@ impl EngineDatabaseInterface for PreCachedDB {
 
         Ok(())
     }
+
+    fn get_current_block(&self) -> Option<BlockHeader> {
+        self.inner.read().unwrap().block.clone()
+    }
 }
 
 impl DatabaseRef for PreCachedDB {

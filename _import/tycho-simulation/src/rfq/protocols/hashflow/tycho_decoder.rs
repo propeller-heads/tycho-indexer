@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
 use tycho_client::feed::synchronizer::ComponentWithState;
 use tycho_common::{models::token::Token, Bytes};
@@ -104,7 +107,7 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for HashflowState {
             auth.user,
             auth.key,
             // Since we will not be polling for price levels, this value is irrelevant
-            0u64,
+            Duration::from_secs(0),
         )
         .map_err(|e| {
             InvalidSnapshotError::MissingAttribute(format!("Couldn't create HashflowClient: {e}"))

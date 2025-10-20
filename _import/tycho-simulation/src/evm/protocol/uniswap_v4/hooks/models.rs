@@ -165,7 +165,7 @@ pub struct WithGasEstimate<T> {
     pub result: T,
 }
 
-#[allow(dead_code)]
+#[derive(Debug)]
 pub struct AmountRanges {
     pub amount_in_range: (U256, U256),
     pub amount_out_range: (U256, U256),

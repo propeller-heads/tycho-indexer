@@ -73,6 +73,8 @@ pub struct BebopClient {
 }
 
 impl BebopClient {
+    pub const PROTOCOL_SYSTEM: &'static str = "rfq:bebop";
+
     pub fn new(
         chain: Chain,
         tokens: HashSet<Bytes>,
@@ -103,7 +105,7 @@ impl BebopClient {
     ) -> ComponentWithState {
         let protocol_component = ProtocolComponent {
             id: component_id.clone(),
-            protocol_system: "rfq:bebop".to_string(),
+            protocol_system: Self::PROTOCOL_SYSTEM.to_string(),
             protocol_type_name: "bebop_pool".to_string(),
             chain: self.chain.into(),
             tokens,
@@ -147,6 +149,101 @@ impl BebopClient {
             component: protocol_component,
             component_tvl: Some(tvl),
             entrypoints: vec![],
+        }
+    }
+
+    fn process_quote_response(
+        quote_response: BebopQuoteResponse,
+        params: &GetAmountOutParams,
+    ) -> Result<SignedQuote, RFQError> {
+        match quote_response {
+            BebopQuoteResponse::Success(quote) => {
+                quote.validate(params)?;
+
+                let mut quote_attributes: HashMap<String, Bytes> = HashMap::new();
+                quote_attributes.insert("calldata".into(), quote.tx.data);
+                quote_attributes.insert(
+                    "partial_fill_offset".into(),
+                    Bytes::from(
+                        quote
+                            .partial_fill_offset
+                            .to_be_bytes()
+                            .to_vec(),
+                    ),
+                );
+                let signed_quote = match quote.to_sign {
+                    BebopOrderToSign::Single(ref single) => SignedQuote {
+                        base_token: params.token_in.clone(),
+                        quote_token: params.token_out.clone(),
+                        amount_in: BigUint::from_str(&single.taker_amount).map_err(|_| {
+                            RFQError::ParsingError(format!(
+                                "Failed to parse amount in string: {}",
+                                single.taker_amount
+                            ))
+                        })?,
+                        amount_out: BigUint::from_str(&single.maker_amount).map_err(|_| {
+                            RFQError::ParsingError(format!(
+                                "Failed to parse amount out string: {}",
+                                single.maker_amount
+                            ))
+                        })?,
+                        quote_attributes,
+                    },
+                    BebopOrderToSign::Aggregate(aggregate) => {
+                        // Sum taker_amounts for taker_tokens matching the token_in
+                        let amount_in: BigUint = aggregate
+                            .taker_tokens
+                            .iter()
+                            .zip(&aggregate.taker_amounts)
+                            .flat_map(|(tokens, amounts)| {
+                                tokens
+                                    .iter()
+                                    .zip(amounts)
+                                    .filter_map(|(token, amount)| {
+                                        if token == &params.token_in {
+                                            BigUint::from_str(amount).ok()
+                                        } else {
+                                            None
+                                        }
+                                    })
+                            })
+                            .sum();
+
+                        // Sum maker_amounts for maker_tokens matching the token_out
+                        let amount_out: BigUint = aggregate
+                            .maker_tokens
+                            .iter()
+                            .zip(&aggregate.maker_amounts)
+                            .flat_map(|(tokens, amounts)| {
+                                tokens
+                                    .iter()
+                                    .zip(amounts)
+                                    .filter_map(|(token, amount)| {
+                                        if token == &params.token_out {
+                                            BigUint::from_str(amount).ok()
+                                        } else {
+                                            None
+                                        }
+                                    })
+                            })
+                            .sum();
+
+                        SignedQuote {
+                            base_token: params.token_in.clone(),
+                            quote_token: params.token_out.clone(),
+                            amount_in,
+                            amount_out,
+                            quote_attributes,
+                        }
+                    }
+                };
+
+                Ok(signed_quote)
+            }
+            BebopQuoteResponse::Error(err) => Err(RFQError::FatalError(format!(
+                "Bebop API error: code {} - {} (requestId: {})",
+                err.error.error_code, err.error.message, err.error.request_id
+            ))),
         }
     }
 }
@@ -224,15 +321,19 @@ impl RFQClient for BebopClient {
                                                 base_bytes.clone(), quote_bytes.clone()
                                             ];
 
-                                            let mut quote_price_data: Option<BebopPriceData> = None;
+                                            let mut quote_price_data: Option<&BebopPriceData> = None;
                                             // The quote token is not one of the approved quote tokens
                                             // Get the price, so we can normalize our TVL calculation
                                             if !client.quote_tokens.contains(&quote_bytes) {
                                                 for approved_quote_token in &client.quote_tokens {
-                                                    // Look for the quote pair in the same protobuf update
+                                                    // Look for a pair containing both our quote token and an approved token
+                                                    // Can be either QUOTE/APPROVED or APPROVED/QUOTE
                                                     if let Some(quote_data) = protobuf_update.pairs.iter()
-                                                        .find(|p| p.base == quote_bytes.as_ref() && p.quote == approved_quote_token.as_ref()) {
-                                                        quote_price_data = Some(quote_data.clone());
+                                                        .find(|p| {
+                                                            (p.base == quote_bytes.as_ref() && p.quote == approved_quote_token.as_ref()) ||
+                                                            (p.quote == quote_bytes.as_ref() && p.base == approved_quote_token.as_ref())
+                                                        }) {
+                                                        quote_price_data = Some(quote_data);
                                                         break;
                                                     }
                                                 }
@@ -240,7 +341,7 @@ impl RFQClient for BebopClient {
                                                 // Quote token doesn't have price levels in approved quote tokens.
                                                 // Skip.
                                                 if quote_price_data.is_none() {
-                                                    warn!("Quote token does not have price levels in approved quote token. Skipping.");
+                                                    warn!("Quote token {} does not have price levels in approved quote token. Skipping.", hex::encode(&quote_bytes));
                                                     continue;
                                                 }
                                             }
@@ -374,83 +475,7 @@ impl RFQClient for BebopClient {
                 RFQError::ParsingError(format!("Failed to parse Bebop quote response: {e}"))
             })?;
 
-        match quote_response {
-            BebopQuoteResponse::Success(quote) => {
-                quote.validate(params)?;
-
-                let mut quote_attributes: HashMap<String, Bytes> = HashMap::new();
-                quote_attributes.insert("calldata".into(), quote.tx.data);
-                quote_attributes.insert(
-                    "partial_fill_offset".into(),
-                    Bytes::from(
-                        quote
-                            .partial_fill_offset
-                            .to_be_bytes()
-                            .to_vec(),
-                    ),
-                );
-                let signed_quote = match quote.to_sign {
-                    BebopOrderToSign::Single(ref single) => SignedQuote {
-                        base_token: params.token_in.clone(),
-                        quote_token: params.token_out.clone(),
-                        amount_in: BigUint::from_str(&single.taker_amount).map_err(|_| {
-                            RFQError::ParsingError(format!(
-                                "Failed to parse amount in string: {}",
-                                single.taker_amount
-                            ))
-                        })?,
-                        amount_out: BigUint::from_str(&single.maker_amount).map_err(|_| {
-                            RFQError::ParsingError(format!(
-                                "Failed to parse amount out string: {}",
-                                single.maker_amount
-                            ))
-                        })?,
-                        quote_attributes,
-                    },
-                    BebopOrderToSign::Aggregate(aggregate) => {
-                        let taker_amounts: Vec<BigUint> = aggregate
-                            .taker_amounts
-                            .into_iter()
-                            .flatten()
-                            .map(|amount| {
-                                BigUint::from_str(&amount).map_err(|_| {
-                                    RFQError::ParsingError(format!(
-                                        "Failed to parse amount in string: {amount}",
-                                    ))
-                                })
-                            })
-                            .collect::<Result<Vec<_>, _>>()?;
-                        let maker_amounts: Vec<BigUint> = aggregate
-                            .maker_amounts
-                            .into_iter()
-                            .flatten()
-                            .map(|amount| {
-                                BigUint::from_str(&amount).map_err(|_| {
-                                    RFQError::ParsingError(format!(
-                                        "Failed to parse amount in string: {amount}",
-                                    ))
-                                })
-                            })
-                            .collect::<Result<Vec<_>, _>>()?;
-                        SignedQuote {
-                            base_token: params.token_in.clone(),
-                            quote_token: params.token_out.clone(),
-                            amount_in: taker_amounts.into_iter().sum(),
-                            amount_out: maker_amounts.into_iter().sum(),
-                            quote_attributes,
-                        }
-                    }
-                };
-
-                Ok(signed_quote)
-            }
-            BebopQuoteResponse::Error(err) => {
-                return Err(RFQError::FatalError(format!(
-                    "Bebop API error: code {} - {} (requestId: {})",
-                    err.error.error_code, err.error.message, err.error.request_id
-                )));
-            }
-        }
+        Self::process_quote_response(quote_response, params)
     }
 }
 
@@ -839,5 +864,46 @@ mod tests {
         // This is the only attribute that is significantly different for the Single and Aggregate
         // Order
         assert_eq!(u64::from_be_bytes(partial_fill_offset_array), 2);
+    }
+
+    #[test]
+    fn test_process_bebop_quote_response_aggregate_order() {
+        let json =
+            std::fs::read_to_string("src/rfq/protocols/bebop/test_responses/aggregate_order.json")
+                .unwrap();
+        let quote_response: BebopQuoteResponse = serde_json::from_str(&json).unwrap();
+        let params = GetAmountOutParams {
+            amount_in: BigUint::from_str("43067495979235520920162").unwrap(),
+            token_in: Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+            token_out: Bytes::from_str("0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3").unwrap(),
+            sender: Bytes::from_str("0xfd0b31d2e955fa55e3fa641fe90e08b677188d35").unwrap(),
+            receiver: Bytes::from_str("0xfd0b31d2e955fa55e3fa641fe90e08b677188d35").unwrap(),
+        };
+        let res = BebopClient::process_quote_response(quote_response, &params).unwrap();
+        assert_eq!(res.amount_out, BigUint::from_str("21700473797683400419007").unwrap());
+        assert_eq!(res.amount_in, BigUint::from_str("20000000000").unwrap());
+        assert_eq!(res.base_token, params.token_in);
+        assert_eq!(res.quote_token, params.token_out);
+    }
+
+    #[test]
+    fn test_process_bebop_quote_response_aggregate_order_with_multihop() {
+        let json = std::fs::read_to_string(
+            "src/rfq/protocols/bebop/test_responses/aggregate_order_with_multihop.json",
+        )
+        .unwrap();
+        let quote_response: BebopQuoteResponse = serde_json::from_str(&json).unwrap();
+        let params = GetAmountOutParams {
+            amount_in: BigUint::from_str("43067495979235520920162").unwrap(),
+            token_in: Bytes::from_str("0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB").unwrap(),
+            token_out: Bytes::from_str("0xdAC17F958D2ee523a2206206994597C13D831ec7").unwrap(),
+            sender: Bytes::from_str("0x809305d724B6E79C71e10a097ABadd1274B9C279").unwrap(),
+            receiver: Bytes::from_str("0x809305d724B6E79C71e10a097ABadd1274B9C279").unwrap(),
+        };
+        let res = BebopClient::process_quote_response(quote_response, &params).unwrap();
+        assert_eq!(res.amount_out, BigUint::from_str("11186653890").unwrap());
+        assert_eq!(res.amount_in, BigUint::from_str("43067495979235520920162").unwrap());
+        assert_eq!(res.base_token, params.token_in);
+        assert_eq!(res.quote_token, params.token_out);
     }
 }

@@ -30,7 +30,6 @@ pub struct HashflowState {
 }
 
 impl HashflowState {
-    #![allow(dead_code)] // TODO remove this
     pub fn new(
         base_token: Token,
         quote_token: Token,
@@ -51,7 +50,7 @@ impl HashflowState {
             token_address_out == &self.quote_token.address)
         {
             Err(SimulationError::InvalidInput(
-                format!("Invalid token addresses: {token_address_in}, {token_address_out}"),
+                format!("Invalid token addresses. Got in={token_address_in}, out={token_address_out}, expected in={}, out={}", self.base_token.address, self.quote_token.address),
                 None,
             ))
         } else {
@@ -206,7 +205,7 @@ impl IndicativelyPriced for HashflowState {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashSet, str::FromStr};
+    use std::{collections::HashSet, str::FromStr, time::Duration};
 
     use tycho_common::models::Chain;
 
@@ -261,7 +260,7 @@ mod tests {
             HashSet::new(),
             "".to_string(),
             "".to_string(),
-            0,
+            Duration::from_secs(0),
         )
         .unwrap()
     }

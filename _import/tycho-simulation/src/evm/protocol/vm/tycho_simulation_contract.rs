@@ -4,7 +4,6 @@ use alloy::{
     primitives::{keccak256, Address, Keccak256, B256, U256},
     sol_types::SolValue,
 };
-use chrono::Utc;
 use revm::{
     state::{AccountInfo, Bytecode},
     DatabaseRef,
@@ -127,8 +126,6 @@ where
         &self,
         selector: &str,
         args: impl SolValue,
-        block_number: u64,
-        timestamp: Option<u64>,
         overrides: Option<HashMap<Address, HashMap<U256, U256>>>,
         caller: Option<Address>,
         value: U256,
@@ -138,13 +135,6 @@ where
         let params = SimulationParameters {
             data: call_data,
             to: self.address,
-            block_number,
-            timestamp: timestamp.unwrap_or_else(|| {
-                Utc::now()
-                    .naive_utc()
-                    .and_utc()
-                    .timestamp() as u64
-            }),
             overrides,
             caller: caller.unwrap_or(*EXTERNAL_ACCOUNT),
             value,
@@ -172,6 +162,7 @@ mod tests {
     use std::str::FromStr;
 
     use alloy::primitives::{hex, Bytes};
+    use tycho_client::feed::BlockHeader;
 
     use super::*;
     use crate::evm::{
@@ -225,6 +216,10 @@ mod tests {
         fn clear_temp_storage(&mut self) -> Result<(), <Self as EngineDatabaseInterface>::Error> {
             // Do nothing
             Ok(())
+        }
+
+        fn get_current_block(&self) -> Option<tycho_client::feed::BlockHeader> {
+            None // Mock database doesn't have a real block
         }
     }
 
@@ -281,7 +276,19 @@ mod tests {
             get_runtime().expect("Failed to create Tokio runtime"),
             None,
         );
-        let engine = create_engine(db, true).expect("Failed to create simulation engine");
+        let mut engine = create_engine(db, true).expect("Failed to create simulation engine");
+
+        // Dummy block (irrelevant for this test)
+        let block = BlockHeader {
+            number: 1,
+            hash: tycho_common::Bytes::from_str(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            )
+            .unwrap(),
+            timestamp: 1748397011,
+            ..Default::default()
+        };
+        engine.state.set_block(Some(block));
 
         let contract_address = Address::from_str("0x0010d0d5db05933fa0d9f7038d365e1541a41888") // Irrelevant address
             .expect("Invalid address");
@@ -319,16 +326,7 @@ mod tests {
         let selector = "test()";
 
         let res = contract
-            .call(
-                selector,
-                args,
-                22578103, // blockBlockHeader
-                None,
-                None,
-                None,
-                U256::from(0u64),
-                Some(transient_storage_params),
-            )
+            .call(selector, args, None, None, U256::from(0u64), Some(transient_storage_params))
             .unwrap();
 
         let decoded: U256 = U256::abi_decode(&res.return_value)

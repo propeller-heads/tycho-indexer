@@ -40,3 +40,17 @@ jobs:
     secrets:
       app_id: ${{ secrets.APP_ID }}
       app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
+  build-push-deploy-integration-test:
+    needs:
+      - release
+    uses: ./.github/workflows/build-push-deploy-integration-test.yaml
+    with:
+      base_tag: ${{ needs.release.outputs.next_release_version }}
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+      role_to_assume: ${{ secrets.ROLE_TO_ASSUME }}
+      aws_region: ${{ secrets.AWS_REGION }}
+      repository_url: ${{ secrets.REPOSITORY_URL }}
+      domain_owner: ${{ secrets.DOMAIN_OWNER }}

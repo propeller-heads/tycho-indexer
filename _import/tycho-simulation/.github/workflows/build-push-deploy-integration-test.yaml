@@ -1,0 +1,123 @@
+name: Build, Push and Deploy Integration Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_suffix:
+        description: 'Optional tag suffix (defaults to commit hash)'
+        required: false
+        type: string
+      base_tag:
+        description: 'Base tag to use (defaults to latest release tag)'
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      tag_suffix:
+        description: 'Optional tag suffix (defaults to commit hash)'
+        required: false
+        type: string
+      base_tag:
+        description: 'Base tag to use (defaults to latest release tag)'
+        required: false
+        type: string
+    secrets:
+      app_id:
+        required: true
+      app_private_key:
+        required: true
+      role_to_assume:
+        required: true
+      aws_region:
+        required: true
+      repository_url:
+        required: true
+      domain_owner:
+        required: true
+
+jobs:
+  generate-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.tag.outputs.image_tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get commit hash
+        id: commit
+        run: echo "hash=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Get latest release tag
+        id: latest_tag
+        run: |
+          # Get the latest release tag, fallback to 'latest' if none found
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "latest")
+          echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+
+      - name: Generate image tag
+        id: tag
+        run: |
+          BASE_TAG="${{ inputs.base_tag || steps.latest_tag.outputs.tag }}"
+          
+          # If called from main workflow (base_tag is provided), use only the base tag
+          # If manually triggered or from other branches, add commit hash suffix
+          if [[ -n "${{ inputs.base_tag }}" ]]; then
+            IMAGE_TAG="$BASE_TAG"
+          else
+            TAG_SUFFIX="${{ inputs.tag_suffix || steps.commit.outputs.hash }}"
+            IMAGE_TAG="${BASE_TAG}-${TAG_SUFFIX}"
+          fi
+          
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+  build-and-push-integration-test:
+    needs: generate-tag
+    uses: propeller-heads/ci-cd-templates/.github/workflows/build-and-push-docker-image.yaml@main
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      image_tag: ${{ needs.generate-tag.outputs.image_tag }}
+      image_name: tycho-integration-test
+    secrets:
+      app_id: ${{ secrets.app_id }}
+      app_private_key: ${{ secrets.app_private_key }}
+      role_to_assume: ${{ secrets.role_to_assume }}
+      aws_region: ${{ secrets.aws_region }}
+      repository_url: ${{ secrets.repository_url }}
+      domain_owner: ${{ secrets.domain_owner }}
+
+  deploy-dev:
+    needs:
+      - build-and-push-integration-test
+      - generate-tag
+    if: ${{ github.event_name != 'workflow_dispatch' }}
+    uses: propeller-heads/ci-cd-templates/.github/workflows/promote-to-dev.yaml@main
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      image_name: tycho-integration-test
+      image_tag: ${{ needs.generate-tag.outputs.image_tag }}
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }} 
+
+  deploy-prod:
+    needs:
+      - build-and-push-integration-test
+      - generate-tag
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    uses: propeller-heads/ci-cd-templates/.github/workflows/promote-to-production.yaml@main
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      image_name: tycho-integration-test
+      image_tag: ${{ needs.generate-tag.outputs.image_tag }}
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}

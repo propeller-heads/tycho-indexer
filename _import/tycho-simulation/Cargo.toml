@@ -1,6 +1,6 @@
 [package]
 name = "tycho-simulation"
-version = "0.160.0"
+version = "0.182.1"
 edition = "2021"
 description = "Provides tools for interacting with protocol states, calculating spot prices, and quoting token swaps."
 repository = "https://github.com/propeller-heads/tycho-simulation"
@@ -11,14 +11,41 @@ license = "MIT"
 categories = ["finance", "cryptography::cryptocurrencies"]
 readme = "README.md"
 
-
 [workspace]
-members = ["tycho_simulation_py"]
+members = ["tycho-integration-test", "tycho_simulation_py"]
+
+[workspace.dependencies]
+# Serialization/Deserialization
+serde = { version = "1.0", features = ["rc", "derive"] }
+serde_json = "1.0.105"
+
+# Async & concurrency
+tokio = { version = "1.47.1", features = ["full"] }
+futures = "0.3.31"
+
+# Logging & Tracing
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.17", default-features = false }
+
+# Utility
+num-traits = "0.2.17"
+num-bigint = { version = "0.4.6", features = ["serde"] }
+dotenv = "0.15.0"
+itertools = "0.10.5"
+
+# Tycho dependencies
+tycho-client = ">=0.91.0"
+tycho-common = ">=0.91.0"
+tycho-ethereum = { version = ">=0.91.0", features = ["onchain_data"] }
+tycho-execution = ">=0.129.1"
+
+# EVM dependencies
+alloy = { version = "1.0.30", features = ["providers", "signer-local", "rpc-types-eth"] }
 
 [dependencies]
 # Serialization/Deserialization
-serde = { version = "1.0", features = ["rc"] }
-serde_json = "1.0.105"
+serde = { workspace = true }
+serde_json = { workspace = true }
 uuid = { version = "1.4.1", features = ["serde", "v4", "fast-rng", "macro-diagnostics"] }
 hex = "0.4.3"
 chrono = { version = "0.4.26", features = ["serde"] }
@@ -27,16 +54,16 @@ chrono = { version = "0.4.26", features = ["serde"] }
 thiserror = "1"
 
 # Async & concurrency
-tokio = { version = "1.38.0", features = ["full"] }
-futures = "0.3.31"
+tokio = { workspace = true }
+futures = { workspace = true }
 
 # Logging & Tracing
-tracing = "0.1.37"
+tracing = { workspace = true }
 
 # Utility
-num-traits = "0.2.17"
-dotenv = "0.15.0"
-itertools = "0.10.5"
+num-traits = { workspace = true }
+dotenv = { workspace = true }
+itertools = { workspace = true }
 enum_delegate = "0.2.0"
 
 # Enum utilities
@@ -48,17 +75,19 @@ mini-moka = "0.10"
 lazy_static = "1.4.0"
 
 # Tycho dependencies
-tycho-common = "0.83.3"
-tycho-client = "0.83.3"
+tycho-client = { workspace = true }
+tycho-common = { workspace = true }
+tycho-ethereum = { workspace = true }
 
 # EVM dependencies
-foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "5a552bb0de7126fa35170fd84532bbd3d40cd348", optional = true }
-foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "5a552bb0de7126fa35170fd84532bbd3d40cd348", optional = true }
-solar-config = "=0.1.5"
-alloy = { version = "1.0.6", features = ["providers", "signer-local", "rpc-types-eth"], optional = true }
-revm = { version = "27.0.3", features = ["alloydb", "serde"], optional = true }
-revm-inspectors = { version = "0.26.5", features = ["serde"], optional = true }
-num-bigint = { version = "0.4", features = ["serde"] }
+foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "d6daa0ac83fe6b3883072436bb3f95ba7820e5d9", optional = true }
+foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "d6daa0ac83fe6b3883072436bb3f95ba7820e5d9", optional = true }
+solar-config = "=0.1.7"
+solar-data-structures = "=0.1.7"
+alloy = { workspace = true, features = ["sol-types"], optional = true }
+revm = { version = "29.0.1", features = ["alloydb", "serde"], optional = true }
+revm-inspectors = { version = "0.30.0", features = ["serde"], optional = true }
+num-bigint = { workspace = true }
 tokio-stream = "0.1.16"
 
 # Dialoguer
@@ -70,21 +99,21 @@ evm_ekubo_sdk = "0.6.2"
 # rfq
 reqwest = { version = "0.12.22", optional = true }
 async-trait = { version = "0.1.88", optional = true }
-tokio-tungstenite = { version = "0.26.2", optional = true }
+tokio-tungstenite = { version = "0.28.0", features = ["native-tls"], optional = true }
 async-stream = { version = "0.3.6", optional = true }
 http = { version = "1.0", optional = true }
 prost = { version = "0.13", optional = true }
-# tycho execution for quickstart
-tycho-execution = "0.124.0"
 
 [dev-dependencies]
+# tycho execution for quickstart
+tycho-execution = { workspace = true }
 tokio-test = "0.4.4"
 approx = "0.5.1"
 rstest = "0.23.0"
 rstest_reuse = "0.7.0"
-tracing-subscriber = { version = "0.3.17", default-features = false, features = [
-    "env-filter",
-    "fmt",
+tracing-subscriber = { workspace = true, default-features = false, features = [
+  "env-filter",
+  "fmt",
 ] }
 tempfile = "3.13.0"
 
@@ -92,19 +121,18 @@ tempfile = "3.13.0"
 mockall = "0.13"
 
 # price_printer example
-clap = { version = "4.5.3", features = ["derive"] }
-anyhow = "1.0.79"
+clap = { version = "4.5.48", features = ["derive"] }
+anyhow = "1.0.76"
 ratatui = "0.29.0"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 unicode-width = "0.1.13"
 tracing-appender = "0.2.3"
 
-
 [features]
 default = ["evm", "rfq"]
 network_tests = []
 evm = [
-    "dep:foundry-config", "dep:foundry-evm", "dep:revm", "dep:revm-inspectors", "dep:alloy",
+  "dep:foundry-config", "dep:foundry-evm", "dep:revm", "dep:revm-inspectors", "dep:alloy",
 ]
 rfq = ["dep:reqwest", "dep:async-trait", "dep:tokio-tungstenite", "dep:async-stream", "dep:http", "dep:prost"]
 

@@ -1,0 +1,125 @@
+{
+  "requestId": "ac9bf751-a05c-49cb-9b70-b461a46c1408",
+  "type": "121",
+  "status": "SIG_SUCCESS",
+  "quoteId": "121-175462439240560258342713576963493704047",
+  "chainId": 1,
+  "approvalType": "Standard",
+  "nativeToken": "ETH",
+  "taker": "0x809305d724B6E79C71e10a097ABadd1274B9C279",
+  "receiver": "0x809305d724B6E79C71e10a097ABadd1274B9C279",
+  "expiry": 1759283228,
+  "slippage": 0.0,
+  "gasFee": {
+    "native": "0",
+    "usd": 0.0
+  },
+  "buyTokens": {
+    "0xdAC17F958D2ee523a2206206994597C13D831ec7": {
+      "amount": "11186653890",
+      "decimals": 6,
+      "priceUsd": 1.0,
+      "symbol": "USDT",
+      "minimumAmount": "11186653890",
+      "price": 3.846391889022875,
+      "priceBeforeFee": 3.846391889022875,
+      "amountBeforeFee": "11186653890",
+      "deltaFromExpected": -0.004350535892670692
+    }
+  },
+  "sellTokens": {
+    "0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB": {
+      "amount": "43067495979235520920162",
+      "decimals": 18,
+      "priceUsd": 0.260882,
+      "symbol": "COW",
+      "price": 0.25998390929792564,
+      "priceBeforeFee": 0.25998390929792564
+    }
+  },
+  "settlementAddress": "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F",
+  "approvalTarget": "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F",
+  "requiredSignatures": [],
+  "priceImpact": -0.004350535892670692,
+  "warnings": [],
+  "tx": {
+    "to": "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F",
+    "value": "0x0",
+    "data": "",
+    "from": "0x809305d724B6E79C71e10a097ABadd1274B9C279",
+    "gas": 265902,
+    "gasPrice": 223405378
+  },
+  "makers": [
+    "🦙",
+    "🦊",
+    "🙈"
+  ],
+  "toSign": {
+    "partner_id": 0,
+    "expiry": 1759283228,
+    "taker_address": "0x809305d724B6E79C71e10a097ABadd1274B9C279",
+    "maker_addresses": [
+      "0x67336Cec42645F55059EfF241Cb02eA5cC52fF86",
+      "0x51C72848c68a965f66FA7a88855F9f7784502a7F",
+      "0xBEE3211ab312a8D065c4FeF0247448e17A8da000"
+    ],
+    "maker_nonces": [
+      "2759247621146563169",
+      "2759247621146563170",
+      "2759247621146563171"
+    ],
+    "taker_tokens": [
+      [
+        "0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB"
+      ],
+      [
+        "0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB",
+        "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+      ],
+      [
+        "0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB"
+      ]
+    ],
+    "maker_tokens": [
+      [
+        "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+      ],
+      [
+        "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+      ],
+      [
+        "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+      ]
+    ],
+    "taker_amounts": [
+      [
+        "23407999999999999260526"
+      ],
+      [
+        "2294263610839843784535",
+        "2689204028434025372"
+      ],
+      [
+        "17365232368395677875101"
+      ]
+    ],
+    "maker_amounts": [
+      [
+        "1463456530782545043"
+      ],
+      [
+        "143491666644308402",
+        "11186653890"
+      ],
+      [
+        "1084155062976260600"
+      ]
+    ],
+    "receiver": "0x809305d724B6E79C71e10a097ABadd1274B9C279",
+    "commands": "0x0700070000080700"
+  },
+  "onchainOrderType": "AggregateOrder",
+  "partialFillOffset": 2
+}
