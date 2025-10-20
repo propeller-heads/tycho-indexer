@@ -417,9 +417,10 @@ impl ProtocolSim for UniswapV4State {
         }
 
         if base < quote {
-            Ok(sqrt_price_q96_to_f64(self.sqrt_price, base.decimals, quote.decimals))
+            sqrt_price_q96_to_f64(self.sqrt_price, base.decimals, quote.decimals)
         } else {
-            Ok(1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, quote.decimals, base.decimals))
+            sqrt_price_q96_to_f64(self.sqrt_price, quote.decimals, base.decimals)
+                .map(|price| 1.0f64 / price)
         }
     }
 

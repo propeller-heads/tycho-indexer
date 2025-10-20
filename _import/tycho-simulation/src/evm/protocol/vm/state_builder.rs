@@ -197,7 +197,11 @@ where
             engine.clone()
         } else {
             self.engine = Some(self.get_default_engine(db).await?);
-            self.engine.clone().unwrap()
+            self.engine.clone().ok_or_else(|| {
+                SimulationError::FatalError(
+                    "Failed to get build engine: Engine not initialized".to_string(),
+                )
+            })?
         };
 
         if self.adapter_contract.is_none() {

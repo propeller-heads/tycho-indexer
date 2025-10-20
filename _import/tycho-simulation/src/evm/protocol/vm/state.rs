@@ -272,7 +272,14 @@ where
                     // Calculate the marginal price, adjusting for token decimals.
                     let token_correction =
                         10f64.powi(sell_token_decimals as i32 - buy_token_decimals as i32);
-                    let marginal_price = u256_to_f64(num) / u256_to_f64(den) * token_correction;
+                    let num_f64 = u256_to_f64(num)?;
+                    let den_f64 = u256_to_f64(den)?;
+                    if den_f64 == 0.0 {
+                        return Err(SimulationError::FatalError(
+                            "Failed to compute marginal price: denominator converted to 0".into(),
+                        ));
+                    }
+                    let marginal_price = num_f64 / den_f64 * token_correction;
 
                     self.spot_prices
                         .insert((t0, t1), marginal_price);

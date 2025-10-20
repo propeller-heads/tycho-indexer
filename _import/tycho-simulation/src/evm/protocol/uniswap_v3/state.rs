@@ -225,9 +225,10 @@ impl ProtocolSim for UniswapV3State {
 
     fn spot_price(&self, a: &Token, b: &Token) -> Result<f64, SimulationError> {
         if a < b {
-            Ok(sqrt_price_q96_to_f64(self.sqrt_price, a.decimals, b.decimals))
+            sqrt_price_q96_to_f64(self.sqrt_price, a.decimals, b.decimals)
         } else {
-            Ok(1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, b.decimals, a.decimals))
+            sqrt_price_q96_to_f64(self.sqrt_price, b.decimals, a.decimals)
+                .map(|price| 1.0f64 / price)
         }
     }
 
