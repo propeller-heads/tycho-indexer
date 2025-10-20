@@ -425,7 +425,7 @@ impl RFQClient for HashflowClient {
                         return Err(RFQError::QuoteNotFound(format!(
                             "Hashflow quote not found for {} {} ->{}",
                             params.amount_in, params.token_in, params.token_out,
-                        )))
+                        )));
                     }
                     // We assume there will be only one quote request at a time
                     let quote = quotes[0].clone();
