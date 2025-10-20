@@ -37,6 +37,8 @@ pub enum SimulationEngineError {
     OutOfGas(String, String),
     /// Simulation didn't succeed; likely not related to network or gas, so retrying won't help
     TransactionError { data: String, gas_used: Option<u64> },
+    /// Processing traces failed.
+    TraceError(String),
 }
 
 /// A result of a successful transaction simulation
@@ -93,13 +95,12 @@ where
         // struct outlive this scope.
 
         // We protect the state from being consumed.
-        let db_ref = OverriddenSimulationDB {
-            inner_db: &self.state,
-            overrides: &params
-                .overrides
-                .clone()
-                .unwrap_or_default(),
-        };
+        let overrides = params
+            .overrides
+            .clone()
+            .unwrap_or_default();
+
+        let db_ref = OverriddenSimulationDB { inner_db: &self.state, overrides: &overrides };
 
         let tx_env = TxEnv {
             caller: params.caller,
@@ -155,7 +156,7 @@ where
                 vm.inspect_tx(tx_env.clone())
             };
 
-            Self::print_traces(tracer, res.as_ref().ok());
+            Self::print_traces(tracer, res.as_ref().ok())?;
 
             res
         } else {
@@ -174,7 +175,10 @@ where
         self.state.clear_temp_storage()
     }
 
-    fn print_traces(tracer: TracingInspector, res: Option<&ResultAndState>) {
+    fn print_traces(
+        tracer: TracingInspector,
+        res: Option<&ResultAndState>,
+    ) -> Result<(), SimulationEngineError> {
         let (exit_reason, _gas_refunded, gas_used, _out, _exec_logs) = match res {
             Some(ResultAndState { result, state: _ }) => {
                 // let ResultAndState { result, state: _ } = res;
@@ -214,21 +218,27 @@ where
             gas_used,
         };
 
-        tokio::task::block_in_place(|| {
+        tokio::task::block_in_place(|| -> Result<(), SimulationEngineError> {
             let future = async {
                 handle_traces(trace_res, &Config::default(), Some(Chain::default()), true)
                     .await
-                    .expect("failure handling traces");
+                    .map_err(|err| SimulationEngineError::TraceError(err.to_string()))
             };
             if let Ok(handle) = Handle::try_current() {
                 // If successful, use the existing runtime to block on the future
                 handle.block_on(future)
             } else {
                 // If no runtime is found, create a new one and block on the future
-                let rt = Runtime::new().expect("Failed to create a new runtime");
+                let rt = Runtime::new().map_err(|err| {
+                    SimulationEngineError::TraceError(format!(
+                        "Failed to create a new runtime: {err}"
+                    ))
+                })?;
                 rt.block_on(future)
             }
-        });
+        })?;
+
+        Ok(())
     }
 }
 

@@ -450,6 +450,9 @@ impl From<simulation::SimulationEngineError> for SimulationErrorDetails {
             simulation::SimulationEngineError::OutOfGas(reason, _) => {
                 SimulationErrorDetails { data: reason, gas_used: None }
             }
+            simulation::SimulationEngineError::TraceError(reason) => {
+                SimulationErrorDetails { data: reason, gas_used: None }
+            }
         }
     }
 }
