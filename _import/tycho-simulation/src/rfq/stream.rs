@@ -5,7 +5,11 @@ use std::collections::HashMap;
 
 use futures::{stream::select_all, StreamExt};
 use tycho_client::feed::{synchronizer::ComponentWithState, FeedMessage};
-use tycho_common::{models::token::Token, simulation::protocol_sim::ProtocolSim, Bytes};
+use tycho_common::{
+    models::token::Token,
+    simulation::{errors::SimulationError, protocol_sim::ProtocolSim},
+    Bytes,
+};
 
 use crate::{
     evm::decoder::TychoStreamDecoder,
@@ -25,7 +29,8 @@ use crate::{
 /// - Dynamically decode incoming updates into `Update` objects using `TychoStreamDecoder`.
 ///
 /// The `build` method consumes the builder and runs the event loop, sending decoded `Update`s
-/// through the provided `mpsc::Sender`.
+/// through the provided `mpsc::Sender`. It returns an error if decoding an update or forwarding
+/// it to the channel fails.
 ///
 /// ### Error Handling:
 /// - Each `RFQClient`'s stream is expected to yield `Result<(String, StateSyncMessage), RFQError>`.
@@ -54,7 +59,7 @@ impl RFQStreamBuilder {
         self
     }
 
-    pub async fn build(self, tx: tokio::sync::mpsc::Sender<Update>) {
+    pub async fn build(self, tx: tokio::sync::mpsc::Sender<Update>) -> Result<(), SimulationError> {
         let streams: Vec<_> = self
             .clients
             .into_iter()
@@ -73,8 +78,16 @@ impl RFQStreamBuilder {
                             sync_states: HashMap::new(),
                         })
                         .await
-                        .unwrap();
-                    tx.send(update).await.unwrap();
+                        .map_err(|err| {
+                            SimulationError::FatalError(format!(
+                                "Failed to decode RFQ update from `{provider}`: {err}"
+                            ))
+                        })?;
+                    tx.send(update).await.map_err(|err| {
+                        SimulationError::FatalError(format!(
+                            "Failed to forward RFQ update from `{provider}`: {err}"
+                        ))
+                    })?;
                 }
                 Err(e) => {
                     tracing::error!(
@@ -83,6 +96,7 @@ impl RFQStreamBuilder {
                 }
             }
         }
+        Ok(())
     }
 
     /// Sets the currently known tokens which to be considered during decoding.
@@ -214,7 +228,7 @@ mod tests {
                         if error_at_time == current_time {
                             return Err(RFQError::FatalError(format!(
                                 "{name} stream is dying and can't go on"
-                            )))
+                            )));
                         };
                     };
                     let protocol_component =
