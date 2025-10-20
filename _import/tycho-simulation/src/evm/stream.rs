@@ -75,7 +75,8 @@
 //!         None,
 //!         None,
 //!     )
-//!     .await;
+//!     .await
+//!     .expect("Failed loading tokens");
 //!
 //!     let mut protocol_stream =
 //!         ProtocolStreamBuilder::new("tycho-beta.propellerheads.xyz", Chain::Ethereum)
