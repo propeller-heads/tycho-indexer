@@ -915,7 +915,7 @@ where
             .cloned()
             .collect();
         let new_block_history = BlockHistory::new(blocks, 10)?;
-        let latest = block_history
+        let latest = new_block_history
             .latest()
             // Block history should not be empty, we just populated it.
             .ok_or(BlockHistoryError::EmptyHistory)?;
