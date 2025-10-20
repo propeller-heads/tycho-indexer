@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use tracing::info;
-use tycho_client::{rpc::RPCClient, HttpRPCClient};
+use tycho_client::{rpc::RPCClient, HttpRPCClient, RPCError};
 use tycho_common::{
     models::{token::Token, Chain},
     simulation::errors::SimulationError,
@@ -27,14 +27,15 @@ use tycho_common::{
 ///
 /// # Errors
 ///
-/// This function returns a `SimulationError::EncodingError` if:
+/// This function returns a `SimulationError::FatalError` if:
 /// - The string contains invalid hexadecimal characters.
 /// - The string is empty or malformed.
 pub fn hexstring_to_vec(hexstring: &str) -> Result<Vec<u8>, SimulationError> {
     let hexstring_no_prefix =
         if let Some(stripped) = hexstring.strip_prefix("0x") { stripped } else { hexstring };
-    let bytes = hex::decode(hexstring_no_prefix)
-        .map_err(|_| SimulationError::FatalError(format!("Invalid hex string: {hexstring}")))?;
+    let bytes = hex::decode(hexstring_no_prefix).map_err(|err| {
+        SimulationError::FatalError(format!("Invalid hex string `{hexstring}`: {err}"))
+    })?;
     Ok(bytes)
 }
 
@@ -49,6 +50,11 @@ pub fn hexstring_to_vec(hexstring: &str) -> Result<Vec<u8>, SimulationError> {
 /// * `min_quality` - The minimum quality of tokens to load. Defaults to 100 if not provided.
 /// * `max_days_since_last_trade` - The max number of days since the token was last traded. Defaults
 ///   are chain specific and applied if not provided.
+///
+/// # Returns
+///
+/// * `Ok(HashMap<Bytes, Token>)` - A mapping from token address to token metadata loaded from Tycho.
+/// * `Err(SimulationError)` - An error indicating why the token list could not be loaded.
 pub async fn load_all_tokens(
     tycho_url: &str,
     no_tls: bool,
@@ -56,17 +62,18 @@ pub async fn load_all_tokens(
     chain: Chain,
     min_quality: Option<i32>,
     max_days_since_last_trade: Option<u64>,
-) -> HashMap<Bytes, Token> {
+) -> Result<HashMap<Bytes, Token>, SimulationError> {
     info!("Loading tokens from Tycho...");
     let rpc_url =
         if no_tls { format!("http://{tycho_url}") } else { format!("https://{tycho_url}") };
-    let rpc_client = HttpRPCClient::new(rpc_url.as_str(), auth_key).unwrap();
+    let rpc_client = HttpRPCClient::new(rpc_url.as_str(), auth_key)
+        .map_err(|err| map_rpc_error(err, "Failed to create Tycho RPC client"))?;
 
     // Chain specific defaults for special case chains. Otherwise defaults to 42 days.
     let default_min_days = HashMap::from([(Chain::Base, 1_u64)]);
 
     #[allow(clippy::mutable_key_type)]
-    rpc_client
+    let tokens = rpc_client
         .get_all_tokens(
             chain.into(),
             min_quality.or(Some(100)),
@@ -77,18 +84,24 @@ pub async fn load_all_tokens(
             3_000,
         )
         .await
-        .expect("Unable to load tokens")
+        .map_err(|err| map_rpc_error(err, "Unable to load tokens"))?;
+
+    tokens
         .into_iter()
         .map(|token| {
             let token_clone = token.clone();
-            (
-                token.address.clone(),
-                token.try_into().unwrap_or_else(|_| {
-                    panic!("Couldn't convert {token_clone:?} into ERC20 token.")
-                }),
-            )
+            Token::try_from(token)
+                .map(|converted| (converted.address.clone(), converted))
+                .map_err(|_| {
+                    SimulationError::FatalError(format!(
+                        "Unable to convert token `{symbol}` at {address} on chain {chain} into ERC20 token",
+                        symbol = token_clone.symbol,
+                        address = token_clone.address,
+                        chain = token_clone.chain,
+                    ))
+                })
         })
-        .collect::<HashMap<_, Token>>()
+        .collect()
 }
 
 /// Get the default Tycho URL for the given chain.
@@ -98,5 +111,15 @@ pub fn get_default_url(chain: &Chain) -> Option<String> {
         Chain::Base => Some("tycho-base-beta.propellerheads.xyz".to_string()),
         Chain::Unichain => Some("tycho-unichain-beta.propellerheads.xyz".to_string()),
         _ => None,
+    }
+}
+
+fn map_rpc_error(err: RPCError, context: &str) -> SimulationError {
+    let message = format!("{context}: {err}", err = err,);
+    match err {
+        RPCError::UrlParsing(_, _) | RPCError::FormatRequest(_) => {
+            SimulationError::InvalidInput(message, None)
+        }
+        _ => SimulationError::FatalError(message),
     }
 }
