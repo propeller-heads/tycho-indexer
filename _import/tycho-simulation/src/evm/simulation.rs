@@ -163,8 +163,8 @@ where
         interpret_evm_result(evm_result, HashMap::new())
     }
 
-    pub fn clear_temp_storage(&mut self) {
-        self.state.clear_temp_storage();
+    pub fn clear_temp_storage(&mut self) -> Result<(), <D as EngineDatabaseInterface>::Error> {
+        self.state.clear_temp_storage()
     }
 
     fn print_traces(tracer: TracingInspector, res: Option<&ResultAndState>) {
@@ -202,10 +202,7 @@ where
             success: matches!(exit_reason, return_ok!()),
             traces: Some(vec![(
                 TraceKind::Execution,
-                SparsedTraceArena {
-                    arena: tracer.into_traces(),
-                    ignored: alloy::primitives::map::HashMap::default(),
-                },
+                SparsedTraceArena { arena: tracer.into_traces(), ignored: HashMap::default() },
             )]),
             gas_used,
         };
@@ -561,8 +558,8 @@ mod tests {
         }
     }
     fn new_state() -> SimulationDB<EVMProvider> {
-        let runtime = get_runtime();
-        let client = get_client(None);
+        let runtime = get_runtime().expect("Failed to create test runtime");
+        let client = get_client(None).expect("Failed to create test client");
         SimulationDB::new(client, runtime, None)
     }
 
@@ -698,7 +695,9 @@ mod tests {
         // MOCK A BALANCE AND APPROVAL
         // let mut permanent_storage = HashMap::new();
         // permanent_storage.insert(s)
-        state.init_account(usdt_address, contract_acc_info, Some(storage), true);
+        state
+            .init_account(usdt_address, contract_acc_info, Some(storage), true)
+            .expect("Failed to init account");
 
         // DEPLOY A CONTRACT TO GET ON-CHAIN BYTECODE
         // let deployment_account = B160::from_str("0x0000000000000000000000000000000000000123")?;

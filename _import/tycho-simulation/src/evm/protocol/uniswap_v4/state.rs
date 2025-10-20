@@ -132,7 +132,7 @@ impl UniswapV4State {
                 liquidity: self.liquidity,
                 tick: self.tick,
                 gas_used: U256::from(3_000), // baseline gas cost for no-op swap
-            })
+            });
         }
 
         if self.liquidity == 0 {
@@ -490,7 +490,7 @@ impl ProtocolSim for UniswapV4State {
                     if amount_to_swap > I256::ZERO {
                         return Err(SimulationError::FatalError(
                             "Hook delta exceeds swap amount".into(),
-                        ))
+                        ));
                     }
                 }
 
@@ -1388,7 +1388,11 @@ mod tests {
         let hook_address: Address = Address::from_str("0x69058613588536167ba0aa94f0cc1fe420ef28a8")
             .expect("Invalid hook address");
 
-        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block));
+        let db = SimulationDB::new(
+            get_client(None).expect("Failed to create client"),
+            get_runtime().expect("Failed to get runtime"),
+            Some(block.clone()),
+        );
         let engine = create_engine(db, true).expect("Failed to create simulation engine");
         let pool_manager = Address::from_str("0x000000000004444c5dc75cb358380d2e3de08a90")
             .expect("Invalid pool manager address");
@@ -1472,7 +1476,11 @@ mod tests {
         let hook_address: Address = Address::from_str("0x69058613588536167ba0aa94f0cc1fe420ef28a8")
             .expect("Invalid hook address");
 
-        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block.clone()));
+        let db = SimulationDB::new(
+            get_client(None).expect("Failed to create client"),
+            get_runtime().expect("Failed to get runtime"),
+            Some(block.clone()),
+        );
         let engine = create_engine(db, true).expect("Failed to create simulation engine");
         let pool_manager = Address::from_str("0x000000000004444c5dc75cb358380d2e3de08a90")
             .expect("Invalid pool manager address");

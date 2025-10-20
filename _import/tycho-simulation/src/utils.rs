@@ -53,7 +53,7 @@ pub fn hexstring_to_vec(hexstring: &str) -> Result<Vec<u8>, SimulationError> {
 ///
 /// # Returns
 ///
-/// * `Ok(HashMap<Bytes, Token>)` - A mapping from token address to token metadata loaded from Tycho.
+/// * `Ok(HashMap<Bytes, Token>)` - A mapping from token address to token metadata loaded from Tycho
 /// * `Err(SimulationError)` - An error indicating why the token list could not be loaded.
 pub async fn load_all_tokens(
     tycho_url: &str,

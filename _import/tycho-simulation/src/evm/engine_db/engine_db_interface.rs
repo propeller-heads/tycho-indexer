@@ -25,7 +25,7 @@ pub trait EngineDatabaseInterface: DatabaseRef + Send + Sync {
         account: AccountInfo,
         permanent_storage: Option<HashMap<U256, U256>>,
         mocked: bool,
-    );
+    ) -> Result<(), <Self as EngineDatabaseInterface>::Error>;
 
-    fn clear_temp_storage(&mut self);
+    fn clear_temp_storage(&mut self) -> Result<(), <Self as EngineDatabaseInterface>::Error>;
 }

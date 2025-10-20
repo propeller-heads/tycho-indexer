@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Debug};
 
-use alloy::primitives::Address;
+use alloy::primitives::{Address, U160};
 use lazy_static::lazy_static;
 use revm::{primitives::KECCAK_EMPTY, state::AccountInfo, DatabaseRef};
 use tycho_client::feed::BlockHeader;
@@ -22,7 +22,7 @@ pub mod utils;
 
 lazy_static! {
     pub static ref SHARED_TYCHO_DB: PreCachedDB =
-        PreCachedDB::new().expect("Failed to create PreCachedDB");
+        PreCachedDB::new().unwrap_or_else(|err| panic!("Failed to create PreCachedDB: {err}"));
 }
 
 /// Creates a simulation engine.
@@ -45,25 +45,22 @@ where
         AccountInfo { balance: Default::default(), nonce: 0, code_hash: KECCAK_EMPTY, code: None };
 
     // Accounts necessary for enabling pre-compilation are initialized by default.
-    engine.state.init_account(
-        Address::from_slice(
-            &hex::decode("0000000000000000000000000000000000000000")
-                .expect("Invalid string for precompile-enabling address"),
-        ),
-        zero_account_info.clone(),
-        None,
-        false,
-    );
+    engine
+        .state
+        .init_account(Address::ZERO, zero_account_info.clone(), None, false)
+        .map_err(|e| {
+            SimulationError::FatalError(format!("Failed to init zero address: {:?}", e))
+        })?;
 
-    engine.state.init_account(
-        Address::from_slice(
-            &hex::decode("0000000000000000000000000000000000000004")
-                .expect("Invalid string for precompile-enabling address"),
-        ),
-        zero_account_info.clone(),
-        None,
-        false,
-    );
+    engine
+        .state
+        .init_account(Address::from(U160::from(4)), zero_account_info.clone(), None, false)
+        .map_err(|e| {
+            SimulationError::FatalError(format!(
+                "Failed to init ecrecover precompile address: {:?}",
+                e
+            ))
+        })?;
 
     Ok(engine)
 }

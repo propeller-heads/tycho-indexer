@@ -74,21 +74,28 @@ where
         adapter_contract_bytecode: Bytecode,
         engine: SimulationEngine<D>,
     ) -> Result<Self, SimulationError> {
-        engine.state.init_account(
-            address,
-            AccountInfo {
-                balance: *MAX_BALANCE,
-                nonce: 0,
-                code_hash: B256::from(keccak256(
-                    adapter_contract_bytecode
-                        .clone()
-                        .bytes(),
-                )),
-                code: Some(adapter_contract_bytecode),
-            },
-            None,
-            false,
-        );
+        engine
+            .state
+            .init_account(
+                address,
+                AccountInfo {
+                    balance: *MAX_BALANCE,
+                    nonce: 0,
+                    code_hash: B256::from(keccak256(
+                        adapter_contract_bytecode
+                            .clone()
+                            .bytes(),
+                    )),
+                    code: Some(adapter_contract_bytecode),
+                },
+                None,
+                false,
+            )
+            .map_err(|err| {
+                SimulationError::FatalError(format!(
+                    "Failed to init contract account in simulation engine: {err:?}"
+                ))
+            })?;
 
         Ok(Self { address, engine })
     }
@@ -210,12 +217,14 @@ mod tests {
             _account: AccountInfo,
             _permanent_storage: Option<HashMap<U256, U256>>,
             _mocked: bool,
-        ) {
+        ) -> Result<(), <Self as EngineDatabaseInterface>::Error> {
             // Do nothing
+            Ok(())
         }
 
-        fn clear_temp_storage(&mut self) {
+        fn clear_temp_storage(&mut self) -> Result<(), <Self as EngineDatabaseInterface>::Error> {
             // Do nothing
+            Ok(())
         }
     }
 
@@ -267,7 +276,11 @@ mod tests {
 
     #[test]
     fn test_transient_storage() {
-        let db = SimulationDB::new(get_client(None), get_runtime(), None);
+        let db = SimulationDB::new(
+            get_client(None).expect("Failed to create Tycho RPC client"),
+            get_runtime().expect("Failed to create Tokio runtime"),
+            None,
+        );
         let engine = create_engine(db, true).expect("Failed to create simulation engine");
 
         let contract_address = Address::from_str("0x0010d0d5db05933fa0d9f7038d365e1541a41888") // Irrelevant address

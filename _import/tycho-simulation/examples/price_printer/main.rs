@@ -128,7 +128,8 @@ async fn main() {
             None,
             None,
         )
-        .await;
+        .await
+        .expect("Failed loading tokens");
         let tvl_filter = ComponentFilter::with_tvl_range(cli.tvl_threshold, cli.tvl_threshold);
         let mut protocol_stream =
             register_exchanges(ProtocolStreamBuilder::new(&tycho_url, chain), &chain, tvl_filter)
