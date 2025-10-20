@@ -41,10 +41,10 @@ jobs:
       app_id: ${{ secrets.APP_ID }}
       app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
 
-  build-and-push-integration-test:
+  build-push-deploy-integration-test:
     needs:
       - release
-    uses: ./.github/workflows/build-and-push-integration-test.yaml
+    uses: ./.github/workflows/build-push-deploy-integration-test.yaml
     with:
       base_tag: ${{ needs.release.outputs.next_release_version }}
     secrets:
