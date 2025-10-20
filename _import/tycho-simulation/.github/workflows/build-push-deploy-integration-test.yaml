@@ -93,6 +93,7 @@ jobs:
   deploy-dev:
     needs:
       - build-and-push-integration-test
+      - generate-tag
     if: ${{ github.event_name != 'workflow_dispatch' }}
     uses: propeller-heads/ci-cd-templates/.github/workflows/promote-to-dev.yaml@main
     permissions:
@@ -108,6 +109,7 @@ jobs:
   deploy-prod:
     needs:
       - build-and-push-integration-test
+      - generate-tag
     if: ${{ github.event_name == 'workflow_dispatch' }}
     uses: propeller-heads/ci-cd-templates/.github/workflows/promote-to-production.yaml@main
     permissions:
