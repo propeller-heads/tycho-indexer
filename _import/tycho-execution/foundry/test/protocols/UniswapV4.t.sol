@@ -281,6 +281,7 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
 
     UniswapV4ExecutorExposed uniswapV4Exposed;
     IERC20 USDT = IERC20(USDT_ADDR);
+    IERC20 USDC = IERC20(USDC_ADDR);
     IERC20 RLUSD = IERC20(RLUSD_ADDR);
     IERC20 WBTC = IERC20(WBTC_ADDR);
 
@@ -362,6 +363,49 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
             RLUSD.balanceOf(eulerProxy), rlusdEulerBalanceBefore + amountIn
         );
         assertTrue(WBTC.balanceOf(ALICE) == amountOut);
+    }
+
+    function testDoubleEulerSwapLowBalance() public {
+        // 10 USDC -(euler)-> RLUSD -(euler)-> USDT
+        // We use RLUSD pools because it doesn't have significant balance on the pool
+        // manager contract
+        uint256 amountIn = 10_000000;
+        deal(USDC_ADDR, address(uniswapV4Exposed), amountIn);
+        address eulerProxy = 0xe0a80d35bB6618CBA260120b279d357978c42BCE;
+        uint256 usdcEulerBalanceBefore = USDC.balanceOf(eulerProxy);
+
+        UniswapV4Executor.UniswapV4Pool[] memory pools =
+            new UniswapV4Executor.UniswapV4Pool[](2);
+
+        // USDC -> RLUSD
+        pools[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: RLUSD_ADDR,
+            fee: uint24(40),
+            tickSpacing: int24(1),
+            hook: address(0x8B0DAD43EA6E83B2A6a0de18c5985030ba0Da8A8),
+            hookData: bytes("")
+        });
+        // RLUSD -> USDT
+        pools[1] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: USDT_ADDR,
+            fee: uint24(50),
+            tickSpacing: int24(1),
+            hook: address(0xF87ACF8428F2f9403AAA0256A7272d6549ECa8A8),
+            hookData: bytes("")
+        });
+
+        bytes memory data = UniswapV4Utils.encodeExactInput(
+            USDC_ADDR,
+            USDT_ADDR,
+            true,
+            RestrictTransferFrom.TransferType.Transfer,
+            ALICE,
+            pools
+        );
+
+        uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
+        assertEq(USDC.balanceOf(eulerProxy), usdcEulerBalanceBefore + amountIn);
+        assertTrue(USDT.balanceOf(ALICE) == amountOut);
     }
 
     function testMultipleSwapLastSwapEuler() public {
