@@ -270,13 +270,13 @@ where
             .num_seconds();
 
         if time_passed >= 60 {
-            state.last_report_ts = now;
-            state.last_report_block_number = msg.block.number;
-
             if is_syncing {
                 self.report_sync_progress(&msg.block, state.last_report_block_number, time_passed)
                     .await;
             }
+
+            state.last_report_ts = now;
+            state.last_report_block_number = msg.block.number;
             drop(state); // Release the lock before doing potentially slow operations
 
             // Report the memory usage for all buffers and caches
