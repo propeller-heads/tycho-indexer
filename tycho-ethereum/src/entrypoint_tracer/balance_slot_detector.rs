@@ -781,7 +781,8 @@ impl EVMBalanceSlotDetector {
         let mut batch = Vec::new();
 
         for (id, metadata) in slots_to_test.iter().enumerate() {
-            let (storage_addr, slot) = &metadata.all_slots
+            let (storage_addr, slot) = &metadata
+                .all_slots
                 .first()
                 .ok_or(BalanceSlotError::TokenNotInTrace)?
                 .0;
@@ -849,7 +850,8 @@ impl EVMBalanceSlotDetector {
                         continue;
                     }
 
-                    let (storage_addr, slot) = &metadata.all_slots
+                    let (storage_addr, slot) = &metadata
+                        .all_slots
                         .first()
                         .expect("all_slots should not be empty")
                         .0
@@ -870,7 +872,10 @@ impl EVMBalanceSlotDetector {
                                     original_balance = %metadata.original_balance,
                                     "Storage slot detected successfully"
                                 );
-                                results.insert(metadata.token, Ok((storage_addr, slot)));
+                                results.insert(
+                                    metadata.token,
+                                    Ok((storage_addr.clone(), slot.clone())),
+                                );
                             } else {
                                 // Override didn't change the balance - this slot is incorrect.
                                 // Remove it from candidates and try the next slot in priority
@@ -1498,7 +1503,7 @@ mod tests {
     #[case("f847a638E44186F3287ee9F8cAF73FF4d4B80784", "ZeroBalanceUser")]
     #[case("000000000004444c5dc75cB358380D2e3dE08A90", "PoolManager")]
     #[tokio::test]
-    #[ignore = "require RPC connection"]
+    // #[ignore = "require RPC connection"]
     async fn test_detect_slots_integration(
         #[case] holder_address_hex: &str,
         #[case] holder_name: &str,

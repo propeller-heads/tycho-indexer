@@ -673,8 +673,9 @@ impl EVMAllowanceSlotDetector {
     ) -> Result<Value, AllowanceSlotError> {
         let mut batch = Vec::new();
 
-        for (id, metadata)  in slots_to_test.iter().enumerate() {
-            let (storage_addr, slot) = &metadata.all_slots
+        for (id, metadata) in slots_to_test.iter().enumerate() {
+            let (storage_addr, slot) = &metadata
+                .all_slots
                 .first()
                 .ok_or(AllowanceSlotError::TokenNotInTrace)?
                 .0;
@@ -742,7 +743,8 @@ impl EVMAllowanceSlotDetector {
                         continue;
                     }
 
-                    let (storage_addr, slot) = &metadata.all_slots
+                    let (storage_addr, slot) = &metadata
+                        .all_slots
                         .first()
                         .expect("all_slots should not be empty")
                         .0
@@ -764,7 +766,10 @@ impl EVMAllowanceSlotDetector {
                                     original_allowance = %metadata.original_allowance,
                                     "Storage slot detected successfully"
                                 );
-                                results.insert(metadata.token, Ok((storage_addr, slot)));
+                                results.insert(
+                                    metadata.token,
+                                    Ok((storage_addr.clone(), slot.clone())),
+                                );
                             } else {
                                 // Override didn't change the allowance - this slot is incorrect.
                                 // Remove it from candidates and try the next slot in priority
