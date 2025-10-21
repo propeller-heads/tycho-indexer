@@ -688,6 +688,12 @@ impl EVMBalanceSlotDetector {
         let mut detected_results = HashMap::new();
         let mut current_attempts = slots_to_test;
 
+        // Retry loop: Test slots with storage overrides, and if a slot fails validation,
+        // remove it from the candidate list and retry with remaining slots.
+        // This continues until either:
+        // 1. All tokens find a valid slot (added to detected_results)
+        // 2. A token exhausts all slot candidates (error added to detected_results)
+        // 3. An RPC error occurs (error added to detected_results)
         loop {
             if current_attempts.is_empty() {
                 break;
