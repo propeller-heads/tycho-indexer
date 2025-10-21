@@ -29,6 +29,7 @@ struct SlotMetadata {
     token: Address,
     original_allowance: U256,
     test_value: U256,
+    all_slots: SlotValues,
 }
 
 /// Type alias for intermediate slot detection results: maps token address to (all_slots,
@@ -546,7 +547,7 @@ impl EVMAllowanceSlotDetector {
         block_hash: &BlockHash,
     ) -> TokenSlotResults {
         let mut detected_results = HashMap::new();
-        let mut slots_and_candidates = Vec::new();
+        let mut slots_to_test = Vec::new();
 
         for (token, result) in token_slots {
             match result {
@@ -554,14 +555,12 @@ impl EVMAllowanceSlotDetector {
                     if all_slots.is_empty() {
                         detected_results.insert(token, Err(AllowanceSlotError::TokenNotInTrace));
                     } else {
-                        slots_and_candidates.push((
+                        slots_to_test.push(SlotMetadata {
+                            token,
+                            original_allowance,
+                            test_value: Self::generate_test_value(original_allowance),
                             all_slots,
-                            SlotMetadata {
-                                token,
-                                original_allowance,
-                                test_value: Self::generate_test_value(original_allowance),
-                            },
-                        ));
+                        });
                     }
                 }
                 Err(e) => {
@@ -570,13 +569,13 @@ impl EVMAllowanceSlotDetector {
             }
         }
 
-        if slots_and_candidates.is_empty() {
+        if slots_to_test.is_empty() {
             return detected_results;
         }
 
         // Test all slot candidates, trying alternate slots if needed
         let test_results = self
-            .test_slots_with_fallback(slots_and_candidates, owner, spender, block_hash)
+            .test_slots_with_fallback(slots_to_test, owner, spender, block_hash)
             .await;
         detected_results.extend(test_results);
 
@@ -585,13 +584,13 @@ impl EVMAllowanceSlotDetector {
 
     async fn test_slots_with_fallback(
         &self,
-        slots_and_candidates: Vec<(SlotValues, SlotMetadata)>,
+        slots_to_test: Vec<SlotMetadata>,
         owner: &Address,
         spender: &Address,
         block_hash: &BlockHash,
     ) -> TokenSlotResults {
         let mut detected_results = HashMap::new();
-        let mut current_attempts = slots_and_candidates;
+        let mut current_attempts = slots_to_test;
 
         loop {
             if current_attempts.is_empty() {
@@ -603,7 +602,7 @@ impl EVMAllowanceSlotDetector {
                 {
                     Ok(requests) => requests,
                     Err(e) => {
-                        for (_, metadata) in current_attempts {
+                        for metadata in current_attempts {
                             detected_results.insert(
                                 metadata.token,
                                 Err(AllowanceSlotError::RequestError(format!(
@@ -621,7 +620,7 @@ impl EVMAllowanceSlotDetector {
             {
                 Ok(responses) => responses,
                 Err(e) => {
-                    for (_, metadata) in current_attempts {
+                    for metadata in current_attempts {
                         detected_results.insert(
                             metadata.token,
                             Err(AllowanceSlotError::RequestError(format!(
@@ -661,15 +660,15 @@ impl EVMAllowanceSlotDetector {
 
     fn create_slot_test_requests(
         &self,
-        slots_to_test: &[(SlotValues, SlotMetadata)],
+        slots_to_test: &[SlotMetadata],
         owner: &Address,
         spender: &Address,
         block_hash: &BlockHash,
     ) -> Result<Value, AllowanceSlotError> {
         let mut batch = Vec::new();
 
-        for (id, (slots, metadata))  in slots_to_test.iter().enumerate() {
-            let (storage_addr, slot) = &slots
+        for (id, metadata)  in slots_to_test.iter().enumerate() {
+            let (storage_addr, slot) = &metadata.all_slots
                 .first()
                 .ok_or(AllowanceSlotError::TokenNotInTrace)?
                 .0;
@@ -708,9 +707,9 @@ impl EVMAllowanceSlotDetector {
     fn process_slot_test_responses(
         &self,
         responses: Vec<Value>,
-        slots_to_test: Vec<(SlotValues, SlotMetadata)>,
+        slots_to_test: Vec<SlotMetadata>,
         results: &mut TokenSlotResults,
-    ) -> Vec<(SlotValues, SlotMetadata)> {
+    ) -> Vec<SlotMetadata> {
         let mut retry_data = Vec::new();
         let mut id_to_response = HashMap::new();
         for response in responses {
@@ -722,7 +721,7 @@ impl EVMAllowanceSlotDetector {
             }
         }
 
-        for (idx, (mut all_slots, metadata)) in slots_to_test.into_iter().enumerate() {
+        for (idx, mut metadata) in slots_to_test.into_iter().enumerate() {
             let response_id = (idx + 1) as u64;
 
             match id_to_response.get(&response_id) {
@@ -737,7 +736,7 @@ impl EVMAllowanceSlotDetector {
                         continue;
                     }
 
-                    let (storage_addr, slot) = &all_slots
+                    let (storage_addr, slot) = &metadata.all_slots
                         .first()
                         .expect("all_slots should not be empty")
                         .0
@@ -761,10 +760,15 @@ impl EVMAllowanceSlotDetector {
                                 );
                                 results.insert(metadata.token, Ok((storage_addr, slot)));
                             } else {
-                                all_slots.retain(|s| s.0 != (storage_addr.clone(), slot.clone()));
-                                if !all_slots.is_empty() {
+                                // Override didn't change the allowance - this slot is incorrect.
+                                // Remove it from candidates and try the next slot in priority
+                                // order.
+                                metadata
+                                    .all_slots
+                                    .retain(|s| s.0 != (storage_addr.clone(), slot.clone()));
+                                if !metadata.all_slots.is_empty() {
                                     warn!("Storage slot test failed - trying next slot");
-                                    retry_data.push((all_slots, metadata.clone()));
+                                    retry_data.push(metadata.clone());
                                 } else {
                                     warn!(
                                         token = %metadata.token,

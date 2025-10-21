@@ -12,6 +12,7 @@ struct SlotMetadata {
     token: Address,
     original_balance: U256,
     test_value: U256,
+    all_slots: SlotValues,
 }
 
 use alloy::primitives::{Address as AlloyAddress, U256};
@@ -651,14 +652,12 @@ impl EVMBalanceSlotDetector {
                     } else {
                         Self::sort_slots_by_priority(&mut all_slots, original_balance);
 
-                        slots_to_test.push((
+                        slots_to_test.push(SlotMetadata {
+                            token,
+                            original_balance,
+                            test_value: Self::generate_test_value(original_balance),
                             all_slots,
-                            SlotMetadata {
-                                token,
-                                original_balance,
-                                test_value: Self::generate_test_value(original_balance),
-                            },
-                        ));
+                        });
                     }
                 }
                 Err(e) => {
@@ -682,7 +681,7 @@ impl EVMBalanceSlotDetector {
 
     async fn test_slots_with_fallback(
         &self,
-        slots_to_test: Vec<(SlotValues, SlotMetadata)>,
+        slots_to_test: Vec<SlotMetadata>,
         owner: &Address,
         block_hash: &BlockHash,
     ) -> TokenSlotResults {
@@ -698,7 +697,7 @@ impl EVMBalanceSlotDetector {
                 match self.create_slot_test_requests(&current_attempts, owner, block_hash) {
                     Ok(requests) => requests,
                     Err(e) => {
-                        for (_, metadata) in current_attempts {
+                        for metadata in current_attempts {
                             detected_results.insert(
                                 metadata.token,
                                 Err(BalanceSlotError::RequestError(format!(
@@ -716,7 +715,7 @@ impl EVMBalanceSlotDetector {
             {
                 Ok(responses) => responses,
                 Err(e) => {
-                    for (_, metadata) in current_attempts {
+                    for metadata in current_attempts {
                         detected_results.insert(
                             metadata.token,
                             Err(BalanceSlotError::RequestError(format!(
@@ -769,14 +768,14 @@ impl EVMBalanceSlotDetector {
 
     fn create_slot_test_requests(
         &self,
-        slots_to_test: &[(SlotValues, SlotMetadata)],
+        slots_to_test: &[SlotMetadata],
         owner: &Address,
         block_hash: &BlockHash,
     ) -> Result<Value, BalanceSlotError> {
         let mut batch = Vec::new();
 
-        for (id, (slots, metadata)) in slots_to_test.iter().enumerate() {
-            let (storage_addr, slot) = &slots
+        for (id, metadata) in slots_to_test.iter().enumerate() {
+            let (storage_addr, slot) = &metadata.all_slots
                 .first()
                 .ok_or(BalanceSlotError::TokenNotInTrace)?
                 .0;
@@ -815,9 +814,9 @@ impl EVMBalanceSlotDetector {
     fn process_slot_test_responses(
         &self,
         responses: Vec<Value>,
-        slots_to_test: Vec<(SlotValues, SlotMetadata)>,
+        slots_to_test: Vec<SlotMetadata>,
         results: &mut TokenSlotResults,
-    ) -> Vec<(SlotValues, SlotMetadata)> {
+    ) -> Vec<SlotMetadata> {
         let mut retry_data = Vec::new();
         let mut id_to_response = HashMap::new();
         for response in responses {
@@ -829,7 +828,7 @@ impl EVMBalanceSlotDetector {
             }
         }
 
-        for (idx, (mut all_slots, metadata)) in slots_to_test.into_iter().enumerate() {
+        for (idx, mut metadata) in slots_to_test.into_iter().enumerate() {
             let response_id = (idx + 1) as u64;
 
             match id_to_response.get(&response_id) {
@@ -844,7 +843,7 @@ impl EVMBalanceSlotDetector {
                         continue;
                     }
 
-                    let (storage_addr, slot) = &all_slots
+                    let (storage_addr, slot) = &metadata.all_slots
                         .first()
                         .expect("all_slots should not be empty")
                         .0
@@ -867,10 +866,15 @@ impl EVMBalanceSlotDetector {
                                 );
                                 results.insert(metadata.token, Ok((storage_addr, slot)));
                             } else {
-                                all_slots.retain(|s| s.0 != (storage_addr.clone(), slot.clone()));
-                                if !all_slots.is_empty() {
+                                // Override didn't change the balance - this slot is incorrect.
+                                // Remove it from candidates and try the next slot in priority
+                                // order.
+                                metadata
+                                    .all_slots
+                                    .retain(|s| s.0 != (storage_addr.clone(), slot.clone()));
+                                if !metadata.all_slots.is_empty() {
                                     warn!("Storage slot test failed - trying next slot");
-                                    retry_data.push((all_slots, metadata.clone()));
+                                    retry_data.push(metadata.clone());
                                 } else {
                                     warn!(
                                         token = %metadata.token,
@@ -1291,28 +1295,24 @@ mod tests {
         let detector = EVMBalanceSlotDetector::new(config).unwrap();
 
         let slot_candidates = vec![
-            (
-                vec![(
+            SlotMetadata {
+                token: Address::from([0x11u8; 20]),
+                original_balance: U256::from(1000u64),
+                test_value: U256::from(2000u64),
+                all_slots: vec![(
                     (Address::from([0x11u8; 20]), Bytes::from(vec![0x01u8; 32])),
                     U256::from(1000u64),
                 )],
-                SlotMetadata {
-                    token: Address::from([0x11u8; 20]),
-                    original_balance: U256::from(1000u64),
-                    test_value: U256::from(2000u64),
-                },
-            ),
-            (
-                vec![(
+            },
+            SlotMetadata {
+                token: Address::from([0x22u8; 20]),
+                original_balance: U256::from(3000u64),
+                test_value: U256::from(6000u64),
+                all_slots: vec![(
                     (Address::from([0x22u8; 20]), Bytes::from(vec![0x02u8; 32])),
                     U256::from(3000u64),
                 )],
-                SlotMetadata {
-                    token: Address::from([0x22u8; 20]),
-                    original_balance: U256::from(3000u64),
-                    test_value: U256::from(6000u64),
-                },
-            ),
+            },
         ];
 
         // Create responses - first one changes (valid), second doesn't (invalid)
