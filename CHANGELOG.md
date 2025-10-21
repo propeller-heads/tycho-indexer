@@ -1,3 +1,11 @@
+## [0.98.1](https://github.com/propeller-heads/tycho-indexer/compare/0.98.0...0.98.1) (2025-10-21)
+
+
+### Bug Fixes
+
+* bug reporting 0 blocks sync rate ([d6df0f1](https://github.com/propeller-heads/tycho-indexer/commit/d6df0f1f2c8430efe71d1879a664d500b28d4a92))
+* bug reporting 0 blocks sync rate ([#737](https://github.com/propeller-heads/tycho-indexer/issues/737)) ([9a82f93](https://github.com/propeller-heads/tycho-indexer/commit/9a82f9358322d10e7e9f3a2b08761154e407dd06))
+
 ## [0.98.0](https://github.com/propeller-heads/tycho-indexer/compare/0.97.0...0.98.0) (2025-10-17)
 
 
