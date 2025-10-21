@@ -1502,7 +1502,7 @@ mod tests {
     #[case("f847a638E44186F3287ee9F8cAF73FF4d4B80784", "ZeroBalanceUser")]
     #[case("000000000004444c5dc75cB358380D2e3dE08A90", "PoolManager")]
     #[tokio::test]
-    // #[ignore = "require RPC connection"]
+    #[ignore = "require RPC connection"]
     async fn test_detect_slots_integration(
         #[case] holder_address_hex: &str,
         #[case] holder_name: &str,
