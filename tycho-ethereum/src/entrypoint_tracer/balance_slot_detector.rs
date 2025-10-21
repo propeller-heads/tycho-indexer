@@ -752,11 +752,10 @@ impl EVMBalanceSlotDetector {
     fn sort_slots_by_priority(slots: &mut SlotValues, original_balance: U256) {
         slots.sort_by_key(|(_, balance_value)| {
             // Primary: distance to original balance (closer is better)
-            let distance = balance_value.abs_diff(original_balance);
             // Note: We can't use reverse index here as a secondary key in a simple way,
             // but the initial order from the trace is already in access order,
             // so slots with the same distance will maintain their relative order (stable sort)
-            distance
+            balance_value.abs_diff(original_balance)
         });
     }
 
