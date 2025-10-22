@@ -1,46 +1,13 @@
-use std::collections::HashSet;
-
 use num_bigint::BigInt;
 use tracing::{debug, info};
 use tycho_client::feed::synchronizer::ComponentWithState;
 
 use crate::evm::protocol::vm::utils::json_deserialize_be_bigint_list;
 
-const ZERO_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
 const ZERO_ADDRESS_ARR: [u8; 20] = [0u8; 20];
 
-// Defines the default Balancer V2 Filter
+/// Filters out pools that DCI currently fails to find some accounts for
 pub fn balancer_v2_pool_filter(component: &ComponentWithState) -> bool {
-    balancer_v2_pool_filter_after_dci_update(component)
-}
-
-/// Filters out pools that have hooks in Uniswap V4
-pub fn uniswap_v4_pool_with_hook_filter(component: &ComponentWithState) -> bool {
-    if let Some(hooks) = component
-        .component
-        .static_attributes
-        .get("hooks")
-    {
-        if hooks.to_vec() != ZERO_ADDRESS_ARR {
-            debug!("Filtering out UniswapV4 pool {} because it has hooks", component.component.id);
-            return false;
-        }
-    }
-    true
-}
-
-pub fn uniswap_v4_pool_with_euler_hook_filter(component: &ComponentWithState) -> bool {
-    component
-        .component
-        .static_attributes
-        .get("hook_identifier")
-        .and_then(|bytes| String::from_utf8(bytes.0.to_vec()).ok())
-        .unwrap_or_default() ==
-        "euler_v1"
-}
-
-/// Filters out pools that are failing at the moment after DCI update
-pub fn balancer_v2_pool_filter_after_dci_update(component: &ComponentWithState) -> bool {
     const UNSUPPORTED_COMPONENT_IDS: [&str; 6] = [
         "0x848a5564158d84b8a8fb68ab5d004fae11619a5400000000000000000000066a",
         "0x596192bb6e41802428ac943d2f1476c1af25cc0e000000000000000000000659",
@@ -67,62 +34,30 @@ pub fn balancer_v2_pool_filter_after_dci_update(component: &ComponentWithState) 
     true
 }
 
-/// Filters out pools that have dynamic rate providers or unsupported pool types
-/// in Balancer V2
-pub fn balancer_v2_pool_filter_pre_dci(component: &ComponentWithState) -> bool {
-    // Check for rate_providers in static_attributes
-    if let Some(rate_providers_data) = component
+/// Filters for core uniswap v4 pools (no hooks)
+pub fn uniswap_v4_core_pool_filter(component: &ComponentWithState) -> bool {
+    if let Some(hooks) = component
         .component
         .static_attributes
-        .get("rate_providers")
+        .get("hooks")
     {
-        let rate_providers_str =
-            std::str::from_utf8(rate_providers_data).expect("Invalid UTF-8 data");
-        let parsed_rate_providers =
-            serde_json::from_str::<Vec<String>>(rate_providers_str).expect("Invalid JSON format");
-
-        let has_dynamic_rate_provider = parsed_rate_providers
-            .iter()
-            .any(|provider| provider != ZERO_ADDRESS);
-
-        if has_dynamic_rate_provider {
-            debug!(
-                "Filtering out Balancer pool {} because it has dynamic rate_providers",
-                component.component.id
-            );
+        if hooks.to_vec() != ZERO_ADDRESS_ARR {
+            debug!("Filtering out UniswapV4 pool {} because it has hooks", component.component.id);
             return false;
         }
     }
-
-    let unsupported_pool_types: HashSet<&str> = [
-        "ERC4626LinearPoolFactory",
-        "EulerLinearPoolFactory",
-        "SiloLinearPoolFactory",
-        "YearnLinearPoolFactory",
-        "ComposableStablePoolFactory",
-    ]
-    .iter()
-    .cloned()
-    .collect();
-
-    // Check pool_type in static_attributes
-    if let Some(pool_type_data) = component
-        .component
-        .static_attributes
-        .get("pool_type")
-    {
-        // Convert the decoded bytes to a UTF-8 string
-        let pool_type = std::str::from_utf8(pool_type_data).expect("Invalid UTF-8 data");
-        if unsupported_pool_types.contains(pool_type) {
-            debug!(
-                "Filtering out Balancer pool {} because it has type {}",
-                component.component.id, pool_type
-            );
-            return false;
-        }
-    }
-
     true
+}
+
+/// Filters for uniswap v4 pools with Euler hooks
+pub fn uniswap_v4_euler_hook_pool_filter(component: &ComponentWithState) -> bool {
+    component
+        .component
+        .static_attributes
+        .get("hook_identifier")
+        .and_then(|bytes| String::from_utf8(bytes.0.to_vec()).ok())
+        .unwrap_or_default() ==
+        "euler_v1"
 }
 
 /// Filters out pools that have unsupported token types in Curve
