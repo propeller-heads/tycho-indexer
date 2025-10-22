@@ -207,9 +207,8 @@ fn run_indexer(global_args: GlobalArgs, index_args: IndexArgs) -> Result<(), Ext
                 })?;
 
             let retention_horizon: NaiveDateTime = index_args
-                .retention_horizon
-                .parse()
-                .expect("Failed to parse retention horizon");
+                .get_retention_horizon()
+                .map_err(ExtractionError::Setup)?;
 
             let (extraction_tasks, other_tasks) = create_indexing_tasks(
                 &global_args,
