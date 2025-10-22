@@ -10,6 +10,7 @@ pub struct StreamUpdate {
     pub update_type: UpdateType,
     pub update: Update,
     pub is_first_update: bool,
+    pub received_at: std::time::Duration,
 }
 
 #[derive(Debug, PartialEq)]

@@ -76,8 +76,27 @@ impl ProtocolStreamProcessor {
                         continue;
                     }
                 };
-                let update =
-                    StreamUpdate { update_type: UpdateType::Protocol, update, is_first_update };
+                let received_at =
+                    match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+                        Ok(duration) => duration,
+                        Err(e) => {
+                            if tx
+                                .send(Err(miette!(e).wrap_err("Error getting current timestamp")))
+                                .await
+                                .is_err()
+                            {
+                                warn!("Receiver dropped, stopping stream processor");
+                                break;
+                            }
+                            continue;
+                        }
+                    };
+                let update = StreamUpdate {
+                    update_type: UpdateType::Protocol,
+                    update,
+                    is_first_update,
+                    received_at,
+                };
                 if is_first_update {
                     is_first_update = false;
                 }
@@ -124,6 +143,11 @@ impl ProtocolStreamProcessor {
                         "uniswap_v4_hooks",
                         tvl_filter.clone(),
                         Some(uniswap_v4_pool_with_euler_hook_filter),
+                    )
+                    .exchange::<EVMPoolState<PreCachedDB>>(
+                        "vm:maverick_v2",
+                        tvl_filter.clone(),
+                        None,
                     );
             }
             Chain::Base => {

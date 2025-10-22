@@ -174,8 +174,29 @@ impl RFQStreamProcessor {
                     .new_pairs
                     .retain(|key, _| update.states.contains_key(key));
 
+                let received_at =
+                    match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+                        Ok(duration) => duration,
+                        Err(e) => {
+                            if stream_tx
+                                .send(Err(miette!(e).wrap_err("Error getting current timestamp")))
+                                .await
+                                .is_err()
+                            {
+                                warn!("Receiver dropped, stopping stream processor");
+                                break;
+                            }
+                            continue;
+                        }
+                    };
+
                 // Send the latest update
-                let update = StreamUpdate { update_type: UpdateType::Rfq, update, is_first_update };
+                let update = StreamUpdate {
+                    update_type: UpdateType::Rfq,
+                    update,
+                    is_first_update,
+                    received_at,
+                };
                 if is_first_update {
                     is_first_update = false;
                 }
