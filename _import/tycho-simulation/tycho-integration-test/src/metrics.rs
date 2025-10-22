@@ -1,6 +1,6 @@
 use actix_web::{rt::System, web, App, HttpResponse, HttpServer, Responder};
 use metrics::{counter, describe_counter, describe_gauge, describe_histogram, gauge, histogram};
-use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
+use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
 use miette::{Context, IntoDiagnostic, Result};
 use tracing::info;
 use tycho_client::feed::SynchronizerState;
@@ -172,7 +172,32 @@ pub fn record_protocol_update_block_delay(block_delay: u64) {
 /// Creates and runs the Prometheus metrics exporter using Actix Web.
 /// Returns a JoinHandle that should be awaited to detect server failures.
 pub async fn create_metrics_exporter(port: u16) -> Result<tokio::task::JoinHandle<Result<()>>> {
-    let exporter_builder = PrometheusBuilder::new();
+    let exporter_builder = PrometheusBuilder::new()
+        .set_buckets_for_metric(
+            Matcher::Full("tycho_integration_block_processing_duration_seconds".to_string()),
+            &[0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0, 15.0, 20.0],
+        )
+        .map_err(|e| miette::miette!("Failed to set buckets: {}", e))?
+        .set_buckets_for_metric(
+            Matcher::Full(
+                "tycho_integration_simulation_get_amount_out_duration_seconds".to_string(),
+            ),
+            &[0.0001, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5],
+        )
+        .map_err(|e| miette::miette!("Failed to set buckets: {}", e))?
+        .set_buckets_for_metric(
+            Matcher::Full("tycho_integration_simulation_execution_slippage_ratio".to_string()),
+            &[
+                -0.05, -0.04, -0.03, -0.02, -0.01, -0.005, -0.001, 0.0, 0.001, 0.005, 0.01, 0.02,
+                0.03, 0.04, 0.05, 0.1,
+            ],
+        )
+        .map_err(|e| miette::miette!("Failed to set buckets: {}", e))?
+        .set_buckets_for_metric(
+            Matcher::Full("tycho_integration_protocol_update_block_delay_blocks".to_string()),
+            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 7.0, 10.0, 15.0, 20.0, 25.0],
+        )
+        .map_err(|e| miette::miette!("Failed to set buckets: {}", e))?;
     let handle = exporter_builder
         .install_recorder()
         .into_diagnostic()
