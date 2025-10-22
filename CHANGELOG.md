@@ -1,3 +1,21 @@
+## [0.99.0](https://github.com/propeller-heads/tycho-indexer/compare/0.98.1...0.99.0) (2025-10-22)
+
+
+### Features
+
+* optimize cloning instead of expensive `msg`, only clone `msg.header` ([6ff30ba](https://github.com/propeller-heads/tycho-indexer/commit/6ff30ba3dcdd3b8f89ef3555c4fbde7a6222207d))
+
+
+### Bug Fixes
+
+* catch missed error handling in message printer of `cli.rs` ([6f8b4fb](https://github.com/propeller-heads/tycho-indexer/commit/6f8b4fbb0e73ae2f408e727bc6dc9df0d09d2d2c))
+* correct typo in `deltas.rs` doc comments ([4134115](https://github.com/propeller-heads/tycho-indexer/commit/413411584ed391c35fc8c593c10a822db51cd0f7))
+* handle CLI errors cleanly in `main.rs` ([6e96ca5](https://github.com/propeller-heads/tycho-indexer/commit/6e96ca5bb053ff3a8f62d11435125fc42e73e747))
+* improve error handling for task monitoring in `cli.rs` ([7d97eac](https://github.com/propeller-heads/tycho-indexer/commit/7d97eacdaf04521702d8e8356df298da9350b466))
+* incorrect `block_history` usage by replacing it with `new_block_history` in `feed/mod.rs` ([eedd967](https://github.com/propeller-heads/tycho-indexer/commit/eedd9675aef73a3b111acb21801b8edc19708ddc))
+* remove unreachable error branches in `stream.rs` ([6e9cc37](https://github.com/propeller-heads/tycho-indexer/commit/6e9cc3755f7a010846ee579b25551fc7d241a5fa))
+* simplify error handling in `handle_error_for_backoff` ([1bb6ae5](https://github.com/propeller-heads/tycho-indexer/commit/1bb6ae5e11f41e2bdf95e8e1c08311a92001ec4d))
+
 ## [0.98.1](https://github.com/propeller-heads/tycho-indexer/compare/0.98.0...0.98.1) (2025-10-21)
 
 
