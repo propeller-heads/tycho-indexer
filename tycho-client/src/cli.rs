@@ -112,13 +112,16 @@ struct CliArgs {
 impl CliArgs {
     fn validate(&self) -> Result<(), String> {
         // TVL thresholds must be set together - either both or neither
-        if self.remove_tvl_threshold.is_some() != self.add_tvl_threshold.is_some() {
-            return Err("Both remove_tvl_threshold and add_tvl_threshold must be set.".to_string());
-        } else if self.remove_tvl_threshold.is_some() &&
-            self.add_tvl_threshold.is_some() &&
-            self.remove_tvl_threshold.unwrap() >= self.add_tvl_threshold.unwrap()
-        {
-            return Err("remove_tvl_threshold must be less than add_tvl_threshold".to_string());
+        match (self.remove_tvl_threshold, self.add_tvl_threshold) {
+            (Some(remove), Some(add)) if remove >= add => {
+                return Err("remove_tvl_threshold must be less than add_tvl_threshold".to_string());
+            }
+            (Some(_), None) | (None, Some(_)) => {
+                return Err(
+                    "Both remove_tvl_threshold and add_tvl_threshold must be set.".to_string()
+                );
+            }
+            _ => {}
         }
 
         Ok(())
@@ -145,16 +148,16 @@ pub async fn run_cli() -> Result<(), String> {
     tracing::subscriber::set_global_default(subscriber)
         .map_err(|e| format!("Failed to set up logging subscriber: {e}"))?;
 
-    // Runs example if flag is set.
-    if args.example {
-        // Run a simple example of a block synchronizer.
-        //
-        // You need to port-forward tycho before running this:
+    // Build the list of exchanges.  When --example is provided, we seed the list with a fixed
+    // pair of well-known pools, otherwise we parse user supplied values (either plain exchange
+    // names or exchange-pool pairs in the {exchange}-{pool_address} format).
+    let exchanges: Vec<(String, Option<String>)> = if args.example {
+        // You will need to port-forward tycho to run the example:
         //
         // ```bash
         // kubectl port-forward -n dev-tycho deploy/tycho-indexer 8888:4242
         // ```
-        let exchanges = vec![
+        vec![
             (
                 "uniswap_v3".to_string(),
                 Some("0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640".to_string()),
@@ -163,29 +166,25 @@ pub async fn run_cli() -> Result<(), String> {
                 "uniswap_v2".to_string(),
                 Some("0xa478c2975ab1ea89e8196811f51a7b7ade33eb11".to_string()),
             ),
-        ];
-        run(exchanges, args).await?;
-        return Ok(());
-    }
-
-    // Parse exchange name and addresses from {exchange}-{pool_address} format.
-    let exchanges: Vec<(String, Option<String>)> = args
-        .exchange
-        .iter()
-        .filter_map(|e| {
-            if e.contains('-') {
-                let parts: Vec<&str> = e.split('-').collect();
-                if parts.len() == 2 {
-                    Some((parts[0].to_string(), Some(parts[1].to_string())))
+        ]
+    } else {
+        args.exchange
+            .iter()
+            .filter_map(|e| {
+                if e.contains('-') {
+                    let parts: Vec<&str> = e.split('-').collect();
+                    if parts.len() == 2 {
+                        Some((parts[0].to_string(), Some(parts[1].to_string())))
+                    } else {
+                        warn!("Ignoring invalid exchange format: {}", e);
+                        None
+                    }
                 } else {
-                    warn!("Ignoring invalid exchange format: {}", e);
-                    None
+                    Some((e.to_string(), None))
                 }
-            } else {
-                Some((e.to_string(), None))
-            }
-        })
-        .collect();
+            })
+            .collect()
+    };
 
     info!("Running with exchanges: {:?}", exchanges);
 
@@ -287,36 +286,51 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
         .map_err(|e| format!("Failed to start block synchronizer: {e}"))?;
 
     let msg_printer = tokio::spawn(async move {
-        while let Some(Ok(msg)) = rx.recv().await {
+        while let Some(result) = rx.recv().await {
+            let msg =
+                result.map_err(|e| format!("Message printer received synchronizer error: {e}"))?;
+
             if let Ok(msg_json) = serde_json::to_string(&msg) {
                 println!("{msg_json}");
             } else {
+                // Log the error but continue processing further messages.
                 error!("Failed to serialize FeedMessage");
-            }
+            };
         }
+
+        Ok::<(), String>(())
     });
 
     // Monitor the WebSocket, BlockSynchronizer and message printer futures.
-    tokio::select! {
-        res = ws_jh => {
-            if let Err(e) = res {
-                error!("WebSocket connection dropped unexpectedly: {}", e);
-            }
-        }
-        res = sync_jh => {
-            if let Err(e) = res {
-                error!("BlockSynchronizer stopped unexpectedly: {}", e);
-            }
-        }
-        res = msg_printer => {
-            if let Err(e) = res {
-                error!("Message printer stopped unexpectedly: {}", e);
-            }
-        }
-    }
+    let (failed_task, shutdown_reason) = tokio::select! {
+        res = ws_jh => (
+            "WebSocket",
+            extract_nested_error(res)
+        ),
+        res = sync_jh => (
+            "BlockSynchronizer",
+            extract_nested_error::<_, _, String>(Ok(res))
+            ),
+        res = msg_printer => (
+            "MessagePrinter",
+            extract_nested_error(res)
+        )
+    };
 
     debug!("RX closed");
-    Ok(())
+    Err(format!(
+        "{failed_task} task terminated: {}",
+        shutdown_reason.unwrap_or("unknown reason".to_string())
+    ))
+}
+
+#[inline]
+fn extract_nested_error<T, E1: ToString, E2: ToString>(
+    res: Result<Result<T, E1>, E2>,
+) -> Option<String> {
+    res.map_err(|e| e.to_string())
+        .and_then(|r| r.map_err(|e| e.to_string()))
+        .err()
 }
 
 #[cfg(test)]

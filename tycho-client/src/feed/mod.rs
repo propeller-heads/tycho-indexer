@@ -375,7 +375,7 @@ impl SynchronizerStream {
                         "Tried to poll from closed synchronizer during catch up.",
                     );
                     self.mark_closed();
-                    return Ok(None)
+                    return Ok(None);
                 }
                 Err(_) => {
                     debug!(%extractor_id, "Timed out waiting for catch-up");
@@ -663,7 +663,7 @@ where
             .collect::<Vec<_>>();
         try_join_all(init_tasks).await?;
 
-        let mut sync_streams = HashMap::with_capacity(synchronizers.len());
+        let mut sync_streams = Vec::with_capacity(synchronizers.len());
         let mut sync_close_senders = Vec::new();
         for (extractor_id, synchronizer) in synchronizers.drain() {
             let (handle, rx) = synchronizer.start().await;
@@ -671,60 +671,60 @@ where
             state_sync_tasks.push(join_handle);
             sync_close_senders.push(close_sender);
 
-            sync_streams.insert(extractor_id.clone(), SynchronizerStream::new(&extractor_id, rx));
+            sync_streams.push(SynchronizerStream::new(&extractor_id, rx));
         }
 
         // startup, schedule first set of futures and wait for them to return to initialise
         // synchronizers.
         debug!("Waiting for initial synchronizer messages...");
         let mut startup_futures = Vec::new();
-        for (id, sh) in sync_streams.iter_mut() {
+        for synchronizer in sync_streams.iter_mut() {
             let fut = async {
-                let res = timeout(self.startup_timeout, sh.rx.recv()).await;
-                (id.clone(), res)
+                let res = timeout(self.startup_timeout, synchronizer.rx.recv()).await;
+                (synchronizer, res)
             };
             startup_futures.push(fut);
         }
+
         let mut ready_sync_msgs = HashMap::new();
         let initial_headers = join_all(startup_futures)
             .await
             .into_iter()
-            .filter_map(|(extractor_id, res)| {
-                let synchronizer = sync_streams
-                .get_mut(&extractor_id)
-                .unwrap();
-            match res {
-                Ok(Some(Ok(msg))) => {
-                    debug!(%extractor_id, height=?&msg.header.number, "Synchronizer started successfully!");
-                    // initially default all synchronizers to Ready
-                    synchronizer.mark_ready(&msg.header);
-                    ready_sync_msgs.insert(extractor_id.name.clone(), msg.clone());
-                    Some(msg.header)
+            .filter_map(|(synchronizer, res)| {
+                let extractor_id = synchronizer.extractor_id.clone();
+                match res {
+                    Ok(Some(Ok(msg))) => {
+                        debug!(%extractor_id, height=?&msg.header.number, "Synchronizer started successfully!");
+                        // initially default all synchronizers to Ready
+                        synchronizer.mark_ready(&msg.header);
+                        let header = msg.header.clone();
+                        ready_sync_msgs.insert(extractor_id.name.clone(), msg);
+                        Some(header)
+                    }
+                    Ok(Some(Err(e))) => {
+                        synchronizer.mark_errored(e);
+                        None
+                    }
+                    Ok(None) => {
+                        // Synchronizer closed channel. This can only happen if the run
+                        // task ended, before this, the synchronizer should have sent
+                        // an error, so this case we likely don't have to handle that
+                        // explicitly
+                        warn!(%extractor_id, "Synchronizer closed during startup");
+                        synchronizer.mark_closed();
+                        None
+                    }
+                    Err(_) => {
+                        // We got an error because the synchronizer timed out during startup
+                        warn!(%extractor_id, "Timed out waiting for first message");
+                        synchronizer.mark_stale(&BlockHeader::default());
+                        None
+                    }
                 }
-                Ok(Some(Err(e))) => {
-                    synchronizer.mark_errored(e);
-                    None
-                }
-                Ok(None) => {
-                    // Synchronizer closed channel. This can only happen if the run
-                    // task ended, before this, the synchronizer should have sent
-                    // an error, so this case we likely don't have to handle that
-                    // explicitly
-                    warn!(%extractor_id, "Synchronizer closed during startup");
-                    synchronizer.mark_closed();
-                    None
-                }
-                Err(_) => {
-                    // We got an error because the synchronizer timed out during startup
-                    warn!(%extractor_id, "Timed out waiting for first message");
-                    synchronizer.mark_stale(&BlockHeader::default());
-                    None
-                }
-            }
-        })
-        .collect::<HashSet<_>>() // remove duplicates
-        .into_iter()
-        .collect::<Vec<_>>();
+            })
+            .collect::<HashSet<_>>() // remove duplicates
+            .into_iter()
+            .collect::<Vec<_>>();
 
         // Ensures we have at least one ready stream
         Self::check_streams(&sync_streams)?;
@@ -732,7 +732,8 @@ where
         // Determine the starting header for synchronization
         let start_header = block_history
             .latest()
-            .expect("Safe since we checked streams before");
+            // Safe, as we have checked this invariant with `check_streams`
+            .ok_or(BlockHistoryError::EmptyHistory)?;
         info!(
             start_block=%start_header,
             n_healthy=ready_sync_msgs.len(),
@@ -742,7 +743,7 @@ where
 
         // Determine correct state for each remaining synchronizer, based on their header vs the
         // latest one
-        for (_, stream) in sync_streams.iter_mut() {
+        for stream in sync_streams.iter_mut() {
             if let SynchronizerState::Ready(header) = stream.state.clone() {
                 if header.number < start_header.number {
                     debug!(
@@ -765,7 +766,7 @@ where
                     std::mem::take(&mut ready_sync_msgs),
                     sync_streams
                         .iter()
-                        .map(|(a, b)| (a.name.to_string(), b.state.clone()))
+                        .map(|stream| (stream.extractor_id.name.to_string(), stream.state.clone()))
                         .collect(),
                 );
                 if sync_tx.send(Ok(msg)).await.is_err() {
@@ -822,16 +823,16 @@ where
     /// non-recoverable error or all synchronizers have ended.
     async fn handle_next_message(
         &self,
-        sync_streams: &mut HashMap<ExtractorIdentity, SynchronizerStream>,
+        sync_streams: &mut [SynchronizerStream],
         ready_sync_msgs: &mut HashMap<String, StateSyncMessage<BlockHeader>>,
         block_history: &mut BlockHistory,
     ) -> BlockSyncResult<()> {
         let mut recv_futures = Vec::new();
-        for (extractor_id, stream) in sync_streams.iter_mut() {
+        for stream in sync_streams.iter_mut() {
             // If stream is in ended state, do not check for any messages (it's receiver
             // is closed), but do check stale streams.
             if stream.has_ended() {
-                continue
+                continue;
             }
             // Here we simply wait block_time + max_wait. This will not work for chains with
             // unknown block times but is simple enough for now.
@@ -852,7 +853,9 @@ where
                             .mul_f64(self.max_missed_blocks as f64),
                     )
                     .await?;
-                Ok::<_, BlockSynchronizerError>(res.map(|msg| (extractor_id.name.clone(), msg)))
+                Ok::<_, BlockSynchronizerError>(
+                    res.map(|msg| (stream.extractor_id.name.clone(), msg)),
+                )
             });
         }
         ready_sync_msgs.extend(
@@ -871,16 +874,20 @@ where
         // if we have any advanced header, we reinit the block history,
         // else we simply advance the existing history
         if sync_streams
-            .values()
+            .iter()
             .any(SynchronizerStream::is_advanced)
         {
             *block_history = Self::reinit_block_history(sync_streams, block_history)?;
         } else {
             let header = sync_streams
-                .values()
+                .iter()
                 .filter_map(SynchronizerStream::get_current_header)
                 .max_by_key(|b| b.number)
-                .expect("Active streams are present, since we checked above");
+                // Safe, as we have checked this invariant with `check_streams`
+                .ok_or(BlockSynchronizerError::NoReadySynchronizers(
+                    "Expected to have at least one synchronizer that is not stale or ended"
+                        .to_string(),
+                ))?;
             block_history.push(header.clone())?;
         }
         Ok(())
@@ -893,30 +900,32 @@ where
     ///
     /// ## Note
     /// This method assumes that at least one synchronizer is in Advanced, Ready or
-    /// Delayed state, it will panic in case this is not the case.
+    /// Delayed state, it will return an error in case this is not the case.
     fn reinit_block_history(
-        sync_streams: &mut HashMap<ExtractorIdentity, SynchronizerStream>,
+        sync_streams: &mut [SynchronizerStream],
         block_history: &mut BlockHistory,
     ) -> Result<BlockHistory, BlockSynchronizerError> {
-        let previous = block_history.latest().expect(
-            "Old block history should not be empty, startup should have populated it at this point",
-        );
+        let previous = block_history
+            .latest()
+            // Old block history should not be empty, startup should have populated it at this point
+            .ok_or(BlockHistoryError::EmptyHistory)?;
         let blocks = sync_streams
-            .values()
+            .iter()
             .filter_map(SynchronizerStream::get_current_header)
             .cloned()
             .collect();
         let new_block_history = BlockHistory::new(blocks, 10)?;
-        let latest = block_history
+        let latest = new_block_history
             .latest()
-            .expect("Block history should not be empty, we just populated it.");
+            // Block history should not be empty, we just populated it.
+            .ok_or(BlockHistoryError::EmptyHistory)?;
         info!(
              %previous,
             %latest,
             "Advanced synchronizer detected. Reinitialized block history."
         );
         sync_streams
-            .values_mut()
+            .iter_mut()
             .for_each(|stream| {
                 // we only get headers from advanced, ready and delayed so stale
                 // or ended streams are not considered here
@@ -935,47 +944,47 @@ where
     ///
     /// If there are no active streams meaning all are ended or stale, it returns a
     /// summary error message for the state of all synchronizers.
-    fn check_streams(
-        sync_streams: &HashMap<ExtractorIdentity, SynchronizerStream>,
-    ) -> BlockSyncResult<()> {
-        if sync_streams
-            .values()
-            .all(|stream| stream.has_ended() | stream.is_stale())
-        {
-            let mut reason = Vec::new();
-            if let Some((last_errored_id, last_errored_stream)) = sync_streams
-                .iter()
-                .filter(|(_, stream)| stream.has_ended() | stream.is_stale())
-                .max_by_key(|(_, stream)| stream.modify_ts)
-            {
-                if let Some(err) = &last_errored_stream.error {
-                    // All synchronizers were errored/stale and the last one errored
-                    reason.push(format!("Synchronizer for {last_errored_id} errored with: {err}"))
-                } else {
-                    // All synchronizer were errored/stale and the last one also became stale
-                    reason.push(format!(
-                        "Synchronizer for {last_errored_id} became: {}",
-                        last_errored_stream.state
-                    ))
-                }
-            } else {
-                reason.push(
-                    "Can't identify protocol that caused the stream to end! \
-                    This condition should be unreachable!"
-                        .to_string(),
-                )
+    fn check_streams(sync_streams: &[SynchronizerStream]) -> BlockSyncResult<()> {
+        let mut latest_errored_stream: Option<&SynchronizerStream> = None;
+
+        for stream in sync_streams.iter() {
+            // If we have at least one active stream, we can return early
+            if !stream.has_ended() && !stream.is_stale() {
+                return Ok(());
             }
 
-            sync_streams
-                .iter()
-                .for_each(|(id, stream)| {
-                    reason
-                        .push(format!("{id} reported as {} at {}", stream.state, stream.modify_ts))
-                });
-
-            return Err(BlockSynchronizerError::NoReadySynchronizers(reason.join(", ")));
+            // Otherwise, we track the latest errored stream for reporting
+            if latest_errored_stream.is_none() ||
+                stream.modify_ts >
+                    latest_errored_stream
+                        .as_ref()
+                        .unwrap()
+                        .modify_ts
+            {
+                latest_errored_stream = Some(stream);
+            }
         }
-        Ok(())
+
+        let last_error_reason = if let Some(stream) = latest_errored_stream {
+            if let Some(err) = &stream.error {
+                format!("Synchronizer for {} errored with: {err}", stream.extractor_id)
+            } else {
+                format!("Synchronizer for {} became: {}", stream.extractor_id, stream.state)
+            }
+        } else {
+            return Err(BlockSynchronizerError::NoSynchronizers);
+        };
+
+        let mut reason = vec![last_error_reason];
+
+        sync_streams.iter().for_each(|stream| {
+            reason.push(format!(
+                "{} reported as {} at {}",
+                stream.extractor_id, stream.state, stream.modify_ts
+            ))
+        });
+
+        Err(BlockSynchronizerError::NoReadySynchronizers(reason.join(", ")))
     }
 }
 
