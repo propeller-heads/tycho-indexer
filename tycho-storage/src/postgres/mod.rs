@@ -213,7 +213,7 @@ where
         self.map_id
             .get(val)
             .copied()
-            .ok_or(StorageError::NotFound(val.to_string(), "id".to_string()))
+            .ok_or(StorageError::NotFound("cached DB id".to_string(), val.to_string()))
     }
 
     /// Retrieves the corresponding enum variant for a database ID. Returns a StorageError
@@ -226,7 +226,7 @@ where
         self.map_enum
             .get(id)
             .cloned()
-            .ok_or(StorageError::NotFound(id.to_string(), "enum".to_string()))
+            .ok_or(StorageError::NotFound("enum".to_string(), id.to_string()))
     }
 
     /// Checks if an enum variant exists in the cache. Returns `true` if the variant is found,
