@@ -1,3 +1,10 @@
+## [0.184.0](https://github.com/propeller-heads/tycho-simulation/compare/0.183.0...0.184.0) (2025-10-22)
+
+
+### Features
+
+* HashflowClientBuilder ([f19cb23](https://github.com/propeller-heads/tycho-simulation/commit/f19cb23b15f24f8a4e93ce08e0af274649ef2ca1))
+
 ## [0.183.0](https://github.com/propeller-heads/tycho-simulation/compare/0.182.1...0.183.0) (2025-10-22)
 
 
