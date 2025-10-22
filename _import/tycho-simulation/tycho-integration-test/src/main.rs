@@ -240,10 +240,6 @@ async fn process_update(
         update.update.states.len()
     );
 
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .into_diagnostic()?
-        .as_secs();
     let block = match rpc_tools
         .provider
         .get_block_by_number(BlockNumberOrTag::Latest)
@@ -280,7 +276,8 @@ async fn process_update(
             }
         }
         // Record block processing latency
-        let latency_seconds = (now as i64 - block.header.timestamp as i64).abs() as f64;
+        let latency_seconds =
+            (update.received_at.as_secs_f64() - block.header.timestamp as f64).abs();
         metrics::record_block_processing_duration(latency_seconds);
 
         let block_delay = block
