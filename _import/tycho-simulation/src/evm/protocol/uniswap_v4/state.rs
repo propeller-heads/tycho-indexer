@@ -382,8 +382,19 @@ impl ProtocolSim for UniswapV4State {
                     let y2 = self.get_amount_out(x2.clone(), base, quote)?;
 
                     // Calculate the marginal price
-                    let num = &y2.amount - &y1.amount;
-                    let den = &x2 - &x1;
+                    let num = y2
+                        .amount
+                        .checked_sub(&y1.amount)
+                        .ok_or_else(|| {
+                            SimulationError::FatalError(
+                                "Cannot calculate spot price: y2 < y1".to_string(),
+                            )
+                        })?;
+                    let den = x2.checked_sub(&x1).ok_or_else(|| {
+                        SimulationError::FatalError(
+                            "Cannot calculate spot price: x2 < x1".to_string(),
+                        )
+                    })?;
 
                     if den == BigUint::from(0u64) {
                         return Err(SimulationError::FatalError(
