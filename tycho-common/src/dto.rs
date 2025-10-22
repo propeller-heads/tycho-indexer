@@ -1345,6 +1345,12 @@ impl From<models::protocol::ProtocolComponentState> for ResponseProtocolState {
     }
 }
 
+impl ResponseProtocolState {
+    pub fn is_paused(&self) -> bool {
+        self.attributes.contains_key("paused")
+    }
+}
+
 fn default_include_balances_flag() -> bool {
     true
 }
@@ -2086,6 +2092,39 @@ mod test {
 
         // These should not be equal due to the difference in tvl_gt
         assert_ne!(body1, body2);
+    }
+
+    #[test]
+    fn test_response_protocol_state_is_paused() {
+        use std::collections::HashMap;
+
+        // Test paused component
+        let mut attributes = HashMap::new();
+        attributes.insert("paused".to_string(), Bytes::from("0x01"));
+        let paused_state = ResponseProtocolState {
+            component_id: "test_component".to_string(),
+            attributes,
+            balances: HashMap::new(),
+        };
+        assert!(paused_state.is_paused());
+
+        // Test non-paused component
+        let mut attributes = HashMap::new();
+        attributes.insert("tvl".to_string(), Bytes::from("0x03e8"));
+        let unpaused_state = ResponseProtocolState {
+            component_id: "test_component".to_string(),
+            attributes,
+            balances: HashMap::new(),
+        };
+        assert!(!unpaused_state.is_paused());
+
+        // Test component with empty attributes
+        let empty_state = ResponseProtocolState {
+            component_id: "test_component".to_string(),
+            attributes: HashMap::new(),
+            balances: HashMap::new(),
+        };
+        assert!(!empty_state.is_paused());
     }
 
     #[test]
