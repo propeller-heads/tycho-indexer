@@ -38,7 +38,9 @@ pub(super) struct DCICache {
     /// Maps entry point IDs to entry point definitions.
     pub(super) ep_id_to_entrypoint: VersionedCache<EntryPointId, EntryPoint>,
     /// Stores tracing results for entry points paired with specific tracing parameters.
-    pub(super) entrypoint_results: VersionedCache<(EntryPointId, TracingParams), TracingResult>,
+    /// None indicates that the TracingParams exist but have no results (e.g., failed traces).
+    pub(super) entrypoint_results:
+        VersionedCache<(EntryPointId, TracingParams), Option<TracingResult>>,
     /// Maps a storage location to entry points that should be retriggered when that location
     /// changes and the address storage offset for packed slots.
     pub(super) retriggers:
@@ -53,6 +55,12 @@ pub(super) struct DCICache {
     pub(super) blacklisted_addresses: VersionedCache<Address, bool>,
     /// Maps an entry point id to the component ids that use it.
     pub(super) ep_id_to_component_id: VersionedCache<EntryPointId, HashSet<ComponentId>>,
+    /// Maps component IDs to their associated entrypoint params for retry logic.
+    pub(super) component_id_to_entrypoint_params:
+        VersionedCache<ComponentId, HashSet<EntryPointWithTracingParams>>,
+    /// Tracks the number of retry attempts for each failed tracing params.
+    /// Used to cap retries at a maximum number of attempts (e.g., 5).
+    pub(super) tracing_retry_counts: VersionedCache<(EntryPointId, TracingParams), u32>,
 }
 
 impl DCICache {
@@ -65,6 +73,8 @@ impl DCICache {
             erc20_addresses: VersionedCache::new(),
             blacklisted_addresses: VersionedCache::new(),
             ep_id_to_component_id: VersionedCache::new(),
+            component_id_to_entrypoint_params: VersionedCache::new(),
+            tracing_retry_counts: VersionedCache::new(),
         }
     }
 
@@ -92,6 +102,10 @@ impl DCICache {
         self.blacklisted_addresses
             .revert_to(block)?;
         self.ep_id_to_component_id
+            .revert_to(block)?;
+        self.component_id_to_entrypoint_params
+            .revert_to(block)?;
+        self.tracing_retry_counts
             .revert_to(block)?;
 
         Ok(())
@@ -152,6 +166,20 @@ impl DCICache {
                     },
                 )),
             )?;
+        self.component_id_to_entrypoint_params
+            .handle_finality(
+                finalized_block_height,
+                MergeStrategy::Custom(Box::new(
+                    |existing: &HashSet<EntryPointWithTracingParams>,
+                     new: HashSet<EntryPointWithTracingParams>| {
+                        let mut merged = existing.clone();
+                        merged.extend(new);
+                        merged
+                    },
+                )),
+            )?;
+        self.tracing_retry_counts
+            .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
 
         Ok(())
     }
@@ -182,6 +210,10 @@ impl DCICache {
         self.erc20_addresses
             .validate_and_ensure_block_layer_internal(block)?;
         self.blacklisted_addresses
+            .validate_and_ensure_block_layer_internal(block)?;
+        self.component_id_to_entrypoint_params
+            .validate_and_ensure_block_layer_internal(block)?;
+        self.tracing_retry_counts
             .validate_and_ensure_block_layer_internal(block)?;
 
         Ok(())
@@ -810,7 +842,7 @@ mod tests {
             .insert_pending(
                 block1.clone(),
                 (entrypoint.external_id.clone(), tracing_params.clone()),
-                tracing_result.clone(),
+                Some(tracing_result.clone()),
             )
             .unwrap();
         cache
