@@ -38,6 +38,7 @@ pub struct HashflowClientBuilder {
     tvl: f64,
     quote_tokens: Option<HashSet<Bytes>>,
     poll_time: Duration,
+    quote_timeout: Duration,
 }
 
 impl HashflowClientBuilder {
@@ -50,6 +51,7 @@ impl HashflowClientBuilder {
             tvl: 100.0, // Default $100 minimum TVL
             quote_tokens: None,
             poll_time: Duration::from_secs(5), // Default 5 second polling
+            quote_timeout: Duration::from_secs(30), // Default 30 second timeout
         }
     }
 
@@ -78,6 +80,12 @@ impl HashflowClientBuilder {
         self
     }
 
+    /// Set the timeout for firm quote requests
+    pub fn quote_timeout(mut self, timeout: Duration) -> Self {
+        self.quote_timeout = timeout;
+        self
+    }
+
     pub fn build(self) -> Result<HashflowClient, RFQError> {
         let quote_tokens;
         if let Some(tokens) = self.quote_tokens {
@@ -94,6 +102,7 @@ impl HashflowClientBuilder {
             self.auth_user,
             self.auth_key,
             self.poll_time,
+            self.quote_timeout,
         )
     }
 }

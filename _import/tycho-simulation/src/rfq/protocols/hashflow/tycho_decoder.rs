@@ -108,6 +108,7 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for HashflowState {
             auth.key,
             // Since we will not be polling for price levels, this value is irrelevant
             Duration::from_secs(0),
+            Duration::from_secs(30),
         )
         .map_err(|e| {
             InvalidSnapshotError::MissingAttribute(format!("Couldn't create HashflowClient: {e}"))

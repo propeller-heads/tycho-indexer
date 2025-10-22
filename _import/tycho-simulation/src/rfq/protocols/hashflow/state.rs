@@ -205,8 +205,9 @@ impl IndicativelyPriced for HashflowState {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashSet, str::FromStr, time::Duration};
+    use std::{collections::HashSet, str::FromStr};
 
+    use tokio::time::Duration;
     use tycho_common::models::Chain;
 
     use super::*;
@@ -261,6 +262,7 @@ mod tests {
             "".to_string(),
             "".to_string(),
             Duration::from_secs(0),
+            Duration::from_secs(30),
         )
         .unwrap()
     }

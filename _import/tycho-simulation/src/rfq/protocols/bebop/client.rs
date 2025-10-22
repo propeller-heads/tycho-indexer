@@ -11,7 +11,7 @@ use http::Request;
 use num_bigint::BigUint;
 use prost::Message as ProstMessage;
 use reqwest::Client;
-use tokio::time::{sleep, Duration};
+use tokio::time::{sleep, timeout, Duration};
 use tokio_tungstenite::{
     connect_async_with_config,
     tungstenite::{handshake::client::generate_key, Message},
@@ -70,6 +70,8 @@ pub struct BebopClient {
     ws_key: String,
     // quote tokens to normalize to for TVL purposes. Should have the same prices.
     quote_tokens: HashSet<Bytes>,
+    // timeout for firm quote requests
+    quote_timeout: Duration,
 }
 
 impl BebopClient {
@@ -82,6 +84,7 @@ impl BebopClient {
         ws_user: String,
         ws_key: String,
         quote_tokens: HashSet<Bytes>,
+        quote_timeout: Duration,
     ) -> Result<Self, RFQError> {
         let url = chain_to_bebop_url(chain)?;
         Ok(Self {
@@ -93,6 +96,7 @@ impl BebopClient {
             ws_user,
             ws_key,
             quote_tokens,
+            quote_timeout,
         })
     }
 
@@ -464,13 +468,26 @@ impl RFQClient for BebopClient {
             .header("source-auth", &self.ws_key)
             .header("Authorization", &self.ws_key);
 
-        let response = request.send().await.map_err(|e| {
-            RFQError::ConnectionError(format!("Failed to send Bebop quote request: {e}"))
-        })?;
-
-        let quote_response = response
-            .json::<BebopQuoteResponse>()
+        let response = timeout(self.quote_timeout, request.send())
             .await
+            .map_err(|_| {
+                RFQError::ConnectionError(format!(
+                    "Bebop quote request timed out after {} seconds",
+                    self.quote_timeout.as_secs()
+                ))
+            })?
+            .map_err(|e| {
+                RFQError::ConnectionError(format!("Failed to send Bebop quote request: {e}"))
+            })?;
+
+        let quote_response = timeout(self.quote_timeout, response.json::<BebopQuoteResponse>())
+            .await
+            .map_err(|_| {
+                RFQError::ParsingError(format!(
+                    "Bebop quote response parsing timed out after {} seconds",
+                    self.quote_timeout.as_secs()
+                ))
+            })?
             .map_err(|e| {
                 RFQError::ParsingError(format!("Failed to parse Bebop quote response: {e}"))
             })?;
@@ -518,6 +535,7 @@ mod tests {
             auth.user,
             auth.key,
             quote_tokens,
+            Duration::from_secs(30),
         )
         .unwrap();
 
@@ -685,6 +703,7 @@ mod tests {
             ws_key: "test_key".to_string(),
             quote_tokens: test_quote_tokens,
             quote_endpoint: "".to_string(),
+            quote_timeout: Duration::from_secs(30),
         };
 
         let start_time = std::time::Instant::now();
@@ -756,6 +775,7 @@ mod tests {
             auth.user,
             auth.key,
             HashSet::new(),
+            Duration::from_secs(30),
         )
         .unwrap();
 
@@ -818,6 +838,7 @@ mod tests {
             auth.user,
             auth.key,
             HashSet::new(),
+            Duration::from_secs(30),
         )
         .unwrap();
 
@@ -905,5 +926,108 @@ mod tests {
         assert_eq!(res.amount_in, BigUint::from_str("43067495979235520920162").unwrap());
         assert_eq!(res.base_token, params.token_in);
         assert_eq!(res.quote_token, params.token_out);
+    }
+
+    #[tokio::test]
+    async fn test_bebop_quote_timeout() {
+        use tokio::io::AsyncWriteExt;
+
+        // Start a mock HTTP server that responds after a delay
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        // Spawn a server that responds after 500ms
+        tokio::spawn(async move {
+            while let Ok((mut stream, _)) = listener.accept().await {
+                tokio::spawn(async move {
+                    // Wait 500ms before responding
+                    sleep(Duration::from_millis(500)).await;
+                    let response = r#"response"#;
+                    let _ = stream
+                        .write_all(response.as_bytes())
+                        .await;
+                    let _ = stream.flush().await;
+                    let _ = stream.shutdown().await;
+                });
+            }
+        });
+
+        // Wait a moment for the server to start
+        sleep(Duration::from_millis(50)).await;
+
+        let token_in = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
+        let token_out = Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap();
+
+        // Test 1: Client with short timeout (200ms) - should timeout
+        let client_short_timeout = BebopClient {
+            chain: Chain::Ethereum,
+            price_ws: "ws://example.com".to_string(),
+            quote_endpoint: format!("http://127.0.0.1:{}/quote", addr.port()),
+            tokens: HashSet::from([token_in.clone(), token_out.clone()]),
+            tvl: 10.0,
+            ws_user: "test_user".to_string(),
+            ws_key: "test_key".to_string(),
+            quote_tokens: HashSet::new(),
+            quote_timeout: Duration::from_millis(200),
+        };
+
+        let router = Bytes::from_str("0xfD0b31d2E955fA55e3fa641Fe90e08b677188d35").unwrap();
+        let params = GetAmountOutParams {
+            amount_in: BigUint::from(1_000000000000000000u64),
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
+            sender: router.clone(),
+            receiver: router.clone(),
+        };
+
+        let start = std::time::Instant::now();
+        let result = client_short_timeout
+            .request_binding_quote(&params)
+            .await;
+        let elapsed = start.elapsed();
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        match err {
+            RFQError::ConnectionError(msg) => {
+                assert!(msg.contains("timed out"), "Expected timeout error, got: {}", msg);
+            }
+            _ => panic!("Expected ConnectionError, got: {:?}", err),
+        }
+        assert!(
+            elapsed.as_millis() >= 200 && elapsed.as_millis() < 400,
+            "Expected timeout around 200ms, got: {:?}",
+            elapsed
+        );
+
+        // Test 2: Client with long timeout (1 second) - should wait and receive response
+        let client_long_timeout = BebopClient {
+            chain: Chain::Ethereum,
+            price_ws: "ws://example.com".to_string(),
+            quote_endpoint: format!("http://127.0.0.1:{}/quote", addr.port()),
+            tokens: HashSet::from([token_in.clone(), token_out.clone()]),
+            tvl: 10.0,
+            ws_user: "test_user".to_string(),
+            ws_key: "test_key".to_string(),
+            quote_tokens: HashSet::new(),
+            quote_timeout: Duration::from_secs(1),
+        };
+
+        let start = std::time::Instant::now();
+        let result = client_long_timeout
+            .request_binding_quote(&params)
+            .await;
+        let elapsed = start.elapsed();
+
+        // Should get a response (not a timeout)
+        // The mock server sends a response, which proves the timeout waited
+        // It's only an error because we didn't properly format the http response,
+        // so it can't be parsed.
+        if let Err(err) = result {
+            let err_msg = format!("{:?}", err);
+            assert!(!err_msg.contains("timed out"), "Should not be a timeout, got: {}", err_msg);
+        }
     }
 }

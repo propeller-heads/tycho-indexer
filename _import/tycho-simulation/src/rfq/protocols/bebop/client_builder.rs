@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use tokio::time::Duration;
 use tycho_common::{models::Chain, Bytes};
 
 use super::client::BebopClient;
@@ -35,6 +36,7 @@ pub struct BebopClientBuilder {
     tokens: HashSet<Bytes>,
     tvl: f64,
     quote_tokens: Option<HashSet<Bytes>>,
+    quote_timeout: Duration,
 }
 
 impl BebopClientBuilder {
@@ -46,6 +48,7 @@ impl BebopClientBuilder {
             tokens: HashSet::new(),
             tvl: 100.0, // Default $100 minimum TVL
             quote_tokens: None,
+            quote_timeout: Duration::from_secs(30), // Default 30 second timeout
         }
     }
 
@@ -68,6 +71,12 @@ impl BebopClientBuilder {
         self
     }
 
+    /// Set the timeout for firm quote requests
+    pub fn quote_timeout(mut self, timeout: Duration) -> Self {
+        self.quote_timeout = timeout;
+        self
+    }
+
     pub fn build(self) -> Result<BebopClient, RFQError> {
         let quote_tokens;
         if let Some(tokens) = self.quote_tokens {
@@ -76,6 +85,14 @@ impl BebopClientBuilder {
             quote_tokens = default_quote_tokens_for_chain(&self.chain)?
         }
 
-        BebopClient::new(self.chain, self.tokens, self.tvl, self.ws_user, self.ws_key, quote_tokens)
+        BebopClient::new(
+            self.chain,
+            self.tokens,
+            self.tvl,
+            self.ws_user,
+            self.ws_key,
+            quote_tokens,
+            self.quote_timeout,
+        )
     }
 }

@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use futures::stream::BoxStream;
 use num_bigint::BigUint;
 use reqwest::Client;
-use tokio::time::{interval, Duration};
+use tokio::time::{interval, timeout, Duration};
 use tracing::{error, info};
 use tycho_common::{
     models::{protocol::GetAmountOutParams, Chain},
@@ -48,6 +48,8 @@ pub struct HashflowClient {
     // Quote tokens to normalize to for TVL purposes. Should have the same prices.
     quote_tokens: HashSet<Bytes>,
     poll_time: Duration,
+    // timeout for firm quote requests
+    quote_timeout: Duration,
 }
 
 impl HashflowClient {
@@ -61,6 +63,7 @@ impl HashflowClient {
         auth_user: String,
         auth_key: String,
         poll_time: Duration,
+        quote_timeout: Duration,
     ) -> Result<Self, RFQError> {
         Ok(Self {
             chain,
@@ -74,6 +77,7 @@ impl HashflowClient {
             auth_user,
             quote_tokens,
             poll_time,
+            quote_timeout,
         })
     }
 
@@ -388,24 +392,45 @@ impl RFQClient for HashflowClient {
             .header("accept", "application/json")
             .header("Authorization", &self.auth_key);
 
-        let response = request.send().await.map_err(|e| {
-            RFQError::ConnectionError(format!("Failed to send Hashflow quote request: {e}"))
-        })?;
+        let response = timeout(self.quote_timeout, request.send())
+            .await
+            .map_err(|_| {
+                RFQError::ConnectionError(format!(
+                    "Hashflow quote request timed out after {} seconds",
+                    self.quote_timeout.as_secs()
+                ))
+            })?
+            .map_err(|e| {
+                RFQError::ConnectionError(format!("Failed to send Hashflow quote request: {e}"))
+            })?;
 
         if response.status() != 200 {
-            let err_msg = response.text().await.map_err(|e| {
-                RFQError::ParsingError(format!(
-                    "Failed to read response text from Hashflow failed request: {e}"
-                ))
-            })?;
+            let err_msg = timeout(self.quote_timeout, response.text())
+                .await
+                .map_err(|_| {
+                    RFQError::ParsingError(format!(
+                        "Hashflow error response parsing timed out after {} seconds",
+                        self.quote_timeout.as_secs()
+                    ))
+                })?
+                .map_err(|e| {
+                    RFQError::ParsingError(format!(
+                        "Failed to read response text from Hashflow failed request: {e}"
+                    ))
+                })?;
             return Err(RFQError::FatalError(format!(
                 "Failed to send Hashflow quote request: {err_msg}",
             )));
         }
 
-        let quote_response = response
-            .json::<HashflowQuoteResponse>()
+        let quote_response = timeout(self.quote_timeout, response.json::<HashflowQuoteResponse>())
             .await
+            .map_err(|_| {
+                RFQError::ParsingError(format!(
+                    "Hashflow quote response parsing timed out after {} seconds",
+                    self.quote_timeout.as_secs()
+                ))
+            })?
             .map_err(|e| {
                 RFQError::ParsingError(format!("Failed to parse Hashflow quote response: {e}"))
             })?;
@@ -608,6 +633,7 @@ mod tests {
             "test_user".to_string(),
             "test_key".to_string(),
             Duration::from_secs(5),
+            Duration::from_secs(30),
         )
         .unwrap()
     }
@@ -636,6 +662,7 @@ mod tests {
             auth.user,
             auth.key,
             Duration::from_secs(1),
+            Duration::from_secs(30),
         )
         .unwrap();
 
@@ -721,6 +748,7 @@ mod tests {
             auth_user,
             auth_key,
             Duration::from_secs(0),
+            Duration::from_secs(30),
         )
         .unwrap();
 
@@ -774,5 +802,118 @@ mod tests {
                 .unwrap(),
             &router
         );
+    }
+
+    #[tokio::test]
+    async fn test_hashflow_quote_timeout() {
+        use tokio::{io::AsyncWriteExt, net::TcpListener};
+
+        // Start a mock HTTP server that responds after a delay
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        // Spawn a server that responds after 500ms
+        tokio::spawn(async move {
+            while let Ok((mut stream, _)) = listener.accept().await {
+                tokio::spawn(async move {
+                    // Wait 500ms before responding
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                    let response = r#"response"#;
+                    let _ = stream
+                        .write_all(response.as_bytes())
+                        .await;
+                    let _ = stream.flush().await;
+                    let _ = stream.shutdown().await;
+                });
+            }
+        });
+
+        // Wait a moment for the server to start
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let token_in = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
+        let token_out = Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap();
+
+        // Test 1: Client with short timeout (200ms) - should timeout
+        let client_short_timeout = HashflowClient {
+            chain: Chain::Ethereum,
+            price_levels_endpoint: format!("http://127.0.0.1:{}/price-levels", addr.port()),
+            market_makers_endpoint: format!("http://127.0.0.1:{}/market-makers", addr.port()),
+            quote_endpoint: format!("http://127.0.0.1:{}/rfq", addr.port()),
+            tokens: HashSet::from([token_in.clone(), token_out.clone()]),
+            tvl: 10.0,
+            http_client: Client::new(),
+            auth_key: "test_key".to_string(),
+            auth_user: "test_user".to_string(),
+            quote_tokens: HashSet::new(),
+            poll_time: Duration::from_secs(0),
+            quote_timeout: Duration::from_millis(200),
+        };
+
+        let router = Bytes::from_str("0xfD0b31d2E955fA55e3fa641Fe90e08b677188d35").unwrap();
+        let params = GetAmountOutParams {
+            amount_in: BigUint::from(1_000000000000000000u64),
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
+            sender: router.clone(),
+            receiver: router.clone(),
+        };
+
+        // This should timeout after 200ms
+        let start = std::time::Instant::now();
+        let result = client_short_timeout
+            .request_binding_quote(&params)
+            .await;
+        let elapsed = start.elapsed();
+
+        // Verify that we got a timeout error
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        match err {
+            RFQError::ConnectionError(msg) => {
+                assert!(msg.contains("timed out"), "Expected timeout error, got: {}", msg);
+            }
+            _ => panic!("Expected ConnectionError, got: {:?}", err),
+        }
+        // Should have timed out around 200ms, definitely less than 400ms
+        assert!(
+            elapsed.as_millis() >= 200 && elapsed.as_millis() < 400,
+            "Expected timeout around 200ms, got: {:?}",
+            elapsed
+        );
+
+        // Test 2: Client with long timeout (1 second) - should wait and receive response
+        let client_long_timeout = HashflowClient {
+            chain: Chain::Ethereum,
+            price_levels_endpoint: format!("http://127.0.0.1:{}/price-levels", addr.port()),
+            market_makers_endpoint: format!("http://127.0.0.1:{}/market-makers", addr.port()),
+            quote_endpoint: format!("http://127.0.0.1:{}/rfq", addr.port()),
+            tokens: HashSet::from([token_in.clone(), token_out.clone()]),
+            tvl: 10.0,
+            http_client: Client::new(),
+            auth_key: "test_key".to_string(),
+            auth_user: "test_user".to_string(),
+            quote_tokens: HashSet::new(),
+            poll_time: Duration::from_secs(0),
+            quote_timeout: Duration::from_secs(1),
+        };
+
+        // This should wait for the response (500ms)
+        let start = std::time::Instant::now();
+        let result = client_long_timeout
+            .request_binding_quote(&params)
+            .await;
+        let elapsed = start.elapsed();
+
+        // Should get a response (not a timeout)
+        // The mock server sends a response, which proves the timeout waited
+        // It's only an error because we didn't properly format the http response,
+        // so it can't be parsed.
+        if let Err(err) = result {
+            let err_msg = format!("{:?}", err);
+            assert!(!err_msg.contains("timed out"), "Should not be a timeout, got: {}", err_msg);
+        }
     }
 }
