@@ -575,15 +575,20 @@ async fn process_state(
             };
         info!("Simulated amount_out: {simulated_amount_out} {}", token_out.symbol);
 
-        // Calculate slippage
-        let slippage = if simulated_amount_out > expected_amount_out {
+        // Calculate slippage: positive = simulated > expected, negative = simulated < expected
+        let slippage = if simulated_amount_out >= expected_amount_out {
             let diff = &simulated_amount_out - &expected_amount_out;
-            (diff.clone() * BigUint::from(10000u32)) / expected_amount_out
+            ((diff.clone() * BigUint::from(10000u32)) / expected_amount_out)
+                .to_f64()
+                .unwrap_or(0.0) /
+                100.0
         } else {
             let diff = &expected_amount_out - &simulated_amount_out;
-            (diff.clone() * BigUint::from(10000u32)) / expected_amount_out
+            -((diff.clone() * BigUint::from(10000u32)) / expected_amount_out)
+                .to_f64()
+                .unwrap_or(0.0) /
+                100.0
         };
-        let slippage = slippage.to_f64().unwrap_or(0.0) / 100.0;
 
         info!(
             event_type = "execution_slippage",
