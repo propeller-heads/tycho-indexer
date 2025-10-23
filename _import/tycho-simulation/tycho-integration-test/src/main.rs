@@ -545,8 +545,12 @@ async fn process_state(
                     let error_name = extract_error_name(revert_reason);
 
                     // Generate Tenderly URL for debugging without state overrides
+                    let overrides = tenderly::TenderlySimParams {
+                        network: Some(chain.id().to_string()),
+                        ..Default::default()
+                    };
                     let tenderly_url = tenderly::build_tenderly_url(
-                        &tenderly::TenderlySimParams::default(),
+                        &overrides,
                         Some(&transaction),
                         Some(block),
                         Address::from_slice(&solution.sender[..20]),
