@@ -158,12 +158,20 @@ fn get_next_sqrt_price_from_amount1_rounding_down(
 ///
 /// # Panics
 /// Will panic if the `x` is bigger than U160.
-pub(crate) fn sqrt_price_q96_to_f64(x: U256, token_0_decimals: u32, token_1_decimals: u32) -> f64 {
-    assert!(x < U160_MAX);
+pub(crate) fn sqrt_price_q96_to_f64(
+    x: U256,
+    token_0_decimals: u32,
+    token_1_decimals: u32,
+) -> Result<f64, SimulationError> {
+    if x >= U160_MAX {
+        return Err(SimulationError::FatalError(format!(
+            "sqrt_price_q96_to_f64: x value {x} exceeds U160 max"
+        )));
+    }
     let token_correction = 10f64.powi(token_0_decimals as i32 - token_1_decimals as i32);
 
-    let price = u256_to_f64(x) / 2.0f64.powi(96);
-    price.powi(2) * token_correction
+    let price = u256_to_f64(x)? / 2.0f64.powi(96);
+    Ok(price.powi(2) * token_correction)
 }
 
 #[cfg(test)]
@@ -341,7 +349,7 @@ mod tests {
         #[case] t1d: u32,
         #[case] exp: f64,
     ) {
-        let res = sqrt_price_q96_to_f64(sqrt_price, t0d, t1d);
+        let res = sqrt_price_q96_to_f64(sqrt_price, t0d, t1d).expect("convert sqrt price");
 
         assert_ulps_eq!(res, exp, epsilon = f64::EPSILON);
     }

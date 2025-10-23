@@ -107,7 +107,12 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
 
         engine
             .state
-            .init_account(*EXTERNAL_ACCOUNT, external_account_info, None, true);
+            .init_account(*EXTERNAL_ACCOUNT, external_account_info, None, true)
+            .map_err(|err| {
+                InvalidSnapshotError::VMError(SimulationError::FatalError(format!(
+                    "Failed to init external account: {err:?}"
+                )))
+            })?;
 
         let hook_handler = GenericVMHookHandler::new(
             params.hook_address,

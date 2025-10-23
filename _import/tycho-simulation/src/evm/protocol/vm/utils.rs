@@ -233,7 +233,8 @@ pub(crate) async fn get_code_for_contract(
         }
     };
 
-    let addr = Address::from_str(address).expect("Failed to parse address to get code for");
+    let addr = Address::from_str(address)
+        .map_err(|_| SimulationError::FatalError(format!("Invalid address format: {address}")))?;
     // Call eth_getCode to get the bytecode of the contract
     match sync_get_code(&connection_string, addr) {
         Ok(code) if code.is_empty() => {
@@ -263,9 +264,7 @@ fn sync_get_code(
             // Create a provider with the URL
             let provider = ProviderBuilder::new()
                 .connect(connection_string)
-                .await
-                .unwrap();
-
+                .await?;
             provider.get_code_at(addr).await
         })
     })

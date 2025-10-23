@@ -26,7 +26,8 @@ use crate::{
 /// - Dynamically decode incoming updates into `Update` objects using `TychoStreamDecoder`.
 ///
 /// The `build` method consumes the builder and runs the event loop, sending decoded `Update`s
-/// through the provided `mpsc::Sender`.
+/// through the provided `mpsc::Sender`. It returns an error if decoding an update or forwarding
+/// it to the channel fails.
 ///
 /// ### Error Handling:
 /// - Each `RFQClient`'s stream is expected to yield `Result<(String, StateSyncMessage), RFQError>`.
