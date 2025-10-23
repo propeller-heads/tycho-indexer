@@ -18,7 +18,7 @@ use revm::{
     DatabaseRef,
 };
 use thiserror::Error;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 use tycho_client::feed::BlockHeader;
 
 use super::{
