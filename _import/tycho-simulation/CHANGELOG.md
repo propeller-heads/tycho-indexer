@@ -1,3 +1,10 @@
+## [0.184.3](https://github.com/propeller-heads/tycho-simulation/compare/0.184.2...0.184.3) (2025-10-23)
+
+
+### Bug Fixes
+
+* Fix slippage buckets ([40f363c](https://github.com/propeller-heads/tycho-simulation/commit/40f363caadca038762e2b479d2aa4e31d4a11e90))
+
 ## [0.184.2](https://github.com/propeller-heads/tycho-simulation/compare/0.184.1...0.184.2) (2025-10-23)
 
 
