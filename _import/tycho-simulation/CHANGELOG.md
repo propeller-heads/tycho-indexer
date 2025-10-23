@@ -1,3 +1,11 @@
+## [0.184.1](https://github.com/propeller-heads/tycho-simulation/compare/0.184.0...0.184.1) (2025-10-23)
+
+
+### Bug Fixes
+
+* adjust test within EVM stream ([938aa95](https://github.com/propeller-heads/tycho-simulation/commit/938aa9595a48abf09ccf24e8477b58c5380fba4c))
+* merge issues ([4f6302c](https://github.com/propeller-heads/tycho-simulation/commit/4f6302c83a4aafa6cc858453c98d445579acaf1c))
+
 ## [0.184.0](https://github.com/propeller-heads/tycho-simulation/compare/0.183.0...0.184.0) (2025-10-22)
 
 
