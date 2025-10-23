@@ -34,11 +34,14 @@ pub enum EkuboState {
     MevResist(MevResistPool),
 }
 
-fn sqrt_price_q128_to_f64(x: U256, (token0_decimals, token1_decimals): (usize, usize)) -> f64 {
+fn sqrt_price_q128_to_f64(
+    x: U256,
+    (token0_decimals, token1_decimals): (usize, usize),
+) -> Result<f64, SimulationError> {
     let token_correction = 10f64.powi(token0_decimals as i32 - token1_decimals as i32);
 
-    let price = u256_to_f64(alloy::primitives::U256::from_limbs(x.0)) / 2.0f64.powi(128);
-    price.powi(2) * token_correction
+    let price = u256_to_f64(alloy::primitives::U256::from_limbs(x.0))? / 2.0f64.powi(128);
+    Ok(price.powi(2) * token_correction)
 }
 
 impl ProtocolSim for EkuboState {
@@ -50,11 +53,12 @@ impl ProtocolSim for EkuboState {
         let sqrt_ratio = self.sqrt_ratio();
         let (base_decimals, quote_decimals) = (base.decimals as usize, quote.decimals as usize);
 
-        Ok(if base < quote {
+        if base < quote {
             sqrt_price_q128_to_f64(sqrt_ratio, (base_decimals, quote_decimals))
         } else {
-            1.0f64 / sqrt_price_q128_to_f64(sqrt_ratio, (quote_decimals, base_decimals))
-        })
+            sqrt_price_q128_to_f64(sqrt_ratio, (quote_decimals, base_decimals))
+                .map(|price| 1.0f64 / price)
+        }
     }
 
     fn get_amount_out(
@@ -144,7 +148,14 @@ impl ProtocolSim for EkuboState {
         let consumed_amount = self.get_limit(U256::from_big_endian(&sell_token))?;
 
         // TODO Update once exact out is supported
-        Ok((BigUint::try_from(consumed_amount).unwrap_or_default(), BigUint::ZERO))
+        Ok((
+            BigUint::try_from(consumed_amount).map_err(|_| {
+                SimulationError::FatalError(format!(
+                    "Failed to convert consumed amount `{consumed_amount}` into BigUint"
+                ))
+            })?,
+            BigUint::ZERO,
+        ))
     }
 }
 

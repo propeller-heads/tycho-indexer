@@ -50,9 +50,9 @@ pub fn cpmm_spot_price(
     reserve1: U256,
 ) -> Result<f64, SimulationError> {
     if base < quote {
-        Ok(spot_price_from_reserves(reserve0, reserve1, base.decimals, quote.decimals))
+        spot_price_from_reserves(reserve0, reserve1, base.decimals, quote.decimals)
     } else {
-        Ok(spot_price_from_reserves(reserve1, reserve0, base.decimals, quote.decimals))
+        spot_price_from_reserves(reserve1, reserve0, base.decimals, quote.decimals)
     }
 }
 

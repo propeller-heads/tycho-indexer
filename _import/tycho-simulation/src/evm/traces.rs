@@ -25,12 +25,10 @@ pub async fn handle_traces(
 
     let mut etherscan_identifier = EtherscanIdentifier::new(config, chain)?;
     if let Some(etherscan_identifier) = &mut etherscan_identifier {
-        for (_, trace) in result
-            .traces
-            .as_deref_mut()
-            .unwrap_or_default()
-        {
-            decoder.identify(trace, etherscan_identifier);
+        if let Some(traces) = result.traces.as_deref_mut() {
+            for (_, trace) in traces {
+                decoder.identify(trace, etherscan_identifier);
+            }
         }
     }
 
@@ -57,7 +55,7 @@ pub async fn print_traces(
     let traces = result
         .traces
         .as_mut()
-        .expect("No traces found");
+        .ok_or_else(|| std::io::Error::other("No traces found"))?;
 
     let mut traces_strings = Vec::new();
     for (_, arena) in traces {

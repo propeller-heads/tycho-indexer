@@ -79,12 +79,12 @@ impl TwammPool {
         })
     }
 
-    fn estimate_block_timestamp(&self) -> u64 {
+    fn estimate_block_timestamp(&self) -> Result<u64, SimulationError> {
         if self.swapped_this_block {
-            self.state.last_execution_time
+            Ok(self.state.last_execution_time)
         } else {
             // TODO How accurate is it to take the current timestamp?
-            Ord::max(self.state.last_execution_time + SLOT_DURATION_SECS, current_timestamp())
+            Ok(Ord::max(self.state.last_execution_time + SLOT_DURATION_SECS, current_timestamp()?))
         }
     }
 }
@@ -119,7 +119,7 @@ impl EkuboPool for TwammPool {
                 token_amount,
                 sqrt_ratio_limit: None,
                 override_state: Some(self.state),
-                meta: self.estimate_block_timestamp(),
+                meta: self.estimate_block_timestamp()?,
             })
             .map_err(|err| SimulationError::RecoverableError(format!("{err:?}")))?;
 
@@ -148,7 +148,7 @@ impl EkuboPool for TwammPool {
 
     fn get_limit(&self, token_in: U256) -> Result<i128, SimulationError> {
         let key = self.key();
-        let estimated_timestamp = self.estimate_block_timestamp();
+        let estimated_timestamp = self.estimate_block_timestamp()?;
 
         // Only execute the virtual orders up to a given timestamp
         let virtual_order_quote = self
@@ -281,14 +281,14 @@ impl EkuboPool for TwammPool {
 }
 
 #[cfg(test)]
-fn current_timestamp() -> u64 {
-    crate::evm::protocol::ekubo::test_cases::TEST_TIMESTAMP
+fn current_timestamp() -> Result<u64, SimulationError> {
+    Ok(crate::evm::protocol::ekubo::test_cases::TEST_TIMESTAMP)
 }
 
 #[cfg(not(test))]
-fn current_timestamp() -> u64 {
+fn current_timestamp() -> Result<u64, SimulationError> {
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
+        .map_err(|e| SimulationError::FatalError(format!("System time before UNIX EPOCH: {e:?}")))
+        .map(|d| d.as_secs())
 }
