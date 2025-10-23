@@ -99,68 +99,43 @@ pub struct IndexArgs {
     #[clap(long, default_value = "ethereum", value_delimiter = ',')]
     pub chains: Vec<String>,
 
-    /// Retention horizon date
-    ///
     /// Any data before this date is not kept in storage.
-    /// Format: "YYYY-MM-DDTHH:MM:SS" (e.g., "2024-01-01T00:00:00")
-    /// If both --retention-horizon and --retention-horizon-days are provided, this takes
-    /// precedence.
-    #[clap(long, env)]
-    pub retention_horizon: Option<String>,
-
-    /// Retention horizon in days
+    /// Can be specified as:
     ///
-    /// The number of days to keep the data in storage. Must be between 1 and 365 days.
-    /// If both --retention-horizon and --retention-horizon-days are provided, --retention-horizon
-    /// takes precedence. If neither is provided, defaults to 30 days.
-    #[clap(long, env)]
-    pub retention_horizon_days: Option<u32>,
+    /// - A date string in format "YYYY-MM-DDTHH:MM:SS" (e.g. "2024-01-01T00:00:00")
+    ///
+    /// - A number of days (e.g. "30" for 30 days ago)
+    #[clap(long, env, default_value = "30")]
+    pub retention_horizon: String,
 }
 
 impl IndexArgs {
     /// Calculates the retention horizon as a NaiveDateTime
     ///
-    /// If retention_horizon is provided, parses it as a datetime string (takes precedence)
-    /// If retention_horizon_days is provided, calculates the datetime by subtracting days from now
-    /// If neither is provided, defaults to 30 days from now
+    /// First tries to parse the input as a date string (YYYY-MM-DDTHH:MM:SS format)
+    /// If that fails, tries to parse it as a number of days and calculates the datetime
+    /// by subtracting days from now
     ///
-    /// Warns if both options are provided (retention_horizon takes precedence)
+    /// Validates that days are greater than 0
     pub fn get_retention_horizon(&self) -> Result<NaiveDateTime, String> {
-        match (&self.retention_horizon, &self.retention_horizon_days) {
-            (Some(horizon_str), Some(_)) => {
-                eprintln!("Warning: Both --retention-horizon and --retention-horizon-days are provided. The --retention-horizon-days value will be ignored.");
-                self.parse_retention_horizon(horizon_str)
-            }
-            (Some(horizon_str), None) => self.parse_retention_horizon(horizon_str),
-            (None, Some(days)) => {
-                let validated_days = self.validate_retention_days(*days)?;
-                Ok(self.calculate_days_horizon(validated_days))
-            }
-            (None, None) => Ok(self.calculate_days_horizon(30)),
-        }
-    }
-
-    /// Parses a retention horizon string into a NaiveDateTime
-    fn parse_retention_horizon(&self, horizon_str: &str) -> Result<NaiveDateTime, String> {
-        horizon_str
+        // First try to parse as a date string
+        if let Ok(datetime) = self
+            .retention_horizon
             .parse::<NaiveDateTime>()
-            .map_err(|e| format!("Failed to parse retention horizon '{}': {}", horizon_str, e))
-    }
-
-    /// Calculates retention horizon by subtracting days from current time
-    fn calculate_days_horizon(&self, days: u32) -> NaiveDateTime {
-        Utc::now().naive_utc() - chrono::Duration::days(days as i64)
-    }
-
-    /// Validates retention horizon days input
-    fn validate_retention_days(&self, days: u32) -> Result<u32, String> {
-        if days == 0 {
-            Err("Retention horizon days must be greater than 0".to_string())
-        } else if days > 365 {
-            Err("Retention horizon days cannot exceed 365".to_string())
-        } else {
-            Ok(days)
+        {
+            return Ok(datetime);
         }
+
+        // If that fails, try to parse as number of days
+        let days= self.retention_horizon.parse::<u32>()
+            .map_err(|_| format!("Failed to parse retention horizon '{}' as either a date (YYYY-MM-DDTHH:MM:SS) or number of days", self.retention_horizon))?;
+
+        if days == 0 {
+            return Err("Retention horizon days must be greater than 0".to_string());
+        }
+
+        let days_horizon = Utc::now().naive_utc() - chrono::Duration::days(days as i64);
+        Ok(days_horizon)
     }
 }
 
@@ -372,8 +347,7 @@ mod cli_tests {
                 substreams_args: SubstreamsArgs { substreams_api_token: "token".to_string() },
                 chains: vec!["ethereum".to_string()],
                 extractors_config: "/opt/extractors.yaml".to_string(),
-                retention_horizon: None,
-                retention_horizon_days: None,
+                retention_horizon: "30".to_string(),
             }),
         };
 
@@ -393,23 +367,11 @@ mod cli_tests {
         assert!(args.is_err());
     }
 
-    #[rstest]
-    #[case("2024-01-01T00:00:00", "none", "2024-01-01 00:00:00")] // retention_horizon only
-    #[case("2024-01-01T00:00:00", "30", "2024-01-01 00:00:00")] // both given (retention_horizon takes precedence)
-    fn test_retention_horizon_parsing(
-        #[case] horizon_str: &str,
-        #[case] days_str: &str,
-        #[case] expected_format: &str,
-    ) {
+    #[test]
+    fn test_retention_horizon_date_parsing() {
         let mut args = create_basic_index_args();
-
         args.push("--retention-horizon".to_string());
-        args.push(horizon_str.to_string());
-
-        if days_str != "none" {
-            args.push("--retention-horizon-days".to_string());
-            args.push(days_str.to_string());
-        }
+        args.push("2024-01-01T00:00:00".to_string());
 
         let index_args = parse_index_args(args);
         let horizon = index_args
@@ -420,19 +382,22 @@ mod cli_tests {
             horizon
                 .format("%Y-%m-%d %H:%M:%S")
                 .to_string(),
-            expected_format
+            "2024-01-01 00:00:00"
         );
     }
 
     #[rstest]
-    #[case("7", 7)] // retention_horizon_days only
-    #[case("none", 30)] // neither given (default)
-    fn test_retention_horizon_days_parsing(#[case] days_str: &str, #[case] expected_days: u32) {
+    #[case::days("7", "7")]
+    #[case::default("none", "30")]
+    fn test_retention_horizon_days_parsing(
+        #[case] horizon_input: &str,
+        #[case] expected_days: &str,
+    ) {
         let mut args = create_basic_index_args();
 
-        if days_str != "none" {
-            args.push("--retention-horizon-days".to_string());
-            args.push(days_str.to_string());
+        if horizon_input != "none" {
+            args.push("--retention-horizon".to_string());
+            args.push(horizon_input.to_string());
         }
 
         let index_args = parse_index_args(args);
@@ -441,18 +406,17 @@ mod cli_tests {
             .expect("Should calculate successfully");
 
         let now = Utc::now().naive_utc();
+        let expected_days: u32 = expected_days.parse().unwrap();
         let expected = now - chrono::Duration::days(expected_days as i64);
         let diff = (horizon - expected).num_seconds().abs();
         assert!(diff < 5, "Expected horizon within 5 seconds of calculated value");
     }
 
-    #[rstest]
-    #[case("0", "Retention horizon days must be greater than 0")]
-    #[case("366", "Retention horizon days cannot exceed 365")]
-    fn test_retention_horizon_validation(#[case] days_str: &str, #[case] expected_error: &str) {
+    #[test]
+    fn test_retention_horizon_validation() {
         let mut args = create_basic_index_args();
-        args.push("--retention-horizon-days".to_string());
-        args.push(days_str.to_string());
+        args.push("--retention-horizon".to_string());
+        args.push("0".to_string());
 
         let index_args = parse_index_args(args);
 
@@ -460,6 +424,6 @@ mod cli_tests {
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
-            .contains(expected_error));
+            .contains("Retention horizon days must be greater than 0"));
     }
 }
