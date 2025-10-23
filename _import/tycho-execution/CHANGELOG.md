@@ -1,3 +1,15 @@
+## [0.131.0](https://github.com/propeller-heads/tycho-execution/compare/0.130.2...0.131.0) (2025-10-23)
+
+
+### Features
+
+* Deploy new UniswapV4Executor to unichain and base ([605122f](https://github.com/propeller-heads/tycho-execution/commit/605122fa9693c7a885f68626dbe47b200889b946))
+
+
+### Bug Fixes
+
+* Forge fmt (after updating local foundry) ([e0cc25e](https://github.com/propeller-heads/tycho-execution/commit/e0cc25e1666c844392e6c6e4053e37e93ab04955))
+
 ## [0.130.2](https://github.com/propeller-heads/tycho-execution/compare/0.130.1...0.130.2) (2025-10-17)
 
 
