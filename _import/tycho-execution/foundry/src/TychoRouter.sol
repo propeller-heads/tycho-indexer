@@ -806,15 +806,15 @@ contract TychoRouter is
     /**
      * @dev Gets balance of a token for a given address. Supports both native ETH and ERC20 tokens.
      */
-    // forgefmt: disable-start
     function _balanceOf(address token, address owner)
         internal
         view
         returns (uint256)
     {
-        return
-            token == address(0) ? owner.balance : IERC20(token).balanceOf(owner);
-    }// forgefmt: disable-end
+        return token == address(0)
+            ? owner.balance
+            : IERC20(token).balanceOf(owner);
+    }
 
     /**
      * @dev Verifies that the expected amount of output tokens was received by the receiver.

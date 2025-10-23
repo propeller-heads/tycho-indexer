@@ -18,14 +18,14 @@
   "base": {
     "uniswap_v2": "0xF744EBfaA580cF3fFc25aD046E92BD8B770a0700",
     "uniswap_v3": "0x647bffbf8bd72bf6341ecba8b0279e090313a40d",
-    "uniswap_v4": "0x7Dfa502736C7bd84DA1402F7524214215BC9534d",
-    "uniswap_v4_hooks": "0x7Dfa502736C7bd84DA1402F7524214215BC9534d",
+    "uniswap_v4": "0x8a3520889fE0bbF9E1F4a9724C27d8D6Ed9f0e29",
+    "uniswap_v4_hooks": "0x8a3520889fE0bbF9E1F4a9724C27d8D6Ed9f0e29",
     "rfq:bebop": "0x489A3f531dA3873D6585BF3f8E0dEE48CAC6F7BC"
   },
   "unichain": {
     "uniswap_v2": "0x00C1b81e3C8f6347E69e2DDb90454798A6Be975E",
     "uniswap_v3": "0xD26A838A41af3d4815DfD745a080B2062c4124d1",
-    "uniswap_v4": "0x647bfFbF8Bd72bF6341ECBa8B0279e090313A40D",
-    "uniswap_v4_hooks": "0x647bfFbF8Bd72bF6341ECBa8B0279e090313A40D"
+    "uniswap_v4": "0x052a40Ab2875437e0fF7f68976954AD62aB1f235",
+    "uniswap_v4_hooks": "0x052a40Ab2875437e0fF7f68976954AD62aB1f235"
   }
 }

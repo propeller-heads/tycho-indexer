@@ -222,9 +222,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);
 
-        uint256 amountOut = tychoRouter.singleSwapPermit2{
-            value: amountIn
-        }(
+        uint256 amountOut = tychoRouter.singleSwapPermit2{value: amountIn}(
             amountIn,
             address(0),
             DAI_ADDR,

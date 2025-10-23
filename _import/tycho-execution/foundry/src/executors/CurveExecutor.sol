@@ -93,10 +93,9 @@ contract CurveExecutor is IExecutor, RestrictTransferFrom {
             // crypto or llamma
             if (tokenIn == nativeToken || tokenOut == nativeToken) {
                 // slither-disable-next-line arbitrary-send-eth
-                CryptoPoolETH(pool)
-                .exchange{
-                    value: ethAmount
-                }(uint256(int256(i)), uint256(int256(j)), amountIn, 0, true);
+                CryptoPoolETH(pool).exchange{value: ethAmount}(
+                    uint256(int256(i)), uint256(int256(j)), amountIn, 0, true
+                );
             } else {
                 CryptoPool(pool)
                     .exchange(

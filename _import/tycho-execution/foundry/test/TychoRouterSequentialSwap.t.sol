@@ -216,9 +216,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             )
         );
 
-        uint256 amountOut = tychoRouter.sequentialSwapPermit2{
-            value: amountIn
-        }(
+        uint256 amountOut = tychoRouter.sequentialSwapPermit2{value: amountIn}(
             amountIn,
             address(0),
             USDC_ADDR,
