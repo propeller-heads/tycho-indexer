@@ -319,7 +319,7 @@ mod cli_tests {
     fn parse_index_args(args: Vec<String>) -> IndexArgs {
         let cli = Cli::try_parse_from(args).expect("parse errored");
         match cli.command() {
-            Command::Index(index_args) => index_args.clone(),
+            Command::Index(index_args) => index_args,
             _ => panic!("Expected Index command"),
         }
     }
@@ -387,15 +387,15 @@ mod cli_tests {
     }
 
     #[rstest]
-    #[case::days("7", "7")]
-    #[case::default("none", "30")]
+    #[case::days(Some("7"), 7)]
+    #[case::default(None, 30)]
     fn test_retention_horizon_days_parsing(
-        #[case] horizon_input: &str,
-        #[case] expected_days: &str,
+        #[case] horizon_input: Option<&str>,
+        #[case] expected_days: u32,
     ) {
         let mut args = create_basic_index_args();
 
-        if horizon_input != "none" {
+        if let Some(horizon_input) = horizon_input {
             args.push("--retention-horizon".to_string());
             args.push(horizon_input.to_string());
         }
@@ -406,7 +406,6 @@ mod cli_tests {
             .expect("Should calculate successfully");
 
         let now = Utc::now().naive_utc();
-        let expected_days: u32 = expected_days.parse().unwrap();
         let expected = now - chrono::Duration::days(expected_days as i64);
         let diff = (horizon - expected).num_seconds().abs();
         assert!(diff < 5, "Expected horizon within 5 seconds of calculated value");
