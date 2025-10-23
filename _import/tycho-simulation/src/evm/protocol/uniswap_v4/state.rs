@@ -2,7 +2,7 @@ use std::{any::Any, collections::HashMap};
 
 use alloy::primitives::{Address, Sign, I256, U256};
 use num_bigint::BigUint;
-use num_traits::{ToPrimitive, Zero};
+use num_traits::{CheckedSub, ToPrimitive, Zero};
 use revm::primitives::I128;
 use tracing::trace;
 use tycho_common::{
