@@ -54,6 +54,7 @@ pub struct HashflowClient {
 impl HashflowClient {
     pub const PROTOCOL_SYSTEM: &'static str = "rfq:hashflow";
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         chain: Chain,
         tokens: HashSet<Bytes>,
