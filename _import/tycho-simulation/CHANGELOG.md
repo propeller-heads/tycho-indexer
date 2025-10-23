@@ -1,3 +1,24 @@
+## [0.184.0](https://github.com/propeller-heads/tycho-simulation/compare/0.183.0...0.184.0) (2025-10-22)
+
+
+### Features
+
+* HashflowClientBuilder ([f19cb23](https://github.com/propeller-heads/tycho-simulation/commit/f19cb23b15f24f8a4e93ce08e0af274649ef2ca1))
+
+## [0.183.0](https://github.com/propeller-heads/tycho-simulation/compare/0.182.1...0.183.0) (2025-10-22)
+
+
+### Features
+
+* Add maverick to integration test ([e65511a](https://github.com/propeller-heads/tycho-simulation/commit/e65511a6468960c5e08cc9a6c7e557ac003d47ab))
+* Improve slippage metric to track which direction it is in ([d6d8f25](https://github.com/propeller-heads/tycho-simulation/commit/d6d8f25f7292d86cdf2c61fbc58f58bad1548e18))
+
+
+### Bug Fixes
+
+* Record time that the Update was received more accurately ([61f6b37](https://github.com/propeller-heads/tycho-simulation/commit/61f6b37eaec5360a492ca8e053132f4ad4c1e3dc))
+* Set buckets for metrics ([d446492](https://github.com/propeller-heads/tycho-simulation/commit/d446492548743be2e5476ef9580eba41ac302b6c))
+
 ## [0.182.1](https://github.com/propeller-heads/tycho-simulation/compare/0.182.0...0.182.1) (2025-10-20)
 
 

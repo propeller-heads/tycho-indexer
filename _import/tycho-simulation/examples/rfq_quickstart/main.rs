@@ -36,7 +36,7 @@ use tycho_simulation::{
     rfq::{
         protocols::{
             bebop::{client_builder::BebopClientBuilder, state::BebopState},
-            hashflow::{client::HashflowClient, state::HashflowState},
+            hashflow::{client_builder::HashflowClientBuilder, state::HashflowState},
         },
         stream::RFQStreamBuilder,
     },
@@ -180,16 +180,12 @@ async fn main() {
     }
     if let (Some(user), Some(key)) = (hashflow_user, hashflow_key) {
         println!("Setting up Hashflow RFQ client...\n");
-        let hashflow_client = HashflowClient::new(
-            chain,
-            rfq_tokens,
-            cli.tvl_threshold,
-            Default::default(),
-            user,
-            key,
-            Duration::from_secs(5),
-        )
-        .expect("Failed to create Hashflow RFQ client");
+        let hashflow_client = HashflowClientBuilder::new(chain, user, key)
+            .tokens(rfq_tokens)
+            .tvl_threshold(cli.tvl_threshold)
+            .poll_time(Duration::from_secs(5))
+            .build()
+            .expect("Failed to create Hashflow RFQ client");
         rfq_stream_builder =
             rfq_stream_builder.add_client::<HashflowState>("hashflow", Box::new(hashflow_client))
     }

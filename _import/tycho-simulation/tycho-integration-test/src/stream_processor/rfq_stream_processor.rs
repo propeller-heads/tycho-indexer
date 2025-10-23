@@ -16,7 +16,9 @@ use tycho_common::{
 use tycho_simulation::rfq::{
     protocols::{
         bebop::{client::BebopClient, client_builder::BebopClientBuilder, state::BebopState},
-        hashflow::{client::HashflowClient, state::HashflowState},
+        hashflow::{
+            client::HashflowClient, client_builder::HashflowClientBuilder, state::HashflowState,
+        },
     },
     stream::RFQStreamBuilder,
 };
@@ -102,17 +104,14 @@ impl RFQStreamProcessor {
                         .add_client::<BebopState>("bebop", Box::new(bebop_client));
                 }
                 RFQProtocol::Hashflow => {
-                    let hashflow_client = HashflowClient::new(
-                        self.chain,
-                        rfq_tokens.clone(),
-                        self.tvl_threshold,
-                        Default::default(),
-                        user.clone(),
-                        key.clone(),
-                        Duration::from_secs(30),
-                    )
-                    .into_diagnostic()
-                    .wrap_err("Failed to create Hashflow RFQ client")?;
+                    let hashflow_client =
+                        HashflowClientBuilder::new(self.chain, user.clone(), key.clone())
+                            .tokens(rfq_tokens.clone())
+                            .tvl_threshold(self.tvl_threshold)
+                            .poll_time(Duration::from_secs(30))
+                            .build()
+                            .into_diagnostic()
+                            .wrap_err("Failed to create Hashflow RFQ client")?;
                     rfq_stream_builder = rfq_stream_builder
                         .add_client::<HashflowState>("hashflow", Box::new(hashflow_client))
                 }
@@ -174,8 +173,29 @@ impl RFQStreamProcessor {
                     .new_pairs
                     .retain(|key, _| update.states.contains_key(key));
 
+                let received_at =
+                    match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+                        Ok(duration) => duration,
+                        Err(e) => {
+                            if stream_tx
+                                .send(Err(miette!(e).wrap_err("Error getting current timestamp")))
+                                .await
+                                .is_err()
+                            {
+                                warn!("Receiver dropped, stopping stream processor");
+                                break;
+                            }
+                            continue;
+                        }
+                    };
+
                 // Send the latest update
-                let update = StreamUpdate { update_type: UpdateType::Rfq, update, is_first_update };
+                let update = StreamUpdate {
+                    update_type: UpdateType::Rfq,
+                    update,
+                    is_first_update,
+                    received_at,
+                };
                 if is_first_update {
                     is_first_update = false;
                 }
