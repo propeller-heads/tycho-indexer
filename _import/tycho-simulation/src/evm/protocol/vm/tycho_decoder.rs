@@ -296,20 +296,23 @@ mod tests {
         let db = SHARED_TYCHO_DB.clone();
         let engine = create_engine(db.clone(), false).unwrap();
         for account in accounts.clone() {
-            engine.state.init_account(
-                account.address,
-                AccountInfo {
-                    balance: account.balance.unwrap_or_default(),
-                    nonce: 0u64,
-                    code_hash: KECCAK_EMPTY,
-                    code: account
-                        .code
-                        .clone()
-                        .map(|arg0: Vec<u8>| Bytecode::new_raw(arg0.into())),
-                },
-                None,
-                false,
-            );
+            engine
+                .state
+                .init_account(
+                    account.address,
+                    AccountInfo {
+                        balance: account.balance.unwrap_or_default(),
+                        nonce: 0u64,
+                        code_hash: KECCAK_EMPTY,
+                        code: account
+                            .code
+                            .clone()
+                            .map(|arg0: Vec<u8>| Bytecode::new_raw(arg0.into())),
+                    },
+                    None,
+                    false,
+                )
+                .expect("Failed to init account");
         }
         db.update(accounts, Some(block))
             .unwrap();

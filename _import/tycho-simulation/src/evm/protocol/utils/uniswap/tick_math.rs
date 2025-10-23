@@ -16,7 +16,12 @@ pub(crate) const MAX_SQRT_RATIO: U256 =
     U256::from_limbs([6743328256752651558u64, 17280870778742802505u64, 4294805859u64, 0]);
 
 pub(crate) fn get_sqrt_ratio_at_tick(tick: i32) -> Result<U256, SimulationError> {
-    assert!(tick.abs() <= MAX_TICK);
+    if tick.abs() > MAX_TICK {
+        return Err(SimulationError::FatalError(format!(
+            "Tick {} is outside valid range [{}, {}]",
+            tick, -MAX_TICK, MAX_TICK
+        )));
+    }
     let abs_tick = U256::from(tick.unsigned_abs());
     let mut ratio = if abs_tick.bit(0) {
         U256::from_limbs([12262481743371124737u64, 18445821805675392311u64, 0, 0])
@@ -147,15 +152,24 @@ pub(crate) fn get_sqrt_ratio_at_tick(tick: i32) -> Result<U256, SimulationError>
     Ok((ratio >> 32) + if rest == U256::from(0u64) { U256::from(0u64) } else { U256::from(1u64) })
 }
 
-fn most_significant_bit(x: U256) -> usize {
-    assert!(x > U256::from(0u64));
-    x.bit_len() - 1
+fn most_significant_bit(x: U256) -> Result<usize, SimulationError> {
+    if x == U256::ZERO {
+        return Err(SimulationError::FatalError(
+            "most_significant_bit requires non-zero value".to_string(),
+        ));
+    }
+    Ok(x.bit_len() - 1)
 }
 
 pub(crate) fn get_tick_at_sqrt_ratio(sqrt_price: U256) -> Result<i32, SimulationError> {
-    assert!(sqrt_price >= MIN_SQRT_RATIO && sqrt_price < MAX_SQRT_RATIO);
+    if sqrt_price < MIN_SQRT_RATIO || sqrt_price >= MAX_SQRT_RATIO {
+        return Err(SimulationError::FatalError(format!(
+            "sqrt_price {} is outside valid range [{}, {})",
+            sqrt_price, MIN_SQRT_RATIO, MAX_SQRT_RATIO
+        )));
+    }
     let ratio_x128 = sqrt_price << 32;
-    let msb = most_significant_bit(ratio_x128);
+    let msb = most_significant_bit(ratio_x128)?;
     let msb_diff = (msb as i32) - 128;
     // Convert msb_diff to I256
     let mut log_2: I256 = if msb_diff >= 0 {
@@ -169,8 +183,11 @@ pub(crate) fn get_tick_at_sqrt_ratio(sqrt_price: U256) -> Result<i32, Simulation
     for i in 0..14 {
         r = r.pow(U256::from_limbs([2u64, 0, 0, 0])) >> 127;
         let f = r >> 128;
-        log_2 =
-            log_2.bitor(I256::checked_from_sign_and_abs(Sign::Positive, f << (63 - i)).unwrap());
+        let shift_value = I256::checked_from_sign_and_abs(Sign::Positive, f << (63 - i))
+            .ok_or_else(|| {
+                SimulationError::FatalError("Failed to convert shifted value to I256".to_string())
+            })?;
+        log_2 = log_2.bitor(shift_value);
         r >>= f;
     }
 
@@ -212,11 +229,11 @@ mod tests {
 
     #[test]
     fn test_most_significant_bit() {
-        assert_eq!(most_significant_bit(U256::from(1)), 0);
-        assert_eq!(most_significant_bit(U256::from(3)), 1);
-        assert_eq!(most_significant_bit(U256::from(8)), 3);
-        assert_eq!(most_significant_bit(U256::from(256)), 8);
-        assert_eq!(most_significant_bit(U256::from(511)), 8);
+        assert_eq!(most_significant_bit(U256::from(1)).unwrap(), 0);
+        assert_eq!(most_significant_bit(U256::from(3)).unwrap(), 1);
+        assert_eq!(most_significant_bit(U256::from(8)).unwrap(), 3);
+        assert_eq!(most_significant_bit(U256::from(256)).unwrap(), 8);
+        assert_eq!(most_significant_bit(U256::from(511)).unwrap(), 8);
     }
 
     #[test]

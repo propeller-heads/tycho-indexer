@@ -49,7 +49,7 @@ type MinGasUsageReturn = U256;
 /// - `get_limits`: Retrieves the trade limits for a given token pair.
 /// - `get_capabilities`: Checks the capabilities of the adapter for a specific token pair.
 /// - `min_gas_usage`: Queries the minimum gas usage required for operations within the adapter.
-impl<D: EngineDatabaseInterface + std::clone::Clone + Debug> TychoSimulationContract<D>
+impl<D: EngineDatabaseInterface + Clone + Debug> TychoSimulationContract<D>
 where
     <D as DatabaseRef>::Error: Debug,
     <D as EngineDatabaseInterface>::Error: Debug,
@@ -191,8 +191,8 @@ where
                         "Adapter price calculation failed: Denominator is zero".to_string(),
                     ))
                 } else {
-                    let num_f64 = u256_to_f64(numerator);
-                    let den_f64 = u256_to_f64(denominator);
+                    let num_f64 = u256_to_f64(numerator)?;
+                    let den_f64 = u256_to_f64(denominator)?;
                     Ok(num_f64 / den_f64)
                 }
             })

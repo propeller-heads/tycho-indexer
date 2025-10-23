@@ -300,12 +300,18 @@ where
                 storage_overwrites.insert(U256::from(0), original_contract_u256);
                 overwrites = Some(HashMap::from([(lens_address, storage_overwrites)]));
 
-                self.contract.engine.state.init_account(
-                    lens_address,
-                    info,
-                    None,
-                    true, // mocked
-                );
+                self.contract
+                    .engine
+                    .state
+                    .init_account(
+                        lens_address,
+                        info,
+                        None,
+                        true, // mocked
+                    )
+                    .map_err(|e| {
+                        SimulationError::FatalError(format!("Failed to initialize contract: {e:?}"))
+                    })?;
                 TychoSimulationContract::new(lens_address, self.contract.engine.clone())?
             } else {
                 TychoSimulationContract::new(contract_address, self.contract.engine.clone())?
@@ -414,7 +420,12 @@ mod tests {
             timestamp: 1748397011,
             ..Default::default()
         };
-        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block.clone()));
+
+        let db = SimulationDB::new(
+            get_client(None).expect("Failed to create client"),
+            get_runtime().expect("Failed to get runtime"),
+            Some(block.clone()),
+        );
         let engine = create_engine(db, true).expect("Failed to create simulation engine");
 
         let hook_address = Address::from_str("0x0010d0d5db05933fa0d9f7038d365e1541a41888")
@@ -503,7 +514,11 @@ mod tests {
             timestamp: 1748397011,
             ..Default::default()
         };
-        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block.clone()));
+        let db = SimulationDB::new(
+            get_client(None).expect("Failed to create client"),
+            get_runtime().expect("Failed to get runtime"),
+            Some(block.clone()),
+        );
         let engine = create_engine(db, true).expect("Failed to create simulation engine");
 
         // pool manager on ethereum
@@ -513,17 +528,20 @@ mod tests {
         let pool_manager_bytecode =
             Bytecode::new_raw(include_bytes!("assets/pool_manager_bytecode.bin").into());
 
-        engine.state.init_account(
-            pool_manager,
-            AccountInfo {
-                balance: *MAX_BALANCE,
-                nonce: 0,
-                code_hash: B256::from(keccak256(pool_manager_bytecode.clone().bytes())),
-                code: Some(pool_manager_bytecode),
-            },
-            None,
-            false,
-        );
+        engine
+            .state
+            .init_account(
+                pool_manager,
+                AccountInfo {
+                    balance: *MAX_BALANCE,
+                    nonce: 0,
+                    code_hash: B256::from(keccak256(pool_manager_bytecode.clone().bytes())),
+                    code: Some(pool_manager_bytecode),
+                },
+                None,
+                false,
+            )
+            .expect("Failed to initialize account");
 
         let hook_address = Address::from_str("0x0010d0d5db05933fa0d9f7038d365e1541a41888")
             .expect("Invalid hook address");
@@ -538,17 +556,20 @@ mod tests {
         let bytecode =
             Bytecode::new_raw(include_bytes!("assets/after_swap_test_hook_bytecode.bin").into());
 
-        engine.state.init_account(
-            hook_address,
-            AccountInfo {
-                balance: *MAX_BALANCE,
-                nonce: 0,
-                code_hash: B256::from(keccak256(bytecode.clone().bytes())),
-                code: Some(bytecode),
-            },
-            None,
-            true,
-        );
+        engine
+            .state
+            .init_account(
+                hook_address,
+                AccountInfo {
+                    balance: *MAX_BALANCE,
+                    nonce: 0,
+                    code_hash: B256::from(keccak256(bytecode.clone().bytes())),
+                    code: Some(bytecode),
+                },
+                None,
+                true,
+            )
+            .expect("Failed to initialize account");
 
         let hook_handler = GenericVMHookHandler::new(
             hook_address,
@@ -604,8 +625,8 @@ mod tests {
             ..Default::default()
         };
         let db = SimulationDB::new(
-            get_client(Some("https://unichain.drpc.org".into())),
-            get_runtime(),
+            get_client(Some("https://unichain.drpc.org".into())).expect("Failed to create client"),
+            get_runtime().expect("Failed to get runtime"),
             Some(block.clone()),
         );
         let engine = create_engine(db, true).expect("Failed to create simulation engine");
@@ -698,7 +719,11 @@ mod tests {
             ..Default::default()
         };
 
-        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block.clone()));
+        let db = SimulationDB::new(
+            get_client(None).expect("Failed to create client"),
+            get_runtime().expect("Failed to get runtime"),
+            Some(block.clone()),
+        );
         let engine = create_engine(db, true).expect("Failed to create simulation engine");
 
         let hook_address = Address::from_str("0xC88b618C2c670c2e2a42e06B466B6F0e82A6E8A8")
@@ -755,7 +780,11 @@ mod tests {
             timestamp: 1748397011,
             ..Default::default()
         };
-        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block.clone()));
+        let db = SimulationDB::new(
+            get_client(None).expect("Failed to create client"),
+            get_runtime().expect("Failed to get runtime"),
+            Some(block.clone()),
+        );
         let engine = create_engine(db, true).expect("Failed to create simulation engine");
 
         let mut hook_handler = GenericVMHookHandler {

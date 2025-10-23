@@ -192,7 +192,11 @@ where
             engine.clone()
         } else {
             self.engine = Some(self.get_default_engine(db).await?);
-            self.engine.clone().unwrap()
+            self.engine.clone().ok_or_else(|| {
+                SimulationError::FatalError(
+                    "Failed to get build engine: Engine not initialized".to_string(),
+                )
+            })?
         };
 
         if self.adapter_contract.is_none() {
@@ -238,12 +242,24 @@ where
     async fn get_default_engine(&self, db: D) -> Result<SimulationEngine<D>, SimulationError> {
         let engine = create_engine(db, self.trace.unwrap_or(false))?;
 
-        engine.state.init_account(
-            *EXTERNAL_ACCOUNT,
-            AccountInfo { balance: *MAX_BALANCE, nonce: 0, code_hash: KECCAK_EMPTY, code: None },
-            None,
-            false,
-        );
+        engine
+            .state
+            .init_account(
+                *EXTERNAL_ACCOUNT,
+                AccountInfo {
+                    balance: *MAX_BALANCE,
+                    nonce: 0,
+                    code_hash: KECCAK_EMPTY,
+                    code: None,
+                },
+                None,
+                false,
+            )
+            .map_err(|err| {
+                SimulationError::FatalError(format!(
+                    "Failed to get default engine: Failed to init external account: {err:?}"
+                ))
+            })?;
 
         if let Some(stateless_contracts) = &self.stateless_contracts {
             for (address, bytecode) in stateless_contracts.iter() {
@@ -271,11 +287,15 @@ where
                     ))
                 })?;
                 engine.state.init_account(
-                    alloy::primitives::Address(*account_address),
+                    Address(*account_address),
                     AccountInfo { balance: Default::default(), nonce: 0, code_hash, code },
                     None,
                     false,
-                );
+                ).map_err(|err| {
+                    SimulationError::FatalError(format!(
+                        "Failed to get default engine: Failed to init stateless contract account: {err:?}"
+                    ))
+                })?;
             }
         }
         Ok(engine)
@@ -441,6 +461,7 @@ mod tests {
         assert!(engine
             .state
             .get_account_storage()
+            .expect("Failed to get account storage")
             .account_present(&EXTERNAL_ACCOUNT));
     }
 }

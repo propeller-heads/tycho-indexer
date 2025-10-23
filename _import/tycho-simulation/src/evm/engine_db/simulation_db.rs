@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fmt::Debug,
-    sync::{Arc, RwLock},
+    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
 use alloy::{
@@ -18,7 +18,7 @@ use revm::{
     DatabaseRef,
 };
 use thiserror::Error;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 use tycho_client::feed::BlockHeader;
 
 use super::{
@@ -140,32 +140,23 @@ impl<P: Provider + Debug + 'static> SimulationDB<P> {
         &mut self,
         updates: &HashMap<Address, StateUpdate>,
         block: BlockHeader,
-    ) -> HashMap<Address, StateUpdate> {
+    ) -> Result<HashMap<Address, StateUpdate>, SimulationDBError> {
         info!("Received account state update.");
         let mut revert_updates = HashMap::new();
         self.block = Some(block);
         for (address, update_info) in updates.iter() {
             let mut revert_entry = StateUpdate::default();
             if let Some(current_account) = self
-                .account_storage
-                .read()
-                .unwrap()
+                .read_account_storage()?
                 .get_account_info(address)
             {
                 revert_entry.balance = Some(current_account.balance);
             }
-            if update_info.storage.is_some() {
+            if let Some(storage_updates) = update_info.storage.as_ref() {
                 let mut revert_storage = HashMap::default();
-                for index in update_info
-                    .storage
-                    .as_ref()
-                    .unwrap()
-                    .keys()
-                {
+                for index in storage_updates.keys() {
                     if let Some(s) = self
-                        .account_storage
-                        .read()
-                        .unwrap()
+                        .read_account_storage()?
                         .get_permanent_storage(address, index)
                     {
                         revert_storage.insert(*index, s);
@@ -175,12 +166,10 @@ impl<P: Provider + Debug + 'static> SimulationDB<P> {
             }
             revert_updates.insert(*address, revert_entry);
 
-            self.account_storage
-                .write()
-                .unwrap()
+            self.write_account_storage()?
                 .update_account(address, update_info);
         }
-        revert_updates
+        Ok(revert_updates)
     }
 
     /// Query information about an Ethereum account.
@@ -236,17 +225,38 @@ impl<P: Provider + Debug + 'static> SimulationDB<P> {
         address: Address,
         index: U256,
     ) -> Result<StorageValue, <SimulationDB<P> as DatabaseRef>::Error> {
-        let storage = self.block_on(async {
-            let mut request = self
-                .client
-                .get_storage_at(address, index);
-            if let Some(block) = &self.block {
-                request = request.number(block.number);
-            }
-            request.await.unwrap()
-        });
+        let mut request = self
+            .client
+            .get_storage_at(address, index);
+        if let Some(block) = &self.block {
+            request = request.number(block.number);
+        }
 
-        Ok(storage)
+        let storage_future = async move {
+            request.await.map_err(|err| {
+                SimulationDBError::SimulationError(format!(
+                    "Failed to fetch storage for {address:?} slot {index}: {err}"
+                ))
+            })
+        };
+
+        self.block_on(storage_future)
+    }
+
+    fn read_account_storage(
+        &self,
+    ) -> Result<RwLockReadGuard<'_, AccountStorage>, SimulationDBError> {
+        self.account_storage
+            .read()
+            .map_err(|_| SimulationDBError::Internal("Account storage read lock poisoned".into()))
+    }
+
+    fn write_account_storage(
+        &self,
+    ) -> Result<RwLockWriteGuard<'_, AccountStorage>, SimulationDBError> {
+        self.account_storage
+            .write()
+            .map_err(|_| SimulationDBError::Internal("Account storage write lock poisoned".into()))
     }
 
     fn block_on<F: core::future::Future>(&self, f: F) -> F::Output {
@@ -264,7 +274,7 @@ impl<P: Provider + Debug> EngineDatabaseInterface for SimulationDB<P>
 where
     P: Provider + Send + Sync + 'static,
 {
-    type Error = String;
+    type Error = SimulationDBError;
 
     /// Sets up a single account
     ///
@@ -285,25 +295,26 @@ where
         mut account: AccountInfo,
         permanent_storage: Option<HashMap<U256, U256>>,
         mocked: bool,
-    ) {
-        if account.code.is_some() {
-            account.code = Some(account.code.unwrap());
+    ) -> Result<(), <Self as EngineDatabaseInterface>::Error> {
+        if let Some(code) = account.code.clone() {
+            account.code = Some(code);
         }
 
-        let mut account_storage = self.account_storage.write().unwrap();
+        self.write_account_storage()?
+            .init_account(address, account, permanent_storage, mocked);
 
-        account_storage.init_account(address, account, permanent_storage, mocked);
+        Ok(())
     }
 
     /// Clears temp storage
     ///
     /// It is recommended to call this after a new block is received,
     /// to avoid stored state leading to wrong results.
-    fn clear_temp_storage(&mut self) {
-        self.account_storage
-            .write()
-            .unwrap()
+    fn clear_temp_storage(&mut self) -> Result<(), <Self as EngineDatabaseInterface>::Error> {
+        self.write_account_storage()?
             .clear_temp_storage();
+
+        Ok(())
     }
 
     fn get_current_block(&self) -> Option<BlockHeader> {
@@ -317,6 +328,8 @@ pub enum SimulationDBError {
     SimulationError(String),
     #[error("Not implemented error: {0}")]
     NotImplementedError(String),
+    #[error("Simulation DB internal error: {0}")]
+    Internal(String),
 }
 
 impl DBErrorMarker for SimulationDBError {}
@@ -364,16 +377,15 @@ where
     ///   from the contract, initializes the account in the storage with the retrieved information,
     ///   and returns a clone of the account information.
     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
-        if let Some(account) = self
-            .account_storage
-            .read()
-            .unwrap()
-            .get_account_info(&address)
-        {
-            return Ok(Some(account.clone()));
+        if let Some(account) = {
+            self.read_account_storage()?
+                .get_account_info(&address)
+                .cloned()
+        } {
+            return Ok(Some(account));
         }
         let account_info = self.query_account_info(address)?;
-        self.init_account(address, account_info.clone(), None, false);
+        self.init_account(address, account_info.clone(), None, false)?;
         Ok(Some(account_info))
     }
 
@@ -419,20 +431,23 @@ where
     ///   returns the storage value.
     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
         debug!("Requested storage of account {:x?} slot {}", address, index);
-        let is_mocked; // will be None if we don't have this account at all
-        {
-            let account_storage = self.account_storage.read().unwrap();
-            // This scope is to not make two simultaneous borrows
-            is_mocked = account_storage.is_mocked_account(&address);
-            if let Some(storage_value) = account_storage.get_storage(&address, &index) {
-                debug!(
-                    "Got value locally. This is a {} account. Value: {}",
-                    (if is_mocked.unwrap_or(false) { "mocked" } else { "non-mocked" }),
-                    storage_value
-                );
-                return Ok(storage_value);
-            }
+        let (is_mocked, local_value) = {
+            let account_storage = self.read_account_storage()?;
+            (
+                account_storage.is_mocked_account(&address),
+                account_storage.get_storage(&address, &index),
+            )
+        };
+
+        if let Some(storage_value) = local_value {
+            debug!(
+                "Got value locally. This is a {} account. Value: {}",
+                if is_mocked.unwrap_or(false) { "mocked" } else { "non-mocked" },
+                storage_value
+            );
+            return Ok(storage_value);
         }
+
         // At this point we know we don't have data for this storage slot.
         match is_mocked {
             Some(true) => {
@@ -441,9 +456,8 @@ where
             }
             Some(false) => {
                 let storage_value = self.query_storage(address, index)?;
-                let mut account_storage = self.account_storage.write().unwrap();
-
-                account_storage.set_temp_storage(address, index, storage_value);
+                self.write_account_storage()?
+                    .set_temp_storage(address, index, storage_value);
                 debug!(
                     "This is a non-mocked account for which we didn't have data. Fetched value: {}",
                     storage_value
@@ -453,9 +467,9 @@ where
             None => {
                 let account_info = self.query_account_info(address)?;
                 let storage_value = self.query_storage(address, index)?;
-                self.init_account(address, account_info, None, false);
-                let mut account_storage = self.account_storage.write().unwrap();
-                account_storage.set_temp_storage(address, index, storage_value);
+                self.init_account(address, account_info, None, false)?;
+                self.write_account_storage()?
+                    .set_temp_storage(address, index, storage_value);
                 debug!("This is non-initialised account. Fetched value: {}", storage_value);
                 Ok(storage_value)
             }
@@ -476,6 +490,7 @@ where
 mod tests {
     use std::{error::Error, str::FromStr};
 
+    use alloy::primitives::U160;
     use rstest::rstest;
     use tycho_common::Bytes;
 
@@ -484,10 +499,15 @@ mod tests {
 
     #[rstest]
     fn test_query_storage_latest_block() -> Result<(), Box<dyn Error>> {
-        let db = SimulationDB::new(get_client(None), get_runtime(), None);
+        let db = SimulationDB::new(
+            get_client(None).expect("Failed to create test client"),
+            get_runtime().expect("Failed to create test runtime"),
+            None,
+        );
         let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let index = U256::from_limbs_slice(&[8]);
-        db.init_account(address, AccountInfo::default(), None, false);
+        db.init_account(address, AccountInfo::default(), None, false)
+            .expect("Failed to init account");
 
         db.query_storage(address, index)
             .unwrap();
@@ -500,7 +520,11 @@ mod tests {
 
     #[rstest]
     fn test_query_account_info() {
-        let mut db = SimulationDB::new(get_client(None), get_runtime(), None);
+        let mut db = SimulationDB::new(
+            get_client(None).expect("Failed to create test client"),
+            get_runtime().expect("Failed to create test runtime"),
+            None,
+        );
         let block = BlockHeader {
             number: 20308186,
             hash: Bytes::from_str(
@@ -512,7 +536,8 @@ mod tests {
         };
         db.set_block(Some(block));
         let address = Address::from_str("0x168b93113fe5902c87afaecE348581A1481d0f93").unwrap();
-        db.init_account(address, AccountInfo::default(), None, false);
+        db.init_account(address, AccountInfo::default(), None, false)
+            .expect("Failed to init account");
 
         let account_info = db.query_account_info(address).unwrap();
 
@@ -522,10 +547,15 @@ mod tests {
 
     #[rstest]
     fn test_mock_account_get_acc_info() {
-        let db = SimulationDB::new(get_client(None), get_runtime(), None);
+        let db = SimulationDB::new(
+            get_client(None).expect("Failed to create test client"),
+            get_runtime().expect("Failed to create test runtime"),
+            None,
+        );
         let mock_acc_address =
             Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
-        db.init_account(mock_acc_address, AccountInfo::default(), None, true);
+        db.init_account(mock_acc_address, AccountInfo::default(), None, true)
+            .expect("Failed to init account");
 
         let acc_info = db
             .basic_ref(mock_acc_address)
@@ -544,11 +574,16 @@ mod tests {
 
     #[rstest]
     fn test_mock_account_get_storage() {
-        let db = SimulationDB::new(get_client(None), get_runtime(), None);
+        let db = SimulationDB::new(
+            get_client(None).expect("Failed to create test client"),
+            get_runtime().expect("Failed to create test runtime"),
+            None,
+        );
         let mock_acc_address =
             Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
         let storage_address = U256::ZERO;
-        db.init_account(mock_acc_address, AccountInfo::default(), None, true);
+        db.init_account(mock_acc_address, AccountInfo::default(), None, true)
+            .expect("Failed to init account");
 
         let storage = db
             .storage_ref(mock_acc_address, storage_address)
@@ -559,9 +594,14 @@ mod tests {
 
     #[rstest]
     fn test_update_state() {
-        let mut db = SimulationDB::new(get_client(None), get_runtime(), None);
+        let mut db = SimulationDB::new(
+            get_client(None).expect("Failed to create test client"),
+            get_runtime().expect("Failed to create test runtime"),
+            None,
+        );
         let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
-        db.init_account(address, AccountInfo::default(), None, false);
+        db.init_account(address, AccountInfo::default(), None, false)
+            .expect("Failed to init account");
 
         let mut new_storage = HashMap::default();
         let new_storage_value_index = U256::from_limbs_slice(&[123]);
@@ -572,12 +612,14 @@ mod tests {
         updates.insert(address, update);
         let new_block = BlockHeader { number: 1, timestamp: 234, ..Default::default() };
 
-        let reverse_update = db.update_state(&updates, new_block);
+        let reverse_update = db
+            .update_state(&updates, new_block)
+            .expect("State update should succeed");
 
         assert_eq!(
             db.account_storage
                 .read()
-                .unwrap()
+                .expect("Storage entry should exist")
                 .get_storage(&address, &new_storage_value_index)
                 .unwrap(),
             new_storage_value_index
@@ -612,7 +654,11 @@ mod tests {
 
     #[rstest]
     fn test_overridden_db() {
-        let db = SimulationDB::new(get_client(None), get_runtime(), None);
+        let db = SimulationDB::new(
+            get_client(None).expect("Failed to create test client"),
+            get_runtime().expect("Failed to create test runtime"),
+            None,
+        );
         let slot1 = U256::from_limbs_slice(&[1]);
         let slot2 = U256::from_limbs_slice(&[2]);
         let orig_value1 = U256::from_limbs_slice(&[100]);
@@ -622,14 +668,16 @@ mod tests {
             .cloned()
             .collect();
 
-        let address1 = Address::from_str("0000000000000000000000000000000000000001").unwrap();
-        let address2 = Address::from_str("0000000000000000000000000000000000000002").unwrap();
-        let address3 = Address::from_str("0000000000000000000000000000000000000003").unwrap();
+        let address1 = Address::from(U160::from(1));
+        let address2 = Address::from(U160::from(2));
+        let address3 = Address::from(U160::from(3));
 
         // override slot 1 of address 2
         // and slot 1 of address 3 which doesn't exist in the original DB
-        db.init_account(address1, AccountInfo::default(), Some(original_storage.clone()), false);
-        db.init_account(address2, AccountInfo::default(), Some(original_storage), false);
+        db.init_account(address1, AccountInfo::default(), Some(original_storage.clone()), false)
+            .expect("Failed to init account");
+        db.init_account(address2, AccountInfo::default(), Some(original_storage), false)
+            .expect("Failed to init account");
 
         let overridden_value1 = U256::from_limbs_slice(&[101]);
         let mut overrides: HashMap<Address, HashMap<U256, U256>> = HashMap::new();
