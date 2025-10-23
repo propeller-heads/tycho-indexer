@@ -70,7 +70,6 @@ pub struct BebopClient {
     ws_key: String,
     // quote tokens to normalize to for TVL purposes. Should have the same prices.
     quote_tokens: HashSet<Bytes>,
-    // timeout for firm quote requests
     quote_timeout: Duration,
 }
 

@@ -48,7 +48,6 @@ pub struct HashflowClient {
     // Quote tokens to normalize to for TVL purposes. Should have the same prices.
     quote_tokens: HashSet<Bytes>,
     poll_time: Duration,
-    // timeout for firm quote requests
     quote_timeout: Duration,
 }
 
