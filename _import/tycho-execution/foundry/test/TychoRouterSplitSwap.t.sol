@@ -271,9 +271,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         bytes[] memory swaps = new bytes[](1);
         swaps[0] = swap;
 
-        uint256 amountOut = tychoRouter.splitSwapPermit2{
-            value: amountIn
-        }(
+        uint256 amountOut = tychoRouter.splitSwapPermit2{value: amountIn}(
             amountIn,
             address(0),
             DAI_ADDR,
