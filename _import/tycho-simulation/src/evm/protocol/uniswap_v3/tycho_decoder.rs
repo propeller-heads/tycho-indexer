@@ -103,8 +103,12 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV3State {
                         key.split('/')
                             .nth(1)?
                             .parse::<i32>()
-                            .map(|tick_index| TickInfo::new(tick_index, i128::from(value.clone())))
-                            .map_err(|err| InvalidSnapshotError::ValueError(err.to_string())),
+                            .map_err(|err| InvalidSnapshotError::ValueError(err.to_string()))
+                            .and_then(|tick_index| {
+                                TickInfo::new(tick_index, i128::from(value.clone())).map_err(
+                                    |err| InvalidSnapshotError::ValueError(err.to_string()),
+                                )
+                            }),
                     )
                 } else {
                     None
@@ -122,7 +126,8 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV3State {
 
         ticks.sort_by_key(|tick| tick.index);
 
-        Ok(UniswapV3State::new(liquidity, sqrt_price, fee, tick, ticks))
+        UniswapV3State::new(liquidity, sqrt_price, fee, tick, ticks)
+            .map_err(|err| InvalidSnapshotError::ValueError(err.to_string()))
     }
 }
 
@@ -208,8 +213,9 @@ mod tests {
             U256::from(200),
             FeeAmount::Medium,
             300,
-            vec![TickInfo::new(60, 400)],
-        );
+            vec![TickInfo::new(60, 400).unwrap()],
+        )
+        .unwrap();
         assert_eq!(result.unwrap(), expected);
     }
 

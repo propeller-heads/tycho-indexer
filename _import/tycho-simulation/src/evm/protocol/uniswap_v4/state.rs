@@ -93,16 +93,17 @@ impl UniswapV4State {
         tick: i32,
         tick_spacing: i32,
         ticks: Vec<TickInfo>,
-    ) -> Self {
-        let tick_list = TickList::from(
-            tick_spacing
-                .try_into()
-                // even though it's given as int24, tick_spacing must be positive, see here:
-                // https://github.com/Uniswap/v4-core/blob/a22414e4d7c0d0b0765827fe0a6c20dfd7f96291/src/libraries/TickMath.sol#L25-L28
-                .expect("tick_spacing should always be positive"),
-            ticks,
-        );
-        UniswapV4State {
+    ) -> Result<Self, SimulationError> {
+        let tick_spacing_u16 = tick_spacing.try_into().map_err(|_| {
+            // even though it's given as int24, tick_spacing must be positive, see here:
+            // https://github.com/Uniswap/v4-core/blob/a22414e4d7c0d0b0765827fe0a6c20dfd7f96291/src/libraries/TickMath.sol#L25-L28
+            SimulationError::FatalError(format!(
+                "tick_spacing {} must be positive (int24 -> u16 conversion failed)",
+                tick_spacing
+            ))
+        })?;
+        let tick_list = TickList::from(tick_spacing_u16, ticks)?;
+        Ok(UniswapV4State {
             liquidity,
             sqrt_price,
             fees,
@@ -110,7 +111,7 @@ impl UniswapV4State {
             ticks: tick_list,
             tick_spacing,
             hook: None,
-        }
+        })
     }
 
     fn swap(
@@ -745,12 +746,14 @@ impl ProtocolSim for UniswapV4State {
             // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
             if key.starts_with("ticks/") {
                 let parts: Vec<&str> = key.split('/').collect();
-                self.ticks.set_tick_liquidity(
-                    parts[1]
-                        .parse::<i32>()
-                        .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
-                    i128::from(value.clone()),
-                )
+                self.ticks
+                    .set_tick_liquidity(
+                        parts[1]
+                            .parse::<i32>()
+                            .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
+                        i128::from(value.clone()),
+                    )
+                    .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
             }
         }
         // delete ticks - ignores deletes for attributes other than tick liquidity
@@ -758,12 +761,14 @@ impl ProtocolSim for UniswapV4State {
             // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
             if key.starts_with("tick/") {
                 let parts: Vec<&str> = key.split('/').collect();
-                self.ticks.set_tick_liquidity(
-                    parts[1]
-                        .parse::<i32>()
-                        .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
-                    0,
-                )
+                self.ticks
+                    .set_tick_liquidity(
+                        parts[1]
+                            .parse::<i32>()
+                            .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
+                        0,
+                    )
+                    .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
             }
         }
 
@@ -866,8 +871,9 @@ mod tests {
             UniswapV4Fees { zero_for_one: 100, one_for_zero: 90, lp_fee: 700 },
             100,
             60,
-            vec![TickInfo::new(120, 10000), TickInfo::new(180, -10000)],
-        );
+            vec![TickInfo::new(120, 10000).unwrap(), TickInfo::new(180, -10000).unwrap()],
+        )
+        .unwrap();
 
         let attributes: HashMap<String, Bytes> = [
             ("liquidity".to_string(), Bytes::from(2000_u64.to_be_bytes().to_vec())),
@@ -1319,7 +1325,8 @@ mod tests {
                         .unwrap(),
                 },
             ],
-        );
+        )
+        .unwrap();
 
         let t0 = usdc();
         let t1 = eth();
@@ -1368,7 +1375,8 @@ mod tests {
             0,
             1,
             vec![],
-        );
+        )
+        .unwrap();
 
         let hook_address: Address = Address::from_str("0x69058613588536167ba0aa94f0cc1fe420ef28a8")
             .expect("Invalid hook address");
@@ -1416,10 +1424,11 @@ mod tests {
             0,
             60,
             vec![
-                TickInfo::new(-600, 500000000000000000i128),
-                TickInfo::new(600, -500000000000000000i128),
+                TickInfo::new(-600, 500000000000000000i128).unwrap(),
+                TickInfo::new(600, -500000000000000000i128).unwrap(),
             ],
-        );
+        )
+        .unwrap();
 
         // Test spot price calculation without a hook (should use default implementation)
         let spot_price_result = usv4_state.spot_price(&usdc(), &weth());
@@ -1481,7 +1490,8 @@ mod tests {
             0,      // current tick
             1,      // tick spacing
             vec![], // no ticks - hook manages liquidity
-        );
+        )
+        .unwrap();
 
         usv4_state.set_hook_handler(Box::new(hook_handler));
 
@@ -1511,8 +1521,8 @@ mod tests {
         let fees = UniswapV4Fees { zero_for_one: 100, one_for_zero: 100, lp_fee: 100 };
         let tick_spacing = 60;
         let ticks = vec![
-            TickInfo::new(-600, (liquidity / 4) as i128),
-            TickInfo::new(600, -((liquidity / 4) as i128)),
+            TickInfo::new(-600, (liquidity / 4) as i128).unwrap(),
+            TickInfo::new(600, -((liquidity / 4) as i128)).unwrap(),
         ];
 
         let usv4_state = UniswapV4State::new(
@@ -1522,7 +1532,8 @@ mod tests {
             0,
             tick_spacing,
             ticks,
-        );
+        )
+        .unwrap();
 
         let token_in = usdc();
         let token_out = weth();
