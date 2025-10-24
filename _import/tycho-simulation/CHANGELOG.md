@@ -1,3 +1,10 @@
+## [0.185.1](https://github.com/propeller-heads/tycho-simulation/compare/0.185.0...0.185.1) (2025-10-24)
+
+
+### Bug Fixes
+
+* Don't instantiate a HttpClient in HashflowState new() ([951deb3](https://github.com/propeller-heads/tycho-simulation/commit/951deb326006faad539db10dab2fdda75ea136ff))
+
 ## [0.185.0](https://github.com/propeller-heads/tycho-simulation/compare/0.184.4...0.185.0) (2025-10-24)
 
 
