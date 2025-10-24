@@ -1,12 +1,10 @@
-use std::{
-    collections::{HashMap, HashSet},
-    time::Duration,
-};
+use std::collections::{HashMap, HashSet};
 
 use tycho_client::feed::synchronizer::ComponentWithState;
 use tycho_common::{models::token::Token, Bytes};
 
 use super::{
+    client_builder::HashflowClientBuilder,
     models::{HashflowMarketMakerLevels, HashflowPair, HashflowPriceLevel},
     state::HashflowState,
 };
@@ -15,10 +13,7 @@ use crate::{
         errors::InvalidSnapshotError,
         models::{DecoderContext, TryFromWithBlock},
     },
-    rfq::{
-        constants::get_hashflow_auth, models::TimestampHeader,
-        protocols::hashflow::client::HashflowClient,
-    },
+    rfq::{constants::get_hashflow_auth, models::TimestampHeader},
 };
 
 impl TryFromWithBlock<ComponentWithState, TimestampHeader> for HashflowState {
@@ -95,23 +90,15 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for HashflowState {
             InvalidSnapshotError::ValueError(format!("Failed to get Hashflow authentication: {e}"))
         })?;
 
-        let client = HashflowClient::new(
-            snapshot.component.chain.into(),
-            HashSet::from([base_token_address.clone(), quote_token_address.clone()]),
-            // Since we will not be polling for price levels, this value is irrelevant, since
-            // no TVL filtering will be performed.
-            0.0,
-            // Approved quote tokens can be empty, since no more normalization will be
-            // necessary inside the HashflowState
-            HashSet::new(),
-            auth.user,
-            auth.key,
-            // Since we will not be polling for price levels, this value is irrelevant
-            Duration::from_secs(0),
-        )
-        .map_err(|e| {
-            InvalidSnapshotError::MissingAttribute(format!("Couldn't create HashflowClient: {e}"))
-        })?;
+        let client =
+            HashflowClientBuilder::new(snapshot.component.chain.into(), auth.user, auth.key)
+                .tokens(HashSet::from([base_token_address.clone(), quote_token_address.clone()]))
+                .build()
+                .map_err(|e| {
+                    InvalidSnapshotError::MissingAttribute(format!(
+                        "Couldn't create HashflowClient: {e}"
+                    ))
+                })?;
 
         Ok(HashflowState::new(base_token, quote_token, levels, market_maker, client))
     }
