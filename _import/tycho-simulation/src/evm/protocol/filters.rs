@@ -4,8 +4,6 @@ use tycho_client::feed::synchronizer::ComponentWithState;
 
 use crate::evm::protocol::vm::utils::json_deserialize_be_bigint_list;
 
-const ZERO_ADDRESS_ARR: [u8; 20] = [0u8; 20];
-
 /// Filters out pools that DCI currently fails to find some accounts for
 pub fn balancer_v2_pool_filter(component: &ComponentWithState) -> bool {
     const UNSUPPORTED_COMPONENT_IDS: [&str; 6] = [
@@ -34,30 +32,14 @@ pub fn balancer_v2_pool_filter(component: &ComponentWithState) -> bool {
     true
 }
 
-/// Filters for core uniswap v4 pools (no hooks)
-pub fn uniswap_v4_core_pool_filter(component: &ComponentWithState) -> bool {
-    if let Some(hooks) = component
-        .component
-        .static_attributes
-        .get("hooks")
-    {
-        if hooks.to_vec() != ZERO_ADDRESS_ARR {
-            debug!("Filtering out UniswapV4 pool {} because it has hooks", component.component.id);
-            return false;
-        }
-    }
-    true
-}
-
-/// Filters for uniswap v4 pools with Euler hooks
+/// Filters out uniswap v4 pools with non-Euler hooks
 pub fn uniswap_v4_euler_hook_pool_filter(component: &ComponentWithState) -> bool {
     component
         .component
         .static_attributes
         .get("hook_identifier")
-        .and_then(|bytes| String::from_utf8(bytes.0.to_vec()).ok())
-        .unwrap_or_default() ==
-        "euler_v1"
+        .and_then(|bytes| std::str::from_utf8(bytes).ok())
+        .is_some_and(|s| s == "euler_v1")
 }
 
 /// Filters out pools that have unsupported token types in Curve
