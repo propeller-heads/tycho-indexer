@@ -96,7 +96,6 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for HashflowState {
         let client =
             HashflowClientBuilder::new(snapshot.component.chain.into(), auth.user, auth.key)
                 .tokens(HashSet::from([base_token_address.clone(), quote_token_address.clone()]))
-                .quote_timeout(Duration::from_secs(5))
                 .build()
                 .map_err(|e| {
                     InvalidSnapshotError::MissingAttribute(format!(

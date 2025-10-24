@@ -710,7 +710,7 @@ mod tests {
             "test_user".to_string(),
             "test_key".to_string(),
             Duration::from_secs(5),
-            Duration::from_secs(30),
+            Duration::from_secs(5),
         )
         .unwrap()
     }
@@ -739,7 +739,7 @@ mod tests {
             auth.user,
             auth.key,
             Duration::from_secs(1),
-            Duration::from_secs(30),
+            Duration::from_secs(5),
         )
         .unwrap();
 
@@ -825,7 +825,7 @@ mod tests {
             auth_user,
             auth_key,
             Duration::from_secs(0),
-            Duration::from_secs(30),
+            Duration::from_secs(5),
         )
         .unwrap();
 

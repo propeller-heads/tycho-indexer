@@ -751,7 +751,7 @@ mod tests {
             ws_key: "test_key".to_string(),
             quote_tokens: test_quote_tokens,
             quote_endpoint: "".to_string(),
-            quote_timeout: Duration::from_secs(30),
+            quote_timeout: Duration::from_secs(5),
         };
 
         let start_time = std::time::Instant::now();

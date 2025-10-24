@@ -48,7 +48,7 @@ impl BebopClientBuilder {
             tokens: HashSet::new(),
             tvl: 100.0, // Default $100 minimum TVL
             quote_tokens: None,
-            quote_timeout: Duration::from_secs(30), // Default 30 second timeout
+            quote_timeout: Duration::from_secs(5), // Default 5 second timeout
         }
     }
 

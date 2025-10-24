@@ -51,7 +51,7 @@ impl HashflowClientBuilder {
             tvl: 100.0, // Default $100 minimum TVL
             quote_tokens: None,
             poll_time: Duration::from_secs(5), // Default 5 second polling
-            quote_timeout: Duration::from_secs(30), // Default 30 second timeout
+            quote_timeout: Duration::from_secs(5), // Default 5 second timeout
         }
     }
 
