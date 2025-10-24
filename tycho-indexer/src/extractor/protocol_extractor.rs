@@ -941,7 +941,8 @@ where
                 "ProcessedMessage"
             );
         }
-        return Ok(Some(Arc::new(changes)));
+
+        Ok(Some(Arc::new(changes)))
     }
 
     #[instrument(skip_all, fields(target_hash, target_number))]
