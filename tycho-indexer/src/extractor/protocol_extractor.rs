@@ -1521,7 +1521,6 @@ impl ExtractorGateway for ExtractorPgGateway {
         let mut account_changes: Vec<(Bytes, AccountDelta)> = vec![];
         let mut component_balance_changes: Vec<ComponentBalance> = vec![];
         let mut account_balance_changes: Vec<AccountBalance> = vec![];
-        let mut protocol_tokens: HashSet<Bytes> = HashSet::new();
         let mut new_entrypoints: HashMap<ComponentId, HashSet<EntryPoint>> = HashMap::new();
         let mut new_entrypoint_params: HashMap<
             EntryPointId,
@@ -1541,7 +1540,6 @@ impl ExtractorGateway for ExtractorPgGateway {
             // Map new protocol components
             for (_component_id, new_protocol_component) in tx_update.protocol_components.iter() {
                 new_protocol_components.push(new_protocol_component.clone());
-                protocol_tokens.extend(new_protocol_component.tokens.clone());
             }
 
             // Map new accounts/contracts
