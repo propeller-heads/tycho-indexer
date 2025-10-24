@@ -173,7 +173,7 @@ async fn analyze_batch(
     }
 
     if !tokens.is_empty() {
-        gw.update_tokens(&tokens).await?;
+        gw.update_tokens(tokens).await?;
     }
     Ok(())
 }
@@ -297,8 +297,8 @@ mod test {
         gw.expect_update_tokens()
             .once()
             .returning(move |updated| {
-                assert_eq!(updated, &exp);
-                Box::pin(async { Ok(()) })
+                assert_eq!(updated, exp);
+                Ok(())
             });
 
         analyze_tokens(args, Arc::new(gw))

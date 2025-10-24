@@ -10,7 +10,7 @@ use std::{
     env,
     fs::File,
     io::Read,
-    process, slice,
+    process,
     str::FromStr,
     sync::{mpsc, Arc},
 };
@@ -500,8 +500,9 @@ async fn initialize_accounts(
 
     info!(block_number = block.number, "Initializing accounts");
 
+    let tx_hash = Bytes::random(32); //TODO: remove Bytes length assumption
     let tx = Transaction {
-        hash: Bytes::random(32), //TODO: remove Bytes length assumption
+        hash: tx_hash.clone(),
         block_hash: block.hash.clone(),
         from: Bytes::from([0u8; 20]),
         to: None,
@@ -511,12 +512,12 @@ async fn initialize_accounts(
     // First transaction
     with_transaction(cached_gw, &block, || async {
         cached_gw
-            .upsert_block(slice::from_ref(&block))
+            .upsert_block(block.clone())
             .await
             .expect("Failed to insert block");
 
         cached_gw
-            .upsert_tx(slice::from_ref(&tx))
+            .upsert_tx(tx)
             .await
             .expect("Failed to insert tx");
     })
@@ -525,16 +526,16 @@ async fn initialize_accounts(
     // Process account updates
     for account_update in extracted_accounts.into_values() {
         with_transaction(cached_gw, &block, || async {
-            let new_account = account_update.ref_into_account(&tx.hash);
+            let new_account = account_update.ref_into_account(&tx_hash);
             info!(block_number = block.number, contract_address = ?new_account.address, "NewContract");
 
             // Insert new accounts
             cached_gw
-                .insert_contract(&new_account)
+                .insert_contract(new_account)
                 .await
                 .expect("Failed to insert contract");
             cached_gw
-                .update_contracts(&[(tx.hash.clone(), account_update)])
+                .update_contracts(vec![(tx_hash.clone(), account_update)])
                 .await
                 .expect("Failed to update contract");
         })

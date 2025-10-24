@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    slice,
     str::FromStr,
     sync::Arc,
 };
@@ -677,7 +676,7 @@ where
             .collect();
         self.gateway
             .inner
-            .ensure_protocol_types(&protocol_types)
+            .ensure_protocol_types(protocol_types)
             .await;
     }
 
@@ -1401,7 +1400,7 @@ pub struct ExtractorPgGateway {
 pub trait ExtractorGateway: Send + Sync {
     async fn get_cursor(&self) -> Result<(Vec<u8>, Bytes), StorageError>;
 
-    async fn ensure_protocol_types(&self, new_protocol_types: &[ProtocolType]);
+    async fn ensure_protocol_types(&self, new_protocol_types: Vec<ProtocolType>);
 
     async fn advance(
         &self,
@@ -1483,7 +1482,7 @@ impl ExtractorGateway for ExtractorPgGateway {
         }
     }
 
-    async fn ensure_protocol_types(&self, new_protocol_types: &[ProtocolType]) {
+    async fn ensure_protocol_types(&self, new_protocol_types: Vec<ProtocolType>) {
         self.state_gateway
             .add_protocol_types(new_protocol_types)
             .await
@@ -1509,13 +1508,16 @@ impl ExtractorGateway for ExtractorPgGateway {
                 .collect::<Vec<_>>();
             debug!(new_tokens=?new_tokens.iter().map(|t| &t.address).collect::<Vec<_>>(), block_number=block.number, "NewTokens");
             self.state_gateway
-                .add_tokens(&new_tokens)
+                .add_tokens(new_tokens)
                 .await?;
         }
 
+        let block_num = block.number;
+        let block_hash = block.hash.clone();
+
         // Insert block
         self.state_gateway
-            .upsert_block(slice::from_ref(&block))
+            .upsert_block(block)
             .await?;
 
         // Collect transaction aggregated changes
@@ -1547,9 +1549,7 @@ impl ExtractorGateway for ExtractorPgGateway {
             trace!(tx_hash = ?tx_hash, "Processing tx");
 
             // Insert transaction
-            self.state_gateway
-                .upsert_tx(slice::from_ref(&tx))
-                .await?;
+            self.state_gateway.upsert_tx(tx).await?;
 
             // Map new protocol components
             for (_component_id, new_protocol_component) in protocol_components.into_iter() {
@@ -1560,11 +1560,11 @@ impl ExtractorGateway for ExtractorPgGateway {
             for (_, account_update) in account_deltas.into_iter() {
                 if account_update.is_creation() {
                     let new: Account = account_update.ref_into_account(&tx_hash);
-                    info!(block_number = ?block.number, contract_address = ?new.address, "NewContract");
+                    info!(block_number = ?block_num, contract_address = ?new.address, "NewContract");
 
                     // Insert new account static values
                     self.state_gateway
-                        .insert_contract(&new)
+                        .insert_contract(new)
                         .await?;
 
                     // Collect new account dynamic values for block-scoped batch insert (necessary
@@ -1637,64 +1637,64 @@ impl ExtractorGateway for ExtractorPgGateway {
                     .iter()
                     .map(|pc| &pc.id)
                     .collect::<Vec<_>>(),
-                block_number = block.number,
+                block_number = block_num,
                 "NewProtocolComponents"
             );
             self.state_gateway
-                .add_protocol_components(new_protocol_components.as_slice())
+                .add_protocol_components(new_protocol_components)
                 .await?;
         }
 
         // Insert changed accounts
         if !new_account_changes.is_empty() {
             self.state_gateway
-                .update_contracts(new_account_changes.as_slice())
+                .update_contracts(new_account_changes)
                 .await?;
         }
 
         // Insert protocol state changes
         if !new_state_updates.is_empty() {
             self.state_gateway
-                .update_protocol_states(new_state_updates.as_slice())
+                .update_protocol_states(new_state_updates)
                 .await?;
         }
 
         // Insert component balance changes
         if !new_component_balance_changes.is_empty() {
             self.state_gateway
-                .add_component_balances(new_component_balance_changes.as_slice())
+                .add_component_balances(new_component_balance_changes)
                 .await?;
         }
 
         // Insert account balance changes
         if !new_account_balance_changes.is_empty() {
             self.state_gateway
-                .add_account_balances(new_account_balance_changes.as_slice())
+                .add_account_balances(new_account_balance_changes)
                 .await?;
         }
 
         // Insert new entrypoints
         if !new_entrypoints.is_empty() {
             self.state_gateway
-                .insert_entry_points(&new_entrypoints)
+                .insert_entry_points(new_entrypoints)
                 .await?;
         }
 
         // Insert new entrypoint params
         if !new_entrypoint_params.is_empty() {
             self.state_gateway
-                .insert_entry_point_tracing_params(&new_entrypoint_params)
+                .insert_entry_point_tracing_params(new_entrypoint_params)
                 .await?;
         }
 
         // Insert trace results
         if !trace_results.is_empty() {
             self.state_gateway
-                .upsert_traced_entry_points(trace_results.as_slice())
+                .upsert_traced_entry_points(trace_results)
                 .await?;
         }
 
-        self.save_cursor(new_cursor, block.hash.clone())
+        self.save_cursor(new_cursor, block_hash)
             .await?;
 
         let batch_size = if force_commit { 0 } else { self.db_tx_batch_size };
@@ -2785,7 +2785,7 @@ mod test_serial_db {
                 .start_transaction(&Block::default(), None)
                 .await;
             evm_gw
-                .upsert_block(&[Block {
+                .upsert_block(Block {
                     number: 1,
                     chain: Chain::Ethereum,
                     hash: Bytes::from_str(
@@ -2794,7 +2794,7 @@ mod test_serial_db {
                     .unwrap(),
                     parent_hash: Bytes::default(),
                     ts: db_fixtures::yesterday_half_past_midnight(),
-                }])
+                })
                 .await
                 .expect("block insertion succeeded");
             evm_gw

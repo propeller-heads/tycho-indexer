@@ -997,13 +997,13 @@ where
             }
         }
         self.db_gateway
-            .insert_entry_points(&entry_points)
+            .insert_entry_points(entry_points.clone())
             .await?;
         self.db_gateway
-            .insert_entry_point_tracing_params(&entry_points_params)
+            .insert_entry_point_tracing_params(entry_points_params)
             .await?;
         self.db_gateway
-            .upsert_traced_entry_points(&tracing_result)
+            .upsert_traced_entry_points(tracing_result.clone())
             .await?;
 
         let mut traced_entry_points: HashMap<
@@ -1877,12 +1877,12 @@ mod tests {
         let mut gw = MockGateway::new();
         gw.expect_insert_entry_points()
             .return_once(move |inserted_entry_points| {
-                assert_eq!(*inserted_entry_points, expected_inserted_entry_points);
+                assert_eq!(inserted_entry_points, expected_inserted_entry_points);
                 Box::pin(async move { Ok(()) })
             });
         gw.expect_insert_entry_point_tracing_params()
             .return_once(move |inserted_tracing_params| {
-                assert_eq!(*inserted_tracing_params, expected_inserted_tracing_params);
+                assert_eq!(inserted_tracing_params, expected_inserted_tracing_params);
                 Box::pin(async move { Ok(()) })
             });
         gw.expect_upsert_traced_entry_points()
