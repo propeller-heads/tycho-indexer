@@ -1559,7 +1559,7 @@ impl ExtractorGateway for ExtractorPgGateway {
             // Map new accounts/contracts
             for (_, account_update) in account_deltas.into_iter() {
                 if account_update.is_creation() {
-                    let new: Account = account_update.ref_into_account(&tx);
+                    let new: Account = account_update.ref_into_account(&tx_hash);
                     info!(block_number = ?block.number, contract_address = ?new.address, "NewContract");
 
                     // Insert new account static values

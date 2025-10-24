@@ -524,7 +524,7 @@ async fn initialize_accounts(
     // Process account updates
     for account_update in extracted_accounts.into_values() {
         with_transaction(cached_gw, &block, || async {
-            let new_account = account_update.ref_into_account(&tx);
+            let new_account = account_update.ref_into_account(&tx.hash);
             info!(block_number = block.number, contract_address = ?new_account.address, "NewContract");
 
             // Insert new accounts
