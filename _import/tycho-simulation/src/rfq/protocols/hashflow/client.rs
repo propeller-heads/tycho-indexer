@@ -42,7 +42,6 @@ pub struct HashflowClient {
     tokens: HashSet<Bytes>,
     // Min tvl value in the quote token.
     tvl: f64,
-    http_client: Client,
     auth_key: String,
     auth_user: String,
     // Quote tokens to normalize to for TVL purposes. Should have the same prices.
@@ -72,7 +71,6 @@ impl HashflowClient {
             quote_endpoint: "https://api.hashflow.com/taker/v3/rfq".to_string(),
             tokens,
             tvl,
-            http_client: Client::new(),
             auth_key,
             auth_user,
             quote_tokens,
@@ -161,8 +159,8 @@ impl HashflowClient {
             ("baseChainId", self.chain.id().to_string()),
         ];
 
-        let request = self
-            .http_client
+        let http_client = Client::new();
+        let request = http_client
             .get(&self.market_makers_endpoint)
             .query(&query_params)
             .header("accept", "application/json")
@@ -211,8 +209,8 @@ impl HashflowClient {
             query_params.push(("marketMakers[]", mm.clone()));
         }
 
-        let request = self
-            .http_client
+        let http_client = Client::new();
+        let request = http_client
             .get(&self.price_levels_endpoint)
             .query(&query_params)
             .header("accept", "application/json")
@@ -403,8 +401,8 @@ impl RFQClient for HashflowClient {
 
             let remaining_time = self.quote_timeout - elapsed;
 
-            let request = self
-                .http_client
+            let http_client = Client::new();
+            let request = http_client
                 .post(&url)
                 .json(&quote_request)
                 .header("accept", "application/json")
@@ -929,7 +927,6 @@ mod tests {
             quote_endpoint,
             tokens: HashSet::from([token_in, token_out]),
             tvl: 10.0,
-            http_client: Client::new(),
             auth_key: "test_key".to_string(),
             auth_user: "test_user".to_string(),
             quote_tokens: HashSet::new(),
