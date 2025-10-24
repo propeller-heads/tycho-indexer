@@ -243,6 +243,7 @@ impl IndicativelyPriced for BebopState {
 mod tests {
     use std::{collections::HashSet, str::FromStr};
 
+    use tokio::time::Duration;
     use tycho_common::models::Chain;
 
     use super::*;
@@ -295,6 +296,7 @@ mod tests {
             "".to_string(),
             "".to_string(),
             HashSet::new(),
+            Duration::from_secs(30),
         )
         .unwrap()
     }

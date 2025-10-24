@@ -1,3 +1,23 @@
+## [0.185.1](https://github.com/propeller-heads/tycho-simulation/compare/0.185.0...0.185.1) (2025-10-24)
+
+
+### Bug Fixes
+
+* Don't instantiate a HttpClient in HashflowState new() ([951deb3](https://github.com/propeller-heads/tycho-simulation/commit/951deb326006faad539db10dab2fdda75ea136ff))
+
+## [0.185.0](https://github.com/propeller-heads/tycho-simulation/compare/0.184.4...0.185.0) (2025-10-24)
+
+
+### Features
+
+* (RFQS) Wait for quote response with timeout ([c91953a](https://github.com/propeller-heads/tycho-simulation/commit/c91953ac2fa061b670f546d2e435dec7c9c6ecb5))
+* Add retry logic with timeout for RFQ quote ([a8b822f](https://github.com/propeller-heads/tycho-simulation/commit/a8b822f2af48d59c39dbc09f9c1fa1d318651ea4))
+
+
+### Bug Fixes
+
+* Reduce default quote timeout to 5s ([fbaf120](https://github.com/propeller-heads/tycho-simulation/commit/fbaf1200cf56737311c52a6efddfc69c4e7c0156))
+
 ## [0.184.4](https://github.com/propeller-heads/tycho-simulation/compare/0.184.3...0.184.4) (2025-10-23)
 
 
