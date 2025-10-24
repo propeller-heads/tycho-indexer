@@ -71,12 +71,17 @@ Example setup for Bebop:
 ```rust
 let bebop_client = BebopClientBuilder::new(chain, bebop_ws_user, bebop_ws_key)
     .tokens(rfq_tokens)
+    .quote_tokens(quote_tokens)
     .tvl_threshold(cli.tvl_threshold)
     .build()
     .expect("Failed to create RFQ clients");
 ```
 
 **TVL threshold** is specified in USD, as most RFQ quotes are USD-denominated. This setting filters out token pairs with low liquidity on the RFQ side, helping avoid thin or illiquid quotes.
+
+**Quote tokens:** You can optionally specify quote tokens when configuring the RFQ client to define which tokens the client should consider “approved” for TVL normalization purposes. The client uses this approved quote token list exclusively for TVL filtering and does not use it for quote requests or trade execution.
+
+You should specify USD-priced stablecoins (e.g., USDC, USDT, DAI) as quote tokens, since currently-supported RFQ providers quote most of their currently supported liquidity in USD stablecoins. This ensures the client calculates TVL accurately when comparing pairs with different quote tokens. For instance, if you receive price levels for an ETH/WBTC pair where WBTC is the quote token, the client will look up the WBTC price in one of your approved quote tokens (USD stablecoins) to properly calculate the TVL in dollar terms. If you don’t explicitly set quote tokens, the client uses chain-specific defaults.
 
 **Note:** Some RFQ providers may support tokens that Tycho does not. Because execution happens through the Tycho Router, it’s important to ensure that all tokens used in RFQ quotes are also supported by Tycho.
 

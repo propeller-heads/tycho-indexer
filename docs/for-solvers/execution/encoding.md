@@ -182,7 +182,7 @@ Both encoders have the following options:
 
 The router builder includes the following configuration options:
 
-* `user_transfer_type: UserTransferType` Defines how to funds will be transferred from the user. The options are `TransferFromPermit2`, `TransferFrom` and `None`  (see more about token transfers [here](./#token-allowances)).
+* `user_transfer_type: UserTransferType` Defines how the funds will be transferred from the user. The options are `TransferFromPermit2`, `TransferFrom` and `None`  (see more about token transfers [here](./#token-allowances)).
 * `router_address` Router address to use for execution (defaults to the address corresponding to the given chain in `config/router_addresses.json`). See Tycho addresses [here](contract-addresses.md).
 
 - ~~`swapper_pk: String`~~ (deprecated and will be removed soon) Used only for permit2 transfers. The private key is used to sign the permit object. This is only necessary when you want to retrieve the full calldata directly (which is not recommended - see more in the next section).
