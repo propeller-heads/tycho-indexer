@@ -896,8 +896,8 @@ where
                         .map_err(ExtractionError::Storage)?;
                 }
 
-                let mut committed_hieght_guard = committed_block_height.lock().await;
-                *committed_hieght_guard = Some(last_block_height);
+                let mut committed_height_guard = committed_block_height.lock().await;
+                *committed_height_guard = Some(last_block_height);
 
                 debug!(batch_size, block_height = last_block_height, extractor_id = extractor_name, chain = %chain, "CommitTaskCompleted");
 
