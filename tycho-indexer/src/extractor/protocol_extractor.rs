@@ -17,6 +17,7 @@ use tycho_common::{
     models::{
         blockchain::{
             Block, BlockAggregatedChanges, BlockTag, DCIUpdate, EntryPoint, TracingParams,
+            TxWithChanges,
         },
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
@@ -883,15 +884,17 @@ where
             let new_handle = tokio::spawn(async move {
                 let now = std::time::Instant::now();
 
-                let mut it = blocks_to_commit.iter().peekable();
+                let mut it = blocks_to_commit.into_iter().peekable();
                 while let Some(block) = it.next() {
                     // Force a database commit if we're not syncing and this is the last block
                     // to be sent. Otherwise, wait to accumulate a full
                     // batch before committing.
                     let force_db_commit = if is_syncing { false } else { it.peek().is_none() };
 
+                    let BlockUpdateWithCursor { block_update, cursor } = block;
+
                     gateway
-                        .advance(block.block_update(), block.cursor(), force_db_commit)
+                        .advance(block_update, &cursor, force_db_commit)
                         .await
                         .map_err(ExtractionError::Storage)?;
                 }
@@ -1402,7 +1405,7 @@ pub trait ExtractorGateway: Send + Sync {
 
     async fn advance(
         &self,
-        changes: &BlockChanges,
+        changes: BlockChanges,
         new_cursor: &str,
         force_commit: bool,
     ) -> Result<(), StorageError>;
@@ -1489,22 +1492,22 @@ impl ExtractorGateway for ExtractorPgGateway {
 
     async fn advance(
         &self,
-        changes: &BlockChanges,
+        changes: BlockChanges,
         new_cursor: &str,
         force_commit: bool,
     ) -> Result<(), StorageError> {
+        let BlockChanges { block, new_tokens, txs_with_update, trace_results, .. } = changes;
+
         self.state_gateway
-            .start_transaction(&changes.block, Some(self.name.as_str()))
+            .start_transaction(&block, Some(self.name.as_str()))
             .await;
 
         // Insert new tokens
-        if !changes.new_tokens.is_empty() {
-            let new_tokens = changes
-                .new_tokens
-                .values()
-                .cloned()
+        if !new_tokens.is_empty() {
+            let new_tokens = new_tokens
+                .into_values()
                 .collect::<Vec<_>>();
-            debug!(new_tokens=?new_tokens.iter().map(|t| &t.address).collect::<Vec<_>>(), block_number=changes.block.number, "NewTokens");
+            debug!(new_tokens=?new_tokens.iter().map(|t| &t.address).collect::<Vec<_>>(), block_number=block.number, "NewTokens");
             self.state_gateway
                 .add_tokens(&new_tokens)
                 .await?;
@@ -1512,41 +1515,52 @@ impl ExtractorGateway for ExtractorPgGateway {
 
         // Insert block
         self.state_gateway
-            .upsert_block(slice::from_ref(&changes.block))
+            .upsert_block(slice::from_ref(&block))
             .await?;
 
         // Collect transaction aggregated changes
         let mut new_protocol_components: Vec<ProtocolComponent> = vec![];
-        let mut state_updates: Vec<(TxHash, ProtocolComponentStateDelta)> = vec![];
-        let mut account_changes: Vec<(Bytes, AccountDelta)> = vec![];
-        let mut component_balance_changes: Vec<ComponentBalance> = vec![];
-        let mut account_balance_changes: Vec<AccountBalance> = vec![];
+        let mut new_state_updates: Vec<(TxHash, ProtocolComponentStateDelta)> = vec![];
+        let mut new_account_changes: Vec<(Bytes, AccountDelta)> = vec![];
+        let mut new_component_balance_changes: Vec<ComponentBalance> = vec![];
+        let mut new_account_balance_changes: Vec<AccountBalance> = vec![];
         let mut new_entrypoints: HashMap<ComponentId, HashSet<EntryPoint>> = HashMap::new();
         let mut new_entrypoint_params: HashMap<
             EntryPointId,
             HashSet<(TracingParams, Option<ComponentId>)>,
         > = HashMap::new();
 
-        for tx_update in changes.txs_with_update.iter() {
-            trace!(tx_hash = ?tx_update.tx.hash, "Processing tx");
+        for tx_update in txs_with_update.into_iter() {
+            let TxWithChanges {
+                tx,
+                protocol_components,
+                account_deltas,
+                state_updates,
+                balance_changes,
+                account_balance_changes,
+                entrypoints,
+                entrypoint_params,
+            } = tx_update;
+
+            let tx_hash: TxHash = tx.hash.clone();
+
+            trace!(tx_hash = ?tx_hash, "Processing tx");
 
             // Insert transaction
             self.state_gateway
-                .upsert_tx(slice::from_ref(&tx_update.tx))
+                .upsert_tx(slice::from_ref(&tx))
                 .await?;
 
-            let hash: TxHash = tx_update.tx.hash.clone();
-
             // Map new protocol components
-            for (_component_id, new_protocol_component) in tx_update.protocol_components.iter() {
-                new_protocol_components.push(new_protocol_component.clone());
+            for (_component_id, new_protocol_component) in protocol_components.into_iter() {
+                new_protocol_components.push(new_protocol_component);
             }
 
             // Map new accounts/contracts
-            for (_, account_update) in tx_update.account_deltas.iter() {
+            for (_, account_update) in account_deltas.into_iter() {
                 if account_update.is_creation() {
-                    let new: Account = account_update.ref_into_account(&tx_update.tx);
-                    info!(block_number = ?changes.block.number, contract_address = ?new.address, "NewContract");
+                    let new: Account = account_update.ref_into_account(&tx);
+                    info!(block_number = ?block.number, contract_address = ?new.address, "NewContract");
 
                     // Insert new account static values
                     self.state_gateway
@@ -1555,7 +1569,7 @@ impl ExtractorGateway for ExtractorPgGateway {
 
                     // Collect new account dynamic values for block-scoped batch insert (necessary
                     // for correct versioning)
-                    let mut account_delta_creation = account_update.clone();
+                    let mut account_delta_creation = account_update;
 
                     // Set default dynamic values for creation.
                     account_delta_creation.balance = Some(
@@ -1569,9 +1583,9 @@ impl ExtractorGateway for ExtractorPgGateway {
                             .clone()
                             .unwrap_or_default(),
                     );
-                    account_changes.push((tx_update.tx.hash.clone(), account_delta_creation));
+                    new_account_changes.push((tx_hash.clone(), account_delta_creation));
                 } else if account_update.is_update() {
-                    account_changes.push((tx_update.tx.hash.clone(), account_update.clone()));
+                    new_account_changes.push((tx_hash.clone(), account_update));
                 } else {
                     // log error
                     error!(?account_update, "Invalid account update type");
@@ -1579,37 +1593,28 @@ impl ExtractorGateway for ExtractorPgGateway {
             }
 
             // Map protocol state changes
-            state_updates.extend(
-                tx_update
-                    .state_updates
-                    .values()
-                    .map(|state_change| (hash.clone(), state_change.clone())),
+            new_state_updates.extend(
+                state_updates
+                    .into_values()
+                    .map(|state_change| (tx_hash.clone(), state_change)),
             );
 
             // Map component balance changes
-            component_balance_changes.extend(
-                tx_update
-                    .balance_changes
-                    .clone()
+            new_component_balance_changes.extend(
+                balance_changes
                     .into_iter()
                     .flat_map(|(_, tokens_balances)| tokens_balances.into_values()),
             );
 
             // Map account balance changes
-            account_balance_changes.extend(
-                tx_update
-                    .account_balance_changes
-                    .clone()
+            new_account_balance_changes.extend(
+                account_balance_changes
                     .into_iter()
                     .flat_map(|(_, tokens_balances)| tokens_balances.into_values()),
             );
 
             // Map new entrypoints
-            for (component_id, entrypoints) in tx_update
-                .entrypoints
-                .clone()
-                .into_iter()
-            {
+            for (component_id, entrypoints) in entrypoints.into_iter() {
                 new_entrypoints
                     .entry(component_id)
                     .or_default()
@@ -1617,11 +1622,7 @@ impl ExtractorGateway for ExtractorPgGateway {
             }
 
             // Map new entrypoint params
-            for (entrypoint_id, params) in tx_update
-                .clone()
-                .entrypoint_params
-                .into_iter()
-            {
+            for (entrypoint_id, params) in entrypoint_params.into_iter() {
                 new_entrypoint_params
                     .entry(entrypoint_id)
                     .or_default()
@@ -1636,7 +1637,7 @@ impl ExtractorGateway for ExtractorPgGateway {
                     .iter()
                     .map(|pc| &pc.id)
                     .collect::<Vec<_>>(),
-                block_number = changes.block.number,
+                block_number = block.number,
                 "NewProtocolComponents"
             );
             self.state_gateway
@@ -1645,30 +1646,30 @@ impl ExtractorGateway for ExtractorPgGateway {
         }
 
         // Insert changed accounts
-        if !account_changes.is_empty() {
+        if !new_account_changes.is_empty() {
             self.state_gateway
-                .update_contracts(account_changes.as_slice())
+                .update_contracts(new_account_changes.as_slice())
                 .await?;
         }
 
         // Insert protocol state changes
-        if !state_updates.is_empty() {
+        if !new_state_updates.is_empty() {
             self.state_gateway
-                .update_protocol_states(state_updates.as_slice())
+                .update_protocol_states(new_state_updates.as_slice())
                 .await?;
         }
 
         // Insert component balance changes
-        if !component_balance_changes.is_empty() {
+        if !new_component_balance_changes.is_empty() {
             self.state_gateway
-                .add_component_balances(component_balance_changes.as_slice())
+                .add_component_balances(new_component_balance_changes.as_slice())
                 .await?;
         }
 
         // Insert account balance changes
-        if !account_balance_changes.is_empty() {
+        if !new_account_balance_changes.is_empty() {
             self.state_gateway
-                .add_account_balances(account_balance_changes.as_slice())
+                .add_account_balances(new_account_balance_changes.as_slice())
                 .await?;
         }
 
@@ -1687,13 +1688,13 @@ impl ExtractorGateway for ExtractorPgGateway {
         }
 
         // Insert trace results
-        if !changes.trace_results.is_empty() {
+        if !trace_results.is_empty() {
             self.state_gateway
-                .upsert_traced_entry_points(changes.trace_results.as_slice())
+                .upsert_traced_entry_points(trace_results.as_slice())
                 .await?;
         }
 
-        self.save_cursor(new_cursor, changes.block.hash.clone())
+        self.save_cursor(new_cursor, block.hash.clone())
             .await?;
 
         let batch_size = if force_commit { 0 } else { self.db_tx_batch_size };
@@ -3049,7 +3050,7 @@ mod test_serial_db {
                 ..Default::default()
             }];
 
-            gw.advance(&msg, "cursor@500", false)
+            gw.advance(msg, "cursor@500", false)
                 .await
                 .expect("upsert should succeed");
 
@@ -3079,7 +3080,7 @@ mod test_serial_db {
             let msg = vm_creation_and_update();
             let exp = vm_account(0);
 
-            gw.advance(&msg, "cursor@500", true)
+            gw.advance(msg.clone(), "cursor@500", true)
                 .await
                 .expect("upsert should succeed");
 
