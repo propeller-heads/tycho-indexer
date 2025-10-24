@@ -1,8 +1,9 @@
 //! Numeric methods for the U256 type
-use std::{cmp::max, collections::HashMap, panic};
+use std::collections::HashMap;
 
 use alloy::primitives::{bytes::Bytes, U256};
 use num_bigint::BigUint;
+use tycho_common::simulation::errors::SimulationError;
 
 /// Converts a U256 integer into it's closest floating point representation
 ///
@@ -27,71 +28,82 @@ use num_bigint::BigUint;
 /// - [Int to Float rounding on SO](https://stackoverflow.com/a/42032175/8648259)
 /// - [How to round binary numbers](https://indepth.dev/posts/1017/how-to-round-binary-numbers)
 /// - [Paper: "What Every Computer Scientist Should Know About Floating Point Arithmetic"](http://www.validlab.com/goldberg/paper.pdf)
-pub fn u256_to_f64(x: U256) -> f64 {
-    let res = panic::catch_unwind(|| {
-        if x == U256::from(0u64) {
-            return 0.0;
-        }
+pub fn u256_to_f64(x: U256) -> Result<f64, SimulationError> {
+    if x == U256::from(0u64) {
+        return Ok(0.0);
+    }
 
-        let x_bits = x.bit_len();
-        let n_shifts = 53i32 - x_bits as i32;
-        let mut exponent = (1023 + 52 - n_shifts) as u64;
+    let x_bits = x.bit_len();
+    let n_shifts = 53i32 - x_bits as i32;
+    let mut exponent = (1023 + 52 - n_shifts) as u64;
 
-        let mut significant = if n_shifts >= 0 {
-            // shift left if pos, no rounding needed
-            (x << n_shifts)
-                .try_into()
-                .expect("Value does not fit into u64")
+    let mut significant = if n_shifts >= 0 {
+        let shift = n_shifts as u32;
+        let shifted = x << shift;
+        u64::try_from(shifted).map_err(|_| {
+            SimulationError::FatalError(format!(
+                "Unable to convert shifted U256 value `{shifted}` into u64 when converting {x}"
+            ))
+        })?
+    } else {
+        /*
+        shift right if neg, dropping LSBs, round to nearest even
+
+        The general rule when rounding binary fractions to the n-th place prescribes to check
+        the digit following the n-th place in the number (round_bit). If it’s 0, then the
+        number should always be rounded down. If, instead, the digit is 1 and any of the
+        following digits (sticky_bits) are also 1, then the number should be rounded up.
+        If, however, all of the following digits are 0’s, then a tie breaking rule must
+        be applied and usually it’s the ‘ties to even’. This rule says that we should
+        round to the number that has 0 at the n-th place.
+        */
+        // least significant bit is be used as tiebreaker
+        let shift = n_shifts.unsigned_abs();
+
+        // least significant bit is used as tiebreaker
+        let lsb = (x >> shift) & U256::from(1u64);
+        let round_bit = (x >> (shift - 1)) & U256::from(1u64);
+
+        // build mask for sticky bit, handle case when no data for sticky bit is available
+        let sticky_bit = if shift < 2 {
+            // no bits after round bit, so sticky bit is 0
+            U256::from(0u64)
         } else {
-            /*
-            shift right if neg, dropping LSBs, round to nearest even
-
-            The general rule when rounding binary fractions to the n-th place prescribes to check
-            the digit following the n-th place in the number (round_bit). If it’s 0, then the
-            number should always be rounded down. If, instead, the digit is 1 and any of the
-            following digits (sticky_bits) are also 1, then the number should be rounded up.
-            If, however, all of the following digits are 0’s, then a tie breaking rule must
-            be applied and usually it’s the ‘ties to even’. This rule says that we should
-            round to the number that has 0 at the n-th place.
-            */
-            // least significant bit is be used as tiebreaker
-            let lsb = (x >> n_shifts.abs()) & U256::from(1u64);
-            let round_bit = (x >> (n_shifts.abs() - 1)) & U256::from(1u64);
-
-            // build mask for sticky bit, handle case when no data for sticky bit is available
-            let sticky_bit =
-                x & ((U256::from(1u64) << max(n_shifts.abs() - 2, 0)) - U256::from(1u64));
-
-            let rounded_torwards_zero: u64 = (x >> n_shifts.abs())
-                .try_into()
-                .expect("Value does not fit into u64");
-            if round_bit == U256::from(1u64) {
-                if sticky_bit == U256::from(0u64) {
-                    // tiebreaker: round up if lsb is 1 and down if lsb is 0
-                    if lsb == U256::from(0u64) {
-                        rounded_torwards_zero
-                    } else {
-                        rounded_torwards_zero + 1
-                    }
-                } else {
-                    rounded_torwards_zero + 1
-                }
-            } else {
-                rounded_torwards_zero
-            }
+            x & ((U256::from(1u64) << (shift - 2)) - U256::from(1u64))
         };
 
-        // due to rounding rules significand might be using 54 bits instead of 53 if
-        // this is the case we shift to the right once more and decrease the exponent.
-        if significant & (1 << 53) > 0 {
-            significant >>= 1;
-            exponent += 1;
-        }
+        let rounded_towards_zero_u256 = x >> shift;
+        let rounded_towards_zero: u64 = rounded_towards_zero_u256.try_into().map_err(|_| {
+            SimulationError::FatalError(format!(
+                "Unable to convert rounded U256 value `{rounded_towards_zero_u256}` into u64 when converting {x}"
+            ))
+        })?;
 
-        let merged = (exponent << 52) | (significant & 0xFFFFFFFFFFFFFu64);
-        f64::from_bits(merged)
-    });
-    res.unwrap_or_else(|_| panic!("Conversion f64 -> U256 panicked for {x}"))
+        if round_bit == U256::from(1u64) {
+            if sticky_bit == U256::from(0u64) {
+                // tiebreaker: round up if lsb is 1 and down if lsb is 0
+                if lsb == U256::from(0u64) {
+                    rounded_towards_zero
+                } else {
+                    rounded_towards_zero + 1
+                }
+            } else {
+                rounded_towards_zero + 1
+            }
+        } else {
+            rounded_towards_zero
+        }
+    };
+
+    // due to rounding rules significand might be using 54 bits instead of 53 if
+    // this is the case we shift to the right once more and decrease the exponent.
+    if significant & (1 << 53) > 0 {
+        significant >>= 1;
+        exponent += 1;
+    }
+
+    let merged = (exponent << 52) | (significant & 0xFFFFFFFFFFFFFu64);
+    Ok(f64::from_bits(merged))
 }
 
 pub fn u256_to_biguint(value: U256) -> BigUint {
@@ -143,7 +155,7 @@ mod test {
     #[case::edge_53bits_trailing_zeros(U256::from(2u64.pow(52)), 2u64.pow(52) as f64)]
     #[case::edge_53bits_trailing_ones(U256::from(2u64.pow(53) - 1), (2u64.pow(53) - 1) as f64)]
     fn test_convert(#[case] inp: U256, #[case] out: f64) {
-        let res = u256_to_f64(inp);
+        let res = u256_to_f64(inp).expect("convert U256 to f64");
 
         assert_eq!(res, out);
     }

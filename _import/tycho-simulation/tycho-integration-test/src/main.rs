@@ -156,7 +156,8 @@ async fn run(cli: Cli) -> miette::Result<()> {
     info!(%cli.tycho_url, "Loading tokens...");
     let all_tokens =
         load_all_tokens(&cli.tycho_url, false, Some(cli.tycho_api_key.as_str()), chain, None, None)
-            .await;
+            .await
+            .map_err(|e| miette!("Failed to load tokens: {e:?}"))?;
     info!(%cli.tycho_url, "Loaded tokens");
 
     // Run streams in background tasks
@@ -544,8 +545,12 @@ async fn process_state(
                     let error_name = extract_error_name(revert_reason);
 
                     // Generate Tenderly URL for debugging without state overrides
+                    let overrides = tenderly::TenderlySimParams {
+                        network: Some(chain.id().to_string()),
+                        ..Default::default()
+                    };
                     let tenderly_url = tenderly::build_tenderly_url(
-                        &tenderly::TenderlySimParams::default(),
+                        &overrides,
                         Some(&transaction),
                         Some(block),
                         Address::from_slice(&solution.sender[..20]),

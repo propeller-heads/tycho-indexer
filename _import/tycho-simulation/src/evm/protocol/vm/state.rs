@@ -266,7 +266,14 @@ where
                     // Calculate the marginal price, adjusting for token decimals.
                     let token_correction =
                         10f64.powi(sell_token_decimals as i32 - buy_token_decimals as i32);
-                    let marginal_price = u256_to_f64(num) / u256_to_f64(den) * token_correction;
+                    let num_f64 = u256_to_f64(num)?;
+                    let den_f64 = u256_to_f64(den)?;
+                    if den_f64 == 0.0 {
+                        return Err(SimulationError::FatalError(
+                            "Failed to compute marginal price: denominator converted to 0".into(),
+                        ));
+                    }
+                    let marginal_price = num_f64 / den_f64 * token_correction;
 
                     self.spot_prices
                         .insert((t0, t1), marginal_price);
@@ -340,7 +347,10 @@ where
         // clear cache
         self.adapter_contract
             .engine
-            .clear_temp_storage();
+            .clear_temp_storage()
+            .map_err(|err| {
+                SimulationError::FatalError(format!("Failed to clear temporary storage: {err:?}",))
+            })?;
         self.block_lasting_overwrites.clear();
 
         // set balances
@@ -764,37 +774,43 @@ mod tests {
         };
 
         for account in accounts.clone() {
-            engine.state.init_account(
-                account.address,
-                AccountInfo {
-                    balance: account.balance.unwrap_or_default(),
-                    nonce: 0u64,
-                    code_hash: KECCAK_EMPTY,
-                    code: account
-                        .code
-                        .clone()
-                        .map(|arg0: Vec<u8>| Bytecode::new_raw(arg0.into())),
-                },
-                None,
-                false,
-            );
+            engine
+                .state
+                .init_account(
+                    account.address,
+                    AccountInfo {
+                        balance: account.balance.unwrap_or_default(),
+                        nonce: 0u64,
+                        code_hash: KECCAK_EMPTY,
+                        code: account
+                            .code
+                            .clone()
+                            .map(|arg0: Vec<u8>| Bytecode::new_raw(arg0.into())),
+                    },
+                    None,
+                    false,
+                )
+                .expect("Failed to initialize account");
         }
         db.update(accounts, Some(block))
             .unwrap();
 
         let tokens = vec![dai().address, bal().address];
         for token in &tokens {
-            engine.state.init_account(
-                bytes_to_address(token).unwrap(),
-                AccountInfo {
-                    balance: U256::from(0),
-                    nonce: 0,
-                    code_hash: KECCAK_EMPTY,
-                    code: Some(Bytecode::new_raw(ERC20_PROXY_BYTECODE.into())),
-                },
-                None,
-                true,
-            );
+            engine
+                .state
+                .init_account(
+                    bytes_to_address(token).unwrap(),
+                    AccountInfo {
+                        balance: U256::from(0),
+                        nonce: 0,
+                        code_hash: KECCAK_EMPTY,
+                        code: Some(Bytecode::new_raw(ERC20_PROXY_BYTECODE.into())),
+                    },
+                    None,
+                    true,
+                )
+                .expect("Failed to initialize account");
         }
 
         let block = BlockHeader {
@@ -837,7 +853,9 @@ mod tests {
     #[tokio::test]
     async fn test_init() {
         // Clear DB from this test to prevent interference from other tests
-        SHARED_TYCHO_DB.clear();
+        SHARED_TYCHO_DB
+            .clear()
+            .expect("Failed to cleared SHARED TX");
         let pool_state = setup_pool_state().await;
 
         let expected_capabilities = vec![
@@ -882,7 +900,8 @@ mod tests {
             .engine
             .state
             .clone()
-            .get_account_storage();
+            .get_account_storage()
+            .expect("Failed to get account storage");
         for token in pool_state.tokens.clone() {
             let account = engine_accounts
                 .get_account_info(&bytes_to_address(&token).unwrap())

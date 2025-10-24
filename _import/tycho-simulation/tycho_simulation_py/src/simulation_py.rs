@@ -1,7 +1,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use num_bigint::BigUint;
-use pyo3::{prelude::*, types::PyType};
+use pyo3::{exceptions::PyValueError, prelude::*, types::PyType};
 use revm::primitives::{Address, U256 as rU256};
 use tycho_simulation::{
     evm::{
@@ -51,18 +51,16 @@ impl SimulationEngineInner {
         account: revm::state::AccountInfo,
         permanent_storage: Option<HashMap<rU256, rU256>>,
         mocked: bool,
-    ) {
+    ) -> PyResult<()> {
         match self {
-            SimulationEngineInner::SimulationDB(engine) => {
-                engine
-                    .state
-                    .init_account(address, account, permanent_storage, mocked)
-            }
-            SimulationEngineInner::TychoDB(engine) => {
-                engine
-                    .state
-                    .init_account(address, account, permanent_storage, false)
-            }
+            SimulationEngineInner::SimulationDB(engine) => engine
+                .state
+                .init_account(address, account, permanent_storage, mocked)
+                .map_err(|e| PyValueError::new_err(format!("error initializing account: {}", e))),
+            SimulationEngineInner::TychoDB(engine) => engine
+                .state
+                .init_account(address, account, permanent_storage, false)
+                .map_err(|e| PyValueError::new_err(format!("error initializing account: {}", e))),
         }
     }
 
@@ -70,33 +68,46 @@ impl SimulationEngineInner {
         &mut self,
         updates: &HashMap<Address, account_storage::StateUpdate>,
         block: TychoHeader,
-    ) -> HashMap<Address, account_storage::StateUpdate> {
+    ) -> PyResult<HashMap<Address, account_storage::StateUpdate>> {
         match self {
             SimulationEngineInner::SimulationDB(engine) => engine
                 .state
-                .update_state(updates, block),
+                .update_state(updates, block)
+                .map_err(|e| PyErr::new::<PyValueError, _>(format!("error updating state: {}", e))),
             SimulationEngineInner::TychoDB(engine) => engine
                 .state
-                .update_state(updates, block),
+                .update_state(updates, block)
+                .map_err(|e| PyErr::new::<PyValueError, _>(format!("error updating state: {}", e))),
         }
     }
 
-    fn query_storage(&self, address: Address, slot: rU256) -> Option<rU256> {
+    fn query_storage(&self, address: Address, slot: rU256) -> PyResult<Option<rU256>> {
         match self {
             SimulationEngineInner::SimulationDB(engine) => engine
                 .state
                 .query_storage(address, slot)
-                .ok(),
-            SimulationEngineInner::TychoDB(engine) => engine
+                .map(Some)
+                .map_err(|e| PyErr::new::<PyValueError, _>(format!("error querying state: {}", e))),
+            SimulationEngineInner::TychoDB(engine) => Ok(engine
                 .state
-                .get_storage(&address, &slot),
+                .get_storage(&address, &slot)),
         }
     }
 
-    fn clear_temp_storage(&mut self) {
+    fn clear_temp_storage(&mut self) -> PyResult<()> {
         match self {
-            SimulationEngineInner::SimulationDB(engine) => engine.state.clear_temp_storage(),
-            SimulationEngineInner::TychoDB(engine) => engine.state.clear_temp_storage(),
+            SimulationEngineInner::SimulationDB(engine) => engine
+                .state
+                .clear_temp_storage()
+                .map_err(|e| {
+                    PyErr::new::<PyValueError, _>(format!("error clearing temp storage: {}", e))
+                }),
+            SimulationEngineInner::TychoDB(engine) => engine
+                .state
+                .clear_temp_storage()
+                .map_err(|e| {
+                    PyErr::new::<PyValueError, _>(format!("error clearing temp storage: {}", e))
+                }),
         }
     }
 
@@ -171,7 +182,7 @@ impl SimulationEngine {
         account: AccountInfo,
         mocked: bool,
         permanent_storage: Option<HashMap<BigUint, BigUint>>,
-    ) {
+    ) -> PyResult<()> {
         let address = Address::from_str(&address).unwrap();
         let account = revm::state::AccountInfo::from(account);
 
@@ -221,7 +232,7 @@ impl SimulationEngine {
 
         let reverse_updates = self_
             .0
-            .update_state(&rust_updates, block);
+            .update_state(&rust_updates, block)?;
 
         let mut py_reverse_updates: HashMap<String, StateUpdate> = HashMap::new();
         for (key, value) in reverse_updates {
@@ -252,9 +263,15 @@ impl SimulationEngine {
         address: String,
         slot: String,
     ) -> PyResult<Option<String>> {
-        let address = Address::from_str(&address).unwrap();
-        let slot = rU256::from_str(&slot).unwrap();
-        match self_.0.query_storage(address, slot) {
+        let address = Address::from_str(&address)
+            .map_err(|_e| PyErr::new::<PyValueError, _>("invalid address"))?;
+        let slot =
+            rU256::from_str(&slot).map_err(|_e| PyErr::new::<PyValueError, _>("invalid slot"))?;
+        match self_
+            .0
+            .query_storage(address, slot)
+            .map_err(|_e| PyErr::new::<PyValueError, _>("error querying storage"))?
+        {
             Some(state_update) => Ok(Some(state_update.to_string())),
             None => Ok(None),
         }
@@ -264,7 +281,7 @@ impl SimulationEngine {
     ///
     /// This only has an effect if using the RPCReader database. It will clear any
     /// storage slots that have been populated through rpc calls.
-    fn clear_temp_storage(mut self_: PyRefMut<Self>) {
+    fn clear_temp_storage(mut self_: PyRefMut<Self>) -> PyResult<()> {
         self_.0.clear_temp_storage()
     }
 

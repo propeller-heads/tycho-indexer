@@ -1,4 +1,5 @@
 use alloy::primitives::U256;
+use tycho_common::simulation::errors::SimulationError;
 
 use crate::evm::protocol::u256_num::u256_to_f64;
 
@@ -13,9 +14,9 @@ pub(super) fn spot_price_from_reserves(
     r1: U256,
     token_0_decimals: u32,
     token_1_decimals: u32,
-) -> f64 {
+) -> Result<f64, SimulationError> {
     let token_correction = 10f64.powi(token_0_decimals as i32 - token_1_decimals as i32);
-    (u256_to_f64(r1) / u256_to_f64(r0)) * token_correction
+    Ok((u256_to_f64(r1)? / u256_to_f64(r0)?) * token_correction)
 }
 
 #[cfg(test)]
@@ -56,7 +57,7 @@ mod test {
         #[case] t1d: u32,
         #[case] exp: f64,
     ) {
-        let res = spot_price_from_reserves(r0, r1, t0d, t1d);
+        let res = spot_price_from_reserves(r0, r1, t0d, t1d).expect("spot price");
 
         assert_ulps_eq!(res, exp);
     }

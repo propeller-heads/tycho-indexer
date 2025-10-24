@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, RwLock},
+    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
 use alloy::primitives::{Address, Bytes as AlloyBytes, B256, U256};
@@ -85,10 +85,7 @@ impl PreCachedDB {
     ) -> Result<(), PreCachedDBError> {
         // Hold the write lock for the duration of the function so that no other thread can
         // write to the storage.
-        let mut write_guard = self
-            .inner
-            .write()
-            .expect("Fatal tycho state db lock poisoned");
+        let mut write_guard = self.write_inner()?;
 
         write_guard.block = block;
 
@@ -181,10 +178,10 @@ impl PreCachedDB {
         &mut self,
         updates: &HashMap<Address, StateUpdate>,
         block: BlockHeader,
-    ) -> HashMap<Address, StateUpdate> {
+    ) -> Result<HashMap<Address, StateUpdate>, PreCachedDBError> {
         // Hold the write lock for the duration of the function so that no other thread can
         // write to the storage.
-        let mut write_guard = self.inner.write().unwrap();
+        let mut write_guard = self.write_inner()?;
 
         let mut revert_updates = HashMap::new();
         write_guard.block = Some(block);
@@ -222,38 +219,48 @@ impl PreCachedDB {
                 .update_account(address, update_info);
         }
 
-        revert_updates
+        Ok(revert_updates)
     }
 
     #[cfg(test)]
-    pub fn get_account_storage(&self) -> AccountStorage {
-        self.inner
-            .read()
-            .unwrap()
-            .accounts
-            .clone()
+    pub fn get_account_storage(&self) -> Result<AccountStorage, PreCachedDBError> {
+        self.read_inner()
+            .map(|guard| guard.accounts.clone())
     }
 
     /// If block is set, returns the number. Otherwise returns None.
-    pub fn block_number(&self) -> Option<u64> {
-        self.inner
-            .read()
-            .unwrap()
-            .block
-            .as_ref()
-            .map(|header| header.number)
+    pub fn block_number(&self) -> Result<Option<u64>, PreCachedDBError> {
+        self.read_inner().map(|guard| {
+            guard
+                .block
+                .as_ref()
+                .map(|header| header.number)
+        })
     }
 
     /// Clear all state from the database.
-    pub fn clear(&self) {
-        let mut write_guard = self.inner.write().unwrap();
+    pub fn clear(&self) -> Result<(), PreCachedDBError> {
+        let mut write_guard = self.write_inner()?;
         write_guard.accounts.clear();
         write_guard.block = None;
+        Ok(())
+    }
+
+    fn read_inner(&self) -> Result<RwLockReadGuard<'_, PreCachedDBInner>, PreCachedDBError> {
+        self.inner
+            .read()
+            .map_err(|_| PreCachedDBError::Fatal("Tycho state db lock poisoned".into()))
+    }
+
+    fn write_inner(&self) -> Result<RwLockWriteGuard<'_, PreCachedDBInner>, PreCachedDBError> {
+        self.inner
+            .write()
+            .map_err(|_| PreCachedDBError::Fatal("Tycho state db lock poisoned".into()))
     }
 }
 
 impl EngineDatabaseInterface for PreCachedDB {
-    type Error = String;
+    type Error = PreCachedDBError;
 
     /// Sets up a single account
     ///
@@ -271,23 +278,25 @@ impl EngineDatabaseInterface for PreCachedDB {
         account: AccountInfo,
         permanent_storage: Option<HashMap<U256, U256>>,
         _mocked: bool,
-    ) {
+    ) -> Result<(), <Self as EngineDatabaseInterface>::Error> {
         if account.code.is_none() && account.code_hash != KECCAK_EMPTY {
             warn!("Code is None for account {address} but code hash is not KECCAK_EMPTY");
         } else if account.code.is_some() && account.code_hash == KECCAK_EMPTY {
             warn!("Code is Some for account {address} but code hash is KECCAK_EMPTY");
         }
 
-        self.inner
-            .write()
-            .unwrap()
+        self.write_inner()?
             .accounts
-            .init_account(address, account, permanent_storage, true)
+            .init_account(address, account, permanent_storage, true);
+
+        Ok(())
     }
 
     /// Deprecated in TychoDB
-    fn clear_temp_storage(&mut self) {
+    fn clear_temp_storage(&mut self) -> Result<(), <Self as EngineDatabaseInterface>::Error> {
         debug!("Temp storage in TychoDB is never set, nothing to clear");
+
+        Ok(())
     }
 
     fn get_current_block(&self) -> Option<BlockHeader> {
@@ -310,9 +319,7 @@ impl DatabaseRef for PreCachedDB {
     /// Returns a `Result` containing the account information or an error if the account is not
     /// found.
     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
-        self.inner
-            .read()
-            .unwrap()
+        self.read_inner()?
             .accounts
             .get_account_info(&address)
             .map(|acc| Some(acc.clone()))
@@ -339,7 +346,7 @@ impl DatabaseRef for PreCachedDB {
     /// Returns an error if the storage value is not found.
     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
         debug!(%address, %index, "Requested storage of account");
-        let read_guard = self.inner.read().unwrap();
+        let read_guard = self.read_inner()?;
         if let Some(storage_value) = read_guard
             .accounts
             .get_storage(&address, &index)
@@ -366,7 +373,7 @@ impl DatabaseRef for PreCachedDB {
 
     /// If block header is set, returns the hash. Otherwise, returns a zero hash.
     fn block_hash_ref(&self, _number: u64) -> Result<B256, Self::Error> {
-        match self.inner.read().unwrap().block.clone() {
+        match self.read_inner()?.block.clone() {
             Some(header) => Ok(B256::from_slice(&header.hash)),
             None => Ok(B256::default()),
         }
@@ -400,7 +407,9 @@ mod tests {
         // Tests if the provider has not been queried.
         // Querying the mocked provider would cause a panic, therefore no assert is needed.
         let mock_acc_address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        mock_db.init_account(mock_acc_address, AccountInfo::default(), None, false);
+        mock_db
+            .init_account(mock_acc_address, AccountInfo::default(), None, false)
+            .expect("Account init should succeed");
 
         let acc_info = mock_db
             .basic_ref(mock_acc_address)
@@ -423,12 +432,9 @@ mod tests {
         let storage_address = U256::from(1);
         let mut permanent_storage: HashMap<U256, U256> = HashMap::new();
         permanent_storage.insert(storage_address, U256::from(10));
-        mock_db.init_account(
-            mock_acc_address,
-            AccountInfo::default(),
-            Some(permanent_storage),
-            false,
-        );
+        mock_db
+            .init_account(mock_acc_address, AccountInfo::default(), Some(permanent_storage), false)
+            .expect("Account init should succeed");
 
         let storage = mock_db
             .storage_ref(mock_acc_address, storage_address)
@@ -442,7 +448,9 @@ mod tests {
     fn test_account_storage_zero(mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
         let mock_acc_address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let storage_address = U256::from(1);
-        mock_db.init_account(mock_acc_address, AccountInfo::default(), None, false);
+        mock_db
+            .init_account(mock_acc_address, AccountInfo::default(), None, false)
+            .expect("Account init should succeed");
 
         let storage = mock_db
             .storage_ref(mock_acc_address, storage_address)
@@ -471,7 +479,9 @@ mod tests {
     #[tokio::test]
     async fn test_update_state(mut mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
         let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        mock_db.init_account(address, AccountInfo::default(), None, false);
+        mock_db
+            .init_account(address, AccountInfo::default(), None, false)
+            .expect("Account init should succeed");
 
         let mut new_storage = HashMap::default();
         let new_storage_value_index = U256::from_limbs_slice(&[123]);
@@ -490,7 +500,9 @@ mod tests {
         let mut updates = HashMap::default();
         updates.insert(address, update);
 
-        mock_db.update_state(&updates, new_block);
+        mock_db
+            .update_state(&updates, new_block)
+            .expect("State update should succeed");
 
         assert_eq!(
             mock_db
@@ -519,7 +531,9 @@ mod tests {
     #[tokio::test]
     async fn test_block_number_getter(mut mock_db: PreCachedDB) -> Result<(), Box<dyn Error>> {
         let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
-        mock_db.init_account(address, AccountInfo::default(), None, false);
+        mock_db
+            .init_account(address, AccountInfo::default(), None, false)
+            .expect("Account init should succeed");
 
         let new_block = BlockHeader {
             number: 1,
@@ -532,10 +546,12 @@ mod tests {
         };
         let updates = HashMap::default();
 
-        mock_db.update_state(&updates, new_block);
+        mock_db
+            .update_state(&updates, new_block)
+            .expect("State update should succeed");
 
         let block_number = mock_db.block_number();
-        assert_eq!(block_number.unwrap(), 1);
+        assert_eq!(block_number.unwrap().unwrap(), 1);
 
         Ok(())
     }

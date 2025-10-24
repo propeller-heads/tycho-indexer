@@ -450,6 +450,9 @@ impl From<simulation::SimulationEngineError> for SimulationErrorDetails {
             simulation::SimulationEngineError::OutOfGas(reason, _) => {
                 SimulationErrorDetails { data: reason, gas_used: None }
             }
+            simulation::SimulationEngineError::TraceError(reason) => {
+                SimulationErrorDetails { data: reason, gas_used: None }
+            }
         }
     }
 }
@@ -467,14 +470,18 @@ pub struct SimulationDB {
 impl SimulationDB {
     #[new]
     #[pyo3(signature = (rpc_url, block))]
-    pub fn new(rpc_url: String, block: Option<BlockHeader>) -> Self {
+    pub fn new(rpc_url: String, block: Option<BlockHeader>) -> PyResult<Self> {
         info!(?rpc_url, ?block, "Creating python SimulationDB wrapper instance");
-        let db = simulation_db::SimulationDB::new(
-            get_client(Some(rpc_url)),
-            get_runtime(),
-            block.map(Into::into),
-        );
-        Self { inner: db }
+        let client = get_client(Some(rpc_url.clone())).map_err(|err| {
+            PyRuntimeError::new_err(format!(
+                "Failed to create SimulationDB client for `{rpc_url}`: {err}"
+            ))
+        })?;
+        let runtime = get_runtime().map_err(|err| {
+            PyRuntimeError::new_err(format!("Failed to create SimulationDB runtime: {err}"))
+        })?;
+        let db = simulation_db::SimulationDB::new(client, runtime, block.map(Into::into));
+        Ok(Self { inner: db })
     }
 }
 
@@ -503,8 +510,13 @@ impl TychoDB {
     }
 
     /// Get the current block number of a TychoDB instance.
-    pub fn block_number(self_: PyRefMut<Self>) -> Option<u64> {
-        self_.inner.block_number()
+    pub fn block_number(self_: PyRefMut<Self>) -> PyResult<Option<u64>> {
+        self_
+            .inner
+            .block_number()
+            .map_err(|err| {
+                PyRuntimeError::new_err(format!("Failed to get TychoDB block number: {err}"))
+            })
     }
 
     // Apply a list of account updates to TychoDB instance.

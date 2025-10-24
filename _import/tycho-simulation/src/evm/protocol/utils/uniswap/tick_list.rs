@@ -1,6 +1,7 @@
 use std::cmp;
 
 use alloy::primitives::U256;
+use tycho_common::simulation::errors::SimulationError;
 
 use super::tick_math::{get_sqrt_ratio_at_tick, MAX_TICK, MIN_TICK};
 
@@ -12,11 +13,11 @@ pub struct TickInfo {
 }
 
 impl TickInfo {
-    pub fn new(index: i32, net_liquidity: i128) -> Self {
+    pub fn new(index: i32, net_liquidity: i128) -> Result<Self, SimulationError> {
         // Note: using this method here returns slightly different values
         //  compared to the Python implementation, likely more correct
-        let sqrt_price = get_sqrt_ratio_at_tick(index).unwrap();
-        TickInfo { index, net_liquidity, sqrt_price }
+        let sqrt_price = get_sqrt_ratio_at_tick(index)?;
+        Ok(TickInfo { index, net_liquidity, sqrt_price })
     }
 }
 
@@ -46,53 +47,58 @@ pub(crate) struct TickList {
 }
 
 impl TickList {
-    pub(crate) fn from(spacing: u16, ticks: Vec<TickInfo>) -> Self {
+    pub(crate) fn from(spacing: u16, ticks: Vec<TickInfo>) -> Result<Self, SimulationError> {
         let tick_list = TickList { tick_spacing: spacing, ticks };
-        tick_list
-            .valid_ticks()
-            .expect("Invalid tick list");
-        tick_list
+        tick_list.valid_ticks()?;
+        Ok(tick_list)
     }
 
-    // Asserts that all attributes are valid. Checks for:
+    // Validates that all attributes are valid. Checks for:
     // 1. Tick spacing > 0
     // 2. Tick indexes have no rest when divided by tick spacing
     // 3. Ticks are ordered by index
-    fn valid_ticks(&self) -> Result<bool, String> {
+    fn valid_ticks(&self) -> Result<(), SimulationError> {
         if self.tick_spacing == 0 {
-            return Err(String::from("Tick spacing is 0"));
+            return Err(SimulationError::FatalError("Tick spacing is 0".to_string()));
         }
 
-        for i in 0..self.ticks.len() {
-            let t = self.ticks.get(i).unwrap();
+        for t in &self.ticks {
             if t.index % self.tick_spacing as i32 != 0 {
-                return Err(format!(
+                return Err(SimulationError::FatalError(format!(
                     "Tick index {} not aligned with tick spacing {}",
                     t.index, self.tick_spacing,
-                ));
+                )));
             }
         }
         if !self.ticks.is_empty() {
             for i in 0..self.ticks.len() - 1 {
-                let t = self.ticks.get(i).unwrap();
-                if i != self.ticks.len() && t > self.ticks.get(i + 1).unwrap() {
-                    let msg = format!("Ticks are not ordered at position {index}", index = t.index);
-                    return Err(msg);
+                let t = &self.ticks[i];
+                if t > &self.ticks[i + 1] {
+                    return Err(SimulationError::FatalError(format!(
+                        "Ticks are not ordered at position {}",
+                        t.index
+                    )));
                 }
             }
         }
 
-        Ok(true)
+        Ok(())
     }
 
     #[allow(dead_code)]
-    fn apply_liquidity_change(&mut self, lower: i32, upper: i32, delta: i128) {
-        self.upsert_tick(lower, delta);
-        self.upsert_tick(upper, -delta);
+    fn apply_liquidity_change(
+        &mut self,
+        lower: i32,
+        upper: i32,
+        delta: i128,
+    ) -> Result<(), SimulationError> {
+        self.upsert_tick(lower, delta)?;
+        self.upsert_tick(upper, -delta)?;
+        Ok(())
     }
 
     #[allow(dead_code)]
-    fn upsert_tick(&mut self, tick: i32, delta: i128) {
+    fn upsert_tick(&mut self, tick: i32, delta: i128) -> Result<(), SimulationError> {
         match self
             .ticks
             .binary_search_by(|t| t.index.cmp(&tick))
@@ -106,12 +112,17 @@ impl TickList {
             }
             Err(insert_idx) => {
                 self.ticks
-                    .insert(insert_idx, TickInfo::new(tick, delta));
+                    .insert(insert_idx, TickInfo::new(tick, delta)?);
             }
         }
+        Ok(())
     }
 
-    pub(crate) fn set_tick_liquidity(&mut self, tick: i32, liquidity: i128) {
+    pub(crate) fn set_tick_liquidity(
+        &mut self,
+        tick: i32,
+        liquidity: i128,
+    ) -> Result<(), SimulationError> {
         match self
             .ticks
             .binary_search_by(|t| t.index.cmp(&tick))
@@ -125,9 +136,10 @@ impl TickList {
             }
             Err(insert_idx) => {
                 self.ticks
-                    .insert(insert_idx, TickInfo::new(tick, liquidity));
+                    .insert(insert_idx, TickInfo::new(tick, liquidity)?);
             }
         }
+        Ok(())
     }
 
     fn is_below_smallest(&self, tick: i32) -> bool {
@@ -279,7 +291,7 @@ mod tests {
         let tick_infos =
             vec![create_tick_info(10, 10), create_tick_info(20, -5), create_tick_info(40, -5)];
 
-        TickList::from(10, tick_infos)
+        TickList::from(10, tick_infos).unwrap()
     }
 
     fn create_tick_info(idx: i32, liq: i128) -> TickInfo {
@@ -334,7 +346,7 @@ mod tests {
             create_tick_info(0, -5),
             create_tick_info(MAX_TICK - 1, -5),
         ];
-        let tick_list = TickList::from(1, tick_infos.clone());
+        let tick_list = TickList::from(1, tick_infos.clone()).unwrap();
         let cases = vec![
             TestCaseNextInitializedTick {
                 args: (MIN_TICK + 1, true),
@@ -415,7 +427,7 @@ mod tests {
             create_tick_info(0, -5),
             create_tick_info(MAX_TICK - 1, -5),
         ];
-        let tick_list = TickList::from(1, tick_infos);
+        let tick_list = TickList::from(1, tick_infos).unwrap();
         let cases = vec![
             TestCaseNextInitializedTickWithinWord {
                 args: (-257, true),
@@ -524,8 +536,8 @@ mod tests {
     #[test]
     fn test_next_initialized_tick_within_one_word_spacing() {
         let tick_infos = vec![create_tick_info(0, 5), create_tick_info(512, -5)];
-        let tick_list1 = TickList::from(1, tick_infos.clone());
-        let tick_list2 = TickList::from(2, tick_infos);
+        let tick_list1 = TickList::from(1, tick_infos.clone()).unwrap();
+        let tick_list2 = TickList::from(2, tick_infos).unwrap();
 
         assert_eq!(
             tick_list1
@@ -552,7 +564,7 @@ mod tests {
     fn test_next_initialized_tick_within_one_word_errors() {
         let tick_infos =
             vec![create_tick_info(-5100, 10), create_tick_info(0, -5), create_tick_info(5100, -5)];
-        let tick_list = TickList::from(10, tick_infos);
+        let tick_list = TickList::from(10, tick_infos).unwrap();
         let cases = vec![
             TestCaseNextTickError {
                 args: (-1, true),
@@ -637,9 +649,11 @@ mod tests {
     fn test_apply_liquidity_change(#[case] delta: i128) {
         let tick_infos =
             vec![create_tick_info(-5100, 10), create_tick_info(0, -5), create_tick_info(5100, -5)];
-        let mut tick_list = TickList::from(10, tick_infos);
+        let mut tick_list = TickList::from(10, tick_infos).unwrap();
 
-        tick_list.apply_liquidity_change(-10, 10, delta);
+        tick_list
+            .apply_liquidity_change(-10, 10, delta)
+            .unwrap();
 
         let lower = tick_list.get_tick(-10).unwrap();
         let upper = tick_list.get_tick(10).unwrap();
@@ -651,10 +665,14 @@ mod tests {
     fn test_apply_liquidity_change_add_remove() {
         let tick_infos =
             vec![create_tick_info(-5100, 10), create_tick_info(0, -5), create_tick_info(5100, -5)];
-        let mut tick_list = TickList::from(10, tick_infos);
+        let mut tick_list = TickList::from(10, tick_infos).unwrap();
 
-        tick_list.apply_liquidity_change(-10, 10, 100);
-        tick_list.apply_liquidity_change(-10, 10, -100);
+        tick_list
+            .apply_liquidity_change(-10, 10, 100)
+            .unwrap();
+        tick_list
+            .apply_liquidity_change(-10, 10, -100)
+            .unwrap();
 
         assert!(tick_list.get_tick(-10).is_err());
         assert!(tick_list.get_tick(10).is_err());

@@ -97,7 +97,7 @@ impl ProtocolSim for BebopState {
             return Err(SimulationError::RecoverableError(format!(
                 "Invalid token addresses: {}, {}",
                 token_in.address, token_out.address
-            )))
+            )));
         };
         // if sell base is true -> use bids
         // if sell base is false -> use asks AND amount is in quote token so the levels need to be
@@ -134,7 +134,7 @@ impl ProtocolSim for BebopState {
         if remaining_amount_in > 0.0 {
             return Err(SimulationError::InvalidInput(
                 format!("Pool has not enough liquidity to support complete swap. input amount: {amount_in}, consumed amount: {}", amount_in-remaining_amount_in),
-                Some(res)))
+                Some(res)));
         }
 
         Ok(res)
@@ -156,7 +156,7 @@ impl ProtocolSim for BebopState {
         } else {
             return Err(SimulationError::RecoverableError(format!(
                 "Invalid token addresses: {sell_token}, {buy_token}"
-            )))
+            )));
         };
 
         // If there are no price levels, return 0 for both limits

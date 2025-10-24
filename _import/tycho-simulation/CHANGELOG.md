@@ -1,3 +1,34 @@
+## [0.184.4](https://github.com/propeller-heads/tycho-simulation/compare/0.184.3...0.184.4) (2025-10-23)
+
+
+### Bug Fixes
+
+* **cluster-test:** Base doesn't have univ4 ([8887cc7](https://github.com/propeller-heads/tycho-simulation/commit/8887cc7866f3b66fe6f091998d95e98b51fcec5c))
+* **cluster-test:** Pass the correct chain ID to tenderly sim params ([a894a4b](https://github.com/propeller-heads/tycho-simulation/commit/a894a4b5c76d43e9577230878bfbd1da0944fded))
+
+## [0.184.3](https://github.com/propeller-heads/tycho-simulation/compare/0.184.2...0.184.3) (2025-10-23)
+
+
+### Bug Fixes
+
+* Fix slippage buckets ([40f363c](https://github.com/propeller-heads/tycho-simulation/commit/40f363caadca038762e2b479d2aa4e31d4a11e90))
+
+## [0.184.2](https://github.com/propeller-heads/tycho-simulation/compare/0.184.1...0.184.2) (2025-10-23)
+
+
+### Bug Fixes
+
+* (USV4) Used checked sub and propagate error ([bf302ed](https://github.com/propeller-heads/tycho-simulation/commit/bf302edb9775f78630fa914093b641460c5241ad))
+* import CheckedSub ([1b135f8](https://github.com/propeller-heads/tycho-simulation/commit/1b135f817332977bb54acc2f4d2a2d78cca23bd9))
+
+## [0.184.1](https://github.com/propeller-heads/tycho-simulation/compare/0.184.0...0.184.1) (2025-10-23)
+
+
+### Bug Fixes
+
+* adjust test within EVM stream ([938aa95](https://github.com/propeller-heads/tycho-simulation/commit/938aa9595a48abf09ccf24e8477b58c5380fba4c))
+* merge issues ([4f6302c](https://github.com/propeller-heads/tycho-simulation/commit/4f6302c83a4aafa6cc858453c98d445579acaf1c))
+
 ## [0.184.0](https://github.com/propeller-heads/tycho-simulation/compare/0.183.0...0.184.0) (2025-10-22)
 
 

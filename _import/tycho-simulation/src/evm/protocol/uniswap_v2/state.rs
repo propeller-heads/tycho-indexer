@@ -1,7 +1,7 @@
 use std::{any::Any, collections::HashMap};
 
 use alloy::primitives::U256;
-use num_bigint::{BigUint, ToBigUint};
+use num_bigint::BigUint;
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -75,9 +75,7 @@ impl ProtocolSim for UniswapV2State {
         };
         Ok(GetAmountOutResult::new(
             u256_to_biguint(amount_out),
-            120_000
-                .to_biguint()
-                .expect("Expected an unsigned integer as gas value"),
+            BigUint::from(120_000u32),
             Box::new(new_state),
         ))
     }

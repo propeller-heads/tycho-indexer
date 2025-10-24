@@ -55,10 +55,10 @@ impl UniswapV3State {
         fee: FeeAmount,
         tick: i32,
         ticks: Vec<TickInfo>,
-    ) -> Self {
+    ) -> Result<Self, SimulationError> {
         let spacing = UniswapV3State::get_spacing(fee);
-        let tick_list = TickList::from(spacing, ticks);
-        UniswapV3State { liquidity, sqrt_price, fee, tick, ticks: tick_list }
+        let tick_list = TickList::from(spacing, ticks)?;
+        Ok(UniswapV3State { liquidity, sqrt_price, fee, tick, ticks: tick_list })
     }
 
     fn get_spacing(fee: FeeAmount) -> u16 {
@@ -228,9 +228,10 @@ impl ProtocolSim for UniswapV3State {
 
     fn spot_price(&self, a: &Token, b: &Token) -> Result<f64, SimulationError> {
         if a < b {
-            Ok(sqrt_price_q96_to_f64(self.sqrt_price, a.decimals, b.decimals))
+            sqrt_price_q96_to_f64(self.sqrt_price, a.decimals, b.decimals)
         } else {
-            Ok(1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, b.decimals, a.decimals))
+            sqrt_price_q96_to_f64(self.sqrt_price, b.decimals, a.decimals)
+                .map(|price| 1.0f64 / price)
         }
     }
 
@@ -416,12 +417,14 @@ impl ProtocolSim for UniswapV3State {
             // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
             if key.starts_with("ticks/") {
                 let parts: Vec<&str> = key.split('/').collect();
-                self.ticks.set_tick_liquidity(
-                    parts[1]
-                        .parse::<i32>()
-                        .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
-                    i128::from(value.clone()),
-                )
+                self.ticks
+                    .set_tick_liquidity(
+                        parts[1]
+                            .parse::<i32>()
+                            .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
+                        i128::from(value.clone()),
+                    )
+                    .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
             }
         }
         // delete ticks - ignores deletes for attributes other than tick liquidity
@@ -429,12 +432,14 @@ impl ProtocolSim for UniswapV3State {
             // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
             if key.starts_with("tick/") {
                 let parts: Vec<&str> = key.split('/').collect();
-                self.ticks.set_tick_liquidity(
-                    parts[1]
-                        .parse::<i32>()
-                        .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
-                    0,
-                )
+                self.ticks
+                    .set_tick_liquidity(
+                        parts[1]
+                            .parse::<i32>()
+                            .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
+                        0,
+                    )
+                    .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
             }
         }
         Ok(())
@@ -512,8 +517,9 @@ mod tests {
             U256::from_str("188562464004052255423565206602").unwrap(),
             FeeAmount::Medium,
             17342,
-            vec![TickInfo::new(0, 0), TickInfo::new(46080, 0)],
-        );
+            vec![TickInfo::new(0, 0).unwrap(), TickInfo::new(46080, 0).unwrap()],
+        )
+        .unwrap();
         let sell_amount = BigUint::from_str("11_000_000000000000000000").unwrap();
         let expected = BigUint::from_str("61927070842678722935941").unwrap();
 
@@ -556,19 +562,20 @@ mod tests {
             FeeAmount::Low,
             255830,
             vec![
-                TickInfo::new(255760, 1759015528199933i128),
-                TickInfo::new(255770, 6393138051835308i128),
-                TickInfo::new(255780, 228206673808681i128),
-                TickInfo::new(255820, 1319490609195820i128),
-                TickInfo::new(255830, 678916926147901i128),
-                TickInfo::new(255840, 12208947683433103i128),
-                TickInfo::new(255850, 1177970713095301i128),
-                TickInfo::new(255860, 8752304680520407i128),
-                TickInfo::new(255880, 1486478248067104i128),
-                TickInfo::new(255890, 1878744276123248i128),
-                TickInfo::new(255900, 77340284046725227i128),
+                TickInfo::new(255760, 1759015528199933i128).unwrap(),
+                TickInfo::new(255770, 6393138051835308i128).unwrap(),
+                TickInfo::new(255780, 228206673808681i128).unwrap(),
+                TickInfo::new(255820, 1319490609195820i128).unwrap(),
+                TickInfo::new(255830, 678916926147901i128).unwrap(),
+                TickInfo::new(255840, 12208947683433103i128).unwrap(),
+                TickInfo::new(255850, 1177970713095301i128).unwrap(),
+                TickInfo::new(255860, 8752304680520407i128).unwrap(),
+                TickInfo::new(255880, 1486478248067104i128).unwrap(),
+                TickInfo::new(255890, 1878744276123248i128).unwrap(),
+                TickInfo::new(255900, 77340284046725227i128).unwrap(),
             ],
-        );
+        )
+        .unwrap();
         let cases = vec![
             SwapTestCase {
                 symbol: "WBTC",
@@ -659,27 +666,28 @@ mod tests {
             FeeAmount::High,
             -263789,
             vec![
-                TickInfo::new(-269600, 3612326326695492i128),
-                TickInfo::new(-268800, 1487613939516867i128),
-                TickInfo::new(-267800, 1557587121322546i128),
-                TickInfo::new(-267400, 424592076717375i128),
-                TickInfo::new(-267200, 11691597431643916i128),
-                TickInfo::new(-266800, -218742815100986i128),
-                TickInfo::new(-266600, 1118947532495477i128),
-                TickInfo::new(-266200, 1233064286622365i128),
-                TickInfo::new(-265000, 4252603063356107i128),
-                TickInfo::new(-263200, -351282010325232i128),
-                TickInfo::new(-262800, -2352011819117842i128),
-                TickInfo::new(-262600, -424592076717375i128),
-                TickInfo::new(-262200, -11923662433672566i128),
-                TickInfo::new(-261600, -2432911749667741i128),
-                TickInfo::new(-260200, -4032727022572273i128),
-                TickInfo::new(-260000, -22889492064625028i128),
-                TickInfo::new(-259400, -1557587121322546i128),
-                TickInfo::new(-259200, -1487613939516867i128),
-                TickInfo::new(-258400, -400137022888262i128),
+                TickInfo::new(-269600, 3612326326695492i128).unwrap(),
+                TickInfo::new(-268800, 1487613939516867i128).unwrap(),
+                TickInfo::new(-267800, 1557587121322546i128).unwrap(),
+                TickInfo::new(-267400, 424592076717375i128).unwrap(),
+                TickInfo::new(-267200, 11691597431643916i128).unwrap(),
+                TickInfo::new(-266800, -218742815100986i128).unwrap(),
+                TickInfo::new(-266600, 1118947532495477i128).unwrap(),
+                TickInfo::new(-266200, 1233064286622365i128).unwrap(),
+                TickInfo::new(-265000, 4252603063356107i128).unwrap(),
+                TickInfo::new(-263200, -351282010325232i128).unwrap(),
+                TickInfo::new(-262800, -2352011819117842i128).unwrap(),
+                TickInfo::new(-262600, -424592076717375i128).unwrap(),
+                TickInfo::new(-262200, -11923662433672566i128).unwrap(),
+                TickInfo::new(-261600, -2432911749667741i128).unwrap(),
+                TickInfo::new(-260200, -4032727022572273i128).unwrap(),
+                TickInfo::new(-260000, -22889492064625028i128).unwrap(),
+                TickInfo::new(-259400, -1557587121322546i128).unwrap(),
+                TickInfo::new(-259200, -1487613939516867i128).unwrap(),
+                TickInfo::new(-258400, -400137022888262i128).unwrap(),
             ],
-        );
+        )
+        .unwrap();
         let amount_in = BigUint::from_str("50000000000").unwrap();
         let exp = BigUint::from_str("6820591625999718100883").unwrap();
 
@@ -714,8 +722,9 @@ mod tests {
             U256::from_str("1000").unwrap(),
             FeeAmount::Low,
             100,
-            vec![TickInfo::new(255760, 10000), TickInfo::new(255900, -10000)],
-        );
+            vec![TickInfo::new(255760, 10000).unwrap(), TickInfo::new(255900, -10000).unwrap()],
+        )
+        .unwrap();
         let attributes: HashMap<String, Bytes> = [
             ("liquidity".to_string(), Bytes::from(2000_u64.to_be_bytes().to_vec())),
             ("sqrt_price_x96".to_string(), Bytes::from(1001_u64.to_be_bytes().to_vec())),
