@@ -651,78 +651,17 @@ mod tests {
     use tracing_test::traced_test;
 
     use super::*;
+    use crate::test_fixtures::{
+        TestFixture, BALANCER_VAULT_STR, STETH_STR, TEST_BLOCK_HASH, TEST_BLOCK_NUMBER, TEST_SLOTS,
+        TOKEN_ADDRESSES,
+    };
 
-    // Common test constants
-    const BALANCER_VAULT_STR: &str = "0xba12222222228d8ba445958a75a0704d566bf2c8";
-    const STETH_STR: &str = "0xae7ab96520de3a18e5e111b5eaab095312d7fe84";
-    const TEST_BLOCK_HASH: &str =
-        "0x7f70ac678819e24c4947a3a95fdab886083892a18ba1a962ebaac31455584042";
-    const TEST_BLOCK_NUMBER: u64 = 20378314;
+    // Contract-specific test constants for expected slot counts at TEST_BLOCK_NUMBER
+    const BALANCER_VAULT_EXPECTED_SLOTS: usize = 47690;
+    const STETH_EXPECTED_SLOTS: usize = 789526;
 
-    // Common token addresses for tests
-    const TOKEN_ADDRESSES: [&str; 5] = [
-        BALANCER_VAULT_STR,
-        STETH_STR,
-        "0x6b175474e89094c44da98b954eedeac495271d0f", // DAI
-        "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599", // WBTC
-        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // USDC
-    ];
-
-    // Common storage slots for testing
-    fn get_test_slots() -> HashMap<Bytes, Bytes> {
-        HashMap::from([
-            (
-                Bytes::from_str("0000000000000000000000000000000000000000000000000000000000000000")
-                    .unwrap(),
-                Bytes::from_str("0000000000000000000000000000000000000000000000000000000000000001")
-                    .unwrap(),
-            ),
-            (
-                Bytes::from_str("0000000000000000000000000000000000000000000000000000000000000003")
-                    .unwrap(),
-                Bytes::from_str("00000000000000000000006048a8c631fb7e77eca533cf9c29784e482391e700")
-                    .unwrap(),
-            ),
-            (
-                Bytes::from_str("00015ea75c6f99b2e8663793de8ab1ce7c52e3295bf307bbf9990d4af56f7035")
-                    .unwrap(),
-                Bytes::from_str("0000000000000000000000000000000000000000000000000000000000000001")
-                    .unwrap(),
-            ),
-        ])
-    }
-
-    // Test fixture setup
-    struct TestFixture {
-        block: Block,
-        node_url: String,
-    }
-
+    // Local extension methods specific to account extractor tests
     impl TestFixture {
-        async fn new() -> Self {
-            let node_url = std::env::var("RPC_URL").expect("RPC_URL must be set for testing");
-
-            let block_hash = B256::from_bytes(
-                &hex::decode(
-                    TEST_BLOCK_HASH
-                        .strip_prefix("0x")
-                        .unwrap_or(TEST_BLOCK_HASH),
-                )
-                .expect("valid hex")
-                .into(),
-            );
-
-            let block = Block::new(
-                TEST_BLOCK_NUMBER,
-                Chain::Ethereum,
-                block_hash.to_bytes(),
-                Default::default(),
-                Default::default(),
-            );
-
-            Self { block, node_url }
-        }
-
         async fn create_evm_extractor(&self) -> Result<EVMAccountExtractor, RPCError> {
             EVMAccountExtractor::new_from_url(&self.node_url, Chain::Ethereum).await
         }
@@ -730,29 +669,30 @@ mod tests {
         async fn create_batch_extractor(&self) -> Result<EVMBatchAccountExtractor, RPCError> {
             EVMBatchAccountExtractor::new_from_url(&self.node_url, Chain::Ethereum).await
         }
+    }
 
-        fn create_address(address_str: &str) -> Address {
-            Address::from_str(address_str).expect("valid address")
-        }
+    fn create_storage_request(
+        address_str: &str,
+        slots: Option<Vec<Bytes>>,
+    ) -> StorageSnapshotRequest {
+        StorageSnapshotRequest { address: create_address(address_str), slots }
+    }
 
-        fn create_storage_request(
-            address_str: &str,
-            slots: Option<Vec<Bytes>>,
-        ) -> StorageSnapshotRequest {
-            StorageSnapshotRequest { address: Self::create_address(address_str), slots }
-        }
+    /// Parses an address string into an Address
+    pub fn create_address(address_str: &str) -> Address {
+        Address::from_str(address_str).expect("valid address")
     }
 
     #[rstest]
     #[case(BALANCER_VAULT_STR, U256::ZERO)]
-    #[case(STETH_STR, U256::from_str("4550827602262703358208").unwrap())]
+    #[case(STETH_STR, U256::from_str("8158647137036262954484").unwrap())]
     #[tokio::test]
     #[ignore = "require RPC connection"]
     async fn test_get_balance(
         #[case] address_str: &str,
         #[case] expected_balance: U256,
     ) -> Result<(), RPCError> {
-        let fixture = TestFixture::new().await;
+        let fixture = TestFixture::new();
         let extractor = fixture.create_evm_extractor().await?;
 
         let address = AlloyAddress::from_str(address_str).expect("failed to parse address");
@@ -783,7 +723,7 @@ mod tests {
         #[case] expected_length: usize,
         #[case] expected_prefix: &str,
     ) -> Result<(), RPCError> {
-        let fixture = TestFixture::new().await;
+        let fixture = TestFixture::new();
         let extractor = fixture.create_evm_extractor().await?;
 
         let address = AlloyAddress::from_str(address_str).expect("failed to parse address");
@@ -818,16 +758,25 @@ mod tests {
     }
 
     #[rstest]
-    #[case(BALANCER_VAULT_STR, 47690)]
-    #[case(STETH_STR, 789526)]
+    #[case(BALANCER_VAULT_STR, BALANCER_VAULT_EXPECTED_SLOTS)]
+    #[case(STETH_STR, STETH_EXPECTED_SLOTS)]
+    #[traced_test]
     #[tokio::test]
     #[ignore = "require RPC connection"]
     async fn test_get_storage_range(
         #[case] address_str: &str,
         #[case] expected_slot_count: usize,
     ) -> Result<(), RPCError> {
-        let fixture = TestFixture::new().await;
+        let fixture = TestFixture::new();
         let extractor = fixture.create_evm_extractor().await?;
+
+        // Warn about large contracts (STETH has 789k+ slots, takes ~2 mins, ~50MB data)
+        if expected_slot_count > 100_000 {
+            warn!(
+                "Testing large contract {} with {} storage slots - this will take ~2 minutes and retrieve ~50MB of data",
+                address_str, expected_slot_count
+            );
+        }
 
         let address = AlloyAddress::from_str(address_str).expect("failed to parse address");
         let block_id = B256::from_str(TEST_BLOCK_HASH).expect("failed to parse block hash");
@@ -848,24 +797,52 @@ mod tests {
         Ok(())
     }
 
+    /// Test the account extractor with various contracts and their storage slots.
+    ///
+    /// Note: The STETH test case processes a large number of storage slots (789,526 slots,
+    /// stETH is the 9th largest token by number of holders). This test takes around 2 minutes
+    /// to run and retrieves around 50MB of data.
+    #[rstest]
+    #[case(BALANCER_VAULT_STR, BALANCER_VAULT_EXPECTED_SLOTS)]
+    #[case(STETH_STR, STETH_EXPECTED_SLOTS)] // Large contract - takes ~2 mins, retrieves ~50MB
+    #[traced_test]
     #[tokio::test]
     #[ignore = "require RPC connection"]
-    async fn test_account_extractor() -> Result<(), Box<dyn std::error::Error>> {
-        let fixture = TestFixture::new().await;
+    async fn test_account_extractor(
+        #[case] address_str: &str,
+        #[case] expected_slot_count: usize,
+    ) -> Result<(), RPCError> {
+        let fixture = TestFixture::new();
         let extractor = fixture.create_evm_extractor().await?;
 
-        let requests = vec![TestFixture::create_storage_request(BALANCER_VAULT_STR, None)];
+        // Warn about large contracts (STETH has 789k+ slots, takes ~2 mins, ~50MB data)
+        if expected_slot_count > 100_000 {
+            warn!(
+                "Testing large contract {} with {} storage slots - this will take ~2 minutes and retrieve ~50MB of data",
+                address_str, expected_slot_count
+            );
+        }
+
+        let requests = vec![create_storage_request(address_str, None)];
 
         let updates = extractor
             .get_accounts_at_block(&fixture.block, &requests)
             .await?;
 
-        assert_eq!(updates.len(), 1);
+        assert_eq!(updates.len(), 1, "Expected exactly 1 account update");
+
         let update = updates
-            .get(&Bytes::from_str(BALANCER_VAULT_STR).expect("valid address"))
+            .get(&Bytes::from_str(address_str).expect("valid address"))
             .expect("update exists");
 
-        assert_eq!(update.slots.len(), 47690);
+        assert_eq!(
+            update.slots.len(),
+            expected_slot_count,
+            "{} storage slot count mismatch. Expected: {}, Got: {}",
+            address_str,
+            expected_slot_count,
+            update.slots.len()
+        );
 
         Ok(())
     }
@@ -873,45 +850,14 @@ mod tests {
     #[traced_test]
     #[tokio::test]
     #[ignore = "require RPC connection"]
-    /// Test the contract extractor with a large number of storage slots (stETH is the 9th largest
-    /// token by number of holders).
-    /// This test takes around 2 mins to run and retreives around 50mb of data
-    async fn test_contract_extractor_steth() -> Result<(), Box<dyn std::error::Error>> {
-        let fixture = TestFixture::new().await;
-        let extractor = fixture.create_evm_extractor().await?;
-
-        let requests = vec![TestFixture::create_storage_request(STETH_STR, None)];
-
-        println!("Getting accounts for block: {TEST_BLOCK_NUMBER:?}");
-        let start_time = std::time::Instant::now();
-        let updates = extractor
-            .get_accounts_at_block(&fixture.block, &requests)
-            .await?;
-        let duration = start_time.elapsed();
-        println!("Time taken to get accounts: {duration:?}");
-
-        assert_eq!(updates.len(), 1);
-        let update = updates
-            .get(&Bytes::from_str(STETH_STR).expect("valid address"))
-            .expect("update exists");
-
-        assert_eq!(update.slots.len(), 789526);
-
-        Ok(())
-    }
-
-    #[traced_test]
-    #[tokio::test]
-    #[ignore = "require RPC connection"]
-    async fn test_get_storage_snapshots() -> Result<(), Box<dyn std::error::Error>> {
-        let fixture = TestFixture::new().await;
-        println!("Using node: {}", fixture.node_url);
+    async fn test_get_storage_snapshots() -> Result<(), RPCError> {
+        let fixture = TestFixture::new();
 
         let extractor = fixture.create_batch_extractor().await?;
 
         let requests = vec![
-            TestFixture::create_storage_request(BALANCER_VAULT_STR, Some(vec![])),
-            TestFixture::create_storage_request(STETH_STR, Some(vec![])),
+            create_storage_request(BALANCER_VAULT_STR, Some(vec![])),
+            create_storage_request(STETH_STR, Some(vec![])),
         ];
 
         let start_time = std::time::Instant::now();
@@ -924,7 +870,7 @@ mod tests {
         assert_eq!(result.len(), 2);
 
         // First account check
-        let first_address = TestFixture::create_address(BALANCER_VAULT_STR);
+        let first_address = create_address(BALANCER_VAULT_STR);
         let first_delta = result
             .get(&first_address)
             .expect("first address should exist");
@@ -935,7 +881,7 @@ mod tests {
         println!("Balance: {:?}", first_delta.balance);
 
         // Second account check
-        let second_address = TestFixture::create_address(STETH_STR);
+        let second_address = create_address(STETH_STR);
         let second_delta: &AccountDelta = result
             .get(&second_address)
             .expect("second address should exist");
@@ -951,8 +897,8 @@ mod tests {
     #[traced_test]
     #[tokio::test]
     #[ignore = "require RPC connection"]
-    async fn test_evm_batch_extractor_new() -> Result<(), Box<dyn std::error::Error>> {
-        let fixture = TestFixture::new().await;
+    async fn test_evm_batch_extractor_new() -> Result<(), RPCError> {
+        let fixture = TestFixture::new();
 
         // Test with valid URL
         let extractor =
@@ -969,14 +915,14 @@ mod tests {
     #[traced_test]
     #[tokio::test]
     #[ignore = "require RPC connection"]
-    async fn test_batch_fetch_account_code_and_balance() -> Result<(), Box<dyn std::error::Error>> {
-        let fixture = TestFixture::new().await;
+    async fn test_batch_fetch_account_code_and_balance() -> Result<(), RPCError> {
+        let fixture = TestFixture::new();
         let extractor = fixture.create_batch_extractor().await?;
 
         // Test with multiple addresses
         let requests = vec![
-            TestFixture::create_storage_request(BALANCER_VAULT_STR, Some(Vec::new())),
-            TestFixture::create_storage_request(STETH_STR, Some(Vec::new())),
+            create_storage_request(BALANCER_VAULT_STR, Some(Vec::new())),
+            create_storage_request(STETH_STR, Some(Vec::new())),
         ];
 
         let (codes, balances) = extractor
@@ -988,12 +934,12 @@ mod tests {
         assert_eq!(balances.len(), 2);
 
         // Check that the first address has code and balance
-        let first_address = TestFixture::create_address(BALANCER_VAULT_STR);
+        let first_address = create_address(BALANCER_VAULT_STR);
         assert!(codes.contains_key(&first_address));
         assert!(balances.contains_key(&first_address));
 
         // Check that the second address has code and balance
-        let second_address = TestFixture::create_address(STETH_STR);
+        let second_address = create_address(STETH_STR);
         assert!(codes.contains_key(&second_address));
         assert!(balances.contains_key(&second_address));
 
@@ -1013,21 +959,20 @@ mod tests {
     #[traced_test]
     #[tokio::test]
     #[ignore = "require RPC connection"]
-    async fn test_fetch_account_storage_without_specific_slots(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let fixture = TestFixture::new().await;
+    async fn test_fetch_account_storage_without_specific_slots() -> Result<(), RPCError> {
+        let fixture = TestFixture::new();
         let extractor = fixture.create_batch_extractor().await?;
 
         // Create request with specific slots
-        let slots = get_test_slots();
-        let request = TestFixture::create_storage_request(BALANCER_VAULT_STR, None);
+        let slots = &*TEST_SLOTS;
+        let request = create_storage_request(BALANCER_VAULT_STR, None);
 
         let storage = extractor
             .fetch_account_storage(&fixture.block, 10, &request)
             .await?;
 
         // Verify that we got the storage for all requested slots
-        assert_eq!(storage.len(), 47690);
+        assert_eq!(storage.len(), BALANCER_VAULT_EXPECTED_SLOTS);
 
         // Check that each slot has a value
         for (key, value) in slots.iter().take(3) {
@@ -1047,15 +992,14 @@ mod tests {
     #[traced_test]
     #[tokio::test]
     #[ignore = "require RPC connection"]
-    async fn test_fetch_account_storage_with_specific_slots(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let fixture = TestFixture::new().await;
+    async fn test_fetch_account_storage_with_specific_slots() -> Result<(), RPCError> {
+        let fixture = TestFixture::new();
         let extractor = fixture.create_batch_extractor().await?;
 
         // Create request with specific slots
-        let slots = get_test_slots();
+        let slots = &*TEST_SLOTS;
         let slots_request: Vec<Bytes> = slots.keys().cloned().collect();
-        let request = TestFixture::create_storage_request(BALANCER_VAULT_STR, Some(slots_request));
+        let request = create_storage_request(BALANCER_VAULT_STR, Some(slots_request));
 
         let storage = extractor
             .fetch_account_storage(&fixture.block, 10, &request)
@@ -1082,17 +1026,15 @@ mod tests {
     #[traced_test]
     #[tokio::test]
     #[ignore = "require RPC connection"]
-    async fn test_get_storage_snapshots_with_specific_slots(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let fixture = TestFixture::new().await;
+    async fn test_get_storage_snapshots_with_specific_slots() -> Result<(), RPCError> {
+        let fixture = TestFixture::new();
         let extractor = fixture.create_batch_extractor().await?;
 
         // Create request with specific slots
-        let slots = get_test_slots();
+        let slots = &*TEST_SLOTS;
         let slots_request: Vec<Bytes> = slots.keys().cloned().collect();
 
-        let requests =
-            vec![TestFixture::create_storage_request(BALANCER_VAULT_STR, Some(slots_request))];
+        let requests = vec![create_storage_request(BALANCER_VAULT_STR, Some(slots_request))];
 
         let result = extractor
             .get_accounts_at_block(&fixture.block, &requests)
@@ -1101,7 +1043,7 @@ mod tests {
         assert_eq!(result.len(), 1);
 
         // Check the account delta
-        let address = TestFixture::create_address(BALANCER_VAULT_STR);
+        let address = create_address(BALANCER_VAULT_STR);
         let delta = result
             .get(&address)
             .expect("address should exist");
@@ -1130,9 +1072,8 @@ mod tests {
     #[traced_test]
     #[tokio::test]
     #[ignore = "require RPC connection"]
-    async fn test_get_storage_snapshots_with_empty_slot() -> Result<(), Box<dyn std::error::Error>>
-    {
-        let fixture = TestFixture::new().await;
+    async fn test_get_storage_snapshots_with_empty_slot() -> Result<(), RPCError> {
+        let fixture = TestFixture::new();
         let extractor = fixture.create_batch_extractor().await?;
 
         // Try to get a slot that was not initialized / is empty
@@ -1141,10 +1082,8 @@ mod tests {
         )
         .unwrap()];
 
-        let requests = vec![TestFixture::create_storage_request(
-            BALANCER_VAULT_STR,
-            Some(slots_request.clone()),
-        )];
+        let requests =
+            vec![create_storage_request(BALANCER_VAULT_STR, Some(slots_request.clone()))];
 
         let result = extractor
             .get_accounts_at_block(&fixture.block, &requests)
@@ -1153,7 +1092,7 @@ mod tests {
         assert_eq!(result.len(), 1);
 
         // Check the account delta
-        let address = TestFixture::create_address(BALANCER_VAULT_STR);
+        let address = create_address(BALANCER_VAULT_STR);
         let delta = result
             .get(&address)
             .expect("address should exist");
@@ -1179,16 +1118,15 @@ mod tests {
     #[traced_test]
     #[tokio::test]
     #[ignore = "require RPC connection"]
-    async fn test_get_storage_snapshots_multiple_accounts() -> Result<(), Box<dyn std::error::Error>>
-    {
-        let fixture = TestFixture::new().await;
+    async fn test_get_storage_snapshots_multiple_accounts() -> Result<(), RPCError> {
+        let fixture = TestFixture::new();
         let extractor = fixture.create_batch_extractor().await?;
 
         // Create multiple requests with different token addresses
         let requests: Vec<_> = TOKEN_ADDRESSES
             .iter()
             .map(|&addr| {
-                TestFixture::create_storage_request(
+                create_storage_request(
                     addr,
                     Some(vec![Bytes::from_str(
                         "0000000000000000000000000000000000000000000000000000000000000000",
@@ -1213,7 +1151,7 @@ mod tests {
 
         // Check each account has the required data
         for addr_str in TOKEN_ADDRESSES.iter() {
-            let address = TestFixture::create_address(addr_str);
+            let address = create_address(addr_str);
             let delta = result
                 .get(&address)
                 .expect("address should exist");

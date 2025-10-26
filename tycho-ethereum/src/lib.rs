@@ -14,6 +14,9 @@ pub mod token_analyzer;
 #[cfg(feature = "onchain_data")]
 pub mod token_pre_processor;
 
+#[cfg(test)]
+pub mod test_fixtures;
+
 use std::fmt::Display;
 
 use alloy::{

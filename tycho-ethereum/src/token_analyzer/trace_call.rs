@@ -517,12 +517,13 @@ fn ensure_transaction_ok_and_get_gas(trace: &TraceResults) -> Result<Result<U256
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, env, str::FromStr, sync::Arc};
+    use std::{env, str::FromStr, sync::Arc};
 
     use alloy::primitives::Address;
-    use tycho_common::{models::token::TokenOwnerStore, Bytes};
+    use tycho_common::models::token::TokenOwnerStore;
 
     use super::*;
+    use crate::test_fixtures::{TEST_BLOCK_NUMBER, TOKEN_HOLDERS, USDC_STR};
 
     #[tokio::test]
     #[ignore = "This test requires real RPC connection"]
@@ -530,22 +531,16 @@ mod tests {
         let rpc_url = env::var("RPC_URL").expect("RPC_URL environment variable must be set");
 
         // USDC mainnet address
-        let usdc_address = Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
+        let usdc_address = Address::from_str(USDC_STR).unwrap();
 
-        // Using USV4 pool manager
-        let holder = Bytes::from_str("0x000000000004444c5dc75cB358380D2e3dE08A90").unwrap();
-        let large_balance = Bytes::from_str("0x43f6e8f16703").unwrap(); // Large balance
-
-        let token_finder = TokenOwnerStore::new(HashMap::from([(
-            usdc_address.to_bytes(),
-            (holder, large_balance),
-        )]));
+        // Use shared token holders
+        let token_finder = TokenOwnerStore::new(TOKEN_HOLDERS.clone());
 
         let detector = TraceCallDetector::new_from_url(&rpc_url, Arc::new(token_finder));
 
         // Test with the latest block
         let result = detector
-            .detect_impl(usdc_address, BlockTag::Number(23475728))
+            .detect_impl(usdc_address, BlockTag::Number(TEST_BLOCK_NUMBER))
             .await;
 
         match result {
