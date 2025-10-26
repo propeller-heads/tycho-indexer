@@ -8,7 +8,7 @@ pub mod account_extractor;
 #[allow(unused)] //TODO: Remove when used
 pub mod entrypoint_tracer;
 #[cfg(feature = "onchain_data")]
-pub mod erc20_abi;
+pub mod erc20;
 #[cfg(feature = "onchain_data")]
 pub mod token_analyzer;
 #[cfg(feature = "onchain_data")]
