@@ -133,7 +133,7 @@ async fn analyze_batch(
             }
         })
         .collect::<HashMap<_, _>>();
-    let analyzer = TraceCallDetector::new(
+    let analyzer = TraceCallDetector::new_from_url(
         eth_rpc_url.as_str(),
         Arc::new(TokenOwnerStore::new(liquidity_token_owners)),
     );

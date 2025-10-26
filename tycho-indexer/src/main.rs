@@ -378,7 +378,8 @@ async fn create_indexing_tasks(
         *chains
             .first()
             .expect("No chain provided"), //TODO: handle multichain?
-    );
+    )
+    .map_err(|e| ExtractionError::Setup(format!("Failed to create token pre-processor: {e}")))?;
 
     let (runners, extractor_handles): (Vec<_>, Vec<_>) =
         // TODO: accept substreams configuration from cli.
@@ -563,7 +564,7 @@ async fn get_accounts_data(
     rpc_url: &str,
     chain: Chain,
 ) -> (Block, HashMap<Bytes, AccountDelta>) {
-    let account_extractor = EVMAccountExtractor::new(rpc_url, chain)
+    let account_extractor = EVMAccountExtractor::new_from_url(rpc_url, chain)
         .await
         .expect("Failed to create account extractor");
 
