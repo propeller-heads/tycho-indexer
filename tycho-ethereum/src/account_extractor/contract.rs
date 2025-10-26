@@ -7,13 +7,12 @@ use alloy::{
     primitives::{Address as AlloyAddress, Uint, B256, U256},
     rpc::{
         client::{ClientBuilder, ReqwestClient},
-        types::{Block as AlloyBlock, BlockId, BlockNumberOrTag},
+        types::{debug::StorageRangeResult, Block as AlloyBlock, BlockId, BlockNumberOrTag},
     },
 };
 use async_trait::async_trait;
 use chrono::DateTime;
 use futures::future::try_join_all;
-use serde::{Deserialize, Serialize};
 use tracing::{debug, info, trace, warn};
 use tycho_common::{
     models::{blockchain::Block, contract::AccountDelta, Address, Chain, ChangeType},
@@ -164,7 +163,7 @@ impl EVMAccountExtractor {
             );
 
             trace!("Requesting storage range for {:?}, block: {:?}", address, block_hash);
-            let result: StorageRange = self
+            let result: StorageRangeResult = self
                 .rpc
                 .request("debug_storageRangeAt", params)
                 .await
@@ -175,10 +174,10 @@ impl EVMAccountExtractor {
                     )))
                 })?;
 
-            for (_, entry) in result.storage {
+            for (_, entry) in result.storage.0 {
                 all_slots.insert(
-                    U256::from_be_bytes(entry.key.into()),
-                    U256::from_be_bytes(entry.value.into()),
+                    U256::from_bytes(&entry.key.to_bytes()),
+                    U256::from_bytes(&entry.value.to_bytes()),
                 );
             }
 
@@ -473,7 +472,7 @@ impl EVMBatchAccountExtractor {
 
             // We request as a generic Value to see the raw response
             // This allows us to see the raw response and debug deserialization errors
-            let raw_result: serde_json::Value = self
+            let result: StorageRangeResult = self
                 .rpc
                 .request(
                     "debug_storageRangeAt",
@@ -494,26 +493,9 @@ impl EVMBatchAccountExtractor {
                     )))
                 })?;
 
-            // This is settable because cloning the value is expensive
-            let should_debug = std::env::var("TYCHO_DEBUG_ACCOUNT_EXTRACTOR_RESPONSE").is_ok();
-            let result = if should_debug {
-                let value_string = raw_result.to_string();
-                let result: StorageRange =
-                    serde_json::from_value(raw_result.clone()).map_err(|e| {
-                        RPCError::RequestError(RequestError::Other(format!("Failed to deserialize storage response: {e}, address: {address}, block: {}, raw_json: {}", block.number, value_string)))
-                    })?;
-                result
-            } else {
-                let result: StorageRange =
-                    serde_json::from_value(raw_result.clone()).map_err(|e| {
-                        RPCError::RequestError(RequestError::Other(format!("Failed to deserialize storage response: {e}, address: {address}, block: {block:?}")))
-                    })?;
-                result
-            };
-
-            for (_, entry) in result.storage {
+            for (_, entry) in result.storage.0 {
                 all_slots
-                    .insert(Bytes::from(entry.key.0.to_vec()), Bytes::from(entry.value.0.to_vec()));
+                    .insert(Bytes::from(entry.key.as_slice()), Bytes::from(entry.key.as_slice()));
             }
 
             if let Some(next_key) = result.next_key {
@@ -627,19 +609,6 @@ impl AccountExtractor for EVMBatchAccountExtractor {
 
         Ok(updates)
     }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct StorageEntry {
-    key: B256,
-    value: B256,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-struct StorageRange {
-    storage: HashMap<B256, StorageEntry>,
-    next_key: Option<B256>,
 }
 
 #[cfg(test)]
@@ -850,7 +819,7 @@ mod tests {
     #[traced_test]
     #[tokio::test]
     #[ignore = "require RPC connection"]
-    async fn test_get_storage_snapshots() -> Result<(), RPCError> {
+    async fn test_get_storage_snapshots_plain() -> Result<(), RPCError> {
         let fixture = TestFixture::new();
 
         let extractor = fixture.create_batch_extractor().await?;
