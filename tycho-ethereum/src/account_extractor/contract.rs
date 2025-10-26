@@ -191,9 +191,8 @@ impl EVMAccountExtractor {
         Ok(all_slots)
     }
 
-    // TODO - change this to use block_id as BlockId
-    pub async fn get_block_data(&self, block_id: i64) -> Result<Block, RPCError> {
-        let block_id = BlockId::from(u64::try_from(block_id).expect("Invalid block number"));
+    pub async fn get_block_data(&self, block_id: u64) -> Result<Block, RPCError> {
+        let block_id = BlockId::from(block_id);
         let full_tx_objects = false; // same as get_block_by_number(..., false)
 
         let result: Option<AlloyBlock> = self
