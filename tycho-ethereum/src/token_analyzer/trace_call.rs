@@ -141,9 +141,8 @@ impl TraceCallDetector {
         // Note that gas use can depend on the recipient because for the standard
         // implementation sending to an address that does not have any balance
         // yet (implicitly 0) causes an allocation.
-        let request = self
-            .create_trace_request(token, amount, take_from, TraceRequestType::SimpleTransfer)
-            .map_err(|e| e.to_string())?;
+        let request =
+            self.create_trace_request(token, amount, take_from, TraceRequestType::SimpleTransfer);
         let traces = trace_many::trace_many(request, &self.rpc, block)
             .await
             .map_err(|e| e.to_string())?;
@@ -161,14 +160,12 @@ impl TraceCallDetector {
             None => return Ok((bad, None, None)),
         };
 
-        let request = self
-            .create_trace_request(
-                token,
-                amount,
-                take_from,
-                TraceRequestType::DoubleTransfer(middle_balance),
-            )
-            .map_err(|e| e.to_string())?;
+        let request = self.create_trace_request(
+            token,
+            amount,
+            take_from,
+            TraceRequestType::DoubleTransfer(middle_balance),
+        );
         let traces = trace_many::trace_many(request, &self.rpc, block)
             .await
             .map_err(|e| e.to_string())?;
@@ -190,7 +187,7 @@ impl TraceCallDetector {
         amount: U256,
         take_from: Address,
         request_type: TraceRequestType,
-    ) -> Result<Vec<TransactionRequest>, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Vec<TransactionRequest> {
         let mut requests = Vec::new();
 
         // 0 Get balance of settlement_contract before
@@ -210,28 +207,25 @@ impl TraceCallDetector {
         let calldata = encode_balance_of(recipient);
         requests.push(call_request(None, token, calldata));
 
-        match request_type {
-            TraceRequestType::SimpleTransfer => Ok(requests),
-            TraceRequestType::DoubleTransfer(middle_amount) => {
-                // 4 Transfer from settlement_contract to arbitrary_recipient
-                let calldata = encode_transfer(recipient, middle_amount);
-                requests.push(call_request(Some(self.settlement_contract), token, calldata));
+        if let TraceRequestType::DoubleTransfer(middle_amount) = request_type {
+            // 4 Transfer from settlement_contract to arbitrary_recipient
+            let calldata = encode_transfer(recipient, middle_amount);
+            requests.push(call_request(Some(self.settlement_contract), token, calldata));
 
-                // 5 Get balance of settlement_contract after
-                let calldata = encode_balance_of(self.settlement_contract);
-                requests.push(call_request(None, token, calldata));
+            // 5 Get balance of settlement_contract after
+            let calldata = encode_balance_of(self.settlement_contract);
+            requests.push(call_request(None, token, calldata));
 
-                // 6 Get balance of arbitrary_recipient after
-                let calldata = encode_balance_of(recipient);
-                requests.push(call_request(None, token, calldata));
+            // 6 Get balance of arbitrary_recipient after
+            let calldata = encode_balance_of(recipient);
+            requests.push(call_request(None, token, calldata));
 
-                // 7 Approve max with settlement_contract
-                let calldata = encode_approve(recipient, U256::MAX);
-                requests.push(call_request(Some(self.settlement_contract), token, calldata));
-
-                Ok(requests)
-            }
+            // 7 Approve max with settlement_contract
+            let calldata = encode_approve(recipient, U256::MAX);
+            requests.push(call_request(Some(self.settlement_contract), token, calldata));
         }
+
+        requests
     }
 
     fn handle_response(
