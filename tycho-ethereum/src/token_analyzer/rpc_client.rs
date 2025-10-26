@@ -40,6 +40,7 @@ impl EthereumRpcClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_fixtures::TEST_BLOCK_NUMBER;
 
     #[tokio::test]
     #[ignore = "require RPC connection"]
@@ -52,7 +53,7 @@ mod tests {
         // For Ethereum mainnet, we know block numbers are in the millions
         // This is a sanity check to ensure we're not getting garbage data
         assert!(
-            block_number > 20_378_314,
+            block_number > TEST_BLOCK_NUMBER,
             "Block number seems too low for Ethereum mainnet: {}",
             block_number
         );

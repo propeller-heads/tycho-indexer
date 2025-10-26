@@ -177,11 +177,12 @@ impl TokenPreProcessor for EthereumTokenPreProcessor {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, env, str::FromStr};
+    use std::{env, str::FromStr};
 
     use tycho_common::models::token::TokenOwnerStore;
 
     use super::*;
+    use crate::test_fixtures::{TEST_BLOCK_NUMBER, TOKEN_HOLDERS, USDC_STR, WETH_STR};
 
     #[tokio::test]
     #[ignore = "require RPC connection"]
@@ -192,8 +193,7 @@ mod tests {
             .expect("Failed to create processor");
 
         // Test making an RPC call to get WETH symbol
-        let weth_address = Address::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
-            .expect("Failed to parse WETH address");
+        let weth_address = Address::from_str(WETH_STR).expect("Failed to parse WETH address");
         let calldata = symbolCall {}.abi_encode();
         let request = call_request(None, weth_address, calldata);
 
@@ -218,21 +218,17 @@ mod tests {
         let processor = EthereumTokenPreProcessor::new_from_url(&rpc_url, Chain::Ethereum)
             .expect("Failed to create processor");
 
-        // TODO - this seems to be never populated with data, so all tokens have quality 10
-        let tf = TokenOwnerStore::new(HashMap::new());
+        let tf = TokenOwnerStore::new(TOKEN_HOLDERS.clone());
 
-        let weth_address: &str = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
-        let usdc_address: &str = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
         let fake_address: &str = "0xA0b86991c7456b36c1d19D4a2e9Eb0cE3606eB48";
         let addresses = vec![
-            Bytes::from_str(weth_address).unwrap(),
-            Bytes::from_str(usdc_address).unwrap(),
+            Bytes::from_str(WETH_STR).unwrap(),
+            Bytes::from_str(USDC_STR).unwrap(),
             Bytes::from_str(fake_address).unwrap(),
         ];
 
-        // TODO - block number probably should not be 1, but something more reasonable
         let results = processor
-            .get_tokens(addresses, Arc::new(tf), BlockTag::Number(1))
+            .get_tokens(addresses, Arc::new(tf), BlockTag::Number(TEST_BLOCK_NUMBER))
             .await;
         assert_eq!(results.len(), 3);
         let relevant_attrs: Vec<(String, u32, u32)> = results
@@ -244,8 +240,7 @@ mod tests {
             vec![
                 ("WETH".to_string(), 18, 100),
                 ("USDC".to_string(), 6, 100),
-                // TODO - probably quality 0 is impossible, and it should be 10 instead (bad token)
-                ("0xa0b86991c7456b36c1d19d4a2e9eb0ce3606eb48".to_string(), 18, 0)
+                ("0xa0b86991c7456b36c1d19d4a2e9eb0ce3606eb48".to_string(), 18, 10)
             ]
         );
     }
