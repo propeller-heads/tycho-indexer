@@ -9,12 +9,16 @@ use alloy::{
         map::FbBuildHasher, Address as AlloyAddress, BlockHash as AlloyBlockHash,
         Bytes as AlloyBytes, FixedBytes, B256, U256,
     },
-    providers::{Provider, ProviderBuilder},
-    rpc::types::{state::AccountOverride, BlockId, TransactionInput, TransactionRequest},
-};
-use alloy_rpc_types_trace::geth::{
-    GethDebugBuiltInTracerType, GethDebugTracerConfig, GethDebugTracerType,
-    GethDebugTracingOptions, GethDefaultTracingOptions, GethTrace, PreStateFrame, PreStateMode,
+    rpc::types::{
+        state::AccountOverride,
+        trace::geth::{
+            GethDebugBuiltInTracerType, GethDebugTracerConfig, GethDebugTracerType,
+            GethDebugTracingOptions, GethDefaultTracingOptions, GethTrace, PreStateFrame,
+            PreStateMode,
+        },
+        BlockId, TransactionInput, TransactionRequest,
+    },
+    transports::http::reqwest,
 };
 use async_trait::async_trait;
 use serde_json::{json, value::to_raw_value, Value};

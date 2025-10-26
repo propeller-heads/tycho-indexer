@@ -1,6 +1,7 @@
 /// To run: cargo run --example run-analysis
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
+
 use alloy::primitives::U256;
 use anyhow::Result;
 use tycho_common::{
@@ -23,7 +24,7 @@ async fn main() -> Result<(), ()> {
         ),
     )]));
 
-    let trace_call = TraceCallDetector::new(&rpc, Arc::new(tf));
+    let trace_call = TraceCallDetector::new_from_url(&rpc, Arc::new(tf));
 
     let quality = trace_call
         .analyze(

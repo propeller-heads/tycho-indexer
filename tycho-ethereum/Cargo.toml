@@ -21,16 +21,13 @@ tycho-common.workspace = true
 serde.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
-reqwest = { workspace = true, features = ["json"] }
 unicode-segmentation.workspace = true
 rand.workspace = true
 url = "2"
 futures = "0.3"
 
 # Required dependencies
-web3 = { version = "0.19", default-features = false }
-alloy = { version = "1.0.30", default-features = true, features = ["reqwest-default-tls"] }
-alloy-rpc-types-trace = "1.0.24"
+alloy = { version = "1.0.30", default-features = false, features = ["reqwest-default-tls", "rpc-client", "sol-types", "rpc-types-trace"] }
 
 # Optional dependencies
 clap = { version = "4", features = ["derive", "env"], optional = true }
