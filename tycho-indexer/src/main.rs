@@ -1,4 +1,10 @@
 #![doc = include_str!("../../README.md")]
+
+// TODO: We need to use `use pretty_assertions::{assert_eq, assert_ne}` per test module.
+#[cfg(test)]
+#[macro_use]
+extern crate pretty_assertions;
+
 use std::{
     collections::HashMap,
     env,
@@ -55,11 +61,6 @@ use tycho_indexer::{
 use tycho_storage::postgres::{builder::GatewayBuilder, cache::CachedGateway};
 
 mod ot;
-
-// TODO: We need to use `use pretty_assertions::{assert_eq, assert_ne}` per test module.
-#[cfg(test)]
-#[macro_use]
-extern crate pretty_assertions;
 
 #[derive(Debug, Deserialize)]
 struct ExtractorConfigs {
