@@ -595,7 +595,7 @@ impl ExtractorBuilder {
                     })?;
 
                     let account_extractor =
-                        EVMBatchAccountExtractor::new(rpc_url, self.config.chain)
+                        EVMBatchAccountExtractor::new_from_url(rpc_url, self.config.chain)
                             .await
                             .map_err(|err| {
                                 ExtractionError::Setup(format!(
