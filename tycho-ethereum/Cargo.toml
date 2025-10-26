@@ -32,13 +32,17 @@ alloy = { version = "1.0.41", default-features = false, features = ["reqwest-def
 # Optional dependencies
 clap = { version = "4", features = ["derive", "env"], optional = true }
 humantime = { version = "2.1.0", optional = true }
-tracing-test = "0.2.5"
 
 [dev-dependencies]
 pretty_assertions.workspace = true
 mockito.workspace = true
 rstest.workspace = true
+tracing-test = "0.2.5"
 
 [features]
 default = []
 onchain_data = ["humantime", "clap"]
+
+[[example]]
+name = "run-analysis"
+required-features = ["onchain_data"]
