@@ -16,8 +16,11 @@ struct ValidationData {
     test_value: U256,
 }
 
-use alloy::primitives::{Address as AlloyAddress, U256};
-use alloy_rpc_types_trace::geth::{GethTrace, PreStateFrame, PreStateMode};
+use alloy::{
+    primitives::{Address as AlloyAddress, U256},
+    rpc::types::trace::geth::{GethTrace, PreStateFrame, PreStateMode},
+    transports::http::reqwest,
+};
 use async_trait::async_trait;
 use futures::future::join_all;
 use serde_json::{json, Value};

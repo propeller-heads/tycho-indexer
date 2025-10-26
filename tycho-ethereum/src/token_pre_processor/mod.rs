@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
-use alloy::{hex, primitives::Address};
+use alloy::{
+    hex,
+    primitives::Address,
+    rpc::client::{ClientBuilder, ReqwestClient},
+};
 use async_trait::async_trait;
-use reqwest::Client;
 use tracing::{instrument, warn};
 use tycho_common::{
     models::{
@@ -15,30 +18,33 @@ use tycho_common::{
 };
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{erc20_abi, token_analyzer::trace_call::TraceCallDetector, BytesCodec};
+use crate::{
+    erc20_abi, token_analyzer::trace_call::TraceCallDetector, BytesCodec, RPCError, RequestError,
+};
 
 #[derive(Debug, Clone)]
 pub struct EthereumTokenPreProcessor {
-    rpc_url: String,
+    rpc: ReqwestClient,
     chain: Chain,
 }
 
 impl EthereumTokenPreProcessor {
-    pub fn new_from_url(rpc_url: &str, chain: Chain) -> Self {
-        EthereumTokenPreProcessor { rpc_url: rpc_url.to_string(), chain }
+    pub fn new_from_url(rpc_url: &str, chain: Chain) -> Result<Self, RPCError> {
+        let url = rpc_url
+            .parse()
+            .map_err(|e: url::ParseError| {
+                RPCError::RequestError(RequestError::Other(e.to_string()))
+            })?;
+        let rpc = ClientBuilder::default().http(url);
+        Ok(EthereumTokenPreProcessor { rpc, chain })
     }
 
-    async fn call_symbol(
-        &self,
-        token: Address,
-    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        let calldata = match erc20_abi::encode_symbol() {
-            Ok(calldata) => calldata,
-            Err(e) => {
-                warn!(?e, "Failed to encode symbol function call, using address as fallback");
-                return Ok(format!("0x{:x}", token));
-            }
-        };
+    pub fn new(rpc: ReqwestClient, chain: Chain) -> Self {
+        EthereumTokenPreProcessor { rpc, chain }
+    }
+
+    async fn call_symbol(&self, token: Address) -> String {
+        let calldata = erc20_abi::encode_symbol();
 
         let result = match self
             .make_rpc_call(token, calldata)
@@ -47,34 +53,25 @@ impl EthereumTokenPreProcessor {
             Ok(result) => result,
             Err(e) => {
                 warn!(?e, ?token, "Failed to call symbol function, using address as fallback");
-                return Ok(format!("0x{:x}", token));
+                return format!("0x{:x}", token);
             }
         };
 
         match erc20_abi::decode_symbol(&result) {
-            Ok(symbol) => Ok(symbol),
+            Ok(symbol) => symbol,
             Err(e) => {
                 warn!(
                     ?e,
                     ?token,
                     "Failed to decode symbol function result, using address as fallback"
                 );
-                Ok(format!("0x{:x}", token))
+                format!("0x{:x}", token)
             }
         }
     }
 
-    async fn call_decimals(
-        &self,
-        token: Address,
-    ) -> Result<u8, Box<dyn std::error::Error + Send + Sync>> {
-        let calldata = match erc20_abi::encode_decimals() {
-            Ok(calldata) => calldata,
-            Err(e) => {
-                warn!(?e, "Failed to encode decimals function call, using default decimals 18");
-                return Ok(18);
-            }
-        };
+    async fn call_decimals(&self, token: Address) -> u8 {
+        let calldata = erc20_abi::encode_decimals();
 
         let result = match self
             .make_rpc_call(token, calldata)
@@ -83,19 +80,19 @@ impl EthereumTokenPreProcessor {
             Ok(result) => result,
             Err(e) => {
                 warn!(?e, ?token, "Failed to call decimals function, using default decimals 18");
-                return Ok(18);
+                return 18;
             }
         };
 
         match erc20_abi::decode_decimals(&result) {
-            Ok(decimals) => Ok(decimals),
+            Ok(decimals) => decimals,
             Err(e) => {
                 warn!(
                     ?e,
                     ?token,
                     "Failed to decode decimals function result, using default decimals 18"
                 );
-                Ok(18)
+                18
             }
         }
     }
@@ -105,41 +102,18 @@ impl EthereumTokenPreProcessor {
         to: Address,
         data: Vec<u8>,
     ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-        let client = Client::new();
-
+        // TODO - use a alloy datastruct instead
         let call_request = serde_json::json!({
             "to": format!("0x{:x}", to),
             "data": format!("0x{}", hex::encode(data))
         });
 
-        let rpc_request = serde_json::json!({
-            "jsonrpc": "2.0",
-            "method": "eth_call",
-            "params": [call_request, "latest"],
-            "id": 1
-        });
-
-        let response = client
-            .post(&self.rpc_url)
-            .json(&rpc_request)
-            .send()
-            .await?
-            .json::<serde_json::Value>()
+        let response: String = self
+            .rpc
+            .request("eth_call", (call_request, "latest"))
             .await?;
 
-        if let Some(error) = response.get("error") {
-            return Err(format!("RPC error: {}", error).into());
-        }
-
-        let result_str = response
-            .get("result")
-            .and_then(|r| r.as_str())
-            .ok_or("No result in response")?;
-
-        let hex_str = result_str
-            .strip_prefix("0x")
-            .unwrap_or(result_str);
-        Ok(hex::decode(hex_str)?)
+        Ok(hex::decode(&response)?)
     }
 }
 
@@ -161,7 +135,7 @@ impl TokenPreProcessor for EthereumTokenPreProcessor {
             let symbol = self.call_symbol(token_address).await;
             let decimals = self.call_decimals(token_address).await;
 
-            let trace_call = TraceCallDetector::new(&self.rpc_url, token_finder.clone());
+            let trace_call = TraceCallDetector::new(self.rpc.clone(), token_finder.clone());
 
             let (token_quality, gas, tax) = trace_call
                 .analyze(address.clone(), block)
@@ -171,12 +145,7 @@ impl TokenPreProcessor for EthereumTokenPreProcessor {
                     (TokenQuality::bad("Detection failed"), None, None)
                 });
 
-            let (symbol, decimals, mut quality) = match (symbol, decimals) {
-                (Ok(symbol), Ok(decimals)) => (symbol, decimals, 100),
-                (Ok(symbol), Err(_)) => (symbol, 18, 0),
-                (Err(_), Ok(decimals)) => (address.to_string(), decimals, 0),
-                (Err(_), Err(_)) => (address.to_string(), 18, 0),
-            };
+            let mut quality = 100;
 
             if let TokenQuality::Bad { reason } = token_quality {
                 warn!(address=?address, ?reason, "BadToken");
@@ -220,13 +189,14 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[ignore]
-    // This test requires a real RPC URL
+    #[ignore = "require archive RPC connection"]
     async fn test_get_tokens() {
-        let archive_rpc = env::var("ARCHIVE_ETH_RPC_URL").expect("ARCHIVE_ETH_RPC_URL is not set");
+        let rpc_url = env::var("RPC_URL").expect("RPC_URL is not set");
 
-        let processor = EthereumTokenPreProcessor::new_from_url(&archive_rpc, Chain::Ethereum);
+        let processor = EthereumTokenPreProcessor::new_from_url(&rpc_url, Chain::Ethereum)
+            .expect("Failed to create processor");
 
+        // TODO - this seems to be never populated with data, so all tokens have quality 10
         let tf = TokenOwnerStore::new(HashMap::new());
 
         let weth_address: &str = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
@@ -238,6 +208,7 @@ mod tests {
             Bytes::from_str(fake_address).unwrap(),
         ];
 
+        // TODO - block number probably should not be 1, but something more reasonable
         let results = processor
             .get_tokens(addresses, Arc::new(tf), BlockTag::Number(1))
             .await;
@@ -251,7 +222,8 @@ mod tests {
             vec![
                 ("WETH".to_string(), 18, 100),
                 ("USDC".to_string(), 6, 100),
-                ("0xa0b8…eb48".to_string(), 18, 0)
+                // TODO - probably quality 0 is impossible, and it should be 10 instead (bad token)
+                ("0xa0b86991c7456b36c1d19d4a2e9eb0ce3606eb48".to_string(), 18, 0)
             ]
         );
     }

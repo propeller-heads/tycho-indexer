@@ -4,13 +4,11 @@ use std::{
 };
 
 use alloy::{
-    eips::{BlockId, BlockNumberOrTag},
     primitives::{Address as AlloyAddress, Uint, B256, U256},
-    providers::{
-        fillers::{BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller},
-        Identity, Provider, ProviderBuilder,
+    rpc::{
+        client::{ClientBuilder, ReqwestClient},
+        types::{Block as AlloyBlock, BlockId, BlockNumberOrTag},
     },
-    rpc::client::{ClientBuilder, ReqwestClient},
 };
 use async_trait::async_trait;
 use chrono::DateTime;
@@ -22,16 +20,9 @@ use tycho_common::{
     traits::{AccountExtractor, StorageSnapshotRequest},
     Bytes,
 };
+use url::Url;
 
 use crate::{BytesCodec, RPCError, RequestError};
-
-type AlloyProvider = FillProvider<
-    JoinFill<
-        Identity,
-        JoinFill<GasFiller, JoinFill<BlobGasFiller, JoinFill<NonceFiller, ChainIdFiller>>>,
-    >,
-    alloy::providers::RootProvider,
->;
 
 /// Helper function to extract the full error chain including source errors
 fn extract_error_chain(error: &dyn Error) -> String {
@@ -53,7 +44,7 @@ fn extract_error_chain(error: &dyn Error) -> String {
 /// `EVMAccountExtractor` is a struct that implements the `AccountExtractor` trait for Ethereum
 /// accounts. It is recommended for nodes that do not support batch requests.
 pub struct EVMAccountExtractor {
-    provider: AlloyProvider,
+    rpc: ReqwestClient,
     chain: Chain,
 }
 
@@ -61,7 +52,7 @@ pub struct EVMAccountExtractor {
 /// Ethereum accounts. It can only be used with nodes that support batch requests. If you are using
 /// a node that does not support batch requests, use `EVMAccountExtractor` instead.
 pub struct EVMBatchAccountExtractor {
-    provider: ReqwestClient,
+    rpc: ReqwestClient,
     chain: Chain,
 }
 
@@ -75,7 +66,7 @@ impl AccountExtractor for EVMAccountExtractor {
         requests: &[StorageSnapshotRequest],
     ) -> Result<HashMap<Bytes, AccountDelta>, Self::Error> {
         let mut updates = HashMap::new();
-        let block_number = BlockNumberOrTag::Number(block.number);
+        let block_id = BlockId::number(block.number);
 
         // Convert addresses to AlloyAddress for easier handling
         let alloy_addresses: Vec<AlloyAddress> = requests
@@ -87,18 +78,14 @@ impl AccountExtractor for EVMAccountExtractor {
         let balance_futures = alloy_addresses
             .iter()
             .map(|&address| async move {
-                self.provider
-                    .get_balance(address)
-                    .block_id(BlockId::Number(block_number))
+                self.eth_get_balance(block_id, address)
                     .await
             });
 
         let code_futures = alloy_addresses
             .iter()
             .map(|&address| async move {
-                self.provider
-                    .get_code_at(address)
-                    .block_id(BlockId::Number(block_number))
+                self.eth_get_code(block_id, address)
                     .await
             });
 
@@ -106,18 +93,8 @@ impl AccountExtractor for EVMAccountExtractor {
         let (result_balances, result_codes) =
             tokio::join!(try_join_all(balance_futures), try_join_all(code_futures));
 
-        let balances = result_balances.map_err(|e| {
-            let error_chain = extract_error_chain(&e);
-            RPCError::RequestError(RequestError::Other(format!(
-                "Failed to get balance: {error_chain}"
-            )))
-        })?;
-        let codes = result_codes.map_err(|e| {
-            let error_chain = extract_error_chain(&e);
-            RPCError::RequestError(RequestError::Other(format!(
-                "Failed to get code: {error_chain}"
-            )))
-        })?;
+        let balances = result_balances?;
+        let codes = result_codes?;
 
         // Process each address with its corresponding balance and code
         for (i, &address) in alloy_addresses.iter().enumerate() {
@@ -154,42 +131,42 @@ impl AccountExtractor for EVMAccountExtractor {
             );
         }
 
-        return Ok(updates);
+        Ok(updates)
     }
 }
 
 impl EVMAccountExtractor {
-    pub async fn new(node_url: &str, chain: Chain) -> Result<Self, RPCError>
-    where
-        Self: Sized,
-    {
-        let url = node_url
+    pub async fn new_from_url(rpc_url: &str, chain: Chain) -> Result<Self, RPCError> {
+        let url = rpc_url
             .parse()
             .map_err(|e: url::ParseError| {
                 RPCError::RequestError(RequestError::Other(e.to_string()))
             })?;
-        let provider = ProviderBuilder::new().connect_http(url);
-        Ok(Self { provider, chain })
+        let client = ClientBuilder::default().http(url);
+        Self::new(client, chain).await
     }
 
-    async fn get_storage_range(
+    pub async fn new(client: ReqwestClient, chain: Chain) -> Result<Self, RPCError> {
+        Ok(Self { rpc: client, chain })
+    }
+
+    pub(super) async fn get_storage_range(
         &self,
         address: AlloyAddress,
-        block: B256,
+        block_hash: B256,
     ) -> Result<HashMap<U256, U256>, RPCError> {
         let mut all_slots = HashMap::new();
         let mut start_key = B256::ZERO;
-        let block = format!("0x{block:x}");
         loop {
-            let params = serde_json::json!([
-                block, 0, // transaction index, 0 for the state at the end of the block
-                address, start_key, 100000 // limit
-            ]);
+            let params = (
+                block_hash, 0, // transaction index, 0 for the state at the end of the block
+                address, start_key, 100000, // limit
+            );
 
-            trace!("Requesting storage range for {:?}, block: {:?}", address, block);
+            trace!("Requesting storage range for {:?}, block: {:?}", address, block_hash);
             let result: StorageRange = self
-                .provider
-                .raw_request("debug_storageRangeAt".into(), params)
+                .rpc
+                .request("debug_storageRangeAt", params)
                 .await
                 .map_err(|e| {
                     let error_chain = extract_error_chain(&e);
@@ -215,17 +192,21 @@ impl EVMAccountExtractor {
         Ok(all_slots)
     }
 
+    // TODO - change this to use block_id as BlockId
     pub async fn get_block_data(&self, block_id: i64) -> Result<Block, RPCError> {
-        let block = self
-            .provider
-            .get_block_by_number(BlockNumberOrTag::Number(
-                u64::try_from(block_id).expect("Invalid block number"),
-            ))
+        let block_id = BlockId::from(u64::try_from(block_id).expect("Invalid block number"));
+        let full_tx_objects = false; // same as get_block_by_number(..., false)
+
+        let result: Option<AlloyBlock> = self
+            .rpc
+            .request("eth_getBlockByNumber", (block_id, full_tx_objects))
             .await
             .map_err(|e| {
                 RPCError::RequestError(RequestError::Other(format!("Failed to get block: {e}")))
-            })?
-            .expect("Block not found");
+            })?;
+
+        let block = result
+            .ok_or_else(|| RPCError::RequestError(RequestError::Other("Block not found".into())))?;
 
         Ok(Block {
             number: block.header.number,
@@ -237,27 +218,60 @@ impl EVMAccountExtractor {
                 .naive_utc(),
         })
     }
+
+    async fn eth_get_balance(
+        &self,
+        block_id: BlockId,
+        address: AlloyAddress,
+    ) -> Result<U256, RPCError> {
+        self.rpc
+            .request("eth_getBalance", (address, block_id))
+            .await
+            .map_err(|e| {
+                let error_chain = extract_error_chain(&e);
+                RPCError::RequestError(RequestError::Other(format!(
+                    "Failed to get balance: {error_chain}"
+                )))
+            })
+    }
+
+    async fn eth_get_code(
+        &self,
+        block_id: BlockId,
+        address: AlloyAddress,
+    ) -> Result<Bytes, RPCError> {
+        self.rpc
+            .request("eth_getCode", (address, block_id))
+            .await
+            .map_err(|e| {
+                let error_chain = extract_error_chain(&e);
+                RPCError::RequestError(RequestError::Other(format!(
+                    "Failed to get code: {error_chain}"
+                )))
+            })
+    }
 }
 
 impl EVMBatchAccountExtractor {
-    pub async fn new(node_url: &str, chain: Chain) -> Result<Self, RPCError>
-    where
-        Self: Sized,
-    {
-        let url = url::Url::parse(node_url).map_err(|e| {
-            RPCError::SetupError(format!(
+    pub async fn new_from_url(rpc_url: &str, chain: Chain) -> Result<Self, RPCError> {
+        let url: Url = rpc_url
+            .parse()
+            .map_err(|e: url::ParseError| {
+                RPCError::SetupError(format!(
                 "Invalid URL '{}': {}. Make sure the URL includes the scheme (http:// or https://)",
-                node_url, e
+                rpc_url, e
             ))
-        })?;
-
+            })?;
         debug!(scheme = url.scheme(), host = url.host_str(), "Parsed URL successfully");
 
-        // Create the RPC client using ReqwestClient for proper HTTPS support
-        let provider: ReqwestClient = ClientBuilder::default().http(url.clone());
-
+        let rpc = ClientBuilder::default().http(url.clone());
         info!(scheme = url.scheme(), "Successfully created RPC client");
-        Ok(Self { provider, chain })
+
+        Self::new(rpc, chain).await
+    }
+
+    pub async fn new(rpc: ReqwestClient, chain: Chain) -> Result<Self, RPCError> {
+        Ok(Self { rpc, chain })
     }
 
     async fn batch_fetch_account_code_and_balance(
@@ -273,7 +287,7 @@ impl EVMBatchAccountExtractor {
             "Preparing batch request for account code and balance"
         );
 
-        let mut batch = self.provider.new_batch();
+        let mut batch = self.rpc.new_batch();
         let mut code_requests = Vec::with_capacity(max_batch_size);
         let mut balance_requests = Vec::with_capacity(max_batch_size);
 
@@ -381,7 +395,7 @@ impl EVMBatchAccountExtractor {
         match request.slots.clone() {
             Some(slots) => {
                 for slot_batch in slots.chunks(max_batch_size) {
-                    let mut storage_batch = self.provider.new_batch();
+                    let mut storage_batch = self.rpc.new_batch();
 
                     for slot in slot_batch {
                         storage_requests.push(Box::pin(
@@ -460,7 +474,7 @@ impl EVMBatchAccountExtractor {
             // We request as a generic Value to see the raw response
             // This allows us to see the raw response and debug deserialization errors
             let raw_result: serde_json::Value = self
-                .provider
+                .rpc
                 .request(
                     "debug_storageRangeAt",
                     &(
@@ -633,6 +647,7 @@ mod tests {
     use std::str::FromStr;
 
     use alloy::hex;
+    use rstest::rstest;
     use tracing_test::traced_test;
 
     use super::*;
@@ -709,11 +724,11 @@ mod tests {
         }
 
         async fn create_evm_extractor(&self) -> Result<EVMAccountExtractor, RPCError> {
-            EVMAccountExtractor::new(&self.node_url, Chain::Ethereum).await
+            EVMAccountExtractor::new_from_url(&self.node_url, Chain::Ethereum).await
         }
 
         async fn create_batch_extractor(&self) -> Result<EVMBatchAccountExtractor, RPCError> {
-            EVMBatchAccountExtractor::new(&self.node_url, Chain::Ethereum).await
+            EVMBatchAccountExtractor::new_from_url(&self.node_url, Chain::Ethereum).await
         }
 
         fn create_address(address_str: &str) -> Address {
@@ -726,6 +741,111 @@ mod tests {
         ) -> StorageSnapshotRequest {
             StorageSnapshotRequest { address: Self::create_address(address_str), slots }
         }
+    }
+
+    #[rstest]
+    #[case(BALANCER_VAULT_STR, U256::ZERO)]
+    #[case(STETH_STR, U256::from_str("4550827602262703358208").unwrap())]
+    #[tokio::test]
+    #[ignore = "require RPC connection"]
+    async fn test_get_balance(
+        #[case] address_str: &str,
+        #[case] expected_balance: U256,
+    ) -> Result<(), RPCError> {
+        let fixture = TestFixture::new().await;
+        let extractor = fixture.create_evm_extractor().await?;
+
+        let address = AlloyAddress::from_str(address_str).expect("failed to parse address");
+        let block_id = BlockId::number(TEST_BLOCK_NUMBER);
+
+        let balance = extractor
+            .eth_get_balance(block_id, address)
+            .await
+            .expect("Failed to get balance");
+
+        assert_eq!(
+            balance, expected_balance,
+            "Balance mismatch for address {}. Expected: {}, Got: {}",
+            address_str, expected_balance, balance
+        );
+
+        Ok(())
+    }
+
+    #[rstest]
+    #[case(BALANCER_VAULT_STR, 24512, "0x60806040526004361061")]
+    #[case(STETH_STR, 1035, "0x60806040526004361061")]
+    #[case("0x0000000000000000000000000000000000000000", 0, "0x")]
+    #[tokio::test]
+    #[ignore = "require RPC connection"]
+    async fn test_get_code(
+        #[case] address_str: &str,
+        #[case] expected_length: usize,
+        #[case] expected_prefix: &str,
+    ) -> Result<(), RPCError> {
+        let fixture = TestFixture::new().await;
+        let extractor = fixture.create_evm_extractor().await?;
+
+        let address = AlloyAddress::from_str(address_str).expect("failed to parse address");
+        let block_id = BlockId::number(TEST_BLOCK_NUMBER);
+
+        let code = extractor
+            .eth_get_code(block_id, address)
+            .await?;
+
+        assert_eq!(
+            code.len(),
+            expected_length,
+            "{} code length mismatch. Expected: {}, Got: {}",
+            address_str,
+            expected_length,
+            code.len()
+        );
+
+        let actual_prefix = if code.len() >= 10 {
+            format!("0x{}", hex::encode(&code[..10]))
+        } else {
+            format!("0x{}", hex::encode(&code))
+        };
+
+        assert_eq!(
+            actual_prefix, expected_prefix,
+            "{} code prefix mismatch. Expected: {}, Got: {}",
+            address_str, expected_prefix, actual_prefix
+        );
+
+        Ok(())
+    }
+
+    #[rstest]
+    #[case(BALANCER_VAULT_STR, 47690)]
+    #[case(STETH_STR, 789526)]
+    #[tokio::test]
+    #[ignore = "require RPC connection"]
+    async fn test_get_storage_range(
+        #[case] address_str: &str,
+        #[case] expected_slot_count: usize,
+    ) -> Result<(), RPCError> {
+        let fixture = TestFixture::new().await;
+        let extractor = fixture.create_evm_extractor().await?;
+
+        let address = AlloyAddress::from_str(address_str).expect("failed to parse address");
+        let block_id = B256::from_str(TEST_BLOCK_HASH).expect("failed to parse block hash");
+
+        let storage = extractor
+            .get_storage_range(address, block_id)
+            .await?;
+
+        assert_eq!(
+            storage.len(),
+            expected_slot_count,
+            "{} storage slot count mismatch. Expected: {}, Got: {}",
+            address_str,
+            expected_slot_count,
+            storage.len()
+        );
+
+        Ok(())
     }
 
     #[tokio::test]
@@ -835,11 +955,12 @@ mod tests {
         let fixture = TestFixture::new().await;
 
         // Test with valid URL
-        let extractor = EVMBatchAccountExtractor::new(&fixture.node_url, Chain::Ethereum).await?;
+        let extractor =
+            EVMBatchAccountExtractor::new_from_url(&fixture.node_url, Chain::Ethereum).await?;
         assert_eq!(extractor.chain, Chain::Ethereum);
 
         // Test with invalid URL
-        let result = EVMBatchAccountExtractor::new("invalid-url", Chain::Ethereum).await;
+        let result = EVMBatchAccountExtractor::new_from_url("invalid-url", Chain::Ethereum).await;
         assert!(result.is_err());
 
         Ok(())
