@@ -19,7 +19,7 @@ use tycho_common::{
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    erc20_abi, token_analyzer::trace_call::TraceCallDetector, BytesCodec, RPCError, RequestError,
+    erc20, token_analyzer::trace_call::TraceCallDetector, BytesCodec, RPCError, RequestError,
 };
 
 #[derive(Debug, Clone)]
@@ -44,7 +44,7 @@ impl EthereumTokenPreProcessor {
     }
 
     async fn call_symbol(&self, token: Address) -> String {
-        let calldata = erc20_abi::encode_symbol();
+        let calldata = erc20::encode_symbol();
 
         let result = match self
             .make_rpc_call(token, calldata)
@@ -57,7 +57,7 @@ impl EthereumTokenPreProcessor {
             }
         };
 
-        match erc20_abi::decode_symbol(&result) {
+        match erc20::decode_symbol(&result) {
             Ok(symbol) => symbol,
             Err(e) => {
                 warn!(
@@ -71,7 +71,7 @@ impl EthereumTokenPreProcessor {
     }
 
     async fn call_decimals(&self, token: Address) -> u8 {
-        let calldata = erc20_abi::encode_decimals();
+        let calldata = erc20::encode_decimals();
 
         let result = match self
             .make_rpc_call(token, calldata)
@@ -84,7 +84,7 @@ impl EthereumTokenPreProcessor {
             }
         };
 
-        match erc20_abi::decode_decimals(&result) {
+        match erc20::decode_decimals(&result) {
             Ok(decimals) => decimals,
             Err(e) => {
                 warn!(

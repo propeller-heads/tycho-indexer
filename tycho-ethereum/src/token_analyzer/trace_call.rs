@@ -21,7 +21,7 @@ use tycho_common::{
 };
 
 use crate::{
-    erc20_abi::{encode_approve, encode_balance_of, encode_transfer},
+    erc20::{encode_approve, encode_balance_of, encode_transfer},
     token_analyzer::trace_many,
     BytesCodec,
 };
