@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
 use alloy::{
-    hex,
-    primitives::Address,
-    rpc::client::{ClientBuilder, ReqwestClient},
+    primitives::{Address, Bytes as AlloyBytes},
+    rpc::{
+        client::{ClientBuilder, ReqwestClient},
+        types::{BlockNumberOrTag, TransactionRequest},
+    },
 };
 use async_trait::async_trait;
 use tracing::{instrument, warn};
@@ -19,7 +21,9 @@ use tycho_common::{
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    erc20, token_analyzer::trace_call::TraceCallDetector, BytesCodec, RPCError, RequestError,
+    erc20,
+    token_analyzer::trace_call::{call_request, TraceCallDetector},
+    BytesCodec, RPCError, RequestError,
 };
 
 #[derive(Debug, Clone)]
@@ -47,7 +51,7 @@ impl EthereumTokenPreProcessor {
         let calldata = erc20::encode_symbol();
 
         let result = match self
-            .make_rpc_call(token, calldata)
+            .make_rpc_call(call_request(None, token, calldata))
             .await
         {
             Ok(result) => result,
@@ -74,7 +78,7 @@ impl EthereumTokenPreProcessor {
         let calldata = erc20::encode_decimals();
 
         let result = match self
-            .make_rpc_call(token, calldata)
+            .make_rpc_call(call_request(None, token, calldata))
             .await
         {
             Ok(result) => result,
@@ -97,23 +101,13 @@ impl EthereumTokenPreProcessor {
         }
     }
 
-    async fn make_rpc_call(
-        &self,
-        to: Address,
-        data: Vec<u8>,
-    ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-        // TODO - use a alloy datastruct instead
-        let call_request = serde_json::json!({
-            "to": format!("0x{:x}", to),
-            "data": format!("0x{}", hex::encode(data))
-        });
-
-        let response: String = self
-            .rpc
-            .request("eth_call", (call_request, "latest"))
-            .await?;
-
-        Ok(hex::decode(&response)?)
+    async fn make_rpc_call(&self, requests: TransactionRequest) -> Result<AlloyBytes, RPCError> {
+        self.rpc
+            .request("eth_call", (requests, BlockNumberOrTag::Latest))
+            .await
+            .map_err(|e| {
+                RPCError::RequestError(RequestError::Other(format!("RPC eth_call failed: {e}")))
+            })
     }
 }
 
@@ -187,6 +181,33 @@ mod tests {
     use tycho_common::models::token::TokenOwnerStore;
 
     use super::*;
+
+    #[tokio::test]
+    #[ignore = "require RPC connection"]
+    async fn test_make_rpc_call() {
+        let rpc_url = env::var("RPC_URL").expect("RPC_URL is not set");
+
+        let processor = EthereumTokenPreProcessor::new_from_url(&rpc_url, Chain::Ethereum)
+            .expect("Failed to create processor");
+
+        // Test making an RPC call to get WETH symbol
+        let weth_address = Address::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
+            .expect("Failed to parse WETH address");
+        let calldata = erc20::encode_symbol();
+        let request = call_request(None, weth_address, calldata);
+
+        let result = processor
+            .make_rpc_call(request)
+            .await
+            .expect("Failed to make RPC call");
+
+        // Verify we got a non-empty response
+        assert!(!result.is_empty(), "RPC call should return non-empty data");
+
+        // Verify we can decode the symbol
+        let symbol = erc20::decode_symbol(&result).expect("Failed to decode symbol");
+        assert_eq!(symbol, "WETH", "Expected WETH symbol");
+    }
 
     #[tokio::test]
     #[ignore = "require archive RPC connection"]

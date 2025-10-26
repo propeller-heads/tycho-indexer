@@ -452,7 +452,11 @@ impl TraceCallDetector {
     }
 }
 
-fn call_request(from: Option<Address>, to: Address, calldata: Vec<u8>) -> TransactionRequest {
+pub(crate) fn call_request(
+    from: Option<Address>,
+    to: Address,
+    calldata: Vec<u8>,
+) -> TransactionRequest {
     let mut req = TransactionRequest::default()
         .to(to)
         .input(TransactionInput::both(calldata.into()));
