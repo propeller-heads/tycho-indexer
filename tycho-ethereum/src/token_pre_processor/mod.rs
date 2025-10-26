@@ -6,6 +6,7 @@ use alloy::{
         client::{ClientBuilder, ReqwestClient},
         types::{BlockNumberOrTag, TransactionRequest},
     },
+    sol_types::SolCall,
 };
 use async_trait::async_trait;
 use tracing::{instrument, warn};
@@ -21,7 +22,7 @@ use tycho_common::{
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    erc20,
+    erc20::{decimalsCall, symbolCall},
     token_analyzer::trace_call::{call_request, TraceCallDetector},
     BytesCodec, RPCError, RequestError,
 };
@@ -48,7 +49,7 @@ impl EthereumTokenPreProcessor {
     }
 
     async fn call_symbol(&self, token: Address) -> String {
-        let calldata = erc20::encode_symbol();
+        let calldata = symbolCall {}.abi_encode();
 
         let result = match self
             .make_rpc_call(call_request(None, token, calldata))
@@ -61,7 +62,7 @@ impl EthereumTokenPreProcessor {
             }
         };
 
-        match erc20::decode_symbol(&result) {
+        match symbolCall::abi_decode_returns(&result) {
             Ok(symbol) => symbol,
             Err(e) => {
                 warn!(
@@ -75,7 +76,7 @@ impl EthereumTokenPreProcessor {
     }
 
     async fn call_decimals(&self, token: Address) -> u8 {
-        let calldata = erc20::encode_decimals();
+        let calldata = decimalsCall {}.abi_encode();
 
         let result = match self
             .make_rpc_call(call_request(None, token, calldata))
@@ -88,7 +89,7 @@ impl EthereumTokenPreProcessor {
             }
         };
 
-        match erc20::decode_decimals(&result) {
+        match decimalsCall::abi_decode_returns(&result) {
             Ok(decimals) => decimals,
             Err(e) => {
                 warn!(
@@ -193,7 +194,7 @@ mod tests {
         // Test making an RPC call to get WETH symbol
         let weth_address = Address::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
             .expect("Failed to parse WETH address");
-        let calldata = erc20::encode_symbol();
+        let calldata = symbolCall {}.abi_encode();
         let request = call_request(None, weth_address, calldata);
 
         let result = processor
@@ -205,7 +206,7 @@ mod tests {
         assert!(!result.is_empty(), "RPC call should return non-empty data");
 
         // Verify we can decode the symbol
-        let symbol = erc20::decode_symbol(&result).expect("Failed to decode symbol");
+        let symbol = symbolCall::abi_decode_returns(&result).expect("Failed to decode symbol");
         assert_eq!(symbol, "WETH", "Expected WETH symbol");
     }
 

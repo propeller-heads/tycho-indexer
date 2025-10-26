@@ -9,6 +9,7 @@ use alloy::{
             TransactionInput, TransactionRequest,
         },
     },
+    sol_types::SolCall,
 };
 use anyhow::{bail, ensure, Context, Result};
 use tycho_common::{
@@ -21,7 +22,7 @@ use tycho_common::{
 };
 
 use crate::{
-    erc20::{encode_approve, encode_balance_of, encode_transfer},
+    erc20::{approveCall, balanceOfCall, transferCall},
     token_analyzer::trace_many,
     BytesCodec,
 };
@@ -191,37 +192,37 @@ impl TraceCallDetector {
         let mut requests = Vec::new();
 
         // 0 Get balance of settlement_contract before
-        let calldata = encode_balance_of(self.settlement_contract);
+        let calldata = balanceOfCall { _owner: self.settlement_contract }.abi_encode();
         requests.push(call_request(None, token, calldata));
 
         // 1 Transfer from take_from to settlement_contract
-        let calldata = encode_transfer(self.settlement_contract, amount);
+        let calldata = transferCall { _to: self.settlement_contract, _value: amount }.abi_encode();
         requests.push(call_request(Some(take_from), token, calldata));
 
         // 2 Get balance of settlement_contract after
-        let calldata = encode_balance_of(self.settlement_contract);
+        let calldata = balanceOfCall { _owner: self.settlement_contract }.abi_encode();
         requests.push(call_request(None, token, calldata));
 
         // 3 Get balance of arbitrary_recipient before
         let recipient = Self::arbitrary_recipient();
-        let calldata = encode_balance_of(recipient);
+        let calldata = balanceOfCall { _owner: recipient }.abi_encode();
         requests.push(call_request(None, token, calldata));
 
         if let TraceRequestType::DoubleTransfer(middle_amount) = request_type {
             // 4 Transfer from settlement_contract to arbitrary_recipient
-            let calldata = encode_transfer(recipient, middle_amount);
+            let calldata = transferCall { _to: recipient, _value: middle_amount }.abi_encode();
             requests.push(call_request(Some(self.settlement_contract), token, calldata));
 
             // 5 Get balance of settlement_contract after
-            let calldata = encode_balance_of(self.settlement_contract);
+            let calldata = balanceOfCall { _owner: self.settlement_contract }.abi_encode();
             requests.push(call_request(None, token, calldata));
 
             // 6 Get balance of arbitrary_recipient after
-            let calldata = encode_balance_of(recipient);
+            let calldata = balanceOfCall { _owner: recipient }.abi_encode();
             requests.push(call_request(None, token, calldata));
 
             // 7 Approve max with settlement_contract
-            let calldata = encode_approve(recipient, U256::MAX);
+            let calldata = approveCall { _spender: recipient, _value: U256::MAX }.abi_encode();
             requests.push(call_request(Some(self.settlement_contract), token, calldata));
         }
 
