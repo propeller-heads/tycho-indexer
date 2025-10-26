@@ -382,7 +382,7 @@ pub struct ExtractorConfig {
     #[serde(default)]
     pub initialized_accounts: Vec<Bytes>,
     #[serde(default)]
-    pub initialized_accounts_block: i64,
+    pub initialized_accounts_block: u64,
     #[serde(default)]
     pub post_processor: Option<String>,
     #[serde(default)]
@@ -402,7 +402,7 @@ impl ExtractorConfig {
         spkg: String,
         module_name: String,
         initialized_accounts: Vec<Bytes>,
-        initialized_accounts_block: i64,
+        initialized_accounts_block: u64,
         post_processor: Option<String>,
         dci_plugin: Option<DCIType>,
     ) -> Self {

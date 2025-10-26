@@ -487,7 +487,7 @@ where
 #[instrument(skip_all, fields(n_accounts = %accounts.len(), block_id = block_id))]
 async fn initialize_accounts(
     accounts: Vec<Address>,
-    block_id: i64,
+    block_id: u64,
     rpc_url: &str,
     chain: Chain,
     cached_gw: &CachedGateway,
@@ -559,7 +559,7 @@ async fn initialize_accounts(
 
 async fn get_accounts_data(
     accounts: Vec<Address>,
-    block_id: i64,
+    block_id: u64,
     rpc_url: &str,
     chain: Chain,
 ) -> (Block, HashMap<Bytes, AccountDelta>) {
