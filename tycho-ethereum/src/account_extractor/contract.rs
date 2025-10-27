@@ -193,7 +193,7 @@ impl EVMAccountExtractor {
 
     pub async fn get_block_data(&self, block_id: u64) -> Result<Block, RPCError> {
         let block_id = BlockId::from(block_id);
-        let full_tx_objects = false; // same as get_block_by_number(..., false)
+        let full_tx_objects = false;
 
         let result: Option<AlloyBlock> = self
             .rpc
@@ -212,7 +212,9 @@ impl EVMAccountExtractor {
             parent_hash: block.header.parent_hash.to_bytes(),
             chain: self.chain,
             ts: DateTime::from_timestamp(block.header.timestamp as i64, 0)
-                .expect("Failed to convert timestamp")
+                .ok_or_else(|| {
+                    RPCError::RequestError(RequestError::Other("Invalid timestamp in block".into()))
+                })?
                 .naive_utc(),
         })
     }
