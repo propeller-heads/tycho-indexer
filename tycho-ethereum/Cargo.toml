@@ -27,7 +27,7 @@ url = "2"
 futures = "0.3"
 
 # Required dependencies
-alloy = { version = "1.0.41", default-features = false, features = ["reqwest-default-tls", "rpc-client", "sol-types", "rpc-types-trace", "rpc-types-debug"] }
+alloy = { workspace = true, default-features = false, features = ["reqwest-default-tls", "rpc-client", "sol-types", "rpc-types-trace", "rpc-types-debug"] }
 
 # Optional dependencies
 clap = { version = "4", features = ["derive", "env"], optional = true }

@@ -5,11 +5,10 @@ use std::{
     sync::Arc,
 };
 
-use actix_web::{web, HttpResponse, ResponseError};
+use actix_web::{http::StatusCode, web, HttpResponse, ResponseError};
 use anyhow::Error;
 use chrono::{Duration, Utc};
 use diesel_async::pooled_connection::deadpool;
-use reqwest::StatusCode;
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
