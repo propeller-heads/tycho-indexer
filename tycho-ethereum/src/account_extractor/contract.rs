@@ -210,7 +210,7 @@ impl EVMAccountExtractor {
             number: block.header.number,
             hash: block.header.hash.to_bytes(),
             parent_hash: block.header.parent_hash.to_bytes(),
-            chain: Chain::Ethereum,
+            chain: self.chain,
             ts: DateTime::from_timestamp(block.header.timestamp as i64, 0)
                 .expect("Failed to convert timestamp")
                 .naive_utc(),
