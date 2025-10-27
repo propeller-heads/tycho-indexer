@@ -1,3 +1,10 @@
+## [0.186.0](https://github.com/propeller-heads/tycho-simulation/compare/0.185.2...0.186.0) (2025-10-27)
+
+
+### Features
+
+* rename uniswap_v4 filters ([cac8b31](https://github.com/propeller-heads/tycho-simulation/commit/cac8b319ed36157bebd49a7c2f4951992065d4cb))
+
 ## [0.185.2](https://github.com/propeller-heads/tycho-simulation/compare/0.185.1...0.185.2) (2025-10-24)
 
 ## [0.185.1](https://github.com/propeller-heads/tycho-simulation/compare/0.185.0...0.185.1) (2025-10-24)
