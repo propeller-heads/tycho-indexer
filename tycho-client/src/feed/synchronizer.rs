@@ -15,9 +15,8 @@ use tokio::{
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     dto::{
-        BlockChanges, BlockParam, Chain, ComponentTvlRequestBody, EntryPointWithTracingParams,
-        ExtractorIdentity, ProtocolComponent, ResponseAccount, ResponseProtocolState,
-        TracingResult, VersionParam,
+        BlockChanges, EntryPointWithTracingParams, ExtractorIdentity, PaginationResponse,
+        ProtocolComponent, ResponseAccount, ResponseProtocolState, TracingResult,
     },
     Bytes,
 };
@@ -259,14 +258,6 @@ where
         if !self.include_snapshots {
             return Ok(StateSyncMessage { header, ..Default::default() });
         }
-        let version = VersionParam::new(
-            None,
-            Some(BlockParam {
-                chain: Some(self.extractor_id.chain),
-                hash: None,
-                number: Some(header.number as i64),
-            }),
-        );
 
         // Use given ids or use all if not passed
         let component_ids: Vec<_> = match ids {
@@ -280,59 +271,46 @@ where
             return Ok(StateSyncMessage { header, ..Default::default() });
         }
 
-        let component_tvl = if self.include_tvl {
-            let body = ComponentTvlRequestBody::id_filtered(
-                component_ids.clone(),
-                self.extractor_id.chain,
-            );
-            self.rpc_client
-                .get_component_tvl_paginated(&body, 100, 4)
-                .await?
-                .tvl
-        } else {
-            HashMap::new()
-        };
+        // Get contract IDs from component tracker
+        let contract_ids: Vec<Bytes> = self
+            .component_tracker
+            .get_contracts_by_component(&component_ids)
+            .into_iter()
+            .collect();
 
-        //TODO: Improve this, we should not query for every component, but only for the ones that
-        // could have entrypoints. Maybe apply a filter per protocol?
-        let entrypoints_result = if self.extractor_id.chain == Chain::Ethereum {
-            // Fetch entrypoints
-            let result = self
-                .rpc_client
-                .get_traced_entry_points_paginated(
-                    self.extractor_id.chain,
-                    &self.extractor_id.name,
-                    &component_ids,
-                    100,
-                    4,
-                )
-                .await?;
-            self.component_tracker
-                .process_entrypoints(&result.clone().into());
-            Some(result)
-        } else {
-            None
-        };
-
-        // Fetch protocol states
-        let mut protocol_states = self
+        // Use the RPC client's get_snapshots method
+        let snapshot_response = self
             .rpc_client
-            .get_protocol_states_paginated(
+            .get_snapshots(
                 self.extractor_id.chain,
-                &component_ids,
                 &self.extractor_id.name,
+                &component_ids,
+                &contract_ids,
+                header.number,
                 self.retrieve_balances,
-                &version,
+                self.include_tvl,
                 100,
                 4,
             )
-            .await?
-            .states
-            .into_iter()
-            .map(|state| (state.component_id.clone(), state))
-            .collect::<HashMap<_, _>>();
+            .await?;
 
+        // Process entrypoints if we got them
+        if !snapshot_response.traced_entry_points.is_empty() {
+            use tycho_common::dto::TracedEntryPointRequestResponse;
+
+            // Convert to TracedEntryPointRequestResponse for processing
+            let entrypoint_response = TracedEntryPointRequestResponse {
+                traced_entry_points: snapshot_response.traced_entry_points.clone(),
+                pagination: PaginationResponse { page: 0, page_size: 100, total: 0 },
+            };
+            self.component_tracker
+                .process_entrypoints(&entrypoint_response.into());
+        }
+
+        // Build ComponentWithState from the snapshot response
+        let mut protocol_states = snapshot_response.protocol_states;
         trace!(states=?&protocol_states, "Retrieved ProtocolStates");
+
         let states = self
             .component_tracker
             .components
@@ -344,17 +322,12 @@ where
                         ComponentWithState {
                             state,
                             component: component.clone(),
-                            component_tvl: component_tvl
+                            component_tvl: snapshot_response.component_tvl
                                 .get(&component.id)
                                 .cloned(),
-                            entrypoints: entrypoints_result
-                                .as_ref()
-                                .map(|r| {
-                                    r.traced_entry_points
-                                        .get(&component.id)
-                                        .cloned()
-                                        .unwrap_or_default()
-                                })
+                            entrypoints: snapshot_response.traced_entry_points
+                                .get(&component.id)
+                                .cloned()
                                 .unwrap_or_default(),
                         },
                     ))
@@ -369,75 +342,49 @@ where
             })
             .collect();
 
-        // Fetch contract states
-        let contract_ids = self
+        // Process VM storage - validate that all requested contracts were returned
+        let contract_states = snapshot_response.vm_storage;
+        trace!(states=?&contract_states, "Retrieved ContractState");
+
+        let contract_address_to_components = self
             .component_tracker
-            .get_contracts_by_component(&component_ids);
-        let vm_storage = if !contract_ids.is_empty() {
-            let ids: Vec<Bytes> = contract_ids
-                .clone()
-                .into_iter()
-                .collect();
-            let contract_states = self
-                .rpc_client
-                .get_contract_state_paginated(
-                    self.extractor_id.chain,
-                    ids.as_slice(),
-                    &self.extractor_id.name,
-                    &version,
-                    100,
-                    4,
-                )
-                .await?
-                .accounts
-                .into_iter()
-                .map(|acc| (acc.address.clone(), acc))
-                .collect::<HashMap<_, _>>();
+            .components
+            .iter()
+            .filter_map(|(id, comp)| {
+                if component_ids.contains(id) {
+                    Some(
+                        comp.contract_ids
+                            .iter()
+                            .map(|address| (address.clone(), comp.id.clone())),
+                    )
+                } else {
+                    None
+                }
+            })
+            .flatten()
+            .fold(HashMap::<Bytes, Vec<String>>::new(), |mut acc, (addr, c_id)| {
+                acc.entry(addr).or_default().push(c_id);
+                acc
+            });
 
-            trace!(states=?&contract_states, "Retrieved ContractState");
-
-            let contract_address_to_components = self
-                .component_tracker
-                .components
-                .iter()
-                .filter_map(|(id, comp)| {
-                    if component_ids.contains(id) {
-                        Some(
-                            comp.contract_ids
-                                .iter()
-                                .map(|address| (address.clone(), comp.id.clone())),
-                        )
-                    } else {
-                        None
-                    }
-                })
-                .flatten()
-                .fold(HashMap::<Bytes, Vec<String>>::new(), |mut acc, (addr, c_id)| {
-                    acc.entry(addr).or_default().push(c_id);
-                    acc
-                });
-
-            contract_ids
-                .iter()
-                .filter_map(|address| {
-                    if let Some(state) = contract_states.get(address) {
-                        Some((address.clone(), state.clone()))
-                    } else if let Some(ids) = contract_address_to_components.get(address) {
-                        // only emit error even if we did actually request this address
-                        error!(
-                            ?address,
-                            ?ids,
-                            "Component with lacking contract storage encountered!"
-                        );
-                        None
-                    } else {
-                        None
-                    }
-                })
-                .collect()
-        } else {
-            HashMap::new()
-        };
+        let vm_storage = contract_ids
+            .iter()
+            .filter_map(|address| {
+                if let Some(state) = contract_states.get(address) {
+                    Some((address.clone(), state.clone()))
+                } else if let Some(ids) = contract_address_to_components.get(address) {
+                    // only emit error even if we did actually request this address
+                    error!(
+                        ?address,
+                        ?ids,
+                        "Component with lacking contract storage encountered!"
+                    );
+                    None
+                } else {
+                    None
+                }
+            })
+            .collect();
 
         Ok(StateSyncMessage {
             header,

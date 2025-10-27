@@ -15,7 +15,7 @@ use futures03::future::try_join_all;
 #[cfg(test)]
 use mockall::automock;
 use reqwest::{header, Client, ClientBuilder, Response, StatusCode, Url};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use time::{format_description::well_known::Rfc2822, OffsetDateTime};
 use tokio::{
@@ -28,9 +28,9 @@ use tycho_common::{
         Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse, PaginationParams,
         PaginationResponse, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
         ProtocolStateRequestBody, ProtocolStateRequestResponse, ProtocolSystemsRequestBody,
-        ProtocolSystemsRequestResponse, ResponseToken, StateRequestBody, StateRequestResponse,
-        TokensRequestBody, TokensRequestResponse, TracedEntryPointRequestBody,
-        TracedEntryPointRequestResponse, VersionParam,
+        ProtocolSystemsRequestResponse, ResponseAccount, ResponseProtocolState, ResponseToken,
+        StateRequestBody, StateRequestResponse, TokensRequestBody, TokensRequestResponse,
+        TracedEntryPointRequestBody, TracedEntryPointRequestResponse, VersionParam,
     },
     Bytes,
 };
@@ -64,6 +64,19 @@ pub enum RPCError {
 
     #[error("Server unreachable: {0}")]
     ServerUnreachable(String),
+}
+
+/// Response containing snapshot data for protocol states and VM storage
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotResponse {
+    /// Protocol states indexed by component ID
+    pub protocol_states: HashMap<String, ResponseProtocolState>,
+    /// VM storage (contract accounts) indexed by address
+    pub vm_storage: HashMap<Bytes, ResponseAccount>,
+    /// Component TVL values (if requested)
+    pub component_tvl: HashMap<String, f64>,
+    /// Traced entry points (if requested for Ethereum)
+    pub traced_entry_points: HashMap<String, Vec<(tycho_common::dto::EntryPointWithTracingParams, tycho_common::dto::TracingResult)>>,
 }
 
 #[cfg_attr(test, automock)]
@@ -586,6 +599,38 @@ pub trait RPCClient: Send + Sync {
                 }
             })
     }
+
+    /// Retrieves snapshots of protocol states and contract states for a given block and component IDs.
+    ///
+    /// This method fetches:
+    /// - Component TVL (if requested)
+    /// - Traced entry points (for Ethereum chain)
+    /// - Protocol states
+    /// - Contract states (VM storage)
+    ///
+    /// # Arguments
+    /// * `chain` - The blockchain to query
+    /// * `protocol_system` - The protocol system name
+    /// * `component_ids` - List of component IDs to fetch
+    /// * `contract_ids` - List of contract addresses to fetch
+    /// * `block_number` - Block number for versioning
+    /// * `include_balances` - Whether to include balance information
+    /// * `include_tvl` - Whether to fetch TVL data
+    /// * `chunk_size` - Batch size for paginated requests
+    /// * `concurrency` - Number of concurrent requests
+    #[allow(clippy::too_many_arguments)]
+    async fn get_snapshots(
+        &self,
+        chain: Chain,
+        protocol_system: &str,
+        component_ids: &[String],
+        contract_ids: &[Bytes],
+        block_number: u64,
+        include_balances: bool,
+        include_tvl: bool,
+        chunk_size: usize,
+        concurrency: usize,
+    ) -> Result<SnapshotResponse, RPCError>;
 }
 
 #[derive(Debug, Clone)]
@@ -1024,6 +1069,104 @@ impl RPCClient for HttpRPCClient {
             })?;
         trace!(?entrypoints, "Received traced_entry_points response from Tycho server");
         Ok(entrypoints)
+    }
+
+    async fn get_snapshots(
+        &self,
+        chain: Chain,
+        protocol_system: &str,
+        component_ids: &[String],
+        contract_ids: &[Bytes],
+        block_number: u64,
+        include_balances: bool,
+        include_tvl: bool,
+        chunk_size: usize,
+        concurrency: usize,
+    ) -> Result<SnapshotResponse, RPCError> {
+        use tycho_common::dto::BlockParam;
+
+        let version = VersionParam::new(
+            None,
+            Some(BlockParam {
+                chain: None,
+                hash: None,
+                number: Some(block_number as i64),
+            }),
+        );
+
+        // Fetch component TVL if requested
+        let component_tvl = if include_tvl && !component_ids.is_empty() {
+            let body = ComponentTvlRequestBody::id_filtered(
+                component_ids.to_vec(),
+                chain,
+            );
+            self.get_component_tvl_paginated(&body, chunk_size, concurrency)
+                .await?
+                .tvl
+        } else {
+            HashMap::new()
+        };
+
+        // Fetch traced entry points for Ethereum
+        let traced_entry_points = if chain == Chain::Ethereum && !component_ids.is_empty() {
+            self.get_traced_entry_points_paginated(
+                chain,
+                protocol_system,
+                component_ids,
+                chunk_size,
+                concurrency,
+            )
+            .await?
+            .traced_entry_points
+        } else {
+            HashMap::new()
+        };
+
+        // Fetch protocol states
+        let protocol_states = if !component_ids.is_empty() {
+            self.get_protocol_states_paginated(
+                chain,
+                component_ids,
+                protocol_system,
+                include_balances,
+                &version,
+                chunk_size,
+                concurrency,
+            )
+            .await?
+            .states
+            .into_iter()
+            .map(|state| (state.component_id.clone(), state))
+            .collect()
+        } else {
+            HashMap::new()
+        };
+
+        // Fetch contract states (VM storage)
+        let vm_storage = if !contract_ids.is_empty() {
+            self.get_contract_state_paginated(
+                chain,
+                contract_ids,
+                protocol_system,
+                &version,
+                chunk_size,
+                concurrency,
+            )
+            .await?
+            .accounts
+            .into_iter()
+            .map(|acc| (acc.address.clone(), acc))
+            .collect()
+        } else {
+            HashMap::new()
+        };
+
+        Ok(SnapshotResponse {
+            protocol_states,
+            vm_storage,
+            component_tvl,
+            traced_entry_points,
+        })
     }
 }
 
