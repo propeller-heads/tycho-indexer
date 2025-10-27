@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use reqwest::Client;
+use alloy::transports::http::Client;
 use serde_json::{json, Value};
 use thiserror::Error;
 use tonic::async_trait;
