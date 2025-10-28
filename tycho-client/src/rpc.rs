@@ -15,7 +15,7 @@ use futures03::future::try_join_all;
 #[cfg(test)]
 use mockall::automock;
 use reqwest::{header, Client, ClientBuilder, Response, StatusCode, Url};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use thiserror::Error;
 use time::{format_description::well_known::Rfc2822, OffsetDateTime};
 use tokio::{
@@ -28,9 +28,10 @@ use tycho_common::{
         Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse, PaginationParams,
         PaginationResponse, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
         ProtocolStateRequestBody, ProtocolStateRequestResponse, ProtocolSystemsRequestBody,
-        ProtocolSystemsRequestResponse, ResponseAccount, ResponseProtocolState, ResponseToken,
-        StateRequestBody, StateRequestResponse, TokensRequestBody, TokensRequestResponse,
-        TracedEntryPointRequestBody, TracedEntryPointRequestResponse, VersionParam,
+        ProtocolSystemsRequestResponse, ResponseToken, SnapshotRequestBody,
+        SnapshotRequestResponse, StateRequestBody, StateRequestResponse, TokensRequestBody,
+        TokensRequestResponse, TracedEntryPointRequestBody, TracedEntryPointRequestResponse,
+        VersionParam,
     },
     Bytes,
 };
@@ -64,19 +65,6 @@ pub enum RPCError {
 
     #[error("Server unreachable: {0}")]
     ServerUnreachable(String),
-}
-
-/// Response containing snapshot data for protocol states and VM storage
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SnapshotResponse {
-    /// Protocol states indexed by component ID
-    pub protocol_states: HashMap<String, ResponseProtocolState>,
-    /// VM storage (contract accounts) indexed by address
-    pub vm_storage: HashMap<Bytes, ResponseAccount>,
-    /// Component TVL values (if requested)
-    pub component_tvl: HashMap<String, f64>,
-    /// Traced entry points (if requested for Ethereum)
-    pub traced_entry_points: HashMap<String, Vec<(tycho_common::dto::EntryPointWithTracingParams, tycho_common::dto::TracingResult)>>,
 }
 
 #[cfg_attr(test, automock)]
@@ -600,37 +588,10 @@ pub trait RPCClient: Send + Sync {
             })
     }
 
-    /// Retrieves snapshots of protocol states and contract states for a given block and component IDs.
-    ///
-    /// This method fetches:
-    /// - Component TVL (if requested)
-    /// - Traced entry points (for Ethereum chain)
-    /// - Protocol states
-    /// - Contract states (VM storage)
-    ///
-    /// # Arguments
-    /// * `chain` - The blockchain to query
-    /// * `protocol_system` - The protocol system name
-    /// * `component_ids` - List of component IDs to fetch
-    /// * `contract_ids` - List of contract addresses to fetch
-    /// * `block_number` - Block number for versioning
-    /// * `include_balances` - Whether to include balance information
-    /// * `include_tvl` - Whether to fetch TVL data
-    /// * `chunk_size` - Batch size for paginated requests
-    /// * `concurrency` - Number of concurrent requests
-    #[allow(clippy::too_many_arguments)]
     async fn get_snapshots(
         &self,
-        chain: Chain,
-        protocol_system: &str,
-        component_ids: &[String],
-        contract_ids: &[Bytes],
-        block_number: u64,
-        include_balances: bool,
-        include_tvl: bool,
-        chunk_size: usize,
-        concurrency: usize,
-    ) -> Result<SnapshotResponse, RPCError>;
+        request: &SnapshotRequestBody,
+    ) -> Result<SnapshotRequestResponse, RPCError>;
 }
 
 #[derive(Debug, Clone)]
@@ -1073,33 +1034,26 @@ impl RPCClient for HttpRPCClient {
 
     async fn get_snapshots(
         &self,
-        chain: Chain,
-        protocol_system: &str,
-        component_ids: &[String],
-        contract_ids: &[Bytes],
-        block_number: u64,
-        include_balances: bool,
-        include_tvl: bool,
-        chunk_size: usize,
-        concurrency: usize,
-    ) -> Result<SnapshotResponse, RPCError> {
+        request: &SnapshotRequestBody,
+    ) -> Result<SnapshotRequestResponse, RPCError> {
         use tycho_common::dto::BlockParam;
+
+        let chunk_size = 100;
+        let concurrency = 4;
 
         let version = VersionParam::new(
             None,
-            Some(BlockParam {
-                chain: None,
-                hash: None,
-                number: Some(block_number as i64),
+            Some({
+                // The chain field is deprecated. We rely on block number uniqueness within
+                // the protocol system context, which is already specified in the request.
+                #[allow(deprecated)]
+                BlockParam { hash: None, chain: None, number: Some(request.block_number as i64) }
             }),
         );
 
-        // Fetch component TVL if requested
-        let component_tvl = if include_tvl && !component_ids.is_empty() {
-            let body = ComponentTvlRequestBody::id_filtered(
-                component_ids.to_vec(),
-                chain,
-            );
+        let component_tvl = if request.include_tvl && !request.component_ids.is_empty() {
+            let body =
+                ComponentTvlRequestBody::id_filtered(request.component_ids.clone(), request.chain);
             self.get_component_tvl_paginated(&body, chunk_size, concurrency)
                 .await?
                 .tvl
@@ -1107,28 +1061,27 @@ impl RPCClient for HttpRPCClient {
             HashMap::new()
         };
 
-        // Fetch traced entry points for Ethereum
-        let traced_entry_points = if chain == Chain::Ethereum && !component_ids.is_empty() {
-            self.get_traced_entry_points_paginated(
-                chain,
-                protocol_system,
-                component_ids,
-                chunk_size,
-                concurrency,
-            )
-            .await?
-            .traced_entry_points
-        } else {
-            HashMap::new()
-        };
+        let traced_entry_points =
+            if request.chain == Chain::Ethereum && !request.component_ids.is_empty() {
+                self.get_traced_entry_points_paginated(
+                    request.chain,
+                    &request.protocol_system,
+                    &request.component_ids,
+                    chunk_size,
+                    concurrency,
+                )
+                .await?
+                .traced_entry_points
+            } else {
+                HashMap::new()
+            };
 
-        // Fetch protocol states
-        let protocol_states = if !component_ids.is_empty() {
+        let protocol_states = if !request.component_ids.is_empty() {
             self.get_protocol_states_paginated(
-                chain,
-                component_ids,
-                protocol_system,
-                include_balances,
+                request.chain,
+                &request.component_ids,
+                &request.protocol_system,
+                request.include_balances,
                 &version,
                 chunk_size,
                 concurrency,
@@ -1142,12 +1095,11 @@ impl RPCClient for HttpRPCClient {
             HashMap::new()
         };
 
-        // Fetch contract states (VM storage)
-        let vm_storage = if !contract_ids.is_empty() {
+        let vm_storage = if !request.contract_ids.is_empty() {
             self.get_contract_state_paginated(
-                chain,
-                contract_ids,
-                protocol_system,
+                request.chain,
+                &request.contract_ids,
+                &request.protocol_system,
                 &version,
                 chunk_size,
                 concurrency,
@@ -1161,7 +1113,7 @@ impl RPCClient for HttpRPCClient {
             HashMap::new()
         };
 
-        Ok(SnapshotResponse {
+        Ok(SnapshotRequestResponse {
             protocol_states,
             vm_storage,
             component_tvl,
@@ -2378,20 +2330,21 @@ mod tests {
         let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
 
         let component_ids = vec!["component1".to_string()];
-        let contract_ids = vec![Bytes::from_str("0x1111111111111111111111111111111111111111").unwrap()];
+        let contract_ids =
+            vec![Bytes::from_str("0x1111111111111111111111111111111111111111").unwrap()];
+
+        let request = SnapshotRequestBody::new(
+            Chain::Ethereum,
+            "test_protocol".to_string(),
+            component_ids.clone(),
+            contract_ids.clone(),
+            12345,
+            true,
+            true,
+        );
 
         let response = client
-            .get_snapshots(
-                Chain::Ethereum,
-                "test_protocol",
-                &component_ids,
-                &contract_ids,
-                12345,
-                true,
-                true,
-                100,
-                4,
-            )
+            .get_snapshots(&request)
             .await
             .expect("get snapshots");
 
@@ -2403,19 +2356,25 @@ mod tests {
 
         // Assert protocol states
         assert_eq!(response.protocol_states.len(), 1);
-        assert!(response.protocol_states.contains_key("component1"));
+        assert!(response
+            .protocol_states
+            .contains_key("component1"));
 
         // Assert VM storage
         assert_eq!(response.vm_storage.len(), 1);
         let contract_addr = Bytes::from_str("0x1111111111111111111111111111111111111111").unwrap();
-        assert!(response.vm_storage.contains_key(&contract_addr));
+        assert!(response
+            .vm_storage
+            .contains_key(&contract_addr));
 
         // Assert component TVL
         assert_eq!(response.component_tvl.get("component1"), Some(&1000000.0));
 
         // Assert traced entry points
         assert_eq!(response.traced_entry_points.len(), 1);
-        assert!(response.traced_entry_points.contains_key("component1"));
+        assert!(response
+            .traced_entry_points
+            .contains_key("component1"));
         let entrypoints = &response.traced_entry_points["component1"];
         assert_eq!(entrypoints.len(), 1);
         assert_eq!(entrypoints[0].0.entry_point.external_id, "swap");
@@ -2426,21 +2385,18 @@ mod tests {
         let server = Server::new_async().await;
         let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
 
-        let component_ids: Vec<String> = vec![];
-        let contract_ids: Vec<Bytes> = vec![];
+        let request = SnapshotRequestBody::new(
+            Chain::Ethereum,
+            "test_protocol".to_string(),
+            vec![],
+            vec![],
+            12345,
+            true,
+            true,
+        );
 
         let response = client
-            .get_snapshots(
-                Chain::Ethereum,
-                "test_protocol",
-                &component_ids,
-                &contract_ids,
-                12345,
-                true,
-                true,
-                100,
-                4,
-            )
+            .get_snapshots(&request)
             .await
             .expect("get snapshots");
 
@@ -2500,28 +2456,25 @@ mod tests {
 
         let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
 
-        let component_ids = vec!["component1".to_string()];
-        let contract_ids: Vec<Bytes> = vec![]; // No contracts, so no contract_state call
+        let request = SnapshotRequestBody::new(
+            Chain::Ethereum,
+            "test_protocol".to_string(),
+            vec!["component1".to_string()],
+            vec![],
+            12345,
+            false,
+            false, // include_tvl = false
+        );
 
         let response = client
-            .get_snapshots(
-                Chain::Ethereum,
-                "test_protocol",
-                &component_ids,
-                &contract_ids,
-                12345,
-                false,
-                false, // include_tvl = false
-                100,
-                4,
-            )
+            .get_snapshots(&request)
             .await
             .expect("get snapshots");
 
         // Verify only necessary mocks were called
         protocol_states_mock.assert();
         entrypoints_mock.assert(); // Ethereum always fetches entrypoints
-        // No contract_state_mock.assert() since contract_ids is empty
+                                   // No contract_state_mock.assert() since contract_ids is empty
 
         assert_eq!(response.protocol_states.len(), 1);
         assert!(response.component_tvl.is_empty());

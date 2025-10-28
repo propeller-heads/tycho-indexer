@@ -15,8 +15,9 @@ use tokio::{
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     dto::{
-        BlockChanges, Chain, EntryPointWithTracingParams, ExtractorIdentity, PaginationResponse,
-        ProtocolComponent, ResponseAccount, ResponseProtocolState, TracingResult,
+        BlockChanges, EntryPointWithTracingParams, ExtractorIdentity, PaginationResponse,
+        ProtocolComponent, ResponseAccount, ResponseProtocolState, SnapshotRequestBody,
+        TracingResult,
     },
     Bytes,
 };
@@ -278,29 +279,32 @@ where
             .into_iter()
             .collect();
 
-        // Use the RPC client's get_snapshots method
+        let request = SnapshotRequestBody::new(
+            self.extractor_id.chain,
+            self.extractor_id.name.clone(),
+            component_ids.clone(),
+            contract_ids.clone(),
+            header.number,
+            self.retrieve_balances,
+            self.include_tvl,
+        );
         let snapshot_response = self
             .rpc_client
-            .get_snapshots(
-                self.extractor_id.chain,
-                &self.extractor_id.name,
-                &component_ids,
-                &contract_ids,
-                header.number,
-                self.retrieve_balances,
-                self.include_tvl,
-                100,
-                4,
-            )
+            .get_snapshots(&request)
             .await?;
 
         // Process entrypoints if we got them
-        if !snapshot_response.traced_entry_points.is_empty() {
+        if !snapshot_response
+            .traced_entry_points
+            .is_empty()
+        {
             use tycho_common::dto::TracedEntryPointRequestResponse;
 
             // Convert to TracedEntryPointRequestResponse for processing
             let entrypoint_response = TracedEntryPointRequestResponse {
-                traced_entry_points: snapshot_response.traced_entry_points.clone(),
+                traced_entry_points: snapshot_response
+                    .traced_entry_points
+                    .clone(),
                 pagination: PaginationResponse { page: 0, page_size: 100, total: 0 },
             };
             self.component_tracker
@@ -322,10 +326,12 @@ where
                         ComponentWithState {
                             state,
                             component: component.clone(),
-                            component_tvl: snapshot_response.component_tvl
+                            component_tvl: snapshot_response
+                                .component_tvl
                                 .get(&component.id)
                                 .cloned(),
-                            entrypoints: snapshot_response.traced_entry_points
+                            entrypoints: snapshot_response
+                                .traced_entry_points
                                 .get(&component.id)
                                 .cloned()
                                 .unwrap_or_default(),
@@ -342,7 +348,6 @@ where
             })
             .collect();
 
-        // Process VM storage - validate that all requested contracts were returned
         let contract_states = snapshot_response.vm_storage;
         trace!(states=?&contract_states, "Retrieved ContractState");
 
@@ -374,11 +379,7 @@ where
                     Some((address.clone(), state.clone()))
                 } else if let Some(ids) = contract_address_to_components.get(address) {
                     // only emit error even if we did actually request this address
-                    error!(
-                        ?address,
-                        ?ids,
-                        "Component with lacking contract storage encountered!"
-                    );
+                    error!(?address, ?ids, "Component with lacking contract storage encountered!");
                     None
                 } else {
                     None
@@ -806,29 +807,9 @@ mod test {
 
         async fn get_snapshots(
             &self,
-            chain: Chain,
-            protocol_system: &str,
-            component_ids: &[String],
-            contract_ids: &[Bytes],
-            block_number: u64,
-            include_balances: bool,
-            include_tvl: bool,
-            chunk_size: usize,
-            concurrency: usize,
-        ) -> Result<crate::rpc::SnapshotResponse, RPCError> {
-            self.0
-                .get_snapshots(
-                    chain,
-                    protocol_system,
-                    component_ids,
-                    contract_ids,
-                    block_number,
-                    include_balances,
-                    include_tvl,
-                    chunk_size,
-                    concurrency,
-                )
-                .await
+            request: &SnapshotRequestBody,
+        ) -> Result<tycho_common::dto::SnapshotRequestResponse, RPCError> {
+            self.0.get_snapshots(request).await
         }
     }
 
@@ -920,17 +901,17 @@ mod test {
         let header = BlockHeader::default();
         let mut rpc = MockRPCClient::new();
         rpc.expect_get_snapshots()
-            .returning(|_, _, _, _, _, _, _, _, _| {
-                Ok(crate::rpc::SnapshotResponse {
-                    protocol_states: state_snapshot_native()
+            .returning(|_request| {
+                Ok(tycho_common::dto::SnapshotRequestResponse::new(
+                    state_snapshot_native()
                         .states
                         .into_iter()
                         .map(|state| (state.component_id.clone(), state))
                         .collect(),
-                    vm_storage: HashMap::new(),
-                    component_tvl: HashMap::new(),
-                    traced_entry_points: HashMap::new(),
-                })
+                    HashMap::new(),
+                    HashMap::new(),
+                    HashMap::new(),
+                ))
             });
         let mut state_sync = with_mocked_clients(true, false, Some(rpc), None);
         let component = ProtocolComponent { id: "Component1".to_string(), ..Default::default() };
@@ -976,17 +957,17 @@ mod test {
         let header = BlockHeader::default();
         let mut rpc = MockRPCClient::new();
         rpc.expect_get_snapshots()
-            .returning(|_, _, _, _, _, _, _, _, _| {
-                Ok(crate::rpc::SnapshotResponse {
-                    protocol_states: state_snapshot_native()
+            .returning(|_request| {
+                Ok(tycho_common::dto::SnapshotRequestResponse::new(
+                    state_snapshot_native()
                         .states
                         .into_iter()
                         .map(|state| (state.component_id.clone(), state))
                         .collect(),
-                    vm_storage: HashMap::new(),
-                    component_tvl: component_tvl_snapshot().tvl,
-                    traced_entry_points: HashMap::new(),
-                })
+                    HashMap::new(),
+                    component_tvl_snapshot().tvl,
+                    HashMap::new(),
+                ))
             });
         let mut state_sync = with_mocked_clients(true, true, Some(rpc), None);
         let component = ProtocolComponent { id: "Component1".to_string(), ..Default::default() };
@@ -1076,21 +1057,21 @@ mod test {
         let header = BlockHeader::default();
         let mut rpc = MockRPCClient::new();
         rpc.expect_get_snapshots()
-            .returning(|_, _, _, _, _, _, _, _, _| {
-                Ok(crate::rpc::SnapshotResponse {
-                    protocol_states: state_snapshot_native()
+            .returning(|_request| {
+                Ok(tycho_common::dto::SnapshotRequestResponse::new(
+                    state_snapshot_native()
                         .states
                         .into_iter()
                         .map(|state| (state.component_id.clone(), state))
                         .collect(),
-                    vm_storage: state_snapshot_vm()
+                    state_snapshot_vm()
                         .accounts
                         .into_iter()
                         .map(|acc| (acc.address.clone(), acc))
                         .collect(),
-                    component_tvl: HashMap::new(),
-                    traced_entry_points: traced_entry_point_response().traced_entry_points,
-                })
+                    HashMap::new(),
+                    traced_entry_point_response().traced_entry_points,
+                ))
             });
         let mut state_sync = with_mocked_clients(false, false, Some(rpc), None);
         let component = ProtocolComponent {
@@ -1167,21 +1148,21 @@ mod test {
         let header = BlockHeader::default();
         let mut rpc = MockRPCClient::new();
         rpc.expect_get_snapshots()
-            .returning(|_, _, _, _, _, _, _, _, _| {
-                Ok(crate::rpc::SnapshotResponse {
-                    protocol_states: state_snapshot_native()
+            .returning(|_request| {
+                Ok(tycho_common::dto::SnapshotRequestResponse::new(
+                    state_snapshot_native()
                         .states
                         .into_iter()
                         .map(|state| (state.component_id.clone(), state))
                         .collect(),
-                    vm_storage: state_snapshot_vm()
+                    state_snapshot_vm()
                         .accounts
                         .into_iter()
                         .map(|acc| (acc.address.clone(), acc))
                         .collect(),
-                    component_tvl: component_tvl_snapshot().tvl,
-                    traced_entry_points: HashMap::new(),
-                })
+                    component_tvl_snapshot().tvl,
+                    HashMap::new(),
+                ))
             });
         let mut state_sync = with_mocked_clients(false, true, Some(rpc), None);
         let component = ProtocolComponent {
@@ -1254,15 +1235,17 @@ mod test {
                     pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
-        // Mock get_snapshots for Component3 specifically (more specific, comes first)
+        // Mock get_snapshots for Component3
         rpc_client
             .expect_get_snapshots()
-            .withf(|_chain, _protocol_system, component_ids: &[String], _contract_ids, _block_number, _include_balances, _include_tvl, _chunk_size, _concurrency| {
-                component_ids.contains(&"Component3".to_string())
+            .withf(|request: &SnapshotRequestBody| {
+                request
+                    .component_ids
+                    .contains(&"Component3".to_string())
             })
-            .returning(|_, _, _, _, _, _, _, _, _| {
-                Ok(crate::rpc::SnapshotResponse {
-                    protocol_states: [(
+            .returning(|_request| {
+                Ok(tycho_common::dto::SnapshotRequestResponse::new(
+                    [(
                         "Component3".to_string(),
                         ResponseProtocolState {
                             component_id: "Component3".to_string(),
@@ -1271,12 +1254,12 @@ mod test {
                     )]
                     .into_iter()
                     .collect(),
-                    vm_storage: HashMap::new(),
-                    component_tvl: [("Component3".to_string(), 1000.0)]
+                    HashMap::new(),
+                    [("Component3".to_string(), 1000.0)]
                         .into_iter()
                         .collect(),
-                    traced_entry_points: HashMap::new(),
-                })
+                    HashMap::new(),
+                ))
             });
 
         // mock calls for the initial state snapshots
@@ -1296,33 +1279,38 @@ mod test {
                 })
             });
 
-        // Mock get_snapshots for the initial state sync
         rpc_client
             .expect_get_snapshots()
-            .returning(|_, _, _, _, _, _, _, _, _| {
-                Ok(crate::rpc::SnapshotResponse {
-                    protocol_states: [
-                        ("Component1".to_string(), ResponseProtocolState {
-                            component_id: "Component1".to_string(),
-                            ..Default::default()
-                        }),
-                        ("Component2".to_string(), ResponseProtocolState {
-                            component_id: "Component2".to_string(),
-                            ..Default::default()
-                        }),
+            .returning(|_request| {
+                Ok(tycho_common::dto::SnapshotRequestResponse::new(
+                    [
+                        (
+                            "Component1".to_string(),
+                            ResponseProtocolState {
+                                component_id: "Component1".to_string(),
+                                ..Default::default()
+                            },
+                        ),
+                        (
+                            "Component2".to_string(),
+                            ResponseProtocolState {
+                                component_id: "Component2".to_string(),
+                                ..Default::default()
+                            },
+                        ),
                     ]
                     .into_iter()
                     .collect(),
-                    vm_storage: HashMap::new(),
-                    component_tvl: [
+                    HashMap::new(),
+                    [
                         ("Component1".to_string(), 100.0),
                         ("Component2".to_string(), 0.0),
                         ("Component3".to_string(), 1000.0),
                     ]
                     .into_iter()
                     .collect(),
-                    traced_entry_points: HashMap::new(),
-                })
+                    HashMap::new(),
+                ))
             });
 
         // Mock deltas client and messages
@@ -1593,15 +1581,17 @@ mod test {
                     pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
-        // Mock get_snapshots for Component3 specifically (more specific, comes first)
+        // Mock get_snapshots for Component3
         rpc_client
             .expect_get_snapshots()
-            .withf(|_chain, _protocol_system, component_ids: &[String], _contract_ids, _block_number, _include_balances, _include_tvl, _chunk_size, _concurrency| {
-                component_ids.contains(&"Component3".to_string())
+            .withf(|request: &SnapshotRequestBody| {
+                request
+                    .component_ids
+                    .contains(&"Component3".to_string())
             })
-            .returning(|_, _, _, _, _, _, _, _, _| {
-                Ok(crate::rpc::SnapshotResponse {
-                    protocol_states: [(
+            .returning(|_request| {
+                Ok(tycho_common::dto::SnapshotRequestResponse::new(
+                    [(
                         "Component3".to_string(),
                         ResponseProtocolState {
                             component_id: "Component3".to_string(),
@@ -1610,12 +1600,12 @@ mod test {
                     )]
                     .into_iter()
                     .collect(),
-                    vm_storage: HashMap::new(),
-                    component_tvl: [("Component3".to_string(), 10.0)]
+                    HashMap::new(),
+                    [("Component3".to_string(), 10.0)]
                         .into_iter()
                         .collect(),
-                    traced_entry_points: HashMap::new(),
-                })
+                    HashMap::new(),
+                ))
             });
 
         // Mock for the initial snapshot retrieval
@@ -1631,33 +1621,39 @@ mod test {
                 })
             });
 
-        // Mock get_snapshots for initial snapshot (less specific, comes second)
+        // Mock get_snapshots for initial snapshot
         rpc_client
             .expect_get_snapshots()
-            .returning(|_, _, _, _, _, _, _, _, _| {
-                Ok(crate::rpc::SnapshotResponse {
-                    protocol_states: [
-                        ("Component1".to_string(), ResponseProtocolState {
-                            component_id: "Component1".to_string(),
-                            ..Default::default()
-                        }),
-                        ("Component2".to_string(), ResponseProtocolState {
-                            component_id: "Component2".to_string(),
-                            ..Default::default()
-                        }),
+            .returning(|_request| {
+                Ok(tycho_common::dto::SnapshotRequestResponse::new(
+                    [
+                        (
+                            "Component1".to_string(),
+                            ResponseProtocolState {
+                                component_id: "Component1".to_string(),
+                                ..Default::default()
+                            },
+                        ),
+                        (
+                            "Component2".to_string(),
+                            ResponseProtocolState {
+                                component_id: "Component2".to_string(),
+                                ..Default::default()
+                            },
+                        ),
                     ]
                     .into_iter()
                     .collect(),
-                    vm_storage: HashMap::new(),
-                    component_tvl: [
+                    HashMap::new(),
+                    [
                         ("Component1".to_string(), 6.0),
                         ("Component2".to_string(), 2.0),
                         ("Component3".to_string(), 10.0),
                     ]
                     .into_iter()
                     .collect(),
-                    traced_entry_points: HashMap::new(),
-                })
+                    HashMap::new(),
+                ))
             });
 
         let (tx, rx) = channel(1);
