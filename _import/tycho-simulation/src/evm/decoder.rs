@@ -333,11 +333,14 @@ where
                         if state_guard.tokens.contains_key(key) {
                             let original_address = account.address;
                             // To work with Tycho's token overwrites system, if we get account
-                            // snapshots for a token we must handle them
-                            // with a proxy/wrapper contract.
-                            // This is done by loading the original token contract at a new address,
-                            // setting the proxy token contract at the original token address and
-                            // pointing that proxy contract to the token's new contract address.
+                            // snapshots for a token we must handle them ith a proxy/wrapper
+                            // contract. This is done by loading the original token contract at a
+                            // new address, setting the proxy token contract at the original token
+                            // address and pointing that proxy contract to the token's new contract
+                            // address.
+                            // Note: storage for the original contract must be set at the proxy
+                            // contract address. This is because the proxy contract uses
+                            // delegatecall to the original contract.
 
                             // Get or create a new token address
                             let proxy_addr = if !state_guard
@@ -586,45 +589,46 @@ where
                         //  switch the if cases.
                         if state_guard.tokens.contains_key(key) {
                             let original_address = update.address;
-                            // If the account is a token, we need to handle it with a proxy contract
+                            // If the account is a token, we need to handle it with a proxy
+                            // contract. Code updates must apply to the original token (at the new
+                            // address) and storage updates must apply to the proxy contract (at
+                            // original address).
 
                             // Get or create a new token address
-                            let proxy_addr = if !state_guard
+                            let proxy_addr = match state_guard
                                 .proxy_token_addresses
-                                .contains_key(&original_address)
+                                .get(&original_address)
                             {
-                                // Token does not have a proxy contract yet, create one
+                                Some(proxy_addr) => {
+                                    // Token already has a proxy contract, simply apply the storage
+                                    // update to it.
+                                    let proxy_update =
+                                        AccountUpdate { code: None, ..update.clone() };
+                                    token_proxy_accounts.insert(original_address, proxy_update);
+                                    *proxy_addr
+                                }
+                                None => {
+                                    // Token does not have a proxy contract yet, create one
 
-                                // Assign original token contract to new address
-                                let new_address = generate_proxy_token_address(
-                                    state_guard.proxy_token_addresses.len() as u32,
-                                )?;
-                                state_guard
-                                    .proxy_token_addresses
-                                    .insert(original_address, new_address);
+                                    // Assign original token contract to new address
+                                    let new_address = generate_proxy_token_address(
+                                        state_guard.proxy_token_addresses.len() as u32,
+                                    )?;
+                                    state_guard
+                                        .proxy_token_addresses
+                                        .insert(original_address, new_address);
 
-                                // Create proxy token account
-                                let proxy_state = create_proxy_token_account(
-                                    original_address,
-                                    new_address,
-                                    &update.slots,
-                                    update.chain,
-                                );
-                                token_proxy_accounts.insert(original_address, proxy_state);
+                                    // Create proxy token account with original account's storage
+                                    let proxy_state = create_proxy_token_account(
+                                        original_address,
+                                        new_address,
+                                        &update.slots,
+                                        update.chain,
+                                    );
+                                    token_proxy_accounts.insert(original_address, proxy_state);
 
-                                new_address
-                            } else {
-                                // Token already has a proxy contract, update the original token
-                                // contract
-                                state_guard
-                                    .proxy_token_addresses
-                                    .get(&original_address)
-                                    .copied()
-                                    .ok_or_else(|| {
-                                        StreamDecodeError::Fatal(
-                                            "Missing proxy token address".to_string(),
-                                        )
-                                    })?
+                                    new_address
+                                }
                             };
 
                             // TEMP PATCH (ENG-4993)
@@ -642,9 +646,11 @@ where
                                 update.change = ChangeType::Update;
                             }
 
-                            // assign original token contract to new address
+                            // apply code update to original token contract at its proxy address
+                            update.slots = HashMap::new();
                             update.address = proxy_addr;
                         };
+
                         Ok((update.address, update))
                     })
                     .collect::<Result<HashMap<_, _>, StreamDecodeError>>()?;
