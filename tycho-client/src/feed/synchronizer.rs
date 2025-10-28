@@ -16,8 +16,8 @@ use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     dto::{
         BlockChanges, EntryPointWithTracingParams, ExtractorIdentity, PaginationResponse,
-        ProtocolComponent, ResponseAccount, ResponseProtocolState, SnapshotRequestBody,
-        TracedEntryPointRequestResponse, TracingResult,
+        ProtocolComponent, ResponseAccount, ResponseProtocolState, TracedEntryPointRequestResponse,
+        TracingResult,
     },
     Bytes,
 };
@@ -29,6 +29,7 @@ use crate::{
         BlockHeader, HeaderLike,
     },
     rpc::{RPCClient, RPCError},
+    snapshot::SnapshotRequestBody,
     DeltasError,
 };
 
@@ -771,7 +772,10 @@ mod test {
     use uuid::Uuid;
 
     use super::*;
-    use crate::{deltas::MockDeltasClient, rpc::MockRPCClient, DeltasError, RPCError};
+    use crate::{
+        deltas::MockDeltasClient, rpc::MockRPCClient, DeltasError, RPCError,
+        SnapshotRequestResponse,
+    };
 
     // Required for mock client to implement clone
     struct ArcRPCClient<T>(Arc<T>);
@@ -850,7 +854,7 @@ mod test {
             request: &SnapshotRequestBody,
             chunk_size: usize,
             concurrency: usize,
-        ) -> Result<tycho_common::dto::SnapshotRequestResponse, RPCError> {
+        ) -> Result<SnapshotRequestResponse, RPCError> {
             self.0
                 .get_snapshots(request, chunk_size, concurrency)
                 .await
@@ -949,13 +953,13 @@ mod test {
         // Mock get_snapshots for Component3
         rpc_client
             .expect_get_snapshots()
-            .withf(|request: &SnapshotRequestBody| {
+            .withf(|request: &SnapshotRequestBody, _chunk_size: &usize, _concurrency: &usize| {
                 request
                     .component_ids
                     .contains(&"Component3".to_string())
             })
-            .returning(|_request| {
-                Ok(tycho_common::dto::SnapshotRequestResponse::new(
+            .returning(|_request, _chunk_size, _concurrency| {
+                Ok(SnapshotRequestResponse::new(
                     [(
                         "Component3".to_string(),
                         ResponseProtocolState {
@@ -992,8 +996,8 @@ mod test {
 
         rpc_client
             .expect_get_snapshots()
-            .returning(|_request| {
-                Ok(tycho_common::dto::SnapshotRequestResponse::new(
+            .returning(|_request, _chunk_size, _concurrency| {
+                Ok(SnapshotRequestResponse::new(
                     [
                         (
                             "Component1".to_string(),
@@ -1295,13 +1299,13 @@ mod test {
         // Mock get_snapshots for Component3
         rpc_client
             .expect_get_snapshots()
-            .withf(|request: &SnapshotRequestBody| {
+            .withf(|request: &SnapshotRequestBody, _chunk_size: &usize, _concurrency: &usize| {
                 request
                     .component_ids
                     .contains(&"Component3".to_string())
             })
-            .returning(|_request| {
-                Ok(tycho_common::dto::SnapshotRequestResponse::new(
+            .returning(|_request, _chunk_size, _concurrency| {
+                Ok(SnapshotRequestResponse::new(
                     [(
                         "Component3".to_string(),
                         ResponseProtocolState {
@@ -1335,8 +1339,8 @@ mod test {
         // Mock get_snapshots for initial snapshot
         rpc_client
             .expect_get_snapshots()
-            .returning(|_request| {
-                Ok(tycho_common::dto::SnapshotRequestResponse::new(
+            .returning(|_request, _chunk_size, _concurrency| {
+                Ok(SnapshotRequestResponse::new(
                     [
                         (
                             "Component1".to_string(),

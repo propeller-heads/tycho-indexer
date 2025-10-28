@@ -28,15 +28,17 @@ use tycho_common::{
         BlockParam, Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse, PaginationParams,
         PaginationResponse, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
         ProtocolStateRequestBody, ProtocolStateRequestResponse, ProtocolSystemsRequestBody,
-        ProtocolSystemsRequestResponse, ResponseToken, SnapshotRequestBody,
-        SnapshotRequestResponse, StateRequestBody, StateRequestResponse, TokensRequestBody,
-        TokensRequestResponse, TracedEntryPointRequestBody, TracedEntryPointRequestResponse,
-        VersionParam,
+        ProtocolSystemsRequestResponse, ResponseToken, StateRequestBody, StateRequestResponse,
+        TokensRequestBody, TokensRequestResponse, TracedEntryPointRequestBody,
+        TracedEntryPointRequestResponse, VersionParam,
     },
     Bytes,
 };
 
-use crate::TYCHO_SERVER_VERSION;
+use crate::{
+    snapshot::{SnapshotRequestBody, SnapshotRequestResponse},
+    TYCHO_SERVER_VERSION,
+};
 
 #[derive(Error, Debug)]
 pub enum RPCError {
