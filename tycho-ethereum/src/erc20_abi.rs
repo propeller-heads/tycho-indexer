@@ -4,6 +4,7 @@ use alloy::{
     primitives::{Address, U256},
 };
 
+const MAX_DECIMALS: U256 = U256::from_limbs([256, 0, 0, 0]);
 const ERC20_ABI_STR: &str = include_str!("./token_pre_processor/abi/erc20.json");
 
 pub fn get_erc20_abi() -> Result<JsonAbi, Box<dyn std::error::Error + Send + Sync>> {
@@ -77,8 +78,31 @@ pub fn decode_decimals(data: &[u8]) -> Result<u8, Box<dyn std::error::Error + Se
     let function = get_erc20_function("decimals")?;
     let decoded = function.abi_decode_output(data)?;
     if let Some(DynSolValue::Uint(decimals, _)) = decoded.first() {
-        Ok(decimals.to::<u8>())
+        if decimals < &MAX_DECIMALS {
+            Ok(decimals.to::<u8>())
+        } else {
+            Err("More than 255 decimals are not supported".into())
+        }
     } else {
         Err("Decimals function returned unexpected type".into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_decode_decimals() {
+        let val = U256::from(255);
+        let decimals = decode_decimals(&val.to_be_bytes::<32>()).unwrap();
+        assert_eq!(decimals, 255);
+    }
+
+    #[test]
+    fn test_decode_decimals_does_not_panic() {
+        let val = U256::from(1024);
+        let res = decode_decimals(&val.to_be_bytes::<32>());
+        assert!(res.is_err());
     }
 }
