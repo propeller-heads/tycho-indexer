@@ -102,7 +102,7 @@ where
             self.cache
                 .ep_id_to_component_id
                 .pending_entry(&block_changes.block, &ep.external_id)?
-                .or_insert(HashSet::new())
+                .or_default()
                 .insert(component_id);
         }
 
@@ -159,6 +159,11 @@ where
                     tx.state_updates
                         .keys()
                         .map(|pc| (pc, tx.tx.clone()))
+                        .chain(
+                            tx.balance_changes
+                                .keys()
+                                .map(|pc| (pc, tx.tx.clone())),
+                        )
                 })
                 .collect::<HashMap<_, _>>();
 
@@ -166,24 +171,20 @@ where
                 if let Some(entrypoint_params_set) = self
                     .cache
                     .component_id_to_entrypoint_params
-                    .get(component_id)
+                    .get_all(component_id)
                 {
                     for entrypoint_with_params in entrypoint_params_set {
-                        let key = (
-                            entrypoint_with_params
-                                .entry_point
-                                .external_id
-                                .clone(),
-                            entrypoint_with_params.params.clone(),
-                        );
-
                         // If we have None (failed trace) for this key, check retry count before
                         // retrying
-                        if let Some(None) = self.cache.entrypoint_results.get(&key) {
+                        if let Some(None) = self
+                            .cache
+                            .entrypoint_results
+                            .get(entrypoint_with_params)
+                        {
                             let retry_count = self
                                 .cache
                                 .tracing_retry_counts
-                                .get(&key)
+                                .get(entrypoint_with_params)
                                 .cloned()
                                 .unwrap_or(0);
 
@@ -233,16 +234,6 @@ where
             HashMap::new();
         for (entrypoint_id, tracing_params) in new_entrypoint_params.iter() {
             for (tx, param) in tracing_params.iter() {
-                // Skip if we already have a successful trace for this entrypoint + params pair.
-                // Only skip if we have Some(result), not if we have None (failed trace).
-                if let Some(Some(_)) = self
-                    .cache
-                    .entrypoint_results
-                    .get(&(entrypoint_id.clone(), param.clone()))
-                {
-                    continue;
-                }
-
                 let entrypoint = new_entrypoints
                     .get(entrypoint_id)
                     .or_else(|| {
@@ -260,6 +251,16 @@ where
                 let entrypoint_with_params =
                     EntryPointWithTracingParams::new(entrypoint.clone(), param.clone());
 
+                // Skip if we already have a successful trace for this entrypoint + params pair.
+                // Only skip if we have Some(result), not if we have None (failed trace).
+                if let Some(Some(_)) = self
+                    .cache
+                    .entrypoint_results
+                    .get(&entrypoint_with_params)
+                {
+                    continue;
+                }
+
                 // Update the component_id_to_entrypoint_params cache
                 if let Some(component_ids) = self
                     .cache
@@ -270,7 +271,7 @@ where
                         self.cache
                             .component_id_to_entrypoint_params
                             .pending_entry(&block_changes.block, component_id)?
-                            .or_insert(HashSet::new())
+                            .or_default()
                             .insert(entrypoint_with_params.clone());
                     }
                 }
@@ -573,30 +574,26 @@ where
 
             // Store failed traces as None in the cache and increment retry counter
             for (failed_ep, _) in failed_entrypoints.iter() {
-                let key = (
-                    failed_ep
-                        .entry_point
-                        .external_id
-                        .clone(),
-                    failed_ep.params.clone(),
-                );
-
                 // Store the failed trace result
                 self.cache
                     .entrypoint_results
-                    .insert_pending(block_changes.block.clone(), key.clone(), None)?;
+                    .insert_pending(block_changes.block.clone(), failed_ep.clone(), None)?;
 
                 // Get current retry count (default to 0 if first failure) and increment
                 let current_retry_count = self
                     .cache
                     .tracing_retry_counts
-                    .get(&key)
+                    .get(failed_ep)
                     .cloned()
                     .unwrap_or(0);
 
                 self.cache
                     .tracing_retry_counts
-                    .insert_pending(block_changes.block.clone(), key, current_retry_count + 1)?;
+                    .insert_pending(
+                        block_changes.block.clone(),
+                        failed_ep.clone(),
+                        current_retry_count + 1,
+                    )?;
             }
 
             // Update the block changes with the traced entrypoints
@@ -774,14 +771,11 @@ where
             );
 
         // First, populate all TracingParams with None
-        for (entrypoint_id, params_set) in entrypoints_with_params.iter() {
+        for (_entrypoint_id, params_set) in entrypoints_with_params.iter() {
             for entrypoint_with_params in params_set.iter() {
                 self.cache
                     .entrypoint_results
-                    .insert_permanent(
-                        (entrypoint_id.clone(), entrypoint_with_params.params.clone()),
-                        None,
-                    );
+                    .insert_permanent(entrypoint_with_params.clone(), None);
             }
         }
 
@@ -821,9 +815,20 @@ where
                         .or_insert(slots_to_insert);
                 }
 
+                let entrypoint_with_params_for_result = EntryPointWithTracingParams::new(
+                    self.cache
+                        .ep_id_to_entrypoint
+                        .get(&entrypoint_id)
+                        .ok_or(ExtractionError::Setup(format!(
+                            "Got a tracing result for a unknown entrypoint: {entrypoint_id}"
+                        )))?
+                        .clone(),
+                    param.clone(),
+                );
+
                 self.cache
                     .entrypoint_results
-                    .insert_permanent((entrypoint_id.clone(), param), Some(result));
+                    .insert_permanent(entrypoint_with_params_for_result, Some(result));
             }
         }
 
@@ -1102,17 +1107,9 @@ where
                 .entrypoint_results
                 .insert_pending(
                     block.clone(),
-                    (
-                        traced_entry_point
-                            .entry_point_with_params
-                            .entry_point
-                            .external_id
-                            .clone(),
-                        traced_entry_point
-                            .entry_point_with_params
-                            .params
-                            .clone(),
-                    ),
+                    traced_entry_point
+                        .entry_point_with_params
+                        .clone(),
                     Some(
                         traced_entry_point
                             .tracing_result
