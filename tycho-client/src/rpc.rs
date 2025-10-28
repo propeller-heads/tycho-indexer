@@ -591,6 +591,8 @@ pub trait RPCClient: Send + Sync {
     async fn get_snapshots(
         &self,
         request: &SnapshotRequestBody,
+        chunk_size: usize,
+        concurrency: usize,
     ) -> Result<SnapshotRequestResponse, RPCError>;
 }
 
@@ -1035,10 +1037,9 @@ impl RPCClient for HttpRPCClient {
     async fn get_snapshots(
         &self,
         request: &SnapshotRequestBody,
+        chunk_size: usize,
+        concurrency: usize,
     ) -> Result<SnapshotRequestResponse, RPCError> {
-        let chunk_size = 100;
-        let concurrency = 4;
-
         let version = VersionParam::new(
             None,
             Some({
@@ -2340,7 +2341,7 @@ mod tests {
         );
 
         let response = client
-            .get_snapshots(&request)
+            .get_snapshots(&request, 100, 4)
             .await
             .expect("get snapshots");
 
@@ -2392,7 +2393,7 @@ mod tests {
         );
 
         let response = client
-            .get_snapshots(&request)
+            .get_snapshots(&request, 100, 4)
             .await
             .expect("get snapshots");
 
@@ -2463,7 +2464,7 @@ mod tests {
         );
 
         let response = client
-            .get_snapshots(&request)
+            .get_snapshots(&request, 100, 4)
             .await
             .expect("get snapshots");
 

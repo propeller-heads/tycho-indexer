@@ -367,7 +367,7 @@ where
                             self.retrieve_balances,
                             self.include_tvl,
                         );
-                        let snapshot_response = self.rpc_client.get_snapshots(&request).await?;
+                        let snapshot_response = self.rpc_client.get_snapshots(&request, 100, 4).await?;
 
                         // Process entrypoints if we got them
                         if !snapshot_response.traced_entry_points.is_empty() {
@@ -497,7 +497,7 @@ where
                                             self.retrieve_balances,
                                             self.include_tvl,
                                         );
-                                        let snapshot_response = self.rpc_client.get_snapshots(&request).await?;
+                                        let snapshot_response = self.rpc_client.get_snapshots(&request, 100, 4).await?;
 
                                         // Process entrypoints if we got them
                                         if !snapshot_response.traced_entry_points.is_empty() {
@@ -848,8 +848,12 @@ mod test {
         async fn get_snapshots(
             &self,
             request: &SnapshotRequestBody,
+            chunk_size: usize,
+            concurrency: usize,
         ) -> Result<tycho_common::dto::SnapshotRequestResponse, RPCError> {
-            self.0.get_snapshots(request).await
+            self.0
+                .get_snapshots(request, chunk_size, concurrency)
+                .await
         }
     }
 
