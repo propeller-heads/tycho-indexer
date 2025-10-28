@@ -6,7 +6,7 @@ use std::{
 use thiserror::Error;
 use tracing::{debug, trace, warn};
 use tycho_common::models::{
-    blockchain::{Block, EntryPoint, EntryPointWithTracingParams, TracingParams, TracingResult},
+    blockchain::{Block, EntryPoint, EntryPointWithTracingParams, TracingResult},
     protocol::ProtocolComponent,
     Address, BlockHash, ComponentId, EntryPointId, StoreKey,
 };
@@ -840,7 +840,7 @@ mod tests {
             .entrypoint_results
             .insert_pending(
                 block1.clone(),
-                (entrypoint.external_id.clone(), tracing_params.clone()),
+                EntryPointWithTracingParams::new(entrypoint.clone(), tracing_params.clone()),
                 Some(tracing_result.clone()),
             )
             .unwrap();

@@ -151,60 +151,69 @@ where
             let mut retry_params: HashMap<EntryPointId, Vec<(Transaction, TracingParams)>> =
                 HashMap::new();
 
-            // Check for components with state updates that have failed traces to retry
-            let updated_components: HashMap<&ComponentId, Transaction> = block_changes
+            // Process updated components while deduplicating in a single pass
+            // We iterate in reverse order to encounter the latest transaction first for each
+            // component, using a HashSet to track seen components and process retry
+            // logic immediately
+            let mut seen_components: HashSet<&ComponentId> = HashSet::new();
+
+            for tx_with_changes in block_changes
                 .txs_with_update
                 .iter()
-                .flat_map(|tx| {
-                    tx.state_updates
-                        .keys()
-                        .map(|pc| (pc, tx.tx.clone()))
-                        .chain(
-                            tx.balance_changes
-                                .keys()
-                                .map(|pc| (pc, tx.tx.clone())),
-                        )
-                })
-                .collect::<HashMap<_, _>>();
-
-            for (component_id, tx) in updated_components.iter() {
-                if let Some(entrypoint_params_set) = self
-                    .cache
-                    .component_id_to_entrypoint_params
-                    .get_all(component_id)
+                .rev()
+            {
+                for component_id in tx_with_changes
+                    .state_updates
+                    .keys()
+                    .chain(tx_with_changes.balance_changes.keys())
                 {
-                    for entrypoint_with_params in entrypoint_params_set {
-                        // If we have None (failed trace) for this key, check retry count before
-                        // retrying
-                        if let Some(None) = self
+                    // Only process each component once (first time we see it, which is the latest
+                    // tx)
+                    if seen_components.insert(component_id) {
+                        if let Some(entrypoint_params_sets) = self
                             .cache
-                            .entrypoint_results
-                            .get(entrypoint_with_params)
+                            .component_id_to_entrypoint_params
+                            .get_all(component_id.clone())
                         {
-                            let retry_count = self
-                                .cache
-                                .tracing_retry_counts
-                                .get(entrypoint_with_params)
-                                .cloned()
-                                .unwrap_or(0);
+                            for entrypoint_params_set in entrypoint_params_sets {
+                                for entrypoint_with_params in entrypoint_params_set {
+                                    // If we have None (failed trace) for this key, check retry
+                                    // count
+                                    if let Some(None) = self
+                                        .cache
+                                        .entrypoint_results
+                                        .get(entrypoint_with_params)
+                                    {
+                                        let retry_count = self
+                                            .cache
+                                            .tracing_retry_counts
+                                            .get(entrypoint_with_params)
+                                            .cloned()
+                                            .unwrap_or(0);
 
-                            if retry_count < self.max_retry_count {
-                                retry_params
-                                    .entry(
-                                        entrypoint_with_params
-                                            .entry_point
-                                            .external_id
-                                            .clone(),
-                                    )
-                                    .or_default()
-                                    .push((tx.clone(), entrypoint_with_params.params.clone()));
-                            } else {
-                                debug!(
-                                    "Skipping retry for entrypoint {:?} with params - max retries ({}) exceeded (retry_count: {})",
-                                    entrypoint_with_params.entry_point.external_id,
-                                    self.max_retry_count,
-                                    retry_count
-                                );
+                                        if retry_count < self.max_retry_count {
+                                            retry_params
+                                                .entry(
+                                                    entrypoint_with_params
+                                                        .entry_point
+                                                        .external_id
+                                                        .clone(),
+                                                )
+                                                .or_default()
+                                                .push((
+                                                    tx_with_changes.tx.clone(),
+                                                    entrypoint_with_params.params.clone(),
+                                                ));
+                                        } else {
+                                            debug!(
+                                                "Aborting retries for entrypoint {:?} on current state and params - max retries ({}) exceeded (retry_count: {})",
+                                                entrypoint_with_params.entry_point.external_id,
+                                                self.max_retry_count,
+                                                retry_count
+                                            );
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -218,9 +227,10 @@ where
             debug!("Will retry {:?} parameters", params_to_retry.len());
         }
 
-        // Merge retry params into new_entrypoint_params
+        // Combine new params from block and retry params into a single map for processing
+        let mut all_entrypoint_params = new_entrypoint_params;
         for (ep_id, retry_params) in params_to_retry {
-            new_entrypoint_params
+            all_entrypoint_params
                 .entry(ep_id)
                 .or_default()
                 .extend(retry_params);
@@ -232,7 +242,7 @@ where
         // for performance reasons, we don't want to re-analyze the same entrypoint many times.
         let mut entrypoints_to_analyze: HashMap<EntryPointWithTracingParams, &Transaction> =
             HashMap::new();
-        for (entrypoint_id, tracing_params) in new_entrypoint_params.iter() {
+        for (entrypoint_id, tracing_params) in all_entrypoint_params.iter() {
             for (tx, param) in tracing_params.iter() {
                 let entrypoint = new_entrypoints
                     .get(entrypoint_id)
@@ -251,8 +261,8 @@ where
                 let entrypoint_with_params =
                     EntryPointWithTracingParams::new(entrypoint.clone(), param.clone());
 
-                // Skip if we already have a successful trace for this entrypoint + params pair.
-                // Only skip if we have Some(result), not if we have None (failed trace).
+                // Skip if we already have a successful trace (Some(result)), not if we have None
+                // (failed trace).
                 if let Some(Some(_)) = self
                     .cache
                     .entrypoint_results
@@ -341,23 +351,19 @@ where
                 }
             }
 
-            let ep_ids_to_pause = failed_entrypoints
+            let component_ids_to_pause = failed_entrypoints
                 .iter()
-                .map(|(ep, tx)| (ep.entry_point.external_id.clone(), *tx))
-                .collect::<HashSet<_>>();
-
-            let mut component_ids_to_pause = HashMap::new();
-            for (ep_id, tx) in ep_ids_to_pause {
-                if let Some(component_ids) = self
-                    .cache
-                    .ep_id_to_component_id
-                    .get_all(ep_id)
-                {
-                    for component_id in component_ids.flatten() {
-                        component_ids_to_pause.insert(component_id, tx);
-                    }
-                }
-            }
+                .flat_map(|(ep, tx)| {
+                    // Get component IDs associated with this entry point's external ID
+                    self.cache
+                        .ep_id_to_component_id
+                        .get_all(ep.entry_point.external_id.clone())
+                        .into_iter()
+                        .flatten()
+                        .flatten() // Flatten the inner iterator of component IDs
+                        .map(move |component_id| (component_id, *tx))
+                })
+                .collect::<HashMap<_, _>>();
 
             tracing::debug!(
                 traced_entry_points = traced_entry_points
@@ -561,7 +567,7 @@ where
                 )?;
             }
 
-            // Update the cache with new traced entrypoints
+            // Update the cache with new traced entrypoints and failed entrypoints
             let _span = span!(
                 Level::INFO,
                 "dci_cache_update",
@@ -569,32 +575,8 @@ where
                 block_number = block_changes.block.number
             )
             .entered();
-            self.update_cache(&block_changes.block, &traced_entry_points)?;
+            self.update_cache(&block_changes.block, &traced_entry_points, &failed_entrypoints)?;
             drop(_span);
-
-            // Store failed traces as None in the cache and increment retry counter
-            for (failed_ep, _) in failed_entrypoints.iter() {
-                // Store the failed trace result
-                self.cache
-                    .entrypoint_results
-                    .insert_pending(block_changes.block.clone(), failed_ep.clone(), None)?;
-
-                // Get current retry count (default to 0 if first failure) and increment
-                let current_retry_count = self
-                    .cache
-                    .tracing_retry_counts
-                    .get(failed_ep)
-                    .cloned()
-                    .unwrap_or(0);
-
-                self.cache
-                    .tracing_retry_counts
-                    .insert_pending(
-                        block_changes.block.clone(),
-                        failed_ep.clone(),
-                        current_retry_count + 1,
-                    )?;
-            }
 
             // Update the block changes with the traced entrypoints
             block_changes.trace_results = traced_entry_points;
@@ -1064,6 +1046,7 @@ where
         &mut self,
         block: &Block,
         new_tracing_results: &[TracedEntryPoint],
+        failed_entrypoints: &[(EntryPointWithTracingParams, &Transaction)],
     ) -> Result<(), ExtractionError> {
         // Update the cache with the traced entrypoints
         // Perf: when syncing we can completely bypass the reorgs handling logic and push directly
@@ -1116,6 +1099,21 @@ where
                             .clone(),
                     ),
                 )?;
+        }
+
+        // Store failed traces as None in the cache and increment retry counter
+        for (failed_ep, _) in failed_entrypoints.iter() {
+            // Store the failed trace result
+            self.cache
+                .entrypoint_results
+                .insert_pending(block.clone(), failed_ep.clone(), None)?;
+
+            // Increment retry counter (starting from 0 on first failure)
+            self.cache
+                .tracing_retry_counts
+                .pending_entry(block, failed_ep)?
+                .and_modify(|count| *count += 1)
+                .or_insert(0);
         }
 
         Ok(())
@@ -1563,11 +1561,20 @@ mod tests {
                 .entrypoint_results
                 .get_full_permanent_state(),
             &HashMap::from([
-                (("entrypoint_1".to_string(), get_tracing_params(1)), Some(get_tracing_result(1))),
-                (("entrypoint_1".to_string(), get_tracing_params(2)), None), /* No result for
-                                                                              * this param */
-                (("entrypoint_2".to_string(), get_tracing_params(3)), Some(get_tracing_result(2))),
-                (("entrypoint_4".to_string(), get_tracing_params(1)), Some(get_tracing_result(1))),
+                (
+                    EntryPointWithTracingParams::new(get_entrypoint(1), get_tracing_params(1)),
+                    Some(get_tracing_result(1))
+                ),
+                (EntryPointWithTracingParams::new(get_entrypoint(1), get_tracing_params(2)), None), /* No result for
+                                                                                                     * this param */
+                (
+                    EntryPointWithTracingParams::new(get_entrypoint(2), get_tracing_params(3)),
+                    Some(get_tracing_result(2))
+                ),
+                (
+                    EntryPointWithTracingParams::new(get_entrypoint(4), get_tracing_params(1)),
+                    Some(get_tracing_result(1))
+                ),
             ])
         );
         assert_eq!(
@@ -3349,7 +3356,7 @@ mod tests {
         assert_eq!(
             dci.cache
                 .entrypoint_results
-                .get(&(entrypoint_id.clone(), tracing_params.clone())),
+                .get(&EntryPointWithTracingParams::new(entrypoint.clone(), tracing_params.clone())),
             Some(&None)
         );
 
@@ -3379,7 +3386,7 @@ mod tests {
         assert!(matches!(
             dci.cache
                 .entrypoint_results
-                .get(&(entrypoint_id, tracing_params)),
+                .get(&EntryPointWithTracingParams::new(entrypoint, tracing_params)),
             Some(Some(_))
         ));
     }
@@ -3497,7 +3504,7 @@ mod tests {
         assert!(matches!(
             dci.cache
                 .entrypoint_results
-                .get(&(entrypoint_id.clone(), tracing_params.clone())),
+                .get(&EntryPointWithTracingParams::new(entrypoint.clone(), tracing_params.clone())),
             Some(Some(_))
         ));
 
@@ -3529,7 +3536,7 @@ mod tests {
         assert!(matches!(
             dci.cache
                 .entrypoint_results
-                .get(&(entrypoint_id, tracing_params)),
+                .get(&EntryPointWithTracingParams::new(entrypoint, tracing_params)),
             Some(Some(_))
         ));
     }
