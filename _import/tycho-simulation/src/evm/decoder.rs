@@ -311,7 +311,6 @@ where
                     removed_pairs.insert(id, component);
                 }
 
-                // Continue with the same write guard for token proxy processing
                 // UPDATE VM STORAGE
                 let mut token_proxy_accounts: HashMap<Address, AccountUpdate> = HashMap::new();
 
@@ -343,39 +342,32 @@ where
                             // delegatecall to the original contract.
 
                             // Get or create a new token address
-                            let proxy_addr = if !state_guard
+                            let proxy_addr = match state_guard
                                 .proxy_token_addresses
-                                .contains_key(&original_address)
+                                .get(&original_address)
                             {
-                                // Token does not have a proxy contract yet, create one
+                                Some(proxy_addr) => *proxy_addr,
+                                None => {
+                                    // Token does not have a proxy contract yet, create one
 
-                                // Assign original token contract to new address
-                                let new_address = generate_proxy_token_address(
-                                    state_guard.proxy_token_addresses.len() as u32,
-                                )?;
-                                state_guard
-                                    .proxy_token_addresses
-                                    .insert(original_address, new_address);
+                                    // Assign original token contract to new address
+                                    let new_address = generate_proxy_token_address(
+                                        state_guard.proxy_token_addresses.len() as u32,
+                                    )?;
+                                    state_guard
+                                        .proxy_token_addresses
+                                        .insert(original_address, new_address);
 
-                                // Add proxy token contract at original token address
-                                let proxy_state = create_proxy_token_account(
-                                    original_address,
-                                    new_address,
-                                    &account.slots,
-                                    value.chain.into(),
-                                );
-                                token_proxy_accounts.insert(original_address, proxy_state);
-                                new_address
-                            } else {
-                                state_guard
-                                    .proxy_token_addresses
-                                    .get(&original_address)
-                                    .copied()
-                                    .ok_or_else(|| {
-                                        StreamDecodeError::Fatal(
-                                            "Missing proxy token address".to_string(),
-                                        )
-                                    })?
+                                    // Add proxy token contract at original token address
+                                    let proxy_state = create_proxy_token_account(
+                                        original_address,
+                                        Some(new_address),
+                                        &account.slots,
+                                        value.chain.into(),
+                                    );
+                                    token_proxy_accounts.insert(original_address, proxy_state);
+                                    new_address
+                                }
                             };
 
                             // assign original token contract to new address
@@ -418,6 +410,7 @@ where
             let mut components_to_store = HashMap::new();
             {
                 let state_guard = self.state.read().await;
+
                 // PROCESS SNAPSHOTS
                 'snapshot_loop: for (id, snapshot) in protocol_msg
                     .snapshots
@@ -441,8 +434,8 @@ where
                             Some(token) => {
                                 component_tokens.push(token.clone());
 
-                                // If the token is not a proxy token, we need to add it to the
-                                // simulation engine
+                                // If the token is not an existing proxy token, we need to add it to
+                                // the simulation engine
                                 let token_address = match bytes_to_address(&token.address) {
                                     Ok(addr) => addr,
                                     Err(_) => {
@@ -453,22 +446,19 @@ where
                                         continue 'snapshot_loop;
                                     }
                                 };
-                                // TODO: Ok we deployed a proxy whenever we see a new token without
-                                // a implementation set.
+                                // Deploy a proxy account without an implementation set
                                 if !state_guard
                                     .proxy_token_addresses
                                     .contains_key(&token_address)
                                 {
                                     new_tokens_accounts.insert(
                                         token_address,
-                                        AccountUpdate {
-                                            address: token_address,
-                                            chain: snapshot.component.chain.into(),
-                                            slots: HashMap::new(),
-                                            balance: None,
-                                            code: Some(ERC20_PROXY_BYTECODE.into()),
-                                            change: ChangeType::Creation,
-                                        },
+                                        create_proxy_token_account(
+                                            token_address,
+                                            None,
+                                            &HashMap::new(),
+                                            snapshot.component.chain.into(),
+                                        ),
                                     );
                                 }
                             }
@@ -621,7 +611,7 @@ where
                                     // Create proxy token account with original account's storage
                                     let proxy_state = create_proxy_token_account(
                                         original_address,
-                                        new_address,
+                                        Some(new_address),
                                         &update.slots,
                                         update.chain,
                                     );
@@ -944,13 +934,14 @@ fn generate_proxy_token_address(idx: u32) -> Result<Address, StreamDecodeError> 
 /// address.
 fn create_proxy_token_account(
     addr: Address,
-    new_address: Address,
+    new_address: Option<Address>,
     storage: &HashMap<U256, U256>,
     chain: Chain,
 ) -> AccountUpdate {
-    let mut slots =
-        HashMap::from([(*IMPLEMENTATION_SLOT, U256::from_be_slice(new_address.as_slice()))]);
-    slots.extend(storage);
+    let mut slots = storage.clone();
+    if let Some(new_address) = new_address {
+        slots.insert(*IMPLEMENTATION_SLOT, U256::from_be_slice(new_address.as_slice()));
+    }
 
     AccountUpdate {
         address: addr,
