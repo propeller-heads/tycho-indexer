@@ -23,7 +23,7 @@ async fn main() -> Result<(), ()> {
         ),
     )]));
 
-    let trace_call = TraceCallDetector::new(&rpc, Arc::new(tf));
+    let trace_call = TraceCallDetector::new_from_url(&rpc, Arc::new(tf));
 
     let quality = trace_call
         .analyze(

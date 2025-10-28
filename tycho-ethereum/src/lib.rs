@@ -1,25 +1,30 @@
+#[cfg(test)]
+#[macro_use]
+extern crate pretty_assertions;
+
 #[cfg(feature = "onchain_data")]
 pub mod account_extractor;
 #[cfg(feature = "onchain_data")]
 #[allow(unused)] //TODO: Remove when used
 pub mod entrypoint_tracer;
 #[cfg(feature = "onchain_data")]
-pub mod erc20_abi;
+pub mod erc20;
 #[cfg(feature = "onchain_data")]
 pub mod token_analyzer;
 #[cfg(feature = "onchain_data")]
 pub mod token_pre_processor;
 
 #[cfg(test)]
-#[macro_use]
-extern crate pretty_assertions;
+pub mod test_fixtures;
 
 use std::fmt::Display;
 
-use alloy::primitives::{Address, B256, U256};
+use alloy::{
+    primitives::{Address, B256, U256},
+    transports::http::reqwest,
+};
 use thiserror::Error;
-use tycho_common::{models::blockchain::BlockTag, Bytes};
-use web3::types::BlockNumber;
+use tycho_common::Bytes;
 
 #[derive(Error, Debug)]
 pub struct SerdeJsonError {
@@ -79,21 +84,6 @@ pub enum RPCError {
 impl RPCError {
     pub fn should_retry(&self) -> bool {
         matches!(self, Self::RequestError(_))
-    }
-}
-
-pub struct BlockTagWrapper(BlockTag);
-
-impl From<BlockTagWrapper> for BlockNumber {
-    fn from(value: BlockTagWrapper) -> Self {
-        match value.0 {
-            BlockTag::Finalized => BlockNumber::Finalized,
-            BlockTag::Safe => BlockNumber::Safe,
-            BlockTag::Latest => BlockNumber::Latest,
-            BlockTag::Earliest => BlockNumber::Earliest,
-            BlockTag::Pending => BlockNumber::Pending,
-            BlockTag::Number(n) => BlockNumber::Number(n.into()),
-        }
     }
 }
 

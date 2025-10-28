@@ -1,4 +1,10 @@
 #![doc = include_str!("../../README.md")]
+
+// TODO: We need to use `use pretty_assertions::{assert_eq, assert_ne}` per test module.
+#[cfg(test)]
+#[macro_use]
+extern crate pretty_assertions;
+
 use std::{
     collections::HashMap,
     env,
@@ -55,11 +61,6 @@ use tycho_indexer::{
 use tycho_storage::postgres::{builder::GatewayBuilder, cache::CachedGateway};
 
 mod ot;
-
-// TODO: We need to use `use pretty_assertions::{assert_eq, assert_ne}` per test module.
-#[cfg(test)]
-#[macro_use]
-extern crate pretty_assertions;
 
 #[derive(Debug, Deserialize)]
 struct ExtractorConfigs {
@@ -378,7 +379,8 @@ async fn create_indexing_tasks(
         *chains
             .first()
             .expect("No chain provided"), //TODO: handle multichain?
-    );
+    )
+    .map_err(|e| ExtractionError::Setup(format!("Failed to create token pre-processor: {e}")))?;
 
     let (runners, extractor_handles): (Vec<_>, Vec<_>) =
         // TODO: accept substreams configuration from cli.
@@ -487,7 +489,7 @@ where
 #[instrument(skip_all, fields(n_accounts = %accounts.len(), block_id = block_id))]
 async fn initialize_accounts(
     accounts: Vec<Address>,
-    block_id: i64,
+    block_id: u64,
     rpc_url: &str,
     chain: Chain,
     cached_gw: &CachedGateway,
@@ -559,11 +561,11 @@ async fn initialize_accounts(
 
 async fn get_accounts_data(
     accounts: Vec<Address>,
-    block_id: i64,
+    block_id: u64,
     rpc_url: &str,
     chain: Chain,
 ) -> (Block, HashMap<Bytes, AccountDelta>) {
-    let account_extractor = EVMAccountExtractor::new(rpc_url, chain)
+    let account_extractor = EVMAccountExtractor::new_from_url(rpc_url, chain)
         .await
         .expect("Failed to create account extractor");
 

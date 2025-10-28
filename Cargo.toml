@@ -37,7 +37,7 @@ serde_json = "1.0.120"
 serde = { version = "1.0.204", features = ["rc"] }
 strum = "0.25.0"
 strum_macros = "0.25.2"
-alloy-primitives = { version = "0.6.2", features = ["serde"] }
+alloy = { version = "1.0.41", default-features = false }
 uuid = { version = "1.4.1", features = [
     "serde",
     "v4",
