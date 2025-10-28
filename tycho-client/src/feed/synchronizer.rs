@@ -15,9 +15,8 @@ use tokio::{
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     dto::{
-        BlockChanges, EntryPointWithTracingParams, ExtractorIdentity, PaginationResponse,
-        ProtocolComponent, ResponseAccount, ResponseProtocolState, TracedEntryPointRequestResponse,
-        TracingResult,
+        BlockChanges, EntryPointWithTracingParams, ExtractorIdentity, ProtocolComponent,
+        ResponseAccount, ResponseProtocolState, TracingResult,
     },
     Bytes,
 };
@@ -372,11 +371,7 @@ where
 
                         // Process entrypoints if we got them
                         if !snapshot_response.traced_entry_points.is_empty() {
-                            let entrypoint_response = TracedEntryPointRequestResponse {
-                                traced_entry_points: snapshot_response.traced_entry_points.clone(),
-                                pagination: PaginationResponse { page: 0, page_size: 100, total: 0 },
-                            };
-                            self.component_tracker.process_entrypoints(&entrypoint_response.into());
+                            self.component_tracker.process_entrypoints(&snapshot_response.traced_entry_points.clone().into());
                         }
 
                         // Build ComponentWithState from the snapshot response
@@ -502,12 +497,7 @@ where
 
                                         // Process entrypoints if we got them
                                         if !snapshot_response.traced_entry_points.is_empty() {
-                                            use tycho_common::dto::TracedEntryPointRequestResponse;
-                                            let entrypoint_response = TracedEntryPointRequestResponse {
-                                                traced_entry_points: snapshot_response.traced_entry_points.clone(),
-                                                pagination: PaginationResponse { page: 0, page_size: 100, total: 0 },
-                                            };
-                                            self.component_tracker.process_entrypoints(&entrypoint_response.into());
+                                            self.component_tracker.process_entrypoints(&snapshot_response.traced_entry_points.clone().into());
                                         }
 
                                         // Build ComponentWithState from the snapshot response
