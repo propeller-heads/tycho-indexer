@@ -493,8 +493,8 @@ where
                     }
 
                     // collect contracts:ids mapping for states that should update on contract
-                    // changes
-                    if component
+                    // changes (non-manual updates)
+                    if !component
                         .static_attributes
                         .contains_key("manual_updates")
                     {
