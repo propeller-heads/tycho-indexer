@@ -1,3 +1,11 @@
+## [0.99.1](https://github.com/propeller-heads/tycho-indexer/compare/0.99.0...0.99.1) (2025-10-28)
+
+
+### Bug Fixes
+
+* reschedule DB cronjobs ([1c123f0](https://github.com/propeller-heads/tycho-indexer/commit/1c123f0266f389b721c69d8d89fa70c67eafa5c2))
+* reschedule DB cronjobs ([#740](https://github.com/propeller-heads/tycho-indexer/issues/740)) ([cc4256a](https://github.com/propeller-heads/tycho-indexer/commit/cc4256abcc8176d1eac4a5d2b72ec3ec11c7fcbf))
+
 ## [0.99.0](https://github.com/propeller-heads/tycho-indexer/compare/0.98.1...0.99.0) (2025-10-22)
 
 
