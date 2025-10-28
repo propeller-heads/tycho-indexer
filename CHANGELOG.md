@@ -1,3 +1,11 @@
+## [0.99.2](https://github.com/propeller-heads/tycho-indexer/compare/0.99.1...0.99.2) (2025-10-28)
+
+
+### Bug Fixes
+
+* erc20 abi panicking on big decimals values ([#744](https://github.com/propeller-heads/tycho-indexer/issues/744)) ([be07e3b](https://github.com/propeller-heads/tycho-indexer/commit/be07e3b882ea05d5be188e81e9d3a48fc540826e))
+* fix erc20 abi panicking on big decimals values ([0fe3bdb](https://github.com/propeller-heads/tycho-indexer/commit/0fe3bdb49436b99a46f5c1a13fbd10dfcc093d5c))
+
 ## [0.99.1](https://github.com/propeller-heads/tycho-indexer/compare/0.99.0...0.99.1) (2025-10-28)
 
 
