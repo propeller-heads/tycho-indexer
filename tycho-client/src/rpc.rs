@@ -2247,4 +2247,284 @@ mod tests {
             assert!(diff <= Duration::from_secs(3), "Retry time difference too large: {:?}", diff);
         }
     }
+
+    #[tokio::test]
+    async fn test_get_snapshots() {
+        let mut server = Server::new_async().await;
+
+        // Mock protocol states response
+        let protocol_states_resp = r#"
+        {
+            "states": [
+                {
+                    "component_id": "component1",
+                    "attributes": {
+                        "attribute_1": "0x00000000000003e8"
+                    },
+                    "balances": {
+                        "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2": "0x01f4"
+                    }
+                }
+            ],
+            "pagination": {
+                "page": 0,
+                "page_size": 100,
+                "total": 1
+            }
+        }
+        "#;
+
+        // Mock contract state response
+        let contract_state_resp = r#"
+        {
+            "accounts": [
+                {
+                    "chain": "ethereum",
+                    "address": "0x1111111111111111111111111111111111111111",
+                    "title": "",
+                    "slots": {},
+                    "native_balance": "0x01f4",
+                    "token_balances": {},
+                    "code": "0x00",
+                    "code_hash": "0x5c06b7c5b3d910fd33bc2229846f9ddaf91d584d9b196e16636901ac3a77077e",
+                    "balance_modify_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "code_modify_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "creation_tx": null
+                }
+            ],
+            "pagination": {
+                "page": 0,
+                "page_size": 100,
+                "total": 1
+            }
+        }
+        "#;
+
+        // Mock component TVL response
+        let tvl_resp = r#"
+        {
+            "tvl": {
+                "component1": 1000000.0
+            },
+            "pagination": {
+                "page": 0,
+                "page_size": 100,
+                "total": 1
+            }
+        }
+        "#;
+
+        // Mock traced entry points response
+        let entrypoints_resp = r#"
+        {
+            "traced_entry_points": {
+                "component1": [
+                    [
+                        {
+                            "entry_point": {
+                                "external_id": "swap",
+                                "target": "0x1111111111111111111111111111111111111111",
+                                "signature": "swap(uint256,uint256)"
+                            },
+                            "params": {
+                                "method": "rpctracer",
+                                "caller": "0x2222222222222222222222222222222222222222",
+                                "calldata": "0x00"
+                            }
+                        },
+                        {
+                            "retriggers": [],
+                            "accessed_slots": {}
+                        }
+                    ]
+                ]
+            },
+            "pagination": {
+                "page": 0,
+                "page_size": 100,
+                "total": 1
+            }
+        }
+        "#;
+
+        let protocol_states_mock = server
+            .mock("POST", "/v1/protocol_state")
+            .expect(1)
+            .with_body(protocol_states_resp)
+            .create_async()
+            .await;
+
+        let contract_state_mock = server
+            .mock("POST", "/v1/contract_state")
+            .expect(1)
+            .with_body(contract_state_resp)
+            .create_async()
+            .await;
+
+        let tvl_mock = server
+            .mock("POST", "/v1/component_tvl")
+            .expect(1)
+            .with_body(tvl_resp)
+            .create_async()
+            .await;
+
+        let entrypoints_mock = server
+            .mock("POST", "/v1/traced_entry_points")
+            .expect(1)
+            .with_body(entrypoints_resp)
+            .create_async()
+            .await;
+
+        let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+
+        let component_ids = vec!["component1".to_string()];
+        let contract_ids = vec![Bytes::from_str("0x1111111111111111111111111111111111111111").unwrap()];
+
+        let response = client
+            .get_snapshots(
+                Chain::Ethereum,
+                "test_protocol",
+                &component_ids,
+                &contract_ids,
+                12345,
+                true,
+                true,
+                100,
+                4,
+            )
+            .await
+            .expect("get snapshots");
+
+        // Verify all mocks were called
+        protocol_states_mock.assert();
+        contract_state_mock.assert();
+        tvl_mock.assert();
+        entrypoints_mock.assert();
+
+        // Assert protocol states
+        assert_eq!(response.protocol_states.len(), 1);
+        assert!(response.protocol_states.contains_key("component1"));
+
+        // Assert VM storage
+        assert_eq!(response.vm_storage.len(), 1);
+        let contract_addr = Bytes::from_str("0x1111111111111111111111111111111111111111").unwrap();
+        assert!(response.vm_storage.contains_key(&contract_addr));
+
+        // Assert component TVL
+        assert_eq!(response.component_tvl.get("component1"), Some(&1000000.0));
+
+        // Assert traced entry points
+        assert_eq!(response.traced_entry_points.len(), 1);
+        assert!(response.traced_entry_points.contains_key("component1"));
+        let entrypoints = &response.traced_entry_points["component1"];
+        assert_eq!(entrypoints.len(), 1);
+        assert_eq!(entrypoints[0].0.entry_point.external_id, "swap");
+    }
+
+    #[tokio::test]
+    async fn test_get_snapshots_empty_components() {
+        let server = Server::new_async().await;
+        let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+
+        let component_ids: Vec<String> = vec![];
+        let contract_ids: Vec<Bytes> = vec![];
+
+        let response = client
+            .get_snapshots(
+                Chain::Ethereum,
+                "test_protocol",
+                &component_ids,
+                &contract_ids,
+                12345,
+                true,
+                true,
+                100,
+                4,
+            )
+            .await
+            .expect("get snapshots");
+
+        // Should return empty response without making any requests
+        assert!(response.protocol_states.is_empty());
+        assert!(response.vm_storage.is_empty());
+        assert!(response.component_tvl.is_empty());
+        assert!(response.traced_entry_points.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_snapshots_without_tvl() {
+        let mut server = Server::new_async().await;
+
+        let protocol_states_resp = r#"
+        {
+            "states": [
+                {
+                    "component_id": "component1",
+                    "attributes": {},
+                    "balances": {}
+                }
+            ],
+            "pagination": {
+                "page": 0,
+                "page_size": 100,
+                "total": 1
+            }
+        }
+        "#;
+
+        // Still need to mock traced_entry_points for Ethereum chain
+        let entrypoints_resp = r#"
+        {
+            "traced_entry_points": {},
+            "pagination": {
+                "page": 0,
+                "page_size": 100,
+                "total": 0
+            }
+        }
+        "#;
+
+        let protocol_states_mock = server
+            .mock("POST", "/v1/protocol_state")
+            .expect(1)
+            .with_body(protocol_states_resp)
+            .create_async()
+            .await;
+
+        let entrypoints_mock = server
+            .mock("POST", "/v1/traced_entry_points")
+            .expect(1)
+            .with_body(entrypoints_resp)
+            .create_async()
+            .await;
+
+        let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+
+        let component_ids = vec!["component1".to_string()];
+        let contract_ids: Vec<Bytes> = vec![]; // No contracts, so no contract_state call
+
+        let response = client
+            .get_snapshots(
+                Chain::Ethereum,
+                "test_protocol",
+                &component_ids,
+                &contract_ids,
+                12345,
+                false,
+                false, // include_tvl = false
+                100,
+                4,
+            )
+            .await
+            .expect("get snapshots");
+
+        // Verify only necessary mocks were called
+        protocol_states_mock.assert();
+        entrypoints_mock.assert(); // Ethereum always fetches entrypoints
+        // No contract_state_mock.assert() since contract_ids is empty
+
+        assert_eq!(response.protocol_states.len(), 1);
+        assert!(response.component_tvl.is_empty());
+        assert!(response.traced_entry_points.is_empty());
+    }
 }
