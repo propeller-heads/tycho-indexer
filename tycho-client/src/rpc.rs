@@ -25,7 +25,7 @@ use tokio::{
 use tracing::{debug, error, instrument, trace, warn};
 use tycho_common::{
     dto::{
-        Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse, PaginationParams,
+        BlockParam, Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse, PaginationParams,
         PaginationResponse, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
         ProtocolStateRequestBody, ProtocolStateRequestResponse, ProtocolSystemsRequestBody,
         ProtocolSystemsRequestResponse, ResponseToken, SnapshotRequestBody,
@@ -1036,16 +1036,12 @@ impl RPCClient for HttpRPCClient {
         &self,
         request: &SnapshotRequestBody,
     ) -> Result<SnapshotRequestResponse, RPCError> {
-        use tycho_common::dto::BlockParam;
-
         let chunk_size = 100;
         let concurrency = 4;
 
         let version = VersionParam::new(
             None,
             Some({
-                // The chain field is deprecated. We rely on block number uniqueness within
-                // the protocol system context, which is already specified in the request.
                 #[allow(deprecated)]
                 BlockParam { hash: None, chain: None, number: Some(request.block_number as i64) }
             }),

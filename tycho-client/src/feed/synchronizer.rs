@@ -17,7 +17,7 @@ use tycho_common::{
     dto::{
         BlockChanges, EntryPointWithTracingParams, ExtractorIdentity, PaginationResponse,
         ProtocolComponent, ResponseAccount, ResponseProtocolState, SnapshotRequestBody,
-        TracingResult,
+        TracedEntryPointRequestResponse, TracingResult,
     },
     Bytes,
 };
@@ -371,7 +371,6 @@ where
 
                         // Process entrypoints if we got them
                         if !snapshot_response.traced_entry_points.is_empty() {
-                            use tycho_common::dto::TracedEntryPointRequestResponse;
                             let entrypoint_response = TracedEntryPointRequestResponse {
                                 traced_entry_points: snapshot_response.traced_entry_points.clone(),
                                 pagination: PaginationResponse { page: 0, page_size: 100, total: 0 },
