@@ -40,7 +40,7 @@ tycho-ethereum = { version = ">=0.91.0", features = ["onchain_data"] }
 tycho-execution = ">=0.129.1"
 
 # EVM dependencies
-alloy = { version = "1.0.30", features = ["providers", "signer-local", "rpc-types-eth"] }
+alloy = { version = "1.0.30", features = ["providers", "signer-local", "rpc-types-eth", "provider-debug-api"] }
 
 [dependencies]
 # Serialization/Deserialization
@@ -112,8 +112,8 @@ approx = "0.5.1"
 rstest = "0.23.0"
 rstest_reuse = "0.7.0"
 tracing-subscriber = { workspace = true, default-features = false, features = [
-  "env-filter",
-  "fmt",
+    "env-filter",
+    "fmt",
 ] }
 tempfile = "3.13.0"
 
@@ -132,7 +132,7 @@ tracing-appender = "0.2.3"
 default = ["evm", "rfq"]
 network_tests = []
 evm = [
-  "dep:foundry-config", "dep:foundry-evm", "dep:revm", "dep:revm-inspectors", "dep:alloy",
+    "dep:foundry-config", "dep:foundry-evm", "dep:revm", "dep:revm-inspectors", "dep:alloy",
 ]
 rfq = ["dep:reqwest", "dep:async-trait", "dep:tokio-tungstenite", "dep:async-stream", "dep:http", "dep:prost"]
 

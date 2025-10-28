@@ -3,6 +3,7 @@ mod metrics;
 mod stream_processor;
 
 use std::{
+    collections::HashMap,
     fmt::Debug,
     num::NonZeroUsize,
     sync::{Arc, RwLock},
@@ -40,7 +41,11 @@ use tycho_simulation::{
 };
 
 use crate::{
-    execution::{encoding::encode_swap, simulate_swap_transaction, tenderly},
+    execution::{
+        encoding::encode_swap,
+        models::{TychoExecutionInfo, TychoExecutionResult},
+        simulate_swap_transaction, tenderly,
+    },
     stream_processor::{
         protocol_stream_processor::ProtocolStreamProcessor,
         rfq_stream_processor::RFQStreamProcessor, StreamUpdate, UpdateType,
@@ -309,6 +314,8 @@ async fn process_update(
 
     // Process states in parallel
     let semaphore = Arc::new(Semaphore::new(cli.parallel_simulations as usize));
+    let mut tasks = Vec::new();
+
     for (id, state) in update
         .update
         .states
@@ -339,7 +346,6 @@ async fn process_update(
                 }
             },
         };
-        let rpc_tools = rpc_tools.clone();
         let block = block.clone();
         let state_id = id.clone();
         let state = state.clone_box();
@@ -349,12 +355,70 @@ async fn process_update(
             .await
             .into_diagnostic()
             .wrap_err("Failed to acquire permit")?;
-        tokio::spawn(async move {
+
+        let task = tokio::spawn(async move {
             let simulation_id = generate_simulation_id(&component.protocol_system, &state_id);
-            process_state(&simulation_id, rpc_tools, chain, component, &block, state_id, state)
-                .await;
+            let result =
+                process_state(&simulation_id, chain, component, &block, state_id, state).await;
             drop(permit);
+            result
         });
+        tasks.push(task);
+    }
+
+    let mut block_execution_info = HashMap::new();
+
+    for task in tasks {
+        match task.await {
+            Ok(execution_data) => {
+                block_execution_info.extend(execution_data);
+            }
+            Err(e) => {
+                warn!("Task failed: {:?}", e);
+            }
+        }
+    }
+
+    info!("Collected {} execution data for block {}", block_execution_info.len(), block.number());
+
+    if block_execution_info.is_empty() {
+        warn!("No simulations were gathered for block {}", block.number());
+        return Ok(())
+    }
+
+    let results =
+        match simulate_swap_transaction(&rpc_tools, block_execution_info.clone(), &block).await {
+            Ok(results) => results,
+            Err((e, _, _)) => return Err(e),
+        };
+
+    let mut n_reverts = 0;
+    let mut n_failures = 0;
+    let total_simulations = results.len();
+    for (simulation_id, result) in &results {
+        let execution_info = match block_execution_info.get(simulation_id) {
+            Some(info) => info,
+            None => {
+                error!("Simulation ID {simulation_id} not found in execution_info HashMap");
+                continue;
+            }
+        }
+        .clone();
+        (n_reverts, n_failures) = process_execution_result(
+            simulation_id,
+            result,
+            execution_info,
+            (*block).clone(),
+            chain.id().to_string(),
+            n_reverts,
+            n_failures,
+        );
+    }
+    if n_reverts > 0 || n_failures > 0 {
+        warn!(
+            "Simulations reverted: {n_reverts}/{}. Simulations failed: {n_failures}/{}",
+            total_simulations, total_simulations
+        )
     }
 
     Ok(())
@@ -371,13 +435,12 @@ async fn process_update(
 )]
 async fn process_state(
     simulation_id: &str,
-    rpc_tools: RPCTools,
     chain: Chain,
     component: ProtocolComponent,
     block: &Block,
     state_id: String,
     state: Box<dyn ProtocolSim>,
-) {
+) -> HashMap<String, TychoExecutionInfo> {
     info!(
         "Component has tokens: {}",
         component
@@ -389,7 +452,7 @@ async fn process_state(
     let tokens_len = component.tokens.len();
     if tokens_len < 2 {
         error!("Component has less than 2 tokens, skipping...");
-        return;
+        return HashMap::new();
     }
     // Get all the possible swap directions
     let swap_directions = match component.protocol_system.as_str() {
@@ -404,7 +467,7 @@ async fn process_state(
                 Some(s) => s.clone(),
                 None => {
                     warn!("Failed to downcast state to HashflowState");
-                    return;
+                    return HashMap::new();
                 }
             };
             vec![(state.base_token, state.quote_token)]
@@ -416,7 +479,8 @@ async fn process_state(
             .map(|perm| (perm[0].clone(), perm[1].clone()))
             .collect(),
     };
-    for (token_in, token_out) in swap_directions.iter() {
+    let mut execution_infos = HashMap::new();
+    for (i, (token_in, token_out)) in swap_directions.iter().enumerate() {
         info!(
             "Processing {} pool {state_id}, from {} to {}",
             component.protocol_system, token_in.symbol, token_out.symbol
@@ -519,95 +583,137 @@ async fn process_state(
                 continue;
             }
         };
-        let simulated_amount_out =
-            match simulate_swap_transaction(&rpc_tools, &solution, &transaction, block).await {
-                Ok(amount) => {
-                    info!(
-                        event_type = "simulation_execution_success",
-                        "Simulation execution succeeded"
-                    );
-                    metrics::record_simulation_execution_success(&component.protocol_system);
-                    amount
-                }
-                Err((e, state_overwrites, metadata)) => {
-                    let error_msg = e.to_string();
-
-                    // Extract revert reason from error message
-                    // Error format is typically "Transaction reverted: <reason>"
-                    let revert_reason =
-                        if let Some(reason) = error_msg.strip_prefix("Transaction reverted: ") {
-                            reason
-                        } else {
-                            &error_msg
-                        };
-
-                    // Extract error name (first word or function signature)
-                    let error_name = extract_error_name(revert_reason);
-
-                    // Generate Tenderly URL for debugging without state overrides
-                    let overrides = tenderly::TenderlySimParams {
-                        network: Some(chain.id().to_string()),
-                        ..Default::default()
-                    };
-                    let tenderly_url = tenderly::build_tenderly_url(
-                        &overrides,
-                        Some(&transaction),
-                        Some(block),
-                        Address::from_slice(&solution.sender[..20]),
-                    );
-                    // Generate overwrites string with metadata
-                    let overwrites_string = if let Some(overwrites) = state_overwrites.as_ref() {
-                        tenderly::get_overwites_string(overwrites, metadata.as_ref())
-                    } else {
-                        String::new()
-                    };
-
-                    error!(
-                        event_type = "simulation_execution_failure",
-                        error_message = %revert_reason,
-                        error_name = %error_name,
-                        tenderly_url = %tenderly_url,
-                        overwrites = %overwrites_string,
-                        "Failed to simulate swap: {error_msg}"
-                    );
-                    metrics::record_simulation_execution_failure(
-                        &component.protocol_system,
-                        &error_name,
-                    );
-
-                    continue;
-                }
-            };
-        info!("Simulated amount_out: {simulated_amount_out} {}", token_out.symbol);
-
-        // Calculate slippage: positive = simulated > expected, negative = simulated < expected
-        let slippage = if simulated_amount_out >= expected_amount_out {
-            let diff = &simulated_amount_out - &expected_amount_out;
-            ((diff.clone() * BigUint::from(10000u32)) / expected_amount_out)
-                .to_f64()
-                .unwrap_or(0.0) /
-                100.0
-        } else {
-            let diff = &expected_amount_out - &simulated_amount_out;
-            -((diff.clone() * BigUint::from(10000u32)) / expected_amount_out)
-                .to_f64()
-                .unwrap_or(0.0) /
-                100.0
-        };
-
-        info!(
-            event_type = "execution_slippage",
-            slippage_ratio = slippage,
-            "Execution slippage: {:.2}%",
-            slippage
+        execution_infos.insert(
+            format!("{}-{:?}", simulation_id, i),
+            TychoExecutionInfo {
+                solution,
+                transaction,
+                expected_amount_out,
+                protocol_system: component.protocol_system.clone(),
+                component_id: component.id.to_string(),
+            },
         );
-        metrics::record_execution_slippage(&component.protocol_system, slippage);
 
         info!(
             "{} pool processed {state_id} from {} to {}",
             component.protocol_system, token_in.symbol, token_out.symbol
         );
     }
+    execution_infos
+}
+
+#[tracing::instrument(
+    skip_all,
+    fields(
+        simulation_id = %simulation_id,
+        protocol = %execution_info.protocol_system,
+        block_number = %block.header.number,
+        component_id = %execution_info.component_id,
+    )
+)]
+fn process_execution_result(
+    simulation_id: &String,
+    result: &TychoExecutionResult,
+    execution_info: TychoExecutionInfo,
+    block: Block,
+    chain_id: String,
+    mut n_reverts: i32,
+    mut n_failures: i32,
+) -> (i32, i32) {
+    match result {
+        TychoExecutionResult::Success { gas_used, amount_out } => {
+            info!(
+                event_type = "simulation_execution_success",
+                amount_out = amount_out.to_string(),
+                gas_used = gas_used,
+                "Simulation execution succeeded"
+            );
+
+            metrics::record_simulation_execution_success(&execution_info.protocol_system);
+
+            // Calculate slippage: positive = simulated > expected, negative = simulated <
+            // expected
+            let slippage = if amount_out >= &execution_info.expected_amount_out {
+                let diff = amount_out - &execution_info.expected_amount_out;
+                ((diff.clone() * BigUint::from(10000u32)) / &execution_info.expected_amount_out)
+                    .to_f64()
+                    .unwrap_or(0.0) /
+                    100.0
+            } else {
+                let diff = &execution_info.expected_amount_out - amount_out;
+                -((diff.clone() * BigUint::from(10000u32)) / &execution_info.expected_amount_out)
+                    .to_f64()
+                    .unwrap_or(0.0) /
+                    100.0
+            };
+
+            info!(
+                event_type = "execution_slippage",
+                slippage_ratio = slippage,
+                "Execution slippage: {:.2}%",
+                slippage
+            );
+            metrics::record_execution_slippage(&execution_info.protocol_system, slippage);
+        }
+        TychoExecutionResult::Revert { reason, state_overwrites, overwrite_metadata } => {
+            n_reverts += 1;
+            let error_msg = reason.to_string();
+
+            // Extract revert reason from error message
+            // Error format is typically "Transaction reverted: <reason>"
+            let revert_reason =
+                if let Some(reason) = error_msg.strip_prefix("Transaction reverted: ") {
+                    reason
+                } else {
+                    &error_msg
+                };
+
+            // Extract error name (first word or function signature)
+            let error_name = extract_error_name(revert_reason);
+
+            // Generate Tenderly URL for debugging without state overrides
+            let overrides =
+                tenderly::TenderlySimParams { network: Some(chain_id), ..Default::default() };
+            let tenderly_url = tenderly::build_tenderly_url(
+                &overrides,
+                Some(&execution_info.transaction),
+                Some(&block),
+                Address::from_slice(&execution_info.solution.sender[..20]),
+            );
+
+            let overwrites_string = if let Some(overwrites) = state_overwrites.as_ref() {
+                tenderly::get_overwrites_string(overwrites, overwrite_metadata)
+            } else {
+                String::new()
+            };
+            error!(
+                event_type = "simulation_execution_failure",
+                error_message = %revert_reason,
+                error_name = %error_name,
+                tenderly_url = %tenderly_url,
+                overwrites = %overwrites_string,
+                "Failed to simulate swap: {error_msg}"
+            );
+            metrics::record_simulation_execution_failure(
+                &execution_info.protocol_system,
+                &error_name,
+            );
+        }
+        TychoExecutionResult::Failed { error_msg } => {
+            n_failures += 1;
+
+            error!(
+                event_type = "simulation_execution_failure",
+                error_message = %error_msg,
+                "Failed to simulate swap: {error_msg}"
+            );
+            metrics::record_simulation_execution_failure(
+                &execution_info.protocol_system,
+                error_msg,
+            );
+        }
+    }
+    (n_reverts, n_failures)
 }
 
 /// Extract the error name from a revert reason string

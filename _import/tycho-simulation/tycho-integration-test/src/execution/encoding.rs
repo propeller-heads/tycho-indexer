@@ -27,6 +27,8 @@ use tycho_simulation::{
 
 use crate::{execution::tenderly::OverwriteMetadata, RPCTools};
 
+const USER_ADDR: &str = "0xf847a638E44186F3287ee9F8cAF73FF4d4B80784";
+
 pub fn encode_swap(
     component: &ProtocolComponent,
     state: Arc<dyn ProtocolSim>,
@@ -72,8 +74,7 @@ fn create_solution(
     amount_in: BigUint,
     expected_amount_out: BigUint,
 ) -> miette::Result<Solution> {
-    let user_address =
-        Bytes::from_str("0xf847a638E44186F3287ee9F8cAF73FF4d4B80784").into_diagnostic()?;
+    let user_address = Bytes::from_str(USER_ADDR).into_diagnostic()?;
 
     // Prepare data to encode. First we need to create a swap object
     let simple_swap =
@@ -168,32 +169,32 @@ fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
 /// Returns both the overwrites and metadata for human-readable logging.
 pub(crate) async fn setup_user_overwrites(
     rpc_tools: &RPCTools,
-    solution: &Solution,
-    transaction: &Transaction,
     block: &Block,
-    user_address: Address,
+    to_address: &Bytes,
+    token_address: &Bytes,
+    amount: &BigUint,
 ) -> miette::Result<(AddressHashMap<AccountOverride>, OverwriteMetadata)> {
     let mut overwrites = AddressHashMap::default();
     let mut metadata = OverwriteMetadata::new();
-    let token_address = Address::from_slice(&solution.given_token[..20]);
-    // If given token is ETH, add the given amount + 10 ETH for gas
-    if solution.given_token == Bytes::zero(20) {
-        let eth_balance = biguint_to_u256(&solution.given_amount) +
-            U256::from_str("10000000000000000000").unwrap(); // given_amount + 1 ETH for gas
+    let user_address = Address::from_str(USER_ADDR).into_diagnostic()?;
+    let spender_address = Address::from_slice(&to_address[..20]);
+    // ETH
+    if token_address == &Bytes::zero(20) {
+        let eth_balance = biguint_to_u256(amount) +
+            U256::from_str("100000000000000000000").expect("Couldn't convert eth amount to U256"); // given_amount + 10 ETH for gas
         overwrites.insert(user_address, AccountOverride::default().with_balance(eth_balance));
-    // if the given token is not ETH, do balance and allowance slots overwrites
     } else {
         let results = rpc_tools
             .evm_balance_slot_detector
             .detect_balance_slots(
-                std::slice::from_ref(&solution.given_token),
+                std::slice::from_ref(token_address),
                 (**user_address).into(),
                 (*block.header.hash).into(),
             )
             .await;
 
         let (balance_storage_addr, balance_slot) =
-            if let Some(Ok((storage_addr, slot))) = results.get(&solution.given_token.clone()) {
+            if let Some(Ok((storage_addr, slot))) = results.get(token_address) {
                 (storage_addr, slot)
             } else {
                 return Err(miette!("Couldn't find balance storage slot for token {token_address}"));
@@ -202,15 +203,15 @@ pub(crate) async fn setup_user_overwrites(
         let results = rpc_tools
             .evm_allowance_slot_detector
             .detect_allowance_slots(
-                std::slice::from_ref(&solution.given_token),
+                std::slice::from_ref(token_address),
                 (**user_address).into(),
-                transaction.to.clone(), // tycho router
+                to_address.clone(), // tycho router
                 (*block.header.hash).into(),
             )
             .await;
 
         let (allowance_storage_addr, allowance_slot) = if let Some(Ok((storage_addr, slot))) =
-            results.get(&solution.given_token.clone())
+            results.get(&token_address.clone())
         {
             (storage_addr, slot)
         } else {
@@ -218,15 +219,14 @@ pub(crate) async fn setup_user_overwrites(
         };
 
         // Use the exact given amount for balance and allowance (no buffer, no max)
-        let token_balance = biguint_to_u256(&solution.given_amount);
-        let token_allowance = biguint_to_u256(&solution.given_amount);
+        let token_balance = biguint_to_u256(amount);
+        let token_allowance = biguint_to_u256(amount);
 
         let balance_storage_address = Address::from_slice(&balance_storage_addr[..20]);
         let allowance_storage_address = Address::from_slice(&allowance_storage_addr[..20]);
 
         let balance_slot_b256 = alloy::primitives::B256::from_slice(balance_slot);
         let allowance_slot_b256 = alloy::primitives::B256::from_slice(allowance_slot);
-        let spender_address = Address::from_slice(&transaction.to[..20]);
 
         debug!(
             "Setting token override for {token_address}: balance={}, allowance={}, balance_storage={}, allowance_storage={}",
@@ -275,11 +275,10 @@ pub(crate) async fn setup_user_overwrites(
                 )]),
             );
         }
-
         // Add 10 ETH for gas for non-ETH token swaps
-        let eth_balance = U256::from_str("10000000000000000000").unwrap(); // 1 ETH for gas
+        let eth_balance =
+            U256::from_str("10000000000000000000").expect("Couldn't convert eth amount to U256");
         overwrites.insert(user_address, AccountOverride::default().with_balance(eth_balance));
-        debug!("Setting ETH balance override for user {user_address}: {eth_balance} (for gas)");
     }
 
     Ok((overwrites, metadata))
