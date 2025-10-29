@@ -169,13 +169,13 @@ pub fn build_tenderly_url(
     format!("https://dashboard.tenderly.co/tvinagre/project/simulator/new?{}", query_string)
 }
 
-pub fn get_overwites_string(
-    overrides: &AddressHashMap<AccountOverride>,
-    metadata: Option<&OverwriteMetadata>,
+pub fn get_overwrites_string(
+    overwrites: &AddressHashMap<AccountOverride>,
+    metadata: &Option<OverwriteMetadata>,
 ) -> String {
     let mut tokens = Vec::new();
 
-    for (address, account_override) in overrides {
+    for (address, account_override) in overwrites {
         let mut token_overwrites = Vec::new();
 
         // Add balance if present

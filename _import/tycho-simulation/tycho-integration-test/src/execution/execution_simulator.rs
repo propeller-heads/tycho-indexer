@@ -2,9 +2,11 @@ use std::collections::HashMap;
 
 use alloy::{
     hex,
-    primitives::{keccak256, map::AddressHashMap, Bytes},
-    providers::{Provider, ProviderBuilder},
-    rpc::types::{state::AccountOverride, BlockId, TransactionRequest},
+    primitives::{keccak256, Bytes},
+    rpc::{
+        client::ClientBuilder,
+        types::{Block, BlockId},
+    },
     sol_types::SolValue,
 };
 use alloy_rpc_types_trace::geth::{
@@ -14,17 +16,14 @@ use alloy_rpc_types_trace::geth::{
 use serde_json::Value;
 use tracing::{error, warn};
 
-use crate::execution::four_byte_client::FourByteClient;
+use crate::execution::{
+    four_byte_client::FourByteClient,
+    models::{SimulationInput, SimulationResult},
+    traces::print_call_trace,
+};
 
 const KNOWN_SIGNATURES: &[&str] =
     &["Error(string)", "Panic(uint256)", "TychoRouter__NegativeSlippage(uint256,uint256)"];
-
-/// Result of a simulation with trace
-#[derive(Debug)]
-pub enum SimulationResult {
-    Success { return_data: Vec<u8>, gas_used: u64 },
-    Revert { reason: String },
-}
 
 /// Represents a Solidity error signature
 ///
@@ -181,14 +180,11 @@ impl ExecutionSimulator {
     }
 
     /// Simulate a transaction with trace and return the SimulationResult.
-    pub async fn simulate_with_trace(
+    pub async fn batch_simulate_with_trace(
         &mut self,
-        tx: TransactionRequest,
-        state_overrides: Option<AddressHashMap<AccountOverride>>,
-        block_number: u64,
-    ) -> Result<SimulationResult, Box<dyn std::error::Error>> {
-        let provider = ProviderBuilder::new().connect_http(self.rpc_url.parse()?);
-
+        inputs: HashMap<String, SimulationInput>,
+        block: &Block,
+    ) -> Result<HashMap<String, SimulationResult>, Box<dyn std::error::Error>> {
         // Configure tracing options - use callTracer for better formatted results
         let tracing_options = GethDebugTracingOptions {
             tracer: Some(GethDebugTracerType::BuiltInTracer(
@@ -199,68 +195,114 @@ impl ExecutionSimulator {
             timeout: None,
         };
 
-        let trace_options =
-            GethDebugTracingCallOptions { tracing_options, state_overrides, block_overrides: None };
+        let (simulation_ids, simulation_inputs): (Vec<String>, Vec<SimulationInput>) =
+            inputs.into_iter().unzip();
 
-        // We use debug_traceCall because it provides more meaningful simulation error results than
-        // other forms of simulation. (eth_call, using the provider)
-        // It is also already being used in the testing SDK, and supports overrides and simulating
-        // on past blocks, if we would need to do that in the future.
-        let trace_result: Value = provider
-            .client()
-            .request("debug_traceCall", (tx, BlockId::from(block_number), trace_options))
-            .await?;
+        let block_id = BlockId::from(block.number());
 
-        // Check for error in response, print the full trace only on failure
-        if let Some(error) = trace_result.get("error") {
-            error!("=== Transaction Trace (FAILURE) ===");
-            crate::execution::traces::print_call_trace(&trace_result, 0).await;
-            error!("=== End Trace ===");
+        let client = ClientBuilder::default().http(self.rpc_url.parse()?);
+        let mut batch = client.new_batch();
 
-            // Try to find the deepest revert reason in the trace
-            let reason =
-                if let Some(deepest_reason) = Self::find_deepest_revert_reason(&trace_result) {
-                    // Try to decode it if it looks like hex data
-                    if deepest_reason.starts_with("0x") {
-                        self.decode_error(&deepest_reason)
-                            .await?
-                    } else {
-                        deepest_reason
-                    }
-                } else if let Some(data) = error
-                    .get("data")
-                    .and_then(|d| d.as_str())
-                {
-                    self.decode_error(data).await?
-                } else if let Some(message) = error
-                    .get("message")
-                    .and_then(|m| m.as_str())
-                {
-                    message.to_string()
-                } else {
-                    "UnknownError".to_string()
-                };
-
-            return Ok(SimulationResult::Revert { reason });
+        let mut futures = Vec::new();
+        for input in simulation_inputs.iter() {
+            let trace_options = GethDebugTracingCallOptions {
+                tracing_options: tracing_options.clone(),
+                state_overrides: input.state_overwrites.clone(),
+                block_overrides: None,
+            };
+            let fut =
+                batch.add_call("debug_traceCall", &(input.tx.clone(), block_id, trace_options))?;
+            futures.push(fut);
         }
 
-        // Extract return data and gas used from successful trace
-        let return_data = if let Some(output) = trace_result
-            .get("output")
-            .and_then(|o| o.as_str())
-        {
-            hex::decode(output.trim_start_matches("0x"))?
-        } else {
-            Vec::new()
-        };
+        batch.send().await?;
 
-        let gas_used = trace_result
-            .get("gasUsed")
-            .and_then(|g| g.as_str())
-            .and_then(|s| u64::from_str_radix(s.trim_start_matches("0x"), 16).ok())
-            .unwrap_or(0);
+        let mut batch_results = Vec::new();
+        for fut in futures {
+            batch_results.push(fut.await);
+        }
 
-        Ok(SimulationResult::Success { return_data, gas_used })
+        let mut results = HashMap::new();
+
+        for (i, batch_result) in batch_results.into_iter().enumerate() {
+            let simulation_id: &String = &simulation_ids[i];
+
+            match batch_result {
+                Ok(trace_response) => {
+                    let trace_value: Value = trace_response;
+
+                    let has_error = trace_value
+                        .get("error")
+                        .and_then(|e| e.as_str())
+                        .is_some();
+
+                    if has_error {
+                        error!("=== Transaction {} Trace (FAILURE) ===", simulation_id);
+                        print_call_trace(&trace_value, 0).await;
+                        error!("=== End Trace ===");
+
+                        // Try to get revert reason from multiple possible locations
+                        let reason = if let Some(revert_reason) = trace_value
+                            .get("revertReason")
+                            .and_then(|r| r.as_str())
+                        {
+                            revert_reason.to_string()
+                        } else if let Some(output) = trace_value
+                            .get("output")
+                            .and_then(|o| o.as_str())
+                        {
+                            if output.starts_with("0x") && output.len() > 2 {
+                                self.decode_error(output).await?
+                            } else {
+                                "execution reverted".to_string()
+                            }
+                        } else if let Some(deepest_reason) =
+                            Self::find_deepest_revert_reason(&trace_value)
+                        {
+                            if deepest_reason.starts_with("0x") {
+                                self.decode_error(&deepest_reason)
+                                    .await?
+                            } else {
+                                deepest_reason
+                            }
+                        } else {
+                            "execution reverted".to_string()
+                        };
+
+                        results.insert(simulation_id.clone(), SimulationResult::Revert { reason });
+                    } else {
+                        // Extract return data and gas used from successful trace
+                        let return_data = if let Some(output) = trace_value
+                            .get("output")
+                            .and_then(|o| o.as_str())
+                        {
+                            hex::decode(output.trim_start_matches("0x"))?
+                        } else {
+                            Vec::new()
+                        };
+
+                        let gas_used = trace_value
+                            .get("gasUsed")
+                            .and_then(|g| g.as_u64())
+                            .unwrap_or(0);
+
+                        results.insert(
+                            simulation_id.clone(),
+                            SimulationResult::Success { return_data, gas_used },
+                        );
+                    }
+                }
+                Err(err) => {
+                    error!("Error tracing transaction {}: {:?}", simulation_id, err);
+                    results.insert(
+                        simulation_id.clone(),
+                        SimulationResult::Revert { reason: format!("Transaction failed: {}", err) },
+                    );
+                }
+            }
+        }
+
+        Ok(results)
     }
 
     /// It simulates the transaction and tries to decode the revert reason.
