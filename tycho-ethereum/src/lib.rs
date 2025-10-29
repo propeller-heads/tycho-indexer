@@ -14,78 +14,13 @@ pub mod token_analyzer;
 #[cfg(feature = "onchain_data")]
 pub mod token_pre_processor;
 
+mod errors;
 #[cfg(test)]
 pub mod test_fixtures;
 
-use std::fmt::Display;
-
-use alloy::{
-    primitives::{Address, B256, U256},
-    transports::http::reqwest,
-};
-use thiserror::Error;
+use alloy::primitives::{Address, B256, U256};
+pub(crate) use errors::*;
 use tycho_common::Bytes;
-
-#[derive(Error, Debug)]
-pub struct SerdeJsonError {
-    msg: String,
-    #[source]
-    source: serde_json::Error,
-}
-
-impl Display for SerdeJsonError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.msg, self.source)
-    }
-}
-
-#[derive(Error, Debug)]
-pub struct ReqwestError {
-    msg: String,
-    #[source]
-    source: reqwest::Error,
-}
-
-impl Display for ReqwestError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.msg, self.source)
-    }
-}
-
-#[derive(Error, Debug)]
-pub enum RequestError {
-    Reqwest(ReqwestError),
-    Other(String),
-}
-
-impl Display for RequestError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RequestError::Reqwest(e) => write!(f, "{}: {}", e.msg, e.source),
-            RequestError::Other(e) => write!(f, "{e}"),
-        }
-    }
-}
-
-#[derive(Error, Debug)]
-pub enum RPCError {
-    #[error("RPC setup error: {0}")]
-    SetupError(String),
-    #[error("Request error: {0}")]
-    RequestError(RequestError),
-    #[error("Tracing failure: {0}")]
-    TracingFailure(String),
-    #[error("Serialize error: {0}")]
-    SerializeError(SerdeJsonError),
-    #[error("Unknown error: {0}")]
-    UnknownError(String),
-}
-
-impl RPCError {
-    pub fn should_retry(&self) -> bool {
-        matches!(self, Self::RequestError(_))
-    }
-}
 
 /// A trait for converting types to and from `Bytes`.
 ///
