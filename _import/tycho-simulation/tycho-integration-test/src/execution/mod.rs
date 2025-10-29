@@ -11,12 +11,12 @@ use tokio_retry2::{
     Retry, RetryError,
 };
 use tycho_simulation::{
-    evm::protocol::u256_num::u256_to_biguint,
-    foundry_evm::revm::primitives::{map::AddressHashMap, Address},
+    evm::protocol::u256_num::u256_to_biguint, foundry_evm::revm::primitives::map::AddressHashMap,
 };
 
 use crate::{
     execution::{
+        encoding::detect_token_slots,
         execution_simulator::ExecutionSimulator,
         models::{SimulationInput, SimulationResult, TychoExecutionInput, TychoExecutionResult},
     },
@@ -48,10 +48,18 @@ pub async fn simulate_swap_transaction(
         .map(|info| info.transaction.to.clone())
         .expect("To address must be set");
 
-    for (simulation_id, info) in &execution_info {
-        let user_address = Address::from_slice(&info.solution.sender[..20]);
+    // Gather all unique token addresses for batch slot detection
+    let token_addresses: Vec<_> = execution_info
+        .values()
+        .map(|info| info.solution.given_token.clone())
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
 
-        let request = match encoding::swap_request(&info.transaction, block, user_address) {
+    let token_slots = detect_token_slots(rpc_tools, block, &token_addresses, &to_address).await;
+
+    for (simulation_id, info) in &execution_info {
+        let request = match encoding::swap_request(&info.transaction, block) {
             Ok(request) => request,
             Err(e) => {
                 tycho_execution_results.insert(
@@ -64,21 +72,21 @@ pub async fn simulate_swap_transaction(
             }
         };
 
-        let (state_overwrites, metadata) = match encoding::setup_user_overwrites(
-            rpc_tools,
-            block,
-            &to_address,
-            &info.solution.given_token,
-            &info.solution.given_amount,
-        )
-        .await
-        {
-            Ok((overwrites, metadata)) => (overwrites, metadata),
-            Err(e) => {
+        let (state_overwrites, metadata) = match token_slots.get(&info.solution.given_token) {
+            Some(slots) => encoding::setup_user_overwrites(
+                &to_address,
+                &info.solution.given_token,
+                &info.solution.given_amount,
+                slots,
+            ),
+            None => {
                 tycho_execution_results.insert(
                     simulation_id.clone(),
                     TychoExecutionResult::Failed {
-                        error_msg: format!("Failed to setup user overwrites: {}", e),
+                        error_msg: format!(
+                            "Couldn't find storage slots for token {}",
+                            info.solution.given_token
+                        ),
                     },
                 );
                 continue;

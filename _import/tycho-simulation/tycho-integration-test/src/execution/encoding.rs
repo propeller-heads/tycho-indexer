@@ -1,4 +1,4 @@
-use std::{str::FromStr, sync::Arc};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use alloy::{
     rpc::types::{state::AccountOverride, Block, TransactionRequest},
@@ -28,6 +28,15 @@ use tycho_simulation::{
 use crate::{execution::tenderly::OverwriteMetadata, RPCTools};
 
 const USER_ADDR: &str = "0xf847a638E44186F3287ee9F8cAF73FF4d4B80784";
+
+/// Contains the detected storage slots for a token.
+#[derive(Debug, Clone, Default)]
+pub struct TokenSlots {
+    pub balance_storage_addr: Vec<u8>,
+    pub balance_slot: Vec<u8>,
+    pub allowance_storage_addr: Vec<u8>,
+    pub allowance_slot: Vec<u8>,
+}
 
 pub fn encode_swap(
     component: &ProtocolComponent,
@@ -163,70 +172,107 @@ fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
     call_data
 }
 
-/// Set up all state overrides needed for simulation.
+/// Detects balance and allowance storage slots for all given tokens in a single batch operation.
+///
+/// Returns a mapping from token address to their detected storage slots.
+/// This function should be called once per block with all tokens of interest to optimize RPC calls.
+/// Tokens that fail slot detection are silently skipped and not included in the result.
+pub(crate) async fn detect_token_slots(
+    rpc_tools: &RPCTools,
+    block: &Block,
+    token_addresses: &[Bytes],
+    to_address: &Bytes,
+) -> HashMap<Bytes, TokenSlots> {
+    let user_address = match Address::from_str(USER_ADDR).into_diagnostic() {
+        Ok(addr) => addr,
+        Err(_) => return HashMap::new(),
+    };
+
+    let mut token_slots = HashMap::new();
+    // Add one entry for ETH
+    token_slots.insert(Bytes::zero(20), TokenSlots::default());
+
+    // Filter out ETH (zero address) as it doesn't need slot detection
+    let erc20_tokens: Vec<Bytes> = token_addresses
+        .iter()
+        .filter(|&addr| addr != &Bytes::zero(20))
+        .cloned()
+        .collect();
+
+    if erc20_tokens.is_empty() {
+        return token_slots;
+    }
+
+    let balance_results = rpc_tools
+        .evm_balance_slot_detector
+        .detect_balance_slots(&erc20_tokens, (**user_address).into(), (*block.header.hash).into())
+        .await;
+
+    let allowance_results = rpc_tools
+        .evm_allowance_slot_detector
+        .detect_allowance_slots(
+            &erc20_tokens,
+            (**user_address).into(),
+            to_address.clone(),
+            (*block.header.hash).into(),
+        )
+        .await;
+
+    for token_address in &erc20_tokens {
+        let balance_slot_data = match balance_results.get(token_address) {
+            Some(Ok((storage_addr, slot))) => (storage_addr.clone(), slot.clone()),
+            Some(Err(_)) | None => continue, // Skip tokens with detection failures
+        };
+
+        let allowance_slot_data = match allowance_results.get(token_address) {
+            Some(Ok((storage_addr, slot))) => (storage_addr.clone(), slot.clone()),
+            Some(Err(_)) | None => continue, // Skip tokens with detection failures
+        };
+
+        token_slots.insert(
+            token_address.clone(),
+            TokenSlots {
+                balance_storage_addr: balance_slot_data.0.to_vec(),
+                balance_slot: balance_slot_data.1.to_vec(),
+                allowance_storage_addr: allowance_slot_data.0.to_vec(),
+                allowance_slot: allowance_slot_data.1.to_vec(),
+            },
+        );
+    }
+
+    token_slots
+}
+
+/// Set up all state overrides needed for simulation using pre-computed token slots.
 ///
 /// This includes balance overrides and allowance overrides of the sell token for the sender.
 /// Returns both the overwrites and metadata for human-readable logging.
-pub(crate) async fn setup_user_overwrites(
-    rpc_tools: &RPCTools,
-    block: &Block,
+pub(crate) fn setup_user_overwrites(
     to_address: &Bytes,
     token_address: &Bytes,
     amount: &BigUint,
-) -> miette::Result<(AddressHashMap<AccountOverride>, OverwriteMetadata)> {
+    token_slots: &TokenSlots,
+) -> (AddressHashMap<AccountOverride>, OverwriteMetadata) {
     let mut overwrites = AddressHashMap::default();
     let mut metadata = OverwriteMetadata::new();
-    let user_address = Address::from_str(USER_ADDR).into_diagnostic()?;
+    let user_address = Address::from_str(USER_ADDR).expect("Valid user address");
     let spender_address = Address::from_slice(&to_address[..20]);
+
     // ETH
     if token_address == &Bytes::zero(20) {
         let eth_balance = biguint_to_u256(amount) +
             U256::from_str("100000000000000000000").expect("Couldn't convert eth amount to U256"); // given_amount + 10 ETH for gas
         overwrites.insert(user_address, AccountOverride::default().with_balance(eth_balance));
     } else {
-        let results = rpc_tools
-            .evm_balance_slot_detector
-            .detect_balance_slots(
-                std::slice::from_ref(token_address),
-                (**user_address).into(),
-                (*block.header.hash).into(),
-            )
-            .await;
-
-        let (balance_storage_addr, balance_slot) =
-            if let Some(Ok((storage_addr, slot))) = results.get(token_address) {
-                (storage_addr, slot)
-            } else {
-                return Err(miette!("Couldn't find balance storage slot for token {token_address}"));
-            };
-
-        let results = rpc_tools
-            .evm_allowance_slot_detector
-            .detect_allowance_slots(
-                std::slice::from_ref(token_address),
-                (**user_address).into(),
-                to_address.clone(), // tycho router
-                (*block.header.hash).into(),
-            )
-            .await;
-
-        let (allowance_storage_addr, allowance_slot) = if let Some(Ok((storage_addr, slot))) =
-            results.get(&token_address.clone())
-        {
-            (storage_addr, slot)
-        } else {
-            return Err(miette!("Couldn't find allowance storage slot for token {token_address}"));
-        };
-
-        // Use the exact given amount for balance and allowance (no buffer, no max)
         let token_balance = biguint_to_u256(amount);
         let token_allowance = biguint_to_u256(amount);
 
-        let balance_storage_address = Address::from_slice(&balance_storage_addr[..20]);
-        let allowance_storage_address = Address::from_slice(&allowance_storage_addr[..20]);
+        let balance_storage_address = Address::from_slice(&token_slots.balance_storage_addr[..20]);
+        let allowance_storage_address =
+            Address::from_slice(&token_slots.allowance_storage_addr[..20]);
 
-        let balance_slot_b256 = alloy::primitives::B256::from_slice(balance_slot);
-        let allowance_slot_b256 = alloy::primitives::B256::from_slice(allowance_slot);
+        let balance_slot_b256 = alloy::primitives::B256::from_slice(&token_slots.balance_slot);
+        let allowance_slot_b256 = alloy::primitives::B256::from_slice(&token_slots.allowance_slot);
 
         debug!(
             "Setting token override for {token_address}: balance={}, allowance={}, balance_storage={}, allowance_storage={}",
@@ -281,15 +327,15 @@ pub(crate) async fn setup_user_overwrites(
         overwrites.insert(user_address, AccountOverride::default().with_balance(eth_balance));
     }
 
-    Ok((overwrites, metadata))
+    (overwrites, metadata)
 }
 
 pub(crate) fn swap_request(
     transaction: &Transaction,
     block: &Block,
-    user_address: Address,
 ) -> miette::Result<TransactionRequest> {
     let (max_fee_per_gas, max_priority_fee_per_gas) = calculate_gas_fees(block)?;
+    let user_address = Address::from_str(USER_ADDR).expect("Valid user address");
     Ok(TransactionRequest::default()
         .to(Address::from_slice(&transaction.to[..20]))
         .input(transaction.data.clone().into())
