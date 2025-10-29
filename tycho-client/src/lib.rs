@@ -38,4 +38,4 @@ extern crate pretty_assertions;
 
 pub use deltas::{DeltasError, WsDeltasClient};
 pub use rpc::{HttpRPCClient, RPCError};
-pub use snapshot::{SnapshotRequestBody, SnapshotRequestResponse};
+pub use snapshot::{SnapshotParameters, SnapshotRequestResponse};

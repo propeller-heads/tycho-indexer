@@ -28,7 +28,7 @@ use crate::{
         BlockHeader, HeaderLike,
     },
     rpc::{RPCClient, RPCError},
-    snapshot::SnapshotRequestBody,
+    snapshot::SnapshotParameters,
     DeltasError,
 };
 
@@ -358,7 +358,7 @@ where
                             .into_iter()
                             .collect();
 
-                        let request = SnapshotRequestBody::new(
+                        let request = SnapshotParameters::new(
                             self.extractor_id.chain,
                             self.extractor_id.name.clone(),
                             component_ids.clone(),
@@ -484,7 +484,7 @@ where
                                             .into_iter()
                                             .collect();
 
-                                        let request = SnapshotRequestBody::new(
+                                        let request = SnapshotParameters::new(
                                             self.extractor_id.chain,
                                             self.extractor_id.name.clone(),
                                             component_ids.clone(),
@@ -841,7 +841,7 @@ mod test {
 
         async fn get_snapshots(
             &self,
-            request: &SnapshotRequestBody,
+            request: &SnapshotParameters,
             chunk_size: usize,
             concurrency: usize,
         ) -> Result<SnapshotRequestResponse, RPCError> {
@@ -943,7 +943,7 @@ mod test {
         // Mock get_snapshots for Component3
         rpc_client
             .expect_get_snapshots()
-            .withf(|request: &SnapshotRequestBody, _chunk_size: &usize, _concurrency: &usize| {
+            .withf(|request: &SnapshotParameters, _chunk_size: &usize, _concurrency: &usize| {
                 request
                     .component_ids
                     .contains(&"Component3".to_string())
@@ -1289,7 +1289,7 @@ mod test {
         // Mock get_snapshots for Component3
         rpc_client
             .expect_get_snapshots()
-            .withf(|request: &SnapshotRequestBody, _chunk_size: &usize, _concurrency: &usize| {
+            .withf(|request: &SnapshotParameters, _chunk_size: &usize, _concurrency: &usize| {
                 request
                     .component_ids
                     .contains(&"Component3".to_string())

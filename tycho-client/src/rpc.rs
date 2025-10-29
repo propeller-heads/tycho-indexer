@@ -36,7 +36,7 @@ use tycho_common::{
 };
 
 use crate::{
-    snapshot::{SnapshotRequestBody, SnapshotRequestResponse},
+    snapshot::{SnapshotParameters, SnapshotRequestResponse},
     TYCHO_SERVER_VERSION,
 };
 
@@ -592,7 +592,7 @@ pub trait RPCClient: Send + Sync {
 
     async fn get_snapshots(
         &self,
-        request: &SnapshotRequestBody,
+        request: &SnapshotParameters,
         chunk_size: usize,
         concurrency: usize,
     ) -> Result<SnapshotRequestResponse, RPCError>;
@@ -1038,7 +1038,7 @@ impl RPCClient for HttpRPCClient {
 
     async fn get_snapshots(
         &self,
-        request: &SnapshotRequestBody,
+        request: &SnapshotParameters,
         chunk_size: usize,
         concurrency: usize,
     ) -> Result<SnapshotRequestResponse, RPCError> {
@@ -2332,7 +2332,7 @@ mod tests {
         let contract_ids =
             vec![Bytes::from_str("0x1111111111111111111111111111111111111111").unwrap()];
 
-        let request = SnapshotRequestBody::new(
+        let request = SnapshotParameters::new(
             Chain::Ethereum,
             "test_protocol".to_string(),
             component_ids.clone(),
@@ -2384,7 +2384,7 @@ mod tests {
         let server = Server::new_async().await;
         let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
 
-        let request = SnapshotRequestBody::new(
+        let request = SnapshotParameters::new(
             Chain::Ethereum,
             "test_protocol".to_string(),
             vec![],
@@ -2455,7 +2455,7 @@ mod tests {
 
         let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
 
-        let request = SnapshotRequestBody::new(
+        let request = SnapshotParameters::new(
             Chain::Ethereum,
             "test_protocol".to_string(),
             vec!["component1".to_string()],
