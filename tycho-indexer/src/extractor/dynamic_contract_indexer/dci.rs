@@ -147,85 +147,7 @@ where
             }), "DCI: Entrypoints params");
         }
 
-        let params_to_retry: HashMap<EntryPointId, Vec<(Transaction, TracingParams)>> = {
-            let mut retry_params: HashMap<EntryPointId, Vec<(Transaction, TracingParams)>> =
-                HashMap::new();
-
-            // Process updated components while deduplicating in a single pass
-            // We iterate in reverse order to encounter the latest transaction first for each
-            // component, using a HashSet to track seen components and process retry
-            // logic immediately
-            let mut seen_components: HashSet<&ComponentId> = HashSet::new();
-
-            for tx_with_changes in block_changes
-                .txs_with_update
-                .iter()
-                .rev()
-            {
-                for component_id in tx_with_changes
-                    .state_updates
-                    .keys()
-                    .chain(tx_with_changes.balance_changes.keys())
-                {
-                    // Only process each component once (first time we see it, which is the latest
-                    // tx)
-                    if seen_components.insert(component_id) {
-                        if let Some(entrypoint_params_sets) = self
-                            .cache
-                            .component_id_to_entrypoint_params
-                            .get_all(component_id.clone())
-                        {
-                            for entrypoint_params_set in entrypoint_params_sets {
-                                for entrypoint_with_params in entrypoint_params_set {
-                                    let key = (
-                                        entrypoint_with_params
-                                            .entry_point
-                                            .external_id
-                                            .clone(),
-                                        entrypoint_with_params.params.clone(),
-                                    );
-
-                                    // If we have None (failed trace) for this key, check retry
-                                    // count
-                                    if let Some(None) = self.cache.entrypoint_results.get(&key) {
-                                        let retry_count = self
-                                            .cache
-                                            .tracing_retry_counts
-                                            .get(&key)
-                                            .cloned()
-                                            .unwrap_or(0);
-
-                                        if retry_count < self.max_retry_count {
-                                            retry_params
-                                                .entry(
-                                                    entrypoint_with_params
-                                                        .entry_point
-                                                        .external_id
-                                                        .clone(),
-                                                )
-                                                .or_default()
-                                                .push((
-                                                    tx_with_changes.tx.clone(),
-                                                    entrypoint_with_params.params.clone(),
-                                                ));
-                                        } else {
-                                            debug!(
-                                                "Aborting retries for entrypoint {:?} on current state and params - max retries ({}) exceeded (retry_count: {})",
-                                                entrypoint_with_params.entry_point.external_id,
-                                                self.max_retry_count,
-                                                retry_count
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            retry_params
-        };
+        let params_to_retry = self.extract_params_to_retry(block_changes);
 
         if !params_to_retry.is_empty() {
             debug!("Will retry {:?} parameters", params_to_retry.len());
@@ -1135,6 +1057,98 @@ where
         }
 
         Ok(())
+    }
+
+    /// Collects failed TracingParams that should be retried based on updated components.
+    ///
+    /// For each component that has been updated in the block, this method checks if there are
+    /// any failed TracingParams (stored as None in the cache) associated with it. If the retry
+    /// count hasn't exceeded the maximum, it adds them to the retry list.
+    #[instrument(skip_all, fields(block_number = block_changes.block.number))]
+    fn extract_params_to_retry(
+        &self,
+        block_changes: &BlockChanges,
+    ) -> HashMap<EntryPointId, Vec<(Transaction, TracingParams)>> {
+        let params_to_retry: HashMap<EntryPointId, Vec<(Transaction, TracingParams)>> = {
+            let mut retry_params: HashMap<EntryPointId, Vec<(Transaction, TracingParams)>> =
+                HashMap::new();
+
+            // Process updated components while deduplicating in a single pass
+            // We iterate in reverse order to encounter the latest transaction first for each
+            // component, using a HashSet to track seen components and process retry
+            // logic immediately
+            let mut seen_components: HashSet<&ComponentId> = HashSet::new();
+
+            for tx_with_changes in block_changes
+                .txs_with_update
+                .iter()
+                .rev()
+            {
+                for component_id in tx_with_changes
+                    .state_updates
+                    .keys()
+                    .chain(tx_with_changes.balance_changes.keys())
+                {
+                    // Only process each component once (first time we see it, which is the latest
+                    // tx)
+                    if seen_components.insert(component_id) {
+                        if let Some(entrypoint_params_sets) = self
+                            .cache
+                            .component_id_to_entrypoint_params
+                            .get_all(component_id.clone())
+                        {
+                            for entrypoint_params_set in entrypoint_params_sets {
+                                for entrypoint_with_params in entrypoint_params_set {
+                                    let key = (
+                                        entrypoint_with_params
+                                            .entry_point
+                                            .external_id
+                                            .clone(),
+                                        entrypoint_with_params.params.clone(),
+                                    );
+
+                                    // If we have None (failed trace) for this key, check retry
+                                    // count
+                                    if let Some(None) = self.cache.entrypoint_results.get(&key) {
+                                        let retry_count = self
+                                            .cache
+                                            .tracing_retry_counts
+                                            .get(&key)
+                                            .cloned()
+                                            .unwrap_or(0);
+
+                                        if retry_count < self.max_retry_count {
+                                            retry_params
+                                                .entry(
+                                                    entrypoint_with_params
+                                                        .entry_point
+                                                        .external_id
+                                                        .clone(),
+                                                )
+                                                .or_default()
+                                                .push((
+                                                    tx_with_changes.tx.clone(),
+                                                    entrypoint_with_params.params.clone(),
+                                                ));
+                                        } else {
+                                            debug!(
+                                                "Aborting retries for entrypoint {:?} on current state and params - max retries ({}) exceeded (retry_count: {})",
+                                                entrypoint_with_params.entry_point.external_id,
+                                                self.max_retry_count,
+                                                retry_count
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            retry_params
+        };
+        params_to_retry
     }
 
     /// Scans the block storage changes and extracts the updates for the tracked contracts.
