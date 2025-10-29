@@ -36,7 +36,8 @@ use tycho_common::{
 };
 
 use crate::{
-    snapshot::{SnapshotParameters, SnapshotRequestResponse},
+    feed::synchronizer::{ComponentWithState, Snapshot},
+    snapshot::SnapshotParameters,
     TYCHO_SERVER_VERSION,
 };
 
@@ -595,7 +596,7 @@ pub trait RPCClient: Send + Sync {
         request: &SnapshotParameters,
         chunk_size: usize,
         concurrency: usize,
-    ) -> Result<SnapshotRequestResponse, RPCError>;
+    ) -> Result<Snapshot, RPCError>;
 }
 
 #[derive(Debug, Clone)]
@@ -1041,7 +1042,13 @@ impl RPCClient for HttpRPCClient {
         request: &SnapshotParameters,
         chunk_size: usize,
         concurrency: usize,
-    ) -> Result<SnapshotRequestResponse, RPCError> {
+    ) -> Result<Snapshot, RPCError> {
+        let component_ids: Vec<_> = request
+            .components
+            .keys()
+            .cloned()
+            .collect();
+
         let version = VersionParam::new(
             None,
             Some({
@@ -1050,9 +1057,8 @@ impl RPCClient for HttpRPCClient {
             }),
         );
 
-        let component_tvl = if request.include_tvl && !request.component_ids.is_empty() {
-            let body =
-                ComponentTvlRequestBody::id_filtered(request.component_ids.clone(), request.chain);
+        let component_tvl = if request.include_tvl && !component_ids.is_empty() {
+            let body = ComponentTvlRequestBody::id_filtered(component_ids.clone(), request.chain);
             self.get_component_tvl_paginated(&body, chunk_size, concurrency)
                 .await?
                 .tvl
@@ -1060,25 +1066,10 @@ impl RPCClient for HttpRPCClient {
             HashMap::new()
         };
 
-        let traced_entry_points =
-            if request.chain == Chain::Ethereum && !request.component_ids.is_empty() {
-                self.get_traced_entry_points_paginated(
-                    request.chain,
-                    &request.protocol_system,
-                    &request.component_ids,
-                    chunk_size,
-                    concurrency,
-                )
-                .await?
-                .traced_entry_points
-            } else {
-                HashMap::new()
-            };
-
-        let protocol_states = if !request.component_ids.is_empty() {
+        let mut protocol_states = if !component_ids.is_empty() {
             self.get_protocol_states_paginated(
                 request.chain,
-                &request.component_ids,
+                &component_ids,
                 &request.protocol_system,
                 request.include_balances,
                 &version,
@@ -1094,30 +1085,100 @@ impl RPCClient for HttpRPCClient {
             HashMap::new()
         };
 
+        // Convert to ComponentWithState, which includes entrypoint information.
+        let states = request
+            .components
+            .values()
+            .filter_map(|component| {
+                if let Some(state) = protocol_states.remove(&component.id) {
+                    Some((
+                        component.id.clone(),
+                        ComponentWithState {
+                            state,
+                            component: component.clone(),
+                            component_tvl: component_tvl
+                                .get(&component.id)
+                                .cloned(),
+                            entrypoints: request
+                                .entrypoints
+                                .get(&component.id)
+                                .cloned()
+                                .unwrap_or_default(),
+                        },
+                    ))
+                } else if component_ids.contains(&component.id) {
+                    // only emit error event if we requested this component
+                    let component_id = &component.id;
+                    error!(?component_id, "Missing state for native component!");
+                    None
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         let vm_storage = if !request.contract_ids.is_empty() {
-            self.get_contract_state_paginated(
-                request.chain,
-                &request.contract_ids,
-                &request.protocol_system,
-                &version,
-                chunk_size,
-                concurrency,
-            )
-            .await?
-            .accounts
-            .into_iter()
-            .map(|acc| (acc.address.clone(), acc))
-            .collect()
+            let contract_states = self
+                .get_contract_state_paginated(
+                    request.chain,
+                    &request.contract_ids,
+                    &request.protocol_system,
+                    &version,
+                    chunk_size,
+                    concurrency,
+                )
+                .await?
+                .accounts
+                .into_iter()
+                .map(|acc| (acc.address.clone(), acc))
+                .collect::<HashMap<_, _>>();
+
+            trace!(states=?&contract_states, "Retrieved ContractState");
+
+            let contract_address_to_components = request
+                .components
+                .iter()
+                .filter_map(|(id, comp)| {
+                    if component_ids.contains(id) {
+                        Some(
+                            comp.contract_ids
+                                .iter()
+                                .map(|address| (address.clone(), comp.id.clone())),
+                        )
+                    } else {
+                        None
+                    }
+                })
+                .flatten()
+                .fold(HashMap::<Bytes, Vec<String>>::new(), |mut acc, (addr, c_id)| {
+                    acc.entry(addr).or_default().push(c_id);
+                    acc
+                });
+
+            request
+                .contract_ids
+                .iter()
+                .filter_map(|address| {
+                    if let Some(state) = contract_states.get(address) {
+                        Some((address.clone(), state.clone()))
+                    } else if let Some(ids) = contract_address_to_components.get(address) {
+                        // only emit error even if we did actually request this address
+                        error!(
+                            ?address,
+                            ?ids,
+                            "Component with lacking contract storage encountered!"
+                        );
+                        None
+                    } else {
+                        None
+                    }
+                })
+                .collect()
         } else {
             HashMap::new()
         };
 
-        Ok(SnapshotRequestResponse {
-            protocol_states,
-            vm_storage,
-            component_tvl,
-            traced_entry_points,
-        })
+        Ok(Snapshot { states, vm_storage })
     }
 }
 
@@ -2265,39 +2326,6 @@ mod tests {
         }
         "#;
 
-        // Mock traced entry points response
-        let entrypoints_resp = r#"
-        {
-            "traced_entry_points": {
-                "component1": [
-                    [
-                        {
-                            "entry_point": {
-                                "external_id": "swap",
-                                "target": "0x1111111111111111111111111111111111111111",
-                                "signature": "swap(uint256,uint256)"
-                            },
-                            "params": {
-                                "method": "rpctracer",
-                                "caller": "0x2222222222222222222222222222222222222222",
-                                "calldata": "0x00"
-                            }
-                        },
-                        {
-                            "retriggers": [],
-                            "accessed_slots": {}
-                        }
-                    ]
-                ]
-            },
-            "pagination": {
-                "page": 0,
-                "page_size": 100,
-                "total": 1
-            }
-        }
-        "#;
-
         let protocol_states_mock = server
             .mock("POST", "/v1/protocol_state")
             .expect(1)
@@ -2319,24 +2347,40 @@ mod tests {
             .create_async()
             .await;
 
-        let entrypoints_mock = server
-            .mock("POST", "/v1/traced_entry_points")
-            .expect(1)
-            .with_body(entrypoints_resp)
-            .create_async()
-            .await;
-
         let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
 
-        let component_ids = vec!["component1".to_string()];
+        // Create test component
+        #[allow(deprecated)]
+        let component = tycho_common::dto::ProtocolComponent {
+            id: "component1".to_string(),
+            protocol_system: "test_protocol".to_string(),
+            protocol_type_name: "test_type".to_string(),
+            chain: Chain::Ethereum,
+            tokens: vec![],
+            contract_ids: vec![
+                Bytes::from_str("0x1111111111111111111111111111111111111111").unwrap()
+            ],
+            static_attributes: HashMap::new(),
+            change: tycho_common::dto::ChangeType::Creation,
+            creation_tx: Bytes::from_str(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            )
+            .unwrap(),
+            created_at: chrono::Utc::now().naive_utc(),
+        };
+
+        let mut components = HashMap::new();
+        components.insert("component1".to_string(), component);
+
         let contract_ids =
             vec![Bytes::from_str("0x1111111111111111111111111111111111111111").unwrap()];
 
         let request = SnapshotParameters::new(
             Chain::Ethereum,
             "test_protocol".to_string(),
-            component_ids.clone(),
-            contract_ids.clone(),
+            components,
+            HashMap::new(), // entrypoints
+            contract_ids,
             12345,
             true,
             true,
@@ -2351,13 +2395,19 @@ mod tests {
         protocol_states_mock.assert();
         contract_state_mock.assert();
         tvl_mock.assert();
-        entrypoints_mock.assert();
 
-        // Assert protocol states
-        assert_eq!(response.protocol_states.len(), 1);
+        // Assert states
+        assert_eq!(response.states.len(), 1);
         assert!(response
-            .protocol_states
+            .states
             .contains_key("component1"));
+
+        // Check that the state has the expected TVL
+        let component_state = response
+            .states
+            .get("component1")
+            .unwrap();
+        assert_eq!(component_state.component_tvl, Some(1000000.0));
 
         // Assert VM storage
         assert_eq!(response.vm_storage.len(), 1);
@@ -2365,18 +2415,6 @@ mod tests {
         assert!(response
             .vm_storage
             .contains_key(&contract_addr));
-
-        // Assert component TVL
-        assert_eq!(response.component_tvl.get("component1"), Some(&1000000.0));
-
-        // Assert traced entry points
-        assert_eq!(response.traced_entry_points.len(), 1);
-        assert!(response
-            .traced_entry_points
-            .contains_key("component1"));
-        let entrypoints = &response.traced_entry_points["component1"];
-        assert_eq!(entrypoints.len(), 1);
-        assert_eq!(entrypoints[0].0.entry_point.external_id, "swap");
     }
 
     #[tokio::test]
@@ -2387,8 +2425,9 @@ mod tests {
         let request = SnapshotParameters::new(
             Chain::Ethereum,
             "test_protocol".to_string(),
-            vec![],
-            vec![],
+            HashMap::new(), // empty components
+            HashMap::new(), // empty entrypoints
+            vec![],         // empty contract_ids
             12345,
             true,
             true,
@@ -2400,10 +2439,8 @@ mod tests {
             .expect("get snapshots");
 
         // Should return empty response without making any requests
-        assert!(response.protocol_states.is_empty());
+        assert!(response.states.is_empty());
         assert!(response.vm_storage.is_empty());
-        assert!(response.component_tvl.is_empty());
-        assert!(response.traced_entry_points.is_empty());
     }
 
     #[tokio::test]
@@ -2427,18 +2464,6 @@ mod tests {
         }
         "#;
 
-        // Still need to mock traced_entry_points for Ethereum chain
-        let entrypoints_resp = r#"
-        {
-            "traced_entry_points": {},
-            "pagination": {
-                "page": 0,
-                "page_size": 100,
-                "total": 0
-            }
-        }
-        "#;
-
         let protocol_states_mock = server
             .mock("POST", "/v1/protocol_state")
             .expect(1)
@@ -2446,20 +2471,35 @@ mod tests {
             .create_async()
             .await;
 
-        let entrypoints_mock = server
-            .mock("POST", "/v1/traced_entry_points")
-            .expect(1)
-            .with_body(entrypoints_resp)
-            .create_async()
-            .await;
-
         let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+
+        // Create test component
+        #[allow(deprecated)]
+        let component = tycho_common::dto::ProtocolComponent {
+            id: "component1".to_string(),
+            protocol_system: "test_protocol".to_string(),
+            protocol_type_name: "test_type".to_string(),
+            chain: Chain::Ethereum,
+            tokens: vec![],
+            contract_ids: vec![],
+            static_attributes: HashMap::new(),
+            change: tycho_common::dto::ChangeType::Creation,
+            creation_tx: Bytes::from_str(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            )
+            .unwrap(),
+            created_at: chrono::Utc::now().naive_utc(),
+        };
+
+        let mut components = HashMap::new();
+        components.insert("component1".to_string(), component);
 
         let request = SnapshotParameters::new(
             Chain::Ethereum,
             "test_protocol".to_string(),
-            vec!["component1".to_string()],
-            vec![],
+            components,
+            HashMap::new(), // entrypoints
+            vec![],         // contract_ids
             12345,
             false,
             false, // include_tvl = false
@@ -2472,11 +2512,15 @@ mod tests {
 
         // Verify only necessary mocks were called
         protocol_states_mock.assert();
-        entrypoints_mock.assert(); // Ethereum always fetches entrypoints
-                                   // No contract_state_mock.assert() since contract_ids is empty
+        // No contract_state_mock.assert() since contract_ids is empty
+        // No tvl_mock.assert() since include_tvl is false
 
-        assert_eq!(response.protocol_states.len(), 1);
-        assert!(response.component_tvl.is_empty());
-        assert!(response.traced_entry_points.is_empty());
+        assert_eq!(response.states.len(), 1);
+        // Check that TVL is None since we didn't request it
+        let component_state = response
+            .states
+            .get("component1")
+            .unwrap();
+        assert_eq!(component_state.component_tvl, None);
     }
 }

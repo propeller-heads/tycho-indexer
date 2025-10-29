@@ -1912,18 +1912,13 @@ pub struct TracedEntryPointRequestResponse {
         HashMap<ComponentId, Vec<(EntryPointWithTracingParams, TracingResult)>>,
     pub pagination: PaginationResponse,
 }
-impl From<HashMap<ComponentId, Vec<(EntryPointWithTracingParams, TracingResult)>>> for DCIUpdate {
-    fn from(
-        traced_entry_points: HashMap<
-            ComponentId,
-            Vec<(EntryPointWithTracingParams, TracingResult)>,
-        >,
-    ) -> Self {
+impl From<TracedEntryPointRequestResponse> for DCIUpdate {
+    fn from(response: TracedEntryPointRequestResponse) -> Self {
         let mut new_entrypoints = HashMap::new();
         let mut new_entrypoint_params = HashMap::new();
         let mut trace_results = HashMap::new();
 
-        for (component, traces) in traced_entry_points {
+        for (component, traces) in response.traced_entry_points {
             let mut entrypoints = HashSet::new();
 
             for (entrypoint, trace) in traces {

@@ -82,12 +82,12 @@ impl ComponentFilter {
 
 /// Information about an entrypoint, including which components use it and what contracts it
 /// interacts with
-#[derive(Default)]
-struct EntrypointRelations {
+#[derive(Default, Clone, Debug, PartialEq)]
+pub struct EntrypointRelations {
     /// Set of component ids for components that have this entrypoint
-    components: HashSet<ComponentId>,
+    pub components: HashSet<ComponentId>,
     /// Set of detected contracts for the entrypoint
-    contracts: HashSet<Address>,
+    pub contracts: HashSet<Address>,
 }
 
 /// Helper struct to determine which components and contracts are being tracked atm.
@@ -99,7 +99,7 @@ pub struct ComponentTracker<R: RPCClient> {
     // snapshot for yet but are relevant now, e.g. because min tvl threshold exceeded.
     pub components: HashMap<ComponentId, ProtocolComponent>,
     /// Map of entrypoint id to its associated components and contracts
-    entrypoints: HashMap<String, EntrypointRelations>,
+    pub entrypoints: HashMap<String, EntrypointRelations>,
     /// Derived from tracked components. We need this if subscribed to a vm extractor because
     /// updates are emitted on a contract level instead of a component level.
     pub contracts: HashSet<Address>,

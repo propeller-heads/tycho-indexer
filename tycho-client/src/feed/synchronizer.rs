@@ -15,7 +15,7 @@ use tokio::{
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     dto::{
-        BlockChanges, EntryPointWithTracingParams, ExtractorIdentity, ProtocolComponent,
+        BlockChanges, Chain, EntryPointWithTracingParams, ExtractorIdentity, ProtocolComponent,
         ResponseAccount, ResponseProtocolState, TracingResult,
     },
     Bytes,
@@ -249,6 +249,85 @@ where
         }
     }
 
+    /// Retrieves state snapshots of the requested components
+    #[allow(deprecated)]
+    async fn get_snapshots<'a, I: IntoIterator<Item = &'a String>>(
+        &mut self,
+        header: BlockHeader,
+        ids: Option<I>,
+    ) -> SyncResult<StateSyncMessage<BlockHeader>> {
+        if !self.include_snapshots {
+            return Ok(StateSyncMessage { header, ..Default::default() });
+        }
+
+        // Use given ids or use all if not passed
+        let component_ids: Vec<_> = match ids {
+            Some(ids) => ids.into_iter().cloned().collect(),
+            None => self
+                .component_tracker
+                .get_tracked_component_ids(),
+        };
+
+        if component_ids.is_empty() {
+            return Ok(StateSyncMessage { header, ..Default::default() });
+        }
+
+        //TODO: Improve this, we should not query for every component, but only for the ones that
+        // could have entrypoints. Maybe apply a filter per protocol?
+        let entrypoints_result = if self.extractor_id.chain == Chain::Ethereum {
+            // Fetch entrypoints
+            let result = self
+                .rpc_client
+                .get_traced_entry_points_paginated(
+                    self.extractor_id.chain,
+                    &self.extractor_id.name,
+                    &component_ids,
+                    100,
+                    4,
+                )
+                .await?;
+            self.component_tracker
+                .process_entrypoints(&result.clone().into());
+            result.traced_entry_points.clone()
+        } else {
+            HashMap::new()
+        };
+
+        // Get contract IDs from component tracker
+        let contract_ids: Vec<Bytes> = self
+            .component_tracker
+            .get_contracts_by_component(&component_ids)
+            .into_iter()
+            .collect();
+
+        let request = SnapshotParameters::new(
+            self.extractor_id.chain,
+            self.extractor_id.name.clone(),
+            self.component_tracker
+                .components
+                .clone(),
+            entrypoints_result,
+            contract_ids.clone(),
+            header.number,
+            self.retrieve_balances,
+            self.include_tvl,
+        );
+        let snapshot_response = self
+            .rpc_client
+            .get_snapshots(&request, 100, 4)
+            .await?;
+
+        trace!(states=?&snapshot_response.states, "Retrieved ProtocolStates");
+        trace!(contract_states=?&snapshot_response.vm_storage, "Retrieved ContractState");
+
+        Ok(StateSyncMessage {
+            header,
+            snapshots: snapshot_response,
+            deltas: None,
+            removed_components: HashMap::new(),
+        })
+    }
+
     /// Main method that does all the work.
     ///
     /// ## Return Value
@@ -332,108 +411,13 @@ where
             // If possible skip retrieving snapshots
             let msg = if !self.is_next_expected(&header) {
                 info!("Retrieving snapshot");
-                let snapshot = if !self.include_snapshots {
-                    StateSyncMessage {
-                        header: BlockHeader::from_block(&block, false),
-                        snapshots: Snapshot::default(),
-                        deltas: None,
-                        removed_components: HashMap::new(),
-                    }
-                } else {
-                    // Get component IDs (all tracked components since ids is None)
-                    let component_ids: Vec<_> = self.component_tracker.get_tracked_component_ids();
-
-                    if component_ids.is_empty() {
-                        StateSyncMessage {
-                            header: BlockHeader::from_block(&block, false),
-                            snapshots: Snapshot::default(),
-                            deltas: None,
-                            removed_components: HashMap::new(),
-                        }
-                    } else {
-                        // Get contract IDs from component tracker
-                        let contract_ids: Vec<Bytes> = self
-                            .component_tracker
-                            .get_contracts_by_component(&component_ids)
-                            .into_iter()
-                            .collect();
-
-                        let request = SnapshotParameters::new(
-                            self.extractor_id.chain,
-                            self.extractor_id.name.clone(),
-                            component_ids.clone(),
-                            contract_ids.clone(),
-                            BlockHeader::from_block(&block, false).number,
-                            self.retrieve_balances,
-                            self.include_tvl,
-                        );
-                        let snapshot_response = self.rpc_client.get_snapshots(&request, 100, 4).await?;
-
-                        // Process entrypoints if we got them
-                        if !snapshot_response.traced_entry_points.is_empty() {
-                            self.component_tracker.process_entrypoints(&snapshot_response.traced_entry_points.clone().into());
-                        }
-
-                        // Build ComponentWithState from the snapshot response
-                        let mut protocol_states = snapshot_response.protocol_states;
-                        trace!(states=?&protocol_states, "Retrieved ProtocolStates");
-
-                        let states = self.component_tracker.components.values().filter_map(|component| {
-                            if let Some(state) = protocol_states.remove(&component.id) {
-                                Some((
-                                    component.id.clone(),
-                                    ComponentWithState {
-                                        state,
-                                        component: component.clone(),
-                                        component_tvl: snapshot_response.component_tvl.get(&component.id).cloned(),
-                                        entrypoints: snapshot_response.traced_entry_points.get(&component.id).cloned().unwrap_or_default(),
-                                    },
-                                ))
-                            } else if component_ids.contains(&component.id) {
-                                error!(component_id = ?component.id, "Missing state for native component!");
-                                None
-                            } else {
-                                None
-                            }
-                        }).collect();
-
-                        let contract_states = snapshot_response.vm_storage;
-                        trace!(states=?&contract_states, "Retrieved ContractState");
-
-                        let contract_address_to_components = self.component_tracker.components.iter()
-                            .filter_map(|(id, comp)| {
-                                if component_ids.contains(id) {
-                                    Some(comp.contract_ids.iter().map(|address| (address.clone(), comp.id.clone())))
-                                } else {
-                                    None
-                                }
-                            })
-                            .flatten()
-                            .fold(HashMap::<Bytes, Vec<String>>::new(), |mut acc, (addr, c_id)| {
-                                acc.entry(addr).or_default().push(c_id);
-                                acc
-                            });
-
-                        let vm_storage = contract_ids.iter().filter_map(|address| {
-                            if let Some(state) = contract_states.get(address) {
-                                Some((address.clone(), state.clone()))
-                            } else if let Some(ids) = contract_address_to_components.get(address) {
-                                error!(?address, ?ids, "Component with lacking contract storage encountered!");
-                                None
-                            } else {
-                                None
-                            }
-                        }).collect();
-
-                        StateSyncMessage {
-                            header: BlockHeader::from_block(&block, false),
-                            snapshots: Snapshot { states, vm_storage },
-                            deltas: None,
-                            removed_components: HashMap::new(),
-                        }
-                    }
-                }
-                .merge(deltas_msg);
+                let snapshot = self
+                    .get_snapshots::<Vec<&String>>(
+                        BlockHeader::from_block(&block, false),
+                        None,
+                    )
+                    .await?
+                    .merge(deltas_msg);
                 let n_components = self.component_tracker.components.len();
                 let n_snapshots = snapshot.snapshots.states.len();
                 info!(n_components, n_snapshots, "Initial snapshot retrieved, starting delta message feed");
@@ -468,92 +452,11 @@ where
                                 self.component_tracker
                                     .start_tracking(requiring_snapshot.as_slice())
                                     .await?;
-                                let snapshots = if !self.include_snapshots {
-                                    Snapshot::default()
-                                } else {
-                                    // Get component IDs (clone from requiring_snapshot)
-                                    let component_ids: Vec<_> = requiring_snapshot.into_iter().map(|s| (*s).clone()).collect();
 
-                                    if component_ids.is_empty() {
-                                        Snapshot::default()
-                                    } else {
-                                        // Get contract IDs from component tracker
-                                        let contract_ids: Vec<Bytes> = self
-                                            .component_tracker
-                                            .get_contracts_by_component(&component_ids)
-                                            .into_iter()
-                                            .collect();
-
-                                        let request = SnapshotParameters::new(
-                                            self.extractor_id.chain,
-                                            self.extractor_id.name.clone(),
-                                            component_ids.clone(),
-                                            contract_ids.clone(),
-                                            header.number,
-                                            self.retrieve_balances,
-                                            self.include_tvl,
-                                        );
-                                        let snapshot_response = self.rpc_client.get_snapshots(&request, 100, 4).await?;
-
-                                        // Process entrypoints if we got them
-                                        if !snapshot_response.traced_entry_points.is_empty() {
-                                            self.component_tracker.process_entrypoints(&snapshot_response.traced_entry_points.clone().into());
-                                        }
-
-                                        // Build ComponentWithState from the snapshot response
-                                        let mut protocol_states = snapshot_response.protocol_states;
-                                        trace!(states=?&protocol_states, "Retrieved ProtocolStates");
-
-                                        let states = self.component_tracker.components.values().filter_map(|component| {
-                                            if let Some(state) = protocol_states.remove(&component.id) {
-                                                Some((
-                                                    component.id.clone(),
-                                                    ComponentWithState {
-                                                        state,
-                                                        component: component.clone(),
-                                                        component_tvl: snapshot_response.component_tvl.get(&component.id).cloned(),
-                                                        entrypoints: snapshot_response.traced_entry_points.get(&component.id).cloned().unwrap_or_default(),
-                                                    },
-                                                ))
-                                            } else if component_ids.contains(&component.id) {
-                                                error!(component_id = ?component.id, "Missing state for native component!");
-                                                None
-                                            } else {
-                                                None
-                                            }
-                                        }).collect();
-
-                                        let contract_states = snapshot_response.vm_storage;
-                                        trace!(states=?&contract_states, "Retrieved ContractState");
-
-                                        let contract_address_to_components = self.component_tracker.components.iter()
-                                            .filter_map(|(id, comp)| {
-                                                if component_ids.contains(id) {
-                                                    Some(comp.contract_ids.iter().map(|address| (address.clone(), comp.id.clone())))
-                                                } else {
-                                                    None
-                                                }
-                                            })
-                                            .flatten()
-                                            .fold(HashMap::<Bytes, Vec<String>>::new(), |mut acc, (addr, c_id)| {
-                                                acc.entry(addr).or_default().push(c_id);
-                                                acc
-                                            });
-
-                                        let vm_storage = contract_ids.iter().filter_map(|address| {
-                                            if let Some(state) = contract_states.get(address) {
-                                                Some((address.clone(), state.clone()))
-                                            } else if let Some(ids) = contract_address_to_components.get(address) {
-                                                error!(?address, ?ids, "Component with lacking contract storage encountered!");
-                                                None
-                                            } else {
-                                                None
-                                            }
-                                        }).collect();
-
-                                        Snapshot { states, vm_storage }
-                                    }
-                                };
+                                let snapshots = self
+                                    .get_snapshots(header.clone(), Some(requiring_snapshot))
+                                    .await?
+                                    .snapshots;
 
                                 let removed_components = if !to_remove.is_empty() {
                                     self.component_tracker.stop_tracking(&to_remove)
@@ -762,10 +665,7 @@ mod test {
     use uuid::Uuid;
 
     use super::*;
-    use crate::{
-        deltas::MockDeltasClient, rpc::MockRPCClient, DeltasError, RPCError,
-        SnapshotRequestResponse,
-    };
+    use crate::{deltas::MockDeltasClient, rpc::MockRPCClient, DeltasError, RPCError};
 
     // Required for mock client to implement clone
     struct ArcRPCClient<T>(Arc<T>);
@@ -844,7 +744,7 @@ mod test {
             request: &SnapshotParameters,
             chunk_size: usize,
             concurrency: usize,
-        ) -> Result<SnapshotRequestResponse, RPCError> {
+        ) -> Result<Snapshot, RPCError> {
             self.0
                 .get_snapshots(request, chunk_size, concurrency)
                 .await
@@ -945,26 +845,30 @@ mod test {
             .expect_get_snapshots()
             .withf(|request: &SnapshotParameters, _chunk_size: &usize, _concurrency: &usize| {
                 request
-                    .component_ids
-                    .contains(&"Component3".to_string())
+                    .components
+                    .contains_key("Component3")
             })
             .returning(|_request, _chunk_size, _concurrency| {
-                Ok(SnapshotRequestResponse::new(
-                    [(
+                Ok(Snapshot {
+                    states: [(
                         "Component3".to_string(),
-                        ResponseProtocolState {
-                            component_id: "Component3".to_string(),
-                            ..Default::default()
+                        ComponentWithState {
+                            state: ResponseProtocolState {
+                                component_id: "Component3".to_string(),
+                                ..Default::default()
+                            },
+                            component: ProtocolComponent {
+                                id: "Component3".to_string(),
+                                ..Default::default()
+                            },
+                            component_tvl: Some(1000.0),
+                            entrypoints: vec![],
                         },
                     )]
                     .into_iter()
                     .collect(),
-                    HashMap::new(),
-                    [("Component3".to_string(), 1000.0)]
-                        .into_iter()
-                        .collect(),
-                    HashMap::new(),
-                ))
+                    vm_storage: HashMap::new(),
+                })
             });
 
         // mock calls for the initial state snapshots
@@ -987,35 +891,53 @@ mod test {
         rpc_client
             .expect_get_snapshots()
             .returning(|_request, _chunk_size, _concurrency| {
-                Ok(SnapshotRequestResponse::new(
-                    [
+                Ok(Snapshot {
+                    states: [
                         (
                             "Component1".to_string(),
-                            ResponseProtocolState {
-                                component_id: "Component1".to_string(),
-                                ..Default::default()
+                            ComponentWithState {
+                                state: ResponseProtocolState {
+                                    component_id: "Component1".to_string(),
+                                    ..Default::default()
+                                },
+                                component: ProtocolComponent {
+                                    id: "Component1".to_string(),
+                                    ..Default::default()
+                                },
+                                component_tvl: Some(100.0),
+                                entrypoints: vec![],
                             },
                         ),
                         (
                             "Component2".to_string(),
-                            ResponseProtocolState {
-                                component_id: "Component2".to_string(),
-                                ..Default::default()
+                            ComponentWithState {
+                                state: ResponseProtocolState {
+                                    component_id: "Component2".to_string(),
+                                    ..Default::default()
+                                },
+                                component: ProtocolComponent {
+                                    id: "Component2".to_string(),
+                                    ..Default::default()
+                                },
+                                component_tvl: Some(0.0),
+                                entrypoints: vec![],
                             },
                         ),
                     ]
                     .into_iter()
                     .collect(),
-                    HashMap::new(),
-                    [
-                        ("Component1".to_string(), 100.0),
-                        ("Component2".to_string(), 0.0),
-                        ("Component3".to_string(), 1000.0),
-                    ]
-                    .into_iter()
-                    .collect(),
-                    HashMap::new(),
-                ))
+                    vm_storage: HashMap::new(),
+                })
+            });
+
+        // Mock get_traced_entry_points for Ethereum chain
+        rpc_client
+            .expect_get_traced_entry_points()
+            .returning(|_| {
+                Ok(TracedEntryPointRequestResponse {
+                    traced_entry_points: HashMap::new(),
+                    pagination: PaginationResponse { page: 0, page_size: 100, total: 0 },
+                })
             });
 
         // Mock deltas client and messages
@@ -1291,26 +1213,30 @@ mod test {
             .expect_get_snapshots()
             .withf(|request: &SnapshotParameters, _chunk_size: &usize, _concurrency: &usize| {
                 request
-                    .component_ids
-                    .contains(&"Component3".to_string())
+                    .components
+                    .contains_key("Component3")
             })
             .returning(|_request, _chunk_size, _concurrency| {
-                Ok(SnapshotRequestResponse::new(
-                    [(
+                Ok(Snapshot {
+                    states: [(
                         "Component3".to_string(),
-                        ResponseProtocolState {
-                            component_id: "Component3".to_string(),
-                            ..Default::default()
+                        ComponentWithState {
+                            state: ResponseProtocolState {
+                                component_id: "Component3".to_string(),
+                                ..Default::default()
+                            },
+                            component: ProtocolComponent {
+                                id: "Component3".to_string(),
+                                ..Default::default()
+                            },
+                            component_tvl: Some(10.0),
+                            entrypoints: vec![],
                         },
                     )]
                     .into_iter()
                     .collect(),
-                    HashMap::new(),
-                    [("Component3".to_string(), 10.0)]
-                        .into_iter()
-                        .collect(),
-                    HashMap::new(),
-                ))
+                    vm_storage: HashMap::new(),
+                })
             });
 
         // Mock for the initial snapshot retrieval
@@ -1330,35 +1256,53 @@ mod test {
         rpc_client
             .expect_get_snapshots()
             .returning(|_request, _chunk_size, _concurrency| {
-                Ok(SnapshotRequestResponse::new(
-                    [
+                Ok(Snapshot {
+                    states: [
                         (
                             "Component1".to_string(),
-                            ResponseProtocolState {
-                                component_id: "Component1".to_string(),
-                                ..Default::default()
+                            ComponentWithState {
+                                state: ResponseProtocolState {
+                                    component_id: "Component1".to_string(),
+                                    ..Default::default()
+                                },
+                                component: ProtocolComponent {
+                                    id: "Component1".to_string(),
+                                    ..Default::default()
+                                },
+                                component_tvl: Some(6.0),
+                                entrypoints: vec![],
                             },
                         ),
                         (
                             "Component2".to_string(),
-                            ResponseProtocolState {
-                                component_id: "Component2".to_string(),
-                                ..Default::default()
+                            ComponentWithState {
+                                state: ResponseProtocolState {
+                                    component_id: "Component2".to_string(),
+                                    ..Default::default()
+                                },
+                                component: ProtocolComponent {
+                                    id: "Component2".to_string(),
+                                    ..Default::default()
+                                },
+                                component_tvl: Some(2.0),
+                                entrypoints: vec![],
                             },
                         ),
                     ]
                     .into_iter()
                     .collect(),
-                    HashMap::new(),
-                    [
-                        ("Component1".to_string(), 6.0),
-                        ("Component2".to_string(), 2.0),
-                        ("Component3".to_string(), 10.0),
-                    ]
-                    .into_iter()
-                    .collect(),
-                    HashMap::new(),
-                ))
+                    vm_storage: HashMap::new(),
+                })
+            });
+
+        // Mock get_traced_entry_points for Ethereum chain
+        rpc_client
+            .expect_get_traced_entry_points()
+            .returning(|_| {
+                Ok(TracedEntryPointRequestResponse {
+                    traced_entry_points: HashMap::new(),
+                    pagination: PaginationResponse { page: 0, page_size: 100, total: 0 },
+                })
             });
 
         let (tx, rx) = channel(1);
