@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-alloy = { workspace = true, features = ["rpc-types-eth", "sol-types", "provider-debug-api"] }
+alloy = { workspace = true, features = ["rpc-types-eth", "sol-types"] }
 alloy-chains = "0.2.6"
 alloy-rpc-types-trace = "1.0.38"
 clap = { version = "4.5.48", features = ["derive"] }

@@ -43,7 +43,7 @@ use tycho_simulation::{
 use crate::{
     execution::{
         encoding::encode_swap,
-        models::{TychoExecutionInfo, TychoExecutionResult},
+        models::{TychoExecutionInput, TychoExecutionResult},
         simulate_swap_transaction, tenderly,
     },
     stream_processor::{
@@ -440,7 +440,7 @@ async fn process_state(
     block: &Block,
     state_id: String,
     state: Box<dyn ProtocolSim>,
-) -> HashMap<String, TychoExecutionInfo> {
+) -> HashMap<String, TychoExecutionInput> {
     info!(
         "Component has tokens: {}",
         component
@@ -585,7 +585,7 @@ async fn process_state(
         };
         execution_infos.insert(
             format!("{}-{:?}", simulation_id, i),
-            TychoExecutionInfo {
+            TychoExecutionInput {
                 solution,
                 transaction,
                 expected_amount_out,
@@ -602,6 +602,13 @@ async fn process_state(
     execution_infos
 }
 
+/// Processes the result of a Tycho simulation execution and emits metrics.
+///
+/// Handles success, revert, and failure cases by logging appropriate events and recording
+/// metrics. Calculates slippage for successful executions and updates counters for
+/// reverts and failures.
+///
+/// Returns updated counters for reverts and failures.
 #[tracing::instrument(
     skip_all,
     fields(
@@ -614,7 +621,7 @@ async fn process_state(
 fn process_execution_result(
     simulation_id: &String,
     result: &TychoExecutionResult,
-    execution_info: TychoExecutionInfo,
+    execution_info: TychoExecutionInput,
     block: Block,
     chain_id: String,
     mut n_reverts: i32,

@@ -5,15 +5,13 @@ use alloy::{
     primitives::{keccak256, Bytes},
     rpc::{
         client::ClientBuilder,
-        types::{
-            trace::geth::{
-                GethDebugBuiltInTracerType, GethDebugTracerType, GethDebugTracingCallOptions,
-                GethDebugTracingOptions,
-            },
-            Block, BlockId,
-        },
+        types::{Block, BlockId},
     },
     sol_types::SolValue,
+};
+use alloy_rpc_types_trace::geth::{
+    GethDebugBuiltInTracerType, GethDebugTracerType, GethDebugTracingCallOptions,
+    GethDebugTracingOptions,
 };
 use serde_json::Value;
 use tracing::{error, warn};
@@ -21,6 +19,7 @@ use tracing::{error, warn};
 use crate::execution::{
     four_byte_client::FourByteClient,
     models::{SimulationInput, SimulationResult},
+    traces::print_call_trace,
 };
 
 const KNOWN_SIGNATURES: &[&str] =
@@ -239,7 +238,7 @@ impl ExecutionSimulator {
 
                     if has_error {
                         error!("=== Transaction {} Trace (FAILURE) ===", simulation_id);
-                        crate::execution::traces::print_call_trace(&trace_value, 0).await;
+                        print_call_trace(&trace_value, 0).await;
                         error!("=== End Trace ===");
 
                         // Try to get revert reason from multiple possible locations

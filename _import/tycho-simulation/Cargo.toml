@@ -40,7 +40,7 @@ tycho-ethereum = { version = ">=0.91.0", features = ["onchain_data"] }
 tycho-execution = ">=0.129.1"
 
 # EVM dependencies
-alloy = { version = "1.0.30", features = ["providers", "signer-local", "rpc-types-eth", "provider-debug-api"] }
+alloy = { version = "1.0.30", features = ["providers", "signer-local", "rpc-types-eth"] }
 
 [dependencies]
 # Serialization/Deserialization

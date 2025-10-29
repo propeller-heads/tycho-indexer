@@ -18,7 +18,7 @@ use tycho_simulation::{
 use crate::{
     execution::{
         execution_simulator::ExecutionSimulator,
-        models::{SimulationInput, SimulationResult, TychoExecutionInfo, TychoExecutionResult},
+        models::{SimulationInput, SimulationResult, TychoExecutionInput, TychoExecutionResult},
     },
     RPCTools,
 };
@@ -32,7 +32,7 @@ mod traces;
 
 pub async fn simulate_swap_transaction(
     rpc_tools: &RPCTools,
-    execution_info: HashMap<String, TychoExecutionInfo>,
+    execution_info: HashMap<String, TychoExecutionInput>,
     block: &Block,
 ) -> Result<
     HashMap<String, TychoExecutionResult>,
@@ -100,7 +100,7 @@ pub async fn simulate_swap_transaction(
         return Ok(tycho_execution_results);
     }
 
-    // Use debug_traceCallMany from the start with retry logic
+    // Use debug_traceCall from the start with retry logic
     // Worst case, it will take ~100s (20 retries with max 5s delay)
     let retry_strategy = ExponentialFactorBackoff::from_millis(1000, 2.)
         .max_delay_millis(5000)
