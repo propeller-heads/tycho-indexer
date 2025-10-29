@@ -74,7 +74,7 @@ type FilterFn = fn(&ComponentWithState) -> bool;
 /// A decoder to process raw messages.
 ///
 /// This struct decodes incoming messages of type `FeedMessage` and converts it into the
-/// `BlockUpdate`struct.
+/// `BlockUpdate` struct.
 ///
 /// # Important:
 /// - Supports registering exchanges and their associated filters for specific protocol components.
@@ -347,9 +347,9 @@ where
                                 // Token already has a proxy contract, simply update it.
 
                                 // Note: we apply the snapshot as an update. This is to cover the
-                                // case where a contract may be
-                                // stale as it stopped being tracked for some reason (e.g. due
-                                // to a drop in tvl) and is now being tracked again.
+                                // case where a contract may be stale as it stopped being tracked
+                                // for some reason (e.g. due to a drop in tvl) and is now being
+                                // tracked again.
                                 let proxy_state = AccountUpdate::new(
                                     original_address,
                                     value.chain.into(),
