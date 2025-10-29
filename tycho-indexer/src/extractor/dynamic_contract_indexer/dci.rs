@@ -177,17 +177,21 @@ where
                         {
                             for entrypoint_params_set in entrypoint_params_sets {
                                 for entrypoint_with_params in entrypoint_params_set {
+                                    let key = (
+                                        entrypoint_with_params
+                                            .entry_point
+                                            .external_id
+                                            .clone(),
+                                        entrypoint_with_params.params.clone(),
+                                    );
+
                                     // If we have None (failed trace) for this key, check retry
                                     // count
-                                    if let Some(None) = self
-                                        .cache
-                                        .entrypoint_results
-                                        .get(entrypoint_with_params)
-                                    {
+                                    if let Some(None) = self.cache.entrypoint_results.get(&key) {
                                         let retry_count = self
                                             .cache
                                             .tracing_retry_counts
-                                            .get(entrypoint_with_params)
+                                            .get(&key)
                                             .cloned()
                                             .unwrap_or(0);
 
@@ -261,12 +265,12 @@ where
                 let entrypoint_with_params =
                     EntryPointWithTracingParams::new(entrypoint.clone(), param.clone());
 
-                // Skip if we already have a successful trace (Some(result)), not if we have None
-                // (failed trace).
+                // Skip if we already have a successful trace for this entrypoint + params pair.
+                // Only skip if we have Some(result), not if we have None (failed trace).
                 if let Some(Some(_)) = self
                     .cache
                     .entrypoint_results
-                    .get(&entrypoint_with_params)
+                    .get(&(entrypoint_id.clone(), param.clone()))
                 {
                     continue;
                 }
@@ -757,7 +761,16 @@ where
             for entrypoint_with_params in params_set.iter() {
                 self.cache
                     .entrypoint_results
-                    .insert_permanent(entrypoint_with_params.clone(), None);
+                    .insert_permanent(
+                        (
+                            entrypoint_with_params
+                                .entry_point
+                                .external_id
+                                .clone(),
+                            entrypoint_with_params.params.clone(),
+                        ),
+                        None,
+                    );
             }
         }
 
@@ -797,20 +810,9 @@ where
                         .or_insert(slots_to_insert);
                 }
 
-                let entrypoint_with_params_for_result = EntryPointWithTracingParams::new(
-                    self.cache
-                        .ep_id_to_entrypoint
-                        .get(&entrypoint_id)
-                        .ok_or(ExtractionError::Setup(format!(
-                            "Got a tracing result for a unknown entrypoint: {entrypoint_id}"
-                        )))?
-                        .clone(),
-                    param.clone(),
-                );
-
                 self.cache
                     .entrypoint_results
-                    .insert_permanent(entrypoint_with_params_for_result, Some(result));
+                    .insert_permanent((entrypoint_id.clone(), param), Some(result));
             }
         }
 
@@ -1090,9 +1092,17 @@ where
                 .entrypoint_results
                 .insert_pending(
                     block.clone(),
-                    traced_entry_point
-                        .entry_point_with_params
-                        .clone(),
+                    (
+                        traced_entry_point
+                            .entry_point_with_params
+                            .entry_point
+                            .external_id
+                            .clone(),
+                        traced_entry_point
+                            .entry_point_with_params
+                            .params
+                            .clone(),
+                    ),
                     Some(
                         traced_entry_point
                             .tracing_result
@@ -1103,15 +1113,23 @@ where
 
         // Store failed traces as None in the cache and increment retry counter
         for (failed_ep, _) in failed_entrypoints.iter() {
+            let key = (
+                failed_ep
+                    .entry_point
+                    .external_id
+                    .clone(),
+                failed_ep.params.clone(),
+            );
+
             // Store the failed trace result
             self.cache
                 .entrypoint_results
-                .insert_pending(block.clone(), failed_ep.clone(), None)?;
+                .insert_pending(block.clone(), key.clone(), None)?;
 
             // Increment retry counter (starting from 0 on first failure)
             self.cache
                 .tracing_retry_counts
-                .pending_entry(block, failed_ep)?
+                .pending_entry(block, &key)?
                 .and_modify(|count| *count += 1)
                 .or_insert(0);
         }
@@ -1562,17 +1580,17 @@ mod tests {
                 .get_full_permanent_state(),
             &HashMap::from([
                 (
-                    EntryPointWithTracingParams::new(get_entrypoint(1), get_tracing_params(1)),
+                    (get_entrypoint(1).external_id, get_tracing_params(1)),
                     Some(get_tracing_result(1))
                 ),
-                (EntryPointWithTracingParams::new(get_entrypoint(1), get_tracing_params(2)), None), /* No result for
-                                                                                                     * this param */
+                ((get_entrypoint(1).external_id, get_tracing_params(2)), None), /* No result for
+                                                                                 * this param */
                 (
-                    EntryPointWithTracingParams::new(get_entrypoint(2), get_tracing_params(3)),
+                    (get_entrypoint(2).external_id, get_tracing_params(3)),
                     Some(get_tracing_result(2))
                 ),
                 (
-                    EntryPointWithTracingParams::new(get_entrypoint(4), get_tracing_params(1)),
+                    (get_entrypoint(4).external_id, get_tracing_params(1)),
                     Some(get_tracing_result(1))
                 ),
             ])
@@ -3356,7 +3374,7 @@ mod tests {
         assert_eq!(
             dci.cache
                 .entrypoint_results
-                .get(&EntryPointWithTracingParams::new(entrypoint.clone(), tracing_params.clone())),
+                .get(&(entrypoint.external_id.clone(), tracing_params.clone())),
             Some(&None)
         );
 
@@ -3386,7 +3404,7 @@ mod tests {
         assert!(matches!(
             dci.cache
                 .entrypoint_results
-                .get(&EntryPointWithTracingParams::new(entrypoint, tracing_params)),
+                .get(&(entrypoint.external_id, tracing_params)),
             Some(Some(_))
         ));
     }
@@ -3504,7 +3522,7 @@ mod tests {
         assert!(matches!(
             dci.cache
                 .entrypoint_results
-                .get(&EntryPointWithTracingParams::new(entrypoint.clone(), tracing_params.clone())),
+                .get(&(entrypoint.external_id.clone(), tracing_params.clone())),
             Some(Some(_))
         ));
 
@@ -3536,7 +3554,7 @@ mod tests {
         assert!(matches!(
             dci.cache
                 .entrypoint_results
-                .get(&EntryPointWithTracingParams::new(entrypoint, tracing_params)),
+                .get(&(entrypoint.external_id, tracing_params)),
             Some(Some(_))
         ));
     }

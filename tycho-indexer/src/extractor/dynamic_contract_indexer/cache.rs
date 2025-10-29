@@ -6,7 +6,7 @@ use std::{
 use thiserror::Error;
 use tracing::{debug, trace, warn};
 use tycho_common::models::{
-    blockchain::{Block, EntryPoint, EntryPointWithTracingParams, TracingResult},
+    blockchain::{Block, EntryPoint, EntryPointWithTracingParams, TracingParams, TracingResult},
     protocol::ProtocolComponent,
     Address, BlockHash, ComponentId, EntryPointId, StoreKey,
 };
@@ -39,7 +39,7 @@ pub(super) struct DCICache {
     /// Stores tracing results for entry points paired with specific tracing parameters.
     /// None indicates that the TracingParams exist but have no results (e.g., failed traces).
     pub(super) entrypoint_results:
-        VersionedCache<EntryPointWithTracingParams, Option<TracingResult>>,
+        VersionedCache<(EntryPointId, TracingParams), Option<TracingResult>>,
     /// Maps a storage location to entry points that should be retriggered when that location
     /// changes and the address storage offset for packed slots.
     pub(super) retriggers:
@@ -59,7 +59,7 @@ pub(super) struct DCICache {
         VersionedCache<ComponentId, HashSet<EntryPointWithTracingParams>>,
     /// Tracks the number of retry attempts for each failed tracing params.
     /// Used to cap retries at a maximum number of attempts (e.g., 5).
-    pub(super) tracing_retry_counts: VersionedCache<EntryPointWithTracingParams, u32>,
+    pub(super) tracing_retry_counts: VersionedCache<(EntryPointId, TracingParams), u32>,
 }
 
 impl DCICache {
@@ -840,7 +840,7 @@ mod tests {
             .entrypoint_results
             .insert_pending(
                 block1.clone(),
-                EntryPointWithTracingParams::new(entrypoint.clone(), tracing_params.clone()),
+                (entrypoint.external_id.clone(), tracing_params.clone()),
                 Some(tracing_result.clone()),
             )
             .unwrap();
