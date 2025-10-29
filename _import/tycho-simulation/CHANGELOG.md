@@ -1,3 +1,10 @@
+## [0.187.0](https://github.com/propeller-heads/tycho-simulation/compare/0.186.0...0.187.0) (2025-10-29)
+
+
+### Features
+
+* Batch RPC calls for execution simulation ([dccf27c](https://github.com/propeller-heads/tycho-simulation/commit/dccf27cc2bcf9afae90990b2a8ab0da6be32f756))
+
 ## [0.186.0](https://github.com/propeller-heads/tycho-simulation/compare/0.185.2...0.186.0) (2025-10-27)
 
 
