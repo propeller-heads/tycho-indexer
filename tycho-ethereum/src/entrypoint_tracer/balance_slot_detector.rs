@@ -1605,9 +1605,25 @@ mod tests {
         }
     }
 
+    #[rstest]
+    #[case(
+        "f847a638E44186F3287ee9F8cAF73FF4d4B80784",
+        "ZeroBalanceUser",
+        "f37edb7186962a2f96b7645384a9919d11ea2c760622e9e423e3ff0fa39e9b5b"
+    )]
+    // Address extracted from stETH events. Verified that it has funds
+    #[case(
+        "ef417FCE1883c6653E7dC6AF7c6F85CCDE84Aa09",
+        "NonZeroBalanceUser",
+        "28b290becf7be0019520d491d9cd869337f3d683be3e569e54f9044b94df94c0"
+    )]
     #[tokio::test]
-    #[ignore] // Requires real RPC connection
-    async fn test_detect_slots_rebasing_token() {
+    #[ignore = "require RPC connection"]
+    async fn test_detect_slots_rebasing_token(
+        #[case] holder_address_hex: &str,
+        #[case] holder_name: &str,
+        #[case] expected_slot: &str,
+    ) {
         let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
         let config = BalanceSlotDetectorConfig {
             max_batch_size: 5,
@@ -1622,7 +1638,7 @@ mod tests {
         let steth = Address::from(steth_bytes);
 
         // Address extracted from stETH events. Verified that it has funds
-        let owner_address = alloy::hex::decode("ef417FCE1883c6653E7dC6AF7c6F85CCDE84Aa09").unwrap();
+        let owner_address = alloy::hex::decode(holder_address_hex).unwrap();
         let balance_owner = Address::from(owner_address);
 
         let tokens = vec![steth.clone()];
@@ -1689,13 +1705,10 @@ mod tests {
                 println!("✓ Storage slot manipulation verified successfully!");
 
                 // Check if this matches known stETH storage positions:
-                let expected_slot =
-                    "28b290becf7be0019520d491d9cd869337f3d683be3e569e54f9044b94df94c0";
-
                 assert_eq!(slot_hex, expected_slot);
             } else if let Err(e) = result {
                 // If no slot detected, print debug info
-                println!("Failed to detect slots for stETH: {} - this might indicate the balance owner has no stETH balance", e);
+                println!("Failed to detect slots for stETH: {} for {}.", e, holder_name);
             }
         } else {
             panic!("No result for stETH token");

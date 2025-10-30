@@ -753,10 +753,7 @@ impl EVMAllowanceSlotDetector {
                     match self.extract_allowance_from_call_response(response) {
                         Ok(returned_allowance) => {
                             // Check if the override worked (allowance should be different from
-                            // original_allowance). We can't guarantee that it will match the
-                            // override value, as some tokens use shares
-                            // systems, making it hard to control
-                            // the allowance with a single override.
+                            // original_allowance).
                             if returned_allowance != metadata.original_allowance {
                                 debug!(
                                     token = %metadata.token,
