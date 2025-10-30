@@ -23,6 +23,7 @@ use itertools::Itertools;
 use miette::{miette, IntoDiagnostic, NarratableReportHandler, WrapErr};
 use num_bigint::BigUint;
 use num_traits::{ToPrimitive, Zero};
+use rand::prelude::IndexedRandom;
 use tokio::sync::Semaphore;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
@@ -96,9 +97,13 @@ struct Cli {
     #[arg(long, default_value_t = 5, value_parser = clap::value_parser!(u8).range(1..))]
     parallel_simulations: u8,
 
-    /// Maximum number of simulations to run per protocol update
+    /// Maximum number of simulations (of updated states) to run per update
     #[arg(long, default_value_t = 10, value_parser = clap::value_parser!(u16).range(1..))]
     max_simulations: u16,
+
+    /// Maximum number of simulations (of stale states) to run per update per protocol
+    #[arg(long, default_value_t = 10, value_parser = clap::value_parser!(u16).range(1..))]
+    max_simulations_stale: u16,
 
     /// The RFQ stream will skip messages for this duration (in seconds) after processing a message
     #[arg(long, default_value_t = 600)]
@@ -122,6 +127,7 @@ impl Debug for Cli {
 struct TychoState {
     states: HashMap<String, Box<dyn ProtocolSim>>,
     components: HashMap<String, ProtocolComponent>,
+    component_ids_by_protocol: HashMap<String, HashSet<String>>,
 }
 
 #[tokio::main]
@@ -269,6 +275,11 @@ async fn process_update(
                 current_state
                     .components
                     .insert(id.clone(), comp.clone());
+                current_state
+                    .component_ids_by_protocol
+                    .entry(comp.protocol_system.clone())
+                    .or_insert_with(HashSet::new)
+                    .insert(id.clone());
             }
             for (id, state) in update.update.states.iter() {
                 // this overwrites existing entries
@@ -304,13 +315,11 @@ async fn process_update(
         }
     }
 
-    let mut all_protocols = HashSet::new();
     for (protocol, sync_state) in update.update.sync_states.iter() {
         metrics::record_protocol_sync_state(protocol, sync_state);
-        all_protocols.insert(protocol);
     }
 
-    // Process states in parallel
+    // Process updated states in parallel
     let semaphore = Arc::new(Semaphore::new(cli.parallel_simulations as usize));
     let mut tasks = Vec::new();
 
@@ -345,6 +354,76 @@ async fn process_update(
                 }
             },
         };
+        let block = block.clone();
+        let state_id = id.clone();
+        let state = state.clone_box();
+        let permit = semaphore
+            .clone()
+            .acquire_owned()
+            .await
+            .into_diagnostic()
+            .wrap_err("Failed to acquire permit")?;
+
+        let task = tokio::spawn(async move {
+            let simulation_id = generate_simulation_id(&component.protocol_system, &state_id);
+            let result =
+                process_state(&simulation_id, chain, component, &block, state_id, state).await;
+            drop(permit);
+            result
+        });
+        tasks.push(task);
+    }
+
+    // Select states that were not updated in this block to test simulation and execution
+    let selected_ids = {
+        let current_state = tycho_state
+            .write()
+            .map_err(|e| miette!("Failed to acquire write lock on Tycho state: {e}"))?;
+
+        let mut all_selected_ids = Vec::new();
+        for component_ids in current_state
+            .component_ids_by_protocol
+            .values()
+        {
+            // Filter out IDs that are in the current update
+            let available_ids: Vec<_> = component_ids
+                .iter()
+                .filter(|id| !update.update.states.keys().contains(id))
+                .cloned()
+                .collect();
+
+            let protocol_selected_ids: Vec<_> = available_ids
+                .choose_multiple(
+                    &mut rand::rng(),
+                    (cli.max_simulations_stale as usize).min(available_ids.len()),
+                )
+                .cloned()
+                .collect();
+
+            all_selected_ids.extend(protocol_selected_ids);
+        }
+        all_selected_ids
+    };
+
+    for id in selected_ids {
+        let (component, state) = {
+            let current_state = tycho_state
+                .write()
+                .map_err(|e| miette!("Failed to acquire read lock on Tycho state: {e}"))?;
+
+            match (current_state.components.get(&id), current_state.states.get(&id)) {
+                (Some(comp), Some(state)) => (comp.clone(), state.clone()),
+                (None, _) => {
+                    error!(id=%id, "Component not found in saved protocol components.");
+                    continue;
+                }
+                (_, None) => {
+                    error!(id=%id, "State not found in saved protocol states");
+                    continue;
+                }
+            }
+        };
+
         let block = block.clone();
         let state_id = id.clone();
         let state = state.clone_box();
