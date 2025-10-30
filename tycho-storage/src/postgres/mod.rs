@@ -544,6 +544,10 @@ impl PostgresGateway {
         for chain in chain_cache.map_enum.values() {
             let chain_id = chain_cache.try_get_id(chain)?;
             let native_token = chain.native_token();
+            debug!(
+                "Fetching native token for chain: {chain}. Token address: {}",
+                native_token.address.to_string()
+            );
             let token_id = async {
                 schema::token::table
                     .inner_join(
