@@ -250,7 +250,6 @@ where
     }
 
     /// Retrieves state snapshots of the requested components
-    #[allow(deprecated)]
     async fn get_snapshots<'a, I: IntoIterator<Item = &'a String>>(
         &mut self,
         header: BlockHeader,
@@ -813,6 +812,412 @@ mod test {
             deltas_client,
             10_u64,
         )
+    }
+
+    fn state_snapshot_native() -> ProtocolStateRequestResponse {
+        ProtocolStateRequestResponse {
+            states: vec![ResponseProtocolState {
+                component_id: "Component1".to_string(),
+                ..Default::default()
+            }],
+            pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
+        }
+    }
+
+    #[test(tokio::test)]
+    async fn test_get_snapshots_native() {
+        let header = BlockHeader::default();
+        let mut rpc = MockRPCClient::new();
+        let component = ProtocolComponent { id: "Component1".to_string(), ..Default::default() };
+
+        let component_clone = component.clone();
+        rpc.expect_get_snapshots()
+            .returning(move |_request, _chunk_size, _concurrency| {
+                Ok(Snapshot {
+                    states: state_snapshot_native()
+                        .states
+                        .into_iter()
+                        .map(|state| {
+                            (
+                                state.component_id.clone(),
+                                ComponentWithState {
+                                    state,
+                                    component: component_clone.clone(),
+                                    entrypoints: vec![],
+                                    component_tvl: None,
+                                },
+                            )
+                        })
+                        .collect(),
+                    vm_storage: HashMap::new(),
+                })
+            });
+
+        rpc.expect_get_traced_entry_points()
+            .returning(|_| {
+                Ok(TracedEntryPointRequestResponse {
+                    traced_entry_points: HashMap::new(),
+                    pagination: PaginationResponse::new(0, 20, 0),
+                })
+            });
+
+        let mut state_sync = with_mocked_clients(true, false, Some(rpc), None);
+        state_sync
+            .component_tracker
+            .components
+            .insert("Component1".to_string(), component.clone());
+        let components_arg = ["Component1".to_string()];
+        let exp = StateSyncMessage {
+            header: header.clone(),
+            snapshots: Snapshot {
+                states: state_snapshot_native()
+                    .states
+                    .into_iter()
+                    .map(|state| {
+                        (
+                            state.component_id.clone(),
+                            ComponentWithState {
+                                state,
+                                component: component.clone(),
+                                entrypoints: vec![],
+                                component_tvl: None,
+                            },
+                        )
+                    })
+                    .collect(),
+                vm_storage: HashMap::new(),
+            },
+            deltas: None,
+            removed_components: Default::default(),
+        };
+
+        let snap = state_sync
+            .get_snapshots(header, Some(&components_arg))
+            .await
+            .expect("Retrieving snapshot failed");
+
+        assert_eq!(snap, exp);
+    }
+
+    #[test(tokio::test)]
+    async fn test_get_snapshots_native_with_tvl() {
+        let header = BlockHeader::default();
+        let mut rpc = MockRPCClient::new();
+        let component = ProtocolComponent { id: "Component1".to_string(), ..Default::default() };
+
+        let component_clone = component.clone();
+        rpc.expect_get_snapshots()
+            .returning(move |_request, _chunk_size, _concurrency| {
+                Ok(Snapshot {
+                    states: state_snapshot_native()
+                        .states
+                        .into_iter()
+                        .map(|state| {
+                            (
+                                state.component_id.clone(),
+                                ComponentWithState {
+                                    state,
+                                    component: component_clone.clone(),
+                                    component_tvl: Some(100.0),
+                                    entrypoints: vec![],
+                                },
+                            )
+                        })
+                        .collect(),
+                    vm_storage: HashMap::new(),
+                })
+            });
+
+        rpc.expect_get_traced_entry_points()
+            .returning(|_| {
+                Ok(TracedEntryPointRequestResponse {
+                    traced_entry_points: HashMap::new(),
+                    pagination: PaginationResponse::new(0, 20, 0),
+                })
+            });
+
+        let mut state_sync = with_mocked_clients(true, true, Some(rpc), None);
+        state_sync
+            .component_tracker
+            .components
+            .insert("Component1".to_string(), component.clone());
+        let components_arg = ["Component1".to_string()];
+        let exp = StateSyncMessage {
+            header: header.clone(),
+            snapshots: Snapshot {
+                states: state_snapshot_native()
+                    .states
+                    .into_iter()
+                    .map(|state| {
+                        (
+                            state.component_id.clone(),
+                            ComponentWithState {
+                                state,
+                                component: component.clone(),
+                                component_tvl: Some(100.0),
+                                entrypoints: vec![],
+                            },
+                        )
+                    })
+                    .collect(),
+                vm_storage: HashMap::new(),
+            },
+            deltas: None,
+            removed_components: Default::default(),
+        };
+
+        let snap = state_sync
+            .get_snapshots(header, Some(&components_arg))
+            .await
+            .expect("Retrieving snapshot failed");
+
+        assert_eq!(snap, exp);
+    }
+
+    fn state_snapshot_vm() -> StateRequestResponse {
+        StateRequestResponse {
+            accounts: vec![
+                ResponseAccount { address: Bytes::from("0x0badc0ffee"), ..Default::default() },
+                ResponseAccount { address: Bytes::from("0xbabe42"), ..Default::default() },
+            ],
+            pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
+        }
+    }
+
+    fn traced_entry_point_response() -> TracedEntryPointRequestResponse {
+        TracedEntryPointRequestResponse {
+            traced_entry_points: HashMap::from([(
+                "Component1".to_string(),
+                vec![(
+                    EntryPointWithTracingParams {
+                        entry_point: EntryPoint {
+                            external_id: "entrypoint_a".to_string(),
+                            target: Bytes::from("0x0badc0ffee"),
+                            signature: "sig()".to_string(),
+                        },
+                        params: TracingParams::RPCTracer(RPCTracerParams {
+                            caller: Some(Bytes::from("0x0badc0ffee")),
+                            calldata: Bytes::from("0x0badc0ffee"),
+                            state_overrides: None,
+                            prune_addresses: None,
+                        }),
+                    },
+                    TracingResult {
+                        retriggers: HashSet::from([(
+                            Bytes::from("0x0badc0ffee"),
+                            AddressStorageLocation::new(Bytes::from("0x0badc0ffee"), 12),
+                        )]),
+                        accessed_slots: HashMap::from([(
+                            Bytes::from("0x0badc0ffee"),
+                            HashSet::from([Bytes::from("0xbadbeef0")]),
+                        )]),
+                    },
+                )],
+            )]),
+            pagination: PaginationResponse::new(0, 20, 0),
+        }
+    }
+
+    #[test(tokio::test)]
+    async fn test_get_snapshots_vm() {
+        let header = BlockHeader::default();
+        let mut rpc = MockRPCClient::new();
+
+        let traced_ep_response = traced_entry_point_response();
+        rpc.expect_get_snapshots()
+            .returning(move |_request, _chunk_size, _concurrency| {
+                let vm_storage_accounts = state_snapshot_vm();
+                Ok(Snapshot {
+                    states: [(
+                        "Component1".to_string(),
+                        ComponentWithState {
+                            state: ResponseProtocolState {
+                                component_id: "Component1".to_string(),
+                                ..Default::default()
+                            },
+                            component: ProtocolComponent {
+                                id: "Component1".to_string(),
+                                contract_ids: vec![
+                                    Bytes::from("0x0badc0ffee"),
+                                    Bytes::from("0xbabe42"),
+                                ],
+                                ..Default::default()
+                            },
+                            component_tvl: None,
+                            entrypoints: traced_ep_response
+                                .traced_entry_points
+                                .get("Component1")
+                                .cloned()
+                                .unwrap_or_default(),
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    vm_storage: vm_storage_accounts
+                        .accounts
+                        .into_iter()
+                        .map(|state| (state.address.clone(), state))
+                        .collect(),
+                })
+            });
+
+        rpc.expect_get_traced_entry_points()
+            .returning(|_| Ok(traced_entry_point_response()));
+
+        let mut state_sync = with_mocked_clients(false, false, Some(rpc), None);
+        let component = ProtocolComponent {
+            id: "Component1".to_string(),
+            contract_ids: vec![Bytes::from("0x0badc0ffee"), Bytes::from("0xbabe42")],
+            ..Default::default()
+        };
+        state_sync
+            .component_tracker
+            .components
+            .insert("Component1".to_string(), component.clone());
+        let components_arg = ["Component1".to_string()];
+        let exp = StateSyncMessage {
+            header: header.clone(),
+            snapshots: Snapshot {
+                states: [(
+                    component.id.clone(),
+                    ComponentWithState {
+                        state: ResponseProtocolState {
+                            component_id: "Component1".to_string(),
+                            ..Default::default()
+                        },
+                        component: component.clone(),
+                        component_tvl: None,
+                        entrypoints: vec![(
+                            EntryPointWithTracingParams {
+                                entry_point: EntryPoint {
+                                    external_id: "entrypoint_a".to_string(),
+                                    target: Bytes::from("0x0badc0ffee"),
+                                    signature: "sig()".to_string(),
+                                },
+                                params: TracingParams::RPCTracer(RPCTracerParams {
+                                    caller: Some(Bytes::from("0x0badc0ffee")),
+                                    calldata: Bytes::from("0x0badc0ffee"),
+                                    state_overrides: None,
+                                    prune_addresses: None,
+                                }),
+                            },
+                            TracingResult {
+                                retriggers: HashSet::from([(
+                                    Bytes::from("0x0badc0ffee"),
+                                    AddressStorageLocation::new(Bytes::from("0x0badc0ffee"), 12),
+                                )]),
+                                accessed_slots: HashMap::from([(
+                                    Bytes::from("0x0badc0ffee"),
+                                    HashSet::from([Bytes::from("0xbadbeef0")]),
+                                )]),
+                            },
+                        )],
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                vm_storage: state_snapshot_vm()
+                    .accounts
+                    .into_iter()
+                    .map(|state| (state.address.clone(), state))
+                    .collect(),
+            },
+            deltas: None,
+            removed_components: Default::default(),
+        };
+
+        let snap = state_sync
+            .get_snapshots(header, Some(&components_arg))
+            .await
+            .expect("Retrieving snapshot failed");
+
+        assert_eq!(snap, exp);
+    }
+
+    #[test(tokio::test)]
+    async fn test_get_snapshots_vm_with_tvl() {
+        let header = BlockHeader::default();
+        let mut rpc = MockRPCClient::new();
+        let component = ProtocolComponent {
+            id: "Component1".to_string(),
+            contract_ids: vec![Bytes::from("0x0badc0ffee"), Bytes::from("0xbabe42")],
+            ..Default::default()
+        };
+
+        let component_clone = component.clone();
+        rpc.expect_get_snapshots()
+            .returning(move |_request, _chunk_size, _concurrency| {
+                let vm_storage_accounts = state_snapshot_vm();
+                Ok(Snapshot {
+                    states: [(
+                        "Component1".to_string(),
+                        ComponentWithState {
+                            state: ResponseProtocolState {
+                                component_id: "Component1".to_string(),
+                                ..Default::default()
+                            },
+                            component: component_clone.clone(),
+                            component_tvl: Some(100.0),
+                            entrypoints: vec![],
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    vm_storage: vm_storage_accounts
+                        .accounts
+                        .into_iter()
+                        .map(|state| (state.address.clone(), state))
+                        .collect(),
+                })
+            });
+
+        rpc.expect_get_traced_entry_points()
+            .returning(|_| {
+                Ok(TracedEntryPointRequestResponse {
+                    traced_entry_points: HashMap::new(),
+                    pagination: PaginationResponse::new(0, 20, 0),
+                })
+            });
+
+        let mut state_sync = with_mocked_clients(false, true, Some(rpc), None);
+        state_sync
+            .component_tracker
+            .components
+            .insert("Component1".to_string(), component.clone());
+        let components_arg = ["Component1".to_string()];
+        let exp = StateSyncMessage {
+            header: header.clone(),
+            snapshots: Snapshot {
+                states: [(
+                    component.id.clone(),
+                    ComponentWithState {
+                        state: ResponseProtocolState {
+                            component_id: "Component1".to_string(),
+                            ..Default::default()
+                        },
+                        component: component.clone(),
+                        component_tvl: Some(100.0),
+                        entrypoints: vec![],
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                vm_storage: state_snapshot_vm()
+                    .accounts
+                    .into_iter()
+                    .map(|state| (state.address.clone(), state))
+                    .collect(),
+            },
+            deltas: None,
+            removed_components: Default::default(),
+        };
+
+        let snap = state_sync
+            .get_snapshots(header, Some(&components_arg))
+            .await
+            .expect("Retrieving snapshot failed");
+
+        assert_eq!(snap, exp);
     }
 
     fn mock_clients_for_state_sync() -> (MockRPCClient, MockDeltasClient, Sender<BlockChanges>) {
