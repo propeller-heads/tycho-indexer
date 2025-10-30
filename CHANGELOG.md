@@ -1,3 +1,16 @@
+## [0.100.0](https://github.com/propeller-heads/tycho-indexer/compare/0.99.2...0.100.0) (2025-10-30)
+
+
+### Features
+
+* Add a cap on how much TracingParams are retried ([62671fb](https://github.com/propeller-heads/tycho-indexer/commit/62671fb20aad5cce2664735e9fbacffc908b0236))
+* move params_to_retry identification to separate fn ([655e0f9](https://github.com/propeller-heads/tycho-indexer/commit/655e0f9ce0d066656bd3e3226489c0acdae95fef))
+* Retrigger on updates of untraced TracingParams ([#728](https://github.com/propeller-heads/tycho-indexer/issues/728)) ([6de6644](https://github.com/propeller-heads/tycho-indexer/commit/6de66445dca8a4a041b80edffd88abeb68464e9d))
+* Rollback using EntryPointWithTracingParams as cache key ([2c04cb6](https://github.com/propeller-heads/tycho-indexer/commit/2c04cb638a0c4908a199ed5bdb6ffebff84d3807))
+* Update DCI Cache to keep track of TraceParams without results ([706f34a](https://github.com/propeller-heads/tycho-indexer/commit/706f34a654e4e4fd749d76a90ace052b7f7388a8))
+* Update DCI to retry on changed Components that had failed tracing ([625b475](https://github.com/propeller-heads/tycho-indexer/commit/625b475d56204d8f5890ba0f5f45599bde36da7a))
+* Use EntryPointWithTracingParams as cache key ([17d1a47](https://github.com/propeller-heads/tycho-indexer/commit/17d1a4771c1c8dc32c4209ff5c452326d203b402))
+
 ## [0.99.2](https://github.com/propeller-heads/tycho-indexer/compare/0.99.1...0.99.2) (2025-10-28)
 
 
