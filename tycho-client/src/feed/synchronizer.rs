@@ -27,8 +27,7 @@ use crate::{
         component_tracker::{ComponentFilter, ComponentTracker},
         BlockHeader, HeaderLike,
     },
-    rpc::{RPCClient, RPCError},
-    snapshot::SnapshotParameters,
+    rpc::{RPCClient, RPCError, SnapshotParameters},
     DeltasError,
 };
 
