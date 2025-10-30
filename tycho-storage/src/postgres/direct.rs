@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    slice,
+};
 
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
@@ -114,13 +117,13 @@ impl ExtractionStateGateway for DirectGateway {
 #[async_trait]
 impl ChainGateway for DirectGateway {
     #[instrument(skip_all)]
-    async fn upsert_block(&self, new: &[Block]) -> Result<(), StorageError> {
+    async fn upsert_block(&self, new: Block) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .upsert_block(new.to_vec().as_slice(), &mut conn)
+            .upsert_block(slice::from_ref(&new), &mut conn)
             .await?;
         Ok(())
     }
@@ -136,13 +139,13 @@ impl ChainGateway for DirectGateway {
             .await
     }
 
-    async fn upsert_tx(&self, new: &[Transaction]) -> Result<(), StorageError> {
+    async fn upsert_tx(&self, new: Transaction) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .upsert_tx(new.to_vec().as_slice(), &mut conn)
+            .upsert_tx(slice::from_ref(&new), &mut conn)
             .await?;
         Ok(())
     }
@@ -207,25 +210,24 @@ impl ContractStateGateway for DirectGateway {
     }
 
     #[instrument(skip_all)]
-    async fn insert_contract(&self, new: &Account) -> Result<(), StorageError> {
+    async fn insert_contract(&self, new: Account) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .insert_contract(&new.clone(), &mut conn)
+            .insert_contract(&new, &mut conn)
             .await?;
         Ok(())
     }
 
     #[instrument(skip_all)]
-    async fn update_contracts(&self, new: &[(TxHash, AccountDelta)]) -> Result<(), StorageError> {
+    async fn update_contracts(&self, new: Vec<(TxHash, AccountDelta)>) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
-        let binding = new.to_vec();
-        let collected_changes: Vec<(TxHash, &models::contract::AccountDelta)> = binding
+        let collected_changes: Vec<(TxHash, &AccountDelta)> = new
             .iter()
             .map(|(tx, update)| (tx.clone(), update))
             .collect();
@@ -266,14 +268,14 @@ impl ContractStateGateway for DirectGateway {
     #[instrument(skip_all)]
     async fn add_account_balances(
         &self,
-        account_balances: &[AccountBalance],
+        account_balances: Vec<AccountBalance>,
     ) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .add_account_balances(account_balances.to_vec().as_slice(), &self.chain, &mut conn)
+            .add_account_balances(account_balances.as_slice(), &self.chain, &mut conn)
             .await?;
         Ok(())
     }
@@ -332,13 +334,16 @@ impl ProtocolGateway for DirectGateway {
     }
 
     #[instrument(skip_all)]
-    async fn add_protocol_components(&self, new: &[ProtocolComponent]) -> Result<(), StorageError> {
+    async fn add_protocol_components(
+        &self,
+        new: Vec<ProtocolComponent>,
+    ) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .add_protocol_components(new.to_vec().as_slice(), &mut conn)
+            .add_protocol_components(new.as_slice(), &mut conn)
             .await?;
         Ok(())
     }
@@ -361,14 +366,14 @@ impl ProtocolGateway for DirectGateway {
     #[instrument(skip_all)]
     async fn add_protocol_types(
         &self,
-        new_protocol_types: &[ProtocolType],
+        new_protocol_types: Vec<ProtocolType>,
     ) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .add_protocol_types(new_protocol_types, &mut conn)
+            .add_protocol_types(new_protocol_types.as_slice(), &mut conn)
             .await
     }
 
@@ -402,18 +407,16 @@ impl ProtocolGateway for DirectGateway {
     #[instrument(skip_all)]
     async fn update_protocol_states(
         &self,
-        new: &[(TxHash, ProtocolComponentStateDelta)],
+        new: Vec<(TxHash, ProtocolComponentStateDelta)>,
     ) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
-        let deltas = new.to_vec();
-        let collected_changes: Vec<(TxHash, &models::protocol::ProtocolComponentStateDelta)> =
-            deltas
-                .iter()
-                .map(|(tx, update)| (tx.clone(), update))
-                .collect();
+        let collected_changes: Vec<(TxHash, &ProtocolComponentStateDelta)> = new
+            .iter()
+            .map(|(tx, update)| (tx.clone(), update))
+            .collect();
         let changes_slice = collected_changes.as_slice();
         self.state_gateway
             .update_protocol_states(&self.chain, changes_slice, &mut conn)
@@ -442,26 +445,26 @@ impl ProtocolGateway for DirectGateway {
     #[instrument(skip_all)]
     async fn add_component_balances(
         &self,
-        component_balances: &[ComponentBalance],
+        component_balances: Vec<ComponentBalance>,
     ) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .add_component_balances(component_balances.to_vec().as_slice(), &self.chain, &mut conn)
+            .add_component_balances(component_balances.as_slice(), &self.chain, &mut conn)
             .await?;
         Ok(())
     }
 
     #[instrument(skip_all)]
-    async fn add_tokens(&self, tokens: &[Token]) -> Result<(), StorageError> {
+    async fn add_tokens(&self, tokens: Vec<Token>) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .add_tokens(tokens.to_vec().as_slice(), &mut conn)
+            .add_tokens(tokens.as_slice(), &mut conn)
             .await?;
         Ok(())
     }
@@ -476,7 +479,7 @@ impl ProtocolGateway for DirectGateway {
     /// This is a short term solution. Ideally we should have a simple gateway version
     /// for these use cases that creates a single transactions and emits them immediately.
     #[instrument(skip_all)]
-    async fn update_tokens(&self, tokens: &[Token]) -> Result<(), StorageError> {
+    async fn update_tokens(&self, tokens: Vec<Token>) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
@@ -485,7 +488,7 @@ impl ProtocolGateway for DirectGateway {
         conn.transaction(|conn| {
             async {
                 self.state_gateway
-                    .update_tokens(tokens, conn)
+                    .update_tokens(tokens.as_slice(), conn)
                     .await?;
                 Result::<(), PostgresError>::Ok(())
             }
@@ -559,14 +562,14 @@ impl ProtocolGateway for DirectGateway {
     async fn upsert_component_tvl(
         &self,
         chain: &Chain,
-        tvl_values: &HashMap<String, f64>,
+        tvl_values: HashMap<String, f64>,
     ) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .upsert_component_tvl(chain, tvl_values, &mut conn)
+            .upsert_component_tvl(chain, &tvl_values, &mut conn)
             .await
     }
 
@@ -604,14 +607,14 @@ impl EntryPointGateway for DirectGateway {
     #[instrument(skip_all)]
     async fn insert_entry_points(
         &self,
-        entry_points: &HashMap<models::ComponentId, HashSet<models::blockchain::EntryPoint>>,
+        entry_points: HashMap<ComponentId, HashSet<EntryPoint>>,
     ) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .insert_entry_points(&entry_points.clone(), &self.chain, &mut conn)
+            .insert_entry_points(&entry_points, &self.chain, &mut conn)
             .await?;
         Ok(())
     }
@@ -619,14 +622,14 @@ impl EntryPointGateway for DirectGateway {
     #[instrument(skip_all)]
     async fn insert_entry_point_tracing_params(
         &self,
-        entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+        entry_points_params: HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
     ) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .insert_entry_point_tracing_params(&entry_points_params.clone(), &self.chain, &mut conn)
+            .insert_entry_point_tracing_params(&entry_points_params, &self.chain, &mut conn)
             .await?;
         Ok(())
     }
@@ -665,14 +668,14 @@ impl EntryPointGateway for DirectGateway {
     #[instrument(skip_all)]
     async fn upsert_traced_entry_points(
         &self,
-        traced_entry_points: &[TracedEntryPoint],
+        traced_entry_points: Vec<TracedEntryPoint>,
     ) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .upsert_traced_entry_points(traced_entry_points.to_vec().as_slice(), &mut conn)
+            .upsert_traced_entry_points(traced_entry_points.as_slice(), &mut conn)
             .await?;
         Ok(())
     }

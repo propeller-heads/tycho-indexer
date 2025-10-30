@@ -116,6 +116,87 @@ impl WriteOp {
             WriteOp::SaveExtractionState(_) => 13,
         }
     }
+
+    /// Merges another WriteOp into this one if they are of the same variant.
+    /// Returns true if the merge was successful, false otherwise.
+    /// Updates the size accordingly.
+    fn merge(&mut self, other: &mut WriteOp, size: &mut usize) -> bool {
+        match (self, other) {
+            (WriteOp::UpsertBlock(l), WriteOp::UpsertBlock(r)) => {
+                *size += r.len();
+                l.append(r);
+            }
+            (WriteOp::UpsertTx(l), WriteOp::UpsertTx(r)) => {
+                *size += r.len();
+                l.append(r);
+            }
+            (WriteOp::SaveExtractionState(l), WriteOp::SaveExtractionState(r)) => {
+                l.clone_from(r);
+            }
+            (WriteOp::InsertContract(l), WriteOp::InsertContract(r)) => {
+                *size += r.len();
+                l.append(r);
+            }
+            (WriteOp::UpdateContracts(l), WriteOp::UpdateContracts(r)) => {
+                *size += r.len();
+                l.append(r);
+            }
+            (WriteOp::InsertAccountBalances(l), WriteOp::InsertAccountBalances(r)) => {
+                *size += r.len();
+                l.append(r);
+            }
+            (WriteOp::InsertProtocolComponents(l), WriteOp::InsertProtocolComponents(r)) => {
+                *size += r.len();
+                l.append(r);
+            }
+            (WriteOp::InsertTokens(l), WriteOp::InsertTokens(r)) => {
+                *size += r.len();
+                l.append(r);
+            }
+            (WriteOp::UpdateTokens(l), WriteOp::InsertTokens(r)) => {
+                *size += r.len();
+                l.append(r);
+            }
+            (WriteOp::InsertComponentBalances(l), WriteOp::InsertComponentBalances(r)) => {
+                *size += r.len();
+                l.append(r);
+            }
+            (WriteOp::UpsertProtocolState(l), WriteOp::UpsertProtocolState(r)) => {
+                *size += r.len();
+                l.append(r);
+            }
+            (WriteOp::InsertEntryPoints(l), WriteOp::InsertEntryPoints(r)) => {
+                let map = std::mem::take(r);
+                for (component_id, entry_points) in map {
+                    let entry = l.entry(component_id).or_default();
+                    let len_before = entry.len();
+                    entry.extend(entry_points);
+                    *size += entry.len() - len_before;
+                }
+            }
+            (
+                WriteOp::InsertEntryPointTracingParams(l),
+                WriteOp::InsertEntryPointTracingParams(r),
+            ) => {
+                let map = std::mem::take(r);
+                for (component_id, entry_points) in map {
+                    let entry = l.entry(component_id).or_default();
+                    let len_before = entry.len();
+                    entry.extend(entry_points);
+                    *size += entry.len() - len_before;
+                }
+            }
+            (WriteOp::UpsertTracedEntryPoints(l), WriteOp::UpsertTracedEntryPoints(r)) => {
+                *size += r.len();
+                l.append(r);
+            }
+            _ => {
+                return false;
+            }
+        };
+
+        true
+    }
 }
 
 #[derive(Debug)]
@@ -158,94 +239,10 @@ impl DBTransaction {
     /// transaction.
     ///
     /// PERF: Use an array instead of a vec since the order is static.
-    fn add_operation(&mut self, op: WriteOp) -> Result<(), StorageError> {
-        for existing_op in self.operations.iter_mut() {
-            match (existing_op, &op) {
-                (WriteOp::UpsertBlock(l), WriteOp::UpsertBlock(r)) => {
-                    self.size += r.len();
-                    l.extend(r.iter().cloned());
-                    return Ok(());
-                }
-                (WriteOp::UpsertTx(l), WriteOp::UpsertTx(r)) => {
-                    self.size += r.len();
-                    l.extend(r.iter().cloned());
-                    return Ok(());
-                }
-                (WriteOp::SaveExtractionState(l), WriteOp::SaveExtractionState(r)) => {
-                    l.clone_from(r);
-                    return Ok(());
-                }
-                (WriteOp::InsertContract(l), WriteOp::InsertContract(r)) => {
-                    self.size += r.len();
-                    l.extend(r.iter().cloned());
-                    return Ok(());
-                }
-                (WriteOp::UpdateContracts(l), WriteOp::UpdateContracts(r)) => {
-                    self.size += r.len();
-                    l.extend(r.iter().cloned());
-                    return Ok(());
-                }
-                (WriteOp::InsertAccountBalances(l), WriteOp::InsertAccountBalances(r)) => {
-                    self.size += r.len();
-                    l.extend(r.iter().cloned());
-                    return Ok(());
-                }
-                (WriteOp::InsertProtocolComponents(l), WriteOp::InsertProtocolComponents(r)) => {
-                    self.size += r.len();
-                    l.extend(r.iter().cloned());
-                    return Ok(());
-                }
-                (WriteOp::InsertTokens(l), WriteOp::InsertTokens(r)) => {
-                    self.size += r.len();
-                    l.extend(r.iter().cloned());
-                    return Ok(());
-                }
-                (WriteOp::UpdateTokens(l), WriteOp::InsertTokens(r)) => {
-                    self.size += r.len();
-                    l.extend(r.iter().cloned());
-                    return Ok(());
-                }
-                (WriteOp::InsertComponentBalances(l), WriteOp::InsertComponentBalances(r)) => {
-                    self.size += r.len();
-                    l.extend(r.iter().cloned());
-                    return Ok(());
-                }
-                (WriteOp::UpsertProtocolState(l), WriteOp::UpsertProtocolState(r)) => {
-                    self.size += r.len();
-                    l.extend(r.iter().cloned());
-                    return Ok(());
-                }
-                (WriteOp::InsertEntryPoints(l), WriteOp::InsertEntryPoints(r)) => {
-                    for (component_id, entry_points) in r.iter() {
-                        let entry = l
-                            .entry(component_id.clone())
-                            .or_insert_with(HashSet::new);
-                        let len_before = entry.len();
-                        entry.extend(entry_points.iter().cloned());
-                        self.size += entry.len() - len_before;
-                    }
-                    return Ok(());
-                }
-                (
-                    WriteOp::InsertEntryPointTracingParams(l),
-                    WriteOp::InsertEntryPointTracingParams(r),
-                ) => {
-                    for (entry_point_id, params) in r.iter() {
-                        let entry = l
-                            .entry(entry_point_id.clone())
-                            .or_insert_with(HashSet::new);
-                        let len_before = entry.len();
-                        entry.extend(params.iter().cloned());
-                        self.size += entry.len() - len_before;
-                    }
-                    return Ok(());
-                }
-                (WriteOp::UpsertTracedEntryPoints(l), WriteOp::UpsertTracedEntryPoints(r)) => {
-                    self.size += r.len();
-                    l.extend(r.iter().cloned());
-                    return Ok(());
-                }
-                _ => continue,
+    fn add_operation(&mut self, mut op: WriteOp) -> Result<(), StorageError> {
+        for existing_op in &mut self.operations {
+            if existing_op.merge(&mut op, &mut self.size) {
+                return Ok(());
             }
         }
         // not quite accurate but currently all WriteOps are created with a single entry.
@@ -757,8 +754,8 @@ impl ExtractionStateGateway for CachedGateway {
 #[async_trait]
 impl ChainGateway for CachedGateway {
     #[instrument(skip_all)]
-    async fn upsert_block(&self, new: &[Block]) -> Result<(), StorageError> {
-        self.add_op(WriteOp::UpsertBlock(new.to_vec()))
+    async fn upsert_block(&self, new: Block) -> Result<(), StorageError> {
+        self.add_op(WriteOp::UpsertBlock(vec![new]))
             .await?;
         Ok(())
     }
@@ -774,8 +771,8 @@ impl ChainGateway for CachedGateway {
             .await
     }
 
-    async fn upsert_tx(&self, new: &[Transaction]) -> Result<(), StorageError> {
-        self.add_op(WriteOp::UpsertTx(new.to_vec()))
+    async fn upsert_tx(&self, new: Transaction) -> Result<(), StorageError> {
+        self.add_op(WriteOp::UpsertTx(vec![new]))
             .await?;
         Ok(())
     }
@@ -840,15 +837,15 @@ impl ContractStateGateway for CachedGateway {
     }
 
     #[instrument(skip_all)]
-    async fn insert_contract(&self, new: &Account) -> Result<(), StorageError> {
-        self.add_op(WriteOp::InsertContract(vec![new.clone()]))
+    async fn insert_contract(&self, new: Account) -> Result<(), StorageError> {
+        self.add_op(WriteOp::InsertContract(vec![new]))
             .await?;
         Ok(())
     }
 
     #[instrument(skip_all)]
-    async fn update_contracts(&self, new: &[(TxHash, AccountDelta)]) -> Result<(), StorageError> {
-        self.add_op(WriteOp::UpdateContracts(new.to_vec()))
+    async fn update_contracts(&self, new: Vec<(TxHash, AccountDelta)>) -> Result<(), StorageError> {
+        self.add_op(WriteOp::UpdateContracts(new))
             .await?;
         Ok(())
     }
@@ -883,9 +880,9 @@ impl ContractStateGateway for CachedGateway {
     #[instrument(skip_all)]
     async fn add_account_balances(
         &self,
-        account_balances: &[AccountBalance],
+        account_balances: Vec<AccountBalance>,
     ) -> Result<(), StorageError> {
-        self.add_op(WriteOp::InsertAccountBalances(account_balances.to_vec()))
+        self.add_op(WriteOp::InsertAccountBalances(account_balances))
             .await?;
         Ok(())
     }
@@ -944,8 +941,11 @@ impl ProtocolGateway for CachedGateway {
     }
 
     #[instrument(skip_all)]
-    async fn add_protocol_components(&self, new: &[ProtocolComponent]) -> Result<(), StorageError> {
-        self.add_op(WriteOp::InsertProtocolComponents(new.to_vec()))
+    async fn add_protocol_components(
+        &self,
+        new: Vec<ProtocolComponent>,
+    ) -> Result<(), StorageError> {
+        self.add_op(WriteOp::InsertProtocolComponents(new))
             .await?;
         Ok(())
     }
@@ -968,14 +968,14 @@ impl ProtocolGateway for CachedGateway {
     #[instrument(skip_all)]
     async fn add_protocol_types(
         &self,
-        new_protocol_types: &[ProtocolType],
+        new_protocol_types: Vec<ProtocolType>,
     ) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .add_protocol_types(new_protocol_types, &mut conn)
+            .add_protocol_types(new_protocol_types.as_slice(), &mut conn)
             .await
     }
 
@@ -1009,9 +1009,9 @@ impl ProtocolGateway for CachedGateway {
     #[instrument(skip_all)]
     async fn update_protocol_states(
         &self,
-        new: &[(TxHash, ProtocolComponentStateDelta)],
+        new: Vec<(TxHash, ProtocolComponentStateDelta)>,
     ) -> Result<(), StorageError> {
-        self.add_op(WriteOp::UpsertProtocolState(new.to_vec()))
+        self.add_op(WriteOp::UpsertProtocolState(new))
             .await?;
         Ok(())
     }
@@ -1037,16 +1037,16 @@ impl ProtocolGateway for CachedGateway {
     #[instrument(skip_all)]
     async fn add_component_balances(
         &self,
-        component_balances: &[ComponentBalance],
+        component_balances: Vec<ComponentBalance>,
     ) -> Result<(), StorageError> {
-        self.add_op(WriteOp::InsertComponentBalances(component_balances.to_vec()))
+        self.add_op(WriteOp::InsertComponentBalances(component_balances))
             .await?;
         Ok(())
     }
 
     #[instrument(skip_all)]
-    async fn add_tokens(&self, tokens: &[Token]) -> Result<(), StorageError> {
-        self.add_op(WriteOp::InsertTokens(tokens.to_vec()))
+    async fn add_tokens(&self, tokens: Vec<Token>) -> Result<(), StorageError> {
+        self.add_op(WriteOp::InsertTokens(tokens))
             .await?;
         Ok(())
     }
@@ -1061,7 +1061,7 @@ impl ProtocolGateway for CachedGateway {
     /// This is a short term solution. Ideally we should have a simple gateway version
     /// for these use cases that creates a single transactions and emits them immediately.
     #[instrument(skip_all)]
-    async fn update_tokens(&self, tokens: &[Token]) -> Result<(), StorageError> {
+    async fn update_tokens(&self, tokens: Vec<Token>) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
@@ -1070,7 +1070,7 @@ impl ProtocolGateway for CachedGateway {
         conn.transaction(|conn| {
             async {
                 self.state_gateway
-                    .update_tokens(tokens, conn)
+                    .update_tokens(tokens.as_slice(), conn)
                     .await?;
                 Result::<(), PostgresError>::Ok(())
             }
@@ -1144,14 +1144,14 @@ impl ProtocolGateway for CachedGateway {
     async fn upsert_component_tvl(
         &self,
         chain: &Chain,
-        tvl_values: &HashMap<String, f64>,
+        tvl_values: HashMap<String, f64>,
     ) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .upsert_component_tvl(chain, tvl_values, &mut conn)
+            .upsert_component_tvl(chain, &tvl_values, &mut conn)
             .await
     }
 
@@ -1189,9 +1189,9 @@ impl EntryPointGateway for CachedGateway {
     #[instrument(skip_all)]
     async fn insert_entry_points(
         &self,
-        entry_points: &HashMap<models::ComponentId, HashSet<models::blockchain::EntryPoint>>,
+        entry_points: HashMap<ComponentId, HashSet<EntryPoint>>,
     ) -> Result<(), StorageError> {
-        self.add_op(WriteOp::InsertEntryPoints(entry_points.clone()))
+        self.add_op(WriteOp::InsertEntryPoints(entry_points))
             .await?;
         Ok(())
     }
@@ -1199,9 +1199,9 @@ impl EntryPointGateway for CachedGateway {
     #[instrument(skip_all)]
     async fn insert_entry_point_tracing_params(
         &self,
-        entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+        entry_points_params: HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
     ) -> Result<(), StorageError> {
-        self.add_op(WriteOp::InsertEntryPointTracingParams(entry_points_params.clone()))
+        self.add_op(WriteOp::InsertEntryPointTracingParams(entry_points_params))
             .await?;
         Ok(())
     }
@@ -1240,9 +1240,9 @@ impl EntryPointGateway for CachedGateway {
     #[instrument(skip_all)]
     async fn upsert_traced_entry_points(
         &self,
-        traced_entry_points: &[TracedEntryPoint],
+        traced_entry_points: Vec<TracedEntryPoint>,
     ) -> Result<(), StorageError> {
-        self.add_op(WriteOp::UpsertTracedEntryPoints(traced_entry_points.to_vec()))
+        self.add_op(WriteOp::UpsertTracedEntryPoints(traced_entry_points))
             .await?;
         Ok(())
     }
@@ -1266,7 +1266,7 @@ impl Gateway for CachedGateway {}
 
 #[cfg(test)]
 mod test_serial_db {
-    use std::{collections::HashSet, slice, str::FromStr, time::Duration};
+    use std::{collections::HashSet, str::FromStr, time::Duration};
 
     use tycho_common::models::ChangeType;
 
@@ -1534,11 +1534,11 @@ mod test_serial_db {
                 .start_transaction(&block_1, None)
                 .await;
             cached_gw
-                .upsert_block(slice::from_ref(&block_1))
+                .upsert_block(block_1.clone())
                 .await
                 .expect("Upsert block 1 ok");
             cached_gw
-                .upsert_tx(slice::from_ref(&tx_1))
+                .upsert_tx(tx_1.clone())
                 .await
                 .expect("Upsert tx 1 ok");
             cached_gw
@@ -1552,7 +1552,7 @@ mod test_serial_db {
                 .start_transaction(&block_2, None)
                 .await;
             cached_gw
-                .upsert_block(slice::from_ref(&block_2))
+                .upsert_block(block_2.clone())
                 .await
                 .expect("Upsert block 2 ok");
             cached_gw
@@ -1566,7 +1566,7 @@ mod test_serial_db {
                 .start_transaction(&block_3, None)
                 .await;
             cached_gw
-                .upsert_block(slice::from_ref(&block_3))
+                .upsert_block(block_3.clone())
                 .await
                 .expect("Upsert block 3 ok");
             cached_gw

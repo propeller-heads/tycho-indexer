@@ -39,18 +39,18 @@ mock! {
 
     #[async_trait]
     impl ChainGateway for Gateway {
-        async fn upsert_block(&self, new: &[Block]) -> Result<(), StorageError>;
+        async fn upsert_block(&self, new: Block) -> Result<(), StorageError>;
         async fn get_block(&self, id: &BlockIdentifier) -> Result<Block, StorageError>;
-        async fn upsert_tx(&self, new: &[Transaction]) -> Result<(), StorageError>;
+        async fn upsert_tx(&self, new: Transaction) -> Result<(), StorageError>;
         async fn get_tx(&self, hash: &TxHash) -> Result<Transaction, StorageError>;
         async fn revert_state(&self, to: &BlockIdentifier) -> Result<(), StorageError>;
     }
 
     impl EntryPointGateway for Gateway {
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
-        fn insert_entry_points<'life0, 'life1, 'async_trait>(
+        fn insert_entry_points<'life0, 'async_trait>(
             &'life0 self,
-            entry_points: &'life1 HashMap<ComponentId, HashSet<EntryPoint>>,
+            entry_points: HashMap<ComponentId, HashSet<EntryPoint>>,
         ) -> ::core::pin::Pin<
             Box<
                 dyn ::core::future::Future<Output = Result<(), StorageError>>
@@ -60,13 +60,12 @@ mock! {
         >
         where
             'life0: 'async_trait,
-            'life1: 'async_trait,
             Self: 'async_trait;
 
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
-        fn insert_entry_point_tracing_params<'life0, 'life1, 'async_trait>(
+        fn insert_entry_point_tracing_params<'life0, 'async_trait>(
             &'life0 self,
-            entry_points_params: &'life1 HashMap<
+            entry_points_params: HashMap<
                 EntryPointId,
                 HashSet<(TracingParams, Option<ComponentId>)>,
             >,
@@ -79,7 +78,6 @@ mock! {
         >
         where
             'life0: 'async_trait,
-            'life1: 'async_trait,
             Self: 'async_trait;
 
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
@@ -125,9 +123,9 @@ mock! {
             Self: 'async_trait;
 
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
-        fn upsert_traced_entry_points<'life0, 'life1, 'async_trait>(
+        fn upsert_traced_entry_points<'life0, 'async_trait>(
             &'life0 self,
-            traced_entry_points: &'life1 [TracedEntryPoint],
+            traced_entry_points: Vec<TracedEntryPoint>
         ) -> ::core::pin::Pin<
             Box<
                 dyn ::core::future::Future<Output = Result<(), StorageError>>
@@ -137,7 +135,6 @@ mock! {
         >
         where
             'life0: 'async_trait,
-            'life1: 'async_trait,
             Self: 'async_trait;
 
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
@@ -161,6 +158,7 @@ mock! {
             Self: 'async_trait;
     }
 
+    #[async_trait]
     impl ContractStateGateway for Gateway {
         fn get_contract<'life0, 'life1, 'life2, 'async_trait>(
             &'life0 self,
@@ -203,35 +201,15 @@ mock! {
             'life4: 'async_trait,
             Self: 'async_trait;
 
-        fn insert_contract<'life0, 'life1, 'async_trait>(
-            &'life0 self,
-            new: &'life1 Account,
-        ) -> ::core::pin::Pin<
-            Box<
-                dyn ::core::future::Future<
-                    Output = Result<(), StorageError>,
-                > + ::core::marker::Send + 'async_trait,
-            >,
-        >
-        where
-            'life0: 'async_trait,
-            'life1: 'async_trait,
-            Self: 'async_trait;
+        async fn insert_contract(
+            &self,
+            new: Account,
+        ) -> Result<(), StorageError>;
 
-        fn update_contracts<'life0, 'life1, 'async_trait>(
-            &'life0 self,
-            new: &'life1 [(TxHash, AccountDelta)],
-        ) -> ::core::pin::Pin<
-            Box<
-                dyn ::core::future::Future<
-                    Output = Result<(), StorageError>,
-                > + ::core::marker::Send + 'async_trait,
-            >,
-        >
-        where
-            'life0: 'async_trait,
-            'life1: 'async_trait,
-            Self: 'async_trait;
+        async fn update_contracts(
+            &self,
+            new: Vec<(TxHash, AccountDelta)>,
+        ) -> Result<(), StorageError>;
 
         fn delete_contract<'life0, 'life1, 'life2, 'async_trait>(
             &'life0 self,
@@ -270,20 +248,10 @@ mock! {
             Self: 'async_trait;
 
 
-        fn add_account_balances<'life0, 'life1, 'async_trait>(
-            &'life0 self,
-            account_balances: &'life1 [AccountBalance],
-        ) -> ::core::pin::Pin<
-            Box<
-                dyn ::core::future::Future<
-                    Output = Result<(), StorageError>,
-                > + ::core::marker::Send + 'async_trait,
-            >,
-        >
-        where
-            'life0: 'async_trait,
-            'life1: 'async_trait,
-            Self: 'async_trait;
+        async fn add_account_balances(
+            &self,
+            account_balances: Vec<AccountBalance>,
+        ) -> Result<(), StorageError>;
 
         #[allow(clippy::type_complexity)]
         fn get_account_balances<'life0, 'life1, 'life2, 'life3, 'async_trait>(
@@ -307,6 +275,7 @@ mock! {
 
     }
 
+    #[async_trait]
     impl ProtocolGateway for Gateway {
         #[allow(clippy::type_complexity)]
         fn get_protocol_components<'life0, 'life1, 'life2, 'life3, 'life4, 'async_trait>(
@@ -355,20 +324,10 @@ mock! {
             'life2: 'async_trait,
             Self: 'async_trait;
 
-        fn add_protocol_components<'life0, 'life1, 'async_trait>(
-            &'life0 self,
-            new: &'life1 [ProtocolComponent],
-        ) -> ::core::pin::Pin<
-            Box<
-                dyn ::core::future::Future<
-                    Output = Result<(), StorageError>,
-                > + ::core::marker::Send + 'async_trait,
-            >,
-        >
-        where
-            'life0: 'async_trait,
-            'life1: 'async_trait,
-            Self: 'async_trait;
+        async fn add_protocol_components(
+            &self,
+            new: Vec<ProtocolComponent>,
+        ) -> Result<(), StorageError>;
 
         fn delete_protocol_components<'life0, 'life1, 'async_trait>(
             &'life0 self,
@@ -386,20 +345,10 @@ mock! {
             'life1: 'async_trait,
             Self: 'async_trait;
 
-        fn add_protocol_types<'life0, 'life1, 'async_trait>(
-            &'life0 self,
-            new_protocol_types: &'life1 [ProtocolType],
-        ) -> ::core::pin::Pin<
-            Box<
-                dyn ::core::future::Future<
-                    Output = Result<(), StorageError>,
-                > + ::core::marker::Send + 'async_trait,
-            >,
-        >
-        where
-            'life0: 'async_trait,
-            'life1: 'async_trait,
-            Self: 'async_trait;
+        async fn add_protocol_types(
+            &self,
+            new_protocol_types: Vec<ProtocolType>,
+        ) -> Result<(), StorageError>;
 
         #[allow(clippy::type_complexity)]
         fn get_protocol_states<'life0, 'life1, 'life2, 'life3, 'life4, 'async_trait>(
@@ -427,20 +376,10 @@ mock! {
             'life4: 'async_trait,
             Self: 'async_trait;
 
-        fn update_protocol_states<'life0, 'life1, 'async_trait>(
-            &'life0 self,
-            new: &'life1 [(TxHash, ProtocolComponentStateDelta)],
-        ) -> ::core::pin::Pin<
-            Box<
-                dyn ::core::future::Future<
-                    Output = Result<(), StorageError>,
-                > + ::core::marker::Send + 'async_trait,
-            >,
-        >
-        where
-            'life0: 'async_trait,
-            'life1: 'async_trait,
-            Self: 'async_trait;
+        async fn update_protocol_states(
+            &self,
+            new: Vec<(TxHash, ProtocolComponentStateDelta)>,
+        ) -> Result<(), StorageError>;
 
         #[allow(clippy::type_complexity)]
         fn get_tokens<'life0, 'life1, 'life2, 'life3, 'async_trait>(
@@ -464,50 +403,20 @@ mock! {
             'life3: 'async_trait,
             Self: 'async_trait;
 
-        fn add_component_balances<'life0, 'life1, 'async_trait>(
-            &'life0 self,
-            component_balances: &'life1 [ComponentBalance],
-        ) -> ::core::pin::Pin<
-            Box<
-                dyn ::core::future::Future<
-                    Output = Result<(), StorageError>,
-                > + ::core::marker::Send + 'async_trait,
-            >,
-        >
-        where
-            'life0: 'async_trait,
-            'life1: 'async_trait,
-            Self: 'async_trait;
+        async fn add_component_balances(
+            &self,
+            component_balances: Vec<ComponentBalance>,
+        ) -> Result<(), StorageError>;
 
-        fn add_tokens<'life0, 'life1, 'async_trait>(
-            &'life0 self,
-            tokens: &'life1 [Token],
-        ) -> ::core::pin::Pin<
-            Box<
-                dyn ::core::future::Future<
-                    Output = Result<(), StorageError>,
-                > + ::core::marker::Send + 'async_trait,
-            >,
-        >
-        where
-            'life0: 'async_trait,
-            'life1: 'async_trait,
-            Self: 'async_trait;
+        async fn add_tokens(
+            &self,
+            tokens: Vec<Token>,
+        ) -> Result<(), StorageError>;
 
-        fn update_tokens<'life0, 'life1, 'async_trait>(
-            &'life0 self,
-            tokens: &'life1 [Token],
-        ) -> ::core::pin::Pin<
-            Box<
-                dyn ::core::future::Future<
-                    Output = Result<(), StorageError>,
-                > + ::core::marker::Send + 'async_trait,
-            >,
-        >
-        where
-            'life0: 'async_trait,
-            'life1: 'async_trait,
-            Self: 'async_trait;
+        async fn update_tokens(
+            &self,
+            tokens: Vec<Token>,
+        ) -> Result<(), StorageError>;
 
         fn get_protocol_states_delta<'life0, 'life1, 'life2, 'life3, 'async_trait>(
             &'life0 self,
@@ -590,22 +499,11 @@ mock! {
             'life1: 'async_trait,
             Self: 'async_trait;
 
-        fn upsert_component_tvl<'life0, 'life1, 'life2, 'async_trait>(
-            &'life0 self,
-            chain: &'life1 Chain,
-            tvl_values: &'life2 HashMap<String, f64>,
-        ) -> ::core::pin::Pin<
-            Box<
-                dyn ::core::future::Future<
-                    Output = Result<(), StorageError>,
-                > + ::core::marker::Send + 'async_trait,
-            >,
-        >
-        where
-            'life0: 'async_trait,
-            'life1: 'async_trait,
-            'life2: 'async_trait,
-            Self: 'async_trait;
+        async fn upsert_component_tvl(
+            &self,
+            chain: &Chain,
+            tvl_values: HashMap<String, f64>,
+        ) -> Result<(), StorageError>;
 
         #[allow(clippy::type_complexity)]
         fn get_protocol_systems<'life0, 'life1, 'life2, 'async_trait>(

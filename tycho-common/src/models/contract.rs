@@ -184,7 +184,7 @@ impl AccountDelta {
     }
 
     // Convert AccountUpdate into Account using references.
-    pub fn ref_into_account(&self, tx: &Transaction) -> Account {
+    pub fn ref_into_account(&self, tx_hash: &Bytes) -> Account {
         let empty_hash = keccak256(Vec::new());
         if self.change != ChangeType::Creation {
             warn!("Creating an account from a partial change!")
@@ -208,9 +208,9 @@ impl AccountDelta {
                 .map(keccak256)
                 .unwrap_or(empty_hash)
                 .into(),
-            tx.hash.clone(),
-            tx.hash.clone(),
-            Some(tx.hash.clone()),
+            tx_hash.clone(),
+            tx_hash.clone(),
+            Some(tx_hash.clone()),
         )
     }
 
@@ -650,7 +650,7 @@ mod test {
                 .values()
                 .next()
                 .unwrap()
-                .ref_into_account(&update.tx),
+                .ref_into_account(&update.tx.hash),
             exp
         );
     }

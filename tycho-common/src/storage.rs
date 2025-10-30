@@ -103,7 +103,7 @@ pub trait ChainGateway {
     ///
     /// # Returns
     /// - Empty ok result indicates success. Failure might occur if the block is already present.
-    async fn upsert_block(&self, new: &[Block]) -> Result<(), StorageError>;
+    async fn upsert_block(&self, new: Block) -> Result<(), StorageError>;
     /// Retrieves a block from storage.
     ///
     /// # Parameters
@@ -124,7 +124,7 @@ pub trait ChainGateway {
     /// - Empty ok result indicates success. Failure might occur if the
     /// corresponding block does not exists yet, or if the transaction already
     /// exists.
-    async fn upsert_tx(&self, new: &[Transaction]) -> Result<(), StorageError>;
+    async fn upsert_tx(&self, new: Transaction) -> Result<(), StorageError>;
 
     /// Tries to retrieve a transaction from the blockchain's storage using its
     /// hash.
@@ -310,7 +310,10 @@ pub trait ProtocolGateway {
         min_balance: Option<f64>,
     ) -> Result<HashMap<Address, (ComponentId, Bytes)>, StorageError>;
 
-    async fn add_protocol_components(&self, new: &[ProtocolComponent]) -> Result<(), StorageError>;
+    async fn add_protocol_components(
+        &self,
+        new: Vec<ProtocolComponent>,
+    ) -> Result<(), StorageError>;
 
     async fn delete_protocol_components(
         &self,
@@ -327,7 +330,7 @@ pub trait ProtocolGateway {
     /// Ok if stored successfully.
     async fn add_protocol_types(
         &self,
-        new_protocol_types: &[ProtocolType],
+        new_protocol_types: Vec<ProtocolType>,
     ) -> Result<(), StorageError>;
 
     /// Retrieve protocol component states
@@ -360,7 +363,7 @@ pub trait ProtocolGateway {
 
     async fn update_protocol_states(
         &self,
-        new: &[(TxHash, ProtocolComponentStateDelta)],
+        new: Vec<(TxHash, ProtocolComponentStateDelta)>,
     ) -> Result<(), StorageError>;
 
     /// Retrieves a tokens from storage
@@ -393,7 +396,7 @@ pub trait ProtocolGateway {
     /// insert.
     async fn add_component_balances(
         &self,
-        component_balances: &[ComponentBalance],
+        component_balances: Vec<ComponentBalance>,
     ) -> Result<(), StorageError>;
 
     /// Saves multiple tokens to storage.
@@ -407,7 +410,7 @@ pub trait ProtocolGateway {
     /// # Return
     /// Ok if all tokens could be inserted, Err if at least one token failed to
     /// insert.
-    async fn add_tokens(&self, tokens: &[Token]) -> Result<(), StorageError>;
+    async fn add_tokens(&self, tokens: Vec<Token>) -> Result<(), StorageError>;
 
     /// Updates multiple tokens in storage.
     ///
@@ -420,7 +423,7 @@ pub trait ProtocolGateway {
     /// # Return
     /// Ok if all tokens could be inserted, Err if at least one token failed to
     /// insert.
-    async fn update_tokens(&self, tokens: &[Token]) -> Result<(), StorageError>;
+    async fn update_tokens(&self, tokens: Vec<Token>) -> Result<(), StorageError>;
 
     /// Retrieve protocol state changes
     ///
@@ -470,7 +473,7 @@ pub trait ProtocolGateway {
     async fn upsert_component_tvl(
         &self,
         chain: &Chain,
-        tvl_values: &HashMap<String, f64>,
+        tvl_values: HashMap<String, f64>,
     ) -> Result<(), StorageError>;
 
     /// Retrieve a list of actively supported protocol systems
@@ -538,7 +541,7 @@ pub trait EntryPointGateway {
     /// Note: This function ignores conflicts on inserts.
     async fn insert_entry_points(
         &self,
-        entry_points: &HashMap<ComponentId, HashSet<EntryPoint>>,
+        entry_points: HashMap<ComponentId, HashSet<EntryPoint>>,
     ) -> Result<(), StorageError>;
 
     /// Inserts a list of entry points with their tracing params into the database.
@@ -550,7 +553,7 @@ pub trait EntryPointGateway {
     /// Note: This function ignores conflicts on inserts.
     async fn insert_entry_point_tracing_params(
         &self,
-        entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+        entry_points_params: HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
     ) -> Result<(), StorageError>;
 
     /// Retrieves a map of component ids to a set of entry points from the database.
@@ -591,7 +594,7 @@ pub trait EntryPointGateway {
     /// * `traced_entry_points` - The list of traced entry points to upsert.
     async fn upsert_traced_entry_points(
         &self,
-        traced_entry_points: &[TracedEntryPoint],
+        traced_entry_points: Vec<TracedEntryPoint>,
     ) -> Result<(), StorageError>;
 
     /// Retrieves all tracing results for a set of entry points from the database.
@@ -668,7 +671,7 @@ pub trait ContractStateGateway {
     /// - A Result with Ok if the operation was successful, and an Err containing `StorageError` if
     ///   there was an issue inserting the contract into the database. E.g. if the contract already
     ///   existed.
-    async fn insert_contract(&self, new: &Account) -> Result<(), StorageError>;
+    async fn insert_contract(&self, new: Account) -> Result<(), StorageError>;
 
     /// Update multiple contracts
     ///
@@ -689,7 +692,7 @@ pub trait ContractStateGateway {
     /// `StorageError` if there was an issue updating the contracts in the database. E.g. if a
     /// transaction can't be located by it's reference or accounts refer to a different chain then
     /// the one specified.
-    async fn update_contracts(&self, new: &[(TxHash, AccountDelta)]) -> Result<(), StorageError>;
+    async fn update_contracts(&self, new: Vec<(TxHash, AccountDelta)>) -> Result<(), StorageError>;
 
     /// Mark a contract as deleted
     ///
@@ -761,7 +764,7 @@ pub trait ContractStateGateway {
     /// Ok if all account balances could be inserted, Err if at least one token failed to insert.
     async fn add_account_balances(
         &self,
-        account_balances: &[AccountBalance],
+        account_balances: Vec<AccountBalance>,
     ) -> Result<(), StorageError>;
 
     /// Retrieve account balances
