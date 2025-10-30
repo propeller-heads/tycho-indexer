@@ -23,24 +23,67 @@ runs:
         
         # Initialize empty array for package names
         PACKAGE_NAMES=()
+        # Track workspaces where changes occurred outside of packages
+        WORKSPACE_DIRS=()
         
         # Process each changed file
         while IFS= read -r file; do
+          [ -z "$file" ] && continue
+          
           # Get the directory of the file
           dir=$(dirname "$file")
+          FOUND_PACKAGE=false
+          ENCOUNTERED_WORKSPACE=""
           
           # Find the nearest parent directory containing Cargo.toml
           while [ "$dir" != "substreams" ] && [ "$dir" != "." ]; do
             if [ -f "$dir/Cargo.toml" ]; then
-              PACKAGE_NAME=$(grep -m1 '^name = ' "$dir/Cargo.toml" | cut -d'"' -f2)
+              # Check if this Cargo.toml is a workspace (has [workspace] section)
+              if grep -q '^\[workspace\]' "$dir/Cargo.toml" 2>/dev/null; then
+                # Track workspace for potential addition of all members
+                if [ -z "$ENCOUNTERED_WORKSPACE" ]; then
+                  ENCOUNTERED_WORKSPACE="$dir"
+                fi
+                dir=$(dirname "$dir")
+                continue
+              fi
+              
+              # Extract package name, handle case where grep finds nothing
+              PACKAGE_NAME=$(grep -m1 '^name = ' "$dir/Cargo.toml" 2>/dev/null | cut -d'"' -f2)
               if [ -n "$PACKAGE_NAME" ]; then
                 PACKAGE_NAMES+=("$PACKAGE_NAME")
+                FOUND_PACKAGE=true
                 break
               fi
             fi
             dir=$(dirname "$dir")
           done
+          
+          # If no package was found but we encountered a workspace, add it to the list
+          if [ "$FOUND_PACKAGE" = false ] && [ -n "$ENCOUNTERED_WORKSPACE" ]; then
+            WORKSPACE_DIRS+=("$ENCOUNTERED_WORKSPACE")
+          fi
         done < changed_files.txt
+        
+        # Add all packages from workspaces that had changes outside of specific packages
+        for workspace_dir in "${WORKSPACE_DIRS[@]}"; do
+          # Extract workspace members from Cargo.toml
+          if [ -f "$workspace_dir/Cargo.toml" ]; then
+            # Get members section, extract quoted strings
+            MEMBERS=$(awk '/^members = \[/,/^\]/ {print}' "$workspace_dir/Cargo.toml" | grep '.*' | sed 's/.*"\(.*\)".*/\1/')
+            
+            # For each member, try to find the package name
+            for member in $MEMBERS; do
+              MEMBER_PATH="$workspace_dir/$member"
+              if [ -f "$MEMBER_PATH/Cargo.toml" ]; then
+                PACKAGE_NAME=$(grep -m1 '^name = ' "$MEMBER_PATH/Cargo.toml" 2>/dev/null | cut -d'"' -f2)
+                if [ -n "$PACKAGE_NAME" ]; then
+                  PACKAGE_NAMES+=("$PACKAGE_NAME")
+                fi
+              fi
+            done
+          fi
+        done
         
         # Remove duplicates and sort
         PACKAGE_NAMES=($(printf "%s\n" "${PACKAGE_NAMES[@]}" | sort -u))

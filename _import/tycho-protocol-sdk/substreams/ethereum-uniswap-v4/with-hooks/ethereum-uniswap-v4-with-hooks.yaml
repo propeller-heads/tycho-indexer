@@ -1,8 +1,8 @@
 specVersion: v0.1.0
 package:
-  name: "ethereum_uniswap_v4"
-  version: v0.2.2
-  url: "https://github.com/propeller-heads/tycho-protocol-sdk/tree/main/substreams/ethereum-uniswap-v4"
+  name: "ethereum_uniswap_v4_with_hooks"
+  version: v0.6.1
+  url: "https://github.com/propeller-heads/tycho-protocol-sdk/tree/main/substreams/ethereum-uniswap-v4/with-hooks"
 
 protobuf:
   files:
@@ -11,16 +11,17 @@ protobuf:
     - tycho/evm/v1/utils.proto
     - uniswap.proto
   importPaths:
-    - ../../proto
-    - ./proto
+    - ../../../proto
+    - ../shared/proto
   excludePaths:
-    - sf/ethereum
+    - sf/substreams
     - google
+    - tycho
 
 binaries:
   default:
     type: wasm/rust-v1
-    file: ../target/wasm32-unknown-unknown/release/ethereum_uniswap_v4.wasm
+    file: ..//target/wasm32-unknown-unknown/release/ethereum_uniswap_v4_with_hooks.wasm
 
 modules:
   - name: map_pools_created
@@ -115,6 +116,25 @@ modules:
     inputs:
       - map: map_liquidity_changes
 
+  - name: store_euler_hooks
+    kind: store
+    initialBlock: 21688329
+    updatePolicy: set_if_not_exists
+    valueType: int64
+    inputs:
+      - params: string
+      - source: sf.ethereum.type.v2.Block
+
+  - name: store_pool_per_euler_hook
+    kind: store
+    initialBlock: 21688329
+    updatePolicy: set_if_not_exists
+    valueType: string
+    inputs:
+      - map: map_pools_created
+      - store: store_euler_hooks
+        mode: get
+
   - name: map_protocol_changes
     kind: map
     initialBlock: 21688329
@@ -134,5 +154,21 @@ modules:
     output:
       type: proto:tycho.evm.v1.BlockChanges
 
+  - name: map_euler_enriched_protocol_changes
+    kind: map
+    initialBlock: 21688329
+    inputs:
+      - params: string
+      - source: sf.ethereum.type.v2.Block
+      - map: map_protocol_changes
+      - store: store_euler_hooks
+        mode: get
+      - store: store_pool_per_euler_hook
+        mode: get
+    output:
+      type: proto:tycho.evm.v1.BlockChanges
+
 params:
   map_pools_created: "000000000004444c5dc75cB358380D2e3dE08A90"
+  store_euler_hooks: "0xb013be1D0D380C13B58e889f412895970A2Cf228"
+  map_euler_enriched_protocol_changes: "0xb013be1D0D380C13B58e889f412895970A2Cf228"
