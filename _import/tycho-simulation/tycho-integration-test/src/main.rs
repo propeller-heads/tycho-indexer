@@ -3,9 +3,8 @@ mod metrics;
 mod stream_processor;
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt::Debug,
-    num::NonZeroUsize,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -21,7 +20,6 @@ use alloy_chains::NamedChain;
 use clap::Parser;
 use dotenv::dotenv;
 use itertools::Itertools;
-use lru::LruCache;
 use miette::{miette, IntoDiagnostic, NarratableReportHandler, WrapErr};
 use num_bigint::BigUint;
 use num_traits::{ToPrimitive, Zero};
@@ -120,6 +118,12 @@ impl Debug for Cli {
     }
 }
 
+#[derive(Default)]
+struct TychoState {
+    states: HashMap<String, Box<dyn ProtocolSim>>,
+    components: HashMap<String, ProtocolComponent>,
+}
+
 #[tokio::main]
 async fn main() -> miette::Result<()> {
     miette::set_hook(Box::new(|_| Box::new(NarratableReportHandler::new())))?;
@@ -192,13 +196,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
         }
     }
 
-    // Assuming a ProtocolComponent instance can be around 1KB (2 tokens, 2 contract_ids, 6 static
-    // attributes) 250,000 entries would use 250MB of memory.
-    // In a 25min test, the cache increased at a rate of ~2 items/minute, or ~3k items/day, so it
-    // would take ~80 days to get full and start dropping the least used items.
-    let protocol_pairs = Arc::new(RwLock::new(LruCache::new(
-        NonZeroUsize::new(250_000).ok_or_else(|| miette!("Invalid NonZeroUsize"))?,
-    )));
+    let tycho_state = Arc::new(RwLock::new(TychoState::default()));
 
     // Process streams updates
     info!("Waiting for first protocol update...");
@@ -214,7 +212,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
 
         let cli = cli.clone();
         let rpc_tools = rpc_tools.clone();
-        let protocol_pairs = protocol_pairs.clone();
+        let tycho_state = tycho_state.clone();
         let permit = semaphore
             .clone()
             .acquire_owned()
@@ -222,7 +220,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
             .into_diagnostic()
             .wrap_err("Failed to acquire permit")?;
         tokio::spawn(async move {
-            if let Err(e) = process_update(cli, chain, rpc_tools, protocol_pairs, &update).await {
+            if let Err(e) = process_update(cli, chain, rpc_tools, tycho_state, &update).await {
                 warn!("{}", format_error_chain(&e));
             }
             drop(permit);
@@ -236,7 +234,7 @@ async fn process_update(
     cli: Arc<Cli>,
     chain: Chain,
     rpc_tools: RPCTools,
-    protocol_pairs: Arc<RwLock<LruCache<String, ProtocolComponent>>>,
+    tycho_state: Arc<RwLock<TychoState>>,
     update: &StreamUpdate,
 ) -> miette::Result<()> {
     info!(
@@ -264,21 +262,19 @@ async fn process_update(
 
     if let UpdateType::Protocol = update.update_type {
         {
-            let mut pairs = protocol_pairs
+            let mut current_state = tycho_state
                 .write()
-                .map_err(|e| miette!("Failed to acquire write lock on protocol pairs: {e}"))?;
-            let prev_size = pairs.len();
+                .map_err(|e| miette!("Failed to acquire write lock on Tycho state: {e}"))?;
             for (id, comp) in update.update.new_pairs.iter() {
-                pairs.put(id.clone(), comp.clone());
+                current_state
+                    .components
+                    .insert(id.clone(), comp.clone());
             }
-            let new_size = pairs.len();
-            let cap = pairs.cap().get();
-            if new_size != prev_size {
-                info!(size=%new_size, capacity=%cap, "Protocol components cache updated");
-            }
-            if new_size == cap {
-                warn!(size=%new_size, capacity=%cap, "Protocol components cache reached capacity, \
-                least recently used items will be evicted on new insertions");
+            for (id, state) in update.update.states.iter() {
+                // this overwrites existing entries
+                current_state
+                    .states
+                    .insert(id.clone(), state.clone());
             }
         }
         // Record block processing latency
@@ -308,8 +304,10 @@ async fn process_update(
         }
     }
 
+    let mut all_protocols = HashSet::new();
     for (protocol, sync_state) in update.update.sync_states.iter() {
         metrics::record_protocol_sync_state(protocol, sync_state);
+        all_protocols.insert(protocol);
     }
 
     // Process states in parallel
@@ -324,10 +322,11 @@ async fn process_update(
     {
         let component = match update.update_type {
             UpdateType::Protocol => {
-                let mut pairs = protocol_pairs
+                let states = &tycho_state
                     .write()
-                    .map_err(|e| miette!("Failed to acquire read lock on protocol pairs: {e}"))?;
-                match pairs.get(id) {
+                    .map_err(|e| miette!("Failed to acquire read lock on Tycho state: {e}"))?
+                    .components;
+                match states.get(id) {
                     Some(comp) => comp.clone(),
                     None => {
                         warn!(id=%id, "Component not found in cached protocol pairs. Potential causes: \
