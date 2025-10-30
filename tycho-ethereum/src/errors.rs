@@ -5,9 +5,9 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub struct SerdeJsonError {
-    msg: String,
+    pub msg: String,
     #[source]
-    source: serde_json::Error,
+    pub source: serde_json::Error,
 }
 
 impl Display for SerdeJsonError {
@@ -18,9 +18,9 @@ impl Display for SerdeJsonError {
 
 #[derive(Error, Debug)]
 pub struct ReqwestError {
-    msg: String,
+    pub msg: String,
     #[source]
-    source: reqwest::Error,
+    pub source: reqwest::Error,
 }
 
 impl Display for ReqwestError {
