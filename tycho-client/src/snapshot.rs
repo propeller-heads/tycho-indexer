@@ -11,17 +11,17 @@ use tycho_common::{
 /// This struct helps to coordinate fetching  multiple pieces of related data
 /// (protocol states, contract storage, TVL, entry points).
 #[derive(Clone, Debug, PartialEq)]
-pub struct SnapshotParameters {
+pub struct SnapshotParameters<'a> {
     /// Which chain to fetch snapshots for
     pub chain: Chain,
     /// Protocol system name, required for correct state resolution
-    pub protocol_system: String,
+    pub protocol_system: &'a str,
     /// Components to fetch protocol states for
-    pub components: HashMap<ComponentId, ProtocolComponent>,
+    pub components: &'a HashMap<ComponentId, ProtocolComponent>,
     /// Traced entry points data mapped by component id
-    pub entrypoints: HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>,
+    pub entrypoints: &'a HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>,
     /// Contract addresses to fetch VM storage for
-    pub contract_ids: Vec<Bytes>,
+    pub contract_ids: &'a [Bytes],
     /// Block number for versioning
     pub block_number: u64,
     /// Whether to include balance information
@@ -30,13 +30,13 @@ pub struct SnapshotParameters {
     pub include_tvl: bool,
 }
 
-impl SnapshotParameters {
+impl<'a> SnapshotParameters<'a> {
     pub fn new(
         chain: Chain,
-        protocol_system: String,
-        components: HashMap<ComponentId, ProtocolComponent>,
-        entrypoints: HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>,
-        contract_ids: Vec<Bytes>,
+        protocol_system: &'a str,
+        components: &'a HashMap<ComponentId, ProtocolComponent>,
+        entrypoints: &'a HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>,
+        contract_ids: &'a [Bytes],
         block_number: u64,
     ) -> Self {
         Self {

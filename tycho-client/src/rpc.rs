@@ -591,9 +591,9 @@ pub trait RPCClient: Send + Sync {
             })
     }
 
-    async fn get_snapshots(
+    async fn get_snapshots<'a>(
         &self,
-        request: &SnapshotParameters,
+        request: &SnapshotParameters<'a>,
         chunk_size: usize,
         concurrency: usize,
     ) -> Result<Snapshot, RPCError>;
@@ -1037,9 +1037,9 @@ impl RPCClient for HttpRPCClient {
         Ok(entrypoints)
     }
 
-    async fn get_snapshots(
+    async fn get_snapshots<'a>(
         &self,
-        request: &SnapshotParameters,
+        request: &SnapshotParameters<'a>,
         chunk_size: usize,
         concurrency: usize,
     ) -> Result<Snapshot, RPCError> {
@@ -1070,7 +1070,7 @@ impl RPCClient for HttpRPCClient {
             self.get_protocol_states_paginated(
                 request.chain,
                 &component_ids,
-                &request.protocol_system,
+                request.protocol_system,
                 request.include_balances,
                 &version,
                 chunk_size,
@@ -1121,8 +1121,8 @@ impl RPCClient for HttpRPCClient {
             let contract_states = self
                 .get_contract_state_paginated(
                     request.chain,
-                    &request.contract_ids,
-                    &request.protocol_system,
+                    request.contract_ids,
+                    request.protocol_system,
                     &version,
                     chunk_size,
                     concurrency,
@@ -2373,13 +2373,14 @@ mod tests {
 
         let contract_ids =
             vec![Bytes::from_str("0x1111111111111111111111111111111111111111").unwrap()];
+        let entrypoints = HashMap::new();
 
         let request = SnapshotParameters::new(
             Chain::Ethereum,
-            "test_protocol".to_string(),
-            components,
-            HashMap::new(), // entrypoints
-            contract_ids,
+            "test_protocol",
+            &components,
+            &entrypoints,
+            &contract_ids,
             12345,
         );
 
@@ -2419,12 +2420,16 @@ mod tests {
         let server = Server::new_async().await;
         let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
 
+        let components = HashMap::new();
+        let entrypoints = HashMap::new();
+        let contract_ids = vec![];
+
         let request = SnapshotParameters::new(
             Chain::Ethereum,
-            "test_protocol".to_string(),
-            HashMap::new(), // empty components
-            HashMap::new(), // empty entrypoints
-            vec![],         // empty contract_ids
+            "test_protocol",
+            &components,
+            &entrypoints,
+            &contract_ids,
             12345,
         );
 
@@ -2488,13 +2493,15 @@ mod tests {
 
         let mut components = HashMap::new();
         components.insert("component1".to_string(), component);
+        let entrypoints = HashMap::new();
+        let contract_ids = vec![];
 
         let request = SnapshotParameters::new(
             Chain::Ethereum,
-            "test_protocol".to_string(),
-            components,
-            HashMap::new(), // entrypoints
-            vec![],         // contract_ids
+            "test_protocol",
+            &components,
+            &entrypoints,
+            &contract_ids,
             12345,
         )
         .include_balances(false)

@@ -300,12 +300,10 @@ where
 
         let request = SnapshotParameters::new(
             self.extractor_id.chain,
-            self.extractor_id.name.clone(),
-            self.component_tracker
-                .components
-                .clone(),
-            entrypoints_result,
-            contract_ids.clone(),
+            &self.extractor_id.name,
+            &self.component_tracker.components,
+            &entrypoints_result,
+            &contract_ids,
             header.number,
         )
         .include_balances(self.retrieve_balances)
@@ -737,9 +735,9 @@ mod test {
                 .await
         }
 
-        async fn get_snapshots(
+        async fn get_snapshots<'a>(
             &self,
-            request: &SnapshotParameters,
+            request: &SnapshotParameters<'a>,
             chunk_size: usize,
             concurrency: usize,
         ) -> Result<Snapshot, RPCError> {
