@@ -1,3 +1,12 @@
+## [0.100.1](https://github.com/propeller-heads/tycho-indexer/compare/0.100.0...0.100.1) (2025-10-30)
+
+
+### Bug Fixes
+
+* Balance + Allowance slot calculation ([abc5a94](https://github.com/propeller-heads/tycho-indexer/commit/abc5a940f68cfb86d7d96ef99f3dd832b880c636))
+* Balance + Allowance slot calculation ([#725](https://github.com/propeller-heads/tycho-indexer/issues/725)) ([3cd424f](https://github.com/propeller-heads/tycho-indexer/commit/3cd424fc58079cce93ede8492d7908fcd19a4e2d))
+* instead of choosing last slot, use same balance back as before ([facc5e9](https://github.com/propeller-heads/tycho-indexer/commit/facc5e9868a06c31a4c6f62b6d251b3fcf501482))
+
 ## [0.100.0](https://github.com/propeller-heads/tycho-indexer/compare/0.99.2...0.100.0) (2025-10-30)
 
 
