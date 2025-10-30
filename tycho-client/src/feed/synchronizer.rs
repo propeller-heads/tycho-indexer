@@ -269,7 +269,7 @@ where
         );
 
         // Use given ids or use all if not passed
-        let component_ids: Vec<_> = match ids {
+        let mut component_ids: Vec<_> = match ids {
             Some(ids) => ids.into_iter().cloned().collect(),
             None => self
                 .component_tracker
@@ -332,6 +332,22 @@ where
             .map(|state| (state.component_id.clone(), state))
             .collect::<HashMap<_, _>>();
 
+        // Filter out paused components and stop tracking them in one pass
+        let mut paused_components = Vec::new();
+        protocol_states.retain(|id, state| {
+            if state.is_paused() {
+                paused_components.push(id.clone());
+                false
+            } else {
+                true
+            }
+        });
+
+        if !paused_components.is_empty() {
+            self.component_tracker
+                .stop_tracking(&paused_components);
+        }
+
         trace!(states=?&protocol_states, "Retrieved ProtocolStates");
         let states = self
             .component_tracker
@@ -368,6 +384,11 @@ where
                 }
             })
             .collect();
+
+        // Filter out paused components from component_ids as well
+        if !paused_components.is_empty() {
+            component_ids.retain(|id| !paused_components.contains(id));
+        }
 
         // Fetch contract states
         let contract_ids = self
@@ -1841,6 +1862,84 @@ mod test {
         };
 
         assert_eq!(second_msg, expected_second_msg);
+    }
+
+    #[test(tokio::test)]
+    async fn test_get_snapshots_filters_paused_components() {
+        let header = BlockHeader::default();
+        let mut rpc = MockRPCClient::new();
+
+        // Mock to return both paused and unpaused components
+        rpc.expect_get_protocol_states()
+            .returning(|_| {
+                let mut paused_attrs = HashMap::new();
+                paused_attrs.insert("paused".to_string(), Bytes::from("0x01"));
+
+                Ok(ProtocolStateRequestResponse {
+                    states: vec![
+                        ResponseProtocolState {
+                            component_id: "Component1".to_string(),
+                            attributes: HashMap::new(), // Not paused
+                            balances: HashMap::new(),
+                        },
+                        ResponseProtocolState {
+                            component_id: "Component2".to_string(),
+                            attributes: paused_attrs, // Paused
+                            balances: HashMap::new(),
+                        },
+                    ],
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 2 },
+                })
+            });
+        rpc.expect_get_traced_entry_points()
+            .returning(|_| {
+                Ok(TracedEntryPointRequestResponse {
+                    traced_entry_points: HashMap::new(),
+                    pagination: PaginationResponse::new(0, 20, 0),
+                })
+            });
+
+        let mut state_sync = with_mocked_clients(true, false, Some(rpc), None);
+
+        // Add both components to the tracker
+        let component1 = ProtocolComponent { id: "Component1".to_string(), ..Default::default() };
+        let component2 = ProtocolComponent { id: "Component2".to_string(), ..Default::default() };
+        state_sync
+            .component_tracker
+            .components
+            .insert("Component1".to_string(), component1.clone());
+        state_sync
+            .component_tracker
+            .components
+            .insert("Component2".to_string(), component2.clone());
+
+        let components_arg = ["Component1".to_string(), "Component2".to_string()];
+
+        let snap = state_sync
+            .get_snapshots(header, Some(&components_arg))
+            .await
+            .expect("Retrieving snapshot failed");
+
+        // Should only contain the non-paused component
+        assert_eq!(snap.snapshots.states.len(), 1);
+        assert!(snap
+            .snapshots
+            .states
+            .contains_key("Component1"));
+        assert!(!snap
+            .snapshots
+            .states
+            .contains_key("Component2"));
+
+        // Component2 should have been removed from tracker
+        assert!(state_sync
+            .component_tracker
+            .components
+            .contains_key("Component1"));
+        assert!(!state_sync
+            .component_tracker
+            .components
+            .contains_key("Component2"));
     }
 
     #[test(tokio::test)]

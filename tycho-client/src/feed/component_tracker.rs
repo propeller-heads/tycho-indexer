@@ -355,14 +355,38 @@ where
         &self,
         deltas: &BlockChanges,
     ) -> (Vec<ComponentId>, Vec<ComponentId>) {
+        let mut to_add = Vec::new();
+        let mut to_remove = Vec::new();
+
+        // Handle paused/unpaused components
+        for (id, s) in &deltas.state_updates {
+            // If the component is unpaused, we need to add it
+            if s.deleted_attributes.contains("paused") {
+                to_add.push(id.clone());
+            }
+            // If the component is paused, we need to remove it
+            else if s
+                .updated_attributes
+                .contains_key("paused")
+            {
+                to_remove.push(id.clone());
+            }
+        }
+
         match &self.filter.variant {
-            ComponentFilterVariant::Ids(_) => (Default::default(), Default::default()),
-            ComponentFilterVariant::MinimumTVLRange((remove_tvl, add_tvl)) => deltas
-                .component_tvl
-                .iter()
-                .filter(|(_, &tvl)| tvl < *remove_tvl || tvl > *add_tvl)
-                .map(|(id, _)| id.clone())
-                .partition(|id| deltas.component_tvl[id] > *add_tvl),
+            ComponentFilterVariant::Ids(_) => (to_add, to_remove),
+            ComponentFilterVariant::MinimumTVLRange((remove_tvl, add_tvl)) => {
+                let (tvl_add, tvl_remove): (Vec<_>, Vec<_>) = deltas
+                    .component_tvl
+                    .iter()
+                    .filter(|(_, &tvl)| tvl < *remove_tvl || tvl > *add_tvl)
+                    .map(|(id, _)| id.clone())
+                    .partition(|id| deltas.component_tvl[id] > *add_tvl);
+
+                to_add.extend(tvl_add);
+                to_remove.extend(tvl_remove);
+                (to_add, to_remove)
+            }
         }
     }
 }
@@ -500,5 +524,106 @@ mod test {
         let res = tracker.get_tracked_component_ids();
 
         assert_eq!(res, exp);
+    }
+
+    #[test]
+    fn test_filter_updated_components_paused() {
+        use std::collections::HashMap;
+
+        use tycho_common::dto::{BlockChanges, ProtocolStateDelta};
+
+        let tracker = with_mocked_rpc();
+
+        // Create test deltas with paused/unpaused components
+        let mut state_updates = HashMap::new();
+
+        // Component1: gets paused (added to updated_attributes)
+        state_updates.insert(
+            "Component1".to_string(),
+            ProtocolStateDelta {
+                component_id: "Component1".to_string(),
+                updated_attributes: [("paused".to_string(), Bytes::from("0x01"))]
+                    .into_iter()
+                    .collect(),
+                deleted_attributes: Default::default(),
+            },
+        );
+
+        // Component2: gets unpaused (paused removed from deleted_attributes)
+        state_updates.insert(
+            "Component2".to_string(),
+            ProtocolStateDelta {
+                component_id: "Component2".to_string(),
+                updated_attributes: Default::default(),
+                deleted_attributes: ["paused".to_string()]
+                    .into_iter()
+                    .collect(),
+            },
+        );
+
+        let deltas = BlockChanges { state_updates, ..Default::default() };
+
+        let (to_add, to_remove) = tracker.filter_updated_components(&deltas);
+
+        assert_eq!(to_add, vec!["Component2".to_string()]);
+        assert_eq!(to_remove, vec!["Component1".to_string()]);
+    }
+
+    #[test]
+    fn test_filter_updated_components_tvl_and_paused() {
+        use std::collections::HashMap;
+
+        use tycho_common::dto::{BlockChanges, ProtocolStateDelta};
+
+        let tracker = ComponentTracker::new(
+            Chain::Ethereum,
+            "uniswap-v2",
+            ComponentFilter::with_tvl_range(50.0, 100.0),
+            MockRPCClient::new(),
+        );
+
+        // Create test deltas with both TVL changes and paused state changes
+        let mut state_updates = HashMap::new();
+
+        // Component1: gets paused
+        state_updates.insert(
+            "Component1".to_string(),
+            ProtocolStateDelta {
+                component_id: "Component1".to_string(),
+                updated_attributes: [("paused".to_string(), Bytes::from("0x01"))]
+                    .into_iter()
+                    .collect(),
+                deleted_attributes: Default::default(),
+            },
+        );
+
+        // Component2: gets unpaused
+        state_updates.insert(
+            "Component2".to_string(),
+            ProtocolStateDelta {
+                component_id: "Component2".to_string(),
+                updated_attributes: Default::default(),
+                deleted_attributes: ["paused".to_string()]
+                    .into_iter()
+                    .collect(),
+            },
+        );
+
+        let component_tvl = [
+            ("Component3".to_string(), 150.0), // Above add threshold
+            ("Component4".to_string(), 25.0),  // Below remove threshold
+        ]
+        .into_iter()
+        .collect();
+
+        let deltas = BlockChanges { state_updates, component_tvl, ..Default::default() };
+
+        let (to_add, to_remove) = tracker.filter_updated_components(&deltas);
+
+        // Should include both paused/unpaused components and TVL-based changes
+        assert!(to_add.contains(&"Component2".to_string())); // unpaused
+        assert!(to_add.contains(&"Component3".to_string())); // high TVL
+        assert!(to_remove.contains(&"Component1".to_string())); // paused
+        assert!(to_remove.contains(&"Component4".to_string())); // low TVL
     }
 }
