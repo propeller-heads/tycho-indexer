@@ -40,6 +40,7 @@ tracing-test = "0.2.5"
 [dev-dependencies]
 pretty_assertions.workspace = true
 mockito.workspace = true
+rstest.workspace = true
 
 [features]
 default = []

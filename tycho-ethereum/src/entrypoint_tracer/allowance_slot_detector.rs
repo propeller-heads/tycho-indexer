@@ -24,19 +24,20 @@ use tycho_common::{
 
 use crate::{entrypoint_tracer::tracer::EVMEntrypointService, RPCError};
 
-struct ValidationData {
+#[derive(Debug, Clone)]
+struct SlotMetadata {
     token: Address,
-    storage_addr: Address,
-    slot: Bytes,
     original_allowance: U256,
     test_value: U256,
+    all_slots: SlotValues,
 }
 
-/// Type alias for slot detection results: (storage_address, slot_bytes) with allowance
-type SlotDetectionResult = ((Address, Bytes), U256);
+/// Type alias for intermediate slot detection results: maps token address to (all_slots,
+/// expected_allowance)
+type DetectedSlotsResults = HashMap<Address, Result<(SlotValues, U256), AllowanceSlotError>>;
 
-/// Type alias for token slot detection results
-type TokenSlotResults = HashMap<Address, Result<SlotDetectionResult, AllowanceSlotError>>;
+/// Type alias for final slot detection results: maps token address to (storage_addr, slot_bytes)
+type TokenSlotResults = HashMap<Address, Result<(Address, Bytes), AllowanceSlotError>>;
 
 /// Type alias for slot values from trace: (address, slot_bytes) with value
 type SlotValues = Vec<((Address, Bytes), U256)>;
@@ -187,18 +188,18 @@ impl EVMAllowanceSlotDetector {
         // Process the batched response to extract slots
         let token_slots = self.process_batched_response(&request_tokens, responses);
 
-        // Validates that the selected slot actually matches the expectation.
-        let validation_results = self
-            .validate_best_slots(token_slots, owner, spender, block_hash)
+        // Detect the correct slot by testing candidates with storage overrides
+        let detected_results = self
+            .detect_correct_slots(token_slots, owner, spender, block_hash)
             .await;
 
         // Update cache and prepare final results
         let mut final_results = cached_tokens;
         {
             let mut cache = self.cache.write().await;
-            for (token, result) in validation_results {
+            for (token, result) in detected_results {
                 match result {
-                    Ok(((storage_addr, slot_bytes), _allowance)) => {
+                    Ok((storage_addr, slot_bytes)) => {
                         // Update cache with successful detections
                         cache.insert(
                             (token.clone(), owner.clone(), spender.clone()),
@@ -364,7 +365,7 @@ impl EVMAllowanceSlotDetector {
         &self,
         tokens: &[Address],
         responses: Vec<Value>,
-    ) -> TokenSlotResults {
+    ) -> DetectedSlotsResults {
         let mut id_to_response = HashMap::new();
         for response in responses {
             if let Some(id) = response
@@ -405,12 +406,13 @@ impl EVMAllowanceSlotDetector {
     }
 
     /// Extract storage slot from paired debug_traceCall and eth_call responses
+    /// Returns all slots and the expected allowance for testing
     fn extract_slot_from_paired_responses(
         &self,
         token: &Address,
         debug_response: Option<&Value>,
         eth_call_response: Option<&Value>,
-    ) -> Result<SlotDetectionResult, AllowanceSlotError> {
+    ) -> Result<(SlotValues, U256), AllowanceSlotError> {
         let debug_resp = debug_response.ok_or_else(|| {
             AllowanceSlotError::InvalidResponse("Missing debug_traceCall response".into())
         })?;
@@ -435,8 +437,17 @@ impl EVMAllowanceSlotDetector {
         // Extract slot values from debug_traceCall response
         let slot_values = self.extract_slot_values_from_trace_response(debug_resp)?;
 
-        // Find the best slot by comparing values to the expected allowance
-        self.find_best_slot_by_value_comparison(slot_values, allowance)
+        if slot_values.is_empty() {
+            return Err(AllowanceSlotError::TokenNotInTrace);
+        }
+
+        debug!(
+            "Found {} slots for token {}, will test starting from closest value to original allowance",
+            slot_values.len(),
+            token
+        );
+
+        Ok((slot_values, allowance))
     }
 
     fn extract_allowance_from_call_response(
@@ -522,122 +533,129 @@ impl EVMAllowanceSlotDetector {
         Ok(slot_values)
     }
 
-    fn find_best_slot_by_value_comparison(
+    /// Detects the correct storage slot by testing candidates with storage overrides.
+    ///
+    /// Testing order:
+    /// 1. Start with the slot whose value is closest to the original allowance
+    /// 2. Fall back to the last accessed slot
+    /// 3. Try remaining slots in reverse order (most recently accessed first)
+    async fn detect_correct_slots(
         &self,
-        slot_values: SlotValues,
-        expected_allowance: U256,
-    ) -> Result<SlotDetectionResult, AllowanceSlotError> {
-        let slot_count = slot_values.len();
-
-        match slot_count {
-            0 => {
-                debug!("No storage slots found in trace");
-                Err(AllowanceSlotError::TokenNotInTrace)
-            }
-            1 => {
-                let slot = slot_values
-                    .into_iter()
-                    .next()
-                    .unwrap()
-                    .0;
-                debug!("Single slot found, returning: {:?}", slot);
-                Ok((slot, expected_allowance))
-            }
-            _ => {
-                let (best_slot, best_value, best_diff) = slot_values
-                    .into_iter()
-                    .map(|(slot, value)| {
-                        let diff = value.abs_diff(expected_allowance);
-                        (slot, value, diff)
-                    })
-                    .min_by_key(|(_, _, diff)| *diff)
-                    .expect("slot_values is not empty (checked above)");
-
-                debug!(
-                    "Found {} slots, selected best slot: Address=0x{} Slot=0x{} (value: {}, diff: {})",
-                    slot_count,
-                    alloy::hex::encode(best_slot.0.as_ref()),
-                    alloy::hex::encode(best_slot.1.as_ref()),
-                    best_value,
-                    best_diff
-                );
-
-                Ok((best_slot, expected_allowance))
-            }
-        }
-    }
-
-    async fn validate_best_slots(
-        &self,
-        token_slots: TokenSlotResults,
+        token_slots: DetectedSlotsResults,
         owner: &Address,
         spender: &Address,
         block_hash: &BlockHash,
     ) -> TokenSlotResults {
-        let mut validated_results = HashMap::new();
-        let mut validation_data = Vec::new();
+        let mut detected_results = HashMap::new();
+        let mut slots_to_test = Vec::new();
 
         for (token, result) in token_slots {
             match result {
-                Ok(((storage_addr, slot), original_allowance)) => {
-                    validation_data.push(ValidationData {
-                        token,
-                        storage_addr,
-                        slot,
-                        original_allowance,
-                        test_value: Self::generate_test_value(original_allowance),
-                    });
+                Ok((mut all_slots, original_allowance)) => {
+                    if all_slots.is_empty() {
+                        detected_results.insert(token, Err(AllowanceSlotError::TokenNotInTrace));
+                    } else {
+                        slots_to_test.push(SlotMetadata {
+                            token,
+                            original_allowance,
+                            test_value: Self::generate_test_value(original_allowance),
+                            all_slots,
+                        });
+                    }
                 }
                 Err(e) => {
-                    validated_results.insert(token, Err(e));
+                    detected_results.insert(token, Err(e));
                 }
             }
         }
 
-        if validation_data.is_empty() {
-            return validated_results;
+        if slots_to_test.is_empty() {
+            return detected_results;
         }
 
-        let requests =
-            match self.create_validation_requests(&validation_data, owner, spender, block_hash) {
-                Ok(requests) => requests,
+        // Test all slot candidates, trying alternate slots if needed
+        let test_results = self
+            .test_slots_with_fallback(slots_to_test, owner, spender, block_hash)
+            .await;
+        detected_results.extend(test_results);
+
+        detected_results
+    }
+
+    async fn test_slots_with_fallback(
+        &self,
+        slots_to_test: Vec<SlotMetadata>,
+        owner: &Address,
+        spender: &Address,
+        block_hash: &BlockHash,
+    ) -> TokenSlotResults {
+        let mut detected_results = HashMap::new();
+        let mut current_attempts = slots_to_test;
+
+        // Retry loop: Test slots with storage overrides, and if a slot fails validation,
+        // remove it from the candidate list and retry with remaining slots.
+        // This continues until either:
+        // 1. All tokens find a valid slot (added to detected_results)
+        // 2. A token exhausts all slot candidates (error added to detected_results)
+        // 3. An RPC error occurs (error added to detected_results)
+        loop {
+            if current_attempts.is_empty() {
+                break;
+            }
+
+            let requests =
+                match self.create_slot_test_requests(&current_attempts, owner, spender, block_hash)
+                {
+                    Ok(requests) => requests,
+                    Err(e) => {
+                        for metadata in current_attempts {
+                            detected_results.insert(
+                                metadata.token,
+                                Err(AllowanceSlotError::RequestError(format!(
+                                    "Failed to create slot test request: {e}"
+                                ))),
+                            );
+                        }
+                        break;
+                    }
+                };
+
+            let responses = match self
+                .send_batched_request(requests)
+                .await
+            {
+                Ok(responses) => responses,
                 Err(e) => {
-                    for data in validation_data {
-                        validated_results.insert(
-                            data.token,
+                    for metadata in current_attempts {
+                        detected_results.insert(
+                            metadata.token,
                             Err(AllowanceSlotError::RequestError(format!(
-                                "Failed to create validation request: {e}"
+                                "Slot test request failed: {e}"
                             ))),
                         );
                     }
-                    return validated_results;
+                    break;
                 }
             };
 
-        let responses = match self
-            .send_batched_request(requests)
-            .await
-        {
-            Ok(responses) => responses,
-            Err(e) => {
-                for data in validation_data {
-                    validated_results.insert(
-                        data.token,
-                        Err(AllowanceSlotError::RequestError(format!(
-                            "Validation request failed: {e}"
-                        ))),
-                    );
-                }
-                return validated_results;
-            }
-        };
+            current_attempts = self.process_slot_test_responses(
+                responses,
+                current_attempts,
+                &mut detected_results,
+            );
+        }
 
-        self.process_validation_responses(responses, validation_data, &mut validated_results);
-
-        validated_results
+        detected_results
     }
 
-    /// Generate a test value for validation that's different from the original
+    /// Sort slots by priority: closest to original allowance first.
+    /// Uses stable sort so slots with equal distance maintain their original order
+    /// (most recently accessed last).
+    fn sort_slots_by_priority(slots: &mut SlotValues, original_allowance: U256) {
+        slots.sort_by_key(|(_, allowance_value)| allowance_value.abs_diff(original_allowance));
+    }
+
+    /// Generate a test value for testing that's different from the original
     fn generate_test_value(original_allowance: U256) -> U256 {
         if !original_allowance.is_zero() && original_allowance != U256::MAX {
             original_allowance.saturating_mul(U256::from(2))
@@ -646,33 +664,38 @@ impl EVMAllowanceSlotDetector {
         }
     }
 
-    /// Create eth_call requests with storage overrides for validation
-    fn create_validation_requests(
+    fn create_slot_test_requests(
         &self,
-        validation_data: &[ValidationData],
+        slots_to_test: &[SlotMetadata],
         owner: &Address,
         spender: &Address,
         block_hash: &BlockHash,
     ) -> Result<Value, AllowanceSlotError> {
         let mut batch = Vec::new();
 
-        for (id, data) in validation_data.iter().enumerate() {
+        for (id, metadata) in slots_to_test.iter().enumerate() {
+            let (storage_addr, slot) = &metadata
+                .all_slots
+                .first()
+                .ok_or(AllowanceSlotError::TokenNotInTrace)?
+                .0;
+
             let calldata = encode_allowance_calldata(owner, spender);
 
-            let test_value_hex = format!("0x{:064x}", data.test_value);
-            let slot_hex = format!("0x{}", alloy::hex::encode(data.slot.as_ref()));
+            let test_value_hex = format!("0x{:064x}", metadata.test_value);
+            let slot_hex = format!("0x{}", alloy::hex::encode(slot.as_ref()));
 
             let request = json!({
                 "jsonrpc": "2.0",
                 "method": "eth_call",
                 "params": [
                     {
-                        "to": format!("0x{}", alloy::hex::encode(data.token.as_ref())),
+                        "to": format!("0x{}", alloy::hex::encode(metadata.token.as_ref())),
                         "data": format!("0x{}", alloy::hex::encode(calldata.as_ref()))
                     },
                     format!("0x{}", alloy::hex::encode(block_hash.as_ref())),
                     {
-                        format!("0x{}", alloy::hex::encode(data.storage_addr.as_ref())): {
+                        format!("0x{}", alloy::hex::encode(storage_addr.as_ref())): {
                             "stateDiff": {
                                 slot_hex: test_value_hex
                             }
@@ -688,12 +711,13 @@ impl EVMAllowanceSlotDetector {
         Ok(Value::Array(batch))
     }
 
-    fn process_validation_responses(
+    fn process_slot_test_responses(
         &self,
         responses: Vec<Value>,
-        validation_data: Vec<ValidationData>,
+        slots_to_test: Vec<SlotMetadata>,
         results: &mut TokenSlotResults,
-    ) {
+    ) -> Vec<SlotMetadata> {
+        let mut retry_data = Vec::new();
         let mut id_to_response = HashMap::new();
         for response in responses {
             if let Some(id) = response
@@ -704,58 +728,75 @@ impl EVMAllowanceSlotDetector {
             }
         }
 
-        for (idx, data) in validation_data.into_iter().enumerate() {
+        for (idx, mut metadata) in slots_to_test.into_iter().enumerate() {
             let response_id = (idx + 1) as u64;
 
             match id_to_response.get(&response_id) {
                 Some(response) => {
                     if let Some(error) = response.get("error") {
                         results.insert(
-                            data.token,
+                            metadata.token,
                             Err(AllowanceSlotError::RequestError(format!(
-                                "Validation call failed: {error}",
+                                "Slot test call failed: {error}",
                             ))),
                         );
                         continue;
                     }
 
+                    let (storage_addr, slot) = &metadata
+                        .all_slots
+                        .first()
+                        .expect("all_slots should not be empty")
+                        .0
+                        .clone();
+
                     match self.extract_allowance_from_call_response(response) {
                         Ok(returned_allowance) => {
-                            if returned_allowance != data.original_allowance {
+                            // Check if the override worked (allowance should be different from
+                            // original_allowance).
+                            if returned_allowance != metadata.original_allowance {
                                 debug!(
-                                    token = %data.token,
-                                    storage = %data.storage_addr,
-                                    slot = %alloy::hex::encode(data.slot.as_ref()),
+                                    token = %metadata.token,
+                                    storage = %storage_addr,
+                                    slot = %alloy::hex::encode(slot.as_ref()),
                                     returned_allowance = %returned_allowance,
-                                    original_allowance = %data.original_allowance,
-                                    "Storage slot validated successfully"
+                                    original_allowance = %metadata.original_allowance,
+                                    "Storage slot detected successfully"
                                 );
                                 results.insert(
-                                    data.token,
-                                    Ok(((data.storage_addr, data.slot), data.original_allowance)),
+                                    metadata.token,
+                                    Ok((storage_addr.clone(), slot.clone())),
                                 );
                             } else {
-                                warn!(
-                                    token = %data.token,
-                                    storage = %data.storage_addr,
-                                    slot = %alloy::hex::encode(data.slot.as_ref()),
-                                    expected = %data.test_value,
-                                    got = %returned_allowance,
-                                    "Storage slot validation failed - value didn't change as expected"
-                                );
-                                results.insert(
-                                    data.token,
-                                    Err(AllowanceSlotError::WrongSlotError(
-                                        "Slot override didn't change allowance.".to_string(),
-                                    )),
-                                );
+                                // Override didn't change the allowance - this slot is incorrect.
+                                // Remove it from candidates and try the next slot in priority
+                                // order.
+                                metadata
+                                    .all_slots
+                                    .retain(|s| s.0 != (storage_addr.clone(), slot.clone()));
+                                if !metadata.all_slots.is_empty() {
+                                    warn!("Storage slot test failed - trying next slot");
+                                    retry_data.push(metadata.clone());
+                                } else {
+                                    warn!(
+                                        token = %metadata.token,
+                                        slot = %alloy::hex::encode(slot.as_ref()),
+                                        "Storage slot test failed - no more slots to try"
+                                    );
+                                    results.insert(
+                                        metadata.token,
+                                        Err(AllowanceSlotError::WrongSlotError(
+                                            "Slot override didn't change allowance for any detected slot.".to_string(),
+                                        )),
+                                    );
+                                }
                             }
                         }
                         Err(e) => {
                             results.insert(
-                                data.token,
+                                metadata.token,
                                 Err(AllowanceSlotError::InvalidResponse(format!(
-                                    "Failed to extract allowance from validation response: {e}"
+                                    "Failed to extract allowance from slot test response: {e}"
                                 ))),
                             );
                         }
@@ -763,14 +804,16 @@ impl EVMAllowanceSlotDetector {
                 }
                 None => {
                     results.insert(
-                        data.token,
+                        metadata.token,
                         Err(AllowanceSlotError::InvalidResponse(
-                            "Missing validation response".into(),
+                            "Missing slot test response".into(),
                         )),
                     );
                 }
             }
         }
+
+        retry_data
     }
 }
 
