@@ -2,6 +2,7 @@ use alloy::primitives::{I256, U256};
 use tycho_common::Bytes;
 
 pub(crate) mod liquidity_math;
+pub(crate) mod lp_fee;
 mod solidity_math;
 pub(crate) mod sqrt_price_math;
 pub(crate) mod swap_math;
