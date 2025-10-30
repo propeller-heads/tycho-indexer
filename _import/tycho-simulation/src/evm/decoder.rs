@@ -74,7 +74,7 @@ type FilterFn = fn(&ComponentWithState) -> bool;
 /// A decoder to process raw messages.
 ///
 /// This struct decodes incoming messages of type `FeedMessage` and converts it into the
-/// `BlockUpdate`struct.
+/// `BlockUpdate` struct.
 ///
 /// # Important:
 /// - Supports registering exchanges and their associated filters for specific protocol components.
@@ -311,10 +311,7 @@ where
                     removed_pairs.insert(id, component);
                 }
 
-                // Continue with the same write guard for token proxy processing
                 // UPDATE VM STORAGE
-                let mut token_proxy_accounts: HashMap<Address, AccountUpdate> = HashMap::new();
-
                 info!(
                     "Processing {} contracts from snapshots",
                     protocol_msg
@@ -323,71 +320,90 @@ where
                         .len()
                 );
 
-                let storage_by_address: HashMap<Address, ResponseAccount> = protocol_msg
+                let mut proxy_token_accounts: HashMap<Address, AccountUpdate> = HashMap::new();
+                let mut storage_by_address: HashMap<Address, ResponseAccount> = HashMap::new();
+                for (key, value) in protocol_msg
                     .snapshots
                     .get_vm_storage()
                     .iter()
-                    .map(|(key, value)| -> Result<(Address, ResponseAccount), StreamDecodeError> {
-                        let mut account: ResponseAccount = value.clone().into();
+                {
+                    let account: ResponseAccount = value.clone().into();
 
-                        if state_guard.tokens.contains_key(key) {
-                            let original_address = account.address;
-                            // To work with Tycho's token overwrites system, if we get account
-                            // snapshots for a token we must handle them
-                            // with a proxy/wrapper contract.
-                            // This is done by loading the original token contract at a new address,
-                            // setting the proxy token contract at the original token address and
-                            // pointing that proxy contract to the token's new contract address.
+                    if state_guard.tokens.contains_key(key) {
+                        let original_address = account.address;
+                        // To work with Tycho's token overwrites system, if we get account
+                        // snapshots for a token we must handle them with a proxy/wrapper
+                        // contract.
+                        // Note: storage for the original contract must be set at the proxy
+                        // contract address. This is because the proxy contract uses
+                        // delegatecall to the original (implementation) contract.
 
-                            // Get or create a new token address
-                            let proxy_addr = if !state_guard
-                                .proxy_token_addresses
-                                .contains_key(&original_address)
-                            {
+                        // Handle proxy token accounts
+                        let (impl_addr, proxy_state) = match state_guard
+                            .proxy_token_addresses
+                            .get(&original_address)
+                        {
+                            Some(impl_addr) => {
+                                // Token already has a proxy contract, simply update it.
+
+                                // Note: we apply the snapshot as an update. This is to cover the
+                                // case where a contract may be stale as it stopped being tracked
+                                // for some reason (e.g. due to a drop in tvl) and is now being
+                                // tracked again.
+                                let proxy_state = AccountUpdate::new(
+                                    original_address,
+                                    value.chain.into(),
+                                    account.slots.clone(),
+                                    None,
+                                    None,
+                                    ChangeType::Update,
+                                );
+                                (*impl_addr, proxy_state)
+                            }
+                            None => {
                                 // Token does not have a proxy contract yet, create one
 
                                 // Assign original token contract to new address
-                                let new_address = generate_proxy_token_address(
+                                let impl_addr = generate_proxy_token_address(
                                     state_guard.proxy_token_addresses.len() as u32,
                                 )?;
                                 state_guard
                                     .proxy_token_addresses
-                                    .insert(original_address, new_address);
+                                    .insert(original_address, impl_addr);
 
                                 // Add proxy token contract at original token address
                                 let proxy_state = create_proxy_token_account(
                                     original_address,
-                                    new_address,
+                                    Some(impl_addr),
                                     &account.slots,
                                     value.chain.into(),
                                 );
-                                token_proxy_accounts.insert(original_address, proxy_state);
-                                new_address
-                            } else {
-                                state_guard
-                                    .proxy_token_addresses
-                                    .get(&original_address)
-                                    .copied()
-                                    .ok_or_else(|| {
-                                        StreamDecodeError::Fatal(
-                                            "Missing proxy token address".to_string(),
-                                        )
-                                    })?
-                            };
 
-                            // assign original token contract to new address
-                            account.address = proxy_addr;
+                                (impl_addr, proxy_state)
+                            }
                         };
-                        Ok((account.address, account))
-                    })
-                    .collect::<Result<HashMap<_, _>, StreamDecodeError>>()?;
+
+                        proxy_token_accounts.insert(original_address, proxy_state);
+
+                        // Assign original token contract to the implementation address
+                        let impl_update = ResponseAccount {
+                            address: impl_addr,
+                            slots: HashMap::new(),
+                            ..account.clone()
+                        };
+                        storage_by_address.insert(impl_addr, impl_update);
+                    } else {
+                        // Not a token, apply snapshot to the account at its original address
+                        storage_by_address.insert(account.address, account);
+                    }
+                }
 
                 info!("Updating engine with {} contracts from snapshots", storage_by_address.len());
                 update_engine(
                     SHARED_TYCHO_DB.clone(),
                     header.clone().block(),
                     Some(storage_by_address),
-                    token_proxy_accounts,
+                    proxy_token_accounts,
                 )
                 .map_err(|e| StreamDecodeError::Fatal(e.to_string()))?;
                 info!("Engine updated");
@@ -415,6 +431,7 @@ where
             let mut components_to_store = HashMap::new();
             {
                 let state_guard = self.state.read().await;
+
                 // PROCESS SNAPSHOTS
                 'snapshot_loop: for (id, snapshot) in protocol_msg
                     .snapshots
@@ -438,8 +455,8 @@ where
                             Some(token) => {
                                 component_tokens.push(token.clone());
 
-                                // If the token is not a proxy token, we need to add it to the
-                                // simulation engine
+                                // If the token is not an existing proxy token, we need to add it to
+                                // the simulation engine
                                 let token_address = match bytes_to_address(&token.address) {
                                     Ok(addr) => addr,
                                     Err(_) => {
@@ -450,22 +467,19 @@ where
                                         continue 'snapshot_loop;
                                     }
                                 };
-                                // TODO: Ok we deployed a proxy whenever we see a new token without
-                                // a implementation set.
+                                // Deploy a proxy account without an implementation set
                                 if !state_guard
                                     .proxy_token_addresses
                                     .contains_key(&token_address)
                                 {
                                     new_tokens_accounts.insert(
                                         token_address,
-                                        AccountUpdate {
-                                            address: token_address,
-                                            chain: snapshot.component.chain.into(),
-                                            slots: HashMap::new(),
-                                            balance: None,
-                                            code: Some(ERC20_PROXY_BYTECODE.into()),
-                                            change: ChangeType::Creation,
-                                        },
+                                        create_proxy_token_account(
+                                            token_address,
+                                            None,
+                                            &HashMap::new(),
+                                            snapshot.component.chain.into(),
+                                        ),
                                     );
                                 }
                             }
@@ -493,8 +507,8 @@ where
                     }
 
                     // collect contracts:ids mapping for states that should update on contract
-                    // changes
-                    if component
+                    // changes (non-manual updates)
+                    if !component
                         .static_attributes
                         .contains_key("manual_updates")
                     {
@@ -574,83 +588,85 @@ where
                 // Update engine with account changes
                 let mut state_guard = self.state.write().await;
 
-                let mut token_proxy_accounts: HashMap<Address, AccountUpdate> = HashMap::new();
-                let account_update_by_address: HashMap<Address, AccountUpdate> = deltas
-                    .account_updates
-                    .iter()
-                    .map(|(key, value)| -> Result<(Address, AccountUpdate), StreamDecodeError> {
-                        let mut update: AccountUpdate = value.clone().into();
+                let mut account_update_by_address: HashMap<Address, AccountUpdate> = HashMap::new();
+                for (key, value) in deltas.account_updates.iter() {
+                    let mut update: AccountUpdate = value.clone().into();
 
-                        // TODO: Unify this different initialisation if we receive
-                        //  state updates for the token with the usual case. Also
-                        //  switch the if cases.
-                        if state_guard.tokens.contains_key(key) {
-                            let original_address = update.address;
-                            // If the account is a token, we need to handle it with a proxy contract
+                    // TEMP PATCH (ENG-4993)
+                    //
+                    // The indexer emits deltas without code marked as creations, which crashes
+                    // TychoDB. Until fixed, treat them as updates (since EVM code cannot be
+                    // deleted).
+                    if update.code.is_none() && matches!(update.change, ChangeType::Creation) {
+                        error!(
+                            update = ?update,
+                            "FaultyCreationDelta"
+                        );
+                        update.change = ChangeType::Update;
+                    }
 
-                            // Get or create a new token address
-                            let proxy_addr = if !state_guard
-                                .proxy_token_addresses
-                                .contains_key(&original_address)
-                            {
+                    if state_guard.tokens.contains_key(key) {
+                        let original_address = update.address;
+                        // If the account is a token, we need to handle it with a proxy contract.
+                        // Storage updates apply to the proxy contract (at original address).
+                        // Code updates (if any) apply to the token implementation contract (at
+                        // impl_addr).
+
+                        // Handle proxy contract updates
+                        let impl_addr = match state_guard
+                            .proxy_token_addresses
+                            .get(&original_address)
+                        {
+                            Some(impl_addr) => {
+                                // Token already has a proxy contract.
+
+                                // Apply the storage update to proxy contract
+                                let proxy_update = AccountUpdate { code: None, ..update.clone() };
+                                account_update_by_address.insert(original_address, proxy_update);
+
+                                *impl_addr
+                            }
+                            None => {
                                 // Token does not have a proxy contract yet, create one
 
-                                // Assign original token contract to new address
-                                let new_address = generate_proxy_token_address(
+                                // Assign original token (implementation) contract to new proxy
+                                // address
+                                let impl_addr = generate_proxy_token_address(
                                     state_guard.proxy_token_addresses.len() as u32,
                                 )?;
                                 state_guard
                                     .proxy_token_addresses
-                                    .insert(original_address, new_address);
+                                    .insert(original_address, impl_addr);
 
-                                // Create proxy token account
+                                // Create proxy token account with original account's storage (at
+                                // original address)
                                 let proxy_state = create_proxy_token_account(
                                     original_address,
-                                    new_address,
+                                    Some(impl_addr),
                                     &update.slots,
                                     update.chain,
                                 );
-                                token_proxy_accounts.insert(original_address, proxy_state);
+                                account_update_by_address.insert(original_address, proxy_state);
 
-                                new_address
-                            } else {
-                                // Token already has a proxy contract, update the original token
-                                // contract
-                                state_guard
-                                    .proxy_token_addresses
-                                    .get(&original_address)
-                                    .copied()
-                                    .ok_or_else(|| {
-                                        StreamDecodeError::Fatal(
-                                            "Missing proxy token address".to_string(),
-                                        )
-                                    })?
-                            };
-
-                            // TEMP PATCH (ENG-4993)
-                            //
-                            // The indexer emits deltas without code marked as creations,
-                            // which crashes TychoDB. Until fixed, treat them as updates
-                            // (since EVM code cannot be deleted).
-                            if update.code.is_none() &&
-                                matches!(update.change, ChangeType::Creation)
-                            {
-                                error!(
-                                    update = ?update,
-                                    "FaultyCreationDelta"
-                                );
-                                update.change = ChangeType::Update;
+                                impl_addr
                             }
-
-                            // assign original token contract to new address
-                            update.address = proxy_addr;
                         };
-                        Ok((update.address, update))
-                    })
-                    .collect::<Result<HashMap<_, _>, StreamDecodeError>>()?;
-                drop(state_guard);
 
-                token_proxy_accounts.extend(account_update_by_address);
+                        // Apply code update to token implementation contract
+                        if update.code.is_some() {
+                            let impl_update = AccountUpdate {
+                                address: impl_addr,
+                                slots: HashMap::new(),
+                                ..update.clone()
+                            };
+                            account_update_by_address.insert(impl_addr, impl_update);
+                        }
+                    } else {
+                        // Not a token, apply update to the account at its original address
+                        account_update_by_address.insert(update.address, update);
+                    }
+                }
+                drop(state_guard);
 
                 let state_guard = self.state.read().await;
                 info!("Updating engine with {} contract deltas", deltas.account_updates.len());
@@ -658,7 +674,7 @@ where
                     SHARED_TYCHO_DB.clone(),
                     header.clone().block(),
                     None,
-                    token_proxy_accounts,
+                    account_update_by_address,
                 )
                 .map_err(|e| StreamDecodeError::Fatal(e.to_string()))?;
                 info!("Engine updated");
@@ -938,13 +954,14 @@ fn generate_proxy_token_address(idx: u32) -> Result<Address, StreamDecodeError> 
 /// address.
 fn create_proxy_token_account(
     addr: Address,
-    new_address: Address,
+    new_address: Option<Address>,
     storage: &HashMap<U256, U256>,
     chain: Chain,
 ) -> AccountUpdate {
-    let mut slots =
-        HashMap::from([(*IMPLEMENTATION_SLOT, U256::from_be_slice(new_address.as_slice()))]);
-    slots.extend(storage);
+    let mut slots = storage.clone();
+    if let Some(new_address) = new_address {
+        slots.insert(*IMPLEMENTATION_SLOT, U256::from_be_slice(new_address.as_slice()));
+    }
 
     AccountUpdate {
         address: addr,
