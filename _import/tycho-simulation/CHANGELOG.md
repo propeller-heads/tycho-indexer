@@ -1,3 +1,11 @@
+## [0.187.1](https://github.com/propeller-heads/tycho-simulation/compare/0.187.0...0.187.1) (2025-10-30)
+
+
+### Bug Fixes
+
+* correctly apply storage updates to proxy token ([3180720](https://github.com/propeller-heads/tycho-simulation/commit/31807208b85e69341640f2476ca3f8f0b0e196d8))
+* correctly trigger state updates for non-manual update vm pools ([541cab4](https://github.com/propeller-heads/tycho-simulation/commit/541cab44f02b8023663c7e0b7f558d175fbdd161))
+
 ## [0.187.0](https://github.com/propeller-heads/tycho-simulation/compare/0.186.0...0.187.0) (2025-10-29)
 
 
