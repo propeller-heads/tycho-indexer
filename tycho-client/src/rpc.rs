@@ -2349,7 +2349,6 @@ mod tests {
 
         let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
 
-        // Create test component
         #[allow(deprecated)]
         let component = tycho_common::dto::ProtocolComponent {
             id: "component1".to_string(),
@@ -2382,8 +2381,6 @@ mod tests {
             HashMap::new(), // entrypoints
             contract_ids,
             12345,
-            true,
-            true,
         );
 
         let response = client
@@ -2429,8 +2426,6 @@ mod tests {
             HashMap::new(), // empty entrypoints
             vec![],         // empty contract_ids
             12345,
-            true,
-            true,
         );
 
         let response = client
@@ -2501,9 +2496,9 @@ mod tests {
             HashMap::new(), // entrypoints
             vec![],         // contract_ids
             12345,
-            false,
-            false, // include_tvl = false
-        );
+        )
+        .include_balances(false)
+        .include_tvl(false);
 
         let response = client
             .get_snapshots(&request, 100, 4)

@@ -31,7 +31,6 @@ pub struct SnapshotParameters {
 }
 
 impl SnapshotParameters {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         chain: Chain,
         protocol_system: String,
@@ -39,8 +38,6 @@ impl SnapshotParameters {
         entrypoints: HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>,
         contract_ids: Vec<Bytes>,
         block_number: u64,
-        include_balances: bool,
-        include_tvl: bool,
     ) -> Self {
         Self {
             chain,
@@ -49,8 +46,20 @@ impl SnapshotParameters {
             entrypoints,
             contract_ids,
             block_number,
-            include_balances,
-            include_tvl,
+            include_balances: true,
+            include_tvl: true,
         }
+    }
+
+    /// Set whether to include balance information (default: true)
+    pub fn include_balances(mut self, include_balances: bool) -> Self {
+        self.include_balances = include_balances;
+        self
+    }
+
+    /// Set whether to fetch TVL data (default: true)
+    pub fn include_tvl(mut self, include_tvl: bool) -> Self {
+        self.include_tvl = include_tvl;
+        self
     }
 }

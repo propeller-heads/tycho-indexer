@@ -274,7 +274,6 @@ where
         //TODO: Improve this, we should not query for every component, but only for the ones that
         // could have entrypoints. Maybe apply a filter per protocol?
         let entrypoints_result = if self.extractor_id.chain == Chain::Ethereum {
-            // Fetch entrypoints
             let result = self
                 .rpc_client
                 .get_traced_entry_points_paginated(
@@ -308,9 +307,9 @@ where
             entrypoints_result,
             contract_ids.clone(),
             header.number,
-            self.retrieve_balances,
-            self.include_tvl,
-        );
+        )
+        .include_balances(self.retrieve_balances)
+        .include_tvl(self.include_tvl);
         let snapshot_response = self
             .rpc_client
             .get_snapshots(&request, 100, 4)
