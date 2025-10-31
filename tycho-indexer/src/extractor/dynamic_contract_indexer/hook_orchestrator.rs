@@ -350,80 +350,68 @@ where
         Ok(())
     }
 
-    /// Enriches component metadata with balance updates extracted from block changes.
+    /// Enriches component metadata with balance information from block changes.
     ///
-    /// This method efficiently processes blockchain transaction data to extract the latest
-    /// balance updates for protocol components that need metadata for entrypoint generation
-    /// but don't have external metadata sources. It processes transactions in reverse order
-    /// to capture only the most recent balance changes for each token.
-    ///
-    /// # Arguments
-    /// * `components_needing_metadata` - Components that need balance-based metadata
-    /// * `block_changes` - Reference to block changes containing transaction data and balance
-    ///   updates
-    ///
-    /// # Returns
-    /// HashMap mapping component IDs to their enriched metadata containing balance information
+    /// This function processes transactions in reverse chronological order to capture the most
+    /// recent balance state for each component's tokens. Only components with complete token
+    /// data and at least one non-zero balance are included in the result.
     #[instrument(skip_all, fields(
-        components_count = components_needing_metadata.len(),
+        components_count = components.len(),
         transactions_count = block_changes.txs_with_update.len()
     ))]
     fn enrich_metadata_from_block_balances(
         &self,
-        components_needing_metadata: &[&ProtocolComponent],
+        components: &[&ProtocolComponent],
         block_changes: &BlockChanges,
     ) -> HashMap<ComponentId, ComponentTracingMetadata> {
         debug!("Starting balance-based metadata enrichment for entrypoint generation");
 
-        let mut enriched_metadata: HashMap<ComponentId, Balances> =
-            HashMap::with_capacity(components_needing_metadata.len());
+        let mut collected_balances: HashMap<ComponentId, Balances> =
+            HashMap::with_capacity(components.len());
         let mut components_enriched = 0;
         let mut total_balance_entries = 0;
 
-        // Build lookup structures
-        let mut remaining_components: HashMap<ComponentId, HashSet<Address>> =
-            components_needing_metadata
-                .iter()
-                .map(|component| {
-                    (
-                        component.id.clone(),
-                        component
-                            .tokens
-                            .iter()
-                            .cloned()
-                            .collect(),
-                    )
-                })
-                .collect();
+        // Track which tokens still need balance data for each component
+        let mut pending_tokens_per_component: HashMap<ComponentId, HashSet<Address>> = components
+            .iter()
+            .map(|component| {
+                (
+                    component.id.clone(),
+                    component
+                        .tokens
+                        .iter()
+                        .cloned()
+                        .collect(),
+                )
+            })
+            .collect();
 
         debug!(
-            total_tokens_to_track = remaining_components
+            total_tokens_to_track = pending_tokens_per_component
                 .values()
                 .map(|tokens| tokens.len())
                 .sum::<usize>(),
-            unique_components = remaining_components.len(),
+            unique_components = pending_tokens_per_component.len(),
             "Built tracking data structures for balance enrichment"
         );
 
-        // Process transactions in reverse order to get latest values first
+        // Process transactions in reverse order to capture most recent balance state
         for tx_with_changes in block_changes
             .txs_with_update
             .iter()
             .rev()
         {
-            // Early exit if all components have been processed
-            if remaining_components.is_empty() {
-                debug!("Early exit: all components processed");
+            if pending_tokens_per_component.is_empty() {
                 break;
             }
 
             for (component_id, balance_changes) in tx_with_changes.balance_changes.iter() {
-                if let Some(tokens_to_update) = remaining_components.get_mut(component_id) {
-                    let initial_token_count = tokens_to_update.len();
+                if let Some(pending_tokens) = pending_tokens_per_component.get_mut(component_id) {
+                    let tokens_before = pending_tokens.len();
 
                     for (token, component_balance) in balance_changes.iter() {
-                        if tokens_to_update.remove(token) {
-                            enriched_metadata
+                        if pending_tokens.remove(token) {
+                            collected_balances
                                 .entry(component_id.clone())
                                 .or_default()
                                 .insert(token.clone(), component_balance.balance.clone());
@@ -431,14 +419,13 @@ where
                         }
                     }
 
-                    // Remove component if all tokens processed
-                    if tokens_to_update.is_empty() {
-                        remaining_components.remove(component_id);
-                        if initial_token_count > 0 {
+                    if pending_tokens.is_empty() {
+                        pending_tokens_per_component.remove(component_id);
+                        if tokens_before > 0 {
                             components_enriched += 1;
                             debug!(
                                 component_id = %component_id,
-                                tokens_processed = initial_token_count,
+                                tokens_processed = tokens_before,
                                 tx_hash = %tx_with_changes.tx.hash,
                                 "Component fully enriched with balance data"
                             );
@@ -448,59 +435,66 @@ where
             }
         }
 
-        // Convert to ComponentTracingMetadata format
-        let mut result = HashMap::new();
-        for (component_id, balances) in enriched_metadata {
-            // Only include components with non-zero balances and complete token data
-            if !balances.values().all(|v| v.is_zero()) &&
-                !remaining_components.contains_key(&component_id)
-            {
-                // Find the latest transaction hash for this component
-                let tx_hash = block_changes
-                    .txs_with_update
-                    .iter()
-                    .rev()
-                    .find_map(|tx_with_changes| {
-                        if tx_with_changes
-                            .balance_changes
-                            .contains_key(&component_id) ||
-                            tx_with_changes
-                                .protocol_components
-                                .contains_key(&component_id) ||
-                            tx_with_changes
-                                .state_updates
-                                .contains_key(&component_id)
-                        {
-                            Some(tx_with_changes.tx.hash.clone())
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or_else(|| {
-                        block_changes
-                            .txs_with_update
-                            .first()
-                            .unwrap()
-                            .tx
-                            .hash
-                            .clone()
-                    });
+        // Convert to ComponentTracingMetadata, filtering incomplete and zero-balance components
+        let result: HashMap<ComponentId, ComponentTracingMetadata> = collected_balances
+            .into_iter()
+            .filter_map(|(component_id, balances)| {
+                // Skip components with incomplete data or all-zero balances
+                let has_complete_data = !pending_tokens_per_component.contains_key(&component_id);
+                let has_nonzero_balance = balances.values().any(|v| !v.is_zero());
+
+                if !has_complete_data || !has_nonzero_balance {
+                    return None;
+                }
+
+                // Find the most recent transaction that touched this component.
+                // This should always succeed since the component's balances came from
+                // txs_with_update, but we handle None defensively by filtering out
+                // the component.
+                let tx_hash =
+                    Self::find_latest_tx_hash_for_component(&component_id, block_changes)?;
 
                 let mut metadata = ComponentTracingMetadata::new(tx_hash);
                 metadata.balances = Some(Ok(balances));
-                result.insert(component_id, metadata);
-            }
-        }
+                Some((component_id, metadata))
+            })
+            .collect();
 
         info!(
             components_enriched,
-            components_skipped = remaining_components.len(),
+            components_skipped = pending_tokens_per_component.len(),
             total_balance_entries,
             result_count = result.len(),
             "Completed balance-based metadata enrichment for entrypoint generation"
         );
 
         result
+    }
+
+    /// Finds the most recent transaction hash that modified a given component.
+    ///
+    /// Searches through transactions in reverse order to find the latest one that contains
+    /// balance changes, protocol component updates, or state updates for the specified component.
+    fn find_latest_tx_hash_for_component(
+        component_id: &ComponentId,
+        block_changes: &BlockChanges,
+    ) -> Option<TxHash> {
+        block_changes
+            .txs_with_update
+            .iter()
+            .rev()
+            .find(|tx_with_changes| {
+                tx_with_changes
+                    .balance_changes
+                    .contains_key(component_id) ||
+                    tx_with_changes
+                        .protocol_components
+                        .contains_key(component_id) ||
+                    tx_with_changes
+                        .state_updates
+                        .contains_key(component_id)
+            })
+            .map(|tx_with_changes| tx_with_changes.tx.hash.clone())
     }
 
     #[instrument(skip(self, block, components, metadata, block_changes), fields(
