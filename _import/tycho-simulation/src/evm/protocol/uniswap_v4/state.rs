@@ -27,7 +27,7 @@ use crate::evm::protocol::{
         },
     },
     utils::uniswap::{
-        i24_be_bytes_to_i32, liquidity_math,
+        i24_be_bytes_to_i32, liquidity_math, lp_fee,
         sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
         swap_math,
         tick_list::{TickInfo, TickList, TickListErrorKind},
@@ -503,18 +503,27 @@ impl ProtocolSim for UniswapV4State {
                 }
 
                 // Set LP fee override if provided by hook
-                if before_swap_result
+                // The fee returned by beforeSwap may have the override flag (bit 22) set,
+                // which needs to be removed before using the fee value.
+                // See: https://github.com/Uniswap/v4-core/blob/main/src/libraries/LPFeeLibrary.sol
+                let hook_fee = before_swap_result
                     .result
                     .fee
-                    .to::<u32>() !=
-                    0
-                {
-                    lp_fee_override = Some(
-                        before_swap_result
-                            .result
-                            .fee
-                            .to::<u32>(),
-                    );
+                    .to::<u32>();
+                if hook_fee != 0 {
+                    // Remove the override flag (bit 22) as per LPFeeLibrary.sol
+                    let cleaned_fee = lp_fee::remove_override_flag(hook_fee);
+
+                    // Validate the fee doesn't exceed MAX_LP_FEE (1,000,000 pips = 100%)
+                    if !lp_fee::is_valid(cleaned_fee) {
+                        return Err(SimulationError::FatalError(format!(
+                            "LP fee override {} exceeds maximum {} pips",
+                            cleaned_fee,
+                            lp_fee::MAX_LP_FEE
+                        )));
+                    }
+
+                    lp_fee_override = Some(cleaned_fee);
                 }
             }
         }
@@ -832,7 +841,10 @@ mod tests {
                 simulation_db::SimulationDB,
                 utils::{get_client, get_runtime},
             },
-            protocol::uniswap_v4::hooks::generic_vm_hook_handler::GenericVMHookHandler,
+            protocol::{
+                uniswap_v4::hooks::generic_vm_hook_handler::GenericVMHookHandler,
+                utils::uniswap::lp_fee,
+            },
         },
         protocol::models::{DecoderContext, TryFromWithBlock},
     };
@@ -1563,5 +1575,30 @@ mod tests {
             .get_amount_out(one_more, &token_in, &token_out)
             .is_err();
         assert!(should_fail, "Swapping max_amount + 1 should fail.");
+    }
+
+    #[test]
+    fn test_calculate_swap_fees_with_override() {
+        // Test that calculate_swap_fees_pips works correctly with overridden fees
+        let fees = UniswapV4Fees::new(100, 90, 500);
+
+        // Without override, should use LP fee + protocol fee
+        let total_zero_for_one = fees.calculate_swap_fees_pips(true, None);
+        assert_eq!(total_zero_for_one, 600); // 100 (protocol) + 500 (lp)
+
+        // With override, should use override fee + protocol fee
+        let total_with_override = fees.calculate_swap_fees_pips(true, Some(1000));
+        assert_eq!(total_with_override, 1100); // 100 (protocol) + 1000 (override)
+    }
+
+    #[test]
+    fn test_max_combined_fees_stays_valid() {
+        // Test that even with max protocol + max LP fees, we stay under compute_swap_step limit
+        let fees = UniswapV4Fees::new(1000, 1000, 1000);
+        let total = fees.calculate_swap_fees_pips(true, Some(lp_fee::MAX_LP_FEE));
+
+        // Total should be 1001000 (1000 protocol + 1000000 LP override)
+        // This would overflow in compute_swap_step, but that's expected to be validated earlier
+        assert_eq!(total, 1_001_000);
     }
 }
