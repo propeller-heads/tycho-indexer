@@ -1,3 +1,11 @@
+## [0.188.0](https://github.com/propeller-heads/tycho-simulation/compare/0.187.1...0.188.0) (2025-10-31)
+
+
+### Features
+
+* Cleanup unused code, improve tests ([5ee2ed6](https://github.com/propeller-heads/tycho-simulation/commit/5ee2ed607b0ea914873ad51e9f8071a47da2c8df))
+* Fix LP fee overrides decoding on UniswapV4 ([20d228b](https://github.com/propeller-heads/tycho-simulation/commit/20d228b7b37db43b5e81aee178e73a9672550853))
+
 ## [0.187.1](https://github.com/propeller-heads/tycho-simulation/compare/0.187.0...0.187.1) (2025-10-30)
 
 
