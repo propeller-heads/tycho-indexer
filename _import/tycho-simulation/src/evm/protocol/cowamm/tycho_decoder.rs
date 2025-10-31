@@ -1,9 +1,4 @@
 use std::collections::HashMap;
-
-use crate::{
-    evm::protocol::cowamm::{bmath, state::CowAMMState},
-    protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
-};
 use alloy::primitives::U256;
 use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
 use tycho_common::{
@@ -11,6 +6,10 @@ use tycho_common::{
     models::token::Token,
     simulation::errors::{SimulationError, TransitionError},
     Bytes,
+};
+use crate::{
+    evm::protocol::cowamm::{bmath, state::CowAMMState},
+    protocol::{errors::InvalidSnapshotError, models::{TryFromWithBlock, DecoderContext}},
 };
 
 const BYTES: usize = 32;
@@ -28,11 +27,12 @@ fn header() -> BlockHeader {
 impl TryFromWithBlock<ComponentWithState, BlockHeader> for CowAMMState {
     type Error = InvalidSnapshotError;
 
-    async fn try_from_with_block(
+    async fn try_from_with_header(
         snapshot: ComponentWithState,
         _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
+        _decoder_context: &DecoderContext,
     ) -> Result<Self, Self::Error> {
         let address = snapshot
             .component
