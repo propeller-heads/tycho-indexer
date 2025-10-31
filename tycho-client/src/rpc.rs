@@ -55,7 +55,7 @@ pub struct SnapshotParameters<'a> {
     /// Components to fetch protocol states for
     pub components: &'a HashMap<ComponentId, ProtocolComponent>,
     /// Traced entry points data mapped by component id
-    pub entrypoints: &'a HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>,
+    pub entrypoints: Option<&'a HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>>,
     /// Contract addresses to fetch VM storage for
     pub contract_ids: &'a [Bytes],
     /// Block number for versioning
@@ -71,7 +71,6 @@ impl<'a> SnapshotParameters<'a> {
         chain: Chain,
         protocol_system: &'a str,
         components: &'a HashMap<ComponentId, ProtocolComponent>,
-        entrypoints: &'a HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>,
         contract_ids: &'a [Bytes],
         block_number: u64,
     ) -> Self {
@@ -79,7 +78,7 @@ impl<'a> SnapshotParameters<'a> {
             chain,
             protocol_system,
             components,
-            entrypoints,
+            entrypoints: None,
             contract_ids,
             block_number,
             include_balances: true,
@@ -96,6 +95,14 @@ impl<'a> SnapshotParameters<'a> {
     /// Set whether to fetch TVL data (default: true)
     pub fn include_tvl(mut self, include_tvl: bool) -> Self {
         self.include_tvl = include_tvl;
+        self
+    }
+
+    pub fn entrypoints(
+        mut self,
+        entrypoints: &'a HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>,
+    ) -> Self {
+        self.entrypoints = Some(entrypoints);
         self
     }
 }
@@ -1160,7 +1167,8 @@ impl RPCClient for HttpRPCClient {
                                 .cloned(),
                             entrypoints: request
                                 .entrypoints
-                                .get(&component.id)
+                                .as_ref()
+                                .and_then(|map| map.get(&component.id))
                                 .cloned()
                                 .unwrap_or_default(),
                         },
@@ -2432,13 +2440,11 @@ mod tests {
 
         let contract_ids =
             vec![Bytes::from_str("0x1111111111111111111111111111111111111111").unwrap()];
-        let entrypoints = HashMap::new();
 
         let request = SnapshotParameters::new(
             Chain::Ethereum,
             "test_protocol",
             &components,
-            &entrypoints,
             &contract_ids,
             12345,
         );
@@ -2480,14 +2486,12 @@ mod tests {
         let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
 
         let components = HashMap::new();
-        let entrypoints = HashMap::new();
         let contract_ids = vec![];
 
         let request = SnapshotParameters::new(
             Chain::Ethereum,
             "test_protocol",
             &components,
-            &entrypoints,
             &contract_ids,
             12345,
         );
@@ -2552,14 +2556,12 @@ mod tests {
 
         let mut components = HashMap::new();
         components.insert("component1".to_string(), component);
-        let entrypoints = HashMap::new();
         let contract_ids = vec![];
 
         let request = SnapshotParameters::new(
             Chain::Ethereum,
             "test_protocol",
             &components,
-            &entrypoints,
             &contract_ids,
             12345,
         )

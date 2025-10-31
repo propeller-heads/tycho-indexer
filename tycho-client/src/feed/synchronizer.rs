@@ -301,10 +301,10 @@ where
             self.extractor_id.chain,
             &self.extractor_id.name,
             &self.component_tracker.components,
-            &entrypoints_result,
             &contract_ids,
             header.number,
         )
+        .entrypoints(&entrypoints_result)
         .include_balances(self.retrieve_balances)
         .include_tvl(self.include_tvl);
         let snapshot_response = self
