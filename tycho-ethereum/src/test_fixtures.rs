@@ -91,6 +91,14 @@ pub static TEST_SLOTS: LazyLock<HashMap<B256, B256>> = LazyLock::new(|| {
     ])
 });
 
+static RPC_CLIENT: LazyLock<ReqwestClient> = LazyLock::new(|| {
+    let url = std::env::var("RPC_URL")
+        .expect("RPC_URL must be set for testing")
+        .parse()
+        .expect("Invalid RPC_URL");
+    ClientBuilder::default().http(url)
+});
+
 /// Test fixture for creating blocks and RPC clients
 pub struct TestFixture {
     pub block: Block,
@@ -100,11 +108,12 @@ pub struct TestFixture {
 impl TestFixture {
     /// Creates a new test fixture with the default test block and rpc url parsed from env
     pub fn new() -> Self {
-        let url = std::env::var("RPC_URL")
-            .expect("RPC_URL must be set for testing")
-            .parse()
-            .expect("Invalid RPC_URL");
-        let inner_rpc = ClientBuilder::default().http(url);
+        // Clone the static RPC client to support reuse across tests
+        let inner_rpc = RPC_CLIENT.clone();
+
+        // wait for 1 second to avoid rate limiting
+        // TODO: improve rate limiting handling
+        std::thread::sleep(std::time::Duration::from_secs(1));
 
         let block_hash = B256::from_hex(TEST_BLOCK_HASH).expect("expected valid block hash");
         let block = Block::new(
