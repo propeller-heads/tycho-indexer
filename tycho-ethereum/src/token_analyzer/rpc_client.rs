@@ -179,6 +179,7 @@ impl EthereumRpcClient<WithBatching> {
 
         let mut codes_and_balances = HashMap::with_capacity(addresses.len());
 
+        // perf: consider running multiple batches in parallel using map of futures
         for chunk_addresses in addresses.chunks(self.config.max_batch_size) {
             let mut batch = self.inner.new_batch();
             let mut code_requests = Vec::with_capacity(self.config.max_batch_size);
@@ -275,6 +276,7 @@ impl EthereumRpcClient<WithBatching> {
 
         let mut result = HashMap::new();
 
+        // perf: consider running multiple batches in parallel using map of futures
         for slot_batch in slots.chunks(self.config.max_storage_slot_batch_size) {
             let mut storage_batch = self.inner.new_batch();
 
