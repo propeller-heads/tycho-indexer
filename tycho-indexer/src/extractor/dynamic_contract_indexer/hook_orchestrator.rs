@@ -64,11 +64,7 @@ pub struct HookOrchestratorRegistry {
 
 impl HookOrchestratorRegistry {
     pub fn new() -> Self {
-        Self {
-            hooks: HashMap::new(),
-            hook_identifiers: HashMap::new(),
-            default_orchestrator: None,
-        }
+        Self { hooks: HashMap::new(), hook_identifiers: HashMap::new(), default_orchestrator: None }
     }
 
     /// Sets a default orchestrator to use when no specific orchestrator is found for a component
@@ -86,6 +82,7 @@ impl HookOrchestratorRegistry {
             .insert(hook_address, orchestrator);
     }
 
+    #[allow(dead_code)]
     pub fn register_hook_identifier(
         &mut self,
         hook_identifier: String,
@@ -1142,10 +1139,8 @@ mod tests {
         let hook_address = Address::from("0x1234567890123456789012345678901234567890");
         let mut static_attributes = HashMap::new();
         static_attributes.insert("hooks".to_string(), hook_address);
-        static_attributes.insert(
-            "hook_identifier".to_string(),
-            Bytes::from("euler_v1".as_bytes().to_vec()),
-        );
+        static_attributes
+            .insert("hook_identifier".to_string(), Bytes::from("euler_v1".as_bytes().to_vec()));
         let component = ProtocolComponent {
             id: "test_comp".to_string(),
             protocol_system: "uniswap_v4".to_string(),
