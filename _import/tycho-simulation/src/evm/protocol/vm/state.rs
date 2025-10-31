@@ -2,7 +2,7 @@
 use std::{
     any::Any,
     collections::{HashMap, HashSet},
-    fmt::Debug,
+    fmt::{self, Debug},
     str::FromStr,
 };
 
@@ -34,7 +34,7 @@ use crate::evm::{
     },
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct EVMPoolState<D: EngineDatabaseInterface + Clone + Debug>
 where
     <D as DatabaseRef>::Error: Debug,
@@ -68,6 +68,23 @@ where
     manual_updates: bool,
     /// The adapter contract. This is used to interact with the protocol when running simulations
     adapter_contract: TychoSimulationContract<D>,
+}
+
+impl<D> Debug for EVMPoolState<D>
+where
+    D: EngineDatabaseInterface + Clone + Debug,
+    <D as DatabaseRef>::Error: Debug,
+    <D as EngineDatabaseInterface>::Error: Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EVMPoolState")
+            .field("id", &self.id)
+            .field("tokens", &self.tokens)
+            .field("balances", &self.balances)
+            .field("involved_contracts", &self.involved_contracts)
+            .field("contract_balances", &self.contract_balances)
+            .finish_non_exhaustive()
+    }
 }
 
 impl<D> EVMPoolState<D>

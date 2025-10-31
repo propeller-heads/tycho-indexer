@@ -582,6 +582,7 @@ async fn process_state(
                     token_in = %token_in.address,
                     token_out = %token_out.address,
                     error = %format_error_chain(&e),
+                    state = ?state,
                     "Get limits operation failed: {}", format_error_chain(&e)
                 );
                 metrics::record_get_limits_failure(&component.protocol_system);
@@ -626,6 +627,7 @@ async fn process_state(
                     token_out = %token_out.address,
                     amount_in = %amount_in,
                     error = %format_error_chain(&e),
+                    state = ?state,
                     "Get amount out operation failed: {}", format_error_chain(&e)
                 );
                 metrics::record_get_amount_out_failure(&component.protocol_system);

@@ -1,4 +1,4 @@
-use std::{any::Any, collections::HashMap};
+use std::{any::Any, collections::HashMap, fmt};
 
 use async_trait::async_trait;
 use num_bigint::BigUint;
@@ -19,14 +19,23 @@ use crate::rfq::{
     protocols::hashflow::{client::HashflowClient, models::HashflowMarketMakerLevels},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct HashflowState {
     pub base_token: Token,
     pub quote_token: Token,
     pub levels: HashflowMarketMakerLevels,
-    #[allow(dead_code)]
     pub market_maker: String,
     pub client: HashflowClient,
+}
+
+impl fmt::Debug for HashflowState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("HashflowState")
+            .field("base_token", &self.base_token)
+            .field("quote_token", &self.quote_token)
+            .field("market_maker", &self.market_maker)
+            .finish_non_exhaustive()
+    }
 }
 
 impl HashflowState {

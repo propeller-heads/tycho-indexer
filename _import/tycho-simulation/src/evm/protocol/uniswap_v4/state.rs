@@ -1,4 +1,4 @@
-use std::{any::Any, collections::HashMap};
+use std::{any::Any, collections::HashMap, fmt};
 
 use alloy::primitives::{Address, Sign, I256, U256};
 use num_bigint::BigUint;
@@ -40,7 +40,7 @@ use crate::evm::protocol::{
     vm::constants::EXTERNAL_ACCOUNT,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct UniswapV4State {
     liquidity: u128,
     sqrt_price: U256,
@@ -49,6 +49,19 @@ pub struct UniswapV4State {
     ticks: TickList,
     tick_spacing: i32,
     pub hook: Option<Box<dyn HookHandler>>,
+}
+
+impl fmt::Debug for UniswapV4State {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("UniswapV4State")
+            .field("liquidity", &self.liquidity)
+            .field("sqrt_price", &self.sqrt_price)
+            .field("fees", &self.fees)
+            .field("tick", &self.tick)
+            .field("ticks", &self.ticks)
+            .field("tick_spacing", &self.tick_spacing)
+            .finish_non_exhaustive()
+    }
 }
 
 impl PartialEq for UniswapV4State {
