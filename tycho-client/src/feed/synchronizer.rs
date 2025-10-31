@@ -15,9 +15,8 @@ use tokio::{
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     dto::{
-        BlockChanges, BlockParam, Chain, ComponentTvlRequestBody, EntryPointWithTracingParams,
-        ExtractorIdentity, ProtocolComponent, ResponseAccount, ResponseProtocolState,
-        TracingResult, VersionParam,
+        BlockChanges, Chain, EntryPointWithTracingParams, ExtractorIdentity, ProtocolComponent,
+        ResponseAccount, ResponseProtocolState, TracingResult,
     },
     Bytes,
 };
@@ -28,7 +27,7 @@ use crate::{
         component_tracker::{ComponentFilter, ComponentTracker},
         BlockHeader, HeaderLike,
     },
-    rpc::{RPCClient, RPCError},
+    rpc::{RPCClient, RPCError, SnapshotParameters},
     DeltasError,
 };
 
@@ -250,7 +249,6 @@ where
     }
 
     /// Retrieves state snapshots of the requested components
-    #[allow(deprecated)]
     async fn get_snapshots<'a, I: IntoIterator<Item = &'a String>>(
         &mut self,
         header: BlockHeader,
@@ -259,14 +257,6 @@ where
         if !self.include_snapshots {
             return Ok(StateSyncMessage { header, ..Default::default() });
         }
-        let version = VersionParam::new(
-            None,
-            Some(BlockParam {
-                chain: Some(self.extractor_id.chain),
-                hash: None,
-                number: Some(header.number as i64),
-            }),
-        );
 
         // Use given ids or use all if not passed
         let component_ids: Vec<_> = match ids {
@@ -280,23 +270,9 @@ where
             return Ok(StateSyncMessage { header, ..Default::default() });
         }
 
-        let component_tvl = if self.include_tvl {
-            let body = ComponentTvlRequestBody::id_filtered(
-                component_ids.clone(),
-                self.extractor_id.chain,
-            );
-            self.rpc_client
-                .get_component_tvl_paginated(&body, 100, 4)
-                .await?
-                .tvl
-        } else {
-            HashMap::new()
-        };
-
         //TODO: Improve this, we should not query for every component, but only for the ones that
         // could have entrypoints. Maybe apply a filter per protocol?
         let entrypoints_result = if self.extractor_id.chain == Chain::Ethereum {
-            // Fetch entrypoints
             let result = self
                 .rpc_client
                 .get_traced_entry_points_paginated(
@@ -309,139 +285,39 @@ where
                 .await?;
             self.component_tracker
                 .process_entrypoints(&result.clone().into());
-            Some(result)
-        } else {
-            None
-        };
-
-        // Fetch protocol states
-        let mut protocol_states = self
-            .rpc_client
-            .get_protocol_states_paginated(
-                self.extractor_id.chain,
-                &component_ids,
-                &self.extractor_id.name,
-                self.retrieve_balances,
-                &version,
-                100,
-                4,
-            )
-            .await?
-            .states
-            .into_iter()
-            .map(|state| (state.component_id.clone(), state))
-            .collect::<HashMap<_, _>>();
-
-        trace!(states=?&protocol_states, "Retrieved ProtocolStates");
-        let states = self
-            .component_tracker
-            .components
-            .values()
-            .filter_map(|component| {
-                if let Some(state) = protocol_states.remove(&component.id) {
-                    Some((
-                        component.id.clone(),
-                        ComponentWithState {
-                            state,
-                            component: component.clone(),
-                            component_tvl: component_tvl
-                                .get(&component.id)
-                                .cloned(),
-                            entrypoints: entrypoints_result
-                                .as_ref()
-                                .map(|r| {
-                                    r.traced_entry_points
-                                        .get(&component.id)
-                                        .cloned()
-                                        .unwrap_or_default()
-                                })
-                                .unwrap_or_default(),
-                        },
-                    ))
-                } else if component_ids.contains(&component.id) {
-                    // only emit error event if we requested this component
-                    let component_id = &component.id;
-                    error!(?component_id, "Missing state for native component!");
-                    None
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        // Fetch contract states
-        let contract_ids = self
-            .component_tracker
-            .get_contracts_by_component(&component_ids);
-        let vm_storage = if !contract_ids.is_empty() {
-            let ids: Vec<Bytes> = contract_ids
-                .clone()
-                .into_iter()
-                .collect();
-            let contract_states = self
-                .rpc_client
-                .get_contract_state_paginated(
-                    self.extractor_id.chain,
-                    ids.as_slice(),
-                    &self.extractor_id.name,
-                    &version,
-                    100,
-                    4,
-                )
-                .await?
-                .accounts
-                .into_iter()
-                .map(|acc| (acc.address.clone(), acc))
-                .collect::<HashMap<_, _>>();
-
-            trace!(states=?&contract_states, "Retrieved ContractState");
-
-            let contract_address_to_components = self
-                .component_tracker
-                .components
-                .iter()
-                .filter_map(|(id, comp)| {
-                    if component_ids.contains(id) {
-                        Some(
-                            comp.contract_ids
-                                .iter()
-                                .map(|address| (address.clone(), comp.id.clone())),
-                        )
-                    } else {
-                        None
-                    }
-                })
-                .flatten()
-                .fold(HashMap::<Bytes, Vec<String>>::new(), |mut acc, (addr, c_id)| {
-                    acc.entry(addr).or_default().push(c_id);
-                    acc
-                });
-
-            contract_ids
-                .iter()
-                .filter_map(|address| {
-                    if let Some(state) = contract_states.get(address) {
-                        Some((address.clone(), state.clone()))
-                    } else if let Some(ids) = contract_address_to_components.get(address) {
-                        // only emit error even if we did actually request this address
-                        error!(
-                            ?address,
-                            ?ids,
-                            "Component with lacking contract storage encountered!"
-                        );
-                        None
-                    } else {
-                        None
-                    }
-                })
-                .collect()
+            result.traced_entry_points.clone()
         } else {
             HashMap::new()
         };
 
+        // Get contract IDs from component tracker
+        let contract_ids: Vec<Bytes> = self
+            .component_tracker
+            .get_contracts_by_component(&component_ids)
+            .into_iter()
+            .collect();
+
+        let request = SnapshotParameters::new(
+            self.extractor_id.chain,
+            &self.extractor_id.name,
+            &self.component_tracker.components,
+            &contract_ids,
+            header.number,
+        )
+        .entrypoints(&entrypoints_result)
+        .include_balances(self.retrieve_balances)
+        .include_tvl(self.include_tvl);
+        let snapshot_response = self
+            .rpc_client
+            .get_snapshots(&request, 100, 4)
+            .await?;
+
+        trace!(states=?&snapshot_response.states, "Retrieved ProtocolStates");
+        trace!(contract_states=?&snapshot_response.vm_storage, "Retrieved ContractState");
+
         Ok(StateSyncMessage {
             header,
-            snapshots: Snapshot { states, vm_storage },
+            snapshots: snapshot_response,
             deltas: None,
             removed_components: HashMap::new(),
         })
@@ -571,6 +447,7 @@ where
                                 self.component_tracker
                                     .start_tracking(requiring_snapshot.as_slice())
                                     .await?;
+
                                 let snapshots = self
                                     .get_snapshots(header.clone(), Some(requiring_snapshot))
                                     .await?
@@ -856,6 +733,17 @@ mod test {
                 .get_traced_entry_points(request)
                 .await
         }
+
+        async fn get_snapshots<'a>(
+            &self,
+            request: &SnapshotParameters<'a>,
+            chunk_size: usize,
+            concurrency: usize,
+        ) -> Result<Snapshot, RPCError> {
+            self.0
+                .get_snapshots(request, chunk_size, concurrency)
+                .await
+        }
     }
 
     // Required for mock client to implement clone
@@ -932,21 +820,35 @@ mod test {
         }
     }
 
-    fn component_tvl_snapshot() -> ComponentTvlRequestResponse {
-        let tvl = HashMap::from([("Component1".to_string(), 100.0)]);
-
-        ComponentTvlRequestResponse {
-            tvl,
-            pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
-        }
-    }
-
     #[test(tokio::test)]
     async fn test_get_snapshots_native() {
         let header = BlockHeader::default();
         let mut rpc = MockRPCClient::new();
-        rpc.expect_get_protocol_states()
-            .returning(|_| Ok(state_snapshot_native()));
+        let component = ProtocolComponent { id: "Component1".to_string(), ..Default::default() };
+
+        let component_clone = component.clone();
+        rpc.expect_get_snapshots()
+            .returning(move |_request, _chunk_size, _concurrency| {
+                Ok(Snapshot {
+                    states: state_snapshot_native()
+                        .states
+                        .into_iter()
+                        .map(|state| {
+                            (
+                                state.component_id.clone(),
+                                ComponentWithState {
+                                    state,
+                                    component: component_clone.clone(),
+                                    entrypoints: vec![],
+                                    component_tvl: None,
+                                },
+                            )
+                        })
+                        .collect(),
+                    vm_storage: HashMap::new(),
+                })
+            });
+
         rpc.expect_get_traced_entry_points()
             .returning(|_| {
                 Ok(TracedEntryPointRequestResponse {
@@ -954,8 +856,8 @@ mod test {
                     pagination: PaginationResponse::new(0, 20, 0),
                 })
             });
+
         let mut state_sync = with_mocked_clients(true, false, Some(rpc), None);
-        let component = ProtocolComponent { id: "Component1".to_string(), ..Default::default() };
         state_sync
             .component_tracker
             .components
@@ -997,10 +899,31 @@ mod test {
     async fn test_get_snapshots_native_with_tvl() {
         let header = BlockHeader::default();
         let mut rpc = MockRPCClient::new();
-        rpc.expect_get_protocol_states()
-            .returning(|_| Ok(state_snapshot_native()));
-        rpc.expect_get_component_tvl()
-            .returning(|_| Ok(component_tvl_snapshot()));
+        let component = ProtocolComponent { id: "Component1".to_string(), ..Default::default() };
+
+        let component_clone = component.clone();
+        rpc.expect_get_snapshots()
+            .returning(move |_request, _chunk_size, _concurrency| {
+                Ok(Snapshot {
+                    states: state_snapshot_native()
+                        .states
+                        .into_iter()
+                        .map(|state| {
+                            (
+                                state.component_id.clone(),
+                                ComponentWithState {
+                                    state,
+                                    component: component_clone.clone(),
+                                    component_tvl: Some(100.0),
+                                    entrypoints: vec![],
+                                },
+                            )
+                        })
+                        .collect(),
+                    vm_storage: HashMap::new(),
+                })
+            });
+
         rpc.expect_get_traced_entry_points()
             .returning(|_| {
                 Ok(TracedEntryPointRequestResponse {
@@ -1008,8 +931,8 @@ mod test {
                     pagination: PaginationResponse::new(0, 20, 0),
                 })
             });
+
         let mut state_sync = with_mocked_clients(true, true, Some(rpc), None);
-        let component = ProtocolComponent { id: "Component1".to_string(), ..Default::default() };
         state_sync
             .component_tracker
             .components
@@ -1095,12 +1018,48 @@ mod test {
     async fn test_get_snapshots_vm() {
         let header = BlockHeader::default();
         let mut rpc = MockRPCClient::new();
-        rpc.expect_get_protocol_states()
-            .returning(|_| Ok(state_snapshot_native()));
-        rpc.expect_get_contract_state()
-            .returning(|_| Ok(state_snapshot_vm()));
+
+        let traced_ep_response = traced_entry_point_response();
+        rpc.expect_get_snapshots()
+            .returning(move |_request, _chunk_size, _concurrency| {
+                let vm_storage_accounts = state_snapshot_vm();
+                Ok(Snapshot {
+                    states: [(
+                        "Component1".to_string(),
+                        ComponentWithState {
+                            state: ResponseProtocolState {
+                                component_id: "Component1".to_string(),
+                                ..Default::default()
+                            },
+                            component: ProtocolComponent {
+                                id: "Component1".to_string(),
+                                contract_ids: vec![
+                                    Bytes::from("0x0badc0ffee"),
+                                    Bytes::from("0xbabe42"),
+                                ],
+                                ..Default::default()
+                            },
+                            component_tvl: None,
+                            entrypoints: traced_ep_response
+                                .traced_entry_points
+                                .get("Component1")
+                                .cloned()
+                                .unwrap_or_default(),
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    vm_storage: vm_storage_accounts
+                        .accounts
+                        .into_iter()
+                        .map(|state| (state.address.clone(), state))
+                        .collect(),
+                })
+            });
+
         rpc.expect_get_traced_entry_points()
             .returning(|_| Ok(traced_entry_point_response()));
+
         let mut state_sync = with_mocked_clients(false, false, Some(rpc), None);
         let component = ProtocolComponent {
             id: "Component1".to_string(),
@@ -1175,12 +1134,39 @@ mod test {
     async fn test_get_snapshots_vm_with_tvl() {
         let header = BlockHeader::default();
         let mut rpc = MockRPCClient::new();
-        rpc.expect_get_protocol_states()
-            .returning(|_| Ok(state_snapshot_native()));
-        rpc.expect_get_contract_state()
-            .returning(|_| Ok(state_snapshot_vm()));
-        rpc.expect_get_component_tvl()
-            .returning(|_| Ok(component_tvl_snapshot()));
+        let component = ProtocolComponent {
+            id: "Component1".to_string(),
+            contract_ids: vec![Bytes::from("0x0badc0ffee"), Bytes::from("0xbabe42")],
+            ..Default::default()
+        };
+
+        let component_clone = component.clone();
+        rpc.expect_get_snapshots()
+            .returning(move |_request, _chunk_size, _concurrency| {
+                let vm_storage_accounts = state_snapshot_vm();
+                Ok(Snapshot {
+                    states: [(
+                        "Component1".to_string(),
+                        ComponentWithState {
+                            state: ResponseProtocolState {
+                                component_id: "Component1".to_string(),
+                                ..Default::default()
+                            },
+                            component: component_clone.clone(),
+                            component_tvl: Some(100.0),
+                            entrypoints: vec![],
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    vm_storage: vm_storage_accounts
+                        .accounts
+                        .into_iter()
+                        .map(|state| (state.address.clone(), state))
+                        .collect(),
+                })
+            });
+
         rpc.expect_get_traced_entry_points()
             .returning(|_| {
                 Ok(TracedEntryPointRequestResponse {
@@ -1188,12 +1174,8 @@ mod test {
                     pagination: PaginationResponse::new(0, 20, 0),
                 })
             });
+
         let mut state_sync = with_mocked_clients(false, true, Some(rpc), None);
-        let component = ProtocolComponent {
-            id: "Component1".to_string(),
-            contract_ids: vec![Bytes::from("0x0badc0ffee"), Bytes::from("0xbabe42")],
-            ..Default::default()
-        };
         state_sync
             .component_tracker
             .components
@@ -1259,24 +1241,34 @@ mod test {
                     pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
+        // Mock get_snapshots for Component3
         rpc_client
-            .expect_get_protocol_states()
-            .with(mockall::predicate::function(move |request_params: &ProtocolStateRequestBody| {
-                let expected_id = "Component3".to_string();
-                if let Some(ids) = request_params.protocol_ids.as_ref() {
-                    ids.contains(&expected_id)
-                } else {
-                    false
-                }
-            }))
-            .returning(|_| {
-                // return Component3 state
-                Ok(ProtocolStateRequestResponse {
-                    states: vec![ResponseProtocolState {
-                        component_id: "Component3".to_string(),
-                        ..Default::default()
-                    }],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
+            .expect_get_snapshots()
+            .withf(|request: &SnapshotParameters, _chunk_size: &usize, _concurrency: &usize| {
+                request
+                    .components
+                    .contains_key("Component3")
+            })
+            .returning(|_request, _chunk_size, _concurrency| {
+                Ok(Snapshot {
+                    states: [(
+                        "Component3".to_string(),
+                        ComponentWithState {
+                            state: ResponseProtocolState {
+                                component_id: "Component3".to_string(),
+                                ..Default::default()
+                            },
+                            component: ProtocolComponent {
+                                id: "Component3".to_string(),
+                                ..Default::default()
+                            },
+                            component_tvl: Some(1000.0),
+                            entrypoints: vec![],
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    vm_storage: HashMap::new(),
                 })
             });
 
@@ -1296,44 +1288,56 @@ mod test {
                     pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
+
         rpc_client
-            .expect_get_protocol_states()
-            .returning(|_| {
-                // Initial state snapshot
-                Ok(ProtocolStateRequestResponse {
-                    states: vec![
-                        ResponseProtocolState {
-                            component_id: "Component1".to_string(),
-                            ..Default::default()
-                        },
-                        ResponseProtocolState {
-                            component_id: "Component2".to_string(),
-                            ..Default::default()
-                        },
-                    ],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
-                })
-            });
-        rpc_client
-            .expect_get_component_tvl()
-            .returning(|_| {
-                Ok(ComponentTvlRequestResponse {
-                    tvl: [
-                        ("Component1".to_string(), 100.0),
-                        ("Component2".to_string(), 0.0),
-                        ("Component3".to_string(), 1000.0),
+            .expect_get_snapshots()
+            .returning(|_request, _chunk_size, _concurrency| {
+                Ok(Snapshot {
+                    states: [
+                        (
+                            "Component1".to_string(),
+                            ComponentWithState {
+                                state: ResponseProtocolState {
+                                    component_id: "Component1".to_string(),
+                                    ..Default::default()
+                                },
+                                component: ProtocolComponent {
+                                    id: "Component1".to_string(),
+                                    ..Default::default()
+                                },
+                                component_tvl: Some(100.0),
+                                entrypoints: vec![],
+                            },
+                        ),
+                        (
+                            "Component2".to_string(),
+                            ComponentWithState {
+                                state: ResponseProtocolState {
+                                    component_id: "Component2".to_string(),
+                                    ..Default::default()
+                                },
+                                component: ProtocolComponent {
+                                    id: "Component2".to_string(),
+                                    ..Default::default()
+                                },
+                                component_tvl: Some(0.0),
+                                entrypoints: vec![],
+                            },
+                        ),
                     ]
                     .into_iter()
                     .collect(),
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 3 },
+                    vm_storage: HashMap::new(),
                 })
             });
+
+        // Mock get_traced_entry_points for Ethereum chain
         rpc_client
             .expect_get_traced_entry_points()
             .returning(|_| {
                 Ok(TracedEntryPointRequestResponse {
                     traced_entry_points: HashMap::new(),
-                    pagination: PaginationResponse::new(0, 20, 0),
+                    pagination: PaginationResponse { page: 0, page_size: 100, total: 0 },
                 })
             });
 
@@ -1605,23 +1609,34 @@ mod test {
                     pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
+        // Mock get_snapshots for Component3
         rpc_client
-            .expect_get_protocol_states()
-            .with(mockall::predicate::function(move |request_params: &ProtocolStateRequestBody| {
-                let expected_id = "Component3".to_string();
-                if let Some(ids) = request_params.protocol_ids.as_ref() {
-                    ids.contains(&expected_id)
-                } else {
-                    false
-                }
-            }))
-            .returning(|_| {
-                Ok(ProtocolStateRequestResponse {
-                    states: vec![ResponseProtocolState {
-                        component_id: "Component3".to_string(),
-                        ..Default::default()
-                    }],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
+            .expect_get_snapshots()
+            .withf(|request: &SnapshotParameters, _chunk_size: &usize, _concurrency: &usize| {
+                request
+                    .components
+                    .contains_key("Component3")
+            })
+            .returning(|_request, _chunk_size, _concurrency| {
+                Ok(Snapshot {
+                    states: [(
+                        "Component3".to_string(),
+                        ComponentWithState {
+                            state: ResponseProtocolState {
+                                component_id: "Component3".to_string(),
+                                ..Default::default()
+                            },
+                            component: ProtocolComponent {
+                                id: "Component3".to_string(),
+                                ..Default::default()
+                            },
+                            component_tvl: Some(10.0),
+                            entrypoints: vec![],
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    vm_storage: HashMap::new(),
                 })
             });
 
@@ -1637,59 +1652,57 @@ mod test {
                     pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
+
+        // Mock get_snapshots for initial snapshot
         rpc_client
-            .expect_get_protocol_states()
-            .returning(|_| {
-                Ok(ProtocolStateRequestResponse {
-                    states: vec![
-                        ResponseProtocolState {
-                            component_id: "Component1".to_string(),
-                            ..Default::default()
-                        },
-                        ResponseProtocolState {
-                            component_id: "Component2".to_string(),
-                            ..Default::default()
-                        },
-                    ],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
+            .expect_get_snapshots()
+            .returning(|_request, _chunk_size, _concurrency| {
+                Ok(Snapshot {
+                    states: [
+                        (
+                            "Component1".to_string(),
+                            ComponentWithState {
+                                state: ResponseProtocolState {
+                                    component_id: "Component1".to_string(),
+                                    ..Default::default()
+                                },
+                                component: ProtocolComponent {
+                                    id: "Component1".to_string(),
+                                    ..Default::default()
+                                },
+                                component_tvl: Some(6.0),
+                                entrypoints: vec![],
+                            },
+                        ),
+                        (
+                            "Component2".to_string(),
+                            ComponentWithState {
+                                state: ResponseProtocolState {
+                                    component_id: "Component2".to_string(),
+                                    ..Default::default()
+                                },
+                                component: ProtocolComponent {
+                                    id: "Component2".to_string(),
+                                    ..Default::default()
+                                },
+                                component_tvl: Some(2.0),
+                                entrypoints: vec![],
+                            },
+                        ),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    vm_storage: HashMap::new(),
                 })
             });
+
+        // Mock get_traced_entry_points for Ethereum chain
         rpc_client
             .expect_get_traced_entry_points()
             .returning(|_| {
                 Ok(TracedEntryPointRequestResponse {
                     traced_entry_points: HashMap::new(),
-                    pagination: PaginationResponse::new(0, 20, 0),
-                })
-            });
-
-        rpc_client
-            .expect_get_component_tvl()
-            .returning(|_| {
-                Ok(ComponentTvlRequestResponse {
-                    tvl: [
-                        ("Component1".to_string(), 6.0),
-                        ("Component2".to_string(), 2.0),
-                        ("Component3".to_string(), 10.0),
-                    ]
-                    .into_iter()
-                    .collect(),
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 3 },
-                })
-            });
-
-        rpc_client
-            .expect_get_component_tvl()
-            .returning(|_| {
-                Ok(ComponentTvlRequestResponse {
-                    tvl: [
-                        ("Component1".to_string(), 6.0),
-                        ("Component2".to_string(), 2.0),
-                        ("Component3".to_string(), 10.0),
-                    ]
-                    .into_iter()
-                    .collect(),
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 3 },
+                    pagination: PaginationResponse { page: 0, page_size: 100, total: 0 },
                 })
             });
 

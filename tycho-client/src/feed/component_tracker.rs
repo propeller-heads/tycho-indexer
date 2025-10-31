@@ -83,7 +83,7 @@ impl ComponentFilter {
 /// Information about an entrypoint, including which components use it and what contracts it
 /// interacts with
 #[derive(Default)]
-struct EntrypointRelations {
+pub struct EntrypointRelations {
     /// Set of component ids for components that have this entrypoint
     components: HashSet<ComponentId>,
     /// Set of detected contracts for the entrypoint
@@ -95,8 +95,8 @@ pub struct ComponentTracker<R: RPCClient> {
     chain: Chain,
     protocol_system: ProtocolSystem,
     filter: ComponentFilter,
-    // We will need to request a snapshot for components/contracts that we did not emit as
-    // snapshot for yet but are relevant now, e.g. because min tvl threshold exceeded.
+    /// We will need to request a snapshot for components/contracts that we did not emit as
+    /// snapshot for yet but are relevant now, e.g. because min tvl threshold exceeded.
     pub components: HashMap<ComponentId, ProtocolComponent>,
     /// Map of entrypoint id to its associated components and contracts
     entrypoints: HashMap<String, EntrypointRelations>,
