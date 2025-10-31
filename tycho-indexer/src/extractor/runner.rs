@@ -19,11 +19,13 @@ use tokio_stream::StreamExt;
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 use tycho_common::{
     models::{Address, Chain, ExtractorIdentity, FinancialType, ImplementationType, ProtocolType},
+    traits::AccountExtractor,
     Bytes,
 };
 use tycho_ethereum::{
-    account_extractor::contract::EVMBatchAccountExtractor,
+    account_extractor::contract::EVMAccountExtractor,
     entrypoint_tracer::tracer::EVMEntrypointService,
+    token_analyzer::rpc_client::{EthereumRpcClient, WithBatching},
     token_pre_processor::EthereumTokenPreProcessor,
 };
 use tycho_storage::postgres::cache::CachedGateway;
@@ -49,15 +51,13 @@ use crate::{
 
 /// Enum to handle both standard DCI and UniswapV4 Hook DCI
 #[allow(clippy::large_enum_variant)]
-pub(crate) enum DCIPlugin {
-    Standard(DynamicContractIndexer<EVMBatchAccountExtractor, EVMEntrypointService, CachedGateway>),
-    UniswapV4Hooks(
-        Box<UniswapV4HookDCI<EVMBatchAccountExtractor, EVMEntrypointService, CachedGateway>>,
-    ),
+pub(crate) enum DCIPlugin<AE: AccountExtractor + Send + Sync> {
+    Standard(DynamicContractIndexer<AE, EVMEntrypointService, CachedGateway>),
+    UniswapV4Hooks(Box<UniswapV4HookDCI<AE, EVMEntrypointService, CachedGateway>>),
 }
 
 #[async_trait]
-impl ExtractorExtension for DCIPlugin {
+impl<AE: AccountExtractor + Send + Sync> ExtractorExtension for DCIPlugin<AE> {
     async fn process_block_update(
         &mut self,
         block_changes: &mut crate::extractor::models::BlockChanges,
@@ -544,6 +544,7 @@ impl ExtractorBuilder {
         cached_gw: &CachedGateway,
         token_pre_processor: &EthereumTokenPreProcessor,
         protocol_cache: &ProtocolMemoryCache,
+        rpc_client: &EthereumRpcClient<WithBatching>,
     ) -> Result<Self, ExtractionError> {
         let protocol_types = self
             .config
@@ -594,14 +595,13 @@ impl ExtractorBuilder {
                         )
                     })?;
 
-                    let account_extractor =
-                        EVMBatchAccountExtractor::new_from_url(rpc_url, self.config.chain)
-                            .await
-                            .map_err(|err| {
-                                ExtractionError::Setup(format!(
-                                    "Failed to create account extractor for {rpc_url}: {err}"
-                                ))
-                            })?;
+                    let account_extractor = EVMAccountExtractor::new(rpc_client, self.config.chain)
+                        .await
+                        .map_err(|err| {
+                            ExtractionError::Setup(format!(
+                                "Failed to create account extractor: {err}"
+                            ))
+                        })?;
                     // Use TRACE_RPC_URL if available, otherwise fall back to RPC_URL
                     let trace_rpc_url =
                         std::env::var("TRACE_RPC_URL").unwrap_or_else(|_| rpc_url.to_string());
@@ -680,7 +680,7 @@ impl ExtractorBuilder {
             .unwrap_or_default();
 
         self.extractor = Some(Arc::new(
-            ProtocolExtractor::<ExtractorPgGateway, EthereumTokenPreProcessor, DCIPlugin>::new(
+            ProtocolExtractor::<ExtractorPgGateway, EthereumTokenPreProcessor, DCIPlugin<_>>::new(
                 gw,
                 database_insert_batch_size,
                 &self.config.name,

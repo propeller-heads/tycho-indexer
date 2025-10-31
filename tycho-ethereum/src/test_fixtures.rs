@@ -5,7 +5,11 @@
 
 use std::{collections::HashMap, str::FromStr, sync::LazyLock};
 
-use alloy::{hex::FromHex, primitives::B256};
+use alloy::{
+    hex::FromHex,
+    primitives::B256,
+    rpc::client::{ClientBuilder, ReqwestClient},
+};
 use tycho_common::{
     models::{blockchain::Block, Address, Chain},
     Bytes,
@@ -28,6 +32,10 @@ pub const WETH_STR: &str = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 
 // Common token addresses array
 pub const TOKEN_ADDRESSES: [&str; 5] = [BALANCER_VAULT_STR, STETH_STR, DAI_STR, WBTC_STR, USDC_STR];
+
+// Contract-specific test constants for expected slot counts at TEST_BLOCK_NUMBER
+pub const BALANCER_VAULT_EXPECTED_SLOTS: usize = 47690;
+pub const STETH_EXPECTED_SLOTS: usize = 789526;
 
 // Known token holders for testing (addresses with large balances)
 // Using USV4 pool manager as a holder with known large balances
@@ -60,24 +68,24 @@ pub static TOKEN_HOLDERS: LazyLock<HashMap<Address, (Bytes, Bytes)>> = LazyLock:
     ])
 });
 
-pub static TEST_SLOTS: LazyLock<HashMap<Bytes, Bytes>> = LazyLock::new(|| {
+pub static TEST_SLOTS: LazyLock<HashMap<B256, B256>> = LazyLock::new(|| {
     HashMap::from([
         (
-            Bytes::from_str("0000000000000000000000000000000000000000000000000000000000000000")
+            B256::from_str("0000000000000000000000000000000000000000000000000000000000000000")
                 .unwrap(),
-            Bytes::from_str("0000000000000000000000000000000000000000000000000000000000000001")
-                .unwrap(),
-        ),
-        (
-            Bytes::from_str("0000000000000000000000000000000000000000000000000000000000000003")
-                .unwrap(),
-            Bytes::from_str("00000000000000000000006048a8c631fb7e77eca533cf9c29784e482391e700")
+            B256::from_str("0000000000000000000000000000000000000000000000000000000000000001")
                 .unwrap(),
         ),
         (
-            Bytes::from_str("00015ea75c6f99b2e8663793de8ab1ce7c52e3295bf307bbf9990d4af56f7035")
+            B256::from_str("0000000000000000000000000000000000000000000000000000000000000003")
                 .unwrap(),
-            Bytes::from_str("0000000000000000000000000000000000000000000000000000000000000001")
+            B256::from_str("00000000000000000000006048a8c631fb7e77eca533cf9c29784e482391e700")
+                .unwrap(),
+        ),
+        (
+            B256::from_str("00015ea75c6f99b2e8663793de8ab1ce7c52e3295bf307bbf9990d4af56f7035")
+                .unwrap(),
+            B256::from_str("0000000000000000000000000000000000000000000000000000000000000001")
                 .unwrap(),
         ),
     ])
@@ -86,27 +94,28 @@ pub static TEST_SLOTS: LazyLock<HashMap<Bytes, Bytes>> = LazyLock::new(|| {
 /// Test fixture for creating blocks and RPC clients
 pub struct TestFixture {
     pub block: Block,
-    pub node_url: String,
+    pub inner_rpc: ReqwestClient,
 }
 
 impl TestFixture {
-    /// Creates a new test fixture with the default test block
+    /// Creates a new test fixture with the default test block and rpc url parsed from env
     pub fn new() -> Self {
-        let node_url = std::env::var("RPC_URL").expect("RPC_URL must be set for testing");
-        let block = Self::create_test_block();
-        Self { block, node_url }
-    }
+        let url = std::env::var("RPC_URL")
+            .expect("RPC_URL must be set for testing")
+            .parse()
+            .expect("Invalid RPC_URL");
+        let inner_rpc = ClientBuilder::default().http(url);
 
-    /// Creates the default test block
-    fn create_test_block() -> Block {
         let block_hash = B256::from_hex(TEST_BLOCK_HASH).expect("expected valid block hash");
-        Block::new(
+        let block = Block::new(
             TEST_BLOCK_NUMBER,
             Chain::Ethereum,
             block_hash.to_bytes(),
             Default::default(),
             Default::default(),
-        )
+        );
+
+        Self { block, inner_rpc }
     }
 }
 
