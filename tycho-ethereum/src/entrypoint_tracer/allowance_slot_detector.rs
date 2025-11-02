@@ -1,147 +1,32 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::collections::HashMap;
 
-use alloy::{
-    primitives::U256,
-    rpc::types::trace::geth::{GethTrace, PreStateFrame, PreStateMode},
-};
 use async_trait::async_trait;
-use serde_json::{json, Value};
-use thiserror::Error;
-use tokio::sync::RwLock;
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::info;
 use tycho_common::{
-    models::{
-        blockchain::{AccountOverrides, EntryPoint, RPCTracerParams, TracingParams},
-        Address, BlockHash,
-    },
+    models::{Address, BlockHash},
     traits::AllowanceSlotDetector,
     Bytes,
 };
 
-use crate::{
-    entrypoint_tracer::{
-        slot_detector::{
-            SlotDetector, SlotDetectorConfig, SlotDetectorError, TokenSlotResults, ValidationData,
-        },
-        tracer::EVMEntrypointService,
-    },
-    RPCError,
+use crate::entrypoint_tracer::slot_detector::{
+    SlotDetectionStrategy, SlotDetector, SlotDetectorConfig, SlotDetectorError,
 };
 
-/// Cache type for allowance slot detection results
-type AllowanceSlotCache = Arc<RwLock<HashMap<(Address, Address, Address), (Address, Bytes)>>>;
+/// Strategy for allowance slot detection
+#[derive(Clone)]
+pub struct AllowanceStrategy;
 
-/// EVM-specific implementation of AllowanceSlotDetector using debug_traceCall
-pub struct EVMAllowanceSlotDetector {
-    cache: AllowanceSlotCache,
-    inner: SlotDetector,
-}
+impl SlotDetectionStrategy for AllowanceStrategy {
+    type CacheKey = (Address, Address, Address);
+    type Params = (Address, Address);
 
-impl EVMAllowanceSlotDetector {
-    pub fn new(config: SlotDetectorConfig) -> Result<Self, SlotDetectorError> {
-        let slot_detector =
-            SlotDetector::new(config).map_err(|e| SlotDetectorError::SetupError(e.to_string()))?;
-
-        // perf: Allow a client to be passed on the constructor, to use a shared client between
-        // other parts of the code that perform node RPC requests
-
-        Ok(Self { cache: Arc::new(RwLock::new(HashMap::new())), inner: slot_detector })
+    fn cache_key(token: &Address, params: &Self::Params) -> Self::CacheKey {
+        let (owner, spender) = params;
+        (token.clone(), owner.clone(), spender.clone())
     }
 
-    /// Detect slots for a single component using batched requests (debug_traceCall + eth_call per
-    /// token)
-    #[instrument(fields(
-        token_count = tokens.len()
-    ), skip(self, tokens))]
-    async fn detect_token_slots(
-        &self,
-        tokens: &[Address],
-        owner: &Address,
-        spender: &Address,
-        block_hash: &BlockHash,
-    ) -> HashMap<Address, Result<(Address, Bytes), SlotDetectorError>> {
-        if tokens.is_empty() {
-            return HashMap::new();
-        }
-
-        let mut request_tokens = Vec::with_capacity(tokens.len());
-        let mut cached_tokens = HashMap::new();
-
-        // Check cache for tokens
-        {
-            let cache = self.cache.read().await;
-            for token in tokens {
-                if let Some(slot) = cache.get(&(token.clone(), owner.clone(), spender.clone())) {
-                    cached_tokens.insert(token.clone(), Ok(slot.clone()));
-                } else {
-                    request_tokens.push(token.clone());
-                }
-            }
-        }
-
-        if request_tokens.is_empty() {
-            return cached_tokens;
-        }
-
-        // Create batched request: 2 requests per token (debug_traceCall + eth_call)
-        let calldata = Self::encode_allowance_calldata(owner, spender);
-        let requests =
-            self.inner
-                .create_value_requests(&request_tokens, calldata.clone(), block_hash);
-
-        // Send the batched request
-        let responses = match self
-            .inner
-            .send_batched_request(requests)
-            .await
-        {
-            Ok(responses) => responses,
-            Err(e) => {
-                for token in &request_tokens {
-                    cached_tokens
-                        .insert(token.clone(), Err(SlotDetectorError::RequestError(e.to_string())));
-                }
-                return cached_tokens;
-            }
-        };
-
-        // Process the batched response to extract slots
-        let token_slots = self
-            .inner
-            .process_batched_response(&request_tokens, responses);
-
-        // Validates that the selected slot actually matches the expectation.
-        let validation_results = self
-            .inner
-            .validate_best_slots(token_slots, calldata, block_hash)
-            .await;
-
-        // Update cache and prepare final results
-        let mut final_results = cached_tokens;
-        {
-            let mut cache = self.cache.write().await;
-            for (token, result) in validation_results {
-                match result {
-                    Ok(((storage_addr, slot_bytes), _allowance)) => {
-                        // Update cache with successful detections
-                        cache.insert(
-                            (token.clone(), owner.clone(), spender.clone()),
-                            (storage_addr.clone(), slot_bytes.clone()),
-                        );
-                        final_results.insert(token, Ok((storage_addr, slot_bytes)));
-                    }
-                    Err(e) => {
-                        final_results.insert(token, Err(e));
-                    }
-                }
-            }
-        }
-
-        final_results
-    }
-
-    /// Encode allowance(owner, spender) calldata
-    fn encode_allowance_calldata(owner: &Address, spender: &Address) -> Bytes {
+    fn encode_calldata(params: &Self::Params) -> Bytes {
+        let (owner, spender) = params;
         // allowance selector: 0xdd62ed3e
         let mut calldata = vec![0xdd, 0x62, 0xed, 0x3e];
 
@@ -156,6 +41,9 @@ impl EVMAllowanceSlotDetector {
         Bytes::from(calldata)
     }
 }
+
+/// EVM-specific implementation of AllowanceSlotDetector using debug_traceCall
+pub type EVMAllowanceSlotDetector = SlotDetector<AllowanceStrategy>;
 
 /// Implement the AllowanceSlotDetector trait
 #[async_trait]
@@ -173,23 +61,13 @@ impl AllowanceSlotDetector for EVMAllowanceSlotDetector {
     ) -> HashMap<Address, Result<(Address, Bytes), Self::Error>> {
         info!("Starting allowance slot detection for {} tokens", tokens.len());
 
-        let mut all_results = HashMap::new();
+        let params = (owner, spender);
+        let results = self
+            .detect_slots_chunked(tokens, &params, &block_hash)
+            .await;
 
-        for (chunk_idx, chunk) in tokens
-            .chunks(self.inner.max_batch_size)
-            .enumerate()
-        {
-            debug!("Processing chunk {} with {} tokens", chunk_idx, chunk.len());
-
-            let chunk_results = self
-                .detect_token_slots(chunk, &owner, &spender, &block_hash)
-                .await;
-
-            all_results.extend(chunk_results);
-        }
-
-        info!("Allowance slot detection completed. Found results for {} tokens", all_results.len());
-        all_results
+        info!("Allowance slot detection completed. Found results for {} tokens", results.len());
+        results
     }
 }
 
@@ -203,7 +81,7 @@ mod tests {
     fn test_encode_allowance_calldata() {
         let owner = Address::from([0x11u8; 20]);
         let spender = Address::from([0x22u8; 20]);
-        let calldata = EVMAllowanceSlotDetector::encode_allowance_calldata(&owner, &spender);
+        let calldata = AllowanceStrategy::encode_calldata(&(owner.clone(), spender.clone()));
 
         // Verify selector
         assert_eq!(&calldata[0..4], &[0xdd, 0x62, 0xed, 0x3e]);

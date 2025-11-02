@@ -1,165 +1,43 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    ops::Add,
-    sync::Arc,
-    time::Duration,
-};
+use std::collections::HashMap;
 
-use alloy::{
-    primitives::{Address as AlloyAddress, U256},
-    rpc::types::trace::geth::{GethTrace, PreStateFrame, PreStateMode},
-    transports::http::reqwest,
-};
 use async_trait::async_trait;
-use futures::future::join_all;
-use serde_json::{json, Value};
-use thiserror::Error;
-use tokio::sync::RwLock;
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::info;
 use tycho_common::{
-    models::{
-        blockchain::{AccountOverrides, EntryPoint, RPCTracerParams, TracingParams},
-        Address, BlockHash,
-    },
+    models::{Address, BlockHash},
     traits::BalanceSlotDetector,
     Bytes,
 };
 
-use crate::{
-    entrypoint_tracer::{
-        allowance_slot_detector,
-        slot_detector::{
-            SlotDetector, SlotDetectorConfig, SlotDetectorError, TokenSlotResults, ValidationData,
-        },
-        tracer::EVMEntrypointService,
-    },
-    RPCError,
+use crate::entrypoint_tracer::slot_detector::{
+    SlotDetectionStrategy, SlotDetector, SlotDetectorConfig, SlotDetectorError,
 };
 
-/// Cache type for balance slot detection results
-type BalanceSlotCache = Arc<RwLock<HashMap<(Address, Address), (Address, Bytes)>>>;
+/// Strategy for balance slot detection
+#[derive(Clone)]
+pub struct BalanceStrategy;
 
-/// EVM-specific implementation of BalanceSlotDetector using debug_traceCall
-pub struct EVMBalanceSlotDetector {
-    cache: BalanceSlotCache,
-    inner: SlotDetector,
-}
+impl SlotDetectionStrategy for BalanceStrategy {
+    type CacheKey = (Address, Address);
+    type Params = Address;
 
-impl EVMBalanceSlotDetector {
-    pub fn new(config: SlotDetectorConfig) -> Result<Self, SlotDetectorError> {
-        let slot_detector =
-            SlotDetector::new(config).map_err(|e| SlotDetectorError::SetupError(e.to_string()))?;
-
-        // perf: Allow a client to be passed on the constructor, to use a shared client between
-        // other parts of the code that perform node RPC requests
-
-        Ok(Self { cache: Arc::new(RwLock::new(HashMap::new())), inner: slot_detector })
+    fn cache_key(token: &Address, params: &Self::Params) -> Self::CacheKey {
+        (token.clone(), params.clone())
     }
 
-    /// Detect slots for a single component using batched requests (debug_traceCall + eth_call per
-    /// token)
-    #[instrument(fields(
-        token_count = tokens.len()
-    ), skip(self, tokens))]
-    async fn detect_token_slots(
-        &self,
-        tokens: &[Address],
-        owner: &Address,
-        block_hash: &BlockHash,
-    ) -> HashMap<Address, Result<(Address, Bytes), SlotDetectorError>> {
-        if tokens.is_empty() {
-            return HashMap::new();
-        }
-
-        let mut request_tokens = Vec::with_capacity(tokens.len());
-        let mut cached_tokens = HashMap::new();
-
-        // Check cache for tokens
-        {
-            let cache = self.cache.read().await;
-            for token in tokens {
-                if let Some(slot) = cache.get(&(token.clone(), owner.clone())) {
-                    cached_tokens.insert(token.clone(), Ok(slot.clone()));
-                } else {
-                    request_tokens.push(token.clone());
-                }
-            }
-        }
-
-        if request_tokens.is_empty() {
-            return cached_tokens;
-        }
-
-        // Create batched request: 2 requests per token (debug_traceCall + eth_call)
-        let calldata = Self::encode_balance_of_calldata(owner);
-        let requests =
-            self.inner
-                .create_value_requests(&request_tokens, calldata.clone(), block_hash);
-
-        // Send the batched request
-        let responses = match self
-            .inner
-            .send_batched_request(requests)
-            .await
-        {
-            Ok(responses) => responses,
-            Err(e) => {
-                for token in &request_tokens {
-                    // Failed to send the batched request - return with only the cached values.
-                    cached_tokens
-                        .insert(token.clone(), Err(SlotDetectorError::RequestError(e.to_string())));
-                }
-                return cached_tokens;
-            }
-        };
-
-        // Process the batched response to extract slots
-        let token_slots = self
-            .inner
-            .process_batched_response(&request_tokens, responses);
-
-        // Validates that the selected slot actually matches the expectation.
-        let validation_results = self
-            .inner
-            .validate_best_slots(token_slots, calldata, block_hash)
-            .await;
-
-        // Update cache and prepare final results
-        let mut final_results = cached_tokens;
-        {
-            let mut cache = self.cache.write().await;
-            for (token, result) in validation_results {
-                match result {
-                    Ok(((storage_addr, slot_bytes), _balance)) => {
-                        // Update cache with successful detections
-                        cache.insert(
-                            (token.clone(), owner.clone()),
-                            (storage_addr.clone(), slot_bytes.clone()),
-                        );
-                        final_results.insert(token, Ok((storage_addr, slot_bytes)));
-                    }
-                    Err(e) => {
-                        final_results.insert(token, Err(e));
-                    }
-                }
-            }
-        }
-
-        final_results
-    }
-
-    /// Encode balanceOf(address) calldata
-    pub(crate) fn encode_balance_of_calldata(address: &Address) -> Bytes {
+    fn encode_calldata(params: &Self::Params) -> Bytes {
         // balanceOf selector: 0x70a08231
         let mut calldata = vec![0x70, 0xa0, 0x82, 0x31];
 
         // Pad address to 32 bytes (12 bytes of zeros + 20 bytes address)
         calldata.extend_from_slice(&[0u8; 12]);
-        calldata.extend_from_slice(address.as_ref());
+        calldata.extend_from_slice(params.as_ref());
 
         Bytes::from(calldata)
     }
 }
+
+/// EVM-specific implementation of BalanceSlotDetector using debug_traceCall
+pub type EVMBalanceSlotDetector = SlotDetector<BalanceStrategy>;
 
 /// Implement the BalanceSlotDetector trait
 #[async_trait]
@@ -176,37 +54,26 @@ impl BalanceSlotDetector for EVMBalanceSlotDetector {
     ) -> HashMap<Address, Result<(Address, Bytes), Self::Error>> {
         info!("Starting balance slot detection for {} tokens", tokens.len());
 
-        let mut all_results = HashMap::new();
+        let results = self
+            .detect_slots_chunked(tokens, &holder, &block_hash)
+            .await;
 
-        // Batch tokens into chunks to optimize, while avoiding being rate limited. Each token
-        // spawns up to 2 requests in a single batch.
-        for (chunk_idx, chunk) in tokens
-            .chunks(self.inner.max_batch_size)
-            .enumerate()
-        {
-            debug!("Processing chunk {} with {} tokens", chunk_idx, chunk.len());
-
-            let chunk_results = self
-                .detect_token_slots(chunk, &holder, &block_hash)
-                .await;
-
-            // Merge chunk results into all_results
-            all_results.extend(chunk_results);
-        }
-
-        info!("Balance slot detection completed. Found results for {} tokens", all_results.len());
-        all_results
+        info!("Balance slot detection completed. Found results for {} tokens", results.len());
+        results
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use alloy::{primitives::U256, transports::http::reqwest};
+    use serde_json::json;
+
+    use super::{BalanceStrategy, SlotDetectionStrategy, *};
 
     #[test]
     fn test_encode_balance_of_calldata() {
         let address = Address::from([0x12u8; 20]);
-        let calldata = EVMBalanceSlotDetector::encode_balance_of_calldata(&address);
+        let calldata = BalanceStrategy::encode_calldata(&address);
 
         // Verify selector
         assert_eq!(&calldata[0..4], &[0x70, 0xa0, 0x82, 0x31]);
@@ -219,108 +86,6 @@ mod tests {
 
         // Verify address
         assert_eq!(&calldata[16..36], address.as_ref());
-    }
-
-    // Test helper to create mock trace response with storage slots
-    fn create_mock_trace_response(storage_slots: Vec<(&str, &str, &str)>) -> Value {
-        let mut storage_map = serde_json::Map::new();
-
-        for (address, slot, value) in storage_slots {
-            let address_key = format!(
-                "0x{}",
-                address
-                    .strip_prefix("0x")
-                    .unwrap_or(address)
-            );
-            let slot_key = format!("0x{}", slot.strip_prefix("0x").unwrap_or(slot));
-
-            if !storage_map.contains_key(&address_key) {
-                storage_map.insert(
-                    address_key.clone(),
-                    json!({
-                        "storage": {
-                            slot_key: value
-                        }
-                    }),
-                );
-            } else if let Some(account) = storage_map.get_mut(&address_key) {
-                if let Some(storage) = account.get_mut("storage") {
-                    if let Some(storage_obj) = storage.as_object_mut() {
-                        storage_obj.insert(slot_key, json!(value));
-                    }
-                }
-            }
-        }
-
-        json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "result": storage_map
-        })
-    }
-
-    // Test helper to create mock eth_call response
-    fn create_mock_call_response(balance: &str) -> Value {
-        json!({
-            "jsonrpc": "2.0",
-            "id": 2,
-            "result": balance
-        })
-    }
-
-    // Test helper to create error response
-    fn create_error_response(id: u64, error_msg: &str) -> Value {
-        json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "error": {
-                "code": -32000,
-                "message": error_msg
-            }
-        })
-    }
-
-    #[tokio::test]
-    async fn test_detect_token_slots_with_cache() {
-        let config = SlotDetectorConfig {
-            max_batch_size: 10,
-            rpc_url: "http://localhost:8545".to_string(),
-            max_retries: 1,
-            initial_backoff_ms: 10,
-            max_backoff_ms: 100,
-        };
-
-        let detector = EVMBalanceSlotDetector::new(config).unwrap();
-
-        let token1 = Address::from([0x11u8; 20]);
-        let token2 = Address::from([0x22u8; 20]);
-        let owner = Address::from([0x33u8; 20]);
-        let block_hash = BlockHash::from([0x44u8; 32]);
-
-        // Pre-populate cache for token1
-        {
-            let mut cache = detector.cache.write().await;
-            cache.insert(
-                (token1.clone(), owner.clone()),
-                (Address::from([0x11u8; 20]), Bytes::from(vec![0x01u8; 32])),
-            );
-        }
-
-        // Mock server would be needed for token2, but since we can't make real requests,
-        // we'll test that token1 returns from cache
-        let tokens = vec![token1.clone()];
-        let results = detector
-            .detect_token_slots(&tokens, &owner, &block_hash)
-            .await;
-
-        // Token1 should return cached value
-        assert!(results.contains_key(&token1));
-        let token1_result = results.get(&token1).unwrap();
-        assert!(token1_result.is_ok());
-
-        let (storage_addr, slot) = token1_result.as_ref().unwrap();
-        assert_eq!(*storage_addr, Address::from([0x11u8; 20]));
-        assert_eq!(*slot, Bytes::from(vec![0x01u8; 32]));
     }
 
     #[tokio::test]
@@ -538,7 +303,7 @@ mod tests {
 
         println!("Setting storage slot 0x{} to value {}", slot_hex, target_hex);
 
-        let calldata = EVMBalanceSlotDetector::encode_balance_of_calldata(balance_owner);
+        let calldata = BalanceStrategy::encode_calldata(balance_owner);
 
         // This would need to be enhanced to return the actual call result
         // For now, fall back to direct RPC call

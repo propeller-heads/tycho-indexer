@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
 
 use alloy::{primitives::U256, transports::http::reqwest};
 use serde_json::{json, Value};
@@ -19,6 +19,9 @@ pub(super) type TokenSlotResults = HashMap<Address, Result<SlotDetectionResult, 
 
 /// Type alias for slot values from trace: (address, slot_bytes) with value
 type SlotValues = Vec<((Address, Bytes), U256)>;
+
+/// Type alias for the cache
+type ThreadSafeCache<K, V> = Arc<std::sync::RwLock<HashMap<K, V>>>;
 
 #[derive(Debug, Clone)]
 pub(super) struct ValidationData {
@@ -80,19 +83,36 @@ pub enum SlotDetectorError {
     WrongSlotError(String),
 }
 
-/// Shared HTTP client and retry logic for slot detectors.
-/// This struct handles all RPC communication with exponential backoff and jitter.
-pub struct SlotDetector {
+/// Strategy trait for different slot detection types (balance, allowance, etc.)
+/// This allows the SlotDetector to work with different parameter types and cache keys
+pub trait SlotDetectionStrategy: Send + Sync {
+    /// The cache key type for this strategy
+    type CacheKey: std::hash::Hash + Eq + Clone;
+    /// The parameters needed for this strategy (e.g., owner for balance, (owner, spender) for
+    /// allowance)
+    type Params: Clone;
+
+    /// Generate a cache key from token and parameters
+    fn cache_key(token: &Address, params: &Self::Params) -> Self::CacheKey;
+
+    /// Encode the calldata for this slot type
+    fn encode_calldata(params: &Self::Params) -> Bytes;
+}
+
+/// Generic slot detector that handles RPC communication and slot detection with a configurable
+/// strategy. This struct eliminates code duplication between balance and allowance detectors.
+pub struct SlotDetector<S: SlotDetectionStrategy> {
     rpc_url: url::Url,
     pub(crate) max_batch_size: usize,
     http_client: reqwest::Client,
     max_retries: usize,
     initial_backoff_ms: u64,
     max_backoff_ms: u64,
+    cache: ThreadSafeCache<S::CacheKey, (Address, Bytes)>,
 }
 
-impl SlotDetector {
-    /// Create a new SlotDetector with the given configuration
+impl<S: SlotDetectionStrategy> SlotDetector<S> {
+    /// Create a new SlotDetector with the given configuration and strategy
     pub fn new(config: SlotDetectorConfig) -> Result<Self, SlotDetectorError> {
         let rpc_url = url::Url::parse(&config.rpc_url)
             .map_err(|_| SlotDetectorError::SetupError("Invalid URL".to_string()))?;
@@ -116,7 +136,112 @@ impl SlotDetector {
             max_retries: config.max_retries,
             initial_backoff_ms: config.initial_backoff_ms,
             max_backoff_ms: config.max_backoff_ms,
+            cache: Arc::new(std::sync::RwLock::new(HashMap::new())),
         })
+    }
+
+    /// Detect slots for tokens using batched requests (debug_traceCall + eth_call per token)
+    async fn detect_token_slots(
+        &self,
+        tokens: &[Address],
+        params: &S::Params,
+        block_hash: &BlockHash,
+    ) -> HashMap<Address, Result<(Address, Bytes), SlotDetectorError>> {
+        if tokens.is_empty() {
+            return HashMap::new();
+        }
+
+        let mut request_tokens = Vec::with_capacity(tokens.len());
+        let mut cached_tokens = HashMap::new();
+
+        // Check cache for tokens
+        {
+            let cache = self.cache.read().unwrap();
+            for token in tokens {
+                let cache_key = S::cache_key(token, params);
+                if let Some(slot) = cache.get(&cache_key) {
+                    cached_tokens.insert(token.clone(), Ok(slot.clone()));
+                } else {
+                    request_tokens.push(token.clone());
+                }
+            }
+        }
+
+        if request_tokens.is_empty() {
+            return cached_tokens;
+        }
+
+        // Create batched request: 2 requests per token (debug_traceCall + eth_call)
+        let calldata = S::encode_calldata(params);
+        let requests = self.create_value_requests(&request_tokens, calldata.clone(), block_hash);
+
+        // Send the batched request
+        let responses = match self
+            .send_batched_request(requests)
+            .await
+        {
+            Ok(responses) => responses,
+            Err(e) => {
+                for token in &request_tokens {
+                    cached_tokens
+                        .insert(token.clone(), Err(SlotDetectorError::RequestError(e.to_string())));
+                }
+                return cached_tokens;
+            }
+        };
+
+        // Process the batched response to extract slots
+        let token_slots = self.process_batched_response(&request_tokens, responses);
+
+        // Validate that the selected slot actually matches the expectation
+        let validation_results = self
+            .validate_best_slots(token_slots, calldata, block_hash)
+            .await;
+
+        // Update cache and prepare final results
+        let mut final_results = cached_tokens;
+        {
+            let mut cache = self.cache.write().unwrap();
+            for (token, result) in validation_results {
+                match result {
+                    Ok(((storage_addr, slot_bytes), _value)) => {
+                        // Update cache with successful detections
+                        let cache_key = S::cache_key(&token, params);
+                        cache.insert(cache_key, (storage_addr.clone(), slot_bytes.clone()));
+                        final_results.insert(token, Ok((storage_addr, slot_bytes)));
+                    }
+                    Err(e) => {
+                        final_results.insert(token, Err(e));
+                    }
+                }
+            }
+        }
+
+        final_results
+    }
+
+    /// Detect slots for multiple tokens in chunks
+    pub async fn detect_slots_chunked(
+        &self,
+        tokens: &[Address],
+        params: &S::Params,
+        block_hash: &BlockHash,
+    ) -> HashMap<Address, Result<(Address, Bytes), SlotDetectorError>> {
+        let mut all_results = HashMap::new();
+
+        for (chunk_idx, chunk) in tokens
+            .chunks(self.max_batch_size)
+            .enumerate()
+        {
+            debug!("Processing chunk {} with {} tokens", chunk_idx, chunk.len());
+
+            let chunk_results = self
+                .detect_token_slots(chunk, params, block_hash)
+                .await;
+            all_results.extend(chunk_results);
+        }
+
+        all_results
     }
 
     /// Create a batched JSON-RPC request for all tokens (2 requests per token).
@@ -334,7 +459,7 @@ impl SlotDetector {
                         storage_addr,
                         slot,
                         original_value,
-                        test_value: SlotDetector::generate_test_value(original_value),
+                        test_value: Self::generate_test_value(original_value),
                     });
                 }
                 Err(e) => {
@@ -795,9 +920,27 @@ mod tests {
     };
 
     use crate::entrypoint_tracer::{
-        balance_slot_detector::EVMBalanceSlotDetector,
-        slot_detector::{SlotDetector, SlotDetectorConfig, SlotDetectorError, ValidationData},
+        balance_slot_detector::BalanceStrategy,
+        slot_detector::{
+            SlotDetectionStrategy, SlotDetector, SlotDetectorConfig, SlotDetectorError,
+            ValidationData,
+        },
     };
+
+    struct TestFixtureStrategy {}
+
+    impl SlotDetectionStrategy for TestFixtureStrategy {
+        type CacheKey = ();
+        type Params = ();
+
+        fn cache_key(token: &Address, params: &Self::Params) -> Self::CacheKey {
+            unreachable!()
+        }
+
+        fn encode_calldata(params: &Self::Params) -> Bytes {
+            unreachable!()
+        }
+    }
 
     fn create_validation_data() -> Vec<ValidationData> {
         let validation_data = vec![
@@ -829,7 +972,7 @@ mod tests {
             max_backoff_ms: 5000,
         };
 
-        let detector = SlotDetector::new(config).unwrap();
+        let detector = SlotDetector::<TestFixtureStrategy>::new(config).unwrap();
 
         // Test exponential backoff
         let backoff1 = detector.calculate_backoff(1);
@@ -850,17 +993,17 @@ mod tests {
     fn test_generate_test_value() {
         // Test non-zero, non-max value
         let original = U256::from(1000u64);
-        let test_value = SlotDetector::generate_test_value(original);
+        let test_value = SlotDetector::<TestFixtureStrategy>::generate_test_value(original);
         assert_eq!(test_value, U256::from(2000u64));
 
         // Test zero value
         let zero = U256::ZERO;
-        let test_value = SlotDetector::generate_test_value(zero);
+        let test_value = SlotDetector::<TestFixtureStrategy>::generate_test_value(zero);
         assert_eq!(test_value, U256::from(1_000_000_000_000_000_000u64));
 
         // Test max value - falls into else branch since original_value == U256::MAX
         let max = U256::MAX;
-        let test_value = SlotDetector::generate_test_value(max);
+        let test_value = SlotDetector::<TestFixtureStrategy>::generate_test_value(max);
         assert_eq!(test_value, U256::from(1_000_000_000_000_000_000u64)); // Returns 1 ETH for MAX
     }
 
@@ -873,7 +1016,7 @@ mod tests {
             initial_backoff_ms: 100,
             max_backoff_ms: 5000,
         };
-        let detector = SlotDetector::new(config).unwrap();
+        let detector = SlotDetector::<TestFixtureStrategy>::new(config).unwrap();
 
         // Test valid response
         let response = json!({
@@ -913,7 +1056,7 @@ mod tests {
             initial_backoff_ms: 100,
             max_backoff_ms: 5000,
         };
-        let detector = SlotDetector::new(config).unwrap();
+        let detector = SlotDetector::<TestFixtureStrategy>::new(config).unwrap();
 
         // Test valid trace with storage
         let response = json!({
@@ -962,7 +1105,7 @@ mod tests {
             initial_backoff_ms: 100,
             max_backoff_ms: 5000,
         };
-        let detector = SlotDetector::new(config).unwrap();
+        let detector = SlotDetector::<TestFixtureStrategy>::new(config).unwrap();
 
         let addr = Address::from([0x11u8; 20]);
         let slot1 = Bytes::from(vec![0x01u8; 32]);
@@ -1003,7 +1146,7 @@ mod tests {
             initial_backoff_ms: 100,
             max_backoff_ms: 5000,
         };
-        let detector = SlotDetector::new(config).unwrap();
+        let detector = SlotDetector::<TestFixtureStrategy>::new(config).unwrap();
 
         let token1 = Address::from([0x11u8; 20]);
         let token2 = Address::from([0x22u8; 20]);
@@ -1065,7 +1208,7 @@ mod tests {
             initial_backoff_ms: 100,
             max_backoff_ms: 5000,
         };
-        let detector = SlotDetector::new(config).unwrap();
+        let detector = SlotDetector::<TestFixtureStrategy>::new(config).unwrap();
 
         let token1 = Address::from([0x11u8; 20]);
         let token2 = Address::from([0x22u8; 20]);
@@ -1073,7 +1216,7 @@ mod tests {
         let block_hash = BlockHash::from([0x44u8; 32]);
 
         let tokens = vec![token1, token2];
-        let calldata = EVMBalanceSlotDetector::encode_balance_of_calldata(&owner);
+        let calldata = BalanceStrategy::encode_calldata(&owner);
         let requests = detector.create_value_requests(&tokens, calldata, &block_hash);
 
         // Should create 2 requests per token (debug_traceCall + eth_call)
@@ -1107,14 +1250,14 @@ mod tests {
             initial_backoff_ms: 100,
             max_backoff_ms: 5000,
         };
-        let detector = SlotDetector::new(config).unwrap();
+        let detector = SlotDetector::<TestFixtureStrategy>::new(config).unwrap();
 
         let validation_data = create_validation_data();
 
         let owner = Address::from([0x33u8; 20]);
         let block_hash = BlockHash::from([0x44u8; 32]);
 
-        let calldata = EVMBalanceSlotDetector::encode_balance_of_calldata(&owner);
+        let calldata = BalanceStrategy::encode_calldata(&owner);
         let requests = detector
             .create_validation_requests(&validation_data, calldata, &block_hash)
             .unwrap();
@@ -1146,7 +1289,7 @@ mod tests {
             initial_backoff_ms: 100,
             max_backoff_ms: 5000,
         };
-        let detector = SlotDetector::new(config).unwrap();
+        let detector = SlotDetector::<TestFixtureStrategy>::new(config).unwrap();
 
         let validation_data = create_validation_data();
 
@@ -1187,7 +1330,7 @@ mod tests {
             max_backoff_ms: 100,
         };
 
-        let detector = SlotDetector::new(config).unwrap();
+        let detector = SlotDetector::<TestFixtureStrategy>::new(config).unwrap();
 
         // Create a simple batch request
         let batch_request = json!([
@@ -1243,7 +1386,7 @@ mod tests {
             max_backoff_ms: 100,
         };
 
-        let detector = SlotDetector::new(config).unwrap();
+        let detector = SlotDetector::<TestFixtureStrategy>::new(config).unwrap();
 
         let batch_request = json!([
             {
@@ -1277,55 +1420,55 @@ mod tests {
     #[test]
     fn test_is_retryable_rpc_error() {
         // Test retryable error codes
-        assert!(SlotDetector::is_retryable_rpc_error(&json!({
+        assert!(SlotDetector::<TestFixtureStrategy>::is_retryable_rpc_error(&json!({
             "code": -32000,
             "message": "header not found"
         })));
 
-        assert!(SlotDetector::is_retryable_rpc_error(&json!({
+        assert!(SlotDetector::<TestFixtureStrategy>::is_retryable_rpc_error(&json!({
             "code": -32005,
             "message": "limit exceeded"
         })));
 
-        assert!(SlotDetector::is_retryable_rpc_error(&json!({
+        assert!(SlotDetector::<TestFixtureStrategy>::is_retryable_rpc_error(&json!({
             "code": -32603,
             "message": "internal error"
         })));
 
         // Test non-retryable error codes
-        assert!(!SlotDetector::is_retryable_rpc_error(&json!({
+        assert!(!SlotDetector::<TestFixtureStrategy>::is_retryable_rpc_error(&json!({
             "code": -32600,
             "message": "invalid request"
         })));
 
-        assert!(!SlotDetector::is_retryable_rpc_error(&json!({
+        assert!(!SlotDetector::<TestFixtureStrategy>::is_retryable_rpc_error(&json!({
             "code": -32601,
             "message": "method not found"
         })));
 
-        assert!(!SlotDetector::is_retryable_rpc_error(&json!({
+        assert!(!SlotDetector::<TestFixtureStrategy>::is_retryable_rpc_error(&json!({
             "code": -32602,
             "message": "invalid params"
         })));
 
-        assert!(!SlotDetector::is_retryable_rpc_error(&json!({
+        assert!(!SlotDetector::<TestFixtureStrategy>::is_retryable_rpc_error(&json!({
             "code": -32604,
             "message": "method not supported"
         })));
 
         // Test unknown error code (should be retryable)
-        assert!(SlotDetector::is_retryable_rpc_error(&json!({
+        assert!(SlotDetector::<TestFixtureStrategy>::is_retryable_rpc_error(&json!({
             "code": -99999,
             "message": "unknown error"
         })));
 
         // Test missing error code (should be retryable)
-        assert!(SlotDetector::is_retryable_rpc_error(&json!({
+        assert!(SlotDetector::<TestFixtureStrategy>::is_retryable_rpc_error(&json!({
             "message": "error without code"
         })));
 
         // Test invalid error format (should be retryable)
-        assert!(SlotDetector::is_retryable_rpc_error(&json!({
+        assert!(SlotDetector::<TestFixtureStrategy>::is_retryable_rpc_error(&json!({
             "code": "not_a_number",
             "message": "invalid code format"
         })));
@@ -1342,7 +1485,7 @@ mod tests {
             max_backoff_ms: 100,
         };
 
-        let detector = SlotDetector::new(config).unwrap();
+        let detector = SlotDetector::<TestFixtureStrategy>::new(config).unwrap();
 
         let batch_request = json!([
             {
@@ -1409,7 +1552,7 @@ mod tests {
             max_backoff_ms: 100,
         };
 
-        let detector = SlotDetector::new(config).unwrap();
+        let detector = SlotDetector::<TestFixtureStrategy>::new(config).unwrap();
 
         let batch_request = json!([
             {
@@ -1476,7 +1619,7 @@ mod tests {
             max_backoff_ms: 100,
         };
 
-        let detector = SlotDetector::new(config).unwrap();
+        let detector = SlotDetector::<TestFixtureStrategy>::new(config).unwrap();
 
         let batch_request = json!([
             {
@@ -1535,7 +1678,7 @@ mod tests {
             max_backoff_ms: 100,
         };
 
-        let detector = SlotDetector::new(config).unwrap();
+        let detector = SlotDetector::<TestFixtureStrategy>::new(config).unwrap();
 
         let batch_request = json!([
             {
@@ -1584,7 +1727,7 @@ mod tests {
             max_backoff_ms: 100,
         };
 
-        let detector = SlotDetector::new(config).unwrap();
+        let detector = SlotDetector::<TestFixtureStrategy>::new(config).unwrap();
 
         let batch_request = json!([
             {
@@ -1652,7 +1795,7 @@ mod tests {
             max_backoff_ms: 100,
         };
 
-        let detector = SlotDetector::new(config).unwrap();
+        let detector = SlotDetector::<TestFixtureStrategy>::new(config).unwrap();
 
         let batch_request = json!([
             {
