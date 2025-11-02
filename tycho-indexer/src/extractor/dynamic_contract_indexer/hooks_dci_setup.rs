@@ -8,8 +8,8 @@ use tycho_common::{
     storage::{EntryPointGateway, ProtocolGateway},
     traits::{AccountExtractor, EntryPointTracer},
 };
-use tycho_ethereum::entrypoint_tracer::balance_slot_detector::{
-    BalanceSlotDetectorConfig, EVMBalanceSlotDetector,
+use tycho_ethereum::entrypoint_tracer::{
+    balance_slot_detector::EVMBalanceSlotDetector, slot_detector::SlotDetectorConfig,
 };
 
 use crate::extractor::dynamic_contract_indexer::{
@@ -71,7 +71,7 @@ pub fn setup_hook_orchestrator_registry(
 
     // Create EVM balance slot detector
     let balance_slot_detector = {
-        let config = BalanceSlotDetectorConfig {
+        let config = SlotDetectorConfig {
             rpc_url: rpc_url.clone(),
             max_batch_size: 5,
             max_retries: 3,
