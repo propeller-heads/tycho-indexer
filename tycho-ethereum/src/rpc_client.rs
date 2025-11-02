@@ -7,50 +7,65 @@ use alloy::{
         types::{debug::StorageRangeResult, Block, BlockId, BlockNumberOrTag},
     },
 };
-use async_trait::async_trait;
 use tracing::{debug, info, trace};
 use tycho_common::Bytes;
 
 use crate::{errors::extract_error_chain, RPCError, RequestError};
 
-// TODO - move this trait to tycho_common to implement for other chains
-#[async_trait]
-pub trait RpcClient: Sized {
-    fn new(rpc_url: &str) -> Result<Self, RPCError>;
-
-    async fn get_block_number(&self) -> Result<u64, RPCError>;
-}
-
-pub trait EthereumRpcConfig: Clone + Default + Send + Sync {}
-
 // TODO: Optimize these configurable for preventing rate limiting.
 // TODO: Handle rate limiting / individual connection failures & retries
 #[derive(Clone)]
-pub struct WithBatching {
+pub struct BatchingConfig {
     max_batch_size: usize,
     max_storage_slot_batch_size: usize,
 }
 
-impl Default for WithBatching {
+impl Default for BatchingConfig {
     fn default() -> Self {
         Self { max_batch_size: 50, max_storage_slot_batch_size: 10000 }
     }
 }
 
-pub type Plain = ();
-
-impl EthereumRpcConfig for WithBatching {}
-impl EthereumRpcConfig for Plain {}
-
+// TODO: Consider adding rate limiting and retry logic here
 #[derive(Clone)]
-pub struct EthereumRpcClient<C: EthereumRpcConfig> {
+pub struct EthereumRpcClient {
     inner: ReqwestClient,
-    config: C,
+    pub(crate) batching: Option<BatchingConfig>,
 }
 
-impl<C: EthereumRpcConfig> EthereumRpcClient<C> {
-    pub(crate) fn from_inner(inner: ReqwestClient) -> Self {
-        Self { inner, config: C::default() }
+impl EthereumRpcClient {
+    pub fn new(rpc_url: &str) -> Result<Self, RPCError> {
+        let url = rpc_url
+            .parse()
+            .map_err(|e| RPCError::SetupError(format!("Invalid RPC URL: {}", e)))?;
+
+        let rpc = ClientBuilder::default().http(url);
+        let batching = Some(BatchingConfig::default());
+
+        Ok(Self { inner: rpc, batching })
+    }
+
+    pub async fn with_batching(self, batching: Option<BatchingConfig>) -> Result<Self, RPCError> {
+        Ok(Self { inner: self.inner, batching })
+    }
+
+    pub async fn get_block_number(&self) -> Result<u64, RPCError> {
+        let block_number: BlockNumberOrTag = self
+            .inner
+            .request_noparams("eth_blockNumber")
+            .await
+            .map_err(|e| {
+                RPCError::RequestError(RequestError::Other(format!(
+                    "Failed to get block number: {}",
+                    e
+                )))
+            })?;
+
+        if let BlockNumberOrTag::Number(num) = block_number {
+            Ok(num)
+        } else {
+            Err(RPCError::RequestError(RequestError::Other("Unexpected block ID type".to_string())))
+        }
     }
 
     pub(crate) async fn eth_get_block_by_number(
@@ -151,28 +166,43 @@ impl<C: EthereumRpcConfig> EthereumRpcClient<C> {
 
         Ok(all_slots)
     }
-}
 
-impl EthereumRpcClient<WithBatching> {
-    pub fn with_batching_params(
-        self,
-        max_batch_size: usize,
-        max_storage_slot_batch_size: usize,
-    ) -> Self {
-        Self {
-            inner: self.inner,
-            config: WithBatching { max_batch_size, max_storage_slot_batch_size },
-        }
-    }
-
-    pub(crate) async fn batch_fetch_account_code_and_balance(
+    pub(crate) async fn non_batch_fetch_accounts_code_and_balance(
         &self,
         block_id: BlockNumberOrTag,
         addresses: &[Address],
     ) -> Result<HashMap<Address, (Bytes, U256)>, RPCError> {
+        Ok(futures::future::try_join_all(
+            addresses
+                .iter()
+                .map(|&address| async move {
+                    let (code, balance) = tokio::try_join!(
+                        self.eth_get_code(block_id, address),
+                        self.eth_get_balance(block_id, address)
+                    )?;
+                    Ok::<_, RPCError>((address, (code, balance)))
+                }),
+        )
+        .await?
+        .into_iter()
+        .collect())
+    }
+
+    pub(crate) async fn batch_fetch_accounts_code_and_balance(
+        &self,
+        block_id: BlockNumberOrTag,
+        addresses: &[Address],
+    ) -> Result<HashMap<Address, (Bytes, U256)>, RPCError> {
+        let batching = self
+            .batching
+            .as_ref()
+            .ok_or(RPCError::SetupError(
+                "BatchingConfig is required for batch operations".to_string(),
+            ))?;
+
         debug!(
-            chunk_size = self.config.max_batch_size,
-            total_chunks = addresses.len() / self.config.max_batch_size + 1,
+            chunk_size = batching.max_batch_size,
+            total_chunks = addresses.len() / batching.max_batch_size + 1,
             block_id = block_id.to_string(),
             "Preparing batch request for account code and balance"
         );
@@ -180,10 +210,10 @@ impl EthereumRpcClient<WithBatching> {
         let mut codes_and_balances = HashMap::with_capacity(addresses.len());
 
         // perf: consider running multiple batches in parallel using map of futures
-        for chunk_addresses in addresses.chunks(self.config.max_batch_size) {
+        for chunk_addresses in addresses.chunks(batching.max_batch_size) {
             let mut batch = self.inner.new_batch();
-            let mut code_requests = Vec::with_capacity(self.config.max_batch_size);
-            let mut balance_requests = Vec::with_capacity(self.config.max_batch_size);
+            let mut code_requests = Vec::with_capacity(batching.max_batch_size);
+            let mut balance_requests = Vec::with_capacity(batching.max_batch_size);
 
             for address in chunk_addresses {
                 code_requests.push(Box::pin(
@@ -266,18 +296,52 @@ impl EthereumRpcClient<WithBatching> {
         Ok(codes_and_balances)
     }
 
+    pub(crate) async fn non_batch_get_selected_storage(
+        &self,
+        block_id: BlockNumberOrTag,
+        address: Address,
+        slots: &[B256],
+    ) -> Result<HashMap<B256, Option<B256>>, RPCError> {
+        let mut result = HashMap::with_capacity(slots.len());
+
+        for slot in slots {
+            let storage_value = self
+                .inner
+                .request("eth_getStorageAt", (&address, slot, block_id))
+                .await
+                .map_err(|e| {
+                    RPCError::RequestError(RequestError::Other(format!(
+                        "Failed to get storage: {e}, address: {address}, block: {block_id}, slot: {slot}",
+                    )))
+                })?;
+
+            let value = if storage_value == [0; 32] { None } else { Some(storage_value) };
+
+            result.insert(*slot, value);
+        }
+
+        Ok(result)
+    }
+
     pub(crate) async fn batch_get_selected_storage(
         &self,
         block_id: BlockNumberOrTag,
         address: Address,
         slots: &[B256],
     ) -> Result<HashMap<B256, Option<B256>>, RPCError> {
-        let mut storage_requests = Vec::with_capacity(self.config.max_storage_slot_batch_size);
+        let batching = self
+            .batching
+            .as_ref()
+            .ok_or(RPCError::SetupError(
+                "BatchingConfig is required for batch operations".to_string(),
+            ))?;
+
+        let mut storage_requests = Vec::with_capacity(batching.max_storage_slot_batch_size);
 
         let mut result = HashMap::new();
 
         // perf: consider running multiple batches in parallel using map of futures
-        for slot_batch in slots.chunks(self.config.max_storage_slot_batch_size) {
+        for slot_batch in slots.chunks(batching.max_storage_slot_batch_size) {
             let mut storage_batch = self.inner.new_batch();
 
             for slot in slot_batch {
@@ -323,38 +387,6 @@ impl EthereumRpcClient<WithBatching> {
     }
 }
 
-#[async_trait]
-impl<C: EthereumRpcConfig> RpcClient for EthereumRpcClient<C> {
-    fn new(rpc_url: &str) -> Result<Self, RPCError> {
-        let url = rpc_url
-            .parse()
-            .map_err(|e| RPCError::SetupError(format!("Invalid RPC URL: {}", e)))?;
-
-        let rpc = ClientBuilder::default().http(url);
-
-        Ok(Self::from_inner(rpc))
-    }
-
-    async fn get_block_number(&self) -> Result<u64, RPCError> {
-        let block_number: BlockNumberOrTag = self
-            .inner
-            .request_noparams("eth_blockNumber")
-            .await
-            .map_err(|e| {
-                RPCError::RequestError(RequestError::Other(format!(
-                    "Failed to get block number: {}",
-                    e
-                )))
-            })?;
-
-        if let BlockNumberOrTag::Number(num) = block_number {
-            Ok(num)
-        } else {
-            Err(RPCError::RequestError(RequestError::Other("Unexpected block ID type".to_string())))
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -375,8 +407,10 @@ mod tests {
 
     // Local extension methods specific to account extractor tests
     impl TestFixture {
-        fn create_batching_rpc_client(&self) -> EthereumRpcClient<WithBatching> {
-            EthereumRpcClient::<WithBatching>::from_inner(self.inner_rpc.clone())
+        pub(crate) fn create_rpc_client(&self, batching: bool) -> EthereumRpcClient {
+            let batching = if batching { Some(BatchingConfig::default()) } else { None };
+
+            EthereumRpcClient { inner: self.inner_rpc.clone(), batching }
         }
     }
 
@@ -390,11 +424,11 @@ mod tests {
         let url = std::env::var("RPC_URL").expect("RPC_URL must be set for testing");
 
         // Test with valid URL
-        let result = EthereumRpcClient::<WithBatching>::new(&url);
+        let result = EthereumRpcClient::new(&url);
         assert!(result.is_ok());
 
         // Test with invalid URL
-        let result = EthereumRpcClient::<WithBatching>::new("invalid_url");
+        let result = EthereumRpcClient::new("invalid_url");
         assert!(result.is_err());
 
         Ok(())
@@ -404,7 +438,7 @@ mod tests {
     #[ignore = "require RPC connection"]
     async fn test_get_block_number() -> Result<(), RPCError> {
         let fixture = TestFixture::new();
-        let client = fixture.create_batching_rpc_client();
+        let client = fixture.create_rpc_client(false);
 
         let block_number = client.get_block_number().await?;
 
@@ -429,7 +463,7 @@ mod tests {
         #[case] expected_balance: U256,
     ) -> Result<(), RPCError> {
         let fixture = TestFixture::new();
-        let client = fixture.create_batching_rpc_client();
+        let client = fixture.create_rpc_client(false);
 
         let address = Address::from_str(address_str).expect("failed to parse address");
         let block_id = BlockNumberOrTag::Number(TEST_BLOCK_NUMBER);
@@ -460,7 +494,7 @@ mod tests {
         #[case] expected_prefix: &str,
     ) -> Result<(), RPCError> {
         let fixture = TestFixture::new();
-        let client = fixture.create_batching_rpc_client();
+        let client = fixture.create_rpc_client(false);
 
         let address = parse_address(address_str);
         let block_id = BlockNumberOrTag::Number(TEST_BLOCK_NUMBER);
@@ -504,7 +538,7 @@ mod tests {
         #[case] expected_slot_count: usize,
     ) -> Result<(), RPCError> {
         let fixture = TestFixture::new();
-        let client = fixture.create_batching_rpc_client();
+        let client = fixture.create_rpc_client(false);
 
         // Warn about large contracts (STETH has 789k+ slots, takes ~2 mins, ~50MB data)
         if expected_slot_count > 100_000 {
@@ -533,22 +567,34 @@ mod tests {
         Ok(())
     }
 
+    #[rstest]
     #[traced_test]
     #[tokio::test]
     #[ignore = "require RPC connection"]
-    async fn test_batch_fetch_account_code_and_balance() -> Result<(), RPCError> {
+    async fn test_fetch_account_code_and_balance(
+        #[values(false, true)] batching: bool,
+    ) -> Result<(), RPCError> {
         let fixture = TestFixture::new();
-        let client = fixture.create_batching_rpc_client();
+        let client = fixture.create_rpc_client(batching);
 
         // Test with multiple addresses
         let requests = vec![parse_address(BALANCER_VAULT_STR), parse_address(STETH_STR)];
 
-        let codes_and_balances = client
-            .batch_fetch_account_code_and_balance(
-                BlockNumberOrTag::Number(fixture.block.number),
-                &requests,
-            )
-            .await?;
+        let codes_and_balances = if batching {
+            client
+                .batch_fetch_accounts_code_and_balance(
+                    BlockNumberOrTag::Number(fixture.block.number),
+                    &requests,
+                )
+                .await
+        } else {
+            client
+                .non_batch_fetch_accounts_code_and_balance(
+                    BlockNumberOrTag::Number(fixture.block.number),
+                    &requests,
+                )
+                .await
+        }?;
 
         // Check that we got code and balance for both addresses
         assert_eq!(codes_and_balances.len(), 2);
@@ -581,7 +627,7 @@ mod tests {
     #[ignore = "require RPC connection"]
     async fn test_fetch_account_storage_without_specific_slots() -> Result<(), RPCError> {
         let fixture = TestFixture::new();
-        let client = fixture.create_batching_rpc_client();
+        let client = fixture.create_rpc_client(false);
 
         let storage = client
             .get_storage_range(
@@ -603,23 +649,36 @@ mod tests {
         Ok(())
     }
 
+    #[rstest]
     #[traced_test]
     #[tokio::test]
     #[ignore = "require RPC connection"]
-    async fn test_fetch_account_storage_with_specific_slots() -> Result<(), RPCError> {
+    async fn test_fetch_account_storage_with_specific_slots(
+        #[values(false, true)] batching: bool,
+    ) -> Result<(), RPCError> {
         let fixture = TestFixture::new();
-        let client = fixture.create_batching_rpc_client();
+        let client = fixture.create_rpc_client(batching);
 
         // Create request with specific slots
         let slots_request: Vec<B256> = TEST_SLOTS.keys().cloned().collect();
 
-        let storage = client
-            .batch_get_selected_storage(
-                BlockNumberOrTag::Number(fixture.block.number),
-                parse_address(BALANCER_VAULT_STR),
-                &slots_request,
-            )
-            .await?;
+        let storage = if batching {
+            client
+                .batch_get_selected_storage(
+                    BlockNumberOrTag::Number(fixture.block.number),
+                    parse_address(BALANCER_VAULT_STR),
+                    &slots_request,
+                )
+                .await
+        } else {
+            client
+                .non_batch_get_selected_storage(
+                    BlockNumberOrTag::Number(fixture.block.number),
+                    parse_address(BALANCER_VAULT_STR),
+                    &slots_request,
+                )
+                .await
+        }?;
 
         // Verify that we got the storage for all requested slots
         assert_eq!(storage.len(), 3);

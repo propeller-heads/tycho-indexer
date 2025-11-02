@@ -9,12 +9,14 @@ pub mod account_extractor;
 pub mod entrypoint_tracer;
 #[cfg(feature = "onchain_data")]
 pub mod erc20;
+pub mod errors;
+#[cfg(feature = "onchain_data")]
+pub mod rpc_client;
 #[cfg(feature = "onchain_data")]
 pub mod token_analyzer;
 #[cfg(feature = "onchain_data")]
 pub mod token_pre_processor;
 
-mod errors;
 #[cfg(test)]
 pub mod test_fixtures;
 

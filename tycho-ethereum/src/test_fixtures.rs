@@ -108,17 +108,19 @@ pub struct TestFixture {
 impl TestFixture {
     /// Creates a new test fixture with the default test block and rpc url parsed from env
     pub fn new() -> Self {
+        let chain = Chain::Ethereum;
+
         // Clone the static RPC client to support reuse across tests
         let inner_rpc = RPC_CLIENT.clone();
 
         // wait for 1 second to avoid rate limiting
         // TODO: improve rate limiting handling
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::thread::sleep(std::time::Duration::from_secs(5));
 
         let block_hash = B256::from_hex(TEST_BLOCK_HASH).expect("expected valid block hash");
         let block = Block::new(
             TEST_BLOCK_NUMBER,
-            Chain::Ethereum,
+            chain,
             block_hash.to_bytes(),
             Default::default(),
             Default::default(),

@@ -24,8 +24,7 @@ use tycho_common::{
 };
 use tycho_ethereum::{
     account_extractor::contract::EVMAccountExtractor,
-    entrypoint_tracer::tracer::EVMEntrypointService,
-    token_analyzer::rpc_client::{EthereumRpcClient, WithBatching},
+    entrypoint_tracer::tracer::EVMEntrypointService, rpc_client::EthereumRpcClient,
     token_pre_processor::EthereumTokenPreProcessor,
 };
 use tycho_storage::postgres::cache::CachedGateway;
@@ -544,7 +543,7 @@ impl ExtractorBuilder {
         cached_gw: &CachedGateway,
         token_pre_processor: &EthereumTokenPreProcessor,
         protocol_cache: &ProtocolMemoryCache,
-        rpc_client: &EthereumRpcClient<WithBatching>,
+        rpc_client: &EthereumRpcClient,
     ) -> Result<Self, ExtractionError> {
         let protocol_types = self
             .config

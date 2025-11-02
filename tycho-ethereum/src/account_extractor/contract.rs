@@ -7,27 +7,27 @@ use alloy::{
 use async_trait::async_trait;
 use chrono::DateTime;
 use futures::future::try_join_all;
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, info};
 use tycho_common::{
-    models::{blockchain::Block, contract::AccountDelta, Address, Chain, ChangeType},
+    models::{blockchain::Block, contract::AccountDelta, Chain, ChangeType},
     traits::{AccountExtractor, StorageSnapshotRequest},
     Bytes,
 };
 
-use crate::{
-    token_analyzer::rpc_client::{EthereumRpcClient, EthereumRpcConfig, WithBatching},
-    BytesCodec, RPCError, RequestError,
-};
+use crate::{errors::RequestError, rpc_client::EthereumRpcClient, BytesCodec, RPCError};
 
 /// `EVMAccountExtractor` is a struct that implements the `AccountExtractor` trait for Ethereum
 /// accounts.
-pub struct EVMAccountExtractor<C: EthereumRpcConfig> {
-    rpc: EthereumRpcClient<C>,
+/// TODO: once the `chai`n attribute is deprecated from AccountDelta,
+/// We can get rid of this struct and use the EthereumRpcClient directly
+/// to implement the `AccountExtractor` trait.
+pub struct EVMAccountExtractor {
+    rpc: EthereumRpcClient,
     chain: Chain,
 }
 
-impl<C: EthereumRpcConfig> EVMAccountExtractor<C> {
-    pub async fn new(client: &EthereumRpcClient<C>, chain: Chain) -> Result<Self, RPCError> {
+impl EVMAccountExtractor {
+    pub async fn new(client: &EthereumRpcClient, chain: Chain) -> Result<Self, RPCError> {
         // As the client is a thin wrapper around an Arc, cloning is inexpensive.
         Ok(Self { rpc: client.clone(), chain })
     }
@@ -55,7 +55,7 @@ impl<C: EthereumRpcConfig> EVMAccountExtractor<C> {
 }
 
 #[async_trait]
-impl AccountExtractor for EVMAccountExtractor<()> {
+impl AccountExtractor for EVMAccountExtractor {
     type Error = RPCError;
 
     async fn get_accounts_at_block(
@@ -63,7 +63,10 @@ impl AccountExtractor for EVMAccountExtractor<()> {
         block: &Block,
         requests: &[StorageSnapshotRequest],
     ) -> Result<HashMap<Bytes, AccountDelta>, Self::Error> {
+        let batching_supported = self.rpc.batching.is_some();
+
         let block_id = BlockNumberOrTag::Number(block.number);
+        let block_hash = B256::from_slice(&block.hash);
 
         let mut updates = HashMap::new();
 
@@ -81,133 +84,58 @@ impl AccountExtractor for EVMAccountExtractor<()> {
             .map(|request| AlloyAddress::from_bytes(&request.address))
             .collect();
 
-        // Create futures for balance and code retrieval
-        let balance_futures = alloy_addresses.iter().map(|&address| {
-            self.rpc
-                .eth_get_balance(block_id, address)
-        });
-
-        let code_futures = alloy_addresses
-            .iter()
-            .map(|&address| self.rpc.eth_get_code(block_id, address));
-
-        // Execute all balance and code requests concurrently
-        let (result_balances, result_codes) =
-            tokio::join!(try_join_all(balance_futures), try_join_all(code_futures));
-
-        let balances = result_balances?;
-        let codes = result_codes?;
-
-        // Process each address with its corresponding balance and code
-        for (i, &address) in alloy_addresses.iter().enumerate() {
-            trace!(contract=?address, block_number=?block.number, block_hash=?block.hash, "Extracting contract code and storage" );
-
-            let balance = Some(balances[i].to_bytes());
-            let code = Some(codes[i].clone());
-
-            let slots_request = requests
-                .get(i)
-                .expect("Request should exist");
-            if slots_request.slots.is_some() {
-                // TODO: Implement this
-                warn!("Specific storage slot requests are not supported in EVMAccountExtractor");
+        // Create a future for code and balance retrieval
+        let codes_and_balances_fut = async {
+            if batching_supported {
+                self.rpc
+                    .batch_fetch_accounts_code_and_balance(block_id, &alloy_addresses)
+                    .await
+            } else {
+                self.rpc
+                    .non_batch_fetch_accounts_code_and_balance(block_id, &alloy_addresses)
+                    .await
             }
+        };
 
-            let slots = self
-                .rpc
-                .get_storage_range(address, B256::from_slice(&block.hash))
-                .await?
-                .into_iter()
-                .map(|(k, v)| (k.to_bytes(), Some(v.to_bytes())))
-                .collect();
-
-            updates.insert(
-                address.to_bytes(),
-                AccountDelta::new(
-                    self.chain,
-                    address.to_bytes(),
-                    slots,
-                    balance,
-                    code,
-                    ChangeType::Creation,
-                ),
-            );
-        }
-
-        Ok(updates)
-    }
-}
-
-#[async_trait]
-impl AccountExtractor for EVMAccountExtractor<WithBatching> {
-    type Error = RPCError;
-
-    async fn get_accounts_at_block(
-        &self,
-        block: &Block,
-        requests: &[StorageSnapshotRequest],
-    ) -> Result<HashMap<Address, AccountDelta>, Self::Error> {
-        let block_id = BlockNumberOrTag::Number(block.number);
-        let block_hash = B256::from_slice(&block.hash);
-
-        let mut updates = HashMap::new();
-
-        // Remove duplicates to avoid making more requests than necessary.
-        let unique_requests: Vec<StorageSnapshotRequest> = requests
+        // Create futures for storage retrieval
+        let storage_futs = unique_requests
             .iter()
-            .cloned()
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect();
+            .map(|req| {
+                let address = AlloyAddress::from_bytes(&req.address);
 
-        info!(
-            total_requests = unique_requests.len(),
-            block_number = block.number,
-            "Starting batch account extraction"
-        );
+                let fut = async move {
+                    if let Some(slots) = &req.slots {
+                        let slots = slots
+                            .iter()
+                            .map(B256::from_bytes)
+                            .collect::<Vec<_>>();
 
-        let alloy_addresses = unique_requests
-            .iter()
-            .map(|req| AlloyAddress::from_bytes(&req.address))
-            .collect::<Vec<AlloyAddress>>();
+                        if batching_supported {
+                            self.rpc
+                                .batch_get_selected_storage(block_id, address, &slots)
+                                .await
+                        } else {
+                            self.rpc
+                                .non_batch_get_selected_storage(block_id, address, &slots)
+                                .await
+                        }
+                    } else {
+                        self.rpc
+                            .get_storage_range(address, block_hash)
+                            .await
+                            // Wrap the resulting hashmap values in Some to match the expected type
+                            .map(|result| {
+                                result
+                                    .into_iter()
+                                    .map(|(k, v)| (k, Some(v)))
+                                    .collect()
+                            })
+                    }
+                };
 
-        // Create a future for batch code and balance retrieval
-        let codes_and_balances_fut = self
-            .rpc
-            .batch_fetch_account_code_and_balance(block_id, &alloy_addresses);
-
-        // Create futures for batch storage retrieval
-        let mut storage_futs = Vec::new();
-        for (req, address) in unique_requests
-            .iter()
-            .zip(&alloy_addresses)
-        {
-            let fut = async move {
-                if let Some(slots) = &req.slots {
-                    let slots = slots
-                        .iter()
-                        .map(B256::from_bytes)
-                        .collect::<Vec<_>>();
-
-                    self.rpc
-                        .batch_get_selected_storage(block_id, *address, &slots)
-                        .await
-                } else {
-                    self.rpc
-                        .get_storage_range(*address, block_hash)
-                        .await
-                        // Wrap the resulting hashmap values in Some to match the expected type
-                        .map(|result| {
-                            result
-                                .into_iter()
-                                .map(|(k, v)| (k, Some(v)))
-                                .collect()
-                        })
-                }
-            };
-
-            storage_futs.push(fut);
-        }
+                fut
+            })
+            .collect::<Vec<_>>();
 
         let codes_and_balances = codes_and_balances_fut.await?;
         debug!(block_number = block.number, "Successfully retrieved account code and balance data");
@@ -254,29 +182,18 @@ mod tests {
     use std::str::FromStr;
 
     use rstest::rstest;
+    use tracing::warn;
     use tracing_test::traced_test;
+    use tycho_common::models::{Address, Chain};
 
     use super::*;
-    use crate::{
-        test_fixtures::{
-            TestFixture, BALANCER_VAULT_EXPECTED_SLOTS, BALANCER_VAULT_STR, STETH_EXPECTED_SLOTS,
-            STETH_STR, TEST_SLOTS, TOKEN_ADDRESSES,
-        },
-        token_analyzer::rpc_client::Plain,
+    use crate::test_fixtures::{
+        TestFixture, BALANCER_VAULT_EXPECTED_SLOTS, BALANCER_VAULT_STR, STETH_EXPECTED_SLOTS,
+        STETH_STR, TEST_SLOTS, TOKEN_ADDRESSES,
     };
 
     fn parse_address(address_str: &str) -> Address {
         Address::from_str(address_str).expect("failed to parse address")
-    }
-
-    // Local extension methods specific to account extractor tests
-    impl TestFixture {
-        async fn create_evm_extractor<T: EthereumRpcConfig>(
-            &self,
-        ) -> Result<EVMAccountExtractor<T>, RPCError> {
-            let rpc_client = EthereumRpcClient::<T>::from_inner(self.inner_rpc.clone());
-            EVMAccountExtractor::new(&rpc_client, Chain::Ethereum).await
-        }
     }
 
     fn create_storage_request(
@@ -284,6 +201,14 @@ mod tests {
         slots: Option<Vec<Bytes>>,
     ) -> StorageSnapshotRequest {
         StorageSnapshotRequest { address: parse_address(address_str), slots }
+    }
+
+    impl TestFixture {
+        fn create_evm_extractor(&self, batching: bool) -> EVMAccountExtractor {
+            let rpc_client = self.create_rpc_client(batching);
+
+            EVMAccountExtractor { rpc: rpc_client, chain: Chain::Ethereum }
+        }
     }
 
     /// Test the account extractor with various contracts and their storage slots.
@@ -300,11 +225,10 @@ mod tests {
     async fn test_account_extractor(
         #[case] address_str: &str,
         #[case] expected_slot_count: usize,
+        #[values(false, true)] batching: bool,
     ) -> Result<(), RPCError> {
         let fixture = TestFixture::new();
-        let extractor = fixture
-            .create_evm_extractor::<Plain>()
-            .await?;
+        let extractor = fixture.create_evm_extractor(batching);
 
         // Warn about large contracts (STETH has 789k+ slots, takes ~2 mins, ~50MB data)
         if expected_slot_count > 100_000 {
@@ -338,15 +262,16 @@ mod tests {
         Ok(())
     }
 
+    #[rstest]
     #[traced_test]
     #[tokio::test]
     #[ignore = "require RPC connection"]
-    async fn test_get_storage_snapshots_plain() -> Result<(), RPCError> {
+    async fn test_get_storage_snapshots_plain(
+        #[values(false, true)] batching: bool,
+    ) -> Result<(), RPCError> {
         let fixture = TestFixture::new();
 
-        let extractor = fixture
-            .create_evm_extractor::<WithBatching>()
-            .await?;
+        let extractor = fixture.create_evm_extractor(batching);
 
         let requests = vec![
             create_storage_request(BALANCER_VAULT_STR, Some(vec![])),
@@ -387,14 +312,15 @@ mod tests {
         Ok(())
     }
 
+    #[rstest]
     #[traced_test]
     #[tokio::test]
     #[ignore = "require RPC connection"]
-    async fn test_get_storage_snapshots_with_specific_slots() -> Result<(), RPCError> {
+    async fn test_get_storage_snapshots_with_specific_slots(
+        #[values(false, true)] batching: bool,
+    ) -> Result<(), RPCError> {
         let fixture = TestFixture::new();
-        let extractor = fixture
-            .create_evm_extractor::<WithBatching>()
-            .await?;
+        let extractor = fixture.create_evm_extractor(batching);
 
         // Create request with specific slots
         let slots = &*TEST_SLOTS;
@@ -440,14 +366,15 @@ mod tests {
         Ok(())
     }
 
+    #[rstest]
     #[traced_test]
     #[tokio::test]
     #[ignore = "require RPC connection"]
-    async fn test_get_storage_snapshots_with_empty_slot() -> Result<(), RPCError> {
+    async fn test_get_storage_snapshots_with_empty_slot(
+        #[values(false, true)] batching: bool,
+    ) -> Result<(), RPCError> {
         let fixture = TestFixture::new();
-        let extractor = fixture
-            .create_evm_extractor::<WithBatching>()
-            .await?;
+        let extractor = fixture.create_evm_extractor(batching);
 
         // Try to get a slot that was not initialized / is empty
         let slots_request: Vec<Bytes> = vec![Bytes::from_str(
@@ -488,14 +415,15 @@ mod tests {
         Ok(())
     }
 
+    #[rstest]
     #[traced_test]
     #[tokio::test]
     #[ignore = "require RPC connection"]
-    async fn test_get_storage_snapshots_multiple_accounts() -> Result<(), RPCError> {
+    async fn test_get_storage_snapshots_multiple_accounts(
+        #[values(false, true)] batching: bool,
+    ) -> Result<(), RPCError> {
         let fixture = TestFixture::new();
-        let extractor = fixture
-            .create_evm_extractor::<WithBatching>()
-            .await?;
+        let extractor = fixture.create_evm_extractor(batching);
 
         // Create multiple requests with different token addresses
         let requests: Vec<_> = TOKEN_ADDRESSES

@@ -41,8 +41,7 @@ use tycho_common::{
     Bytes,
 };
 use tycho_ethereum::{
-    account_extractor::contract::EVMAccountExtractor,
-    token_analyzer::rpc_client::{EthereumRpcClient, RpcClient, WithBatching},
+    account_extractor::contract::EVMAccountExtractor, rpc_client::EthereumRpcClient,
     token_pre_processor::EthereumTokenPreProcessor,
 };
 use tycho_indexer::{
@@ -355,7 +354,7 @@ async fn create_indexing_tasks(
     extractors_config: ExtractorConfigs,
     extraction_runtime: Option<&Handle>,
 ) -> Result<(ExtractionTasks, ServerTasks), ExtractionError> {
-    let rpc_client = EthereumRpcClient::<WithBatching>::new(&global_args.rpc_url)
+    let rpc_client = EthereumRpcClient::new(&global_args.rpc_url)
         .map_err(|e| ExtractionError::Setup(format!("Failed to create RPC client: {e}")))?;
 
     let block_number = rpc_client
@@ -429,7 +428,7 @@ async fn build_all_extractors(
     database_insert_batch_size: usize,
     token_pre_processor: &EthereumTokenPreProcessor,
     rpc_url: &str,
-    rpc: &EthereumRpcClient<WithBatching>,
+    rpc: &EthereumRpcClient,
     runtime: Option<&tokio::runtime::Handle>,
 ) -> Result<Vec<(ExtractorRunner, ExtractorHandle)>, ExtractionError> {
     let mut extractor_handles = Vec::new();
@@ -494,7 +493,7 @@ where
 async fn initialize_accounts(
     accounts: Vec<Address>,
     block_id: u64,
-    rpc: &EthereumRpcClient<WithBatching>,
+    rpc: &EthereumRpcClient,
     chain: Chain,
     cached_gw: &CachedGateway,
 ) {
@@ -566,7 +565,7 @@ async fn initialize_accounts(
 async fn get_accounts_data(
     accounts: Vec<Address>,
     block_id: u64,
-    rpc: &EthereumRpcClient<WithBatching>,
+    rpc: &EthereumRpcClient,
     chain: Chain,
 ) -> (Block, HashMap<Bytes, AccountDelta>) {
     let account_extractor = EVMAccountExtractor::new(rpc, chain)
@@ -648,9 +647,9 @@ mod test_serial_db {
 
     use super::*;
 
-    static RPC: Lazy<EthereumRpcClient<WithBatching>> = Lazy::new(|| {
+    static RPC: Lazy<EthereumRpcClient> = Lazy::new(|| {
         let rpc_url = std::env::var("RPC_URL").expect("RPC URL must be set for testing");
-        EthereumRpcClient::<WithBatching>::new(&rpc_url).expect("Failed to create RPC client")
+        EthereumRpcClient::new(&rpc_url).expect("Failed to create RPC client")
     });
 
     #[tokio::test]
@@ -759,8 +758,7 @@ mod test_serial_db {
             let chain = Chain::Ethereum;
 
             // RPC client won't be used since an account list is empty, so we can create a stub one
-            let rpc = EthereumRpcClient::<WithBatching>::new(rpc_url)
-                .expect("Failed to create RPC client");
+            let rpc = EthereumRpcClient::new(rpc_url).expect("Failed to create RPC client");
 
             let (cached_gw, _) = GatewayBuilder::new(db_url.as_str())
                 .set_chains(&[chain])
