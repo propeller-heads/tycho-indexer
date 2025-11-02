@@ -8,11 +8,15 @@ use tycho_common::{
     traits::TokenAnalyzer,
     Bytes,
 };
-use tycho_ethereum::{token_analyzer::trace_call::TraceCallDetector, BytesCodec};
+use tycho_ethereum::{
+    rpc_client::EthereumRpcClient, token_analyzer::trace_call::TraceCallDetector, BytesCodec,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), ()> {
-    let rpc = std::env::var("RPC_URL").expect("RPC URL must be set for testing");
+    let rpc_url = std::env::var("RPC_URL").expect("RPC URL must be set for testing");
+    let rpc = EthereumRpcClient::new(&rpc_url).expect("RPC connection to Ethereum provider failed");
+
     let tf = TokenOwnerStore::new(HashMap::from([(
         Bytes::from_str("3A9FfF453d50D4Ac52A6890647b823379ba36B9E").unwrap(),
         (
@@ -23,7 +27,7 @@ async fn main() -> Result<(), ()> {
         ),
     )]));
 
-    let trace_call = TraceCallDetector::new_from_url(&rpc, Arc::new(tf));
+    let trace_call = TraceCallDetector::new(&rpc, Arc::new(tf));
 
     let quality = trace_call
         .analyze(

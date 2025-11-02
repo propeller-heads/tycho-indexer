@@ -1,13 +1,6 @@
 use std::sync::Arc;
 
-use alloy::{
-    primitives::{Address, Bytes as AlloyBytes},
-    rpc::{
-        client::{ClientBuilder, ReqwestClient},
-        types::{BlockNumberOrTag, TransactionRequest},
-    },
-    sol_types::SolCall,
-};
+use alloy::{primitives::Address, rpc::types::BlockNumberOrTag, sol_types::SolCall};
 use async_trait::async_trait;
 use tracing::{instrument, warn};
 use tycho_common::{
@@ -23,36 +16,28 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     erc20::{decimalsCall, symbolCall},
+    rpc_client::EthereumRpcClient,
     token_analyzer::trace_call::{call_request, TraceCallDetector},
-    BytesCodec, RPCError, RequestError,
+    BytesCodec,
 };
 
 #[derive(Debug, Clone)]
 pub struct EthereumTokenPreProcessor {
-    rpc: ReqwestClient,
+    rpc: EthereumRpcClient,
     chain: Chain,
 }
 
 impl EthereumTokenPreProcessor {
-    pub fn new_from_url(rpc_url: &str, chain: Chain) -> Result<Self, RPCError> {
-        let url = rpc_url
-            .parse()
-            .map_err(|e: url::ParseError| {
-                RPCError::RequestError(RequestError::Other(e.to_string()))
-            })?;
-        let rpc = ClientBuilder::default().http(url);
-        Ok(EthereumTokenPreProcessor { rpc, chain })
-    }
-
-    pub fn new(rpc: ReqwestClient, chain: Chain) -> Self {
-        EthereumTokenPreProcessor { rpc, chain }
+    pub fn new(rpc: &EthereumRpcClient, chain: Chain) -> Self {
+        EthereumTokenPreProcessor { rpc: rpc.clone(), chain }
     }
 
     async fn call_symbol(&self, token: Address) -> String {
         let calldata = symbolCall {}.abi_encode();
 
         let result = match self
-            .make_rpc_call(call_request(None, token, calldata))
+            .rpc
+            .eth_call(call_request(None, token, calldata), BlockNumberOrTag::Latest)
             .await
         {
             Ok(result) => result,
@@ -79,7 +64,8 @@ impl EthereumTokenPreProcessor {
         let calldata = decimalsCall {}.abi_encode();
 
         let result = match self
-            .make_rpc_call(call_request(None, token, calldata))
+            .rpc
+            .eth_call(call_request(None, token, calldata), BlockNumberOrTag::Latest)
             .await
         {
             Ok(result) => result,
@@ -101,15 +87,6 @@ impl EthereumTokenPreProcessor {
             }
         }
     }
-
-    async fn make_rpc_call(&self, requests: TransactionRequest) -> Result<AlloyBytes, RPCError> {
-        self.rpc
-            .request("eth_call", (requests, BlockNumberOrTag::Latest))
-            .await
-            .map_err(|e| {
-                RPCError::RequestError(RequestError::Other(format!("RPC eth_call failed: {e}")))
-            })
-    }
 }
 
 #[async_trait]
@@ -130,7 +107,7 @@ impl TokenPreProcessor for EthereumTokenPreProcessor {
             let symbol = self.call_symbol(token_address).await;
             let decimals = self.call_decimals(token_address).await;
 
-            let trace_call = TraceCallDetector::new(self.rpc.clone(), token_finder.clone());
+            let trace_call = TraceCallDetector::new(&self.rpc, token_finder.clone());
 
             let (token_quality, gas, tax) = trace_call
                 .analyze(address.clone(), block)
@@ -177,46 +154,69 @@ impl TokenPreProcessor for EthereumTokenPreProcessor {
 
 #[cfg(test)]
 mod tests {
-    use std::{env, str::FromStr};
+    use std::str::FromStr;
 
     use tycho_common::models::token::TokenOwnerStore;
 
     use super::*;
-    use crate::test_fixtures::{TEST_BLOCK_NUMBER, TOKEN_HOLDERS, USDC_STR, WETH_STR};
+    use crate::test_fixtures::{TestFixture, TEST_BLOCK_NUMBER, TOKEN_HOLDERS, USDC_STR, WETH_STR};
+
+    impl TestFixture {
+        fn create_token_preprocessor(&self) -> EthereumTokenPreProcessor {
+            // We do not enable batching as the token pre-processor does not leverage it currently
+            let rpc = self.create_rpc_client(false);
+
+            EthereumTokenPreProcessor::new(&rpc, Chain::Ethereum)
+        }
+    }
 
     #[tokio::test]
     #[ignore = "require RPC connection"]
-    async fn test_make_rpc_call() {
-        let rpc_url = env::var("RPC_URL").expect("RPC_URL is not set");
+    async fn test_call_symbol() {
+        let fixture = TestFixture::new();
+        let processor = fixture.create_token_preprocessor();
 
-        let processor = EthereumTokenPreProcessor::new_from_url(&rpc_url, Chain::Ethereum)
-            .expect("Failed to create processor");
-
-        // Test making an RPC call to get WETH symbol
+        // Test WETH symbol
         let weth_address = Address::from_str(WETH_STR).expect("Failed to parse WETH address");
-        let calldata = symbolCall {}.abi_encode();
-        let request = call_request(None, weth_address, calldata);
-
-        let result = processor
-            .make_rpc_call(request)
-            .await
-            .expect("Failed to make RPC call");
-
-        // Verify we got a non-empty response
-        assert!(!result.is_empty(), "RPC call should return non-empty data");
-
-        // Verify we can decode the symbol
-        let symbol = symbolCall::abi_decode_returns(&result).expect("Failed to decode symbol");
+        let symbol = processor
+            .call_symbol(weth_address)
+            .await;
         assert_eq!(symbol, "WETH", "Expected WETH symbol");
+
+        // Test USDC symbol
+        let usdc_address = Address::from_str(USDC_STR).expect("Failed to parse USDC address");
+        let symbol = processor
+            .call_symbol(usdc_address)
+            .await;
+        assert_eq!(symbol, "USDC", "Expected USDC symbol");
+    }
+
+    #[tokio::test]
+    #[ignore = "require RPC connection"]
+    async fn test_call_decimals() {
+        let fixture = TestFixture::new();
+        let processor = fixture.create_token_preprocessor();
+
+        // Test WETH decimals (18)
+        let weth_address = Address::from_str(WETH_STR).expect("Failed to parse WETH address");
+        let decimals = processor
+            .call_decimals(weth_address)
+            .await;
+        assert_eq!(decimals, 18, "Expected WETH to have 18 decimals");
+
+        // Test USDC decimals (6)
+        let usdc_address = Address::from_str(USDC_STR).expect("Failed to parse USDC address");
+        let decimals = processor
+            .call_decimals(usdc_address)
+            .await;
+        assert_eq!(decimals, 6, "Expected USDC to have 6 decimals");
     }
 
     #[tokio::test]
     #[ignore = "require archive RPC connection"]
     async fn test_get_tokens() {
-        let rpc_url = env::var("RPC_URL").expect("RPC_URL is not set");
-
-        let processor = EthereumTokenPreProcessor::new_from_url(&rpc_url, Chain::Ethereum)
-            .expect("Failed to create processor");
+        let fixture = TestFixture::new();
+        let processor = fixture.create_token_preprocessor();
 
         let tf = TokenOwnerStore::new(TOKEN_HOLDERS.clone());
 
@@ -240,7 +240,7 @@ mod tests {
             vec![
                 ("WETH".to_string(), 18, 100),
                 ("USDC".to_string(), 6, 100),
-                ("0xa0b86991c7456b36c1d19d4a2e9eb0ce3606eb48".to_string(), 18, 10)
+                (fake_address.to_lowercase(), 18, 10)
             ]
         );
     }

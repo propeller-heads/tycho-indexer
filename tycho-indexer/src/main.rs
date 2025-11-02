@@ -376,13 +376,12 @@ async fn create_indexing_tasks(
         .set_retention_horizon(retention_horizon)
         .build()
         .await?;
-    let token_processor = EthereumTokenPreProcessor::new_from_url(
-        &global_args.rpc_url.clone(),
+    let token_processor = EthereumTokenPreProcessor::new(
+        &rpc_client,
         *chains
             .first()
             .expect("No chain provided"), //TODO: handle multichain?
-    )
-    .map_err(|e| ExtractionError::Setup(format!("Failed to create token pre-processor: {e}")))?;
+    );
 
     let (runners, extractor_handles): (Vec<_>, Vec<_>) =
         // TODO: accept substreams configuration from cli.
@@ -622,13 +621,16 @@ async fn run_tycho_ethereum(
     global_args: GlobalArgs,
     analyzer_args: AnalyzeTokenArgs,
 ) -> Result<(), anyhow::Error> {
+    let rpc_client = EthereumRpcClient::new(&global_args.rpc_url)
+        .map_err(|e| anyhow!("Failed to create RPC client: {e}"))?;
+
     create_tracing_subscriber();
     let (cached_gw, gw_writer_thread) = GatewayBuilder::new(&global_args.database_url)
         .set_chains(&[analyzer_args.chain])
         .build()
         .await?;
     let cached_gw = Arc::new(cached_gw);
-    let analyze_thread = analyze_tokens(analyzer_args, cached_gw.clone());
+    let analyze_thread = analyze_tokens(analyzer_args, &rpc_client, cached_gw.clone());
     select! {
          res = analyze_thread => {
             res?;

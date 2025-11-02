@@ -2,12 +2,9 @@ use std::{cmp, sync::Arc};
 
 use alloy::{
     primitives::{keccak256, Address, U256},
-    rpc::{
-        client::{ClientBuilder, ReqwestClient},
-        types::{
-            trace::parity::{TraceOutput, TraceResults},
-            TransactionInput, TransactionRequest,
-        },
+    rpc::types::{
+        trace::parity::{TraceOutput, TraceResults},
+        BlockNumberOrTag, TransactionInput, TransactionRequest,
     },
     sol_types::SolCall,
 };
@@ -23,7 +20,7 @@ use tycho_common::{
 
 use crate::{
     erc20::{approveCall, balanceOfCall, transferCall},
-    token_analyzer::trace_many,
+    rpc_client::EthereumRpcClient,
     BytesCodec,
 };
 
@@ -35,7 +32,7 @@ use crate::{
 /// - transfer into the settlement contract or back out fails
 /// - a transfer loses total balance
 pub struct TraceCallDetector {
-    pub rpc: ReqwestClient,
+    pub rpc: EthereumRpcClient,
     pub finder: Arc<dyn TokenOwnerFinding>,
     pub settlement_contract: Address,
 }
@@ -69,17 +66,9 @@ enum TraceRequestType {
 }
 
 impl TraceCallDetector {
-    pub fn new_from_url(rpc_url: &str, finder: Arc<dyn TokenOwnerFinding>) -> Self {
-        let url = rpc_url
-            .parse()
-            .expect("Invalid RPC URL");
-        let client = ClientBuilder::default().http(url);
-        Self::new(client, finder)
-    }
-
-    pub fn new(rpc: ReqwestClient, finder: Arc<dyn TokenOwnerFinding>) -> Self {
+    pub fn new(rpc: &EthereumRpcClient, finder: Arc<dyn TokenOwnerFinding>) -> Self {
         Self {
-            rpc,
+            rpc: rpc.clone(),
             finder,
             // middle contract used to check for fees, set to cowswap settlement
             settlement_contract: "0xc9f2e6ea1637E499406986ac50ddC92401ce1f58"
@@ -93,6 +82,8 @@ impl TraceCallDetector {
         token: Address,
         block: BlockTag,
     ) -> Result<(TokenQuality, Option<U256>, Option<U256>), String> {
+        let block_tag = map_block_tag(block);
+
         // Arbitrary amount that is large enough that small relative fees should be
         // visible.
         const MIN_AMOUNT: u64 = 100_000;
@@ -144,7 +135,9 @@ impl TraceCallDetector {
         // yet (implicitly 0) causes an allocation.
         let request =
             self.create_trace_request(token, amount, take_from, TraceRequestType::SimpleTransfer);
-        let traces = trace_many::trace_many(request, &self.rpc, block)
+        let simple_transfer_traces = self
+            .rpc
+            .trace_call_many(request, block_tag)
             .await
             .map_err(|e| e.to_string())?;
 
@@ -156,7 +149,7 @@ impl TraceCallDetector {
         information.\
         ";
         let bad = TokenQuality::Bad { reason: message.to_string() };
-        let middle_balance = match decode_u256(&traces[2]) {
+        let middle_balance = match decode_u256(&simple_transfer_traces[2]) {
             Some(balance) => balance,
             None => return Ok((bad, None, None)),
         };
@@ -167,10 +160,13 @@ impl TraceCallDetector {
             take_from,
             TraceRequestType::DoubleTransfer(middle_balance),
         );
-        let traces = trace_many::trace_many(request, &self.rpc, block)
+        let double_transfer_traces = self
+            .rpc
+            .trace_call_many(request, block_tag)
             .await
             .map_err(|e| e.to_string())?;
-        Self::handle_response(&traces, amount, middle_balance, take_from).map_err(|e| e.to_string())
+        Self::handle_response(&double_transfer_traces, amount, middle_balance, take_from)
+            .map_err(|e| e.to_string())
     }
 
     // For the out transfer we use an arbitrary address without balance to detect
@@ -453,6 +449,18 @@ impl TraceCallDetector {
     }
 }
 
+/// Converts a tycho BlockTag to an alloy BlockNumberOrTag.
+fn map_block_tag(block: BlockTag) -> BlockNumberOrTag {
+    match block {
+        BlockTag::Finalized => BlockNumberOrTag::Finalized,
+        BlockTag::Safe => BlockNumberOrTag::Safe,
+        BlockTag::Latest => BlockNumberOrTag::Latest,
+        BlockTag::Earliest => BlockNumberOrTag::Earliest,
+        BlockTag::Pending => BlockNumberOrTag::Pending,
+        BlockTag::Number(n) => BlockNumberOrTag::Number(n),
+    }
+}
+
 pub(crate) fn call_request(
     from: Option<Address>,
     to: Address,
@@ -517,26 +525,34 @@ fn ensure_transaction_ok_and_get_gas(trace: &TraceResults) -> Result<Result<U256
 
 #[cfg(test)]
 mod tests {
-    use std::{env, str::FromStr, sync::Arc};
+    use std::{str::FromStr, sync::Arc};
 
     use alloy::primitives::Address;
     use tycho_common::models::token::TokenOwnerStore;
 
     use super::*;
-    use crate::test_fixtures::{TEST_BLOCK_NUMBER, TOKEN_HOLDERS, USDC_STR};
+    use crate::test_fixtures::{TestFixture, TEST_BLOCK_NUMBER, TOKEN_HOLDERS, USDC_STR};
+
+    impl TestFixture {
+        fn create_trace_call_detector(&self) -> TraceCallDetector {
+            // We do not enable batching as the token pre-processor does not leverage it currently
+            let rpc = self.create_rpc_client(false);
+
+            // Use shared token holders
+            let token_finder = TokenOwnerStore::new(TOKEN_HOLDERS.clone());
+
+            TraceCallDetector::new(&rpc, Arc::new(token_finder))
+        }
+    }
 
     #[tokio::test]
-    #[ignore = "This test requires real RPC connection"]
+    #[ignore = "require RPC connection"]
     async fn test_detect_impl_usdc() {
-        let rpc_url = env::var("RPC_URL").expect("RPC_URL environment variable must be set");
+        let fixture = TestFixture::new();
+        let detector = fixture.create_trace_call_detector();
 
         // USDC mainnet address
         let usdc_address = Address::from_str(USDC_STR).unwrap();
-
-        // Use shared token holders
-        let token_finder = TokenOwnerStore::new(TOKEN_HOLDERS.clone());
-
-        let detector = TraceCallDetector::new_from_url(&rpc_url, Arc::new(token_finder));
 
         // Test with the latest block
         let result = detector
@@ -564,5 +580,15 @@ mod tests {
                 panic!("Failed to analyze USDC: {}", e);
             }
         }
+    }
+
+    #[test]
+    fn test_map_block_tag() {
+        assert_eq!(map_block_tag(BlockTag::Finalized), BlockNumberOrTag::Finalized);
+        assert_eq!(map_block_tag(BlockTag::Safe), BlockNumberOrTag::Safe);
+        assert_eq!(map_block_tag(BlockTag::Latest), BlockNumberOrTag::Latest);
+        assert_eq!(map_block_tag(BlockTag::Earliest), BlockNumberOrTag::Earliest);
+        assert_eq!(map_block_tag(BlockTag::Pending), BlockNumberOrTag::Pending);
+        assert_eq!(map_block_tag(BlockTag::Number(123)), BlockNumberOrTag::Number(123));
     }
 }

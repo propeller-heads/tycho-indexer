@@ -14,12 +14,15 @@ use tycho_common::{
     traits::TokenAnalyzer,
     Bytes,
 };
-use tycho_ethereum::token_analyzer::trace_call::TraceCallDetector;
+use tycho_ethereum::{
+    rpc_client::EthereumRpcClient, token_analyzer::trace_call::TraceCallDetector,
+};
 
 use crate::cli::AnalyzeTokenArgs;
 
 pub async fn analyze_tokens(
     analyze_args: AnalyzeTokenArgs,
+    rpc: &EthereumRpcClient,
     gw: Arc<dyn ProtocolGateway + Send + Sync>,
 ) -> anyhow::Result<()> {
     let mut tokens = Vec::new();
@@ -44,14 +47,8 @@ pub async fn analyze_tokens(
         let tasks = tokens
             .chunks(analyze_args.update_batch_size)
             .map(|chunk| {
-                analyze_batch(
-                    analyze_args.chain,
-                    analyze_args.rpc_url.clone(),
-                    chunk.to_vec(),
-                    sem.clone(),
-                    gw.clone(),
-                )
-                .boxed()
+                analyze_batch(analyze_args.chain, rpc, chunk.to_vec(), sem.clone(), gw.clone())
+                    .boxed()
             })
             .collect::<Vec<_>>();
 
@@ -70,7 +67,7 @@ pub async fn analyze_tokens(
 
 async fn analyze_batch(
     chain: Chain,
-    eth_rpc_url: String,
+    rpc: &EthereumRpcClient,
     mut tokens: Vec<Token>,
     sem: Arc<Semaphore>,
     gw: Arc<dyn ProtocolGateway + Send + Sync>,
@@ -133,10 +130,8 @@ async fn analyze_batch(
             }
         })
         .collect::<HashMap<_, _>>();
-    let analyzer = TraceCallDetector::new_from_url(
-        eth_rpc_url.as_str(),
-        Arc::new(TokenOwnerStore::new(liquidity_token_owners)),
-    );
+    let analyzer =
+        TraceCallDetector::new(rpc, Arc::new(TokenOwnerStore::new(liquidity_token_owners)));
     for t in tokens.iter_mut() {
         debug!(?t.address, "Analyzing token");
         let (token_quality, gas, tax) = match analyzer
@@ -190,16 +185,18 @@ mod test {
     use crate::testing;
 
     // requires a running ethereum node
-    #[ignore]
+    #[ignore = "require RPC connection"]
     #[test_log::test(tokio::test)]
     async fn test_analyze_tokens() {
-        let rpc = std::env::var("RPC_URL").expect("RPC URL must be set for testing");
+        let rpc_url = std::env::var("RPC_URL").expect("RPC URL must be set for testing");
+        let rpc = EthereumRpcClient::new(&rpc_url).expect("failed to create rpc client");
+
         let args = AnalyzeTokenArgs {
             chain: Chain::Ethereum,
             concurrency: 10,
             update_batch_size: 100,
             fetch_batch_size: 100,
-            rpc_url: rpc,
+            rpc_url,
         };
         let mut gw = testing::MockGateway::new();
         gw.expect_get_tokens()
@@ -301,7 +298,7 @@ mod test {
                 Box::pin(async { Ok(()) })
             });
 
-        analyze_tokens(args, Arc::new(gw))
+        analyze_tokens(args, &rpc, Arc::new(gw))
             .await
             .expect("analyze tokens failed");
     }

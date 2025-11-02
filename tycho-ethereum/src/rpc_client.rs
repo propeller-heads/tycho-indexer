@@ -4,7 +4,11 @@ use alloy::{
     primitives::{Address, B256, U256},
     rpc::{
         client::{ClientBuilder, ReqwestClient},
-        types::{debug::StorageRangeResult, Block, BlockId, BlockNumberOrTag},
+        types::{
+            debug::StorageRangeResult,
+            trace::parity::{TraceResults, TraceType},
+            Block, BlockId, BlockNumberOrTag, TransactionRequest,
+        },
     },
 };
 use tracing::{debug, info, trace};
@@ -14,7 +18,7 @@ use crate::{errors::extract_error_chain, RPCError, RequestError};
 
 // TODO: Optimize these configurable for preventing rate limiting.
 // TODO: Handle rate limiting / individual connection failures & retries
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BatchingConfig {
     max_batch_size: usize,
     max_storage_slot_batch_size: usize,
@@ -27,7 +31,10 @@ impl Default for BatchingConfig {
 }
 
 // TODO: Consider adding rate limiting and retry logic here
-#[derive(Clone)]
+/// This struct wraps the ReqwestClient and provides Ethereum-specific RPC methods
+/// with optional batching support.
+/// It is cheap to clone, as the `inner` internally uses an Arc for the ReqwestClient.
+#[derive(Clone, Debug)]
 pub struct EthereumRpcClient {
     inner: ReqwestClient,
     pub(crate) batching: Option<BatchingConfig>,
@@ -385,22 +392,66 @@ impl EthereumRpcClient {
 
         Ok(result)
     }
+
+    /// Use the trace_callMany API to simulate multiple call requests applied together one after
+    /// another. See https://openethereum.github.io/JSONRPC-trace-module#trace_callmany
+    ///
+    /// Returns error if communication with the node failed.
+    pub(crate) async fn trace_call_many(
+        &self,
+        requests: Vec<TransactionRequest>,
+        block: BlockNumberOrTag,
+    ) -> Result<Vec<TraceResults>, RPCError> {
+        let trace_requests: Vec<(TransactionRequest, Vec<TraceType>)> = requests
+            .into_iter()
+            .map(|request| (request, vec![TraceType::Trace]))
+            .collect();
+
+        self.inner
+            .request("trace_callMany", (trace_requests, block))
+            .await
+            .map_err(|e| {
+                let error_chain = extract_error_chain(&e);
+                RPCError::RequestError(RequestError::Other(format!(
+                    "Failed to send trace_callMany request: {error_chain}"
+                )))
+            })
+    }
+
+    /// Executes a new message call immediately without creating a transaction on the blockchain.
+    /// See https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_call
+    ///
+    /// Returns the output data from the call or an error if the call failed.
+    pub(crate) async fn eth_call(
+        &self,
+        request: TransactionRequest,
+        block: BlockNumberOrTag,
+    ) -> Result<Bytes, RPCError> {
+        self.inner
+            .request("eth_call", (request, block))
+            .await
+            .map_err(|e| {
+                RPCError::RequestError(RequestError::Other(format!("RPC eth_call failed: {e}")))
+            })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
-    use alloy::hex;
+    use alloy::{hex, rpc::types::TransactionInput, sol_types::SolCall};
     use rstest::rstest;
     use tracing::warn;
     use tracing_test::traced_test;
 
     use super::*;
     use crate::{
+        erc20::balanceOfCall,
         test_fixtures::{
             TestFixture, BALANCER_VAULT_EXPECTED_SLOTS, BALANCER_VAULT_STR, STETH_EXPECTED_SLOTS,
-            STETH_STR, TEST_BLOCK_HASH, TEST_BLOCK_NUMBER, TEST_SLOTS,
+            STETH_STR, TEST_BLOCK_HASH, TEST_BLOCK_NUMBER, TEST_SLOTS, USDC_HOLDER_ADDR,
+            USDC_HOLDER_BALANCE, USDC_STR,
         },
         BytesCodec,
     };
@@ -694,6 +745,102 @@ mod tests {
                 Some(value)
             ); // Storage value exists and matches
         }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[ignore = "require RPC connection"]
+    async fn test_trace_call_many() -> Result<(), RPCError> {
+        let fixture = TestFixture::new();
+        let client = fixture.create_rpc_client(false);
+
+        // Create a simple trace_callMany request: check USDC balance
+        let usdc = parse_address(USDC_STR);
+        let balance_holder = parse_address(USDC_HOLDER_ADDR);
+
+        // Request balance of a known holder at TEST_BLOCK_NUMBER
+        let calldata = balanceOfCall { _owner: balance_holder }.abi_encode();
+        let request = TransactionRequest::default()
+            .to(usdc)
+            .input(TransactionInput::both(calldata.into()));
+
+        let traces = client
+            .trace_call_many(vec![request], BlockNumberOrTag::Number(TEST_BLOCK_NUMBER))
+            .await?;
+
+        // Verify we got a response
+        assert_eq!(traces.len(), 1);
+        assert!(!traces[0].trace.is_empty());
+
+        // Verify the trace doesn't have an error
+        let first_trace = &traces[0].trace[0];
+        assert!(first_trace.error.is_none(), "trace should not have an error");
+
+        // Decode and verify the output
+        let output_bytes = &traces[0].output;
+        assert_eq!(output_bytes.len(), 32, "balance should be 32 bytes");
+
+        let balance = U256::from_be_bytes::<32>(
+            output_bytes
+                .as_ref()
+                .try_into()
+                .unwrap(),
+        );
+
+        // Expected balance: 74743132960379 (74,743,132.960379 USDC with 6 decimals)
+        let expected_balance = U256::from(USDC_HOLDER_BALANCE);
+        assert_eq!(
+            balance, expected_balance,
+            "USDC balance from trace mismatch. Expected: {}, Got: {}",
+            expected_balance, balance
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[ignore = "require RPC connection"]
+    async fn test_eth_call() -> Result<(), RPCError> {
+        use alloy::{
+            primitives::U256,
+            rpc::types::{TransactionInput, TransactionRequest},
+            sol_types::SolCall,
+        };
+
+        use crate::erc20::balanceOfCall;
+
+        let fixture = TestFixture::new();
+        let client = fixture.create_rpc_client(false);
+
+        // Create an eth_call request: check USDC balance
+        let usdc = parse_address(USDC_STR);
+        let balance_holder = parse_address(USDC_HOLDER_ADDR);
+
+        // Request balance of a known holder
+        let calldata = balanceOfCall { _owner: balance_holder }.abi_encode();
+        let request = TransactionRequest::default()
+            .to(usdc)
+            .input(TransactionInput::both(calldata.into()));
+
+        let result = client
+            .eth_call(request, BlockNumberOrTag::Number(TEST_BLOCK_NUMBER))
+            .await?;
+
+        // Verify we got a response
+        assert!(!result.is_empty(), "eth_call should return non-empty data");
+        assert_eq!(result.len(), 32, "balance should be 32 bytes");
+
+        // Verify we can decode the balance as U256
+        let balance = U256::from_be_bytes::<32>(result.as_ref().try_into().unwrap());
+
+        // Expected balance: 74743132960379 (74,743,132.960379 USDC with 6 decimals)
+        let expected_balance = U256::from(USDC_HOLDER_BALANCE);
+        assert_eq!(
+            balance, expected_balance,
+            "USDC balance mismatch. Expected: {}, Got: {}",
+            expected_balance, balance
+        );
 
         Ok(())
     }

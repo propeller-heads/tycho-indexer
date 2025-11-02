@@ -39,7 +39,8 @@ pub const STETH_EXPECTED_SLOTS: usize = 789526;
 
 // Known token holders for testing (addresses with large balances)
 // Using USV4 pool manager as a holder with known large balances
-pub const TOKEN_HOLDER_ADDR: &str = "0x000000000004444c5dc75cB358380D2e3dE08A90";
+pub const USDC_HOLDER_ADDR: &str = "0x000000000004444c5dc75cB358380D2e3dE08A90";
+pub const USDC_HOLDER_BALANCE: u64 = 74743132960379_u64; // Balance at the test block
 
 // WETH holder - Uniswap V2 WETH-USDC pair has significant WETH balance
 pub const WETH_HOLDER_ADDR: &str = "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc";
@@ -52,7 +53,7 @@ pub static TOKEN_HOLDERS: LazyLock<HashMap<Address, (Bytes, Bytes)>> = LazyLock:
             // USDC holder
             Address::from_str(USDC_STR).unwrap(),
             (
-                Bytes::from_str(TOKEN_HOLDER_ADDR).unwrap(),
+                Bytes::from_str(USDC_HOLDER_ADDR).unwrap(),
                 Bytes::from_str("0x43f6e8f16703").unwrap(), // Large balance
             ),
         ),
