@@ -23,9 +23,11 @@ use tycho_common::{
     Bytes,
 };
 use tycho_ethereum::{
-    account_extractor::contract::EVMAccountExtractor,
-    entrypoint_tracer::tracer::EVMEntrypointService, rpc_client::EthereumRpcClient,
-    token_pre_processor::EthereumTokenPreProcessor,
+    entrypoint_tracer::tracer::EVMEntrypointService,
+    rpc::EthereumRpcClient,
+    services::{
+        account_extractor::EVMAccountExtractor, token_pre_processor::EthereumTokenPreProcessor,
+    },
 };
 use tycho_storage::postgres::cache::CachedGateway;
 

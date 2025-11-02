@@ -20,7 +20,7 @@ use tycho_common::{
 
 use crate::{
     erc20::{approveCall, balanceOfCall, transferCall},
-    rpc_client::EthereumRpcClient,
+    rpc::EthereumRpcClient,
     BytesCodec,
 };
 

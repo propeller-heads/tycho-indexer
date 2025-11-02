@@ -41,8 +41,10 @@ use tycho_common::{
     Bytes,
 };
 use tycho_ethereum::{
-    account_extractor::contract::EVMAccountExtractor, rpc_client::EthereumRpcClient,
-    token_pre_processor::EthereumTokenPreProcessor,
+    rpc::EthereumRpcClient,
+    services::{
+        account_extractor::EVMAccountExtractor, token_pre_processor::EthereumTokenPreProcessor,
+    },
 };
 use tycho_indexer::{
     cli::{AnalyzeTokenArgs, Cli, Command, GlobalArgs, IndexArgs, RunSpkgArgs, SubstreamsArgs},

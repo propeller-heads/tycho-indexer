@@ -3,19 +3,15 @@
 extern crate pretty_assertions;
 
 #[cfg(feature = "onchain_data")]
-pub mod account_extractor;
-#[cfg(feature = "onchain_data")]
 #[allow(unused)] //TODO: Remove when used
 pub mod entrypoint_tracer;
 #[cfg(feature = "onchain_data")]
 pub mod erc20;
 pub mod errors;
 #[cfg(feature = "onchain_data")]
-pub mod rpc_client;
+pub mod rpc;
 #[cfg(feature = "onchain_data")]
-pub mod token_analyzer;
-#[cfg(feature = "onchain_data")]
-pub mod token_pre_processor;
+pub mod services;
 
 #[cfg(test)]
 pub mod test_fixtures;

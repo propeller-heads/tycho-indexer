@@ -16,8 +16,8 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     erc20::{decimalsCall, symbolCall},
-    rpc_client::EthereumRpcClient,
-    token_analyzer::trace_call::{call_request, TraceCallDetector},
+    rpc::EthereumRpcClient,
+    services::token_analyzer::{call_request, TraceCallDetector},
     BytesCodec,
 };
 

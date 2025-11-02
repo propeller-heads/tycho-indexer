@@ -14,7 +14,11 @@ use tycho_common::{
     Bytes,
 };
 
-use crate::{errors::RequestError, rpc_client::EthereumRpcClient, BytesCodec, RPCError};
+use crate::{
+    errors::{RPCError, RequestError},
+    rpc::EthereumRpcClient,
+    BytesCodec,
+};
 
 /// `EVMAccountExtractor` is a struct that implements the `AccountExtractor` trait for Ethereum
 /// accounts.

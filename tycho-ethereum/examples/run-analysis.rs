@@ -9,7 +9,7 @@ use tycho_common::{
     Bytes,
 };
 use tycho_ethereum::{
-    rpc_client::EthereumRpcClient, token_analyzer::trace_call::TraceCallDetector, BytesCodec,
+    rpc::EthereumRpcClient, services::token_analyzer::TraceCallDetector, BytesCodec,
 };
 
 #[tokio::main]

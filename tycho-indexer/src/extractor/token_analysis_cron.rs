@@ -14,9 +14,7 @@ use tycho_common::{
     traits::TokenAnalyzer,
     Bytes,
 };
-use tycho_ethereum::{
-    rpc_client::EthereumRpcClient, token_analyzer::trace_call::TraceCallDetector,
-};
+use tycho_ethereum::{rpc::EthereumRpcClient, services::token_analyzer::TraceCallDetector};
 
 use crate::cli::AnalyzeTokenArgs;
 
