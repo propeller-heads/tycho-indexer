@@ -36,7 +36,7 @@ impl Default for BatchingConfig {
 /// It is cheap to clone, as the `inner` internally uses an Arc for the ReqwestClient.
 #[derive(Clone, Debug)]
 pub struct EthereumRpcClient {
-    inner: ReqwestClient,
+    pub(crate) inner: ReqwestClient,
     pub(crate) batching: Option<BatchingConfig>,
 }
 

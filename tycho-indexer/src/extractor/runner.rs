@@ -617,8 +617,8 @@ impl ExtractorBuilder {
                         .and_then(|s| s.parse().ok())
                         .unwrap_or(200);
 
-                    let tracer = EVMEntrypointService::try_from_url_with_config(
-                        &trace_rpc_url,
+                    let tracer = EVMEntrypointService::new_with_config(
+                        rpc_client,
                         max_retries,
                         retry_delay_ms,
                     )

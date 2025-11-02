@@ -1441,7 +1441,7 @@ mod tests {
         storage::WithTotal,
         traits::MockEntryPointTracer,
     };
-    use tycho_ethereum::entrypoint_tracer::tracer::EVMEntrypointService;
+    use tycho_ethereum::{entrypoint_tracer::tracer::EVMEntrypointService, rpc::EthereumRpcClient};
 
     use super::*;
     use crate::testing::{evm_contract_slots, MockGateway};
@@ -1986,7 +1986,8 @@ mod tests {
     async fn test_add_entry_points_integration() {
         // Tests the RPC integration with the tracer. The DB writing is still mocked, however.
         let url = env::var("RPC_URL").expect("RPC_URL is not set");
-        let tracer = EVMEntrypointService::try_from_url(&url).unwrap();
+        let rpc = EthereumRpcClient::new(&url).expect("RPC client is not configured");
+        let tracer = EVMEntrypointService::new(&rpc).unwrap();
 
         let block_hash =
             Bytes::from_str("0x354c90a0a98912aff15b044bdff6ce3d4ace63a6fc5ac006ce53c8737d425ab2")

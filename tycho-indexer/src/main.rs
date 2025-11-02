@@ -324,6 +324,9 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
 async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
     create_tracing_subscriber();
 
+    let rpc_client = EthereumRpcClient::new(&global_args.rpc_url)
+        .map_err(|e| ExtractionError::Setup(format!("Failed to create RPC client: {e}")))?;
+
     let direct_gw = GatewayBuilder::new(&global_args.database_url)
         .set_chains(&[Chain::Ethereum]) // TODO: handle multichain
         .build_direct_gw()
@@ -336,7 +339,7 @@ async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
     })?;
 
     let (server_handle, server_task) =
-        ServicesBuilder::new(direct_gw.clone(), global_args.rpc_url.clone(), api_key)
+        ServicesBuilder::new(direct_gw.clone(), rpc_client.clone(), api_key)
             .prefix(&global_args.server_version_prefix)
             .bind(&global_args.server_ip)
             .port(global_args.server_port)
@@ -398,7 +401,7 @@ async fn create_indexing_tasks(
         ExtractionError::Setup("AUTH_API_KEY environment variable is not set".to_string())
     })?;
     let (server_handle, server_task) =
-        ServicesBuilder::new(cached_gw.clone(), global_args.rpc_url.clone(), api_key)
+        ServicesBuilder::new(cached_gw.clone(), rpc_client.clone(), api_key)
             .prefix(&global_args.server_version_prefix)
             .bind(&global_args.server_ip)
             .port(global_args.server_port)

@@ -3,6 +3,7 @@ use std::{
     str::FromStr,
 };
 
+use alloy::rpc::types::AccessListResult;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use tycho_common::{
@@ -10,35 +11,16 @@ use tycho_common::{
         blockchain::{AccountOverrides, StorageOverride},
         Address,
     },
-    serde_primitives::hex_bytes_vec,
     Bytes,
 };
 
-use crate::RPCError;
+use crate::{BytesCodec, RPCError};
 
 #[cfg(feature = "onchain_data")]
 pub mod allowance_slot_detector;
 #[cfg(feature = "onchain_data")]
 pub mod balance_slot_detector;
 pub mod tracer;
-
-#[derive(Debug, Deserialize)]
-pub struct AccessListResult {
-    #[serde(rename = "accessList")]
-    pub access_list: Vec<AccessListEntry>,
-    #[serde(rename = "gasUsed")]
-    pub gas_used: String,
-    #[serde(rename = "error")]
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct AccessListEntry {
-    pub address: String,
-    #[serde(rename = "storageKeys")]
-    #[serde(with = "hex_bytes_vec")]
-    pub storage_keys: Vec<Vec<u8>>,
-}
 
 pub fn build_state_overrides(
     overrides: &BTreeMap<Address, AccountOverrides>,
@@ -83,35 +65,30 @@ pub fn build_state_overrides(
     state_overrides
 }
 
-impl AccessListResult {
-    pub fn try_get_accessed_slots(&self) -> Result<HashMap<Address, HashSet<Bytes>>, RPCError> {
-        if let Some(error) = &self.error {
-            return Err(RPCError::TracingFailure(error.to_string()));
-        }
-
-        let mut out = HashMap::new();
-
-        for entry in &self.access_list {
-            // Parse Address
-            let addr = entry
-                .address
-                .strip_prefix("0x")
-                .unwrap_or(&entry.address);
-            let addr =
-                Address::from_str(addr).map_err(|e| RPCError::UnknownError(e.to_string()))?;
-
-            // Parse storage keys
-            let set = entry
-                .storage_keys
-                .iter()
-                .cloned()
-                .map(Into::into)
-                .collect();
-
-            out.insert(addr, set);
-        }
-        Ok(out)
+pub fn try_get_accessed_slots(
+    access_list: &AccessListResult,
+) -> Result<HashMap<Address, HashSet<Bytes>>, RPCError> {
+    if let Some(error) = &access_list.error {
+        return Err(RPCError::TracingFailure(error.to_string()));
     }
+
+    let mut out = HashMap::new();
+
+    for entry in &access_list.access_list.0 {
+        // Parse Address
+        let addr = Address::from(entry.address.to_bytes());
+
+        // Parse storage keys
+        let set = entry
+            .storage_keys
+            .iter()
+            .cloned()
+            .map(|k| k.to_bytes())
+            .collect();
+
+        out.insert(addr, set);
+    }
+    Ok(out)
 }
 
 #[cfg(test)]

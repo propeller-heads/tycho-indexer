@@ -1794,9 +1794,12 @@ mod tests {
         use std::{collections::HashSet, str::FromStr, sync::Arc};
 
         use tracing::info;
-        use tycho_ethereum::entrypoint_tracer::{
-            balance_slot_detector::{BalanceSlotDetectorConfig, EVMBalanceSlotDetector},
-            tracer::EVMEntrypointService,
+        use tycho_ethereum::{
+            entrypoint_tracer::{
+                balance_slot_detector::{BalanceSlotDetectorConfig, EVMBalanceSlotDetector},
+                tracer::EVMEntrypointService,
+            },
+            rpc::EthereumRpcClient,
         };
 
         use super::*;
@@ -2005,8 +2008,10 @@ mod tests {
             // Use real RPC-based tracer instead of mock
             let trace_rpc_url = std::env::var("TRACE_RPC_URL").expect("RPC_URL must be set");
             let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
-            let entrypoint_tracer = EVMEntrypointService::try_from_url(&trace_rpc_url)
-                .expect("Failed to create RPC entrypoint tracer");
+            let rpc =
+                EthereumRpcClient::new(&rpc_url).expect("Failed to create Ethereum RPC client");
+            let entrypoint_tracer =
+                EVMEntrypointService::new(&rpc).expect("Failed to create RPC entrypoint tracer");
 
             // Setup initial expectations for initialization
             db_gateway
