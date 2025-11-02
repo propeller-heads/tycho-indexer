@@ -262,7 +262,7 @@ impl ProtocolSim for CowAMMState {
             SimulationError::FatalError(format!("Error in bmul(ratio * scale): {err:?}"))
         })?;
 
-        Ok(u256_to_f64(ratio))
+        Ok(u256_to_f64(ratio)?)
     }
 
     fn get_amount_out(
