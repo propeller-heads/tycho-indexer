@@ -1,4 +1,4 @@
-use std::{any::Any, collections::HashMap};
+use std::{any::Any, collections::HashMap, fmt};
 
 use async_trait::async_trait;
 use num_bigint::BigUint;
@@ -19,12 +19,21 @@ use crate::rfq::{
     protocols::bebop::{client::BebopClient, models::BebopPriceData},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct BebopState {
     pub base_token: Token,
     pub quote_token: Token,
     pub price_data: BebopPriceData,
     pub client: BebopClient,
+}
+
+impl fmt::Debug for BebopState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("BebopState")
+            .field("base_token", &self.base_token)
+            .field("quote_token", &self.quote_token)
+            .finish_non_exhaustive()
+    }
 }
 
 impl BebopState {
