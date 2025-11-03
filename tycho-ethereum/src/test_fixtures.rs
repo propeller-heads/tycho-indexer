@@ -6,7 +6,6 @@
 use std::{collections::HashMap, str::FromStr, sync::LazyLock};
 
 use alloy::{
-    hex::FromHex,
     primitives::B256,
     rpc::client::{ClientBuilder, ReqwestClient},
 };
@@ -119,7 +118,7 @@ impl TestFixture {
         // TODO: improve rate limiting handling
         std::thread::sleep(std::time::Duration::from_secs(5));
 
-        let block_hash = B256::from_hex(TEST_BLOCK_HASH).expect("expected valid block hash");
+        let block_hash = B256::from_str(TEST_BLOCK_HASH).expect("expected valid block hash");
         let block = Block::new(
             TEST_BLOCK_NUMBER,
             chain,

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
+use std::{collections::HashMap, marker::PhantomData, str::FromStr, sync::Arc, time::Duration};
 
 use alloy::{
     primitives::U256,
@@ -260,10 +260,10 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
                 method: "eth_call".to_string(),
                 params: json!([
                     {
-                        "to": format!("0x{}", alloy::hex::encode(token.as_ref())),
-                        "data": format!("0x{}", alloy::hex::encode(calldata.as_ref()))
+                        "to": token.to_string(),
+                        "data": calldata.to_string()
                     },
-                    format!("0x{}", alloy::hex::encode(block_hash.as_ref()))
+                    block_hash.to_string()
                 ]),
             });
         }
@@ -622,16 +622,11 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
             if let Some(storage_obj) = account_data.get("storage") {
                 if let Some(storage_map) = storage_obj.as_object() {
                     for (slot_key, slot_value) in storage_map {
-                        // Decode slot key
-                        let slot_hex = slot_key
-                            .strip_prefix("0x")
-                            .unwrap_or(slot_key);
-                        let slot_bytes = match alloy::hex::decode(slot_hex) {
-                            Ok(bytes) => Bytes::from(bytes),
-                            Err(_) => {
-                                warn!("Failed to decode slot key: {}", slot_key);
-                                continue;
-                            }
+                        let slot_bytes = if let Ok(bytes) = Bytes::from_str(slot_key) {
+                            bytes
+                        } else {
+                            warn!("Failed to decode slot key: {slot_key}");
+                            continue;
                         };
 
                         // Decode slot value
@@ -644,7 +639,7 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
                                     slot_values.push(((address.clone(), slot_bytes), value));
                                 }
                                 Err(_) => {
-                                    warn!("Failed to decode slot value: {}", value_str);
+                                    warn!("Failed to decode slot value: {value_str}");
                                 }
                             }
                         }
@@ -739,21 +734,20 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
 
             // Format the override value as a 32-byte hex string
             let test_value_hex = format!("0x{:064x}", metadata.test_value);
-            let slot_hex = format!("0x{}", alloy::hex::encode(slot.as_ref()));
 
             // Create eth_call with state override
             batch_data.push(BatchRequestData {
                 method: "eth_call".to_string(),
                 params: json!([
                     {
-                        "to": format!("0x{}", alloy::hex::encode(metadata.token.as_ref())),
-                        "data": format!("0x{}", alloy::hex::encode(calldata.as_ref()))
+                        "to": metadata.token.to_string(),
+                        "data": calldata.to_string()
                     },
-                    format!("0x{}", alloy::hex::encode(block_hash.as_ref())),
+                    block_hash.to_string(),
                     {
-                        format!("0x{}", alloy::hex::encode(storage_addr.as_ref())): {
+                        storage_addr.to_string(): {
                             "stateDiff": {
-                                slot_hex: test_value_hex
+                                slot.to_string(): test_value_hex
                             }
                         }
                     }
@@ -808,7 +802,7 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
                                 debug!(
                                     token = %metadata.token,
                                     storage = %storage_addr,
-                                    slot = %alloy::hex::encode(slot.as_ref()),
+                                    slot = %slot,
                                     returned_balance = %returned_value,
                                     original_value = %metadata.original_value,
                                     "Storage slot detected successfully"
@@ -830,7 +824,7 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
                                 } else {
                                     warn!(
                                         token = %metadata.token,
-                                        slot = %alloy::hex::encode(slot.as_ref()),
+                                        slot = %slot,
                                         "Storage slot test failed - no more slots to try"
                                     );
                                     results.insert(

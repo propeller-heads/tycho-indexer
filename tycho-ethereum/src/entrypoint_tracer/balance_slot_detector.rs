@@ -299,10 +299,9 @@ mod tests {
         target_balance: U256,
         block_hash: &BlockHash,
     ) -> Result<U256, SlotDetectorError> {
-        let slot_hex = alloy::hex::encode(detected_slot.as_ref());
         let target_hex = format!("0x{:064x}", target_balance);
 
-        println!("Setting storage slot 0x{} to value {}", slot_hex, target_hex);
+        println!("Setting storage slot {detected_slot} to value {target_hex}");
 
         let calldata = BalanceStrategy::encode_calldata(balance_owner);
 
@@ -313,14 +312,14 @@ mod tests {
             "method": "eth_call",
             "params": [
                 {
-                    "to": format!("0x{}", alloy::hex::encode(token.as_ref())),
-                    "data": format!("0x{}", alloy::hex::encode(calldata.as_ref()))
+                    "to": token.to_string(),
+                    "data": calldata.to_string()
                 },
-                format!("0x{}", alloy::hex::encode(block_hash.as_ref())),
+                block_hash.to_string(),
                 {
-                    format!("0x{}", alloy::hex::encode(token.as_ref())): {
+                    token.to_string(): {
                         "stateDiff": {
-                            format!("0x{}", slot_hex): target_hex
+                            detected_slot.to_string(): target_hex
                         }
                     }
                 }

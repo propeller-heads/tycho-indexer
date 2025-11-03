@@ -450,7 +450,7 @@ impl EthereumRpcClient {
 mod tests {
     use std::str::FromStr;
 
-    use alloy::{hex, rpc::types::TransactionInput, sol_types::SolCall};
+    use alloy::{rpc::types::TransactionInput, sol_types::SolCall};
     use rstest::rstest;
     use tracing::warn;
     use tracing_test::traced_test;
@@ -573,16 +573,15 @@ mod tests {
             code.len()
         );
 
-        let actual_prefix = if code.len() >= 10 {
-            format!("0x{}", hex::encode(&code[..10]))
-        } else {
-            format!("0x{}", hex::encode(&code))
-        };
+        // Adjust the code prefix check to match the expected prefix length
+        // As we are not checking the full code, just the beginning
+        let mut code_string = code.to_string();
+        code_string.truncate(22);
 
         assert_eq!(
-            actual_prefix, expected_prefix,
+            code_string, expected_prefix,
             "{} code prefix mismatch. Expected: {}, Got: {}",
-            address_str, expected_prefix, actual_prefix
+            address_str, expected_prefix, code_string
         );
 
         Ok(())
