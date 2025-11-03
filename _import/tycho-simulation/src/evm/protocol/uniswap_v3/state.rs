@@ -346,8 +346,19 @@ impl ProtocolSim for UniswapV3State {
                     .unwrap()
                     .net_liquidity;
                 let liquidity_delta = if zero_for_one { -liquidity_raw } else { liquidity_raw };
-                current_liquidity =
-                    liquidity_math::add_liquidity_delta(current_liquidity, liquidity_delta)?;
+
+                // Check if applying this liquidity delta would cause underflow
+                // If so, stop here rather than continuing with invalid state
+                match liquidity_math::add_liquidity_delta(current_liquidity, liquidity_delta) {
+                    Ok(new_liquidity) => {
+                        current_liquidity = new_liquidity;
+                    }
+                    Err(_) => {
+                        // Liquidity would underflow, stop iteration here
+                        // This represents the maximum liquidity we can actually use
+                        break;
+                    }
+                }
             }
 
             // Move to the next tick position
@@ -879,5 +890,49 @@ mod tests_forks {
             .unwrap();
 
         assert_eq!(res.amount, BigUint::from_str("5975901673").unwrap());
+    }
+
+    #[test]
+    fn test_get_limits_graceful_underflow() {
+        // Verifies graceful handling of liquidity underflow in get_limits for V3
+        let pool = UniswapV3State::new(
+            1000000,                                                  // Small liquidity: 1M
+            U256::from_str("79228162514264337593543950336").unwrap(), // 1:1 price
+            FeeAmount::Medium,
+            0,
+            vec![
+                // A tick with net_liquidity > current_liquidity
+                // When zero_for_one=true, this gets negated and would cause underflow
+                TickInfo::new(-60, 2000000).unwrap(), // 2x current liquidity
+            ],
+        )
+        .unwrap();
+
+        let usdc = Token::new(
+            &Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+            "USDC",
+            6,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
+        );
+        let weth = Token::new(
+            &Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
+            "WETH",
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
+        );
+
+        let (limit_in, limit_out) = pool
+            .get_limits(usdc.address.clone(), weth.address.clone())
+            .unwrap();
+
+        // Should return some conservative limits
+        assert!(limit_in > BigUint::zero());
+        assert!(limit_out > BigUint::zero());
     }
 }

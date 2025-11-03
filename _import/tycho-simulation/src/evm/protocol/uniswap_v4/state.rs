@@ -694,8 +694,19 @@ impl ProtocolSim for UniswapV4State {
                     .unwrap()
                     .net_liquidity;
                 let liquidity_delta = if zero_for_one { -liquidity_raw } else { liquidity_raw };
-                current_liquidity =
-                    liquidity_math::add_liquidity_delta(current_liquidity, liquidity_delta)?;
+
+                // Check if applying this liquidity delta would cause underflow
+                // If so, stop here rather than continuing with invalid state
+                match liquidity_math::add_liquidity_delta(current_liquidity, liquidity_delta) {
+                    Ok(new_liquidity) => {
+                        current_liquidity = new_liquidity;
+                    }
+                    Err(_) => {
+                        // Liquidity would underflow, stop iteration here
+                        // This represents the maximum liquidity we can actually use
+                        break;
+                    }
+                }
             }
 
             // Move to the next tick position
@@ -1600,5 +1611,38 @@ mod tests {
         // Total should be 1001000 (1000 protocol + 1000000 LP override)
         // This would overflow in compute_swap_step, but that's expected to be validated earlier
         assert_eq!(total, 1_001_000);
+    }
+
+    #[test]
+    fn test_get_limits_graceful_underflow() {
+        // Verifies graceful handling of liquidity underflow in get_limits for V4
+        let usv4_state = UniswapV4State::new(
+            1000000,
+            U256::from_str("79228162514264337593543950336").unwrap(), // 1:1 price
+            UniswapV4Fees { zero_for_one: 0, one_for_zero: 0, lp_fee: 3000 },
+            0,
+            60,
+            vec![
+                // A tick with net_liquidity > current_liquidity
+                // When zero_for_one=true, this gets negated and would cause underflow
+                TickInfo {
+                    index: -60,
+                    net_liquidity: 2000000, // 2x current liquidity
+                    sqrt_price: U256::from_str("79051508376726796163471739988").unwrap(),
+                },
+            ],
+        )
+        .unwrap();
+
+        let usdc = usdc();
+        let weth = weth();
+
+        let (limit_in, limit_out) = usv4_state
+            .get_limits(usdc.address.clone(), weth.address.clone())
+            .unwrap();
+
+        // Should return some conservative limits
+        assert!(limit_in > BigUint::zero());
+        assert!(limit_out > BigUint::zero());
     }
 }
