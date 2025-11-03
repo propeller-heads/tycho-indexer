@@ -47,7 +47,7 @@ impl EthereumTokenPreProcessor {
             }
         };
 
-        match symbolCall::abi_decode_returns(&result) {
+        match symbolCall::abi_decode_returns_validate(&result) {
             Ok(symbol) => symbol,
             Err(e) => {
                 warn!(
@@ -75,7 +75,7 @@ impl EthereumTokenPreProcessor {
             }
         };
 
-        match decimalsCall::abi_decode_returns(&result) {
+        match decimalsCall::abi_decode_returns_validate(&result) {
             Ok(decimals) => decimals,
             Err(e) => {
                 warn!(
