@@ -25,17 +25,87 @@ use tokio::{
 use tracing::{debug, error, instrument, trace, warn};
 use tycho_common::{
     dto::{
-        Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse, PaginationParams,
-        PaginationResponse, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
-        ProtocolStateRequestBody, ProtocolStateRequestResponse, ProtocolSystemsRequestBody,
-        ProtocolSystemsRequestResponse, ResponseToken, StateRequestBody, StateRequestResponse,
-        TokensRequestBody, TokensRequestResponse, TracedEntryPointRequestBody,
-        TracedEntryPointRequestResponse, VersionParam,
+        BlockParam, Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse,
+        EntryPointWithTracingParams, PaginationParams, PaginationResponse, ProtocolComponent,
+        ProtocolComponentRequestResponse, ProtocolComponentsRequestBody, ProtocolStateRequestBody,
+        ProtocolStateRequestResponse, ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse,
+        ResponseToken, StateRequestBody, StateRequestResponse, TokensRequestBody,
+        TokensRequestResponse, TracedEntryPointRequestBody, TracedEntryPointRequestResponse,
+        TracingResult, VersionParam,
     },
+    models::ComponentId,
     Bytes,
 };
 
-use crate::TYCHO_SERVER_VERSION;
+use crate::{
+    feed::synchronizer::{ComponentWithState, Snapshot},
+    TYCHO_SERVER_VERSION,
+};
+
+/// Request body for fetching a snapshot of protocol states and VM storage.
+///
+/// This struct helps to coordinate fetching  multiple pieces of related data
+/// (protocol states, contract storage, TVL, entry points).
+#[derive(Clone, Debug, PartialEq)]
+pub struct SnapshotParameters<'a> {
+    /// Which chain to fetch snapshots for
+    pub chain: Chain,
+    /// Protocol system name, required for correct state resolution
+    pub protocol_system: &'a str,
+    /// Components to fetch protocol states for
+    pub components: &'a HashMap<ComponentId, ProtocolComponent>,
+    /// Traced entry points data mapped by component id
+    pub entrypoints: Option<&'a HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>>,
+    /// Contract addresses to fetch VM storage for
+    pub contract_ids: &'a [Bytes],
+    /// Block number for versioning
+    pub block_number: u64,
+    /// Whether to include balance information
+    pub include_balances: bool,
+    /// Whether to fetch TVL data
+    pub include_tvl: bool,
+}
+
+impl<'a> SnapshotParameters<'a> {
+    pub fn new(
+        chain: Chain,
+        protocol_system: &'a str,
+        components: &'a HashMap<ComponentId, ProtocolComponent>,
+        contract_ids: &'a [Bytes],
+        block_number: u64,
+    ) -> Self {
+        Self {
+            chain,
+            protocol_system,
+            components,
+            entrypoints: None,
+            contract_ids,
+            block_number,
+            include_balances: true,
+            include_tvl: true,
+        }
+    }
+
+    /// Set whether to include balance information (default: true)
+    pub fn include_balances(mut self, include_balances: bool) -> Self {
+        self.include_balances = include_balances;
+        self
+    }
+
+    /// Set whether to fetch TVL data (default: true)
+    pub fn include_tvl(mut self, include_tvl: bool) -> Self {
+        self.include_tvl = include_tvl;
+        self
+    }
+
+    pub fn entrypoints(
+        mut self,
+        entrypoints: &'a HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>,
+    ) -> Self {
+        self.entrypoints = Some(entrypoints);
+        self
+    }
+}
 
 #[derive(Error, Debug)]
 pub enum RPCError {
@@ -586,6 +656,13 @@ pub trait RPCClient: Send + Sync {
                 }
             })
     }
+
+    async fn get_snapshots<'a>(
+        &self,
+        request: &SnapshotParameters<'a>,
+        chunk_size: usize,
+        concurrency: usize,
+    ) -> Result<Snapshot, RPCError>;
 }
 
 #[derive(Debug, Clone)]
@@ -1024,6 +1101,151 @@ impl RPCClient for HttpRPCClient {
             })?;
         trace!(?entrypoints, "Received traced_entry_points response from Tycho server");
         Ok(entrypoints)
+    }
+
+    async fn get_snapshots<'a>(
+        &self,
+        request: &SnapshotParameters<'a>,
+        chunk_size: usize,
+        concurrency: usize,
+    ) -> Result<Snapshot, RPCError> {
+        let component_ids: Vec<_> = request
+            .components
+            .keys()
+            .cloned()
+            .collect();
+
+        let version = VersionParam::new(
+            None,
+            Some({
+                #[allow(deprecated)]
+                BlockParam { hash: None, chain: None, number: Some(request.block_number as i64) }
+            }),
+        );
+
+        let component_tvl = if request.include_tvl && !component_ids.is_empty() {
+            let body = ComponentTvlRequestBody::id_filtered(component_ids.clone(), request.chain);
+            self.get_component_tvl_paginated(&body, chunk_size, concurrency)
+                .await?
+                .tvl
+        } else {
+            HashMap::new()
+        };
+
+        let mut protocol_states = if !component_ids.is_empty() {
+            self.get_protocol_states_paginated(
+                request.chain,
+                &component_ids,
+                request.protocol_system,
+                request.include_balances,
+                &version,
+                chunk_size,
+                concurrency,
+            )
+            .await?
+            .states
+            .into_iter()
+            .map(|state| (state.component_id.clone(), state))
+            .collect()
+        } else {
+            HashMap::new()
+        };
+
+        // Convert to ComponentWithState, which includes entrypoint information.
+        let states = request
+            .components
+            .values()
+            .filter_map(|component| {
+                if let Some(state) = protocol_states.remove(&component.id) {
+                    Some((
+                        component.id.clone(),
+                        ComponentWithState {
+                            state,
+                            component: component.clone(),
+                            component_tvl: component_tvl
+                                .get(&component.id)
+                                .cloned(),
+                            entrypoints: request
+                                .entrypoints
+                                .as_ref()
+                                .and_then(|map| map.get(&component.id))
+                                .cloned()
+                                .unwrap_or_default(),
+                        },
+                    ))
+                } else if component_ids.contains(&component.id) {
+                    // only emit error event if we requested this component
+                    let component_id = &component.id;
+                    error!(?component_id, "Missing state for native component!");
+                    None
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let vm_storage = if !request.contract_ids.is_empty() {
+            let contract_states = self
+                .get_contract_state_paginated(
+                    request.chain,
+                    request.contract_ids,
+                    request.protocol_system,
+                    &version,
+                    chunk_size,
+                    concurrency,
+                )
+                .await?
+                .accounts
+                .into_iter()
+                .map(|acc| (acc.address.clone(), acc))
+                .collect::<HashMap<_, _>>();
+
+            trace!(states=?&contract_states, "Retrieved ContractState");
+
+            let contract_address_to_components = request
+                .components
+                .iter()
+                .filter_map(|(id, comp)| {
+                    if component_ids.contains(id) {
+                        Some(
+                            comp.contract_ids
+                                .iter()
+                                .map(|address| (address.clone(), comp.id.clone())),
+                        )
+                    } else {
+                        None
+                    }
+                })
+                .flatten()
+                .fold(HashMap::<Bytes, Vec<String>>::new(), |mut acc, (addr, c_id)| {
+                    acc.entry(addr).or_default().push(c_id);
+                    acc
+                });
+
+            request
+                .contract_ids
+                .iter()
+                .filter_map(|address| {
+                    if let Some(state) = contract_states.get(address) {
+                        Some((address.clone(), state.clone()))
+                    } else if let Some(ids) = contract_address_to_components.get(address) {
+                        // only emit error even if we did actually request this address
+                        error!(
+                            ?address,
+                            ?ids,
+                            "Component with lacking contract storage encountered!"
+                        );
+                        None
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        } else {
+            HashMap::new()
+        };
+
+        Ok(Snapshot { states, vm_storage })
     }
 }
 
@@ -2103,5 +2325,265 @@ mod tests {
             // Should be within a reasonable range (the 2s retry-after plus some buffer)
             assert!(diff <= Duration::from_secs(3), "Retry time difference too large: {:?}", diff);
         }
+    }
+
+    #[tokio::test]
+    async fn test_get_snapshots() {
+        let mut server = Server::new_async().await;
+
+        // Mock protocol states response
+        let protocol_states_resp = r#"
+        {
+            "states": [
+                {
+                    "component_id": "component1",
+                    "attributes": {
+                        "attribute_1": "0x00000000000003e8"
+                    },
+                    "balances": {
+                        "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2": "0x01f4"
+                    }
+                }
+            ],
+            "pagination": {
+                "page": 0,
+                "page_size": 100,
+                "total": 1
+            }
+        }
+        "#;
+
+        // Mock contract state response
+        let contract_state_resp = r#"
+        {
+            "accounts": [
+                {
+                    "chain": "ethereum",
+                    "address": "0x1111111111111111111111111111111111111111",
+                    "title": "",
+                    "slots": {},
+                    "native_balance": "0x01f4",
+                    "token_balances": {},
+                    "code": "0x00",
+                    "code_hash": "0x5c06b7c5b3d910fd33bc2229846f9ddaf91d584d9b196e16636901ac3a77077e",
+                    "balance_modify_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "code_modify_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "creation_tx": null
+                }
+            ],
+            "pagination": {
+                "page": 0,
+                "page_size": 100,
+                "total": 1
+            }
+        }
+        "#;
+
+        // Mock component TVL response
+        let tvl_resp = r#"
+        {
+            "tvl": {
+                "component1": 1000000.0
+            },
+            "pagination": {
+                "page": 0,
+                "page_size": 100,
+                "total": 1
+            }
+        }
+        "#;
+
+        let protocol_states_mock = server
+            .mock("POST", "/v1/protocol_state")
+            .expect(1)
+            .with_body(protocol_states_resp)
+            .create_async()
+            .await;
+
+        let contract_state_mock = server
+            .mock("POST", "/v1/contract_state")
+            .expect(1)
+            .with_body(contract_state_resp)
+            .create_async()
+            .await;
+
+        let tvl_mock = server
+            .mock("POST", "/v1/component_tvl")
+            .expect(1)
+            .with_body(tvl_resp)
+            .create_async()
+            .await;
+
+        let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+
+        #[allow(deprecated)]
+        let component = tycho_common::dto::ProtocolComponent {
+            id: "component1".to_string(),
+            protocol_system: "test_protocol".to_string(),
+            protocol_type_name: "test_type".to_string(),
+            chain: Chain::Ethereum,
+            tokens: vec![],
+            contract_ids: vec![
+                Bytes::from_str("0x1111111111111111111111111111111111111111").unwrap()
+            ],
+            static_attributes: HashMap::new(),
+            change: tycho_common::dto::ChangeType::Creation,
+            creation_tx: Bytes::from_str(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            )
+            .unwrap(),
+            created_at: chrono::Utc::now().naive_utc(),
+        };
+
+        let mut components = HashMap::new();
+        components.insert("component1".to_string(), component);
+
+        let contract_ids =
+            vec![Bytes::from_str("0x1111111111111111111111111111111111111111").unwrap()];
+
+        let request = SnapshotParameters::new(
+            Chain::Ethereum,
+            "test_protocol",
+            &components,
+            &contract_ids,
+            12345,
+        );
+
+        let response = client
+            .get_snapshots(&request, 100, 4)
+            .await
+            .expect("get snapshots");
+
+        // Verify all mocks were called
+        protocol_states_mock.assert();
+        contract_state_mock.assert();
+        tvl_mock.assert();
+
+        // Assert states
+        assert_eq!(response.states.len(), 1);
+        assert!(response
+            .states
+            .contains_key("component1"));
+
+        // Check that the state has the expected TVL
+        let component_state = response
+            .states
+            .get("component1")
+            .unwrap();
+        assert_eq!(component_state.component_tvl, Some(1000000.0));
+
+        // Assert VM storage
+        assert_eq!(response.vm_storage.len(), 1);
+        let contract_addr = Bytes::from_str("0x1111111111111111111111111111111111111111").unwrap();
+        assert!(response
+            .vm_storage
+            .contains_key(&contract_addr));
+    }
+
+    #[tokio::test]
+    async fn test_get_snapshots_empty_components() {
+        let server = Server::new_async().await;
+        let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+
+        let components = HashMap::new();
+        let contract_ids = vec![];
+
+        let request = SnapshotParameters::new(
+            Chain::Ethereum,
+            "test_protocol",
+            &components,
+            &contract_ids,
+            12345,
+        );
+
+        let response = client
+            .get_snapshots(&request, 100, 4)
+            .await
+            .expect("get snapshots");
+
+        // Should return empty response without making any requests
+        assert!(response.states.is_empty());
+        assert!(response.vm_storage.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_snapshots_without_tvl() {
+        let mut server = Server::new_async().await;
+
+        let protocol_states_resp = r#"
+        {
+            "states": [
+                {
+                    "component_id": "component1",
+                    "attributes": {},
+                    "balances": {}
+                }
+            ],
+            "pagination": {
+                "page": 0,
+                "page_size": 100,
+                "total": 1
+            }
+        }
+        "#;
+
+        let protocol_states_mock = server
+            .mock("POST", "/v1/protocol_state")
+            .expect(1)
+            .with_body(protocol_states_resp)
+            .create_async()
+            .await;
+
+        let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+
+        // Create test component
+        #[allow(deprecated)]
+        let component = tycho_common::dto::ProtocolComponent {
+            id: "component1".to_string(),
+            protocol_system: "test_protocol".to_string(),
+            protocol_type_name: "test_type".to_string(),
+            chain: Chain::Ethereum,
+            tokens: vec![],
+            contract_ids: vec![],
+            static_attributes: HashMap::new(),
+            change: tycho_common::dto::ChangeType::Creation,
+            creation_tx: Bytes::from_str(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            )
+            .unwrap(),
+            created_at: chrono::Utc::now().naive_utc(),
+        };
+
+        let mut components = HashMap::new();
+        components.insert("component1".to_string(), component);
+        let contract_ids = vec![];
+
+        let request = SnapshotParameters::new(
+            Chain::Ethereum,
+            "test_protocol",
+            &components,
+            &contract_ids,
+            12345,
+        )
+        .include_balances(false)
+        .include_tvl(false);
+
+        let response = client
+            .get_snapshots(&request, 100, 4)
+            .await
+            .expect("get snapshots");
+
+        // Verify only necessary mocks were called
+        protocol_states_mock.assert();
+        // No contract_state_mock.assert() since contract_ids is empty
+        // No tvl_mock.assert() since include_tvl is false
+
+        assert_eq!(response.states.len(), 1);
+        // Check that TVL is None since we didn't request it
+        let component_state = response
+            .states
+            .get("component1")
+            .unwrap();
+        assert_eq!(component_state.component_tvl, None);
     }
 }
