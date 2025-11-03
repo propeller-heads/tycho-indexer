@@ -69,6 +69,24 @@ mod tests {
     use serde_json::json;
 
     use super::{BalanceStrategy, SlotDetectionStrategy, *};
+    use crate::test_fixtures::TestFixture;
+
+    impl TestFixture {
+        fn create_balance_detector() -> EVMBalanceSlotDetector {
+            let fixture = TestFixture::new();
+
+            let config = SlotDetectorConfig {
+                max_batch_size: 5,
+                max_retries: 3,
+                initial_backoff_ms: 100,
+                max_backoff_ms: 5000,
+            };
+
+            let rpc = fixture.create_rpc_client(true);
+
+            EVMBalanceSlotDetector::new(config, &rpc)
+        }
+    }
 
     #[test]
     fn test_encode_balance_of_calldata() {
@@ -91,16 +109,6 @@ mod tests {
     #[tokio::test]
     #[ignore = "require RPC connection"]
     async fn test_detect_slots_integration() {
-        let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
-        println!("Using RPC URL: {}", rpc_url);
-        let config = SlotDetectorConfig {
-            max_batch_size: 5,
-            rpc_url,
-            max_retries: 3,
-            initial_backoff_ms: 100,
-            max_backoff_ms: 5000,
-        };
-
         // Use real token addresses and block for testing (WETH, USDC)
         let weth_bytes = alloy::hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
         let usdc_bytes = alloy::hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
@@ -130,7 +138,7 @@ mod tests {
         let block_hash = BlockHash::from(block_hash_bytes);
         println!("Block hash: 0x{}", alloy::hex::encode(block_hash.as_ref()));
 
-        let mut detector = EVMBalanceSlotDetector::new(config).unwrap();
+        let mut detector = TestFixture::create_balance_detector();
         let results = detector
             .detect_balance_slots(&tokens, pool_manager, block_hash)
             .await;
@@ -192,13 +200,6 @@ mod tests {
     #[ignore] // Requires real RPC connection
     async fn test_detect_slots_rebasing_token() {
         let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
-        let config = SlotDetectorConfig {
-            max_batch_size: 5,
-            rpc_url: rpc_url.clone(),
-            max_retries: 3,
-            initial_backoff_ms: 100,
-            max_backoff_ms: 5000,
-        };
 
         // stETH contract address (Lido Staked Ether)
         let steth_bytes = alloy::hex::decode("ae7ab96520DE3A18E5e111B5EaAb095312D7fE84").unwrap();
@@ -216,7 +217,7 @@ mod tests {
                 .unwrap();
         let block_hash = BlockHash::from(block_hash_bytes);
 
-        let mut detector = EVMBalanceSlotDetector::new(config).unwrap();
+        let mut detector = TestFixture::create_balance_detector();
         let results = detector
             .detect_balance_slots(&tokens, balance_owner.clone(), block_hash.clone())
             .await;

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, default::Default};
+use std::{collections::HashMap, default::Default, time::Duration};
 
 use alloy::{
     primitives::{Address, B256, U256},
@@ -10,6 +10,7 @@ use alloy::{
             Block, BlockId, BlockNumberOrTag, TransactionRequest,
         },
     },
+    transports::http::reqwest,
 };
 use tracing::{debug, info, trace};
 use tycho_common::Bytes;
@@ -46,7 +47,16 @@ impl EthereumRpcClient {
             .parse()
             .map_err(|e| RPCError::SetupError(format!("Invalid RPC URL: {}", e)))?;
 
-        let rpc = ClientBuilder::default().http(url);
+        let http_client = reqwest::ClientBuilder::new()
+            .timeout(Duration::from_secs(30))
+            .connect_timeout(Duration::from_secs(10))
+            .pool_idle_timeout(Duration::from_secs(90))
+            .pool_max_idle_per_host(10)
+            .tcp_nodelay(true)
+            .build()
+            .map_err(|e| RPCError::SetupError(format!("Failed to create HTTP client: {e}")))?;
+
+        let rpc = ClientBuilder::default().http_with_client(http_client, url);
         let batching = Some(BatchingConfig::default());
 
         Ok(Self { inner: rpc, batching })

@@ -8,8 +8,11 @@ use tycho_common::{
     storage::{EntryPointGateway, ProtocolGateway},
     traits::{AccountExtractor, EntryPointTracer},
 };
-use tycho_ethereum::entrypoint_tracer::{
-    balance_slot_detector::EVMBalanceSlotDetector, slot_detector::SlotDetectorConfig,
+use tycho_ethereum::{
+    entrypoint_tracer::{
+        balance_slot_detector::EVMBalanceSlotDetector, slot_detector::SlotDetectorConfig,
+    },
+    rpc::EthereumRpcClient,
 };
 
 use crate::extractor::dynamic_contract_indexer::{
@@ -65,21 +68,20 @@ pub fn setup_metadata_registries(
 pub fn setup_hook_orchestrator_registry(
     router_address: Address,
     pool_manager: Address,
-    rpc_url: String,
+    rpc: &EthereumRpcClient,
 ) -> HookOrchestratorRegistry {
     let mut hook_registry = HookOrchestratorRegistry::new();
 
     // Create EVM balance slot detector
     let balance_slot_detector = {
         let config = SlotDetectorConfig {
-            rpc_url: rpc_url.clone(),
             max_batch_size: 5,
             max_retries: 3,
             initial_backoff_ms: 100,
             max_backoff_ms: 5000,
         };
 
-        EVMBalanceSlotDetector::new(config).expect("Failed to create EVMBalanceSlotDetector")
+        EVMBalanceSlotDetector::new(config, rpc)
     };
 
     // Create hook entrypoint configuration for Euler V1
@@ -111,6 +113,7 @@ pub fn setup_hook_orchestrator_registry(
 #[allow(clippy::too_many_arguments)]
 pub fn create_testing_hooks_dci<AE, T, G>(
     inner_dci: DynamicContractIndexer<AE, T, G>,
+    rpc: &EthereumRpcClient,
     rpc_url: String,
     router_address: Address,
     pool_manager: Address,
@@ -130,7 +133,7 @@ where
 
     // Setup hook orchestrator registry
     let hook_orchestrator_registry =
-        setup_hook_orchestrator_registry(router_address, pool_manager, rpc_url);
+        setup_hook_orchestrator_registry(router_address, pool_manager, rpc);
 
     // Create metadata orchestrator
     let metadata_orchestrator =

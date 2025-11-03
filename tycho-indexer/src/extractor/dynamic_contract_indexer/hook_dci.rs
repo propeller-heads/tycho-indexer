@@ -15,6 +15,8 @@ use tycho_common::{
     storage::{EntryPointFilter, EntryPointGateway, ProtocolGateway},
     traits::{AccountExtractor, EntryPointTracer},
 };
+#[cfg(test)]
+use tycho_ethereum::rpc::EthereumRpcClient;
 
 use crate::extractor::{
     dynamic_contract_indexer::{
@@ -80,6 +82,7 @@ where
     #[allow(clippy::too_many_arguments)]
     pub fn new_for_testing(
         inner_dci: DynamicContractIndexer<AE, T, G>,
+        rpc: &EthereumRpcClient,
         rpc_url: String,
         router_address: Address,
         pool_manager: Address,
@@ -92,6 +95,7 @@ where
 
         create_testing_hooks_dci(
             inner_dci,
+            rpc,
             rpc_url,
             router_address,
             pool_manager,
@@ -1922,7 +1926,7 @@ mod tests {
         fn setup_test_hook_orchestrator_registry(
             router_address: Address,
             pool_manager: Address,
-            rpc_url: String,
+            rpc: &EthereumRpcClient,
         ) -> HookOrchestratorRegistry {
             let mut hook_registry = HookOrchestratorRegistry::new();
 
@@ -1939,13 +1943,12 @@ mod tests {
 
             let balance_slot_detector_config = SlotDetectorConfig {
                 max_batch_size: 5,
-                rpc_url,
                 max_retries: 3,
                 initial_backoff_ms: 100,
                 max_backoff_ms: 5000,
             };
-            let balance_slot_detector = EVMBalanceSlotDetector::new(balance_slot_detector_config)
-                .expect("Failed to create EVMBalanceSlotDetector");
+            let balance_slot_detector =
+                EVMBalanceSlotDetector::new(balance_slot_detector_config, rpc);
 
             let mut entrypoint_generator = UniswapV4DefaultHookEntrypointGenerator::new(
                 DefaultSwapAmountEstimator::with_limits(),
@@ -2061,11 +2064,8 @@ mod tests {
                 parser_registry,
                 provider_registry,
             );
-            let hook_orchestrator_registry = setup_test_hook_orchestrator_registry(
-                router_address,
-                pool_manager.clone(),
-                rpc_url.clone(),
-            );
+            let hook_orchestrator_registry =
+                setup_test_hook_orchestrator_registry(router_address, pool_manager.clone(), &rpc);
 
             // Create new mock gateway for Hook DCI (since we moved ownership of the first one)
             let mut db_gateway2 = MockGateway::new();
@@ -2278,6 +2278,8 @@ mod tests {
             );
 
             let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
+            let rpc =
+                EthereumRpcClient::new(&rpc_url).expect("Failed to create Ethereum RPC client");
             let (generator_registry, parser_registry, provider_registry) =
                 setup_test_metadata_registries(rpc_url.clone());
             let metadata_orchestrator = BlockMetadataOrchestrator::new(
@@ -2285,11 +2287,8 @@ mod tests {
                 parser_registry,
                 provider_registry,
             );
-            let hook_orchestrator_registry = setup_test_hook_orchestrator_registry(
-                router_address,
-                pool_manager.clone(),
-                rpc_url,
-            );
+            let hook_orchestrator_registry =
+                setup_test_hook_orchestrator_registry(router_address, pool_manager.clone(), &rpc);
 
             let db_gateway2 = MockGateway::new();
 

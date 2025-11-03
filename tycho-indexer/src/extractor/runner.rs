@@ -657,6 +657,7 @@ impl ExtractorBuilder {
 
                         let mut hooks_dci = create_testing_hooks_dci(
                             base_dci,
+                            rpc_client,
                             rpc_url.clone(),
                             router_address,
                             pool_manager,

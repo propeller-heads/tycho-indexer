@@ -76,6 +76,7 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
+    use crate::rpc::EthereumRpcClient;
 
     #[test]
     fn test_encode_allowance_calldata() {
@@ -103,11 +104,8 @@ mod tests {
     async fn test_detect_truf_allowance_slot() {
         let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
 
-        let detector = EVMAllowanceSlotDetector::new(SlotDetectorConfig {
-            rpc_url: rpc_url.clone(),
-            ..Default::default()
-        })
-        .expect("failed to construct detector");
+        let rpc = EthereumRpcClient::new(&rpc_url).expect("failed to create RPC client");
+        let detector = EVMAllowanceSlotDetector::new(SlotDetectorConfig::default(), &rpc);
 
         // TRUF
         let token = Address::from_str("0x38c2a4a7330b22788374b8ff70bba513c8d848ca").unwrap();
