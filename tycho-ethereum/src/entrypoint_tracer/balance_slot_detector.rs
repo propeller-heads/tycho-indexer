@@ -901,12 +901,27 @@ impl EVMBalanceSlotDetector {
                             }
                         }
                         Err(e) => {
-                            results.insert(
-                                metadata.token,
-                                Err(BalanceSlotError::InvalidResponse(format!(
-                                    "Failed to extract balance from slot test response: {e}"
-                                ))),
-                            );
+                            // If we encounter an extraction error - try the next slot
+                            // This handles cases like proxy contracts where some slots return empty
+                            // data
+                            metadata
+                                .all_slots
+                                .retain(|s| s.0 != (storage_addr.clone(), slot.clone()));
+                            if !metadata.all_slots.is_empty() {
+                                warn!(
+                                    token = %metadata.token,
+                                    error = %e,
+                                    "Failed to extract balance from response - trying next slot"
+                                );
+                                retry_data.push(metadata.clone());
+                            } else {
+                                results.insert(
+                                    metadata.token,
+                                    Err(BalanceSlotError::InvalidResponse(format!(
+                                        "Failed to extract balance from slot test response: {e}"
+                                    ))),
+                                );
+                            }
                         }
                     }
                 }
