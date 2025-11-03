@@ -873,6 +873,20 @@ mod tests {
         }
     }
 
+    const LONG_BACKOFF_CONFIG: SlotDetectorConfig = SlotDetectorConfig {
+        max_batch_size: 10,
+        max_retries: 3,
+        initial_backoff_ms: 100,
+        max_backoff_ms: 5000,
+    };
+
+    const SHORT_BACKOFF_CONFIG: SlotDetectorConfig = SlotDetectorConfig {
+        max_batch_size: 10,
+        max_retries: 3,
+        initial_backoff_ms: 10,
+        max_backoff_ms: 100,
+    };
+
     fn create_validation_data() -> Vec<ValidationData> {
         let validation_data = vec![
             ValidationData {
@@ -895,32 +909,24 @@ mod tests {
 
     impl TestFixture {
         fn create_slot_detector_without_rpc(
-            config: Option<SlotDetectorConfig>,
+            config: SlotDetectorConfig,
         ) -> SlotDetector<TestFixtureStrategy> {
             TestFixture::create_slot_detector(config, "http://localhost:8545")
         }
 
         fn create_slot_detector(
-            config: Option<SlotDetectorConfig>,
+            config: SlotDetectorConfig,
             rpc_url: &str,
         ) -> SlotDetector<TestFixtureStrategy> {
             let rpc = EthereumRpcClient::new(rpc_url).expect("Failed to create RPC client");
 
-            SlotDetector::<TestFixtureStrategy>::new(config.unwrap_or_default(), &rpc)
+            SlotDetector::<TestFixtureStrategy>::new(config, &rpc)
         }
     }
 
     #[test]
     fn test_calculate_backoff() {
-        let config = SlotDetectorConfig {
-            max_batch_size: 10,
-            max_retries: 3,
-            initial_backoff_ms: 100,
-            max_backoff_ms: 5000,
-        };
-
-        let detector = TestFixture::create_slot_detector_without_rpc(Some(config));
-
+        let detector = TestFixture::create_slot_detector_without_rpc(LONG_BACKOFF_CONFIG);
         // Test exponential backoff
         let backoff1 = detector.calculate_backoff(1);
         assert!((100..=125).contains(&backoff1)); // 100ms + up to 25% jitter
@@ -956,14 +962,7 @@ mod tests {
 
     #[test]
     fn test_extract_balance_from_call_response() {
-        let config = SlotDetectorConfig {
-            max_batch_size: 10,
-            max_retries: 3,
-            initial_backoff_ms: 100,
-            max_backoff_ms: 5000,
-        };
-        let detector = TestFixture::create_slot_detector_without_rpc(Some(config));
-
+        let detector = TestFixture::create_slot_detector_without_rpc(LONG_BACKOFF_CONFIG);
         // Test valid response
         let response = json!("0x0000000000000000000000000000000000000000000000000de0b6b3a7640000");
         let balance = detector
@@ -989,14 +988,7 @@ mod tests {
 
     #[test]
     fn test_extract_slot_values_from_trace_response() {
-        let config = SlotDetectorConfig {
-            max_batch_size: 10,
-            max_retries: 3,
-            initial_backoff_ms: 100,
-            max_backoff_ms: 5000,
-        };
-        let detector = TestFixture::create_slot_detector_without_rpc(Some(config));
-
+        let detector = TestFixture::create_slot_detector_without_rpc(LONG_BACKOFF_CONFIG);
         // Test valid trace with storage
         let response = json!({
                 "0x1234567890123456789012345678901234567890": {
@@ -1034,14 +1026,7 @@ mod tests {
 
     #[test]
     fn test_find_best_slot_by_value_comparison() {
-        let config = SlotDetectorConfig {
-            max_batch_size: 10,
-            max_retries: 3,
-            initial_backoff_ms: 100,
-            max_backoff_ms: 5000,
-        };
-        let detector = TestFixture::create_slot_detector_without_rpc(Some(config));
-
+        let detector = TestFixture::create_slot_detector_without_rpc(LONG_BACKOFF_CONFIG);
         let addr = Address::from([0x11u8; 20]);
         let slot1 = Bytes::from(vec![0x01u8; 32]);
         let slot2 = Bytes::from(vec![0x02u8; 32]);
@@ -1074,14 +1059,7 @@ mod tests {
 
     #[test]
     fn test_process_batched_response() {
-        let config = SlotDetectorConfig {
-            max_batch_size: 10,
-            max_retries: 3,
-            initial_backoff_ms: 100,
-            max_backoff_ms: 5000,
-        };
-        let detector = TestFixture::create_slot_detector_without_rpc(Some(config));
-
+        let detector = TestFixture::create_slot_detector_without_rpc(LONG_BACKOFF_CONFIG);
         let token1 = Address::from([0x11u8; 20]);
         let token2 = Address::from([0x22u8; 20]);
 
@@ -1127,14 +1105,7 @@ mod tests {
 
     #[test]
     fn test_create_balance_requests() {
-        let config = SlotDetectorConfig {
-            max_batch_size: 10,
-            max_retries: 3,
-            initial_backoff_ms: 100,
-            max_backoff_ms: 5000,
-        };
-        let detector = TestFixture::create_slot_detector_without_rpc(Some(config));
-
+        let detector = TestFixture::create_slot_detector_without_rpc(LONG_BACKOFF_CONFIG);
         let token1 = Address::from([0x11u8; 20]);
         let token2 = Address::from([0x22u8; 20]);
         let owner = Address::from([0x33u8; 20]);
@@ -1163,14 +1134,7 @@ mod tests {
 
     #[test]
     fn test_create_validation_requests() {
-        let config = SlotDetectorConfig {
-            max_batch_size: 10,
-            max_retries: 3,
-            initial_backoff_ms: 100,
-            max_backoff_ms: 5000,
-        };
-        let detector = TestFixture::create_slot_detector_without_rpc(Some(config));
-
+        let detector = TestFixture::create_slot_detector_without_rpc(LONG_BACKOFF_CONFIG);
         let validation_data = create_validation_data();
 
         let owner = Address::from([0x33u8; 20]);
@@ -1198,14 +1162,7 @@ mod tests {
 
     #[test]
     fn test_process_validation_responses() {
-        let config = SlotDetectorConfig {
-            max_batch_size: 10,
-            max_retries: 3,
-            initial_backoff_ms: 100,
-            max_backoff_ms: 5000,
-        };
-        let detector = TestFixture::create_slot_detector_without_rpc(Some(config));
-
+        let detector = TestFixture::create_slot_detector_without_rpc(LONG_BACKOFF_CONFIG);
         let validation_data = create_validation_data();
 
         // Create responses - first one changes (valid), second doesn't (invalid)
@@ -1235,14 +1192,7 @@ mod tests {
     #[tokio::test]
     async fn test_send_batched_request_retry_logic() {
         let mut server = Server::new_async().await;
-        let config = SlotDetectorConfig {
-            max_batch_size: 10,
-            max_retries: 3,
-            initial_backoff_ms: 10,
-            max_backoff_ms: 100,
-        };
-
-        let detector = TestFixture::create_slot_detector(Some(config), &server.url());
+        let detector = TestFixture::create_slot_detector(SHORT_BACKOFF_CONFIG, &server.url());
 
         // Create a simple batch request
         let batch_request =
@@ -1289,14 +1239,7 @@ mod tests {
     #[tokio::test]
     async fn test_send_batched_request_max_retries_exceeded() {
         let mut server = Server::new_async().await;
-        let config = SlotDetectorConfig {
-            max_batch_size: 10,
-            max_retries: 3,
-            initial_backoff_ms: 10,
-            max_backoff_ms: 100,
-        };
-
-        let detector = TestFixture::create_slot_detector(Some(config), &server.url());
+        let detector = TestFixture::create_slot_detector(SHORT_BACKOFF_CONFIG, &server.url());
 
         let batch_request =
             vec![BatchRequestData { method: "eth_call".to_string(), params: json!([]) }];
@@ -1346,14 +1289,7 @@ mod tests {
     #[tokio::test]
     async fn test_retry_on_all_failed_responses() {
         let mut server = Server::new_async().await;
-        let config = SlotDetectorConfig {
-            max_batch_size: 10,
-            max_retries: 3,
-            initial_backoff_ms: 10,
-            max_backoff_ms: 100,
-        };
-
-        let detector = TestFixture::create_slot_detector(Some(config), &server.url());
+        let detector = TestFixture::create_slot_detector(SHORT_BACKOFF_CONFIG, &server.url());
 
         let batch_request = vec![
             BatchRequestData { method: "eth_call".to_string(), params: json!([]) },
@@ -1408,14 +1344,7 @@ mod tests {
     #[tokio::test]
     async fn test_retry_on_retryable_errors_mixed_with_success() {
         let mut server = Server::new_async().await;
-        let config = SlotDetectorConfig {
-            max_batch_size: 10,
-            max_retries: 3,
-            initial_backoff_ms: 10,
-            max_backoff_ms: 100,
-        };
-
-        let detector = TestFixture::create_slot_detector(Some(config), &server.url());
+        let detector = TestFixture::create_slot_detector(SHORT_BACKOFF_CONFIG, &server.url());
 
         let batch_request = vec![
             BatchRequestData { method: "eth_call".to_string(), params: json!([]) },
@@ -1470,14 +1399,7 @@ mod tests {
     #[tokio::test]
     async fn test_retry_on_all_failed_non_retryable_errors_for_safety() {
         let mut server = Server::new_async().await;
-        let config = SlotDetectorConfig {
-            max_batch_size: 10,
-            max_retries: 3,
-            initial_backoff_ms: 10,
-            max_backoff_ms: 100,
-        };
-
-        let detector = TestFixture::create_slot_detector(Some(config), &server.url());
+        let detector = TestFixture::create_slot_detector(SHORT_BACKOFF_CONFIG, &server.url());
 
         let batch_request =
             vec![BatchRequestData { method: "eth_call".to_string(), params: json!([]) }];
@@ -1525,14 +1447,7 @@ mod tests {
     #[tokio::test]
     async fn test_retry_exhaustion_with_retryable_errors() {
         let mut server = Server::new_async().await;
-        let config = SlotDetectorConfig {
-            max_batch_size: 10,
-            max_retries: 3,
-            initial_backoff_ms: 10,
-            max_backoff_ms: 100,
-        };
-
-        let detector = TestFixture::create_slot_detector(Some(config), &server.url());
+        let detector = TestFixture::create_slot_detector(SHORT_BACKOFF_CONFIG, &server.url());
 
         let batch_request =
             vec![BatchRequestData { method: "eth_call".to_string(), params: json!([]) }];
@@ -1593,14 +1508,7 @@ mod tests {
     #[tokio::test]
     async fn test_mixed_retryable_and_non_retryable_errors() {
         let mut server = Server::new_async().await;
-        let config = SlotDetectorConfig {
-            max_batch_size: 10,
-            max_retries: 3,
-            initial_backoff_ms: 10,
-            max_backoff_ms: 100,
-        };
-
-        let detector = TestFixture::create_slot_detector(Some(config), &server.url());
+        let detector = TestFixture::create_slot_detector(SHORT_BACKOFF_CONFIG, &server.url());
 
         let batch_request = vec![
             BatchRequestData { method: "eth_call".to_string(), params: json!([]) },
@@ -1656,14 +1564,7 @@ mod tests {
     #[tokio::test]
     async fn test_no_retry_on_mixed_success_and_non_retryable_errors() {
         let mut server = Server::new_async().await;
-        let config = SlotDetectorConfig {
-            max_batch_size: 10,
-            max_retries: 3,
-            initial_backoff_ms: 10,
-            max_backoff_ms: 100,
-        };
-
-        let detector = TestFixture::create_slot_detector(Some(config), &server.url());
+        let detector = TestFixture::create_slot_detector(SHORT_BACKOFF_CONFIG, &server.url());
 
         let batch_request = vec![
             BatchRequestData { method: "eth_call".to_string(), params: json!([]) },
