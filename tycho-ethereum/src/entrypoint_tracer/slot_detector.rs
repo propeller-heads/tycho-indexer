@@ -243,9 +243,9 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
         block_hash: &BlockHash,
     ) -> Vec<BatchRequestData> {
         let mut batch_data = Vec::new();
+        let tracer_params = RPCTracerParams::new(None, calldata.clone());
 
         for token in tokens {
-            let tracer_params = RPCTracerParams::new(None, calldata.clone());
             let trace_params =
                 EVMEntrypointService::create_trace_call_params(token, &tracer_params, block_hash);
 
