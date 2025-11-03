@@ -28,6 +28,7 @@ pub const STETH_STR: &str = "0xae7ab96520de3a18e5e111b5eaab095312d7fe84";
 pub const DAI_STR: &str = "0x6b175474e89094c44da98b954eedeac495271d0f";
 pub const WBTC_STR: &str = "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599";
 pub const USDC_STR: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+pub const USDT_STR: &str = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
 pub const WETH_STR: &str = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 
 // Common token addresses array

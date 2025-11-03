@@ -65,11 +65,18 @@ impl BalanceSlotDetector for EVMBalanceSlotDetector {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use alloy::{primitives::U256, transports::http::reqwest};
+    use rstest::rstest;
     use serde_json::json;
 
     use super::{BalanceStrategy, SlotDetectionStrategy, *};
-    use crate::test_fixtures::TestFixture;
+    use crate::test_fixtures::{
+        TestFixture, STETH_STR, USDC_HOLDER_ADDR, USDC_STR, USDT_STR, WETH_STR,
+    };
+
+    const BLOCK_HASH: &str = "0x658814e4cb074359f10dd71237cc57b1ae6791fc9de59fde570e724bd884cbb0";
 
     impl TestFixture {
         fn create_balance_detector() -> EVMBalanceSlotDetector {
@@ -106,44 +113,38 @@ mod tests {
         assert_eq!(&calldata[16..36], address.as_ref());
     }
 
+    #[rstest]
+    #[case("0xf847a638E44186F3287ee9F8cAF73FF4d4B80784", "ZeroBalanceUser")]
+    #[case(USDC_HOLDER_ADDR, "PoolManager")]
     #[tokio::test]
     #[ignore = "require RPC connection"]
-    async fn test_detect_slots_integration() {
-        // Use real token addresses and block for testing (WETH, USDC)
-        let weth_bytes = alloy::hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
-        let usdc_bytes = alloy::hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
-        let usdt_bytes = alloy::hex::decode("0xdAC17F958D2ee523a2206206994597C13D831ec7").unwrap();
+    async fn test_detect_slots_integration(
+        #[case] holder_address_hex: &str,
+        #[case] holder_name: &str,
+    ) {
+        let weth = Address::from_str(WETH_STR).expect("Invalid WETH address");
+        let usdc = Address::from_str(USDC_STR).expect("Invalid USDC address");
+        let usdt = Address::from_str(USDT_STR).expect("Invalid USDT address");
 
-        let pool_manager_bytes =
-            alloy::hex::decode("000000000004444c5dc75cB358380D2e3dE08A90").unwrap();
+        let holder_address = Address::from_str(holder_address_hex).expect("Invalid Holder address");
 
-        let weth = Address::from(weth_bytes);
-        let usdc = Address::from(usdc_bytes);
-        let usdt = Address::from(usdt_bytes);
-
-        let pool_manager = Address::from(pool_manager_bytes);
-
-        println!("WETH address: 0x{}", alloy::hex::encode(weth.as_ref()));
-        println!("USDC address: 0x{}", alloy::hex::encode(usdc.as_ref()));
-        println!("USDT address: 0x{}", alloy::hex::encode(usdt.as_ref()));
-
-        println!("Pool manager address: 0x{}", alloy::hex::encode(pool_manager.as_ref()));
+        println!("WETH address: {weth}");
+        println!("USDC address: {usdc}");
+        println!("USDT address: {usdt}");
+        println!("{holder_name} address: {holder_address}");
 
         let tokens = vec![weth.clone(), usdc.clone(), usdt.clone()];
 
         // Use a recent block
-        let block_hash_bytes =
-            alloy::hex::decode("658814e4cb074359f10dd71237cc57b1ae6791fc9de59fde570e724bd884cbb0")
-                .unwrap();
-        let block_hash = BlockHash::from(block_hash_bytes);
-        println!("Block hash: 0x{}", alloy::hex::encode(block_hash.as_ref()));
+        let block_hash = BlockHash::from_str(BLOCK_HASH).expect("Invalid block hash");
+        println!("Block hash: {block_hash}");
 
         let mut detector = TestFixture::create_balance_detector();
         let results = detector
-            .detect_balance_slots(&tokens, pool_manager, block_hash)
+            .detect_balance_slots(&tokens, holder_address, block_hash)
             .await;
 
-        println!("Results: {:?}", results);
+        println!("Results for {holder_name}: {results:?}");
         println!("Number of tokens with results: {}", results.len());
 
         // We should get results for the tokens
@@ -154,75 +155,80 @@ mod tests {
             match weth_result {
                 Ok((storage_addr, slot)) => {
                     println!(
-                        "WETH slot detected - Storage: 0x{}, Slot: 0x{}",
-                        alloy::hex::encode(storage_addr.as_ref()),
-                        alloy::hex::encode(slot.as_ref())
+                        "WETH slot detected for {holder_name} - Storage: {storage_addr}, Slot: {slot}",
                     );
                 }
-                Err(e) => panic!("Failed to detect WETH slot: {}", e),
+                Err(e) => panic!("Failed to detect WETH slot for {holder_name}: {e}"),
             }
         } else {
-            panic!("No result for WETH token");
+            panic!("No result for WETH token for {holder_name}");
         }
 
         if let Some(usdc_result) = results.get(&usdc) {
             match usdc_result {
                 Ok((storage_addr, slot)) => {
                     println!(
-                        "USDC slot detected - Storage: 0x{}, Slot: 0x{}",
-                        alloy::hex::encode(storage_addr.as_ref()),
-                        alloy::hex::encode(slot.as_ref())
+                        "USDC slot detected for {holder_name} - Storage: {storage_addr}, Slot: {slot}",
                     );
                 }
-                Err(e) => panic!("Failed to detect USDC slot: {}", e),
+                Err(e) => panic!("Failed to detect USDC slot for {holder_name}: {e}"),
             }
         } else {
-            panic!("No result for USDC token");
+            panic!("No result for USDC token for {holder_name}");
         }
 
         if let Some(usdt_result) = results.get(&usdt) {
             match usdt_result {
                 Ok((storage_addr, slot)) => {
                     println!(
-                        "USDT slot detected - Storage: 0x{}, Slot: 0x{}",
-                        alloy::hex::encode(storage_addr.as_ref()),
-                        alloy::hex::encode(slot.as_ref())
+                        "USDT slot detected for {holder_name} - Storage: {storage_addr}, Slot: {slot}",
                     );
+                    assert_eq!(storage_addr, &usdt, "Storage address should match token address");
                 }
-                Err(e) => panic!("Failed to detect USDT slot: {}", e),
+                Err(e) => panic!("Failed to detect USDT slot for {holder_name}: {e}"),
             }
         } else {
-            panic!("No result for USDT token");
+            panic!("No result for USDT token for {holder_name}");
         }
     }
 
+    #[rstest]
+    #[case(
+        "0xf847a638E44186F3287ee9F8cAF73FF4d4B80784",
+        "ZeroBalanceUser",
+        "0xf37edb7186962a2f96b7645384a9919d11ea2c760622e9e423e3ff0fa39e9b5b"
+    )]
+    // Address extracted from stETH events. Verified that it has funds
+    #[case(
+        "0xef417FCE1883c6653E7dC6AF7c6F85CCDE84Aa09",
+        "NonZeroBalanceUser",
+        "0x28b290becf7be0019520d491d9cd869337f3d683be3e569e54f9044b94df94c0"
+    )]
     #[tokio::test]
-    #[ignore] // Requires real RPC connection
-    async fn test_detect_slots_rebasing_token() {
+    #[ignore = "require RPC connection"]
+    async fn test_detect_slots_rebasing_token(
+        #[case] holder_address_hex: &str,
+        #[case] holder_name: &str,
+        #[case] expected_slot: &str,
+    ) {
         let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
 
         // stETH contract address (Lido Staked Ether)
-        let steth_bytes = alloy::hex::decode("ae7ab96520DE3A18E5e111B5EaAb095312D7fE84").unwrap();
-        let steth = Address::from(steth_bytes);
+        let steth = Address::from_str(STETH_STR).expect("Invalid stETH address");
 
         // Address extracted from stETH events. Verified that it has funds
-        let owner_address = alloy::hex::decode("ef417FCE1883c6653E7dC6AF7c6F85CCDE84Aa09").unwrap();
-        let balance_owner = Address::from(owner_address);
+        let balance_owner =
+            Address::from_str(holder_address_hex).expect("Invalid balance owner address");
 
         let tokens = vec![steth.clone()];
 
         // Use a recent block where stETH has activity
-        let block_hash_bytes =
-            alloy::hex::decode("658814e4cb074359f10dd71237cc57b1ae6791fc9de59fde570e724bd884cbb0")
-                .unwrap();
-        let block_hash = BlockHash::from(block_hash_bytes);
+        let block_hash = BlockHash::from_str(BLOCK_HASH).expect("Invalid block hash");
 
         let mut detector = TestFixture::create_balance_detector();
         let results = detector
             .detect_balance_slots(&tokens, balance_owner.clone(), block_hash.clone())
             .await;
-
-        dbg!(&results);
 
         // For rebasing tokens like stETH, we expect multiple slots to be accessed
         // because balanceOf() needs to:
@@ -232,14 +238,11 @@ mod tests {
         if let Some(result) = results.get(&steth) {
             if let Ok((storage_addr, detected_slot)) = result {
                 println!(
-                    "Detected stETH storage slot - Storage: 0x{}, Slot: 0x{}",
-                    alloy::hex::encode(storage_addr.as_ref()),
-                    alloy::hex::encode(detected_slot.as_ref())
+                    "Detected stETH storage slot - Storage: {storage_addr}, Slot: {detected_slot}",
                 );
 
                 // Convert to hex string for verification
-                let slot_hex = alloy::hex::encode(detected_slot.as_ref());
-                println!("stETH slot hex: 0x{}", slot_hex);
+                println!("stETH slot hex: {detected_slot}");
 
                 // Now verify the detected slot by setting it to a specific value and checking
                 // balanceOf
@@ -259,8 +262,8 @@ mod tests {
                 // Convert U256 to f64 for display
                 let target_eth = target_balance.to::<u128>() as f64 / 1e18;
                 let verified_eth = verified_balance.to::<u128>() as f64 / 1e18;
-                println!("Target balance: {:.6} ETH", target_eth);
-                println!("Verified balance: {:.6} ETH", verified_eth);
+                println!("Target balance: {target_eth:.6} ETH");
+                println!("Verified balance: {verified_eth:.6} ETH");
 
                 // For stETH, due to the shares system, we expect the actual balance to be
                 // equal to or higher than our target (shares are converted to ETH)
@@ -276,13 +279,10 @@ mod tests {
                 println!("✓ Storage slot manipulation verified successfully!");
 
                 // Check if this matches known stETH storage positions:
-                let expected_slot =
-                    "28b290becf7be0019520d491d9cd869337f3d683be3e569e54f9044b94df94c0";
-
-                assert_eq!(slot_hex, expected_slot);
+                assert_eq!(detected_slot.to_string(), expected_slot);
             } else if let Err(e) = result {
                 // If no slot detected, print debug info
-                println!("Failed to detect slots for stETH: {} - this might indicate the balance owner has no stETH balance", e);
+                println!("Failed to detect slots for stETH: {e} for {holder_name}.");
             }
         } else {
             panic!("No result for stETH token");
