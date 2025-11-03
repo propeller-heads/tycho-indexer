@@ -7250,7 +7250,6 @@ dependencies = [
  "tracing-test",
  "tycho-common",
  "unicode-segmentation",
- "url",
 ]
 
 [[package]]
