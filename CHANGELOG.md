@@ -1,3 +1,20 @@
+## [0.101.0](https://github.com/propeller-heads/tycho-indexer/compare/0.100.1...0.101.0) (2025-11-03)
+
+
+### Features
+
+* Better RPC get_snapshots organization ([5451349](https://github.com/propeller-heads/tycho-indexer/commit/54513492302d7b85bc4eac056fdbd3c68502a4b7))
+* Expose get_snapshots in RPC client ([1f9e702](https://github.com/propeller-heads/tycho-indexer/commit/1f9e70277f533941ba295bf5e9ac2bd82210acc9))
+* Expose get_snapshots in RPC client ([#743](https://github.com/propeller-heads/tycho-indexer/issues/743)) ([cfa8959](https://github.com/propeller-heads/tycho-indexer/commit/cfa89593b3d4eb1adbe8cb2d936d5d42b9dbc17e))
+* get_snapshots takes SnapshotRequestBody as input ([bd8b2ea](https://github.com/propeller-heads/tycho-indexer/commit/bd8b2eab775da15f59d37f76c10f77d46b39ed31))
+* Move chunk_size and concurrency to get_snapshots input ([b153090](https://github.com/propeller-heads/tycho-indexer/commit/b1530907d61ab490bcec828ddfbfdbe42a1588d8))
+* Use references in ShapshotParameters ([8e966be](https://github.com/propeller-heads/tycho-indexer/commit/8e966beead2983911997d42e45f70b6122ea9e4f))
+
+
+### Bug Fixes
+
+* Test fixes after get_snapshots moved to RPC ([18437d6](https://github.com/propeller-heads/tycho-indexer/commit/18437d6f6406b571a98bf5b7d4c25ad91c003c5f))
+
 ## [0.100.1](https://github.com/propeller-heads/tycho-indexer/compare/0.100.0...0.100.1) (2025-10-30)
 
 
