@@ -258,6 +258,8 @@ where
             let mut app = App::new()
                 .wrap(cors)
                 .wrap(actix_middleware::from_fn(rpc_metrics_middleware))
+                // Enable zstd compression while being backwards compatible with clients that do not
+                .wrap(actix_middleware::Compress::default())
                 .wrap(RequestTracing::new())
                 .app_data(rpc_data.clone())
                 .service(
@@ -325,5 +327,100 @@ where
                 .map_err(|err| ExtractionError::Unknown(err.to_string()))
         });
         Ok((handle, task))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use actix_web::{test, web, App};
+
+    use super::*;
+
+    #[actix_web::test]
+    async fn test_compression_without_accept_encoding_header() {
+        let app = test::init_service(
+            App::new()
+                .wrap(actix_middleware::Compress::default())
+                .service(web::resource("/health").route(web::get().to(rpc::health))),
+        )
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri("/health")
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+
+        // Should succeed with 200 OK
+        assert!(resp.status().is_success());
+
+        // Should NOT have Content-Encoding header (uncompressed)
+        assert!(resp
+            .headers()
+            .get("content-encoding")
+            .is_none());
+
+        let body = test::read_body(resp).await;
+        assert!(!body.is_empty());
+    }
+
+    #[actix_web::test]
+    async fn test_compression_with_zstd_encoding() {
+        let app = test::init_service(
+            App::new()
+                .wrap(actix_middleware::Compress::default())
+                .service(web::resource("/health").route(web::get().to(rpc::health))),
+        )
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri("/health")
+            .insert_header(("accept-encoding", "zstd"))
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+
+        // Should succeed with 200 OK
+        assert!(resp.status().is_success());
+
+        // Should have Content-Encoding: zstd header
+        let content_encoding = resp
+            .headers()
+            .get("content-encoding")
+            .and_then(|h| h.to_str().ok());
+        assert_eq!(content_encoding, Some("zstd"));
+
+        // Body should be compressed (we won't decompress in test, just verify it exists)
+        let body = test::read_body(resp).await;
+        assert!(!body.is_empty());
+    }
+
+    #[actix_web::test]
+    async fn test_compression_with_explicit_identity() {
+        let app = test::init_service(
+            App::new()
+                .wrap(actix_middleware::Compress::default())
+                .service(web::resource("/health").route(web::get().to(rpc::health))),
+        )
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri("/health")
+            .insert_header(("accept-encoding", "identity"))
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+
+        // Should succeed with 200 OK
+        assert!(resp.status().is_success());
+
+        // Should NOT have Content-Encoding header (identity means no encoding)
+        assert!(resp
+            .headers()
+            .get("content-encoding")
+            .is_none());
+
+        let body = test::read_body(resp).await;
+        assert!(!body.is_empty());
     }
 }
