@@ -287,7 +287,7 @@ dependencies = [
  "substreams-ethereum",
  "substreams-helper",
  "tiny-keccak",
- "tycho-substreams 0.5.1",
+ "tycho-substreams",
 ]
 
 [[package]]
@@ -308,12 +308,12 @@ dependencies = [
  "substreams-ethereum",
  "substreams-helper",
  "tiny-keccak",
- "tycho-substreams 0.6.0",
+ "tycho-substreams",
 ]
 
 [[package]]
 name = "ethereum-uniswap-v4-with-hooks"
-version = "0.5.2"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "ethabi 18.0.0",
@@ -330,7 +330,7 @@ dependencies = [
  "substreams-ethereum",
  "substreams-helper",
  "tiny-keccak",
- "tycho-substreams 0.6.0",
+ "tycho-substreams",
 ]
 
 [[package]]
@@ -1411,23 +1411,6 @@ dependencies = [
  "indexmap",
  "toml_datetime",
  "winnow",
-]
-
-[[package]]
-name = "tycho-substreams"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a164ecbc3f2d7515e9447d7c1933a01fba6e54a082bbe1c73eb7b827d2a45b47"
-dependencies = [
- "ethabi 18.0.0",
- "hex",
- "itertools 0.12.1",
- "num-bigint",
- "prost 0.11.9",
- "serde",
- "serde_json",
- "substreams",
- "substreams-ethereum",
 ]
 
 [[package]]
