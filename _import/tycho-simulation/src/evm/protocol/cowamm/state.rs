@@ -27,17 +27,17 @@ type TokenInfo = (Bytes, U256, U256);
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CowAMMState {
     /// The Pool Address
-    address: Bytes,
+    pub address: Bytes,
     /// Token A information: (address, liquidity, weight)
-    token_a: TokenInfo,
+    pub token_a: TokenInfo,
     /// Token B information: (address, liquidity, weight)
-    token_b: TokenInfo,
+    pub token_b: TokenInfo,
     /// The Swap Fee on the Pool
-    fee: u64,
+    pub fee: u64,
     ///The lp token of the pool
-    lp_token: Bytes,
+    pub lp_token: Bytes,
     /// The Supply of the lp token
-    lp_token_supply: U256,
+    pub lp_token_supply: U256,
 }
 
 impl CowAMMState {
