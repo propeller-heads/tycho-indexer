@@ -700,7 +700,11 @@ impl DeltasClient for WsDeltasClient {
                 .ok_or_else(|| DeltasError::NotConnected)?;
             trace!("Sending subscribe command");
             inner.new_subscription(&extractor_id, ready_tx)?;
-            let cmd = Command::Subscribe { extractor_id, include_state: options.include_state };
+            let cmd = Command::Subscribe {
+                extractor_id,
+                include_state: options.include_state,
+                compression: false,
+            };
             inner
                 .ws_send(tungstenite::protocol::Message::Text(
                     serde_json::to_string(&cmd).map_err(|e| {
@@ -987,7 +991,8 @@ mod tests {
                         "chain":"ethereum",
                         "name":"vm:ambient"
                     },
-                    "include_state": true
+                    "include_state": true,
+                    "compression": false
                 }"#.to_owned().replace(|c: char| c.is_whitespace(), "")
             )),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(r#"
@@ -1127,7 +1132,8 @@ mod tests {
                         "chain": "ethereum",
                         "name": "vm:ambient"
                     },
-                    "include_state": true
+                    "include_state": true,
+                    "compression": false
                 }"#
                     .to_owned()
                     .replace(|c: char| c.is_whitespace(), ""),
@@ -1222,7 +1228,8 @@ mod tests {
                         "chain":"ethereum",
                         "name":"vm:ambient"
                     },
-                    "include_state": true
+                    "include_state": true,
+                    "compression": false
                 }"#
                     .to_owned()
                     .replace(|c: char| c.is_whitespace(), ""),
@@ -1295,7 +1302,8 @@ mod tests {
                         "chain":"ethereum",
                         "name":"vm:ambient"
                     },
-                    "include_state": true
+                    "include_state": true,
+                    "compression": false
                 }"#.to_owned().replace(|c: char| c.is_whitespace(), "")
             )),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(r#"
@@ -1537,7 +1545,8 @@ mod tests {
                         "chain":"ethereum",
                         "name":"vm:ambient"
                     },
-                    "include_state": true
+                    "include_state": true,
+                    "compression": false
                 }"#
                     .to_owned()
                     .replace(|c: char| c.is_whitespace(), ""),
@@ -1746,7 +1755,7 @@ mod tests {
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true}"#.to_string()
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true,"compression":false}"#.to_string()
                 ),
             ),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
@@ -1804,7 +1813,7 @@ mod tests {
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true}"#.to_string()
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true,"compression":false}"#.to_string()
                 ),
             ),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(format!(
@@ -1879,7 +1888,7 @@ mod tests {
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true}"#.to_string()
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true,"compression":false}"#.to_string()
                 ),
             ),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json))
@@ -1930,7 +1939,7 @@ mod tests {
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"failing_extractor"},"include_state":true}"#.to_string()
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"failing_extractor"},"include_state":true,"compression":false}"#.to_string()
                 ),
             ),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
@@ -1986,7 +1995,7 @@ mod tests {
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true}"#.to_string()
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true,"compression":false}"#.to_string()
                 ),
             ),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
@@ -2058,7 +2067,7 @@ mod tests {
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"vm:ambient"},"include_state":true}"#.to_string()
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"vm:ambient"},"include_state":true,"compression":false}"#.to_string()
                 ),
             ),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(format!(

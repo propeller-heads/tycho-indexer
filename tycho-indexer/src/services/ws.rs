@@ -52,6 +52,8 @@ pub struct WsActor {
     heartbeat: Instant,
     app_state: web::Data<WsData>,
     subscriptions: HashMap<Uuid, SpawnHandle>,
+    /// Tracks which subscriptions have zstd compression enabled
+    compression_enabled: HashMap<Uuid, bool>,
     user_identity: Option<String>,
 }
 
@@ -62,6 +64,7 @@ impl WsActor {
             heartbeat: Instant::now(),
             app_state,
             subscriptions: HashMap::new(),
+            compression_enabled: HashMap::new(),
             user_identity,
         }
     }
@@ -171,6 +174,7 @@ impl WsActor {
         ctx: &mut ws::WebsocketContext<Self>,
         extractor_id: &ExtractorIdentity,
         include_state: bool,
+        compression: bool,
     ) {
         let extractor_id = extractor_id.clone();
         // Step 1: Direct HashMap access (no mutex needed since map is read-only after
@@ -263,6 +267,7 @@ impl WsActor {
                 Some((subscription_id, stream, extractor_id)) => {
                     let handle = ctx.add_stream(stream);
                     actor.subscriptions.insert(subscription_id, handle);
+                    actor.compression_enabled.insert(subscription_id, compression);
                     debug!("Added subscription to hashmap");
                     gauge!("websocket_extractor_subscriptions_active", "subscription_id" => subscription_id.to_string()).increment(1);
                     counter!(
@@ -271,6 +276,7 @@ impl WsActor {
                         "chain"=> extractor_id.chain.to_string(),
                         "extractor" => extractor_id.name.to_string(),
                         "user_identity" => user_identity.unwrap_or("unknown".to_string()),
+                        "compression" => compression.to_string(),
                     )
                     .increment(1);
 
@@ -304,6 +310,9 @@ impl WsActor {
             debug!("Subscription ID found");
             // Cancel the future of the subscription stream
             ctx.cancel_future(handle);
+            // Remove compression tracking for this subscription
+            self.compression_enabled
+                .remove(&subscription_id);
             debug!("Cancelled subscription future");
             gauge!("websocket_extractor_subscriptions_active", "subscription_id" => subscription_id.to_string()).decrement(1);
 
@@ -362,7 +371,32 @@ impl StreamHandler<Result<(Uuid, BlockChanges), ws::ProtocolError>> for WsActor 
             Ok((subscription_id, deltas)) => {
                 trace!("Forwarding message to client");
                 let msg = WebSocketMessage::BlockChanges { deltas, subscription_id };
-                ctx.text(serde_json::to_string(&msg).unwrap());
+                let json_str = serde_json::to_string(&msg).unwrap();
+
+                // Check if compression is enabled for this subscription
+                let compression_enabled = self
+                    .compression_enabled
+                    .get(&subscription_id)
+                    .copied()
+                    .unwrap_or(false);
+
+                if compression_enabled {
+                    // Compress the message using zstd
+                    match zstd::encode_all(json_str.as_bytes(), 0) {
+                        Ok(compressed) => {
+                            trace!("Sending compressed message (compressed size: {} bytes, original size: {} bytes)",
+                                compressed.len(), json_str.len());
+                            ctx.binary(compressed);
+                        }
+                        Err(e) => {
+                            error!(error = %e, "Failed to compress message, sending uncompressed");
+                            ctx.text(json_str);
+                        }
+                    }
+                } else {
+                    // Send uncompressed text message (backward compatible)
+                    ctx.text(json_str);
+                }
             }
             Err(e) => {
                 error!(error = %e, "Failed to receive message from extractor");
@@ -394,9 +428,14 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsActor {
                         debug!(actor_id = %self.id, "Parsed command successfully");
                         // Handle the message based on its variant
                         match message {
-                            Command::Subscribe { extractor_id, include_state } => {
+                            Command::Subscribe { extractor_id, include_state, compression } => {
                                 debug!(actor_id = %self.id, %extractor_id, "Message handler: Processing subscribe request");
-                                self.subscribe(ctx, &extractor_id.clone().into(), include_state);
+                                self.subscribe(
+                                    ctx,
+                                    &extractor_id.clone().into(),
+                                    include_state,
+                                    compression,
+                                );
                                 debug!(actor_id = %self.id, %extractor_id, "Message handler: Subscribe method completed");
                             }
                             Command::Unsubscribe { subscription_id } => {
@@ -726,8 +765,11 @@ mod tests {
         debug!("Connected to test server");
 
         // Create and send a subscribe message from the client
-        let action =
-            Command::Subscribe { extractor_id: extractor_id.clone().into(), include_state: true };
+        let action = Command::Subscribe {
+            extractor_id: extractor_id.clone().into(),
+            include_state: true,
+            compression: false,
+        };
         connection
             .send(Message::Text(serde_json::to_string(&action).unwrap()))
             .await
@@ -756,8 +798,11 @@ mod tests {
         debug!("Received DummyMessage from server");
 
         // Create and send a second subscribe message from the client
-        let action =
-            Command::Subscribe { extractor_id: extractor_id2.clone().into(), include_state: true };
+        let action = Command::Subscribe {
+            extractor_id: extractor_id2.clone().into(),
+            include_state: true,
+            compression: false,
+        };
         connection
             .send(Message::Text(serde_json::to_string(&action).unwrap()))
             .await
@@ -824,14 +869,142 @@ mod tests {
         Ok(())
     }
 
+    #[actix_rt::test]
+    async fn test_subscribe_with_compression() -> Result<(), String> {
+        tracing_subscriber::fmt()
+            .with_test_writer()
+            .try_init()
+            .unwrap_or_else(|_| debug!("Subscriber already initialized"));
+
+        // Setup extractor with message sender
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "compressed_dummy");
+        let message_sender = Arc::new(MyMessageSender::new(extractor_id.clone()));
+
+        let mut subscribers_map = HashMap::new();
+        subscribers_map
+            .insert(extractor_id.clone(), message_sender as Arc<dyn MessageSender + Send + Sync>);
+
+        let app_state = web::Data::new(WsData::new(subscribers_map));
+
+        // Setup WebSocket server
+        let server = start_with(
+            TestServerConfig::default().client_request_timeout(Duration::from_secs(5)),
+            move || {
+                App::new()
+                    .wrap(RequestTracing::new())
+                    .app_data(app_state.clone())
+                    .service(web::resource("/ws/").route(web::get().to(WsActor::ws_index)))
+            },
+        );
+
+        let url = server
+            .url("/ws/")
+            .to_string()
+            .replacen("http://", "ws://", 1);
+        debug!(url = %url, "Connecting to test server");
+
+        // Connect to the server
+        let (mut connection, _response) = tokio_tungstenite::connect_async(url)
+            .await
+            .expect("Failed to connect");
+
+        debug!("Connected to test server");
+
+        // Subscribe with compression enabled
+        let action = Command::Subscribe {
+            extractor_id: extractor_id.clone().into(),
+            include_state: true,
+            compression: true,
+        };
+        connection
+            .send(Message::Text(serde_json::to_string(&action).unwrap()))
+            .await
+            .expect("Failed to send subscribe message");
+        debug!("Sent subscribe message with compression=true");
+
+        // Wait for subscription confirmation
+        let response = wait_for_new_subscription(&mut connection)
+            .await
+            .expect("Failed to get the expected new subscription message");
+        if let Response::NewSubscription { extractor_id: _extractor_id, subscription_id } = response
+        {
+            debug!(subscription_id = ?subscription_id, "Received subscription ID");
+        } else {
+            panic!("Unexpected response: {response:?}");
+        }
+
+        // Wait for a binary message (compressed)
+        let compressed_msg = timeout(Duration::from_secs(2), connection.next())
+            .await
+            .expect("Timeout waiting for message")
+            .expect("Connection closed")
+            .expect("Failed to receive message");
+
+        // Verify it's a binary message and decompress it
+        if let Message::Binary(compressed_data) = compressed_msg {
+            debug!("Received binary (compressed) message: {} bytes", compressed_data.len());
+
+            // Decompress using zstd
+            let decompressed =
+                zstd::decode_all(&compressed_data[..]).expect("Failed to decompress message");
+            debug!("Decompressed to {} bytes", decompressed.len());
+
+            // Parse as JSON to verify it's valid
+            let json_str = String::from_utf8(decompressed).expect("Failed to decode UTF-8");
+            let _message: DummyDelta =
+                serde_json::from_str(&json_str).expect("Failed to parse decompressed JSON");
+            debug!("Successfully parsed compressed message");
+        } else {
+            panic!("Expected binary message, got: {:?}", compressed_msg);
+        }
+
+        // Close the connection
+        connection
+            .send(Message::Close(Some(CloseFrame { code: CloseCode::Normal, reason: "".into() })))
+            .await
+            .expect("Failed to send close message");
+        debug!("Closed connection");
+
+        Ok(())
+    }
+
     #[test]
     fn test_msg() {
         // Create and send a subscribe message from the client
         let extractor_id =
             ExtractorIdentity { chain: Chain::Ethereum, name: "vm:ambient".to_owned() };
-        let action = Command::Subscribe { extractor_id: extractor_id.into(), include_state: true };
+        let action = Command::Subscribe {
+            extractor_id: extractor_id.into(),
+            include_state: true,
+            compression: false,
+        };
         let res = serde_json::to_string(&action).unwrap();
         println!("{res}");
+    }
+
+    #[test]
+    fn test_compression_backward_compatibility() {
+        // Deserialize JSON without compression field - should default to false
+        let json_without_compression = r#"{
+            "method": "subscribe",
+            "extractor_id": {
+                "chain": "ethereum",
+                "name": "test"
+            },
+            "include_state": true
+        }"#;
+
+        let command: Command = serde_json::from_str(json_without_compression)
+            .expect("Failed to deserialize Subscribe without compression field");
+
+        if let Command::Subscribe { compression, .. } = command {
+            assert_eq!(
+                compression, false,
+                "compression should default to false when not specified"
+            );
+        } else {
+            panic!("Expected Subscribe command");
+        }
     }
 
     /// Message sender that simulates slow operations to trigger the deadlock
@@ -933,8 +1106,11 @@ mod tests {
             connections.push(connection);
         }
 
-        let subscribe_msg =
-            Command::Subscribe { extractor_id: extractor_id.clone().into(), include_state: true };
+        let subscribe_msg = Command::Subscribe {
+            extractor_id: extractor_id.clone().into(),
+            include_state: true,
+            compression: false,
+        };
         let msg_text = serde_json::to_string(&subscribe_msg).unwrap();
 
         // Send subscription requests from all clients simultaneously
@@ -1017,8 +1193,11 @@ mod tests {
 
         // Send subscribe request for non-existent extractor
         let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "non_existent");
-        let action =
-            Command::Subscribe { extractor_id: extractor_id.clone().into(), include_state: true };
+        let action = Command::Subscribe {
+            extractor_id: extractor_id.clone().into(),
+            include_state: true,
+            compression: false,
+        };
         connection
             .send(Message::Text(serde_json::to_string(&action).unwrap()))
             .await
@@ -1218,8 +1397,11 @@ mod tests {
             .expect("Failed to connect");
 
         // Send subscribe request to failing extractor
-        let action =
-            Command::Subscribe { extractor_id: extractor_id.clone().into(), include_state: true };
+        let action = Command::Subscribe {
+            extractor_id: extractor_id.clone().into(),
+            include_state: true,
+            compression: false,
+        };
         connection
             .send(Message::Text(serde_json::to_string(&action).unwrap()))
             .await

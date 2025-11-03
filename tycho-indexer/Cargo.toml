@@ -77,6 +77,7 @@ tycho-substreams = "0.6.0"
 rand.workspace = true
 alloy-sol-types = "1.2.1"
 alloy-primitives.workspace = true
+zstd = "0.13"
 
 [dev-dependencies]
 pretty_assertions.workspace = true

@@ -158,8 +158,17 @@ impl fmt::Display for ExtractorIdentity {
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
 #[serde(tag = "method", rename_all = "lowercase")]
 pub enum Command {
-    Subscribe { extractor_id: ExtractorIdentity, include_state: bool },
-    Unsubscribe { subscription_id: Uuid },
+    Subscribe {
+        extractor_id: ExtractorIdentity,
+        include_state: bool,
+        /// Enable zstd compression for messages in this subscription.
+        /// Defaults to false for backward compatibility.
+        #[serde(default)]
+        compression: bool,
+    },
+    Unsubscribe {
+        subscription_id: Uuid,
+    },
 }
 
 /// A easy serializable version of `models::error::WebsocketError`
