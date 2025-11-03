@@ -14,34 +14,45 @@ use tycho_common::{
     Bytes,
 };
 
-use super::enums::FeeAmount;
 use crate::evm::protocol::{
     safe_math::{safe_add_u256, safe_sub_u256},
     u256_num::u256_to_biguint,
-    utils::uniswap::{
-        i24_be_bytes_to_i32, liquidity_math,
-        sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
-        swap_math,
-        tick_list::{TickInfo, TickList, TickListErrorKind},
-        tick_math::{
-            get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
-            MIN_SQRT_RATIO, MIN_TICK,
+    utils::{
+        slipstreams::{
+            dynamic_fee_module::{get_dynamic_fee, DynamicFeeConfig},
+            observations::{Observation, Observations},
         },
-        StepComputation, SwapResults, SwapState,
+        uniswap::{
+            i24_be_bytes_to_i32, liquidity_math,
+            sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
+            swap_math,
+            tick_list::{TickInfo, TickList, TickListErrorKind},
+            tick_math::{
+                get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
+                MIN_SQRT_RATIO, MIN_TICK,
+            },
+            StepComputation, SwapResults, SwapState,
+        },
     },
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct UniswapV3State {
+pub struct AerodromeSlipstreamsState {
+    block_timestamp: u64,
     liquidity: u128,
     sqrt_price: U256,
-    fee: FeeAmount,
+    observation_index: u16,
+    observation_cardinality: u16,
+    default_fee: u32,
+    tick_spacing: i32,
     tick: i32,
     ticks: TickList,
+    observations: Observations,
+    dfc: DynamicFeeConfig,
 }
 
-impl UniswapV3State {
-    /// Creates a new instance of `UniswapV3State`.
+impl AerodromeSlipstreamsState {
+    /// Creates a new instance of `AerodromeSlipstreamsState`.
     ///
     /// # Arguments
     /// - `liquidity`: The initial liquidity of the pool.
@@ -49,30 +60,47 @@ impl UniswapV3State {
     /// - `fee`: The fee tier for the pool.
     /// - `tick`: The current tick of the pool.
     /// - `ticks`: A vector of `TickInfo` representing the tick information for the pool.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
+        block_timestamp: u64,
         liquidity: u128,
         sqrt_price: U256,
-        fee: FeeAmount,
+        observation_index: u16,
+        observation_cardinality: u16,
+        default_fee: u32,
+        tick_spacing: i32,
         tick: i32,
         ticks: Vec<TickInfo>,
+        observations: Vec<Observation>,
+        dfc: DynamicFeeConfig,
     ) -> Result<Self, SimulationError> {
-        let spacing = UniswapV3State::get_spacing(fee);
-        let tick_list = TickList::from(spacing, ticks)?;
-        Ok(UniswapV3State { liquidity, sqrt_price, fee, tick, ticks: tick_list })
+        let tick_list = TickList::from(tick_spacing as u16, ticks)?;
+        Ok(AerodromeSlipstreamsState {
+            block_timestamp,
+            liquidity,
+            sqrt_price,
+            observation_index,
+            observation_cardinality,
+            default_fee,
+            tick_spacing,
+            tick,
+            ticks: tick_list,
+            observations: Observations::new(observations),
+            dfc,
+        })
     }
 
-    fn get_spacing(fee: FeeAmount) -> u16 {
-        match fee {
-            FeeAmount::Lowest => 1,
-            FeeAmount::Lowest2 => 2,
-            FeeAmount::Lowest3 => 3,
-            FeeAmount::Lowest4 => 4,
-            FeeAmount::Low => 10,
-            FeeAmount::MediumLow => 50,
-            FeeAmount::Medium => 60,
-            FeeAmount::MediumHigh => 100,
-            FeeAmount::High => 200,
-        }
+    fn get_fee(&self) -> u32 {
+        get_dynamic_fee(
+            &self.dfc,
+            self.default_fee,
+            self.tick,
+            self.liquidity,
+            self.observation_index,
+            self.observation_cardinality,
+            &self.observations,
+            self.block_timestamp as u32,
+        )
     }
 
     fn swap(
@@ -111,6 +139,7 @@ impl UniswapV3State {
         };
         let mut gas_used = U256::from(130_000);
 
+        let fee = self.get_fee();
         while state.amount_remaining != I256::from_raw(U256::from(0u64)) &&
             state.sqrt_price != price_limit
         {
@@ -143,10 +172,14 @@ impl UniswapV3State {
             let sqrt_price_next = get_sqrt_ratio_at_tick(next_tick)?;
             let (sqrt_price, amount_in, amount_out, fee_amount) = swap_math::compute_swap_step(
                 state.sqrt_price,
-                UniswapV3State::get_sqrt_ratio_target(sqrt_price_next, price_limit, zero_for_one),
+                AerodromeSlipstreamsState::get_sqrt_ratio_target(
+                    sqrt_price_next,
+                    price_limit,
+                    zero_for_one,
+                ),
                 state.liquidity,
                 state.amount_remaining,
-                self.fee as u32,
+                fee,
             )?;
             state.sqrt_price = sqrt_price;
 
@@ -221,9 +254,9 @@ impl UniswapV3State {
     }
 }
 
-impl ProtocolSim for UniswapV3State {
+impl ProtocolSim for AerodromeSlipstreamsState {
     fn fee(&self) -> f64 {
-        (self.fee as u32) as f64 / 1_000_000.0
+        self.get_fee() as f64 / 1_000_000.0
     }
 
     fn spot_price(&self, a: &Token, b: &Token) -> Result<f64, SimulationError> {
@@ -252,7 +285,7 @@ impl ProtocolSim for UniswapV3State {
 
         let result = self.swap(zero_for_one, amount_specified, None)?;
 
-        trace!(?amount_in, ?token_a, ?token_b, ?zero_for_one, ?result, "V3 SWAP");
+        trace!(?amount_in, ?token_a, ?token_b, ?zero_for_one, ?result, "SLIPSTREAMS SWAP");
         let mut new_state = self.clone();
         new_state.liquidity = result.liquidity;
         new_state.tick = result.tick;
@@ -393,6 +426,45 @@ impl ProtocolSim for UniswapV3State {
         {
             self.sqrt_price = U256::from_be_slice(sqrt_price);
         }
+        if let Some(observation_index) = delta
+            .updated_attributes
+            .get("observationIndex")
+        {
+            self.observation_index = u16::from(observation_index.clone());
+        }
+        if let Some(observation_cardinality) = delta
+            .updated_attributes
+            .get("observationCardinality")
+        {
+            self.observation_cardinality = u16::from(observation_cardinality.clone());
+        }
+        if let Some(default_fee) = delta
+            .updated_attributes
+            .get("default_fee")
+        {
+            self.default_fee = u32::from(default_fee.clone());
+        }
+        if let Some(dfc_base_fee) = delta
+            .updated_attributes
+            .get("dfc_baseFee")
+        {
+            self.dfc
+                .update_base_fee(u32::from(dfc_base_fee.clone()));
+        }
+        if let Some(dfc_fee_cap) = delta
+            .updated_attributes
+            .get("dfc_feeCap")
+        {
+            self.dfc
+                .update_fee_cap(u32::from(dfc_fee_cap.clone()));
+        }
+        if let Some(dfc_scaling_factor) = delta
+            .updated_attributes
+            .get("dfc_scalingFactor")
+        {
+            self.dfc
+                .update_scaling_factor(u64::from(dfc_scaling_factor.clone()));
+        }
         if let Some(tick) = delta.updated_attributes.get("tick") {
             // This is a hotfix because if the tick has never been updated after creation, it's
             // currently encoded as H256::zero(), therefore, we can't decode this as i32.
@@ -412,7 +484,7 @@ impl ProtocolSim for UniswapV3State {
             self.tick = i24_be_bytes_to_i32(&ticks_4_bytes);
         }
 
-        // apply tick changes
+        // apply tick & observations changes
         for (key, value) in delta.updated_attributes.iter() {
             // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
             if key.starts_with("ticks/") {
@@ -423,6 +495,19 @@ impl ProtocolSim for UniswapV3State {
                             .parse::<i32>()
                             .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
                         i128::from(value.clone()),
+                    )
+                    .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
+            }
+
+            // observations keys are in the format "observations/{observation_index}"
+            if key.starts_with("observations/") {
+                let parts: Vec<&str> = key.split('/').collect();
+                self.observations
+                    .upsert_observation(
+                        parts[1]
+                            .parse::<i32>()
+                            .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
+                        &value.clone(),
                     )
                     .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
             }
@@ -438,6 +523,19 @@ impl ProtocolSim for UniswapV3State {
                             .parse::<i32>()
                             .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
                         0,
+                    )
+                    .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
+            }
+
+            // observations keys are in the format "observations/{observation_index}"
+            if key.starts_with("observations/") {
+                let parts: Vec<&str> = key.split('/').collect();
+                self.observations
+                    .upsert_observation(
+                        parts[1]
+                            .parse::<i32>()
+                            .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
+                        &[],
                     )
                     .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
             }
@@ -460,424 +558,15 @@ impl ProtocolSim for UniswapV3State {
     fn eq(&self, other: &dyn ProtocolSim) -> bool {
         if let Some(other_state) = other
             .as_any()
-            .downcast_ref::<UniswapV3State>()
+            .downcast_ref::<AerodromeSlipstreamsState>()
         {
             self.liquidity == other_state.liquidity &&
                 self.sqrt_price == other_state.sqrt_price &&
-                self.fee == other_state.fee &&
+                self.get_fee() == other_state.get_fee() &&
                 self.tick == other_state.tick &&
                 self.ticks == other_state.ticks
         } else {
             false
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{
-        collections::{HashMap, HashSet},
-        fs,
-        path::Path,
-        str::FromStr,
-    };
-
-    use num_bigint::ToBigUint;
-    use num_traits::FromPrimitive;
-    use serde_json::Value;
-    use tycho_client::feed::synchronizer::ComponentWithState;
-    use tycho_common::{hex_bytes::Bytes, models::Chain};
-
-    use super::*;
-    use crate::protocol::models::{DecoderContext, TryFromWithBlock};
-
-    #[test]
-    fn test_get_amount_out_full_range_liquidity() {
-        let token_x = Token::new(
-            &Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
-            "X",
-            18,
-            0,
-            &[Some(10_000)],
-            Chain::Ethereum,
-            100,
-        );
-        let token_y = Token::new(
-            &Bytes::from_str("0xf1ca9cb74685755965c7458528a36934df52a3ef").unwrap(),
-            "Y",
-            18,
-            0,
-            &[Some(10_000)],
-            Chain::Ethereum,
-            100,
-        );
-
-        let pool = UniswapV3State::new(
-            8330443394424070888454257,
-            U256::from_str("188562464004052255423565206602").unwrap(),
-            FeeAmount::Medium,
-            17342,
-            vec![TickInfo::new(0, 0).unwrap(), TickInfo::new(46080, 0).unwrap()],
-        )
-        .unwrap();
-        let sell_amount = BigUint::from_str("11_000_000000000000000000").unwrap();
-        let expected = BigUint::from_str("61927070842678722935941").unwrap();
-
-        let res = pool
-            .get_amount_out(sell_amount, &token_x, &token_y)
-            .unwrap();
-
-        assert_eq!(res.amount, expected);
-    }
-
-    struct SwapTestCase {
-        symbol: &'static str,
-        sell: BigUint,
-        exp: BigUint,
-    }
-
-    #[test]
-    fn test_get_amount_out() {
-        let wbtc = Token::new(
-            &Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap(),
-            "WBTC",
-            8,
-            0,
-            &[Some(10_000)],
-            Chain::Ethereum,
-            100,
-        );
-        let weth = Token::new(
-            &Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
-            "WETH",
-            18,
-            0,
-            &[Some(10_000)],
-            Chain::Ethereum,
-            100,
-        );
-        let pool = UniswapV3State::new(
-            377952820878029838,
-            U256::from_str("28437325270877025820973479874632004").unwrap(),
-            FeeAmount::Low,
-            255830,
-            vec![
-                TickInfo::new(255760, 1759015528199933i128).unwrap(),
-                TickInfo::new(255770, 6393138051835308i128).unwrap(),
-                TickInfo::new(255780, 228206673808681i128).unwrap(),
-                TickInfo::new(255820, 1319490609195820i128).unwrap(),
-                TickInfo::new(255830, 678916926147901i128).unwrap(),
-                TickInfo::new(255840, 12208947683433103i128).unwrap(),
-                TickInfo::new(255850, 1177970713095301i128).unwrap(),
-                TickInfo::new(255860, 8752304680520407i128).unwrap(),
-                TickInfo::new(255880, 1486478248067104i128).unwrap(),
-                TickInfo::new(255890, 1878744276123248i128).unwrap(),
-                TickInfo::new(255900, 77340284046725227i128).unwrap(),
-            ],
-        )
-        .unwrap();
-        let cases = vec![
-            SwapTestCase {
-                symbol: "WBTC",
-                sell: 500000000.to_biguint().unwrap(),
-                exp: BigUint::from_str("64352395915550406461").unwrap(),
-            },
-            SwapTestCase {
-                symbol: "WBTC",
-                sell: 550000000.to_biguint().unwrap(),
-                exp: BigUint::from_str("70784271504035662865").unwrap(),
-            },
-            SwapTestCase {
-                symbol: "WBTC",
-                sell: 600000000.to_biguint().unwrap(),
-                exp: BigUint::from_str("77215534856185613494").unwrap(),
-            },
-            SwapTestCase {
-                symbol: "WBTC",
-                sell: BigUint::from_str("1000000000").unwrap(),
-                exp: BigUint::from_str("128643569649663616249").unwrap(),
-            },
-            SwapTestCase {
-                symbol: "WBTC",
-                sell: BigUint::from_str("3000000000").unwrap(),
-                exp: BigUint::from_str("385196519076234662939").unwrap(),
-            },
-            SwapTestCase {
-                symbol: "WETH",
-                sell: BigUint::from_str("64000000000000000000").unwrap(),
-                exp: BigUint::from_str("496294784").unwrap(),
-            },
-            SwapTestCase {
-                symbol: "WETH",
-                sell: BigUint::from_str("70000000000000000000").unwrap(),
-                exp: BigUint::from_str("542798479").unwrap(),
-            },
-            SwapTestCase {
-                symbol: "WETH",
-                sell: BigUint::from_str("77000000000000000000").unwrap(),
-                exp: BigUint::from_str("597047757").unwrap(),
-            },
-            SwapTestCase {
-                symbol: "WETH",
-                sell: BigUint::from_str("128000000000000000000").unwrap(),
-                exp: BigUint::from_str("992129037").unwrap(),
-            },
-            SwapTestCase {
-                symbol: "WETH",
-                sell: BigUint::from_str("385000000000000000000").unwrap(),
-                exp: BigUint::from_str("2978713582").unwrap(),
-            },
-        ];
-
-        for case in cases {
-            let (token_a, token_b) =
-                if case.symbol == "WBTC" { (&wbtc, &weth) } else { (&weth, &wbtc) };
-            let res = pool
-                .get_amount_out(case.sell, token_a, token_b)
-                .unwrap();
-
-            assert_eq!(res.amount, case.exp);
-        }
-    }
-
-    #[test]
-    fn test_err_with_partial_trade() {
-        let dai = Token::new(
-            &Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
-            "DAI",
-            18,
-            0,
-            &[Some(10_000)],
-            Chain::Ethereum,
-            100,
-        );
-        let usdc = Token::new(
-            &Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
-            "USDC",
-            6,
-            0,
-            &[Some(10_000)],
-            Chain::Ethereum,
-            100,
-        );
-        let pool = UniswapV3State::new(
-            73015811375239994,
-            U256::from_str("148273042406850898575413").unwrap(),
-            FeeAmount::High,
-            -263789,
-            vec![
-                TickInfo::new(-269600, 3612326326695492i128).unwrap(),
-                TickInfo::new(-268800, 1487613939516867i128).unwrap(),
-                TickInfo::new(-267800, 1557587121322546i128).unwrap(),
-                TickInfo::new(-267400, 424592076717375i128).unwrap(),
-                TickInfo::new(-267200, 11691597431643916i128).unwrap(),
-                TickInfo::new(-266800, -218742815100986i128).unwrap(),
-                TickInfo::new(-266600, 1118947532495477i128).unwrap(),
-                TickInfo::new(-266200, 1233064286622365i128).unwrap(),
-                TickInfo::new(-265000, 4252603063356107i128).unwrap(),
-                TickInfo::new(-263200, -351282010325232i128).unwrap(),
-                TickInfo::new(-262800, -2352011819117842i128).unwrap(),
-                TickInfo::new(-262600, -424592076717375i128).unwrap(),
-                TickInfo::new(-262200, -11923662433672566i128).unwrap(),
-                TickInfo::new(-261600, -2432911749667741i128).unwrap(),
-                TickInfo::new(-260200, -4032727022572273i128).unwrap(),
-                TickInfo::new(-260000, -22889492064625028i128).unwrap(),
-                TickInfo::new(-259400, -1557587121322546i128).unwrap(),
-                TickInfo::new(-259200, -1487613939516867i128).unwrap(),
-                TickInfo::new(-258400, -400137022888262i128).unwrap(),
-            ],
-        )
-        .unwrap();
-        let amount_in = BigUint::from_str("50000000000").unwrap();
-        let exp = BigUint::from_str("6820591625999718100883").unwrap();
-
-        let err = pool
-            .get_amount_out(amount_in, &usdc, &dai)
-            .unwrap_err();
-
-        match err {
-            SimulationError::InvalidInput(ref _err, ref amount_out_result) => {
-                match amount_out_result {
-                    Some(amount_out_result) => {
-                        assert_eq!(amount_out_result.amount, exp);
-                        let new_state = amount_out_result
-                            .new_state
-                            .as_any()
-                            .downcast_ref::<UniswapV3State>()
-                            .unwrap();
-                        assert_ne!(new_state.tick, pool.tick);
-                        assert_ne!(new_state.liquidity, pool.liquidity);
-                    }
-                    _ => panic!("Partial amount out result is None. Expected partial result."),
-                }
-            }
-            _ => panic!("Test failed: was expecting a SimulationError::InsufficientData"),
-        }
-    }
-
-    #[test]
-    fn test_delta_transition() {
-        let mut pool = UniswapV3State::new(
-            1000,
-            U256::from_str("1000").unwrap(),
-            FeeAmount::Low,
-            100,
-            vec![TickInfo::new(255760, 10000).unwrap(), TickInfo::new(255900, -10000).unwrap()],
-        )
-        .unwrap();
-        let attributes: HashMap<String, Bytes> = [
-            ("liquidity".to_string(), Bytes::from(2000_u64.to_be_bytes().to_vec())),
-            ("sqrt_price_x96".to_string(), Bytes::from(1001_u64.to_be_bytes().to_vec())),
-            ("tick".to_string(), Bytes::from(120_i32.to_be_bytes().to_vec())),
-            (
-                "ticks/-255760/net_liquidity".to_string(),
-                Bytes::from(10200_u64.to_be_bytes().to_vec()),
-            ),
-            (
-                "ticks/255900/net_liquidity".to_string(),
-                Bytes::from(9800_u64.to_be_bytes().to_vec()),
-            ),
-        ]
-        .into_iter()
-        .collect();
-        let delta = ProtocolStateDelta {
-            component_id: "State1".to_owned(),
-            updated_attributes: attributes,
-            deleted_attributes: HashSet::new(),
-        };
-
-        pool.delta_transition(delta, &HashMap::new(), &Balances::default())
-            .unwrap();
-
-        assert_eq!(pool.liquidity, 2000);
-        assert_eq!(pool.sqrt_price, U256::from(1001));
-        assert_eq!(pool.tick, 120);
-        assert_eq!(
-            pool.ticks
-                .get_tick(-255760)
-                .unwrap()
-                .net_liquidity,
-            10200
-        );
-        assert_eq!(
-            pool.ticks
-                .get_tick(255900)
-                .unwrap()
-                .net_liquidity,
-            9800
-        );
-    }
-
-    #[tokio::test]
-    async fn test_get_limits() {
-        let project_root = env!("CARGO_MANIFEST_DIR");
-        let asset_path =
-            Path::new(project_root).join("tests/assets/decoder/uniswap_v3_snapshot.json");
-        let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
-        let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
-
-        let state: ComponentWithState = serde_json::from_value(data)
-            .expect("Expected json to match ComponentWithState structure");
-
-        let usv3_state = UniswapV3State::try_from_with_header(
-            state,
-            Default::default(),
-            &Default::default(),
-            &Default::default(),
-            &DecoderContext::new(),
-        )
-        .await
-        .unwrap();
-
-        let t0 = Token::new(
-            &Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap(),
-            "WBTC",
-            8,
-            0,
-            &[Some(10_000)],
-            Chain::Ethereum,
-            100,
-        );
-        let t1 = Token::new(
-            &Bytes::from_str("0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf").unwrap(),
-            "cbBTC",
-            8,
-            0,
-            &[Some(10_000)],
-            Chain::Ethereum,
-            100,
-        );
-
-        let res = usv3_state
-            .get_limits(t0.address.clone(), t1.address.clone())
-            .unwrap();
-
-        assert_eq!(&res.0, &BigUint::from_u128(20358481906554983980330155).unwrap()); // Crazy amount because of this tick: "ticks/-887272/net-liquidity": "0x10d73d"
-
-        let out = usv3_state
-            .get_amount_out(res.0, &t0, &t1)
-            .expect("swap for limit in didn't work");
-
-        assert_eq!(&res.1, &out.amount);
-    }
-}
-
-#[cfg(test)]
-mod tests_forks {
-    use std::{fs, path::Path, str::FromStr};
-
-    use serde_json::Value;
-    use tycho_client::feed::synchronizer::ComponentWithState;
-    use tycho_common::models::Chain;
-
-    use super::*;
-    use crate::protocol::models::{DecoderContext, TryFromWithBlock};
-
-    #[tokio::test]
-    async fn test_pancakeswap_get_amount_out() {
-        let project_root = env!("CARGO_MANIFEST_DIR");
-        let asset_path =
-            Path::new(project_root).join("tests/assets/decoder/pancakeswap_v3_snapshot.json");
-        let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
-        let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
-
-        let state: ComponentWithState = serde_json::from_value(data)
-            .expect("Expected json to match ComponentWithState structure");
-
-        let pool_state = UniswapV3State::try_from_with_header(
-            state,
-            Default::default(),
-            &Default::default(),
-            &Default::default(),
-            &DecoderContext::new(),
-        )
-        .await
-        .unwrap();
-
-        let usdc = Token::new(
-            &Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
-            "USDC",
-            6,
-            0,
-            &[Some(10_000)],
-            Chain::Ethereum,
-            100,
-        );
-        let usdt = Token::new(
-            &Bytes::from_str("0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap(),
-            "USDT",
-            6,
-            0,
-            &[Some(10_000)],
-            Chain::Ethereum,
-            100,
-        );
-
-        // Swap from https://etherscan.io/tx/0x641b1e98990ae49fd00157a29e1530ff6403706b2864aa52b1c30849ce020b2c#eventlog
-        let res = pool_state
-            .get_amount_out(BigUint::from_str("5976361609").unwrap(), &usdt, &usdc)
-            .unwrap();
-
-        assert_eq!(res.amount, BigUint::from_str("5975901673").unwrap());
     }
 }
