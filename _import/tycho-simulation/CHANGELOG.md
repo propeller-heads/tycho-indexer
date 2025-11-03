@@ -1,3 +1,17 @@
+## [0.189.0](https://github.com/propeller-heads/tycho-simulation/compare/0.188.0...0.189.0) (2025-11-03)
+
+
+### Features
+
+* **cluster-test:** Test stale components ([d092542](https://github.com/propeller-heads/tycho-simulation/commit/d092542b1d2fe2c50f444a5791a9ccc9b418c28e))
+* **cluster-test:** Track ProtocolStates too ([f0571d4](https://github.com/propeller-heads/tycho-simulation/commit/f0571d4c6cdf36a3a5be5784c6d35f82f81484c6))
+
+
+### Bug Fixes
+
+* **cluster-test:** Add state to logs ([757f8d2](https://github.com/propeller-heads/tycho-simulation/commit/757f8d27c93acbc107e08b48f5587ab3d4bf924a))
+* **uniswap:** Handle liquidity underflow gracefully in get_limits ([6aed770](https://github.com/propeller-heads/tycho-simulation/commit/6aed770057c0c606c7efbafb5fbea21d762430cb))
+
 ## [0.188.0](https://github.com/propeller-heads/tycho-simulation/compare/0.187.1...0.188.0) (2025-10-31)
 
 
