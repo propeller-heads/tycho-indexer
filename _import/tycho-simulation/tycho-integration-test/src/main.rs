@@ -332,7 +332,7 @@ async fn process_update(
         let component = match update.update_type {
             UpdateType::Protocol => {
                 let states = &tycho_state
-                    .write()
+                    .read()
                     .map_err(|e| miette!("Failed to acquire read lock on Tycho state: {e}"))?
                     .components;
                 match states.get(id) {
@@ -377,7 +377,7 @@ async fn process_update(
     // Select states that were not updated in this block to test simulation and execution
     let selected_ids = {
         let current_state = tycho_state
-            .write()
+            .read()
             .map_err(|e| miette!("Failed to acquire write lock on Tycho state: {e}"))?;
 
         let mut all_selected_ids = Vec::new();
@@ -408,7 +408,7 @@ async fn process_update(
     for id in selected_ids {
         let (component, state) = {
             let current_state = tycho_state
-                .write()
+                .read()
                 .map_err(|e| miette!("Failed to acquire read lock on Tycho state: {e}"))?;
 
             match (current_state.components.get(&id), current_state.states.get(&id)) {
