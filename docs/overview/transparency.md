@@ -20,7 +20,3 @@ Tycho finances development and maintenance through:
 
 * **Grants:** Tycho receives grants from chains, DEXs, and others that benefit from the flow that Tycho brings.
 * **Tools built on Tycho**: Useful tooling built on Tycho with a fee model (Coming soon).&#x20;
-
-### Road to Community Ownership
-
-Control over Tycho projects, grant funding, and fees earned will gradually transfer to Tycho users. (in planning).
