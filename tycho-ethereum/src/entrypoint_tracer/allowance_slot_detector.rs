@@ -793,12 +793,27 @@ impl EVMAllowanceSlotDetector {
                             }
                         }
                         Err(e) => {
-                            results.insert(
-                                metadata.token,
-                                Err(AllowanceSlotError::InvalidResponse(format!(
-                                    "Failed to extract allowance from slot test response: {e}"
-                                ))),
-                            );
+                            // If we encounter an extraction error - try the next slot
+                            // This handles cases like proxy contracts where some slots return empty
+                            // data
+                            metadata
+                                .all_slots
+                                .retain(|s| s.0 != (storage_addr.clone(), slot.clone()));
+                            if !metadata.all_slots.is_empty() {
+                                warn!(
+                                    token = %metadata.token,
+                                    error = %e,
+                                    "Failed to extract allowance from response - trying next slot"
+                                );
+                                retry_data.push(metadata.clone());
+                            } else {
+                                results.insert(
+                                    metadata.token,
+                                    Err(AllowanceSlotError::InvalidResponse(format!(
+                                        "Failed to extract allowance from slot test response: {e}"
+                                    ))),
+                                );
+                            }
                         }
                     }
                 }
@@ -873,6 +888,8 @@ pub fn encode_allowance_calldata(owner: &Address, spender: &Address) -> Bytes {
 mod tests {
     use std::str::FromStr;
 
+    use rstest::rstest;
+
     use super::*;
 
     #[test]
@@ -935,6 +952,116 @@ mod tests {
             }
             Some(Err(e)) => panic!("Failed to detect slot: {e:?}"),
             None => panic!("No result returned for TRUF"),
+        }
+    }
+
+    #[rstest]
+    // Random EOA - Tycho Router
+    #[case(
+        "f847a638E44186F3287ee9F8cAF73FF4d4B80784",
+        "fD0b31d2E955fA55e3fa641Fe90e08b677188d35",
+        "ZeroAllowanceUser"
+    )]
+    // TychoRouter - Balancer Vault
+    #[case(
+        "fD0b31d2E955fA55e3fa641Fe90e08b677188d35",
+        "BA12222222228d8Ba445958a75a0704d566BF2C8",
+        "NonZeroAllowanceUser"
+    )]
+    #[tokio::test]
+    #[ignore = "require RPC connection"]
+    async fn test_detect_allowance_slots_integration(
+        #[case] owner_address_hex: &str,
+        #[case] spender_address_hex: &str,
+        #[case] user_name: &str,
+    ) {
+        let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
+        println!("Using RPC URL: {}", rpc_url);
+        let config = AllowanceSlotDetectorConfig {
+            max_batch_size: 5,
+            rpc_url,
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5000,
+        };
+
+        let weth_bytes = alloy::hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
+        let usdc_bytes = alloy::hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
+        let usdt_bytes = alloy::hex::decode("0xdAC17F958D2ee523a2206206994597C13D831ec7").unwrap();
+
+        let weth = Address::from(weth_bytes);
+        let usdc = Address::from(usdc_bytes);
+        let usdt = Address::from(usdt_bytes);
+
+        let owner_address_bytes = alloy::hex::decode(owner_address_hex).unwrap();
+        let spender_address_bytes = alloy::hex::decode(spender_address_hex).unwrap();
+
+        let owner_address = Address::from(owner_address_bytes);
+        let spender_address = Address::from(spender_address_bytes);
+
+        let tokens = vec![weth.clone(), usdc.clone(), usdt.clone()];
+
+        // Use a recent block
+        let block_hash_bytes =
+            alloy::hex::decode("658814e4cb074359f10dd71237cc57b1ae6791fc9de59fde570e724bd884cbb0")
+                .unwrap();
+        let block_hash = BlockHash::from(block_hash_bytes);
+        println!("Block hash: 0x{}", alloy::hex::encode(block_hash.as_ref()));
+
+        let mut detector = EVMAllowanceSlotDetector::new(config).unwrap();
+        let results = detector
+            .detect_allowance_slots(&tokens, owner_address, spender_address, block_hash)
+            .await;
+
+        assert!(!results.is_empty(), "Expected results for at least one token, but got none");
+
+        if let Some(weth_result) = results.get(&weth) {
+            match weth_result {
+                Ok((storage_addr, slot)) => {
+                    println!(
+                        "WETH allowance slot detected for {} - Storage: 0x{}, Slot: 0x{}",
+                        user_name,
+                        alloy::hex::encode(storage_addr.as_ref()),
+                        alloy::hex::encode(slot.as_ref())
+                    );
+                }
+                Err(e) => panic!("Failed to detect WETH allowance slot for {}: {}", user_name, e),
+            }
+        } else {
+            panic!("No result for WETH token for {}", user_name);
+        }
+
+        if let Some(usdc_result) = results.get(&usdc) {
+            match usdc_result {
+                Ok((storage_addr, slot)) => {
+                    println!(
+                        "USDC allowance slot detected for {} - Storage: 0x{}, Slot: 0x{}",
+                        user_name,
+                        alloy::hex::encode(storage_addr.as_ref()),
+                        alloy::hex::encode(slot.as_ref())
+                    );
+                }
+                Err(e) => panic!("Failed to detect USDC allowance slot for {}: {}", user_name, e),
+            }
+        } else {
+            panic!("No result for USDC token for {}", user_name);
+        }
+
+        if let Some(usdt_result) = results.get(&usdt) {
+            match usdt_result {
+                Ok((storage_addr, slot)) => {
+                    println!(
+                        "USDT allowance slot detected for {} - Storage: 0x{}, Slot: 0x{}",
+                        user_name,
+                        alloy::hex::encode(storage_addr.as_ref()),
+                        alloy::hex::encode(slot.as_ref())
+                    );
+                    assert_eq!(storage_addr, &usdt, "Storage address should match token address");
+                }
+                Err(e) => panic!("Failed to detect USDT allowance slot for {}: {}", user_name, e),
+            }
+        } else {
+            panic!("No result for USDT token for {}", user_name);
         }
     }
 }
