@@ -896,8 +896,8 @@ mod tests_forks {
     fn test_get_limits_graceful_underflow() {
         // Verifies graceful handling of liquidity underflow in get_limits for V3
         let pool = UniswapV3State::new(
-            1000000,                                                  // Small liquidity: 1M
-            U256::from_str("79228162514264337593543950336").unwrap(), // 1:1 price
+            1000000,
+            U256::from_str("79228162514264337593543950336").unwrap(),
             FeeAmount::Medium,
             0,
             vec![
