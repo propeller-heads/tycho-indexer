@@ -11,7 +11,7 @@ use crate::{
         component_tracker::ComponentFilter, synchronizer::ProtocolStateSynchronizer,
         BlockSynchronizer,
     },
-    rpc::RPCClient,
+    rpc::{HttpRPCClientOptions, RPCClient},
     HttpRPCClient, WsDeltasClient,
 };
 
@@ -102,6 +102,11 @@ struct CliArgs {
     /// which may result in increased start-up latency.
     #[clap(long)]
     include_tvl: bool,
+
+    /// If set, disable compression for WebSocket messages.
+    /// By default, messages are compressed using zstd.
+    #[clap(long)]
+    no_compression: bool,
 
     /// Enable verbose logging. This will show more detailed information about the
     /// synchronization process and any errors that occur.
@@ -209,8 +214,13 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
 
     let ws_client = WsDeltasClient::new(&tycho_ws_url, args.auth_key.as_deref())
         .map_err(|e| format!("Failed to create WebSocket client: {e}"))?;
-    let rpc_client = HttpRPCClient::new(&tycho_rpc_url, args.auth_key.as_deref())
-        .map_err(|e| format!("Failed to create RPC client: {e}"))?;
+    let rpc_client = HttpRPCClient::new(
+        &tycho_rpc_url,
+        HttpRPCClientOptions::new()
+            .with_auth_key(args.auth_key.clone())
+            .with_compression(!args.no_compression),
+    )
+    .map_err(|e| format!("Failed to create RPC client: {e}"))?;
     let chain = Chain::from_str(&args.chain)
         .map_err(|_| format!("Unknown chain: {chain}", chain = &args.chain))?;
     let ws_jh = ws_client
@@ -273,6 +283,7 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
             Duration::from_secs(args.block_time / 2),
             !args.no_state,
             args.include_tvl,
+            !args.no_compression,
             rpc_client.clone(),
             ws_client.clone(),
             args.block_time + args.timeout,
@@ -368,5 +379,6 @@ mod cli_tests {
         assert_eq!(args.log_folder, "test_logs");
         assert_eq!(args.max_messages, Some(1));
         assert!(args.example);
+        assert_eq!(args.no_compression, false);
     }
 }

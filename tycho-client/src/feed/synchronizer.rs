@@ -87,6 +87,7 @@ pub struct ProtocolStateSynchronizer<R: RPCClient, D: DeltasClient> {
     last_synced_block: Option<BlockHeader>,
     timeout: u64,
     include_tvl: bool,
+    compression: bool,
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -224,6 +225,7 @@ where
         retry_cooldown: Duration,
         include_snapshots: bool,
         include_tvl: bool,
+        compression: bool,
         rpc_client: R,
         deltas_client: D,
         timeout: u64,
@@ -245,6 +247,7 @@ where
             last_synced_block: None,
             timeout,
             include_tvl,
+            compression,
         }
     }
 
@@ -342,7 +345,9 @@ where
         mut end_rx: oneshot::Receiver<()>,
     ) -> Result<(), (SynchronizerError, Option<oneshot::Receiver<()>>)> {
         // initialisation
-        let subscription_options = SubscriptionOptions::new().with_state(self.include_snapshots);
+        let subscription_options = SubscriptionOptions::new()
+            .with_state(self.include_snapshots)
+            .with_compression(self.compression);
         let (subscription_id, mut msg_rx) = match self
             .deltas_client
             .subscribe(self.extractor_id.clone(), subscription_options)
@@ -804,6 +809,7 @@ mod test {
             Duration::from_secs(0),
             true,
             include_tvl,
+            true, // Does not matter as we mock the client that never compresses
             rpc_client,
             deltas_client,
             10_u64,
@@ -1724,6 +1730,7 @@ mod test {
             Duration::from_secs(0),
             true,
             true,
+            true,
             ArcRPCClient(Arc::new(rpc_client)),
             ArcDeltasClient(Arc::new(deltas_client)),
             10_u64,
@@ -1896,6 +1903,7 @@ mod test {
             Duration::from_secs(0),
             true,
             false,
+            true,
             ArcRPCClient(Arc::new(rpc_client)),
             ArcDeltasClient(Arc::new(deltas_client)),
             10000_u64, // Long timeout so task doesn't exit on its own
@@ -2011,6 +2019,7 @@ mod test {
             Duration::from_secs(0),
             true,
             false,
+            true,
             ArcRPCClient(Arc::new(rpc_client)),
             ArcDeltasClient(Arc::new(deltas_client)),
             5000_u64,
@@ -2077,6 +2086,7 @@ mod test {
             ComponentFilter::with_tvl_range(0.0, 0.0),
             1,
             Duration::from_secs(0),
+            true,
             true,
             false,
             ArcRPCClient(Arc::new(rpc_client)),
@@ -2206,6 +2216,7 @@ mod test {
             Duration::from_secs(0),
             true,
             false,
+            true,
             ArcRPCClient(Arc::new(rpc_client)),
             ArcDeltasClient(Arc::new(deltas_client)),
             10000_u64,
@@ -2294,6 +2305,7 @@ mod test {
             Duration::from_millis(10), // short retry cooldown
             true,
             false,
+            true,
             ArcRPCClient(Arc::new(rpc_client)),
             ArcDeltasClient(Arc::new(deltas_client)),
             1000_u64,
@@ -2449,6 +2461,7 @@ mod test {
             Duration::from_secs(0),
             true, // include_snapshots = true
             false,
+            true,
             ArcRPCClient(Arc::new(rpc_client)),
             ArcDeltasClient(Arc::new(deltas_client)),
             10000_u64,
@@ -2654,6 +2667,7 @@ mod test {
             ComponentFilter::with_tvl_range(0.0, 1000.0),
             1,
             Duration::from_secs(0),
+            true,
             true,
             true,
             ArcRPCClient(Arc::new(rpc_client)),
