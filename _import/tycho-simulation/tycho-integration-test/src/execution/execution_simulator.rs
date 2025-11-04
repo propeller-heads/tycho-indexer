@@ -198,7 +198,10 @@ impl ExecutionSimulator {
         let (simulation_ids, simulation_inputs): (Vec<String>, Vec<SimulationInput>) =
             inputs.into_iter().unzip();
 
-        let block_id = BlockId::from(block.number());
+        // If we use the current block number we will simulate over the state of the parent of this
+        // block. We want to simulate over the state of the current block, so we need to simulate in
+        // the next block
+        let block_id = BlockId::from(block.number() + 1u64);
 
         let client = ClientBuilder::default().http(self.rpc_url.parse()?);
         let mut batch = client.new_batch();
