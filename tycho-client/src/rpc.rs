@@ -1119,7 +1119,11 @@ impl RPCClient for HttpRPCClient {
             None,
             Some({
                 #[allow(deprecated)]
-                BlockParam { hash: None, chain: None, number: Some(request.block_number as i64) }
+                BlockParam {
+                    hash: None,
+                    chain: Some(request.chain),
+                    number: Some(request.block_number as i64),
+                }
             }),
         );
 

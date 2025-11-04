@@ -83,7 +83,7 @@ impl ComponentFilter {
 /// Information about an entrypoint, including which components use it and what contracts it
 /// interacts with
 #[derive(Default)]
-pub struct EntrypointRelations {
+struct EntrypointRelations {
     /// Set of component ids for components that have this entrypoint
     components: HashSet<ComponentId>,
     /// Set of detected contracts for the entrypoint
