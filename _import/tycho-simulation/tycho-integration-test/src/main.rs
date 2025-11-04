@@ -519,14 +519,6 @@ async fn process_state(
     state_id: String,
     state: Box<dyn ProtocolSim>,
 ) -> HashMap<String, TychoExecutionInput> {
-    info!(
-        "Component has tokens: {}",
-        component
-            .tokens
-            .iter()
-            .map(|t| t.symbol.as_str())
-            .join(", ")
-    );
     let tokens_len = component.tokens.len();
     if tokens_len < 2 {
         error!("Component has less than 2 tokens, skipping...");
@@ -604,7 +596,6 @@ async fn process_state(
             warn!("Calculated amount_in is zero, skipping...");
             continue;
         }
-        info!("Calculated amount_in: {amount_in} {}", token_in.symbol);
 
         // Get expected amount out using tycho-simulation and measure duration
         let start_time = std::time::Instant::now();
@@ -635,17 +626,17 @@ async fn process_state(
             }
         };
         let duration_seconds = start_time.elapsed().as_secs_f64();
+        let expected_amount_out = amount_out_result.amount;
         info!(
             event_type = "get_amount_out_duration",
             token_in = %token_in.address,
             token_out = %token_out.address,
             amount_in = %amount_in,
+            amount_out = %expected_amount_out,
             duration_seconds = duration_seconds,
             "Get amount out operation completed in {:.3}ms", duration_seconds * 1000.0
         );
         metrics::record_get_amount_out_duration(&component.protocol_system, duration_seconds);
-        let expected_amount_out = amount_out_result.amount;
-        info!("Calculated amount_out: {expected_amount_out} {}", token_out.symbol);
 
         // Simulate execution amount out against the RPC
         let (solution, transaction) = match encode_swap(
@@ -672,11 +663,6 @@ async fn process_state(
                 protocol_system: component.protocol_system.clone(),
                 component_id: component.id.to_string(),
             },
-        );
-
-        info!(
-            "{} pool processed {state_id} from {} to {}",
-            component.protocol_system, token_in.symbol, token_out.symbol
         );
     }
     execution_infos
