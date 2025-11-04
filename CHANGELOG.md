@@ -1,3 +1,11 @@
+## [0.101.3](https://github.com/propeller-heads/tycho-indexer/compare/0.101.2...0.101.3) (2025-11-04)
+
+
+### Bug Fixes
+
+* Fix tracer batch request response parsing order ([a5fb8d3](https://github.com/propeller-heads/tycho-indexer/commit/a5fb8d3846eeb35bee228c631d8577f9d7d339f4))
+* Fix tracer batch request response parsing order ([#752](https://github.com/propeller-heads/tycho-indexer/issues/752)) ([f7500bf](https://github.com/propeller-heads/tycho-indexer/commit/f7500bff4e77da92e821254177ec4dbe4ed34f7a))
+
 ## [0.101.2](https://github.com/propeller-heads/tycho-indexer/compare/0.101.1...0.101.2) (2025-11-04)
 
 
