@@ -1544,11 +1544,6 @@ mod tests {
         let holder_address_bytes = alloy::hex::decode(holder_address_hex).unwrap();
         let holder_address = Address::from(holder_address_bytes);
 
-        println!("WETH address: 0x{}", alloy::hex::encode(weth.as_ref()));
-        println!("USDC address: 0x{}", alloy::hex::encode(usdc.as_ref()));
-        println!("USDT address: 0x{}", alloy::hex::encode(usdt.as_ref()));
-        println!("{} address: 0x{}", holder_name, alloy::hex::encode(holder_address.as_ref()));
-
         let tokens = vec![weth.clone(), usdc.clone(), usdt.clone()];
 
         // Use a recent block
@@ -1562,9 +1557,6 @@ mod tests {
         let results = detector
             .detect_balance_slots(&tokens, holder_address, block_hash)
             .await;
-
-        println!("Results for {}: {:?}", holder_name, results);
-        println!("Number of tokens with results: {}", results.len());
 
         // We should get results for the tokens
         assert!(!results.is_empty(), "Expected results for at least one token, but got none");

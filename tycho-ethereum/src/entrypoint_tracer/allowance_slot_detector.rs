@@ -999,16 +999,6 @@ mod tests {
         let owner_address = Address::from(owner_address_bytes);
         let spender_address = Address::from(spender_address_bytes);
 
-        println!("WETH address: 0x{}", alloy::hex::encode(weth.as_ref()));
-        println!("USDC address: 0x{}", alloy::hex::encode(usdc.as_ref()));
-        println!("USDT address: 0x{}", alloy::hex::encode(usdt.as_ref()));
-        println!("{} owner address: 0x{}", user_name, alloy::hex::encode(owner_address.as_ref()));
-        println!(
-            "{} spender address: 0x{}",
-            user_name,
-            alloy::hex::encode(spender_address.as_ref())
-        );
-
         let tokens = vec![weth.clone(), usdc.clone(), usdt.clone()];
 
         // Use a recent block
@@ -1022,9 +1012,6 @@ mod tests {
         let results = detector
             .detect_allowance_slots(&tokens, owner_address, spender_address, block_hash)
             .await;
-
-        println!("Results: {:?}", results);
-        println!("Number of tokens with results: {}", results.len());
 
         assert!(!results.is_empty(), "Expected results for at least one token, but got none");
 
