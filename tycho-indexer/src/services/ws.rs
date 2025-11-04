@@ -982,31 +982,6 @@ mod tests {
         println!("{res}");
     }
 
-    #[test]
-    fn test_compression_backward_compatibility() {
-        // Deserialize JSON without compression field - should default to false
-        let json_without_compression = r#"{
-            "method": "subscribe",
-            "extractor_id": {
-                "chain": "ethereum",
-                "name": "test"
-            },
-            "include_state": true
-        }"#;
-
-        let command: Command = serde_json::from_str(json_without_compression)
-            .expect("Failed to deserialize Subscribe without compression field");
-
-        if let Command::Subscribe { compression, .. } = command {
-            assert_eq!(
-                compression, false,
-                "compression should default to false when not specified"
-            );
-        } else {
-            panic!("Expected Subscribe command");
-        }
-    }
-
     /// Message sender that simulates slow operations to trigger the deadlock
     pub struct SlowMessageSender {
         extractor_id: ExtractorIdentity,

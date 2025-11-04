@@ -2002,6 +2002,51 @@ mod test {
     use super::*;
 
     #[test]
+    fn test_compression_backward_compatibility() {
+        // Test old format (without compression field) - should default to false
+        let json_without_compression = r#"{
+            "method": "subscribe",
+            "extractor_id": {
+                "chain": "ethereum",
+                "name": "test"
+            },
+            "include_state": true
+        }"#;
+
+        let command: Command = serde_json::from_str(json_without_compression)
+            .expect("Failed to deserialize Subscribe without compression field");
+
+        if let Command::Subscribe { compression, .. } = command {
+            assert_eq!(
+                compression, false,
+                "compression should default to false when not specified"
+            );
+        } else {
+            panic!("Expected Subscribe command");
+        }
+
+        // Test new format (with compression field)
+        let json_with_compression = r#"{
+            "method": "subscribe",
+            "extractor_id": {
+                "chain": "ethereum",
+                "name": "test"
+            },
+            "include_state": true,
+            "compression": true
+        }"#;
+
+        let command_with_compression: Command = serde_json::from_str(json_with_compression)
+            .expect("Failed to deserialize Subscribe with compression field");
+
+        if let Command::Subscribe { compression, .. } = command_with_compression {
+            assert_eq!(compression, true, "compression should be true as specified in the JSON");
+        } else {
+            panic!("Expected Subscribe command");
+        }
+    }
+
+    #[test]
     fn test_tracing_result_backward_compatibility() {
         use serde_json::json;
 
