@@ -17,6 +17,7 @@ use alloy_rpc_types_trace::geth::{
     GethDebugTracingOptions, GethDefaultTracingOptions, GethTrace, PreStateFrame, PreStateMode,
 };
 use async_trait::async_trait;
+use futures::stream::Any;
 use serde_json::{json, value::to_raw_value, Value};
 use tracing::error;
 use tycho_common::{
@@ -274,8 +275,16 @@ impl EVMEntrypointService {
             )));
         }
 
-        // Parse access list response
-        let access_list_result = &batch_response[0];
+        // Parse access list response - match by ID field as per JSON-RPC 2.0 spec
+        let access_list_result = batch_response
+            .iter()
+            .find(|x| x.get("id").and_then(|id| id.as_u64()) == Some(1))
+            .ok_or_else(|| {
+                RPCError::UnknownError(format!(
+                    "Missing access list response (id=1) for {target} (block: {block_hash}, params: {params})",
+                ))
+            })?;
+
         if let Some(error) = access_list_result.get("error") {
             return Err(RPCError::UnknownError(format!(
                 "eth_createAccessList failed for {target} (block: {block_hash}, params: {params}): {error}",
@@ -326,8 +335,16 @@ impl EVMEntrypointService {
             accessed_slots.insert(target.clone(), HashSet::new());
         }
 
-        // Parse trace response
-        let trace_result = &batch_response[1];
+        // Parse trace response - match by ID field as per JSON-RPC 2.0 spec
+        let trace_result = batch_response
+            .iter()
+            .find(|x| x.get("id").and_then(|id| id.as_u64()) == Some(2))
+            .ok_or_else(|| {
+                RPCError::UnknownError(format!(
+                    "Missing trace response (id=2) for {target} (block: {block_hash}, params: {params})",
+                ))
+            })?;
+
         if let Some(error) = trace_result.get("error") {
             return Err(RPCError::TracingFailure(format!(
                 "debug_traceCall failed for {target} (block: {block_hash}, params: {params}): {error}",
@@ -1449,5 +1466,387 @@ mod tests {
             EVMEntrypointService::detect_retrigger(&called_addresses, &slot, &packed_value);
 
         assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_batch_response_correct_order() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+
+        use tokio::{
+            io::{AsyncReadExt, AsyncWriteExt},
+            net::TcpListener,
+        };
+
+        // Create a mock RPC server that returns responses in the correct order (id=1 then id=2)
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let call_count_clone = call_count.clone();
+
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let call_count = call_count_clone.clone();
+                tokio::spawn(async move {
+                    let mut buffer = vec![0; 8192];
+                    if let Ok(n) = socket.read(&mut buffer).await {
+                        let _request = String::from_utf8_lossy(&buffer[..n]);
+                        let _current_call = call_count.fetch_add(1, Ordering::SeqCst);
+
+                        // Respond with correct order: id=1 (access list) then id=2 (trace)
+                        let response = r#"[
+                            {
+                                "jsonrpc": "2.0",
+                                "id": 1,
+                                "result": {
+                                    "accessList": [
+                                        {
+                                            "address": "0x0000000000000000000000000000000000000001",
+                                            "storageKeys": ["0x0000000000000000000000000000000000000000000000000000000000000001"]
+                                        }
+                                    ],
+                                    "gasUsed": "0x5dc0"
+                                }
+                            },
+                            {
+                                "jsonrpc": "2.0",
+                                "id": 2,
+                                "result": {
+                                    "0x0000000000000000000000000000000000000001": {
+                                        "balance": "0x1"
+                                    }
+                                }
+                            }
+                        ]"#;
+
+                        let http_response = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                            response.len(),
+                            response
+                        );
+
+                        let _ = socket
+                            .write_all(http_response.as_bytes())
+                            .await;
+                    }
+                });
+            }
+        });
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        let tracer = EVMEntrypointService::try_from_url_with_config(
+            &format!("http://127.0.0.1:{}", addr.port()),
+            0,
+            10,
+        )
+        .unwrap();
+
+        let entry_points = vec![EntryPointWithTracingParams::new(
+            EntryPoint::new(
+                "test:func()".to_string(),
+                Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+                "func()".to_string(),
+            ),
+            TracingParams::RPCTracer(RPCTracerParams::new(
+                None,
+                Bytes::from(&keccak256("func()")[0..4]),
+            )),
+        )];
+
+        let block_hash =
+            Bytes::from_str("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+                .unwrap();
+
+        let results = tracer
+            .trace(block_hash, entry_points)
+            .await;
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].is_ok(), "Expected success with correct order, got: {:?}", results[0]);
+    }
+
+    #[tokio::test]
+    async fn test_batch_response_reversed_order() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+
+        use tokio::{
+            io::{AsyncReadExt, AsyncWriteExt},
+            net::TcpListener,
+        };
+
+        // Create a mock RPC server that returns responses in REVERSED order (id=2 then id=1)
+        // This tests that we correctly match by ID, not by array position
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let call_count_clone = call_count.clone();
+
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let call_count = call_count_clone.clone();
+                tokio::spawn(async move {
+                    let mut buffer = vec![0; 8192];
+                    if let Ok(n) = socket.read(&mut buffer).await {
+                        let _request = String::from_utf8_lossy(&buffer[..n]);
+                        let _current_call = call_count.fetch_add(1, Ordering::SeqCst);
+
+                        // Respond with REVERSED order: id=2 (trace) then id=1 (access list)
+                        // This should still work because we match by ID, not position
+                        let response = r#"[
+                            {
+                                "jsonrpc": "2.0",
+                                "id": 2,
+                                "result": {
+                                    "0x0000000000000000000000000000000000000001": {
+                                        "balance": "0x1"
+                                    }
+                                }
+                            },
+                            {
+                                "jsonrpc": "2.0",
+                                "id": 1,
+                                "result": {
+                                    "accessList": [
+                                        {
+                                            "address": "0x0000000000000000000000000000000000000001",
+                                            "storageKeys": ["0x0000000000000000000000000000000000000000000000000000000000000001"]
+                                        }
+                                    ],
+                                    "gasUsed": "0x5dc0"
+                                }
+                            }
+                        ]"#;
+
+                        let http_response = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                            response.len(),
+                            response
+                        );
+
+                        let _ = socket
+                            .write_all(http_response.as_bytes())
+                            .await;
+                    }
+                });
+            }
+        });
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        let tracer = EVMEntrypointService::try_from_url_with_config(
+            &format!("http://127.0.0.1:{}", addr.port()),
+            0,
+            10,
+        )
+        .unwrap();
+
+        let entry_points = vec![EntryPointWithTracingParams::new(
+            EntryPoint::new(
+                "test:func()".to_string(),
+                Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+                "func()".to_string(),
+            ),
+            TracingParams::RPCTracer(RPCTracerParams::new(
+                None,
+                Bytes::from(&keccak256("func()")[0..4]),
+            )),
+        )];
+
+        let block_hash =
+            Bytes::from_str("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+                .unwrap();
+
+        let results = tracer
+            .trace(block_hash, entry_points)
+            .await;
+
+        assert_eq!(results.len(), 1);
+        assert!(
+            results[0].is_ok(),
+            "Expected success with reversed order (correct ID matching), got: {:?}",
+            results[0]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_batch_response_missing_id() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+
+        use tokio::{
+            io::{AsyncReadExt, AsyncWriteExt},
+            net::TcpListener,
+        };
+
+        // Create a mock RPC server that returns responses with a missing ID
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let call_count_clone = call_count.clone();
+
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let call_count = call_count_clone.clone();
+                tokio::spawn(async move {
+                    let mut buffer = vec![0; 8192];
+                    if let Ok(n) = socket.read(&mut buffer).await {
+                        let _request = String::from_utf8_lossy(&buffer[..n]);
+                        let _current_call = call_count.fetch_add(1, Ordering::SeqCst);
+
+                        // Return only one response with id=1, missing id=2
+                        let response = r#"[
+                            {
+                                "jsonrpc": "2.0",
+                                "id": 1,
+                                "result": {
+                                    "accessList": [],
+                                    "gasUsed": "0x5dc0"
+                                }
+                            }
+                        ]"#;
+
+                        let http_response = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                            response.len(),
+                            response
+                        );
+
+                        let _ = socket
+                            .write_all(http_response.as_bytes())
+                            .await;
+                    }
+                });
+            }
+        });
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        let tracer = EVMEntrypointService::try_from_url_with_config(
+            &format!("http://127.0.0.1:{}", addr.port()),
+            0,
+            10,
+        )
+        .unwrap();
+
+        let entry_points = vec![EntryPointWithTracingParams::new(
+            EntryPoint::new(
+                "test:func()".to_string(),
+                Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+                "func()".to_string(),
+            ),
+            TracingParams::RPCTracer(RPCTracerParams::new(
+                None,
+                Bytes::from(&keccak256("func()")[0..4]),
+            )),
+        )];
+
+        let block_hash =
+            Bytes::from_str("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+                .unwrap();
+
+        let results = tracer
+            .trace(block_hash, entry_points)
+            .await;
+
+        assert_eq!(results.len(), 1);
+        // Should fail because batch response doesn't have correct length
+        assert!(matches!(results[0], Err(RPCError::UnknownError(_))));
+    }
+
+    #[tokio::test]
+    #[ignore = "requires a RPC connection"]
+    async fn test_batch_response_with_real_rpc() {
+        // Integration test using real RPC to verify the fix works end-to-end
+        // We run multiple iterations with different contracts to increase confidence
+        // that the ID matching works correctly with real RPC responses
+        let url = env::var("RPC_URL").expect("RPC_URL is not set");
+        let tracer = EVMEntrypointService::try_from_url(&url).unwrap();
+
+        let block_hash =
+            Bytes::from_str("0x283666c6c90091fa168ebf52c0c61043d6ada7a2ffe10dc303b0e4ff111e172e")
+                .unwrap();
+
+        // Test with multiple different contracts across 3 iterations
+        let test_cases = [
+            vec![
+                ("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988", "getRate()"),
+                ("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9", "getRate()"),
+            ],
+            vec![("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9", "getRate()")],
+            vec![("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988", "getRate()")],
+        ];
+
+        for (iteration, contracts) in test_cases.iter().enumerate() {
+            let entry_points: Vec<EntryPointWithTracingParams> = contracts
+                .iter()
+                .map(|(addr, func)| {
+                    EntryPointWithTracingParams::new(
+                        EntryPoint::new(
+                            format!("{}:{}", addr, func),
+                            Bytes::from_str(addr).unwrap(),
+                            func.to_string(),
+                        ),
+                        TracingParams::RPCTracer(RPCTracerParams::new(
+                            None,
+                            Bytes::from(&keccak256(func)[0..4]),
+                        )),
+                    )
+                })
+                .collect();
+
+            let results = tracer
+                .trace(block_hash.clone(), entry_points.clone())
+                .await;
+
+            assert_eq!(
+                results.len(),
+                contracts.len(),
+                "Iteration {}: Expected {} results, got {}",
+                iteration,
+                contracts.len(),
+                results.len()
+            );
+
+            for (i, result) in results.iter().enumerate() {
+                assert!(
+                    result.is_ok(),
+                    "Iteration {}, contract {}: Real RPC test failed. Error: {:?}",
+                    iteration,
+                    contracts[i].0,
+                    result
+                );
+
+                // Verify the result contains the expected contract address
+                if let Ok(traced) = result {
+                    assert_eq!(
+                        traced
+                            .entry_point_with_params
+                            .entry_point
+                            .target,
+                        Bytes::from_str(contracts[i].0).unwrap(),
+                        "Iteration {}: Result {} has wrong target address",
+                        iteration,
+                        i
+                    );
+                }
+            }
+        }
     }
 }
