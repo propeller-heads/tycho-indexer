@@ -567,8 +567,6 @@ impl WsDeltasClient {
                                 ))
                             }
                             WebsocketError::CompressionError(subscription_id, e) => {
-                                // TODO - Should compression
-                                //   failure be fatal or just kill that subscription?
                                 return Err(DeltasError::ServerError(
                                     format!(
                                         "Server failed to compress message for subscription: {subscription_id}, error: {e}"
