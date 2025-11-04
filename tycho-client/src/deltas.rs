@@ -566,6 +566,16 @@ impl WsDeltasClient {
                                     error.clone(),
                                 ))
                             }
+                            WebsocketError::CompressionError(subscription_id, e) => {
+                                // TODO - Should compression
+                                //   failure be fatal or just kill that subscription?
+                                return Err(DeltasError::ServerError(
+                                    format!(
+                                        "Server failed to compress message for subscription: {subscription_id}, error: {e}"
+                                    ),
+                                    error.clone(),
+                                ))
+                            }
                             WebsocketError::SubscribeError(extractor_id) => {
                                 let inner = guard
                                     .as_mut()
@@ -1917,6 +1927,58 @@ mod tests {
         assert!(result.is_err());
         if let Err(DeltasError::ServerError(message, _)) = result {
             assert!(message.contains("Server failed to parse client message"));
+        } else {
+            panic!("Expected DeltasError::ServerError, got: {:?}", result);
+        }
+
+        server_thread.await.unwrap();
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_compression_error_handling() {
+        use tycho_common::dto::{Response, WebSocketMessage, WebsocketError};
+
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "test_extractor");
+        let subscription_id = Uuid::new_v4();
+        let error_response = WebSocketMessage::Response(Response::Error(
+            WebsocketError::CompressionError(subscription_id, "Compression failed".to_string()),
+        ));
+        let error_json = serde_json::to_string(&error_response).unwrap();
+
+        let exp_comm = [
+            // subscribe first so connect can finish successfully
+            ExpectedComm::Receive(
+                100,
+                tungstenite::protocol::Message::Text(
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true,"compression":false}"#.to_string()
+                ),
+            ),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json))
+        ];
+
+        let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
+
+        let client = WsDeltasClient::new(&format!("ws://{addr}"), None).unwrap();
+        let jh = client
+            .connect()
+            .await
+            .expect("connect failed");
+
+        // Subscribe successfully
+        let _ = timeout(
+            Duration::from_millis(100),
+            client.subscribe(extractor_id, SubscriptionOptions::new()),
+        )
+        .await
+        .expect("subscription timed out");
+
+        // The client should receive the parse error and close the connection
+        let result = jh
+            .await
+            .expect("ws loop should complete");
+        assert!(result.is_err());
+        if let Err(DeltasError::ServerError(message, _)) = result {
+            assert!(message.contains("compress message for subscription"));
         } else {
             panic!("Expected DeltasError::ServerError, got: {:?}", result);
         }

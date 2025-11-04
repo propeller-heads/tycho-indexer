@@ -389,8 +389,22 @@ impl StreamHandler<Result<(Uuid, BlockChanges), ws::ProtocolError>> for WsActor 
                             ctx.binary(compressed);
                         }
                         Err(e) => {
-                            error!(error = %e, "Failed to compress message, sending uncompressed");
-                            ctx.text(json_str);
+                            error!(
+                                error = %e,
+                                "Failed to compress message for subscription"
+                            );
+                            counter!("websocket_compression_errors",).increment(1);
+
+                            // Send compression error to client
+                            let compression_error =
+                                WebsocketError::CompressionError(subscription_id, e);
+                            let error_msg = WebSocketMessage::Response(Response::Error(
+                                compression_error.into(),
+                            ));
+                            ctx.text(
+                                serde_json::to_string(&error_msg)
+                                    .expect("WebsocketMessage serialize infallible"),
+                            );
                         }
                     }
                 } else {

@@ -16,4 +16,7 @@ pub enum WebsocketError {
 
     #[error("Failed to subscribe to extractor: {0}")]
     SubscribeError(ExtractorIdentity),
+
+    #[error("Failed to compress message for subscription: {0}, error: {1}")]
+    CompressionError(Uuid, #[source] std::io::Error),
 }
