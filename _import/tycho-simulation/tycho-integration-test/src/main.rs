@@ -297,9 +297,10 @@ async fn process_update(
             .header
             .number
             .abs_diff(update.update.block_number_or_timestamp);
+        metrics::record_protocol_update_block_delay(block_delay);
         // Consume messages that are older than the current block, to give the stream a chance
         // to catch up
-        if update.update.block_number_or_timestamp < block.header.number {
+        if block_delay > 0 {
             warn!(
                 "Update block ({}) is behind the current block ({}), skipping to catch up.",
                 update.update.block_number_or_timestamp, block.header.number
@@ -307,7 +308,6 @@ async fn process_update(
             metrics::record_protocol_update_skipped();
             return Ok(());
         }
-        metrics::record_protocol_update_block_delay(block_delay);
 
         if update.is_first_update {
             info!("Skipping simulation on first protocol update...");
