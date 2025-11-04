@@ -649,11 +649,7 @@ where
             })?;
 
         // 1. Filter-out components with no swap hooks (keep beforeSwap or afterSwap only)
-        let swap_hook_components = {
-            let _span = span!(Level::INFO, "extract_swap_hook_components").entered();
-
-            self.extract_components_with_swap_hooks(block_changes)?
-        };
+        let swap_hook_components = self.extract_components_with_swap_hooks(block_changes)?;
 
         // Early stop if no hook-components are affected
         if swap_hook_components.is_empty() {
@@ -749,13 +745,6 @@ where
 
         // 4. Prepare metadata lookup map for hook orchestrator processing
         let metadata_by_component_id: HashMap<ComponentId, _> = {
-            let _span = span!(
-                Level::INFO,
-                "prepare_metadata_map",
-                total_metadata = component_metadata_from_external_source.len()
-            )
-            .entered();
-
             component_metadata_from_external_source
                 .into_iter()
                 .map(|(component, metadata)| (component.id.clone(), metadata))

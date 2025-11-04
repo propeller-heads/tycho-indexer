@@ -359,13 +359,11 @@ where
         components_count = components.len(),
         transactions_count = block_changes.txs_with_update.len()
     ))]
-    fn enrich_metadata_from_block_balances(
+    pub(crate) fn enrich_metadata_from_block_balances(
         &self,
         components: &[&ProtocolComponent],
         block_changes: &BlockChanges,
     ) -> HashMap<ComponentId, ComponentTracingMetadata> {
-        debug!("Starting balance-based metadata enrichment for entrypoint generation");
-
         let mut collected_balances: HashMap<ComponentId, Balances> =
             HashMap::with_capacity(components.len());
         let mut components_enriched = 0;
@@ -497,7 +495,7 @@ where
             .map(|tx_with_changes| tx_with_changes.tx.hash.clone())
     }
 
-    #[instrument(skip(self, block, components, metadata, block_changes), fields(
+    #[instrument(skip_all, fields(
         block_number = block.number,
         component_count = components.len(),
         metadata_count = metadata.len()
@@ -673,32 +671,42 @@ mod tests {
             protocol::{ComponentBalance, ProtocolComponent},
             Address, Chain, ChangeType,
         },
+        traits::MockBalanceSlotDetector,
         Bytes,
     };
 
     use super::*;
     use crate::extractor::{
-        dynamic_contract_indexer::component_metadata::ComponentTracingMetadata,
+        dynamic_contract_indexer::entrypoint_generator::{
+            DefaultSwapAmountEstimator, UniswapV4DefaultHookEntrypointGenerator,
+        },
         models::BlockChanges,
     };
 
     // Helper functions for creating test data
+    fn create_test_orchestrator() -> DefaultUniswapV4HookOrchestrator<MockBalanceSlotDetector> {
+        let balance_detector = MockBalanceSlotDetector::new();
+        let swap_estimator = DefaultSwapAmountEstimator::with_balances();
+        let pool_manager = Address::from("0x1234567890123456789012345678901234567890");
+        let entrypoint_generator = UniswapV4DefaultHookEntrypointGenerator::new(
+            swap_estimator,
+            pool_manager,
+            balance_detector,
+        );
+        DefaultUniswapV4HookOrchestrator::new(entrypoint_generator)
+    }
+
     fn create_test_component(id: &str, tokens: Vec<Address>) -> ProtocolComponent {
         let mut static_attributes = HashMap::new();
         static_attributes
             .insert("hooks".to_string(), Bytes::from_str("0x1234567890abcdef").unwrap());
-
-        // Add balance_owner tokens
-        for (i, token) in tokens.into_iter().enumerate() {
-            static_attributes.insert(format!("balance_owner/{}", i), token);
-        }
 
         ProtocolComponent {
             id: id.to_string(),
             protocol_system: "uniswap_v4".to_string(),
             protocol_type_name: "pool".to_string(),
             chain: Chain::Ethereum,
-            tokens: vec![], // Not used in balance enrichment
+            tokens,
             contract_addresses: vec![],
             static_attributes,
             change: ChangeType::Creation,
@@ -763,109 +771,9 @@ mod tests {
         )
     }
 
-    // Test orchestrator for testing balance enrichment functionality
-    struct TestOrchestrator;
-    impl TestOrchestrator {
-        fn enrich_metadata_from_block_balances(
-            &self,
-            components_needing_metadata: &[&ProtocolComponent],
-            block_changes: &BlockChanges,
-        ) -> HashMap<ComponentId, ComponentTracingMetadata> {
-            // Copy the implementation from DefaultUniswapV4HookOrchestrator
-            let mut enriched_metadata: HashMap<ComponentId, HashMap<Address, Bytes>> =
-                HashMap::with_capacity(components_needing_metadata.len());
-            let mut remaining_components: HashMap<ComponentId, std::collections::HashSet<Address>> =
-                components_needing_metadata
-                    .iter()
-                    .map(|component| {
-                        let balance_owner_tokens: std::collections::HashSet<Address> = component
-                            .static_attributes
-                            .iter()
-                            .filter_map(|(key, value)| {
-                                if key.starts_with("balance_owner/") {
-                                    Address::try_from(value.clone()).ok()
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect();
-                        (component.id.clone(), balance_owner_tokens)
-                    })
-                    .collect();
-
-            // Process transactions in reverse order for latest values
-            for tx_with_changes in block_changes
-                .txs_with_update
-                .iter()
-                .rev()
-            {
-                for (component_id, balance_changes) in &tx_with_changes.balance_changes {
-                    if let Some(tokens_to_update) = remaining_components.get_mut(component_id) {
-                        for (token, component_balance) in balance_changes.iter() {
-                            if tokens_to_update.remove(token) {
-                                enriched_metadata
-                                    .entry(component_id.clone())
-                                    .or_default()
-                                    .insert(token.clone(), component_balance.balance.clone());
-                            }
-                        }
-
-                        if tokens_to_update.is_empty() {
-                            remaining_components.remove(component_id);
-                        }
-                    }
-                }
-            }
-
-            // Convert to ComponentTracingMetadata format
-            let mut result = HashMap::new();
-            for (component_id, balances) in enriched_metadata {
-                if !balances.values().all(|v| v.is_zero()) &&
-                    !remaining_components.contains_key(&component_id)
-                {
-                    let tx_hash = block_changes
-                        .txs_with_update
-                        .iter()
-                        .rev()
-                        .find_map(|tx_with_changes| {
-                            if tx_with_changes
-                                .balance_changes
-                                .contains_key(&component_id)
-                            {
-                                Some(tx_with_changes.tx.hash.clone())
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap_or_else(|| {
-                            block_changes
-                                .txs_with_update
-                                .first()
-                                .unwrap()
-                                .tx
-                                .hash
-                                .clone()
-                        });
-
-                    result.insert(
-                        component_id,
-                        ComponentTracingMetadata {
-                            tx_hash,
-                            balances: Some(Ok(balances)),
-                            limits: None,
-                            tvl: None,
-                        },
-                    );
-                }
-            }
-
-            result
-        }
-    }
-
     #[test]
     fn test_enrich_metadata_from_block_balances() {
-        let orchestrator = TestOrchestrator;
+        let orchestrator = create_test_orchestrator();
 
         // Create test components with specific tokens
         let token1 = Address::from("0x1111111111111111111111111111111111111111");
@@ -922,7 +830,7 @@ mod tests {
 
     #[test]
     fn test_enrich_metadata_reverse_order_processing() {
-        let orchestrator = TestOrchestrator;
+        let orchestrator = create_test_orchestrator();
 
         let token1 = Address::from("0x1111111111111111111111111111111111111111");
         let component1 = create_test_component("comp1", vec![token1.clone()]);
@@ -956,7 +864,7 @@ mod tests {
 
     #[test]
     fn test_enrich_metadata_handles_empty_balances() {
-        let orchestrator = TestOrchestrator;
+        let orchestrator = create_test_orchestrator();
 
         let token1 = Address::from("0x1111111111111111111111111111111111111111");
         let component1 = create_test_component("comp1", vec![token1.clone()]);
@@ -978,7 +886,7 @@ mod tests {
 
     #[test]
     fn test_enrich_metadata_filters_zero_balances() {
-        let orchestrator = TestOrchestrator;
+        let orchestrator = create_test_orchestrator();
 
         let token1 = Address::from("0x1111111111111111111111111111111111111111");
         let token2 = Address::from("0x2222222222222222222222222222222222222222");
