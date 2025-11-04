@@ -1,3 +1,11 @@
+## [0.101.2](https://github.com/propeller-heads/tycho-indexer/compare/0.101.1...0.101.2) (2025-11-04)
+
+
+### Bug Fixes
+
+* BlockParam creation in synchronizer ([dc797c4](https://github.com/propeller-heads/tycho-indexer/commit/dc797c4b55ca8f316885ea635c0e37dfda4ca558))
+* BlockParam creation in synchronizer ([#754](https://github.com/propeller-heads/tycho-indexer/issues/754)) ([1658a74](https://github.com/propeller-heads/tycho-indexer/commit/1658a7426c53d25cda6ec0421924e9dbe20464ff))
+
 ## [0.101.1](https://github.com/propeller-heads/tycho-indexer/compare/0.101.0...0.101.1) (2025-11-04)
 
 
