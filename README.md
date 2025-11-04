@@ -1,4 +1,5 @@
 [![Telegram Chat](https://img.shields.io/badge/chat-telegram-blue)][tg-url]
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/propeller-heads/tycho-indexer)
 
 # Tycho Indexer
 
