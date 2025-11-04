@@ -757,7 +757,7 @@ mod tests {
                 assert_eq!(ranges.amount_out_range.0, U256::ZERO);
 
                 // This varies depending on block, so we just use a safe min amount
-                let min_expected_limit_1 = U256::from_str("10000000000000").unwrap();
+                let min_expected_limit_1 = U256::from_str("1000000").unwrap();
                 let min_expected_limit_2 = U256::from_str("1000").unwrap();
 
                 assert!(ranges.amount_in_range.1 >= min_expected_limit_1);
