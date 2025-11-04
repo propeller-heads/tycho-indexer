@@ -1,3 +1,11 @@
+## [0.101.1](https://github.com/propeller-heads/tycho-indexer/compare/0.101.0...0.101.1) (2025-11-04)
+
+
+### Bug Fixes
+
+* Allowance slot calculation - try next slot on error ([cdafeb5](https://github.com/propeller-heads/tycho-indexer/commit/cdafeb5854c41bea0a733a52e3d52103db9e4b55))
+* Allowance slot calculation - try next slot on error ([#750](https://github.com/propeller-heads/tycho-indexer/issues/750)) ([7619036](https://github.com/propeller-heads/tycho-indexer/commit/7619036ad7c26253b73173a421e322c67da8e16b))
+
 ## [0.101.0](https://github.com/propeller-heads/tycho-indexer/compare/0.100.1...0.101.0) (2025-11-03)
 
 
