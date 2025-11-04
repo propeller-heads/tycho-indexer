@@ -17,7 +17,6 @@ use alloy_rpc_types_trace::geth::{
     GethDebugTracingOptions, GethDefaultTracingOptions, GethTrace, PreStateFrame, PreStateMode,
 };
 use async_trait::async_trait;
-use futures::stream::Any;
 use serde_json::{json, value::to_raw_value, Value};
 use tracing::error;
 use tycho_common::{
@@ -534,6 +533,7 @@ impl EntryPointTracer for EVMEntrypointService {
 mod tests {
     use std::env;
 
+    use rstest::rstest;
     use tycho_common::{
         models::blockchain::{AccountOverrides, EntryPoint, RPCTracerParams},
         Bytes,
@@ -1770,12 +1770,23 @@ mod tests {
         assert!(matches!(results[0], Err(RPCError::UnknownError(_))));
     }
 
+    /// Integration test using real RPC to verify the fix works end-to-end.
+    /// We test with different contract combinations to increase confidence
+    /// that the ID matching works correctly with real RPC responses.
+    #[rstest]
+    #[case::two_contracts(vec![
+        ("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988", "getRate()"),
+        ("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9", "getRate()"),
+    ])]
+    #[case::single_contract_first(vec![
+        ("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9", "getRate()"),
+    ])]
+    #[case::single_contract_second(vec![
+        ("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988", "getRate()"),
+    ])]
     #[tokio::test]
     #[ignore = "requires a RPC connection"]
-    async fn test_batch_response_with_real_rpc() {
-        // Integration test using real RPC to verify the fix works end-to-end
-        // We run multiple iterations with different contracts to increase confidence
-        // that the ID matching works correctly with real RPC responses
+    async fn test_batch_response_with_real_rpc(#[case] contracts: Vec<(&str, &str)>) {
         let url = env::var("RPC_URL").expect("RPC_URL is not set");
         let tracer = EVMEntrypointService::try_from_url(&url).unwrap();
 
@@ -1783,69 +1794,54 @@ mod tests {
             Bytes::from_str("0x283666c6c90091fa168ebf52c0c61043d6ada7a2ffe10dc303b0e4ff111e172e")
                 .unwrap();
 
-        // Test with multiple different contracts across 3 iterations
-        let test_cases = [
-            vec![
-                ("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988", "getRate()"),
-                ("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9", "getRate()"),
-            ],
-            vec![("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9", "getRate()")],
-            vec![("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988", "getRate()")],
-        ];
+        let entry_points: Vec<EntryPointWithTracingParams> = contracts
+            .iter()
+            .map(|(addr, func)| {
+                EntryPointWithTracingParams::new(
+                    EntryPoint::new(
+                        format!("{}:{}", addr, func),
+                        Bytes::from_str(addr).unwrap(),
+                        func.to_string(),
+                    ),
+                    TracingParams::RPCTracer(RPCTracerParams::new(
+                        None,
+                        Bytes::from(&keccak256(func)[0..4]),
+                    )),
+                )
+            })
+            .collect();
 
-        for (iteration, contracts) in test_cases.iter().enumerate() {
-            let entry_points: Vec<EntryPointWithTracingParams> = contracts
-                .iter()
-                .map(|(addr, func)| {
-                    EntryPointWithTracingParams::new(
-                        EntryPoint::new(
-                            format!("{}:{}", addr, func),
-                            Bytes::from_str(addr).unwrap(),
-                            func.to_string(),
-                        ),
-                        TracingParams::RPCTracer(RPCTracerParams::new(
-                            None,
-                            Bytes::from(&keccak256(func)[0..4]),
-                        )),
-                    )
-                })
-                .collect();
+        let results = tracer
+            .trace(block_hash.clone(), entry_points.clone())
+            .await;
 
-            let results = tracer
-                .trace(block_hash.clone(), entry_points.clone())
-                .await;
+        assert_eq!(
+            results.len(),
+            contracts.len(),
+            "Expected {} results, got {}",
+            contracts.len(),
+            results.len()
+        );
 
-            assert_eq!(
-                results.len(),
-                contracts.len(),
-                "Iteration {}: Expected {} results, got {}",
-                iteration,
-                contracts.len(),
-                results.len()
+        for (i, result) in results.iter().enumerate() {
+            assert!(
+                result.is_ok(),
+                "Contract {}: Real RPC test failed. Error: {:?}",
+                contracts[i].0,
+                result
             );
 
-            for (i, result) in results.iter().enumerate() {
-                assert!(
-                    result.is_ok(),
-                    "Iteration {}, contract {}: Real RPC test failed. Error: {:?}",
-                    iteration,
-                    contracts[i].0,
-                    result
+            // Verify the result contains the expected contract address
+            if let Ok(traced) = result {
+                assert_eq!(
+                    traced
+                        .entry_point_with_params
+                        .entry_point
+                        .target,
+                    Bytes::from_str(contracts[i].0).unwrap(),
+                    "Result {} has wrong target address",
+                    i
                 );
-
-                // Verify the result contains the expected contract address
-                if let Ok(traced) = result {
-                    assert_eq!(
-                        traced
-                            .entry_point_with_params
-                            .entry_point
-                            .target,
-                        Bytes::from_str(contracts[i].0).unwrap(),
-                        "Iteration {}: Result {} has wrong target address",
-                        iteration,
-                        i
-                    );
-                }
             }
         }
     }
