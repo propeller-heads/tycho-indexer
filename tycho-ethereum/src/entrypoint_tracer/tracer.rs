@@ -18,7 +18,7 @@ use alloy::{
         },
         AccessList, BlockId, TransactionInput, TransactionRequest,
     },
-    transports::http::reqwest,
+    transports::{http::reqwest, HttpError, RpcError, TransportErrorKind},
 };
 use async_trait::async_trait;
 use serde_json::{json, value::to_raw_value, Value};
@@ -38,7 +38,8 @@ use tycho_common::{
 
 use super::{build_state_overrides, try_get_accessed_slots, AccessListResult};
 use crate::{
-    rpc::EthereumRpcClient, BytesCodec, RPCError, RequestError, ReqwestError, SerdeJsonError,
+    errors::extract_error_chain, rpc::EthereumRpcClient, BytesCodec, RPCError, RequestError,
+    ReqwestError, SerdeJsonError,
 };
 
 #[derive(Debug, Clone)]
@@ -229,32 +230,56 @@ impl EVMEntrypointService {
         let access_list_future = batch
             .add_call::<_, AccessListResult>("eth_createAccessList", &access_list_params)
             .map_err(|e| {
-                RPCError::RequestError(RequestError::Other(format!(
-                    "Failed to add access list to batch for {target} (block: {block_hash}): {e}"
-                )))
+                // Transport/Network errors are impossible here
+                RPCError::UnknownError(format!(
+                    "Failed to add trace call to batch for {target} (block: {block_hash}): {e}"
+                ))
             })?;
 
         // Add debug_traceCall call
         let trace_future = batch
             .add_call::<_, GethTrace>("debug_traceCall", &trace_call_params)
             .map_err(|e| {
-                RPCError::TracingFailure(format!(
-                    "Failed to add trace to batch for {target} (block: {block_hash}): {e}"
+                // Transport/Network errors are impossible here
+                RPCError::UnknownError(format!(
+                    "Failed to add trace call to batch for {target} (block: {block_hash}): {e}"
                 ))
             })?;
 
         // Send batch
         batch.send().await.map_err(|e| {
-            RPCError::RequestError(RequestError::Other(format!(
-                "Batch request failed for {target} (block: {block_hash}, params: {params}): {e}"
-            )))
+            match e {
+                // Transport/Network errors
+                RpcError::Transport(e) => {
+                    RPCError::RequestError(RequestError::Reqwest(ReqwestError {
+                        msg: format!("Failed to send batch for {target} (block: {block_hash})"),
+                        source: e,
+                    }))
+                }
+                // Other errors
+                _ => RPCError::UnknownError(format!(
+                    "Failed to send batch for {target} (block: {block_hash}): {e}"
+                )),
+            }
         })?;
 
         // Await access list result
         let access_list_data = access_list_future.await.map_err(|e| {
-            RPCError::RequestError(RequestError::Other(format!(
-                "Failed to get access list from batch for {target} (block: {block_hash}): {e}"
-            )))
+            match e {
+                // Transport/Network errors
+                RpcError::Transport(e) => {
+                    RPCError::RequestError(RequestError::Reqwest(ReqwestError {
+                        msg: format!(
+                            "Failed to get access list from batch for {target} (block: {block_hash})"
+                        ),
+                        source: e,
+                    }))
+                }
+                // Other errors
+                _ => RPCError::UnknownError(format!(
+                    "Failed to get access list from batch for {target} (block: {block_hash}): {e}"
+                )),
+            }
         })?;
 
         let mut accessed_slots = try_get_accessed_slots(&access_list_data)?;
@@ -269,9 +294,21 @@ impl EVMEntrypointService {
 
         // Await trace result
         let pre_state_trace = trace_future.await.map_err(|e| {
-            RPCError::TracingFailure(format!(
-                "Failed to get trace from batch for {target} (block: {block_hash}): {e}"
-            ))
+            match e {
+                // Transport/Network errors
+                RpcError::Transport(e) => {
+                    RPCError::RequestError(RequestError::Reqwest(ReqwestError {
+                        msg: format!(
+                            "Failed to get trace from batch for {target} (block: {block_hash})"
+                        ),
+                        source: e,
+                    }))
+                }
+                // Other errors
+                _ => RPCError::UnknownError(format!(
+                    "Failed to get trace from batch for {target} (block: {block_hash}): {e}"
+                )),
+            }
         })?;
 
         Ok((accessed_slots, pre_state_trace))
@@ -1043,7 +1080,7 @@ mod tests {
 
         // Verify all results are RequestError
         for result in &results {
-            assert!(matches!(result, Err(RPCError::RequestError(RequestError::Other(_)))));
+            assert!(matches!(result, Err(RPCError::RequestError(RequestError::Reqwest(_)))));
         }
 
         // Verify ordering is preserved by checking that error messages contain the expected target
@@ -1230,7 +1267,7 @@ mod tests {
             Ok(_) => {
                 panic!("Expected second request to fail, but it succeeded");
             }
-            Err(RPCError::RequestError(RequestError::Other(msg))) => {
+            Err(RPCError::RequestError(RequestError::Reqwest(ReqwestError { msg, source: _ }))) => {
                 assert!(
                     msg.contains("0x0000000000000000000000000000000000000002"),
                     "Error message should contain the target address of the failed request"

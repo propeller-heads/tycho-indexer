@@ -1,6 +1,6 @@
 use std::{error::Error, fmt::Display};
 
-use alloy::transports::http::reqwest;
+use alloy::transports::{RpcError as AlloyRpcError, TransportErrorKind};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -20,7 +20,7 @@ impl Display for SerdeJsonError {
 pub struct ReqwestError {
     pub msg: String,
     #[source]
-    pub source: reqwest::Error,
+    pub source: TransportErrorKind,
 }
 
 impl Display for ReqwestError {
@@ -56,6 +56,51 @@ pub enum RPCError {
     SerializeError(SerdeJsonError),
     #[error("Unknown error: {0}")]
     UnknownError(String),
+}
+
+impl From<AlloyRpcError<TransportErrorKind>> for RPCError {
+    fn from(e: AlloyRpcError<TransportErrorKind>) -> Self {
+        match e {
+            // Serialization/Deserialization errors
+            AlloyRpcError::SerError(err) => RPCError::SerializeError(SerdeJsonError {
+                msg: "JSON serialization failed".to_string(),
+                source: err,
+            }),
+            AlloyRpcError::DeserError { err, text } => RPCError::SerializeError(SerdeJsonError {
+                msg: format!("JSON deserialization failed: {}", text),
+                source: err,
+            }),
+
+            // Transport/Network errors - these are retryable
+            AlloyRpcError::Transport(e) => {
+                RPCError::RequestError(RequestError::Reqwest(ReqwestError {
+                    msg: "RPC transport error".to_string(),
+                    source: e,
+                }))
+            }
+
+            // JSON-RPC error responses from the server
+            AlloyRpcError::ErrorResp(err) => {
+                RPCError::UnknownError(format!("RPC returned error response: {}", err))
+            }
+
+            // Null response when non-null expected
+            AlloyRpcError::NullResp => {
+                RPCError::UnknownError("RPC returned null response".to_string())
+            }
+
+            // Feature not supported by the RPC endpoint
+            AlloyRpcError::UnsupportedFeature(feature) => {
+                RPCError::UnknownError(format!("Unsupported RPC feature: {}", feature))
+            }
+
+            // Local usage/configuration errors
+            AlloyRpcError::LocalUsageError(err) => RPCError::UnknownError(format!(
+                "Local RPC usage error: {}",
+                extract_error_chain(err.as_ref())
+            )),
+        }
+    }
 }
 
 impl RPCError {
