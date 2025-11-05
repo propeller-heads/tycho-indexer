@@ -55,11 +55,18 @@ impl AerodromeSlipstreamsState {
     /// Creates a new instance of `AerodromeSlipstreamsState`.
     ///
     /// # Arguments
+    /// - `block_timestamp`: The timestamp of the block.
     /// - `liquidity`: The initial liquidity of the pool.
     /// - `sqrt_price`: The square root of the current price.
-    /// - `fee`: The fee tier for the pool.
+    /// - `observation_index`: The index of the current observation.
+    /// - `observation_cardinality`: The cardinality of the observation.
+    /// - `default_fee`: The default fee for the pool.
+    /// - `tick_spacing`: The tick spacing for the pool.
     /// - `tick`: The current tick of the pool.
     /// - `ticks`: A vector of `TickInfo` representing the tick information for the pool.
+    /// - `observations`: A vector of `Observation` representing the observation information for the
+    ///   pool.
+    /// - `dfc`: The dynamic fee configuration for the pool.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         block_timestamp: u64,
