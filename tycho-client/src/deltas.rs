@@ -1970,7 +1970,7 @@ mod tests {
         .await
         .expect("subscription timed out");
 
-        // The client should receive the parse error and close the connection
+        // The client should receive the parse error
         let result = jh
             .await
             .expect("ws loop should complete");
