@@ -644,6 +644,7 @@ where
             .into_iter()
             .flatten()
             .map(|t| (t.address.clone(), t));
+        debug!(?unknown_tokens, block_number = msg.block.number, "NewTokens");
         let new_tokens: HashMap<Address, Token> = self
             .token_pre_processor
             .get_tokens(unknown_tokens, Arc::new(tf), BlockTag::Number(msg.block.number))
@@ -1503,7 +1504,10 @@ impl ExtractorGateway for ExtractorPgGateway {
                 .values()
                 .cloned()
                 .collect::<Vec<_>>();
-            debug!(new_tokens=?new_tokens.iter().map(|t| &t.address).collect::<Vec<_>>(), block_number=changes.block.number, "NewTokens");
+
+            // Commented out to avoid spamming the logs. After https://github.com/propeller-heads/tycho-indexer/commit/94cd54a5a6de99336e467c3abe89b4bcdf5491b2 we are logging every token found in a block, not only new ones.
+            // debug!(new_tokens=?new_tokens.iter().map(|t| &t.address).collect::<Vec<_>>(),
+            // block_number=changes.block.number, "NewTokens");
             self.state_gateway
                 .add_tokens(&new_tokens)
                 .await?;
