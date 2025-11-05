@@ -1,3 +1,10 @@
+## [0.189.3](https://github.com/propeller-heads/tycho-simulation/compare/0.189.2...0.189.3) (2025-11-05)
+
+
+### Bug Fixes
+
+* improve euler limit to return better limits ([ac25b32](https://github.com/propeller-heads/tycho-simulation/commit/ac25b32de4c986df8d6b0767d7b2ed9a52c74d8e))
+
 ## [0.189.2](https://github.com/propeller-heads/tycho-simulation/compare/0.189.1...0.189.2) (2025-11-05)
 
 
