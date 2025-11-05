@@ -432,7 +432,7 @@ pub enum DCIType {
     RPC,
     /// UniswapV4Hooks DCI plugin - wrapper for the RPC DCI plugin that generates hook entrypoints
     /// for tracing
-    UniswapV4Hooks { router_address: String, pool_manager_address: String },
+    UniswapV4Hooks { pool_manager_address: String },
 }
 
 pub struct ExtractorBuilder {
@@ -663,7 +663,7 @@ impl ExtractorBuilder {
 
                     DCIPlugin::Standard(rpc_dci)
                 }
-                DCIType::UniswapV4Hooks { router_address, pool_manager_address } => {
+                DCIType::UniswapV4Hooks { pool_manager_address } => {
                     let rpc_url = self.rpc_url.as_ref().ok_or_else(|| {
                         ExtractionError::Setup(
                             "RPC URL is required for UniswapV4Hooks DCI plugin but not provided"
@@ -671,7 +671,9 @@ impl ExtractorBuilder {
                         )
                     })?;
 
-                    let router_address = Address::from(router_address.as_str());
+                    // random address to deploy our mini router to
+                    let router_address =
+                        Address::from("0xC0FFEE000000000000000000000000000000000000");
                     let pool_manager = Address::from(pool_manager_address.as_str());
 
                     let base_dci = Self::create_rpc_dci(
@@ -930,8 +932,7 @@ dci_plugin:
             .dci_plugin
             .expect("Expected dci_plugin to be set");
         match dci_plugin {
-            DCIType::UniswapV4Hooks { router_address, pool_manager_address } => {
-                assert_eq!(router_address, "0x2e234DAe75C793f67A35089C9d99245E1C58470b");
+            DCIType::UniswapV4Hooks { pool_manager_address } => {
                 assert_eq!(pool_manager_address, "0x000000000004444c5dc75cB358380D2e3dE08A90");
             }
             _ => {
