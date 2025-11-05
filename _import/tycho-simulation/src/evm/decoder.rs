@@ -354,7 +354,7 @@ where
                                     original_address,
                                     value.chain.into(),
                                     account.slots.clone(),
-                                    None,
+                                    Some(account.native_balance),
                                     None,
                                     ChangeType::Update,
                                 );
@@ -377,6 +377,7 @@ where
                                     Some(impl_addr),
                                     &account.slots,
                                     value.chain.into(),
+                                    Some(account.native_balance),
                                 );
 
                                 (impl_addr, proxy_state)
@@ -479,6 +480,7 @@ where
                                             None,
                                             &HashMap::new(),
                                             snapshot.component.chain.into(),
+                                            None,
                                         ),
                                     );
                                 }
@@ -645,6 +647,7 @@ where
                                     Some(impl_addr),
                                     &update.slots,
                                     update.chain,
+                                    update.balance,
                                 );
                                 account_update_by_address.insert(original_address, proxy_state);
 
@@ -957,6 +960,7 @@ fn create_proxy_token_account(
     new_address: Option<Address>,
     storage: &HashMap<U256, U256>,
     chain: Chain,
+    balance: Option<U256>,
 ) -> AccountUpdate {
     let mut slots = storage.clone();
     if let Some(new_address) = new_address {
@@ -967,7 +971,7 @@ fn create_proxy_token_account(
         address: addr,
         chain,
         slots,
-        balance: None,
+        balance,
         code: Some(ERC20_PROXY_BYTECODE.to_vec()),
         change: ChangeType::Creation,
     }
