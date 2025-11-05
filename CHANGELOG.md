@@ -1,3 +1,12 @@
+## [0.103.0](https://github.com/propeller-heads/tycho-indexer/compare/0.102.0...0.103.0) (2025-11-05)
+
+
+### Features
+
+* add zstd compression support for WebSocket subscriptions ([4cf8256](https://github.com/propeller-heads/tycho-indexer/commit/4cf8256e77e97625060d5ec439a9b8190e5d0891))
+* changed `CompressionError` handling for WebSocket communication from retry to fatal ([4a469bf](https://github.com/propeller-heads/tycho-indexer/commit/4a469bfd2d7677e07fe7b5a01599ceb18585bce2))
+* enable zstd compression support in `tycho-indexer` ws ([#749](https://github.com/propeller-heads/tycho-indexer/issues/749)) ([2e2e3d9](https://github.com/propeller-heads/tycho-indexer/commit/2e2e3d99fe4626366fea4c03aa855b3946183b9a))
+
 ## [0.102.0](https://github.com/propeller-heads/tycho-indexer/compare/0.101.4...0.102.0) (2025-11-05)
 
 
