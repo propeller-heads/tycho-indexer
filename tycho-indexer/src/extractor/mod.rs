@@ -132,10 +132,6 @@ impl<B: std::fmt::Debug + DeepSizeOf> BlockUpdateWithCursor<B> {
         Self { block_update, cursor }
     }
 
-    pub(crate) fn cursor(&self) -> &String {
-        &self.cursor
-    }
-
     pub(crate) fn block_update(&self) -> &B {
         &self.block_update
     }
