@@ -61,7 +61,7 @@ pub fn setup_metadata_registries(
     (generator_registry, parser_registry, provider_registry)
 }
 
-/// Sets up hook orchestrator registry with Euler hooks configured
+/// Sets up hook orchestrator registry with a default orchestrator for all hooks
 pub fn setup_hook_orchestrator_registry(
     router_address: Address,
     pool_manager: Address,
@@ -72,7 +72,7 @@ pub fn setup_hook_orchestrator_registry(
     // Create EVM balance slot detector
     let balance_slot_detector = {
         let config = BalanceSlotDetectorConfig {
-            rpc_url: rpc_url.clone(),
+            rpc_url,
             max_batch_size: 5,
             max_retries: 3,
             initial_backoff_ms: 100,
@@ -82,27 +82,28 @@ pub fn setup_hook_orchestrator_registry(
         EVMBalanceSlotDetector::new(config).expect("Failed to create EVMBalanceSlotDetector")
     };
 
-    // Create hook entrypoint configuration for Euler V1
+    // Create hook entrypoint configuration
     let config = HookEntrypointConfig {
-        max_sample_size: Some(10), // Reasonable default for testing
+        max_sample_size: Some(10), // Reasonable default
         min_samples: 1,
         router_address: Some(router_address.clone()),
-        sender: Some(router_address.clone()), // Use router as sender for testing
-        router_code: None,                    // Use default V4MiniRouter bytecode
+        sender: Some(router_address),
+        router_code: None, // Use default V4MiniRouter bytecode
         pool_manager: pool_manager.clone(),
     };
 
     // Create entrypoint generator with default swap amount estimator (preferring balances)
     let mut entrypoint_generator = UniswapV4DefaultHookEntrypointGenerator::new(
         DefaultSwapAmountEstimator::with_limits(),
-        pool_manager.clone(),
+        pool_manager,
         balance_slot_detector,
     );
     entrypoint_generator.set_config(config);
 
-    let orchestrator = DefaultUniswapV4HookOrchestrator::new(entrypoint_generator);
+    let default_orchestrator = DefaultUniswapV4HookOrchestrator::new(entrypoint_generator);
 
-    hook_registry.register_hook_identifier("euler_v1".to_string(), Box::new(orchestrator));
+    // Set the default orchestrator for all hooks that don't have a specific orchestrator registered
+    hook_registry.set_default_orchestrator(Box::new(default_orchestrator));
 
     hook_registry
 }

@@ -649,11 +649,7 @@ where
             })?;
 
         // 1. Filter-out components with no swap hooks (keep beforeSwap or afterSwap only)
-        let swap_hook_components = {
-            let _span = span!(Level::INFO, "extract_swap_hook_components").entered();
-
-            self.extract_components_with_swap_hooks(block_changes)?
-        };
+        let swap_hook_components = self.extract_components_with_swap_hooks(block_changes)?;
 
         // Early stop if no hook-components are affected
         if swap_hook_components.is_empty() {
@@ -680,7 +676,9 @@ where
             "Found swap hook components to process"
         );
 
-        // 2. Categorize components based on processing state
+        // 2. Categorize components based on processing state.
+        // Full-processing are the ones that will need an Entrypoint to be generated.
+        // Balance updates are the ones that only needs their balances to be updated.
         let (components_needing_full_processing, components_needing_balance_only) = {
             let _span = span!(
                 Level::INFO,
@@ -698,8 +696,8 @@ where
             "Categorized components by processing needs"
         );
 
-        // 3. Process the components - collect metadata
-        let component_metadata = self
+        // 3. Collect metadata for components where the liquidity is outside the PoolManager.
+        let component_metadata_from_external_source = self
             .metadata_orchestrator
             .collect_metadata_for_block(
                 &components_needing_balance_only,
@@ -715,77 +713,66 @@ where
                 ExtractionError::Unknown(format!("Failed to collect metadata: {e:?}"))
             })?;
 
-        info!(metadata_count = component_metadata.len(), "Collected component metadata");
+        info!(
+            metadata_count = component_metadata_from_external_source.len(),
+            "Collected component metadata"
+        );
 
+        // Build tx_hash to Transaction lookup map
         let tx_map = block_changes
             .txs_with_update
             .iter()
             .map(|tx_with_changes| (tx_with_changes.tx.hash.clone(), tx_with_changes.tx.clone()))
             .collect::<HashMap<_, _>>();
 
-        let component_id_to_tx_map = component_metadata
-            .iter()
-            .map(|(component, metadata)| {
-                (component.id.clone(), tx_map.get(&metadata.tx_hash).cloned())
-            })
-            .collect::<HashMap<_, _>>();
+        // Build component_id to Transaction map directly from swap_hook_components
+        // This ensures we have transaction info for ALL hook components, not just those with
+        // external metadata
+        let component_id_to_tx_map: HashMap<ComponentId, Option<Transaction>> =
+            swap_hook_components
+                .iter()
+                .map(|(component_id, (tx_hash, _component))| {
+                    (component_id.clone(), tx_map.get(tx_hash).cloned())
+                })
+                .collect();
 
         // 3a. Process metadata errors and update component states
-        self.process_metadata_errors(&component_metadata, &component_id_to_tx_map, block_changes)?;
+        self.process_metadata_errors(
+            &component_metadata_from_external_source,
+            &component_id_to_tx_map,
+            block_changes,
+        )?;
 
-        // 4. Group components by hook address and separate by processing needs
-        let (components_full_processing, components_balance_only, metadata_by_component_id) = {
-            let _span = span!(
-                Level::INFO,
-                "group_components_by_hook",
-                total_metadata = component_metadata.len()
-            )
-            .entered();
-
-            let mut components_full_processing: Vec<ProtocolComponent> = Vec::new();
-            let mut components_balance_only: Vec<ProtocolComponent> = Vec::new();
-            let mut metadata_by_component_id: HashMap<ComponentId, _> = HashMap::new();
-
-            // Create lookup sets for quick component categorization
-            let full_processing_ids: std::collections::HashSet<ComponentId> =
-                components_needing_full_processing
-                    .iter()
-                    .map(|(_, comp)| comp.id.clone())
-                    .collect();
-
-            for (component, metadata) in component_metadata {
-                metadata_by_component_id.insert(component.id.clone(), metadata);
-
-                if let Some(hook_address) = component.static_attributes.get("hooks") {
-                    if full_processing_ids.contains(&component.id) {
-                        // Component needs full processing (entrypoint generation)
-                        components_full_processing.push(component);
-                    } else {
-                        // Component only needs balance updates
-                        components_balance_only.push(component);
-                    }
-                }
-            }
-
-            (components_full_processing, components_balance_only, metadata_by_component_id)
+        // 4. Prepare metadata lookup map for hook orchestrator processing
+        let metadata_by_component_id: HashMap<ComponentId, _> = {
+            component_metadata_from_external_source
+                .into_iter()
+                .map(|(component, metadata)| (component.id.clone(), metadata))
+                .collect()
         };
 
-        // 5a. Call appropriate hook orchestrator for components needing full processing (entrypoint
-        // generation)
-        info!(
-            full_processing_components = components_full_processing.len(),
-            balance_only_components = components_balance_only.len(),
-            "Processing components"
-        );
+        // Create lookup set for components needing entrypoint generation
+        let full_processing_ids: std::collections::HashSet<ComponentId> =
+            components_needing_full_processing
+                .iter()
+                .map(|(_, comp)| comp.id.clone())
+                .collect();
 
-        // TODO: this part needs a full redesign, we want to process batches of components.
+        // 5. Process all hook components through their orchestrators
+        let hook_components: Vec<_> = swap_hook_components.iter().collect();
+
+        info!(hook_components = hook_components.len(), "Processing hook components");
+
+        // TODO: Redesign to process batches of components by orchestrator type
         // We need to be able to sort components by orchestrator and then process them in batches if
         // they have the same orchestrator.
-        for component in &components_full_processing {
+        for (component_id, (tx_hash, component)) in hook_components {
+            let needs_entrypoints = full_processing_ids.contains(&component.id);
             let orchestrator_span = span!(
                 Level::INFO,
-                "hook_orchestrator_full_processing",
+                "hook_orchestrator_processing",
                 component_id = %component.id,
+                needs_entrypoints = needs_entrypoints,
             );
             let _orchestrator_guard = orchestrator_span.enter();
 
@@ -795,25 +782,20 @@ where
             {
                 debug!(
                     component_id = %component.id,
-                    "Found hook orchestrator, processing components needing full processing"
+                    needs_entrypoints = needs_entrypoints,
+                    "Found hook orchestrator, processing component"
                 );
 
-                // TODO: `component_metadata_map` currently contains only one entry. This will
-                // change when we redesign this code (see TODO above)
+                // Prepare metadata map for this component
                 let component_metadata_map: HashMap<String, _> = metadata_by_component_id
-                    .iter()
-                    .filter_map(|(component_id, metadata)| {
-                        if component_id == &component.id {
-                            Some((component_id.clone(), metadata.clone()))
-                        } else {
-                            None
-                        }
-                    })
+                    .get(&component.id)
+                    .map(|metadata| (component.id.clone(), metadata.clone()))
+                    .into_iter()
                     .collect();
 
                 debug!(
                     metadata_entries = component_metadata_map.len(),
-                    "Prepared component metadata map for full processing"
+                    "Prepared component metadata map"
                 );
 
                 match orchestrator
@@ -821,19 +803,31 @@ where
                         block_changes,
                         slice::from_ref(component),
                         &component_metadata_map,
-                        true,
+                        needs_entrypoints,
                     )
                     .await
                 {
                     Ok(()) => {
-                        // Update component states for successful processing
-                        self.handle_component_success(component.id.clone(), &block_changes.block)?;
+                        if needs_entrypoints {
+                            // Update component states for successful entrypoint generation
+                            self.handle_component_success(
+                                component.id.clone(),
+                                &block_changes.block,
+                            )?;
+                        } else {
+                            // Balance-only components remain in their current state
+                            debug!(
+                                component_id = %component.id,
+                                "Completed balance-only update for component"
+                            );
+                        }
                     }
                     Err(e) => {
                         error!(
                             error = %e,
-                            failed_components = component.id,
-                            "Hook orchestrator failed (full processing)"
+                            component_id = %component.id,
+                            needs_entrypoints = needs_entrypoints,
+                            "Hook orchestrator failed"
                         );
 
                         let tx = component_id_to_tx_map
@@ -846,7 +840,6 @@ where
                                 ))
                             })?;
 
-                        // Mark all components in this group as failed
                         self.handle_component_failure(
                             component.id.clone(),
                             format!("Hook orchestrator error: {e:?}"),
@@ -857,7 +850,7 @@ where
                 }
             } else {
                 warn!(
-                    missing_components = component.id,
+                    component_id = %component.id,
                     "No hook orchestrator found for component"
                 );
 
@@ -871,122 +864,6 @@ where
                         ))
                     })?;
 
-                // Mark components as failed since we can't process them
-                self.handle_component_failure(
-                    component.id.clone(),
-                    format!("No hook orchestrator available for component {}", component.id),
-                    tx,
-                    block_changes,
-                )?;
-            }
-        }
-
-        // 5b. Handle components that only need balance updates (no entrypoint generation)
-
-        // TODO: this part needs a full redesign, we want to process batches of components.
-        // We need to be able to sort components by orchestrator and then process them in batches if
-        // they have the same orchestrator.
-        for component in &components_balance_only {
-            let balance_span = span!(
-                Level::INFO,
-                "hook_balance_only_processing",
-                component_id = %component.id,
-            );
-            let _balance_guard = balance_span.enter();
-
-            if let Some(orchestrator) = self
-                .hook_orchestrator_registry
-                .get_orchestrator_for_component(component)
-            {
-                debug!(
-                    component_id = %component.id,
-                    "Found hook orchestrator, processing components needing balance-only updates"
-                );
-
-                // TODO: `component_metadata_map` currently contains only one entry. This will
-                // change when we redesign this code (see TODO above)
-                let component_metadata_map: HashMap<String, _> = metadata_by_component_id
-                    .iter()
-                    .filter_map(|(component_id, metadata)| {
-                        if component_id == &component.id {
-                            Some((component_id.clone(), metadata.clone()))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-
-                debug!(
-                    metadata_entries = component_metadata_map.len(),
-                    "Prepared component metadata map for balance-only processing"
-                );
-
-                // For balance-only components, we just update their balances without generating new
-                // entrypoints The balance updates are already injected into
-                // block_changes by the metadata orchestrator
-                match orchestrator
-                    .update_components(
-                        block_changes,
-                        slice::from_ref(component),
-                        &component_metadata_map,
-                        false, // Skip entrypoint generation
-                    )
-                    .await
-                {
-                    Ok(()) => {
-                        // Update component states for successful processing - they remain
-                        // TracingComplete
-                        // Note: We don't call handle_component_success here because these
-                        // components are already TracingComplete
-                        // and should remain so
-                        debug!(
-                            component_id = %component.id,
-                            "Completed balance-only update for component"
-                        );
-                    }
-                    Err(e) => {
-                        error!(
-                            error = %e,
-                            failed_components = component.id,
-                            "Hook orchestrator failed (balance-only)"
-                        );
-
-                        let tx = component_id_to_tx_map
-                            .get(&component.id)
-                            .and_then(|opt_tx| opt_tx.as_ref())
-                            .ok_or_else(|| {
-                                ExtractionError::Unknown(format!(
-                                    "No tx found for component {}",
-                                    component.id
-                                ))
-                            })?;
-
-                        // Mark all components in this group as failed
-                        self.handle_component_failure(
-                            component.id.clone(),
-                            format!("Hook orchestrator balance update error: {e:?}"),
-                            tx,
-                            block_changes,
-                        )?;
-                    }
-                }
-            } else {
-                warn!(
-                    missing_components = component.id,
-                    "No hook orchestrator found for component (balance-only processing)"
-                );
-
-                let tx = component_id_to_tx_map
-                    .get(&component.id)
-                    .and_then(|opt_tx| opt_tx.as_ref())
-                    .ok_or_else(|| {
-                        ExtractionError::Unknown(format!(
-                            "No tx found for component {}",
-                            component.id
-                        ))
-                    })?;
-
-                // Mark components as failed since we can't process them
                 self.handle_component_failure(
                     component.id.clone(),
                     format!("No hook orchestrator available for component {}", component.id),
@@ -1786,6 +1663,156 @@ mod tests {
             paused_value,
             &Bytes::from([3u8]),
             "Paused attribute should have expected value"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_component_with_balance_changes_no_external_metadata_needs_full_processing() {
+        // This test covers the scenario where:
+        // 1. A component has balance changes in the block
+        // 2. The component has no external metadata source (e.g., not an Euler vault)
+        // 3. The component needs full processing (is Unprocessed or Failed with retries available)
+        // 4. No orchestrator is registered for this hook (simulating the error case)
+        //
+        // This should not fail with "No tx found for component" error
+        // because component_id_to_tx_map is built from swap_hook_components
+
+        let gateway = MockGateway::new();
+        let account_extractor = MockAccountExtractor::new();
+        let entrypoint_tracer = MockEntryPointTracer::new();
+
+        let inner_dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        // Create metadata orchestrator with no generators (component will have no external
+        // metadata)
+        let metadata_orchestrator = BlockMetadataOrchestrator::new(
+            MetadataGeneratorRegistry::new(),
+            MetadataResponseParserRegistry::new(),
+            ProviderRegistry::new(),
+        );
+
+        // Create empty hook orchestrator registry (no orchestrator for this hook)
+        let hook_orchestrator_registry = HookOrchestratorRegistry::new();
+
+        let gateway2 = MockGateway::new();
+        let mut hook_dci = UniswapV4HookDCI::new(
+            inner_dci,
+            metadata_orchestrator,
+            hook_orchestrator_registry,
+            gateway2,
+            Chain::Ethereum,
+            2, // pause_after_retries
+            3, // max_retries
+        );
+
+        // Create a component with swap hooks that will be in the block
+        let hook_address = create_hook_address_with_swap_permissions();
+        let component = create_hook_component("balance_only_comp", hook_address);
+
+        // Pre-populate the cache with this component in Unprocessed state
+        // This ensures it will need full processing
+        hook_dci
+            .cache
+            .protocol_components
+            .insert_permanent(component.id.clone(), component.clone());
+
+        let unprocessed_state = ComponentProcessingState {
+            status: ProcessingStatus::Unprocessed,
+            retry_count: 0,
+            last_error: None,
+        };
+        hook_dci
+            .cache
+            .component_states
+            .insert_permanent(component.id.clone(), unprocessed_state);
+
+        // Create block changes with ONLY balance changes (no new component, no state updates)
+        // This simulates a component that only has balance changes in the block
+        let mut balance_changes = HashMap::new();
+        balance_changes.insert(component.id.clone(), HashMap::new());
+
+        let block = get_test_block(1);
+        let tx = get_test_transaction(1);
+
+        let mut block_changes = BlockChanges::new(
+            "test".to_string(),
+            Chain::Ethereum,
+            block.clone(),
+            1,
+            false,
+            vec![TxWithChanges {
+                tx: tx.clone(),
+                protocol_components: HashMap::new(), // NO new components
+                state_updates: HashMap::new(),       // NO state updates
+                balance_changes,                     // ONLY balance changes
+                ..Default::default()
+            }],
+            Vec::new(),
+        );
+
+        // Initialize the block layer in the cache
+        hook_dci
+            .cache
+            .protocol_components
+            .validate_and_ensure_block_layer_test(&block)
+            .unwrap();
+
+        hook_dci
+            .cache
+            .component_states
+            .validate_and_ensure_block_layer_test(&block)
+            .unwrap();
+
+        // Process the block update
+        // This should handle the error gracefully and mark the component as failed
+        // because no orchestrator is registered, but it should NOT fail with
+        // "No tx found for component" error
+        let result = hook_dci
+            .process_block_update(&mut block_changes)
+            .await;
+
+        // The result should be Ok because the error is handled gracefully
+        // The component should be marked as failed with a paused state
+        assert!(
+            result.is_ok(),
+            "process_block_update should handle missing orchestrator gracefully"
+        );
+
+        // Verify the component was marked as failed
+        let final_state = hook_dci
+            .cache
+            .component_states
+            .get(&component.id);
+        assert!(final_state.is_some(), "Component state should exist in cache");
+        let final_state = final_state.unwrap();
+        assert!(
+            matches!(final_state.status, ProcessingStatus::Failed),
+            "Component should be marked as Failed"
+        );
+        assert_eq!(final_state.retry_count, 1, "Retry count should be incremented");
+
+        // Verify that the paused attribute was added to block_changes
+        assert_eq!(block_changes.txs_with_update.len(), 1, "Should still have one transaction");
+        let tx_with_changes = &block_changes.txs_with_update[0];
+        assert!(
+            tx_with_changes
+                .state_updates
+                .contains_key(&component.id),
+            "State updates should contain the component with paused attribute"
+        );
+
+        let state_delta = &tx_with_changes.state_updates[&component.id];
+        assert!(
+            state_delta
+                .updated_attributes
+                .contains_key("paused"),
+            "State delta should contain 'paused' attribute"
         );
     }
 
