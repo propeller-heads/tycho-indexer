@@ -672,6 +672,8 @@ async fn process_state(
                 expected_amount_out,
                 protocol_system: component.protocol_system.clone(),
                 component_id: component.id.to_string(),
+                token_in: token_in.address.to_string(),
+                token_out: token_out.address.to_string(),
             },
         );
     }
@@ -769,30 +771,38 @@ fn process_execution_result(
             } else {
                 String::new()
             };
+            let error_category = categorize_error(&error_name);
             error!(
                 event_type = "simulation_execution_failure",
                 error_message = %revert_reason,
                 error_name = %error_name,
+                error_category = %error_category,
+                token_in = %execution_info.token_in,
+                token_out = %execution_info.token_out,
                 tenderly_url = %tenderly_url,
                 overwrites = %overwrites_string,
                 "Failed to simulate swap: {error_msg}"
             );
             metrics::record_simulation_execution_failure(
                 &execution_info.protocol_system,
-                &error_name,
+                error_category,
             );
         }
         TychoExecutionResult::Failed { error_msg } => {
             n_failures += 1;
 
+            let error_category = categorize_error(error_msg);
             error!(
                 event_type = "simulation_execution_failure",
                 error_message = %error_msg,
+                error_category = %error_category,
+                token_in = %execution_info.token_in,
+                token_out = %execution_info.token_out,
                 "Failed to simulate swap: {error_msg}"
             );
             metrics::record_simulation_execution_failure(
                 &execution_info.protocol_system,
-                error_msg,
+                error_category,
             );
         }
     }
@@ -818,6 +828,17 @@ fn extract_error_name(revert_reason: &str) -> String {
     } else {
         // Return the whole message for simple errors
         revert_reason.trim().to_string()
+    }
+}
+
+fn categorize_error(error_name: &str) -> &'static str {
+    // We can add more categories here when we find new meaningful ones
+    match error_name {
+        e if e.contains("Couldn't find storage slot") => "Storage slot not found",
+        e if e.contains("TychoRouter__NegativeSlippage") => "TychoRouter__NegativeSlippage",
+        e if e.contains("0xf7bf5832") => "Fee token", /* Decodes to TychoRouter__AmountOutNotFullyReceived */
+        e if e.contains("UniswapV2: K") => "Fee token",
+        _ => "other",
     }
 }
 

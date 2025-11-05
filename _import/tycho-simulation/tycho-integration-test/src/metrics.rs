@@ -117,14 +117,7 @@ pub fn record_simulation_execution_success(protocol: &str) {
 }
 
 /// Record a failed execution simulation
-pub fn record_simulation_execution_failure(protocol: &str, error_name: &str) {
-    // We can add more categories here when we find new meaningful ones
-    let error_category = match error_name {
-        e if e.contains("Couldn't find storage slot") => "Storage slot not found",
-        e if e.contains("TychoRouter__NegativeSlippage") => "TychoRouter__NegativeSlippage",
-        _ => "other",
-    };
-
+pub fn record_simulation_execution_failure(protocol: &str, error_category: &str) {
     counter!(
         "tycho_integration_simulation_execution_failures_total",
         "protocol" => protocol.to_string(),
