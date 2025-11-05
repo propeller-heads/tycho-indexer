@@ -34,6 +34,7 @@ pub async fn simulate_swap_transaction(
     rpc_tools: &RPCTools,
     execution_info: HashMap<String, TychoExecutionInput>,
     block: &Block,
+    block_wait_time_secs: u64,
 ) -> Result<
     HashMap<String, TychoExecutionResult>,
     (miette::Error, Option<AddressHashMap<AccountOverride>>, Option<tenderly::OverwriteMetadata>),
@@ -123,7 +124,7 @@ pub async fn simulate_swap_transaction(
 
         async move {
             match simulator
-                .batch_simulate_with_trace(inputs, block)
+                .batch_simulate_with_trace(inputs, block, block_wait_time_secs)
                 .await
             {
                 Ok(res) => Ok(res),
