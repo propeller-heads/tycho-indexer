@@ -3049,6 +3049,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a2330da5de22e8a3cb63252ce2abb30116bf5265e89c0e01bc17015ce30a476"
 
 [[package]]
+name = "deepsize"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1cdb987ec36f6bf7bfbea3f928b75590b736fc42af8e54d97592481351b2b96c"
+dependencies = [
+ "deepsize_derive",
+]
+
+[[package]]
+name = "deepsize_derive"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "990101d41f3bc8c1a45641024377ee284ecc338e5ecf3ea0f0e236d897c72796"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "der"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9565,9 +9585,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.95.0"
+version = "0.103.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe686fe9c42e5c65f39fd785db11f91ca0626e7cd820b3555d07fd50c7e756b6"
+checksum = "b7d078d966a589443d9671fef82fc383d5addb2aa7ffcf32cd14e47fb5452739"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9594,14 +9614,15 @@ dependencies = [
 
 [[package]]
 name = "tycho-common"
-version = "0.95.0"
+version = "0.103.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2a5e54d034faecf5ddd7685a7ef9a7a042df3faa8dd180e5faca38465f809e2"
+checksum = "dcc3a847db1222b669acf75549c52e4cfef8276f04707bf9c3a0ef8675c0d4c5"
 dependencies = [
  "anyhow",
  "async-trait",
  "bytes",
  "chrono",
+ "deepsize",
  "hex",
  "num-bigint",
  "rand 0.8.5",
@@ -9619,9 +9640,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-ethereum"
-version = "0.95.0"
+version = "0.103.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "315144f62d80f9a7469a9bb491042cf309311d3d913515998c4609b9da0c6ba1"
+checksum = "a466aedb3d40887159cbb30d3bceb9e705050854253a9841f0675a98f5560888"
 dependencies = [
  "alloy",
  "alloy-rpc-types-trace",
