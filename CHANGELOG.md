@@ -1,3 +1,11 @@
+## [0.102.0](https://github.com/propeller-heads/tycho-indexer/compare/0.101.4...0.102.0) (2025-11-05)
+
+
+### Features
+
+* enable zstd compression support in `tycho-indexer` HTTP responses and add tests for compression behavior ([50be5b5](https://github.com/propeller-heads/tycho-indexer/commit/50be5b5314df36bf9444ad8c94453467c899204c))
+* enable zstd compression support in `tycho-indexer` rpc ([#748](https://github.com/propeller-heads/tycho-indexer/issues/748)) ([ae13a7d](https://github.com/propeller-heads/tycho-indexer/commit/ae13a7d4e20a160284c6181f8950246820e73375))
+
 ## [0.101.4](https://github.com/propeller-heads/tycho-indexer/compare/0.101.3...0.101.4) (2025-11-05)
 
 ## [0.101.3](https://github.com/propeller-heads/tycho-indexer/compare/0.101.2...0.101.3) (2025-11-04)
