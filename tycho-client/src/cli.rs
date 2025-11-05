@@ -106,7 +106,7 @@ struct CliArgs {
     /// If set, disable compression for WebSocket messages.
     /// By default, messages are compressed using zstd.
     #[clap(long)]
-    no_compression: bool,
+    disable_compression: bool,
 
     /// Enable verbose logging. This will show more detailed information about the
     /// synchronization process and any errors that occur.
@@ -218,7 +218,7 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
         &tycho_rpc_url,
         HttpRPCClientOptions::new()
             .with_auth_key(args.auth_key.clone())
-            .with_compression(!args.no_compression),
+            .with_compression(!args.disable_compression),
     )
     .map_err(|e| format!("Failed to create RPC client: {e}"))?;
     let chain = Chain::from_str(&args.chain)
@@ -283,7 +283,7 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
             Duration::from_secs(args.block_time / 2),
             !args.no_state,
             args.include_tvl,
-            !args.no_compression,
+            !args.disable_compression,
             rpc_client.clone(),
             ws_client.clone(),
             args.block_time + args.timeout,
@@ -379,6 +379,6 @@ mod cli_tests {
         assert_eq!(args.log_folder, "test_logs");
         assert_eq!(args.max_messages, Some(1));
         assert!(args.example);
-        assert_eq!(args.no_compression, false);
+        assert_eq!(args.disable_compression, false);
     }
 }

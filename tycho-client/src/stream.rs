@@ -193,11 +193,10 @@ impl TychoStreamBuilder {
         self
     }
 
-    /// Configures whether to enable compression for WebSocket messages.
-    ///
-    /// If set to true (default), messages will be compressed using zstd.
-    pub fn compression(mut self, compression: bool) -> Self {
-        self.compression = compression;
+    /// Disables compression for RPC and WebSocket communication.
+    /// By default, messages are compressed using zstd.
+    pub fn disable_compression(mut self) -> Self {
+        self.compression = false;
         self
     }
 
