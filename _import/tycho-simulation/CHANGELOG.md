@@ -1,3 +1,10 @@
+## [0.189.2](https://github.com/propeller-heads/tycho-simulation/compare/0.189.1...0.189.2) (2025-11-05)
+
+
+### Bug Fixes
+
+* **StreamDecoder:** Pass native balance correctly to proxy tokens ([905411c](https://github.com/propeller-heads/tycho-simulation/commit/905411caed8b7ebcf6ad8c1cfe0c93b111076974))
+
 ## [0.189.1](https://github.com/propeller-heads/tycho-simulation/compare/0.189.0...0.189.1) (2025-11-04)
 
 
