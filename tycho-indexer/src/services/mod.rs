@@ -35,7 +35,10 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     extractor::{runner::ExtractorHandle, ExtractionError},
-    services::{deltas_buffer::PendingDeltas, middleware::rpc_metrics_middleware},
+    services::{
+        deltas_buffer::PendingDeltas,
+        middleware::{compression_middleware, rpc_metrics_middleware},
+    },
 };
 
 mod access_control;
@@ -258,6 +261,8 @@ where
             let mut app = App::new()
                 .wrap(cors)
                 .wrap(actix_middleware::from_fn(rpc_metrics_middleware))
+                // Enable zstd compression while being backwards compatible with clients that do not
+                .wrap(compression_middleware())
                 .wrap(RequestTracing::new())
                 .app_data(rpc_data.clone())
                 .service(

@@ -3,7 +3,7 @@ use std::time::Instant;
 use actix_web::{
     body::{BoxBody, MessageBody},
     dev::{ServiceRequest, ServiceResponse},
-    middleware::Next,
+    middleware::{self, Next},
 };
 use metrics::{counter, histogram};
 use tracing::instrument;
@@ -73,6 +73,17 @@ where
             Err(e)
         }
     }
+}
+
+/// Creates the compression middleware for RPC responses.
+///
+/// Enables zstd compression while being backwards compatible with clients that do not support it.
+/// The middleware automatically handles Accept-Encoding negotiation:
+/// - Clients that send "Accept-Encoding: zstd" will receive compressed responses
+/// - Clients that don't specify Accept-Encoding will receive uncompressed responses
+/// - Clients that explicitly send "Accept-Encoding: identity" will receive uncompressed responses
+pub(super) fn compression_middleware() -> middleware::Compress {
+    middleware::Compress::default()
 }
 
 #[cfg(test)]
@@ -251,5 +262,99 @@ mod tests {
             histogram_samples(&after, "rpc_request_duration_seconds", &[("endpoint", "/v1/fail")])
                 .unwrap_or_default();
         assert_eq!(histogram_count, 1);
+    }
+
+    #[actix_web::test]
+    async fn test_compression_without_accept_encoding_header() {
+        let app = test::init_service(
+            App::new()
+                .wrap(compression_middleware())
+                .service(
+                    web::resource("/health").route(web::get().to(crate::services::rpc::health)),
+                ),
+        )
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri("/health")
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+
+        // Should succeed with 200 OK
+        assert!(resp.status().is_success());
+
+        // Should NOT have Content-Encoding header (uncompressed)
+        assert!(resp
+            .headers()
+            .get("content-encoding")
+            .is_none());
+
+        let body = test::read_body(resp).await;
+        assert!(!body.is_empty());
+    }
+
+    #[actix_web::test]
+    async fn test_compression_with_zstd_encoding() {
+        let app = test::init_service(
+            App::new()
+                .wrap(compression_middleware())
+                .service(
+                    web::resource("/health").route(web::get().to(crate::services::rpc::health)),
+                ),
+        )
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri("/health")
+            .insert_header(("accept-encoding", "zstd"))
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+
+        // Should succeed with 200 OK
+        assert!(resp.status().is_success());
+
+        // Should have Content-Encoding: zstd header
+        let content_encoding = resp
+            .headers()
+            .get("content-encoding")
+            .and_then(|h| h.to_str().ok());
+        assert_eq!(content_encoding, Some("zstd"));
+
+        // Body should be compressed (we won't decompress in test, just verify it exists)
+        let body = test::read_body(resp).await;
+        assert!(!body.is_empty());
+    }
+
+    #[actix_web::test]
+    async fn test_compression_with_explicit_identity() {
+        let app = test::init_service(
+            App::new()
+                .wrap(compression_middleware())
+                .service(
+                    web::resource("/health").route(web::get().to(crate::services::rpc::health)),
+                ),
+        )
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri("/health")
+            .insert_header(("accept-encoding", "identity"))
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+
+        // Should succeed with 200 OK
+        assert!(resp.status().is_success());
+
+        // Should NOT have Content-Encoding header (identity means no encoding)
+        assert!(resp
+            .headers()
+            .get("content-encoding")
+            .is_none());
+
+        let body = test::read_body(resp).await;
+        assert!(!body.is_empty());
     }
 }
