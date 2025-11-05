@@ -1,3 +1,10 @@
+## [0.189.4](https://github.com/propeller-heads/tycho-simulation/compare/0.189.3...0.189.4) (2025-11-05)
+
+
+### Bug Fixes
+
+* **cluster-test:** Sleep before simulating execution ([435b301](https://github.com/propeller-heads/tycho-simulation/commit/435b3015a28d68a329dc19eaf443c2a7d3d0c5ee))
+
 ## [0.189.3](https://github.com/propeller-heads/tycho-simulation/compare/0.189.2...0.189.3) (2025-11-05)
 
 
