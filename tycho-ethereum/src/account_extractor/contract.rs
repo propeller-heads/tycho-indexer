@@ -536,7 +536,7 @@ impl AccountExtractor for EVMBatchAccountExtractor {
         // TODO: Handle rate limiting / individual connection failures & retries
 
         let max_batch_size = 50;
-        let storage_max_batch_size = 10000;
+        let storage_max_batch_size = 1000;
         info!(
             total_requests = unique_requests.len(),
             max_batch_size,
