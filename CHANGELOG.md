@@ -1,3 +1,13 @@
+## [0.104.0](https://github.com/propeller-heads/tycho-indexer/compare/0.103.1...0.104.0) (2025-11-05)
+
+
+### Features
+
+* Add ability to register default Hook Orchestrator ([1b1b5c9](https://github.com/propeller-heads/tycho-indexer/commit/1b1b5c9a00a15a6d9c2cd1781a3d774a67f1fb7b))
+* Enriches component metadata with balance updates ([7c78ef7](https://github.com/propeller-heads/tycho-indexer/commit/7c78ef71962d87bb0b9719e2c4ee423d75e48c1f))
+* Index all composable hooks ([#746](https://github.com/propeller-heads/tycho-indexer/issues/746)) ([a90ec11](https://github.com/propeller-heads/tycho-indexer/commit/a90ec11d0e510aa967ff3a3b06c6f0018d5c4e6d))
+* Move the metadata enrichment logic to the hook orchestrator ([bc842c3](https://github.com/propeller-heads/tycho-indexer/commit/bc842c38020d0e00b5280da83ae9c06e85b0e22b))
+
 ## [0.103.1](https://github.com/propeller-heads/tycho-indexer/compare/0.103.0...0.103.1) (2025-11-05)
 
 ## [0.103.0](https://github.com/propeller-heads/tycho-indexer/compare/0.102.0...0.103.0) (2025-11-05)
