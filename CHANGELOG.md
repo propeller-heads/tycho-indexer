@@ -1,3 +1,11 @@
+## [0.104.1](https://github.com/propeller-heads/tycho-indexer/compare/0.104.0...0.104.1) (2025-11-05)
+
+
+### Bug Fixes
+
+* Decrease max batch size on account extractor ([16c477b](https://github.com/propeller-heads/tycho-indexer/commit/16c477be24efc4e67b6d65a88c3f779725bc0b0a))
+* Decrease max batch size on account extractor ([#758](https://github.com/propeller-heads/tycho-indexer/issues/758)) ([fd4524d](https://github.com/propeller-heads/tycho-indexer/commit/fd4524d60a196b845a369242afa48090e89e43aa))
+
 ## [0.104.0](https://github.com/propeller-heads/tycho-indexer/compare/0.103.1...0.104.0) (2025-11-05)
 
 
