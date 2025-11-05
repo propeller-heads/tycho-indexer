@@ -644,7 +644,11 @@ where
             .into_iter()
             .flatten()
             .map(|t| (t.address.clone(), t));
-        debug!(?unknown_tokens, block_number = msg.block.number, "NewTokens");
+
+        if !unknown_tokens.is_empty() {
+            debug!(?unknown_tokens, block_number = msg.block.number, "NewTokens");
+        }
+
         let new_tokens: HashMap<Address, Token> = self
             .token_pre_processor
             .get_tokens(unknown_tokens, Arc::new(tf), BlockTag::Number(msg.block.number))
