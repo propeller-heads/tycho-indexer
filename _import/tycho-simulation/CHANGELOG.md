@@ -1,3 +1,10 @@
+## [0.189.5](https://github.com/propeller-heads/tycho-simulation/compare/0.189.4...0.189.5) (2025-11-05)
+
+
+### Bug Fixes
+
+* Update tycho-ethereum, common and client ([44781ed](https://github.com/propeller-heads/tycho-simulation/commit/44781ed5addd34a6c330e1a7d724e3f59cfe29ba))
+
 ## [0.189.4](https://github.com/propeller-heads/tycho-simulation/compare/0.189.3...0.189.4) (2025-11-05)
 
 
