@@ -1976,7 +1976,7 @@ mod tests {
             .expect("ws loop should complete");
         assert!(result.is_err());
         if let Err(DeltasError::ServerError(message, _)) = result {
-            assert!(message.contains("compress message for subscription"));
+            assert!(message.contains("Server failed to compress message for subscription"));
         } else {
             panic!("Expected DeltasError::ServerError, got: {:?}", result);
         }
