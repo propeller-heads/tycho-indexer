@@ -1,3 +1,18 @@
+## [0.189.2](https://github.com/propeller-heads/tycho-simulation/compare/0.189.1...0.189.2) (2025-11-05)
+
+
+### Bug Fixes
+
+* **StreamDecoder:** Pass native balance correctly to proxy tokens ([905411c](https://github.com/propeller-heads/tycho-simulation/commit/905411caed8b7ebcf6ad8c1cfe0c93b111076974))
+
+## [0.189.1](https://github.com/propeller-heads/tycho-simulation/compare/0.189.0...0.189.1) (2025-11-04)
+
+
+### Bug Fixes
+
+* **cluster-test:** Fix block_delay metric (move it up) ([42dfe85](https://github.com/propeller-heads/tycho-simulation/commit/42dfe85dc5dbaa285054dc5f3d0416f3111d7563))
+* Run simulation of execution in block N+1 ([e4b1fd7](https://github.com/propeller-heads/tycho-simulation/commit/e4b1fd7100384c199bd6e0891046050b91cf58c0))
+
 ## [0.189.0](https://github.com/propeller-heads/tycho-simulation/compare/0.188.0...0.189.0) (2025-11-03)
 
 
