@@ -16,19 +16,19 @@ use alloy::{
             GethDebugTracingOptions, GethDefaultTracingOptions, GethTrace, PreStateFrame,
             PreStateMode,
         },
-        AccessList, BlockId, TransactionInput, TransactionRequest,
+        AccessList, AccessListResult, BlockId, TransactionInput, TransactionRequest,
     },
     transports::{http::reqwest, HttpError, RpcError, TransportErrorKind},
 };
 use async_trait::async_trait;
-use serde_json::{json, value::to_raw_value, Value};
+use serde_json::{json, value::to_raw_value, Map, Value};
 use tracing::error;
 use tycho_common::{
     keccak256,
     models::{
         blockchain::{
-            AddressStorageLocation, EntryPointWithTracingParams, RPCTracerParams, StorageOverride,
-            TracedEntryPoint, TracingParams, TracingResult,
+            AccountOverrides, AddressStorageLocation, EntryPointWithTracingParams, RPCTracerParams,
+            StorageOverride, TracedEntryPoint, TracingParams, TracingResult,
         },
         Address, BlockHash,
     },
@@ -36,7 +36,6 @@ use tycho_common::{
     Bytes,
 };
 
-use super::{build_state_overrides, try_get_accessed_slots, AccessListResult};
 use crate::{
     errors::extract_error_chain, rpc::EthereumRpcClient, BytesCodec, RPCError, RequestError,
     ReqwestError, SerdeJsonError,
@@ -87,7 +86,7 @@ impl EVMEntrypointService {
         {
             json!([tx_params, block_hash.to_string()])
         } else {
-            let state_overrides = build_state_overrides(
+            let state_overrides = Self::build_state_overrides(
                 params
                     .state_overrides
                     .as_ref()
@@ -282,7 +281,7 @@ impl EVMEntrypointService {
             }
         })?;
 
-        let mut accessed_slots = try_get_accessed_slots(&access_list_data)?;
+        let mut accessed_slots = Self::try_get_accessed_slots(&access_list_data)?;
 
         // eth_createAccessList excludes the target address from the access list unless
         // its state is accessed. This line ensures that the target
@@ -314,6 +313,32 @@ impl EVMEntrypointService {
         Ok((accessed_slots, pre_state_trace))
     }
 
+    fn try_get_accessed_slots(
+        access_list: &AccessListResult,
+    ) -> Result<HashMap<Address, HashSet<Bytes>>, RPCError> {
+        if let Some(error) = &access_list.error {
+            return Err(RPCError::TracingFailure(error.to_string()));
+        }
+
+        let mut out = HashMap::new();
+
+        for entry in &access_list.access_list.0 {
+            // Parse Address
+            let addr = Address::from(entry.address.to_bytes());
+
+            // Parse storage keys
+            let set = entry
+                .storage_keys
+                .iter()
+                .cloned()
+                .map(|k| k.to_bytes())
+                .collect();
+
+            out.insert(addr, set);
+        }
+        Ok(out)
+    }
+
     /// Detects if any called addresses are stored in a packed storage slot.
     ///
     /// On Ethereum, a storage slot is 32 bytes, and an address is 20 bytes. This means
@@ -342,6 +367,49 @@ impl EVMEntrypointService {
             ))
         }
         None
+    }
+
+    fn build_state_overrides(
+        overrides: &BTreeMap<Address, AccountOverrides>,
+    ) -> Map<String, Value> {
+        let mut state_overrides = Map::new();
+
+        for (address, account_override) in overrides {
+            let mut override_obj = Map::new();
+
+            if let Some(ref code) = account_override.code {
+                override_obj.insert("code".to_string(), json!(code));
+            }
+
+            if let Some(ref balance) = account_override.native_balance {
+                override_obj.insert("balance".to_string(), json!(balance.to_string()));
+            }
+
+            if let Some(ref slots) = account_override.slots {
+                match slots {
+                    StorageOverride::Diff(slot_map) => {
+                        let mut state_diff = Map::new();
+                        for (slot, value) in slot_map {
+                            state_diff.insert(slot.to_string(), json!(value));
+                        }
+                        override_obj.insert("stateDiff".to_string(), json!(state_diff));
+                    }
+                    StorageOverride::Replace(slot_map) => {
+                        let mut state_map = Map::new();
+                        for (slot, value) in slot_map {
+                            state_map.insert(slot.to_string(), json!(value));
+                        }
+                        override_obj.insert("state".to_string(), json!(state_map));
+                    }
+                }
+            }
+
+            if !override_obj.is_empty() {
+                state_overrides.insert(address.to_string(), json!(override_obj));
+            }
+        }
+
+        state_overrides
     }
 }
 const ZERO_ADDRESS: [u8; 20] = [0u8; 20];
@@ -489,6 +557,39 @@ mod tests {
             let rpc_client = fixture.create_rpc_client(true);
             EVMEntrypointService::new(&rpc_client).expect("Failed to create EVMEntrypointService")
         }
+    }
+
+    #[test]
+    fn test_build_state_overrides() {
+        let mut state_overrides = BTreeMap::new();
+        let mut slots = BTreeMap::new();
+
+        slots.insert(
+            Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000001")
+                .unwrap(),
+            Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000042")
+                .unwrap(),
+        );
+
+        let account_override = AccountOverrides {
+            slots: Some(StorageOverride::Diff(slots)),
+            native_balance: None,
+            code: Some(Bytes::from_str("0x6060604052").unwrap()),
+        };
+
+        state_overrides.insert(
+            Bytes::from_str("0x1234567890123456789012345678901234567890").unwrap(),
+            account_override,
+        );
+
+        let result = EVMEntrypointService::build_state_overrides(&state_overrides);
+
+        assert!(!result.is_empty());
+        assert!(result.contains_key("0x1234567890123456789012345678901234567890"));
+
+        let override_obj = &result["0x1234567890123456789012345678901234567890"];
+        assert!(override_obj.get("code").is_some());
+        assert!(override_obj.get("stateDiff").is_some());
     }
 
     #[tokio::test]
