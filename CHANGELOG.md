@@ -1,3 +1,18 @@
+## [0.105.0](https://github.com/propeller-heads/tycho-indexer/compare/0.104.1...0.105.0) (2025-11-06)
+
+
+### Features
+
+* add dedicated UniswapV4Hooks dci plugin config type ([9d1f3cc](https://github.com/propeller-heads/tycho-indexer/commit/9d1f3cc42c099bcc98e1167e62b0b14c6ba45182))
+* make dci blacklist addresses configurable ([8e1db98](https://github.com/propeller-heads/tycho-indexer/commit/8e1db9826086bfcb82527c33eb58f786aca262df))
+* make uniswap v4 hooks DCI plugin chain agnostic ([#756](https://github.com/propeller-heads/tycho-indexer/issues/756)) ([95257d3](https://github.com/propeller-heads/tycho-indexer/commit/95257d3f2ecfe6159c93fb422952f0c3fd7c3cf9))
+* set trace router address to hardcoded random address ([27ad55c](https://github.com/propeller-heads/tycho-indexer/commit/27ad55ccd722606e76e70e70ba3493f25bf53f31))
+
+
+### Bug Fixes
+
+* argument order of usv4 hook dci creation ([208c6c9](https://github.com/propeller-heads/tycho-indexer/commit/208c6c9b7a369e48d597f4284857933b17689e01))
+
 ## [0.104.1](https://github.com/propeller-heads/tycho-indexer/compare/0.104.0...0.104.1) (2025-11-05)
 
 
