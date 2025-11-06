@@ -28,9 +28,11 @@ use tycho_common::{
 
 use crate::{
     extractor::reorg_buffer::{BlockNumberOrTimestamp, CommitStatus},
+    impl_pagination_validation,
     services::{
         cache::RpcCache,
         deltas_buffer::{PendingDeltasBuffer, PendingDeltasError},
+        middleware::PaginationValidation,
     },
 };
 
@@ -84,6 +86,20 @@ impl ResponseError for RpcError {
             RpcError::Unknown(e) => HttpResponse::InternalServerError().body(e.to_string()),
         }
     }
+}
+
+// Implement pagination validation for all request types that support pagination.
+// This checks that the requested page size does not exceed the maximum allowed size.
+// The first value in the tuple is the maximum page size, and the second value is
+// the multiplication factor for the compressed maximum page size.
+// The compression factors were obtained empirically by testing with zstd compression.
+impl_pagination_validation! {
+    dto::StateRequestBody => (100, 12.0),
+    dto::TokensRequestBody => (3000, 4.3),
+    dto::ProtocolComponentsRequestBody => (500, 5.1),
+    dto::ProtocolStateRequestBody => (100, 3.6),
+    dto::ProtocolSystemsRequestBody => (100, 1.0),
+    dto::TracedEntryPointRequestBody => (100, 1.0),
 }
 
 pub struct RpcHandler<G, T> {
@@ -1085,20 +1101,20 @@ where
 )]
 #[instrument(skip_all, fields(page, page_size, protocol_system))]
 pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
+    req: actix_web::HttpRequest,
     body: web::Json<dto::StateRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> Result<HttpResponse, RpcError> {
     // Note - filtering by protocol system is not supported on this endpoint. This is due to the
     // complexity of paginating this endpoint with the current design.
 
+    // Validate pagination limits based on compression support
+    body.validate_pagination(&req)?;
+
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
     tracing::Span::current().record("page_size", body.pagination.page_size);
     tracing::Span::current().record("protocol_system", &body.protocol_system);
-
-    if body.pagination.page_size > 100 {
-        return Err(RpcError::Pagination(100));
-    }
 
     // Call the handler to get the state
     let response = handler
@@ -1132,16 +1148,16 @@ pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
 )]
 #[instrument(skip_all, fields(page, page_size))]
 pub async fn tokens<G: Gateway, T: EntryPointTracer>(
+    req: actix_web::HttpRequest,
     body: web::Json<dto::TokensRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> Result<HttpResponse, RpcError> {
+    // Validate pagination limits based on compression support
+    body.validate_pagination(&req)?;
+
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
     tracing::Span::current().record("page_size", body.pagination.page_size);
-
-    if body.pagination.page_size > 3000 {
-        return Err(RpcError::Pagination(3000))
-    }
 
     // Call the handler to get tokens
     let response = handler
@@ -1175,17 +1191,17 @@ pub async fn tokens<G: Gateway, T: EntryPointTracer>(
 )]
 #[instrument(skip_all, fields(page, page_size, protocol_system))]
 pub async fn protocol_components<G: Gateway, T: EntryPointTracer>(
+    req: actix_web::HttpRequest,
     body: web::Json<dto::ProtocolComponentsRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> Result<HttpResponse, RpcError> {
+    // Validate pagination limits based on compression support
+    body.validate_pagination(&req)?;
+
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
     tracing::Span::current().record("page_size", body.pagination.page_size);
     tracing::Span::current().record("protocol_system", &body.protocol_system);
-
-    if body.pagination.page_size > 500 {
-        return Err(RpcError::Pagination(500));
-    }
 
     // Call the handler to get tokens
     let response = handler
@@ -1218,17 +1234,17 @@ pub async fn protocol_components<G: Gateway, T: EntryPointTracer>(
 )]
 #[instrument(skip_all, fields(page, page_size, protocol_system))]
 pub async fn protocol_state<G: Gateway, T: EntryPointTracer>(
+    req: actix_web::HttpRequest,
     body: web::Json<dto::ProtocolStateRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> Result<HttpResponse, RpcError> {
+    // Validate pagination limits based on compression support
+    body.validate_pagination(&req)?;
+
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
     tracing::Span::current().record("page_size", body.pagination.page_size);
     tracing::Span::current().record("protocol_system", &body.protocol_system);
-
-    if body.pagination.page_size > 100 {
-        return Err(RpcError::Pagination(100));
-    }
 
     // Call the handler to get protocol states
     let response = handler
@@ -1261,6 +1277,7 @@ pub async fn protocol_state<G: Gateway, T: EntryPointTracer>(
 )]
 #[instrument(skip_all, fields(page, page_size))]
 pub async fn protocol_systems<G: Gateway, T: EntryPointTracer>(
+    req: actix_web::HttpRequest,
     body: web::Json<dto::ProtocolSystemsRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> Result<HttpResponse, RpcError> {
@@ -1268,9 +1285,7 @@ pub async fn protocol_systems<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("page", body.pagination.page);
     tracing::Span::current().record("page_size", body.pagination.page_size);
 
-    if body.pagination.page_size > 100 {
-        return Err(RpcError::Pagination(100));
-    }
+    body.validate_pagination(&req)?;
 
     // Call the handler to get protocol systems
     let response = handler
@@ -1341,6 +1356,7 @@ pub async fn component_tvl<G: Gateway, T: EntryPointTracer>(
 )]
 #[instrument(skip_all, fields(page, page_size))]
 pub async fn traced_entry_points<G: Gateway, T: EntryPointTracer>(
+    req: actix_web::HttpRequest,
     body: web::Json<dto::TracedEntryPointRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> Result<HttpResponse, RpcError> {
@@ -1348,9 +1364,7 @@ pub async fn traced_entry_points<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("page", body.pagination.page);
     tracing::Span::current().record("page_size", body.pagination.page_size);
 
-    if body.pagination.page_size > 100 {
-        return Err(RpcError::Pagination(100));
-    }
+    body.validate_pagination(&req)?;
 
     // Call the handler to get traced entry points
     let response = handler
