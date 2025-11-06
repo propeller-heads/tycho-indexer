@@ -22,7 +22,7 @@ use crate::{
 
 /// `EVMAccountExtractor` is a struct that implements the `AccountExtractor` trait for Ethereum
 /// accounts.
-/// TODO: once the `chai`n attribute is deprecated from AccountDelta,
+/// TODO: once the `chain` attribute is deprecated from AccountDelta,
 /// We can get rid of this struct and use the EthereumRpcClient directly
 /// to implement the `AccountExtractor` trait.
 pub struct EVMAccountExtractor {
