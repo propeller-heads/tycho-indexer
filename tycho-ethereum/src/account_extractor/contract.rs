@@ -568,8 +568,12 @@ impl AccountExtractor for EVMBatchAccountExtractor {
                 ));
             }
 
-            let ((codes, balances), storage_results) =
-                futures::try_join!(metadata_fut, try_join_all(storage_futures))?;
+            let (codes, balances) = metadata_fut.await?;
+
+            let mut storage_results = Vec::with_capacity(storage_futures.len());
+            for fut in storage_futures.into_iter() {
+                storage_results.push(fut.await?);
+            }
 
             debug!(
                 chunk_size = chunk.len(),
