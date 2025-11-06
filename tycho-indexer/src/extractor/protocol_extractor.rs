@@ -880,7 +880,7 @@ where
                     let wait_time = chrono::Utc::now()
                         .naive_utc()
                         .signed_duration_since(now);
-                    debug!(batch_size, block_height = last_block_height, extractor_id = self.name.clone(), chain = %self.chain, wait_time = %wait_time, "CommitTaskAwaited");
+                    trace!(batch_size, block_height = last_block_height, extractor_id = self.name.clone(), chain = %self.chain, wait_time = %wait_time, "CommitTaskAwaited");
                 }
             }
 
@@ -904,7 +904,7 @@ where
                 let mut committed_hieght_guard = committed_block_height.lock().await;
                 *committed_hieght_guard = Some(last_block_height);
 
-                debug!(batch_size, block_height = last_block_height, extractor_id = extractor_name, chain = %chain, "CommitTaskCompleted");
+                trace!(batch_size, block_height = last_block_height, extractor_id = extractor_name, chain = %chain, "CommitTaskCompleted");
 
                 histogram!(
                     "database_commit_duration_ms", "chain" => chain.to_string(), "extractor" => extractor_name
@@ -916,7 +916,7 @@ where
 
             *commit_handle_guard = Some(new_handle);
 
-            debug!(batch_size, block_height = last_block_height, extractor_id = self.name.clone(), chain = %self.chain, "CommitTaskQueued");
+            trace!(batch_size, block_height = last_block_height, extractor_id = self.name.clone(), chain = %self.chain, "CommitTaskQueued");
         };
 
         self.update_last_processed_block(msg.block.clone())
