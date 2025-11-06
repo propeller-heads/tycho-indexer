@@ -1,3 +1,11 @@
+## [0.105.2](https://github.com/propeller-heads/tycho-indexer/compare/0.105.1...0.105.2) (2025-11-06)
+
+
+### Bug Fixes
+
+* use a correct tracing router address ([a3b2f8a](https://github.com/propeller-heads/tycho-indexer/commit/a3b2f8a227be861e8712bef673bdb6cdbf75d7ad))
+* use a correct tracing router address ([#760](https://github.com/propeller-heads/tycho-indexer/issues/760)) ([298d398](https://github.com/propeller-heads/tycho-indexer/commit/298d398dc6d403530ff733c7a7091f6780add549))
+
 ## [0.105.1](https://github.com/propeller-heads/tycho-indexer/compare/0.105.0...0.105.1) (2025-11-06)
 
 ## [0.105.0](https://github.com/propeller-heads/tycho-indexer/compare/0.104.1...0.105.0) (2025-11-06)
