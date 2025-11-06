@@ -673,7 +673,7 @@ impl ExtractorBuilder {
 
                     // random address to deploy our mini router to
                     let router_address =
-                        Address::from("0xC0FFeebEEf00000000000000000000Beefc0fFeE");
+                        Address::from("0x2e234DAe75C793f67A35089C9d99245E1C58470b");
                     let pool_manager = Address::from(pool_manager_address.as_str());
 
                     let base_dci = Self::create_rpc_dci(
