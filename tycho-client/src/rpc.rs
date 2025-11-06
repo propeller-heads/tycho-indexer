@@ -1188,66 +1188,58 @@ impl RPCClient for HttpRPCClient {
             })
             .collect();
 
-        let vm_storage = if !request.contract_ids.is_empty() {
-            let contract_states = self
-                .get_contract_state_paginated(
-                    request.chain,
-                    request.contract_ids,
-                    request.protocol_system,
-                    &version,
-                    chunk_size,
-                    concurrency,
-                )
-                .await?
-                .accounts
-                .into_iter()
-                .map(|acc| (acc.address.clone(), acc))
-                .collect::<HashMap<_, _>>();
+        let contract_states = self
+            .get_contract_state_paginated(
+                request.chain,
+                request.contract_ids,
+                request.protocol_system,
+                &version,
+                chunk_size,
+                concurrency,
+            )
+            .await?
+            .accounts
+            .into_iter()
+            .map(|acc| (acc.address.clone(), acc))
+            .collect::<HashMap<_, _>>();
 
-            trace!(states=?&contract_states, "Retrieved ContractState");
+        trace!(states=?&contract_states, "Retrieved ContractState");
 
-            let contract_address_to_components = request
-                .components
-                .iter()
-                .filter_map(|(id, comp)| {
-                    if component_ids.contains(id) {
-                        Some(
-                            comp.contract_ids
-                                .iter()
-                                .map(|address| (address.clone(), comp.id.clone())),
-                        )
-                    } else {
-                        None
-                    }
-                })
-                .flatten()
-                .fold(HashMap::<Bytes, Vec<String>>::new(), |mut acc, (addr, c_id)| {
-                    acc.entry(addr).or_default().push(c_id);
-                    acc
-                });
+        let contract_address_to_components = request
+            .components
+            .iter()
+            .filter_map(|(id, comp)| {
+                if component_ids.contains(id) {
+                    Some(
+                        comp.contract_ids
+                            .iter()
+                            .map(|address| (address.clone(), comp.id.clone())),
+                    )
+                } else {
+                    None
+                }
+            })
+            .flatten()
+            .fold(HashMap::<Bytes, Vec<String>>::new(), |mut acc, (addr, c_id)| {
+                acc.entry(addr).or_default().push(c_id);
+                acc
+            });
 
-            request
-                .contract_ids
-                .iter()
-                .filter_map(|address| {
-                    if let Some(state) = contract_states.get(address) {
-                        Some((address.clone(), state.clone()))
-                    } else if let Some(ids) = contract_address_to_components.get(address) {
-                        // only emit error even if we did actually request this address
-                        error!(
-                            ?address,
-                            ?ids,
-                            "Component with lacking contract storage encountered!"
-                        );
-                        None
-                    } else {
-                        None
-                    }
-                })
-                .collect()
-        } else {
-            HashMap::new()
-        };
+        let vm_storage = request
+            .contract_ids
+            .iter()
+            .filter_map(|address| {
+                if let Some(state) = contract_states.get(address) {
+                    Some((address.clone(), state.clone()))
+                } else if let Some(ids) = contract_address_to_components.get(address) {
+                    // only emit error even if we did actually request this address
+                    error!(?address, ?ids, "Component with lacking contract storage encountered!");
+                    None
+                } else {
+                    None
+                }
+            })
+            .collect();
 
         Ok(Snapshot { states, vm_storage })
     }
