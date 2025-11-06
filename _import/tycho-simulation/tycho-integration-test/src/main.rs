@@ -112,6 +112,10 @@ struct Cli {
     /// Time to wait (in seconds) for block N+1 to exist before executing debug_traceCall
     #[arg(long, default_value_t = 12)]
     block_wait_time: u64,
+
+    /// List of component IDs to always include in tests every block if not already selected
+    #[arg(long, value_delimiter = ',')]
+    always_test_components: Vec<String>,
 }
 
 impl Debug for Cli {
@@ -385,14 +389,27 @@ async fn process_update(
             .map_err(|e| miette!("Failed to acquire write lock on Tycho state: {e}"))?;
 
         let mut all_selected_ids = Vec::new();
+
+        // Add component IDs from always_test_components that are not in the current update
+        for component_id in &cli.always_test_components {
+            if !update.update.states.keys().contains(component_id)
+                // Ensure that the component exists in the Tycho DB
+                && current_state.components.contains_key(component_id)
+            {
+                all_selected_ids.push(component_id.clone());
+            }
+        }
+
         for component_ids in current_state
             .component_ids_by_protocol
             .values()
         {
-            // Filter out IDs that are in the current update
+            // Filter out IDs that are in the current update or already in all_selected_ids
             let available_ids: Vec<_> = component_ids
                 .iter()
-                .filter(|id| !update.update.states.keys().contains(id))
+                .filter(|id| {
+                    !update.update.states.keys().contains(id) && !all_selected_ids.contains(id)
+                })
                 .cloned()
                 .collect();
 
