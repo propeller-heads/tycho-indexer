@@ -7,6 +7,7 @@ use tycho_common::{
     models::{Address, Chain},
     storage::{EntryPointGateway, ProtocolGateway},
     traits::{AccountExtractor, EntryPointTracer},
+    Bytes,
 };
 use tycho_ethereum::entrypoint_tracer::balance_slot_detector::{
     BalanceSlotDetectorConfig, EVMBalanceSlotDetector,
@@ -19,7 +20,8 @@ use crate::extractor::dynamic_contract_indexer::{
     dci::DynamicContractIndexer,
     entrypoint_generator::{
         DefaultSwapAmountEstimator, HookEntrypointConfig, HookEntrypointGenerator,
-        UniswapV4DefaultHookEntrypointGenerator,
+        UniswapV4DefaultHookEntrypointGenerator, UNICHAIN_V4_MINI_ROUTER_BYTECODE,
+        V4_MINI_ROUTER_BYTECODE,
     },
     euler::metadata_generator::{EulerMetadataGenerator, EulerMetadataResponseParser},
     hook_dci::UniswapV4HookDCI,
@@ -66,6 +68,7 @@ pub fn setup_hook_orchestrator_registry(
     router_address: Address,
     pool_manager: Address,
     rpc_url: String,
+    chain: Chain,
 ) -> HookOrchestratorRegistry {
     let mut hook_registry = HookOrchestratorRegistry::new();
 
@@ -82,13 +85,21 @@ pub fn setup_hook_orchestrator_registry(
         EVMBalanceSlotDetector::new(config).expect("Failed to create EVMBalanceSlotDetector")
     };
 
+    let router_code = match chain {
+        Chain::Ethereum => Bytes::from(V4_MINI_ROUTER_BYTECODE),
+        Chain::Unichain => Bytes::from(UNICHAIN_V4_MINI_ROUTER_BYTECODE),
+        _ => {
+            panic!("Unsupported chain for Hooks DCI");
+        }
+    };
+
     // Create hook entrypoint configuration
     let config = HookEntrypointConfig {
         max_sample_size: Some(10), // Reasonable default
         min_samples: 1,
         router_address: Some(router_address.clone()),
         sender: Some(router_address),
-        router_code: None, // Use default V4MiniRouter bytecode
+        router_code: Some(router_code), // Use default V4MiniRouter bytecode
         pool_manager: pool_manager.clone(),
     };
 
@@ -131,7 +142,7 @@ where
 
     // Setup hook orchestrator registry
     let hook_orchestrator_registry =
-        setup_hook_orchestrator_registry(router_address, pool_manager, rpc_url);
+        setup_hook_orchestrator_registry(router_address, pool_manager, rpc_url, chain);
 
     // Create metadata orchestrator
     let metadata_orchestrator =
