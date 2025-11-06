@@ -1,3 +1,11 @@
+## [0.106.0](https://github.com/propeller-heads/tycho-indexer/compare/0.105.4...0.106.0) (2025-11-06)
+
+
+### Features
+
+* Add custom bytecode for Unichain V4 MiniRouter ([af86232](https://github.com/propeller-heads/tycho-indexer/commit/af862328a8111fd4b167e7234c3070afa1eb1332))
+* Add custom bytecode for Unichain V4 MiniRouter ([#765](https://github.com/propeller-heads/tycho-indexer/issues/765)) ([6b585d8](https://github.com/propeller-heads/tycho-indexer/commit/6b585d892108f9a1beea04bad32966de54d79cf3))
+
 ## [0.105.4](https://github.com/propeller-heads/tycho-indexer/compare/0.105.3...0.105.4) (2025-11-06)
 
 ## [0.105.3](https://github.com/propeller-heads/tycho-indexer/compare/0.105.2...0.105.3) (2025-11-06)
