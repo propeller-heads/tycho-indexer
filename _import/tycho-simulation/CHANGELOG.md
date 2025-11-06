@@ -1,3 +1,10 @@
+## [0.190.0](https://github.com/propeller-heads/tycho-simulation/compare/0.189.5...0.190.0) (2025-11-06)
+
+
+### Features
+
+* pass a list of ids to always test in cluster ([b3a763e](https://github.com/propeller-heads/tycho-simulation/commit/b3a763e28d696de01593f29e86c1ead11f043920))
+
 ## [0.189.5](https://github.com/propeller-heads/tycho-simulation/compare/0.189.4...0.189.5) (2025-11-05)
 
 
