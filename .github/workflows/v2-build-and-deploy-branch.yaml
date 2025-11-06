@@ -12,6 +12,7 @@ on:
           - tycho-indexer
           - arbitrum-tycho-indexer
           - ethereum-tycho-indexer
+          - ethereum-tycho-indexer-new-protocol
           - base-tycho-indexer
           - unichain-tycho-indexer
 
