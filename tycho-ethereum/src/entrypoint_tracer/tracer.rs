@@ -1,8 +1,4 @@
-use std::{
-    collections::{BTreeMap, HashMap, HashSet},
-    str::FromStr,
-    sync::Arc,
-};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use alloy::{
     primitives::{
@@ -16,15 +12,14 @@ use alloy::{
             GethDebugTracingOptions, GethDefaultTracingOptions, GethTrace, PreStateFrame,
             PreStateMode,
         },
-        AccessList, AccessListResult, BlockId, TransactionInput, TransactionRequest,
+        AccessListResult, BlockId, TransactionInput, TransactionRequest,
     },
-    transports::{http::reqwest, HttpError, RpcError, TransportErrorKind},
+    transports::RpcError,
 };
 use async_trait::async_trait;
-use serde_json::{json, value::to_raw_value, Map, Value};
+use serde_json::{json, Map, Value};
 use tracing::error;
 use tycho_common::{
-    keccak256,
     models::{
         blockchain::{
             AccountOverrides, AddressStorageLocation, EntryPointWithTracingParams, RPCTracerParams,
@@ -36,10 +31,7 @@ use tycho_common::{
     Bytes,
 };
 
-use crate::{
-    errors::extract_error_chain, rpc::EthereumRpcClient, BytesCodec, RPCError, RequestError,
-    ReqwestError, SerdeJsonError,
-};
+use crate::{rpc::EthereumRpcClient, BytesCodec, RPCError, RequestError, ReqwestError};
 
 #[derive(Debug, Clone)]
 pub struct EVMEntrypointService {
@@ -58,7 +50,7 @@ impl EVMEntrypointService {
         max_retries: u32,
         retry_delay_ms: u64,
     ) -> Result<Self, RPCError> {
-        let mut rpc_client = rpc.clone();
+        let rpc_client = rpc.clone();
 
         Ok(Self { rpc: rpc_client, max_retries, retry_delay_ms })
     }
@@ -185,7 +177,7 @@ impl EVMEntrypointService {
             Some(overrides) => {
                 // Need to manually construct this because Alloy misses `stateOverrides` in their
                 // structs.
-                let mut tracing_with_overrides = json!({
+                let tracing_with_overrides = json!({
                     "enableReturnData": true,
                     "tracer": "prestateTracer",
                     "stateOverrides": overrides
@@ -352,7 +344,7 @@ impl EVMEntrypointService {
     ) -> Option<AddressStorageLocation> {
         let value_bytes: &[u8] = val.as_ref();
 
-        if let Some((offset, window)) = value_bytes
+        if let Some((offset, _window)) = value_bytes
             .windows(20)
             .enumerate()
             .find(|(_idx, window)| {
@@ -542,7 +534,10 @@ impl EntryPointTracer for EVMEntrypointService {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use tycho_common::{
+        keccak256,
         models::blockchain::{AccountOverrides, EntryPoint, RPCTracerParams},
         Bytes,
     };

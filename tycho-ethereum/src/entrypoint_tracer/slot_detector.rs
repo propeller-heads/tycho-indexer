@@ -1,11 +1,10 @@
-use std::{collections::HashMap, marker::PhantomData, str::FromStr, sync::Arc, time::Duration};
+use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
 
 use alloy::{
     primitives::U256,
-    rpc::client::BatchRequest,
-    transports::{http::reqwest, RpcError, TransportError, TransportErrorKind, TransportResult},
+    transports::{RpcError, TransportResult},
 };
-use futures::{future::join_all, FutureExt, TryFutureExt};
+use futures::future::join_all;
 use serde_json::{json, Value};
 use thiserror::Error;
 use tracing::{debug, error, trace, warn};
@@ -346,8 +345,8 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
 
         for (token_idx, token) in tokens.iter().enumerate() {
             // Calculate expected response IDs for this token
-            let debug_id = (token_idx * 2);
-            let eth_call_id = (token_idx * 2 + 1);
+            let debug_id = token_idx * 2;
+            let eth_call_id = token_idx * 2 + 1;
 
             match self.extract_slot_from_paired_responses(
                 token,
@@ -765,7 +764,7 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
     ) -> Vec<SlotMetadata> {
         let mut retry_data = Vec::new();
         for (idx, mut metadata) in slots_to_test.into_iter().enumerate() {
-            let response_id = (idx);
+            let response_id = idx;
 
             match responses.get(response_id) {
                 Some(response) => {
@@ -890,11 +889,11 @@ mod tests {
         type CacheKey = ();
         type Params = ();
 
-        fn cache_key(token: &Address, params: &Self::Params) -> Self::CacheKey {
+        fn cache_key(_token: &Address, _params: &Self::Params) -> Self::CacheKey {
             unreachable!()
         }
 
-        fn encode_calldata(params: &Self::Params) -> Bytes {
+        fn encode_calldata(_params: &Self::Params) -> Bytes {
             unreachable!()
         }
     }

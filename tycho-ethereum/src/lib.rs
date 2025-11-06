@@ -3,7 +3,6 @@
 extern crate pretty_assertions;
 
 #[cfg(feature = "onchain_data")]
-#[allow(unused)] //TODO: Remove when used
 pub mod entrypoint_tracer;
 #[cfg(feature = "onchain_data")]
 pub mod erc20;

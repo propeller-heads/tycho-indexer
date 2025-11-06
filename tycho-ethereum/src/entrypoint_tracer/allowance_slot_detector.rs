@@ -9,7 +9,7 @@ use tycho_common::{
 };
 
 use crate::entrypoint_tracer::slot_detector::{
-    SlotDetectionStrategy, SlotDetector, SlotDetectorConfig, SlotDetectorError,
+    SlotDetectionStrategy, SlotDetector, SlotDetectorError,
 };
 
 /// Strategy for allowance slot detection
@@ -76,7 +76,7 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::rpc::EthereumRpcClient;
+    use crate::{entrypoint_tracer::slot_detector::SlotDetectorConfig, rpc::EthereumRpcClient};
 
     #[test]
     fn test_encode_allowance_calldata() {
@@ -121,8 +121,6 @@ mod tests {
         let results = detector
             .detect_allowance_slots(std::slice::from_ref(&token), owner, spender, block_hash)
             .await;
-
-        let res = results.get(&token);
 
         match results.get(&token) {
             Some(Ok((storage_addr, slot))) => {

@@ -9,7 +9,7 @@ use tycho_common::{
 };
 
 use crate::entrypoint_tracer::slot_detector::{
-    SlotDetectionStrategy, SlotDetector, SlotDetectorConfig, SlotDetectorError,
+    SlotDetectionStrategy, SlotDetector, SlotDetectorError,
 };
 
 /// Strategy for balance slot detection
@@ -72,8 +72,9 @@ mod tests {
     use serde_json::json;
 
     use super::{BalanceStrategy, SlotDetectionStrategy, *};
-    use crate::test_fixtures::{
-        TestFixture, STETH_STR, USDC_HOLDER_ADDR, USDC_STR, USDT_STR, WETH_STR,
+    use crate::{
+        entrypoint_tracer::slot_detector::SlotDetectorConfig,
+        test_fixtures::{TestFixture, STETH_STR, USDC_HOLDER_ADDR, USDC_STR, USDT_STR, WETH_STR},
     };
 
     const BLOCK_HASH: &str = "0x658814e4cb074359f10dd71237cc57b1ae6791fc9de59fde570e724bd884cbb0";
@@ -139,7 +140,7 @@ mod tests {
         let block_hash = BlockHash::from_str(BLOCK_HASH).expect("Invalid block hash");
         println!("Block hash: {block_hash}");
 
-        let mut detector = TestFixture::create_balance_detector();
+        let detector = TestFixture::create_balance_detector();
         let results = detector
             .detect_balance_slots(&tokens, holder_address, block_hash)
             .await;
@@ -225,7 +226,7 @@ mod tests {
         // Use a recent block where stETH has activity
         let block_hash = BlockHash::from_str(BLOCK_HASH).expect("Invalid block hash");
 
-        let mut detector = TestFixture::create_balance_detector();
+        let detector = TestFixture::create_balance_detector();
         let results = detector
             .detect_balance_slots(&tokens, balance_owner.clone(), block_hash.clone())
             .await;
@@ -249,7 +250,6 @@ mod tests {
                 let target_balance = U256::from(5000000000000000000u64); // 5 ETH in wei. Without overrides
                 let verified_balance = verify_storage_slot_manipulation(
                     &rpc_url,
-                    &detector,
                     &steth,
                     &balance_owner,
                     detected_slot,
@@ -292,7 +292,6 @@ mod tests {
     /// Verify that a detected storage slot can be manipulated to achieve a target balance
     async fn verify_storage_slot_manipulation(
         rpc_url: &str,
-        detector: &EVMBalanceSlotDetector,
         token: &Address,
         balance_owner: &Address,
         detected_slot: &Bytes,
