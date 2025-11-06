@@ -1,6 +1,6 @@
 specVersion: v0.1.0
 package:
-  name: "ethereum_uniswap_v4_no_hooks"
+  name: "base_uniswap_v4_no_hooks"
   version: v0.4.1
   url: "https://github.com/propeller-heads/tycho-protocol-sdk/tree/main/substreams/ethereum-uniswap-v4/no-hooks"
 
@@ -26,7 +26,7 @@ binaries:
 modules:
   - name: map_pools_created
     kind: map
-    initialBlock: 21688329
+    initialBlock: 25350988
     inputs:
       - params: string
       - source: sf.ethereum.type.v2.Block
@@ -35,7 +35,7 @@ modules:
 
   - name: store_pools
     kind: store
-    initialBlock: 21688329
+    initialBlock: 25350988
     updatePolicy: set_if_not_exists
     valueType: proto:uniswap.v4.Pool
     inputs:
@@ -43,7 +43,7 @@ modules:
 
   - name: map_events
     kind: map
-    initialBlock: 21688329
+    initialBlock: 25350988
     inputs:
       - source: sf.ethereum.type.v2.Block
       - store: store_pools
@@ -52,7 +52,7 @@ modules:
 
   - name: store_pool_current_tick
     kind: store
-    initialBlock: 21688329
+    initialBlock: 25350988
     updatePolicy: set
     valueType: int64
     inputs:
@@ -60,7 +60,7 @@ modules:
 
   - name: store_pool_current_sqrt_price
     kind: store
-    initialBlock: 21688329
+    initialBlock: 25350988
     updatePolicy: set
     valueType: bigint
     inputs:
@@ -68,7 +68,7 @@ modules:
 
   - name: map_balance_changes
     kind: map
-    initialBlock: 21688329
+    initialBlock: 25350988
     inputs:
       - map: map_events
       - store: store_pool_current_sqrt_price
@@ -77,7 +77,7 @@ modules:
 
   - name: store_pools_balances
     kind: store
-    initialBlock: 21688329
+    initialBlock: 25350988
     updatePolicy: add
     valueType: bigint
     inputs:
@@ -85,7 +85,7 @@ modules:
 
   - name: map_ticks_changes
     kind: map
-    initialBlock: 21688329
+    initialBlock: 25350988
     inputs:
       - map: map_events
     output:
@@ -93,7 +93,7 @@ modules:
 
   - name: store_ticks_liquidity
     kind: store
-    initialBlock: 21688329
+    initialBlock: 25350988
     updatePolicy: add
     valueType: bigint
     inputs:
@@ -101,7 +101,7 @@ modules:
 
   - name: map_liquidity_changes
     kind: map
-    initialBlock: 21688329
+    initialBlock: 25350988
     inputs:
       - map: map_events
       - store: store_pool_current_tick
@@ -110,7 +110,7 @@ modules:
 
   - name: store_liquidity
     kind: store
-    initialBlock: 21688329
+    initialBlock: 25350988
     updatePolicy: set_sum
     valueType: bigint
     inputs:
@@ -118,7 +118,7 @@ modules:
 
   - name: map_protocol_changes
     kind: map
-    initialBlock: 21688329
+    initialBlock: 25350988
     inputs:
       - source: sf.ethereum.type.v2.Block
       - map: map_pools_created
@@ -136,4 +136,4 @@ modules:
       type: proto:tycho.evm.v1.BlockChanges
 
 params:
-  map_pools_created: "000000000004444c5dc75cB358380D2e3dE08A90"
+  map_pools_created: "498581ff718922c3f8e6a244956af099b2652b2b"
