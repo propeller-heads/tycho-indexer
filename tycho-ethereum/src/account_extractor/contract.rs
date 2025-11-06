@@ -568,7 +568,9 @@ impl AccountExtractor for EVMBatchAccountExtractor {
                 ));
             }
 
-            let (codes, balances) = metadata_fut.await?;
+            let ((codes, balances), storage_results) =
+                futures::try_join!(metadata_fut, try_join_all(storage_futures))?;
+
             debug!(
                 chunk_size = chunk.len(),
                 codes_count = codes.len(),
@@ -576,8 +578,6 @@ impl AccountExtractor for EVMBatchAccountExtractor {
                 block_number = block.number,
                 "Successfully retrieved account code and balance data"
             );
-
-            let storage_results = try_join_all(storage_futures).await?;
 
             for (idx, request) in chunk.iter().enumerate() {
                 let address = &request.address;
