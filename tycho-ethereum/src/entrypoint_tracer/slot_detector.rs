@@ -675,7 +675,6 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
                     if all_slots.is_empty() {
                         detected_results.insert(token, Err(SlotDetectorError::TokenNotInTrace));
                     } else {
-                        // TODO - make sure that this is consistent with the allowance detector
                         Self::sort_slots_by_priority(&mut all_slots, original_value);
 
                         slots_to_test.push(SlotMetadata {
