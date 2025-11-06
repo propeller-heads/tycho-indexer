@@ -374,13 +374,12 @@ impl EVMBatchAccountExtractor {
         max_batch_size: usize,
         request: &StorageSnapshotRequest,
     ) -> Result<HashMap<Bytes, Option<Bytes>>, RPCError> {
-        let mut storage_requests = Vec::with_capacity(max_batch_size);
-
         let mut result = HashMap::new();
 
         match request.slots.clone() {
             Some(slots) => {
                 for slot_batch in slots.chunks(max_batch_size) {
+                    let mut storage_requests = Vec::with_capacity(slot_batch.len());
                     let mut storage_batch = self.provider.new_batch();
 
                     for slot in slot_batch {
@@ -569,12 +568,6 @@ impl AccountExtractor for EVMBatchAccountExtractor {
             }
 
             let (codes, balances) = metadata_fut.await?;
-
-            let mut storage_results = Vec::with_capacity(storage_futures.len());
-            for fut in storage_futures.into_iter() {
-                storage_results.push(fut.await?);
-            }
-
             debug!(
                 chunk_size = chunk.len(),
                 codes_count = codes.len(),
@@ -582,6 +575,8 @@ impl AccountExtractor for EVMBatchAccountExtractor {
                 block_number = block.number,
                 "Successfully retrieved account code and balance data"
             );
+
+            let storage_results = try_join_all(storage_futures).await?;
 
             for (idx, request) in chunk.iter().enumerate() {
                 let address = &request.address;
