@@ -18,7 +18,6 @@ async-trait.workspace = true
 tracing.workspace = true
 tokio.workspace = true
 tycho-common.workspace = true
-serde.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
 unicode-segmentation.workspace = true
@@ -28,10 +27,6 @@ futures = "0.3"
 # Required dependencies
 alloy = { workspace = true, default-features = false, features = ["reqwest-default-tls", "rpc-client", "sol-types", "rpc-types-trace", "rpc-types-debug"] }
 
-# Optional dependencies
-clap = { version = "4", features = ["derive", "env"], optional = true }
-humantime = { version = "2.1.0", optional = true }
-
 [dev-dependencies]
 pretty_assertions.workspace = true
 mockito.workspace = true
@@ -40,7 +35,7 @@ tracing-test = "0.2.5"
 
 [features]
 default = []
-onchain_data = ["humantime", "clap"]
+onchain_data = []
 
 [[example]]
 name = "run-analysis"
