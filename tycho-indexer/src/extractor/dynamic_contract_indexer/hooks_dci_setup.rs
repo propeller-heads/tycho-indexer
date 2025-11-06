@@ -144,8 +144,8 @@ where
         hook_orchestrator_registry,
         db_gateway,
         chain,
-        pause_after_retries,
         max_retries,
+        pause_after_retries,
     )
 }
 
