@@ -98,13 +98,17 @@ impl EVMEntrypointService {
         params: &RPCTracerParams,
         block_hash: &BlockHash,
     ) -> Value {
-        let caller = params
-            .caller
-            .as_ref()
-            .map(|addr| AlloyAddress::from_slice(addr.as_ref()));
+        let caller = params.caller.as_ref().map(|addr| {
+            AlloyAddress::try_from(addr.as_ref())
+                .unwrap_or_else(|_| panic!("Invalid caller address: {addr}"))
+        }); //TODO: Handle this error gracefully
 
         let tx_request = TransactionRequest {
-            to: Some(AlloyAddress::from_slice(target.as_ref()).into()),
+            to: Some(
+                AlloyAddress::try_from(target.as_ref())
+                    .unwrap_or_else(|_| panic!("Invalid target address: {target}")) //TODO: Handle this error gracefully
+                    .into(),
+            ),
             from: caller,
             input: TransactionInput::new(AlloyBytes::from(params.calldata.to_vec())),
             ..Default::default()
@@ -429,7 +433,6 @@ impl EntryPointTracer for EVMEntrypointService {
                 );
                 tokio::time::sleep(tokio::time::Duration::from_millis(self.retry_delay_ms)).await;
             }
-
             let mut failed_retryable = Vec::new();
             let is_last_retry = retry_count == self.max_retries;
 
