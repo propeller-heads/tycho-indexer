@@ -1,6 +1,9 @@
+use std::str::FromStr;
+
 use num_bigint::BigInt;
 use tracing::{debug, info};
 use tycho_client::feed::synchronizer::ComponentWithState;
+use tycho_common::Bytes;
 
 use crate::evm::protocol::vm::utils::json_deserialize_be_bigint_list;
 
@@ -40,6 +43,18 @@ pub fn uniswap_v4_euler_hook_pool_filter(component: &ComponentWithState) -> bool
         .get("hook_identifier")
         .and_then(|bytes| std::str::from_utf8(bytes).ok())
         .is_some_and(|s| s == "euler_v1")
+}
+
+/// Filters out uniswap v4 pools with non-Euler hooks
+pub fn uniswap_v4_angstrom_hook_pool_filter(component: &ComponentWithState) -> bool {
+    let hook_address = component
+        .component
+        .static_attributes
+        .get("hooks")
+        .unwrap();
+    println!("{hook_address:?}",);
+
+    hook_address == &Bytes::from_str("0x0000000aa232009084Bd71A5797d089AA4Edfad4").unwrap()
 }
 
 /// Filters out pools that have unsupported token types in Curve

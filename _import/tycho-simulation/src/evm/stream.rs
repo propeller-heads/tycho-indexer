@@ -116,7 +116,10 @@ use tycho_common::{
 };
 
 use crate::{
-    evm::decoder::{StreamDecodeError, TychoStreamDecoder},
+    evm::{
+        decoder::{StreamDecodeError, TychoStreamDecoder},
+        protocol::uniswap_v4::hooks::hook_handler_creator::initialize_hook_handlers,
+    },
     protocol::{
         errors::InvalidSnapshotError,
         models::{TryFromWithBlock, Update},
@@ -344,6 +347,7 @@ impl ProtocolStreamBuilder {
     pub async fn build(
         self,
     ) -> Result<impl Stream<Item = Result<Update, StreamDecodeError>>, StreamError> {
+        initialize_hook_handlers().unwrap();
         let (_, rx) = self.stream_builder.build().await?;
         let decoder = Arc::new(self.decoder);
 
