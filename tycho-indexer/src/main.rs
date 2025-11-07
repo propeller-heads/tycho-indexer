@@ -572,9 +572,7 @@ async fn get_accounts_data(
     rpc: &EthereumRpcClient,
     chain: Chain,
 ) -> (Block, HashMap<Bytes, AccountDelta>) {
-    let account_extractor = EVMAccountExtractor::new(rpc, chain)
-        .await
-        .expect("Failed to create account extractor");
+    let account_extractor = EVMAccountExtractor::new(rpc, chain);
 
     let block = account_extractor
         .get_block_data(block_id)

@@ -546,24 +546,27 @@ impl ExtractorBuilder {
 
     /// Creates a rpc DynamicContractIndexer with account extractor and tracer configured
     async fn create_rpc_dci(
-        rpc_url: &str,
+        rpc_client: &EthereumRpcClient,
         chain: Chain,
         extractor_name: String,
         cached_gw: &CachedGateway,
     ) -> Result<
-        DynamicContractIndexer<EVMBatchAccountExtractor, EVMEntrypointService, CachedGateway>,
+        DynamicContractIndexer<EVMAccountExtractor, EVMEntrypointService, CachedGateway>,
         ExtractionError,
     > {
-        let account_extractor = EVMBatchAccountExtractor::new(rpc_url, chain)
-            .await
-            .map_err(|err| {
-                ExtractionError::Setup(format!(
-                    "Failed to create account extractor for {rpc_url}: {err}"
-                ))
-            })?;
+        let account_extractor = EVMAccountExtractor::new(rpc_client, chain);
 
-        // Use TRACE_RPC_URL if available, otherwise fall back to RPC_URL
-        let trace_rpc_url = std::env::var("TRACE_RPC_URL").unwrap_or_else(|_| rpc_url.to_string());
+        // Tracer uses dedicated TRACE_RPC_URL if available, and falls back to the main
+        // rpc client otherwise.
+        let tracer_rpc_client = if let Ok(tracer_rpc_url) = std::env::var("TRACE_RPC_URL") {
+            EthereumRpcClient::new(&tracer_rpc_url).map_err(|err| {
+                ExtractionError::Setup(format!(
+                    "Failed to create RPC client for {tracer_rpc_url}: {err}"
+                ))
+            })?
+        } else {
+            rpc_client.clone()
+        };
 
         let max_retries = std::env::var("TRACE_MAX_RETRIES")
             .ok()
@@ -575,16 +578,8 @@ impl ExtractorBuilder {
             .and_then(|s| s.parse().ok())
             .unwrap_or(200);
 
-        let tracer = EVMEntrypointService::try_from_url_with_config(
-            &trace_rpc_url,
-            max_retries,
-            retry_delay_ms,
-        )
-        .map_err(|err| {
-            ExtractionError::Setup(format!(
-                "Failed to create entrypoint tracer for {trace_rpc_url}: {err}"
-            ))
-        })?;
+        let tracer =
+            EVMEntrypointService::new_with_config(&tracer_rpc_client, max_retries, retry_delay_ms);
 
         let mut rpc_dci = DynamicContractIndexer::new(
             chain,
@@ -649,22 +644,8 @@ impl ExtractorBuilder {
         let dci_plugin = if let Some(ref dci_type) = self.config.dci_plugin {
             Some(match dci_type {
                 DCIType::RPC => {
-                    let rpc_url = self.rpc_url.as_ref().ok_or_else(|| {
-                        ExtractionError::Setup(
-                            "RPC URL is required for RPC DCI plugin but not provided".to_string(),
-                        )
-                    })?;
-
                     let rpc_dci = Self::create_rpc_dci(
-                        rpc_url,
-                        self.config.chain,
-                        self.config.name.clone(),
-                        cached_gw,
-                    )
-                    .await?;
-
-                    let rpc_dci = Self::create_rpc_dci(
-                        rpc_url,
+                        rpc_client,
                         self.config.chain,
                         self.config.name.clone(),
                         cached_gw,
@@ -687,7 +668,7 @@ impl ExtractorBuilder {
                     let pool_manager = Address::from(pool_manager_address.as_str());
 
                     let base_dci = Self::create_rpc_dci(
-                        rpc_url,
+                        rpc_client,
                         self.config.chain,
                         self.config.name.clone(),
                         cached_gw,
@@ -697,17 +678,16 @@ impl ExtractorBuilder {
                     let mut hooks_dci = create_testing_hooks_dci(
                         base_dci,
                         rpc_client,
-                            rpc_url.clone(),
-                            router_address,
-                            pool_manager,
-                            cached_gw.clone(),
-                            self.config.chain,
-                            3, // pause_after_retries
-                            5, // max_retries
-                        );
-                        hooks_dci.initialize().await?;
-                        DCIPlugin::UniswapV4Hooks(Box::new(hooks_dci))
-
+                        rpc_url.clone(),
+                        router_address,
+                        pool_manager,
+                        cached_gw.clone(),
+                        self.config.chain,
+                        3, // pause_after_retries
+                        5, // max_retries
+                    );
+                    hooks_dci.initialize().await?;
+                    DCIPlugin::UniswapV4Hooks(Box::new(hooks_dci))
                 }
             })
         } else {
