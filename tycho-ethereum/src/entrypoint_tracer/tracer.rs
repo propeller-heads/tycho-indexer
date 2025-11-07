@@ -41,18 +41,14 @@ pub struct EVMEntrypointService {
 }
 
 impl EVMEntrypointService {
-    pub fn new(rpc: &EthereumRpcClient) -> Result<Self, RPCError> {
+    pub fn new(rpc: &EthereumRpcClient) -> Self {
         Self::new_with_config(rpc, 3, 200)
     }
 
-    pub fn new_with_config(
-        rpc: &EthereumRpcClient,
-        max_retries: u32,
-        retry_delay_ms: u64,
-    ) -> Result<Self, RPCError> {
+    pub fn new_with_config(rpc: &EthereumRpcClient, max_retries: u32, retry_delay_ms: u64) -> Self {
         let rpc_client = rpc.clone();
 
-        Ok(Self { rpc: rpc_client, max_retries, retry_delay_ms })
+        Self { rpc: rpc_client, max_retries, retry_delay_ms }
     }
 
     fn create_access_list_params(
@@ -550,7 +546,7 @@ mod tests {
             let fixture = TestFixture::new();
 
             let rpc_client = fixture.create_rpc_client(true);
-            EVMEntrypointService::new(&rpc_client).expect("Failed to create EVMEntrypointService")
+            EVMEntrypointService::new(&rpc_client)
         }
     }
 
@@ -906,7 +902,7 @@ mod tests {
     async fn test_trace_failing_rpc() {
         let url = "https://fake_rpc.com/eth";
         let rpc = EthereumRpcClient::new(url).unwrap();
-        let tracer = EVMEntrypointService::new(&rpc).unwrap();
+        let tracer = EVMEntrypointService::new(&rpc);
         let entry_points = vec![EntryPointWithTracingParams::new(
             EntryPoint::new(
                 "1a8f81c256aee9c640e14bb0453ce247ea0dfe6f:unknown()".to_string(),
@@ -1082,8 +1078,7 @@ mod tests {
         let tracer = EVMEntrypointService::new_with_config(
             &rpc, 3,  // max_retries
             10, // retry_delay_ms
-        )
-        .unwrap();
+        );
 
         // Create test entry points
         let entry_points: Vec<EntryPointWithTracingParams> =
@@ -1125,7 +1120,7 @@ mod tests {
         // Test with completely unreachable server to ensure ordering is preserved
         let rpc = EthereumRpcClient::new("http://127.0.0.1:1")
             .expect("Failed to create EthereumRpcClient");
-        let tracer = EVMEntrypointService::new_with_config(&rpc, 1, 10).unwrap();
+        let tracer = EVMEntrypointService::new_with_config(&rpc, 1, 10);
 
         // Create entry points with distinguishable signatures for order verification
         let entry_points: Vec<EntryPointWithTracingParams> = vec![
@@ -1291,8 +1286,7 @@ mod tests {
         let tracer = EVMEntrypointService::new_with_config(
             &rpc, 0,  // no retries
             10, // retry_delay_ms (not used since max_retries=0)
-        )
-        .unwrap();
+        );
 
         // Create three test entry points - the middle one should fail
         let entry_points: Vec<EntryPointWithTracingParams> = vec![
@@ -1396,12 +1390,12 @@ mod tests {
         let rpc = EthereumRpcClient::new("http://localhost:8545")
             .expect("Failed to create EthereumRpcClient");
         // Test default configuration
-        let tracer = EVMEntrypointService::new(&rpc).unwrap();
+        let tracer = EVMEntrypointService::new(&rpc);
         assert_eq!(tracer.max_retries, 3);
         assert_eq!(tracer.retry_delay_ms, 200);
 
         // Test custom configuration
-        let tracer = EVMEntrypointService::new_with_config(&rpc, 5, 500).unwrap();
+        let tracer = EVMEntrypointService::new_with_config(&rpc, 5, 500);
         assert_eq!(tracer.max_retries, 5);
         assert_eq!(tracer.retry_delay_ms, 500);
     }

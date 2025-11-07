@@ -198,13 +198,13 @@ impl ExtractorRunner {
         let runtime = self
             .runtime_handle
             .clone()
-            .unwrap_or_else(|| tokio::runtime::Handle::current());
+            .unwrap_or_else(|| Handle::current());
 
         runtime.spawn(async move {
             let id = self.extractor.get_id();
             loop {
                 // this is the main info span of an extractor
-                let loop_span = tracing::info_span!(
+                let loop_span = info_span!(
                     parent: None,  // don't attach this to the parent (builder) span to keep spans short
                     "extractor",
                     extractor_id = %id,
@@ -603,9 +603,19 @@ impl ExtractorBuilder {
                                 "Failed to create account extractor: {err}"
                             ))
                         })?;
-                    // Use TRACE_RPC_URL if available, otherwise fall back to RPC_URL
-                    let trace_rpc_url =
-                        std::env::var("TRACE_RPC_URL").unwrap_or_else(|_| rpc_url.to_string());
+
+                    // Tracer uses dedicated TRACE_RPC_URL if available, and falls back to the main
+                    // rpc client otherwise.
+                    let tracer_rpc_client =
+                        if let Ok(tracer_rpc_url) = std::env::var("TRACE_RPC_URL") {
+                            EthereumRpcClient::new(&tracer_rpc_url).map_err(|err| {
+                                ExtractionError::Setup(format!(
+                                    "Failed to create RPC client for {tracer_rpc_url}: {err}"
+                                ))
+                            })?
+                        } else {
+                            rpc_client.clone()
+                        };
 
                     let max_retries = std::env::var("TRACE_MAX_RETRIES")
                         .ok()
@@ -618,15 +628,10 @@ impl ExtractorBuilder {
                         .unwrap_or(200);
 
                     let tracer = EVMEntrypointService::new_with_config(
-                        rpc_client,
+                        &tracer_rpc_client,
                         max_retries,
                         retry_delay_ms,
-                    )
-                    .map_err(|err| {
-                        ExtractionError::Setup(format!(
-                            "Failed to create entrypoint tracer for {trace_rpc_url}: {err}"
-                        ))
-                    })?;
+                    );
                     let mut base_dci = DynamicContractIndexer::new(
                         self.config.chain,
                         self.config.name.clone(),

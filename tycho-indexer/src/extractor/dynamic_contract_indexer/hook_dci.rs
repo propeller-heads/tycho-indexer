@@ -2013,8 +2013,9 @@ mod tests {
             let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
             let rpc =
                 EthereumRpcClient::new(&rpc_url).expect("Failed to create Ethereum RPC client");
-            let entrypoint_tracer =
-                EVMEntrypointService::new(&rpc).expect("Failed to create RPC entrypoint tracer");
+            let trace_rpc =
+                EthereumRpcClient::new(&trace_rpc_url).expect("Failed to create Trace RPC client");
+            let entrypoint_tracer = EVMEntrypointService::new(&trace_rpc);
 
             // Setup initial expectations for initialization
             db_gateway

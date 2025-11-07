@@ -1987,7 +1987,7 @@ mod tests {
         // Tests the RPC integration with the tracer. The DB writing is still mocked, however.
         let url = env::var("RPC_URL").expect("RPC_URL is not set");
         let rpc = EthereumRpcClient::new(&url).expect("RPC client is not configured");
-        let tracer = EVMEntrypointService::new(&rpc).unwrap();
+        let tracer = EVMEntrypointService::new(&rpc);
 
         let block_hash =
             Bytes::from_str("0x354c90a0a98912aff15b044bdff6ce3d4ace63a6fc5ac006ce53c8737d425ab2")
