@@ -444,7 +444,30 @@ impl EVMBatchAccountExtractor {
         Ok(result)
     }
 
-    async fn get_storage_range(
+    /// Deserialize a storage range response from JSON.
+    ///
+    /// Errors if the response is null. Handles null values in storage/nextKey fields gracefully.
+    fn deserialize_storage_range(
+        raw_result: serde_json::Value,
+        address: &Address,
+        block_number: i64,
+        debug_value_string: Option<&str>,
+    ) -> Result<StorageRange, RPCError> {
+        serde_json::from_value(raw_result).map_err(|e| {
+            let error_msg = if let Some(value_string) = debug_value_string {
+                format!(
+                    "Failed to deserialize storage response: {e}, address: {address}, block: {block_number}, raw_json: {value_string}",
+                )
+            } else {
+                format!(
+                    "Failed to deserialize storage response: {e}, address: {address}, block: {block_number}",
+                )
+            };
+            RPCError::RequestError(RequestError::Other(error_msg))
+        })
+    }
+
+    pub(crate) async fn get_storage_range(
         &self,
         address: &Address,
         block: &Block,
@@ -479,22 +502,17 @@ impl EVMBatchAccountExtractor {
                     )))
                 })?;
 
-            // This is settable because cloning the value is expensive
-            let should_debug = std::env::var("TYCHO_DEBUG_ACCOUNT_EXTRACTOR_RESPONSE").is_ok();
-            let result = if should_debug {
-                let value_string = raw_result.to_string();
-                let result: StorageRange =
-                    serde_json::from_value(raw_result.clone()).map_err(|e| {
-                        RPCError::RequestError(RequestError::Other(format!("Failed to deserialize storage response: {e}, address: {address}, block: {}, raw_json: {}", block.number, value_string)))
-                    })?;
-                result
-            } else {
-                let result: StorageRange =
-                    serde_json::from_value(raw_result.clone()).map_err(|e| {
-                        RPCError::RequestError(RequestError::Other(format!("Failed to deserialize storage response: {e}, address: {address}, block: {block:?}")))
-                    })?;
-                result
-            };
+            // This is configurable because cloning the value is expensive
+            let debug_data = std::env::var("TYCHO_DEBUG_ACCOUNT_EXTRACTOR_RESPONSE")
+                .ok()
+                .map(|_| raw_result.to_string());
+
+            let result = Self::deserialize_storage_range(
+                raw_result,
+                address,
+                block.number as i64,
+                debug_data.as_deref(),
+            )?;
 
             for (_, entry) in result.storage {
                 all_slots
@@ -623,8 +641,19 @@ struct StorageEntry {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct StorageRange {
+    #[serde(default, deserialize_with = "deserialize_storage_map")]
     storage: HashMap<B256, StorageEntry>,
     next_key: Option<B256>,
+}
+
+/// Deserialize storage map, handling null values gracefully by returning empty map
+fn deserialize_storage_map<'de, D>(deserializer: D) -> Result<HashMap<B256, StorageEntry>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    let opt = Option::<HashMap<B256, StorageEntry>>::deserialize(deserializer)?;
+    Ok(opt.unwrap_or_default())
 }
 
 #[cfg(test)]
@@ -632,6 +661,7 @@ mod tests {
     use std::str::FromStr;
 
     use alloy::hex;
+    use rstest::rstest;
     use tracing_test::traced_test;
 
     use super::*;
@@ -1111,5 +1141,79 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_storage_range_null_response() {
+        let address = TestFixture::create_address("0xa6c8d7514785c4314ee05ed566cb41151d43c0c0");
+        let block_number = 8129849;
+        let null_response = serde_json::Value::Null;
+
+        let result = EVMBatchAccountExtractor::deserialize_storage_range(
+            null_response,
+            &address,
+            block_number,
+            None,
+        );
+
+        assert!(result.is_err(), "Null response should error");
+        let error_msg = format!("{:?}", result.unwrap_err());
+        assert!(
+            error_msg
+                .to_lowercase()
+                .contains("null"),
+            "Error message should mention null response: {error_msg}"
+        );
+    }
+
+    #[rstest]
+    #[case::debug_disabled(None)]
+    #[case::debug_enabled(Some("debug value string"))]
+    fn test_deserialize_storage_range_null_storage(#[case] debug_value_string: Option<&str>) {
+        let address = TestFixture::create_address("0xa6c8d7514785c4314ee05ed566cb41151d43c0c0");
+        let block_number = 8129849;
+
+        let response_with_null_storage = serde_json::json!({
+            "storage": null,
+            "nextKey": null
+        });
+
+        let result = EVMBatchAccountExtractor::deserialize_storage_range(
+            response_with_null_storage,
+            &address,
+            block_number,
+            debug_value_string,
+        )
+        .expect("Should handle null storage field gracefully");
+
+        assert!(result.storage.is_empty(), "Null storage field should result in empty storage");
+        assert!(result.next_key.is_none(), "Null nextKey should be handled");
+    }
+
+    #[test]
+    fn test_deserialize_storage_range_valid_response() {
+        let address = TestFixture::create_address("0xa6c8d7514785c4314ee05ed566cb41151d43c0c0");
+        let block_number = 8129849;
+
+        let valid_response = serde_json::json!({
+            "storage": {
+                "0x0000000000000000000000000000000000000000000000000000000000000000": {
+                    "key": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "value": "0x0000000000000000000000000000000000000000000000000000000000000001"
+                }
+            },
+            "nextKey": null
+        });
+
+        let result = EVMBatchAccountExtractor::deserialize_storage_range(
+            valid_response,
+            &address,
+            block_number,
+            None,
+        )
+        .expect("Should deserialize valid StorageRange");
+
+        assert_eq!(result.storage.len(), 1);
+        assert!(result.next_key.is_none());
     }
 }
