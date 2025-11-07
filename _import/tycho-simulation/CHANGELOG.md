@@ -1,3 +1,10 @@
+## [0.191.1](https://github.com/propeller-heads/tycho-simulation/compare/0.191.0...0.191.1) (2025-11-07)
+
+
+### Bug Fixes
+
+* Skip execution when amount out is 0 ([656183a](https://github.com/propeller-heads/tycho-simulation/commit/656183af6f168826f893b749dc808c797b581f9f))
+
 ## [0.191.0](https://github.com/propeller-heads/tycho-simulation/compare/0.190.0...0.191.0) (2025-11-07)
 
 
