@@ -31,7 +31,8 @@ impl Default for BatchingConfig {
     }
 }
 
-// TODO: Consider adding rate limiting and retry logic here
+// TODO: Consider adding rate limiting and retry logic for all RPC requests.
+// TODO: Consider adding fallback for batching requests to non-batched version on failure.
 /// This struct wraps the ReqwestClient and provides Ethereum-specific RPC methods
 /// with optional batching support.
 /// It is cheap to clone, as the `inner` internally uses an Arc for the ReqwestClient.
