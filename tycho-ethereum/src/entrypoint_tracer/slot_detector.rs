@@ -1,4 +1,9 @@
-use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeMap, HashMap},
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
 
 use alloy::{
     primitives::U256,
@@ -603,16 +608,15 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
         response: &Value,
     ) -> Result<SlotValues, SlotDetectorError> {
         // The debug_traceCall with prestateTracer returns the result directly as a hashmap
-        let frame_map: std::collections::BTreeMap<Address, serde_json::Value> =
-            match serde_json::from_value(response.clone()) {
-                Ok(map) => map,
-                Err(e) => {
-                    error!("Failed to parse trace result as hashmap: {}", e);
-                    return Err(SlotDetectorError::ParseError(format!(
-                        "Failed to parse trace result: {e}"
-                    )));
-                }
-            };
+        let frame_map: BTreeMap<Address, Value> = match serde_json::from_value(response.clone()) {
+            Ok(map) => map,
+            Err(e) => {
+                error!("Failed to parse trace result as hashmap: {}", e);
+                return Err(SlotDetectorError::ParseError(format!(
+                    "Failed to parse trace result: {e}"
+                )));
+            }
+        };
 
         let mut slot_values = Vec::new();
 
