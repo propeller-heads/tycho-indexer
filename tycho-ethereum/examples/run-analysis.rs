@@ -2,7 +2,6 @@
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use alloy::primitives::U256;
-use anyhow::Result;
 use tycho_common::{
     models::{blockchain::BlockTag, token::TokenOwnerStore},
     traits::TokenAnalyzer,
