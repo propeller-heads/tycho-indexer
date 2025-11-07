@@ -1,3 +1,10 @@
+## [0.192.0](https://github.com/propeller-heads/tycho-simulation/compare/0.191.1...0.192.0) (2025-11-07)
+
+
+### Features
+
+* Set min amount out to 1 so that execution doesn't fail ([b61c6fa](https://github.com/propeller-heads/tycho-simulation/commit/b61c6fa5c1e3091c816ba3c906b6971dbbd7642d))
+
 ## [0.191.1](https://github.com/propeller-heads/tycho-simulation/compare/0.191.0...0.191.1) (2025-11-07)
 
 
