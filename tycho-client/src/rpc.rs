@@ -665,6 +665,41 @@ pub trait RPCClient: Send + Sync {
     ) -> Result<Snapshot, RPCError>;
 }
 
+/// Configuration options for HttpRPCClient
+#[derive(Debug, Clone)]
+pub struct HttpRPCClientOptions {
+    /// Optional API key for authentication
+    pub auth_key: Option<String>,
+    /// Enable compression for requests (default: true)
+    /// When enabled, adds Accept-Encoding: zstd header
+    pub compression: bool,
+}
+
+impl Default for HttpRPCClientOptions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl HttpRPCClientOptions {
+    /// Create new options with default values (compression enabled)
+    pub fn new() -> Self {
+        Self { auth_key: None, compression: true }
+    }
+
+    /// Set the authentication key
+    pub fn with_auth_key(mut self, auth_key: Option<String>) -> Self {
+        self.auth_key = auth_key;
+        self
+    }
+
+    /// Set whether to enable compression (default: true)
+    pub fn with_compression(mut self, compression: bool) -> Self {
+        self.compression = compression;
+        self
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct HttpRPCClient {
     http_client: Client,
@@ -675,7 +710,7 @@ pub struct HttpRPCClient {
 }
 
 impl HttpRPCClient {
-    pub fn new(base_uri: &str, auth_key: Option<&str>) -> Result<Self, RPCError> {
+    pub fn new(base_uri: &str, options: HttpRPCClientOptions) -> Result<Self, RPCError> {
         let uri = base_uri
             .parse::<Url>()
             .map_err(|e| RPCError::UrlParsing(base_uri.to_string(), e.to_string()))?;
@@ -690,8 +725,14 @@ impl HttpRPCClient {
                 .map_err(|e| RPCError::FormatRequest(format!("Invalid user agent format: {e}")))?,
         );
 
+        // Add Accept-Encoding header when compression is enabled
+        // Note: reqwest with zstd feature will automatically decompress responses
+        if options.compression {
+            headers.insert(header::ACCEPT_ENCODING, header::HeaderValue::from_static("zstd"));
+        }
+
         // Add Authorization if one is given
-        if let Some(key) = auth_key {
+        if let Some(key) = options.auth_key.as_deref() {
             let mut auth_value = header::HeaderValue::from_str(key).map_err(|e| {
                 RPCError::FormatRequest(format!("Invalid authorization key format: {e}"))
             })?;
@@ -1304,6 +1345,31 @@ mod tests {
         }
     }
 
+    const GET_CONTRACT_STATE_RESP: &str = r#"
+        {
+            "accounts": [
+                {
+                    "chain": "ethereum",
+                    "address": "0x0000000000000000000000000000000000000000",
+                    "title": "",
+                    "slots": {},
+                    "native_balance": "0x01f4",
+                    "token_balances": {},
+                    "code": "0x00",
+                    "code_hash": "0x5c06b7c5b3d910fd33bc2229846f9ddaf91d584d9b196e16636901ac3a77077e",
+                    "balance_modify_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "code_modify_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "creation_tx": null
+                }
+            ],
+            "pagination": {
+                "page": 0,
+                "page_size": 20,
+                "total": 10
+            }
+        }
+        "#;
+
     // TODO: remove once deprecated ProtocolId struct is removed
     #[allow(deprecated)]
     #[rstest]
@@ -1349,30 +1415,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_contract_state() {
         let mut server = Server::new_async().await;
-        let server_resp = r#"
-        {
-            "accounts": [
-                {
-                    "chain": "ethereum",
-                    "address": "0x0000000000000000000000000000000000000000",
-                    "title": "",
-                    "slots": {},
-                    "native_balance": "0x01f4",
-                    "token_balances": {},
-                    "code": "0x00",
-                    "code_hash": "0x5c06b7c5b3d910fd33bc2229846f9ddaf91d584d9b196e16636901ac3a77077e",
-                    "balance_modify_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                    "code_modify_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                    "creation_tx": null
-                }
-            ],
-            "pagination": {
-                "page": 0,
-                "page_size": 20,
-                "total": 10
-            }
-        }
-        "#;
+        let server_resp = GET_CONTRACT_STATE_RESP;
         // test that the response is deserialized correctly
         serde_json::from_str::<StateRequestResponse>(server_resp).expect("deserialize");
 
@@ -1383,7 +1426,8 @@ mod tests {
             .create_async()
             .await;
 
-        let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+        let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
+            .expect("create client");
 
         let response = client
             .get_contract_state(&Default::default())
@@ -1446,7 +1490,8 @@ mod tests {
             .create_async()
             .await;
 
-        let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+        let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
+            .expect("create client");
 
         let response = client
             .get_protocol_components(&Default::default())
@@ -1500,7 +1545,8 @@ mod tests {
             .with_body(server_resp)
             .create_async()
             .await;
-        let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+        let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
+            .expect("create client");
 
         let response = client
             .get_protocol_states(&Default::default())
@@ -1573,7 +1619,8 @@ mod tests {
             .with_body(server_resp)
             .create_async()
             .await;
-        let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+        let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
+            .expect("create client");
 
         let response = client
             .get_tokens(&Default::default())
@@ -1631,7 +1678,8 @@ mod tests {
             .with_body(server_resp)
             .create_async()
             .await;
-        let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+        let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
+            .expect("create client");
 
         let response = client
             .get_protocol_systems(&Default::default())
@@ -1667,7 +1715,8 @@ mod tests {
             .with_body(server_resp)
             .create_async()
             .await;
-        let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+        let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
+            .expect("create client");
 
         let response = client
             .get_component_tvl(&Default::default())
@@ -1731,7 +1780,8 @@ mod tests {
             .with_body(server_resp)
             .create_async()
             .await;
-        let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+        let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
+            .expect("create client");
 
         let response = client
             .get_traced_entry_points(&Default::default())
@@ -1859,9 +1909,10 @@ mod tests {
             .await
             .unwrap();
 
-        let http_client = HttpRPCClient::new(server.url().as_str(), None)
-            .unwrap()
-            .with_test_backoff_policy();
+        let http_client =
+            HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
+                .unwrap()
+                .with_test_backoff_policy();
         let result = http_client
             .error_for_response(response)
             .await;
@@ -1889,9 +1940,10 @@ mod tests {
             .await
             .unwrap();
 
-        let http_client = HttpRPCClient::new(server.url().as_str(), None)
-            .unwrap()
-            .with_test_backoff_policy();
+        let http_client =
+            HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
+                .unwrap()
+                .with_test_backoff_policy();
         let result = http_client
             .error_for_response(response)
             .await;
@@ -1921,9 +1973,10 @@ mod tests {
                 .await
                 .unwrap();
 
-            let http_client = HttpRPCClient::new(server.url().as_str(), None)
-                .unwrap()
-                .with_test_backoff_policy();
+            let http_client =
+                HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
+                    .unwrap()
+                    .with_test_backoff_policy();
             let result = http_client
                 .error_for_response(response)
                 .await;
@@ -1953,9 +2006,10 @@ mod tests {
             .await
             .unwrap();
 
-        let http_client = HttpRPCClient::new(server.url().as_str(), None)
-            .unwrap()
-            .with_test_backoff_policy();
+        let http_client =
+            HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
+                .unwrap()
+                .with_test_backoff_policy();
         let result = http_client
             .error_for_response(response)
             .await;
@@ -1969,9 +2023,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_error_for_backoff_server_unreachable() {
-        let http_client = HttpRPCClient::new("http://localhost:8080", None)
-            .unwrap()
-            .with_test_backoff_policy();
+        let http_client =
+            HttpRPCClient::new("http://localhost:8080", HttpRPCClientOptions::default())
+                .unwrap()
+                .with_test_backoff_policy();
         let error = RPCError::ServerUnreachable("Service down".to_string());
 
         let backoff_error = http_client
@@ -1989,9 +2044,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_error_for_backoff_rate_limited_with_retry_after() {
-        let http_client = HttpRPCClient::new("http://localhost:8080", None)
-            .unwrap()
-            .with_test_backoff_policy();
+        let http_client =
+            HttpRPCClient::new("http://localhost:8080", HttpRPCClientOptions::default())
+                .unwrap()
+                .with_test_backoff_policy();
         let future_time = SystemTime::now() + Duration::from_secs(30);
         let error = RPCError::RateLimited(Some(future_time));
 
@@ -2013,9 +2069,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_error_for_backoff_rate_limited_no_retry_after() {
-        let http_client = HttpRPCClient::new("http://localhost:8080", None)
-            .unwrap()
-            .with_test_backoff_policy();
+        let http_client =
+            HttpRPCClient::new("http://localhost:8080", HttpRPCClientOptions::default())
+                .unwrap()
+                .with_test_backoff_policy();
         let error = RPCError::RateLimited(None);
 
         let backoff_error = http_client
@@ -2032,9 +2089,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_error_for_backoff_other_errors() {
-        let http_client = HttpRPCClient::new("http://localhost:8080", None)
-            .unwrap()
-            .with_test_backoff_policy();
+        let http_client =
+            HttpRPCClient::new("http://localhost:8080", HttpRPCClientOptions::default())
+                .unwrap()
+                .with_test_backoff_policy();
         let error = RPCError::ParseResponse("Invalid JSON".to_string());
 
         let backoff_error = http_client
@@ -2051,9 +2109,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_wait_until_retry_after_no_retry_time() {
-        let http_client = HttpRPCClient::new("http://localhost:8080", None)
-            .unwrap()
-            .with_test_backoff_policy();
+        let http_client =
+            HttpRPCClient::new("http://localhost:8080", HttpRPCClientOptions::default())
+                .unwrap()
+                .with_test_backoff_policy();
 
         let start = std::time::Instant::now();
         http_client
@@ -2067,9 +2126,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_wait_until_retry_after_past_time() {
-        let http_client = HttpRPCClient::new("http://localhost:8080", None)
-            .unwrap()
-            .with_test_backoff_policy();
+        let http_client =
+            HttpRPCClient::new("http://localhost:8080", HttpRPCClientOptions::default())
+                .unwrap()
+                .with_test_backoff_policy();
 
         // Set a retry time in the past
         let past_time = SystemTime::now() - Duration::from_secs(10);
@@ -2087,9 +2147,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_wait_until_retry_after_future_time() {
-        let http_client = HttpRPCClient::new("http://localhost:8080", None)
-            .unwrap()
-            .with_test_backoff_policy();
+        let http_client =
+            HttpRPCClient::new("http://localhost:8080", HttpRPCClientOptions::default())
+                .unwrap()
+                .with_test_backoff_policy();
 
         // Set a retry time 100ms in the future
         let future_time = SystemTime::now() + Duration::from_millis(100);
@@ -2118,9 +2179,10 @@ mod tests {
             .create_async()
             .await;
 
-        let http_client = HttpRPCClient::new(server.url().as_str(), None)
-            .unwrap()
-            .with_test_backoff_policy();
+        let http_client =
+            HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
+                .unwrap()
+                .with_test_backoff_policy();
         let request_body = serde_json::json!({"test": "data"});
         let uri = format!("{}/test", server.url());
 
@@ -2156,9 +2218,10 @@ mod tests {
             .create_async()
             .await;
 
-        let http_client = HttpRPCClient::new(server.url().as_str(), None)
-            .unwrap()
-            .with_test_backoff_policy();
+        let http_client =
+            HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
+                .unwrap()
+                .with_test_backoff_policy();
         let request_body = serde_json::json!({"test": "data"});
         let uri = format!("{}/test", server.url());
 
@@ -2192,9 +2255,10 @@ mod tests {
             .create_async()
             .await;
 
-        let http_client = HttpRPCClient::new(server.url().as_str(), None)
-            .unwrap()
-            .with_test_backoff_policy();
+        let http_client =
+            HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
+                .unwrap()
+                .with_test_backoff_policy();
         let request_body = serde_json::json!({"test": "data"});
         let uri = format!("{}/test", server.url());
 
@@ -2225,9 +2289,10 @@ mod tests {
             .create_async()
             .await;
 
-        let http_client = HttpRPCClient::new(server.url().as_str(), None)
-            .unwrap()
-            .with_test_backoff_policy();
+        let http_client =
+            HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
+                .unwrap()
+                .with_test_backoff_policy();
         let request_body = serde_json::json!({"test": "data"});
         let uri = format!("{}/test", server.url());
 
@@ -2281,9 +2346,10 @@ mod tests {
             .create_async()
             .await;
 
-        let http_client = HttpRPCClient::new(server.url().as_str(), None)
-            .unwrap()
-            .with_test_backoff_policy();
+        let http_client =
+            HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
+                .unwrap()
+                .with_test_backoff_policy();
         let request_body = serde_json::json!({"test": "data"});
 
         let uri1 = format!("{}/test1", server.url());
@@ -2418,7 +2484,8 @@ mod tests {
             .create_async()
             .await;
 
-        let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+        let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
+            .expect("create client");
 
         #[allow(deprecated)]
         let component = tycho_common::dto::ProtocolComponent {
@@ -2487,7 +2554,8 @@ mod tests {
     #[tokio::test]
     async fn test_get_snapshots_empty_components() {
         let server = Server::new_async().await;
-        let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+        let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
+            .expect("create client");
 
         let components = HashMap::new();
         let contract_ids = vec![];
@@ -2538,7 +2606,8 @@ mod tests {
             .create_async()
             .await;
 
-        let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+        let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
+            .expect("create client");
 
         // Create test component
         #[allow(deprecated)]
@@ -2589,5 +2658,71 @@ mod tests {
             .get("component1")
             .unwrap();
         assert_eq!(component_state.component_tvl, None);
+    }
+
+    #[tokio::test]
+    async fn test_compression_enabled() {
+        let mut server = Server::new_async().await;
+        let server_resp = GET_CONTRACT_STATE_RESP;
+
+        // Compress the response using zstd
+        let compressed_body =
+            zstd::encode_all(server_resp.as_bytes(), 0).expect("compression failed");
+
+        let mocked_server = server
+            .mock("POST", "/v1/contract_state")
+            .expect(1)
+            .with_header("Content-Encoding", "zstd")
+            .with_body(compressed_body)
+            .create_async()
+            .await;
+
+        // Create client with compression enabled
+        let client = HttpRPCClient::new(
+            server.url().as_str(),
+            HttpRPCClientOptions::new().with_compression(true),
+        )
+        .expect("create client");
+
+        let response = client
+            .get_contract_state(&Default::default())
+            .await
+            .expect("get state");
+        let accounts = response.accounts;
+
+        mocked_server.assert();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].native_balance, Bytes::from(500u16.to_be_bytes()));
+    }
+
+    #[tokio::test]
+    async fn test_compression_disabled() {
+        let mut server = Server::new_async().await;
+        let server_resp = GET_CONTRACT_STATE_RESP;
+
+        // Server sends plain text response
+        let mocked_server = server
+            .mock("POST", "/v1/contract_state")
+            .expect(1)
+            .with_body(server_resp)
+            .create_async()
+            .await;
+
+        // Create client with compression disabled
+        let client = HttpRPCClient::new(
+            server.url().as_str(),
+            HttpRPCClientOptions::new().with_compression(false),
+        )
+        .expect("create client");
+
+        let response = client
+            .get_contract_state(&Default::default())
+            .await
+            .expect("get state");
+        let accounts = response.accounts;
+
+        mocked_server.assert();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].native_balance, Bytes::from(500u16.to_be_bytes()));
     }
 }
