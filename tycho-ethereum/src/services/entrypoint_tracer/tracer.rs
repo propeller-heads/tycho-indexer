@@ -1592,12 +1592,9 @@ mod tests {
 
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
-        let tracer = EVMEntrypointService::try_from_url_with_config(
-            &format!("http://127.0.0.1:{}", addr.port()),
-            0,
-            10,
-        )
-        .unwrap();
+        let rpc = EthereumRpcClient::new(&format!("http://127.0.0.1:{}", addr.port()))
+            .expect("Failed to create EthereumRpcClient");
+        let tracer = EVMEntrypointService::new_with_config(&rpc, 0, 10);
 
         let entry_points = vec![EntryPointWithTracingParams::new(
             EntryPoint::new(
@@ -1697,12 +1694,9 @@ mod tests {
 
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
-        let tracer = EVMEntrypointService::try_from_url_with_config(
-            &format!("http://127.0.0.1:{}", addr.port()),
-            0,
-            10,
-        )
-        .unwrap();
+        let rpc = EthereumRpcClient::new(&format!("http://127.0.0.1:{}", addr.port()))
+            .expect("Failed to create EthereumRpcClient");
+        let tracer = EVMEntrypointService::new_with_config(&rpc, 0, 10);
 
         let entry_points = vec![EntryPointWithTracingParams::new(
             EntryPoint::new(
@@ -1790,12 +1784,9 @@ mod tests {
 
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
-        let tracer = EVMEntrypointService::try_from_url_with_config(
-            &format!("http://127.0.0.1:{}", addr.port()),
-            0,
-            10,
-        )
-        .unwrap();
+        let rpc = EthereumRpcClient::new(&format!("http://127.0.0.1:{}", addr.port()))
+            .expect("Failed to create EthereumRpcClient");
+        let tracer = EVMEntrypointService::new_with_config(&rpc, 0, 10);
 
         let entry_points = vec![EntryPointWithTracingParams::new(
             EntryPoint::new(
@@ -1839,8 +1830,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires a RPC connection"]
     async fn test_batch_response_with_real_rpc(#[case] contracts: Vec<(&str, &str)>) {
-        let url = env::var("RPC_URL").expect("RPC_URL is not set");
-        let tracer = EVMEntrypointService::try_from_url(&url).unwrap();
+        let tracer = TestFixture::create_tracer();
 
         let block_hash =
             Bytes::from_str("0x283666c6c90091fa168ebf52c0c61043d6ada7a2ffe10dc303b0e4ff111e172e")
