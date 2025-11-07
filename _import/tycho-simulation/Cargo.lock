@@ -9585,9 +9585,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.103.1"
+version = "0.107.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7d078d966a589443d9671fef82fc383d5addb2aa7ffcf32cd14e47fb5452739"
+checksum = "fa775b8c613a132254ba7fe1e780ff6316aa40e28a6948c132e70da787dd8488"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9614,9 +9614,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-common"
-version = "0.103.1"
+version = "0.107.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dcc3a847db1222b669acf75549c52e4cfef8276f04707bf9c3a0ef8675c0d4c5"
+checksum = "6fc3b3d860b7865855a114d767962e424a956fb19538bff740a05ef97c35bfd1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9640,9 +9640,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-ethereum"
-version = "0.103.1"
+version = "0.107.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a466aedb3d40887159cbb30d3bceb9e705050854253a9841f0675a98f5560888"
+checksum = "ddef1edc1d6805677689653971443c885e6a05e46eb55fdaf0a664128c0cc552"
 dependencies = [
  "alloy",
  "alloy-rpc-types-trace",

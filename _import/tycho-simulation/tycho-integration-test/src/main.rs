@@ -677,7 +677,6 @@ async fn process_state(
             token_in,
             token_out,
             amount_in.clone(),
-            expected_amount_out.clone(),
             chain,
         ) {
             Ok(res) => res,
