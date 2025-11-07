@@ -1,3 +1,17 @@
+## [0.107.0](https://github.com/propeller-heads/tycho-indexer/compare/0.106.0...0.107.0) (2025-11-07)
+
+
+### Features
+
+* Call all account_extractor futures together ([357bbe9](https://github.com/propeller-heads/tycho-indexer/commit/357bbe98babce6f1149712261099a31bc8a2090a))
+* sequentially process storage futures instead of concurrently ([1bc92e4](https://github.com/propeller-heads/tycho-indexer/commit/1bc92e4fbb9200948771f5ce229771dd60549c88))
+
+
+### Bug Fixes
+
+* Fix batch account storage requests handling ([#766](https://github.com/propeller-heads/tycho-indexer/issues/766)) ([66f57d7](https://github.com/propeller-heads/tycho-indexer/commit/66f57d7159687f0d2e0b686d22e2963d8d98d33d))
+* Fix batch vec initialization by recreating it for every batch ([2d7b2cb](https://github.com/propeller-heads/tycho-indexer/commit/2d7b2cb9563ec8d45cb7ae16a81e2fcd707d8418))
+
 ## [0.106.0](https://github.com/propeller-heads/tycho-indexer/compare/0.105.4...0.106.0) (2025-11-06)
 
 
