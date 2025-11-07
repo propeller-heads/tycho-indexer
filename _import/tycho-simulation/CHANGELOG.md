@@ -1,3 +1,10 @@
+## [0.191.0](https://github.com/propeller-heads/tycho-simulation/compare/0.190.0...0.191.0) (2025-11-07)
+
+
+### Features
+
+* add new error categories + log category ([619b0fc](https://github.com/propeller-heads/tycho-simulation/commit/619b0fc3171d660094d3884814e31dcd5ee4bc64))
+
 ## [0.190.0](https://github.com/propeller-heads/tycho-simulation/compare/0.189.5...0.190.0) (2025-11-06)
 
 
