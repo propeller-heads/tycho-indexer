@@ -1,3 +1,11 @@
+## [0.109.0](https://github.com/propeller-heads/tycho-indexer/compare/0.108.0...0.109.0) (2025-11-07)
+
+
+### Features
+
+* add a way to quickly configure storage batch size ([e6994b8](https://github.com/propeller-heads/tycho-indexer/commit/e6994b8b04a648e3bd150db487837cb273d49354))
+* add a way to quickly configure storage batch size ([#770](https://github.com/propeller-heads/tycho-indexer/issues/770)) ([29a0b4f](https://github.com/propeller-heads/tycho-indexer/commit/29a0b4f811896ed58fc94800fd7df1a72641b932))
+
 ## [0.108.0](https://github.com/propeller-heads/tycho-indexer/compare/0.107.1...0.108.0) (2025-11-07)
 
 
