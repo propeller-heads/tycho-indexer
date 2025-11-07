@@ -1,3 +1,11 @@
+## [0.108.0](https://github.com/propeller-heads/tycho-indexer/compare/0.107.1...0.108.0) (2025-11-07)
+
+
+### Features
+
+* add client support for both `ws` and `rpc` compression ([#753](https://github.com/propeller-heads/tycho-indexer/issues/753)) ([fb0f702](https://github.com/propeller-heads/tycho-indexer/commit/fb0f702c91a41c20ae5c75b4e3f523023dbcb328))
+* add configurable options and zstd compression support to `HttpRPCClient` and WebSocket subscriptions ([c9d1ae2](https://github.com/propeller-heads/tycho-indexer/commit/c9d1ae24e84ebb100c5374374ffa8d5147786b35))
+
 ## [0.107.1](https://github.com/propeller-heads/tycho-indexer/compare/0.107.0...0.107.1) (2025-11-07)
 
 
