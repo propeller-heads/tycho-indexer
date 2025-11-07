@@ -31,9 +31,9 @@ pub struct EVMAccountExtractor {
 }
 
 impl EVMAccountExtractor {
-    pub async fn new(client: &EthereumRpcClient, chain: Chain) -> Result<Self, RPCError> {
+    pub fn new(client: &EthereumRpcClient, chain: Chain) -> Self {
         // As the client is a thin wrapper around an Arc, cloning is inexpensive.
-        Ok(Self { rpc: client.clone(), chain })
+        Self { rpc: client.clone(), chain }
     }
 
     pub async fn get_block_data(&self, block_id: u64) -> Result<Block, RPCError> {
