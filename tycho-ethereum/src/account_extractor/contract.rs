@@ -444,19 +444,15 @@ impl EVMBatchAccountExtractor {
         Ok(result)
     }
 
-    /// Deserialize a storage range response from JSON, handling null responses gracefully.
+    /// Deserialize a storage range response from JSON.
     ///
-    /// Returns an empty StorageRange if the response is null, otherwise attempts to deserialize.
+    /// Errors if the response is null. Handles null values in storage/nextKey fields gracefully.
     fn deserialize_storage_range(
         raw_result: serde_json::Value,
         address: &Address,
         block_number: i64,
         debug_value_string: Option<&str>,
     ) -> Result<StorageRange, RPCError> {
-        if raw_result.is_null() {
-            return Ok(StorageRange { storage: HashMap::new(), next_key: None });
-        }
-
         serde_json::from_value(raw_result).map_err(|e| {
             let error_msg = if let Some(value_string) = debug_value_string {
                 format!(
@@ -645,8 +641,19 @@ struct StorageEntry {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct StorageRange {
+    #[serde(default, deserialize_with = "deserialize_storage_map")]
     storage: HashMap<B256, StorageEntry>,
     next_key: Option<B256>,
+}
+
+/// Deserialize storage map, handling null values gracefully by returning empty map
+fn deserialize_storage_map<'de, D>(deserializer: D) -> Result<HashMap<B256, StorageEntry>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    let opt = Option::<HashMap<B256, StorageEntry>>::deserialize(deserializer)?;
+    Ok(opt.unwrap_or_default())
 }
 
 #[cfg(test)]
@@ -1136,10 +1143,8 @@ mod tests {
         Ok(())
     }
 
-    #[rstest]
-    #[case(None)]
-    #[case(Some("debug value string"))]
-    fn test_deserialize_storage_range_null_response(#[case] debug_value_string: Option<&str>) {
+    #[test]
+    fn test_deserialize_storage_range_null_response() {
         let address = TestFixture::create_address("0xa6c8d7514785c4314ee05ed566cb41151d43c0c0");
         let block_number = 8129849;
         let null_response = serde_json::Value::Null;
@@ -1148,12 +1153,41 @@ mod tests {
             null_response,
             &address,
             block_number,
+            None,
+        );
+
+        assert!(result.is_err(), "Null response should error");
+        let error_msg = format!("{:?}", result.unwrap_err());
+        assert!(
+            error_msg
+                .to_lowercase()
+                .contains("null"),
+            "Error message should mention null response: {error_msg}"
+        );
+    }
+
+    #[rstest]
+    #[case::debug_disabled(None)]
+    #[case::debug_enabled(Some("debug value string"))]
+    fn test_deserialize_storage_range_null_storage(#[case] debug_value_string: Option<&str>) {
+        let address = TestFixture::create_address("0xa6c8d7514785c4314ee05ed566cb41151d43c0c0");
+        let block_number = 8129849;
+
+        let response_with_null_storage = serde_json::json!({
+            "storage": null,
+            "nextKey": null
+        });
+
+        let result = EVMBatchAccountExtractor::deserialize_storage_range(
+            response_with_null_storage,
+            &address,
+            block_number,
             debug_value_string,
         )
-        .expect("Should handle null response gracefully");
+        .expect("Should handle null storage field gracefully");
 
-        assert!(result.storage.is_empty(), "Null response should result in empty storage");
-        assert!(result.next_key.is_none(), "Null response should have no next_key");
+        assert!(result.storage.is_empty(), "Null storage field should result in empty storage");
+        assert!(result.next_key.is_none(), "Null nextKey should be handled");
     }
 
     #[test]
