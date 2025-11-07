@@ -27,7 +27,7 @@ pub struct BatchingConfig {
 
 impl Default for BatchingConfig {
     fn default() -> Self {
-        Self { max_batch_size: 50, max_storage_slot_batch_size: 10000 }
+        Self { max_batch_size: 50, max_storage_slot_batch_size: 1000 }
     }
 }
 
