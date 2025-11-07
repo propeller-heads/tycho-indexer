@@ -1,3 +1,12 @@
+## [0.107.1](https://github.com/propeller-heads/tycho-indexer/compare/0.107.0...0.107.1) (2025-11-07)
+
+
+### Bug Fixes
+
+* **account_extractor:** gracefully handle null storage responses ([6a63a6c](https://github.com/propeller-heads/tycho-indexer/commit/6a63a6cf1bf408fb42a7710e743a200061564577))
+* **account_extractor:** gracefully handle null storage responses ([#769](https://github.com/propeller-heads/tycho-indexer/issues/769)) ([cbb4a4f](https://github.com/propeller-heads/tycho-indexer/commit/cbb4a4f278a8c44bc4d5e5d2f3c512808af1245f))
+* handle null storage value in storage fetch response ([789fe2e](https://github.com/propeller-heads/tycho-indexer/commit/789fe2eff4ded788cd9da92e812662d68b4976f0))
+
 ## [0.107.0](https://github.com/propeller-heads/tycho-indexer/compare/0.106.0...0.107.0) (2025-11-07)
 
 
