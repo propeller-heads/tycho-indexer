@@ -7254,6 +7254,7 @@ dependencies = [
  "actix-web-actors",
  "actix-web-opentelemetry",
  "alloy",
+ "alloy-sol-types",
  "anyhow",
  "async-stream",
  "async-trait",
