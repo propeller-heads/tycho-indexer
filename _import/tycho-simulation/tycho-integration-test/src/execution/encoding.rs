@@ -44,7 +44,6 @@ pub fn encode_swap(
     sell_token: &Token,
     buy_token: &Token,
     amount_in: BigUint,
-    expected_amount_out: BigUint,
     chain: Chain,
 ) -> miette::Result<(Solution, Transaction)> {
     let solution = create_solution(
@@ -53,7 +52,6 @@ pub fn encode_swap(
         sell_token.clone(),
         buy_token.clone(),
         amount_in.clone(),
-        expected_amount_out.clone(),
     )?;
     let encoded_solution = {
         let encoder = TychoRouterEncoderBuilder::new()
@@ -81,7 +79,6 @@ fn create_solution(
     sell_token: Token,
     buy_token: Token,
     amount_in: BigUint,
-    expected_amount_out: BigUint,
 ) -> miette::Result<Solution> {
     let user_address = Bytes::from_str(USER_ADDR).into_diagnostic()?;
 
@@ -92,18 +89,6 @@ fn create_solution(
             .estimated_amount_in(amount_in.clone())
             .build();
 
-    // Compute a minimum amount out
-    //
-    // # ⚠️ Important Responsibility Note
-    // For maximum security, in production code, this minimum amount out should be computed
-    // from a third-party source.
-    let slippage = 0.0025; // 0.25% slippage
-    let bps = BigUint::from(10_000u32);
-    let slippage_percent = BigUint::from((slippage * 10000.0) as u32);
-    let multiplier = &bps - slippage_percent;
-    let min_amount_out = (expected_amount_out * &multiplier) / &bps;
-
-    // Then we create a solution object with the previous swap
     Ok(Solution {
         sender: user_address.clone(),
         receiver: user_address,
@@ -111,7 +96,9 @@ fn create_solution(
         given_amount: amount_in,
         checked_token: buy_token.address,
         exact_out: false, // it's an exact in solution
-        checked_amount: min_amount_out,
+        // We want to keep track of how bad the slippage really is and not just error at execution
+        // time. NEVER DO THIS IN PRODUCTION!
+        checked_amount: BigUint::from(1u64),
         swaps: vec![simple_swap],
         ..Default::default()
     })

@@ -180,7 +180,10 @@ pub async fn create_metrics_exporter(port: u16) -> Result<tokio::task::JoinHandl
         .map_err(|e| miette::miette!("Failed to set buckets: {}", e))?
         .set_buckets_for_metric(
             Matcher::Full("tycho_integration_simulation_execution_slippage_ratio".to_string()),
-            &[-0.25, -0.2, -0.15, -0.1, -0.05, -0.01, 0.0, 0.01, 0.05, 0.1, 0.15, 0.2, 0.25],
+            &[
+                -10.0, -1.0, -0.5, -0.25, -0.2, -0.15, -0.1, -0.05, -0.01, 0.0, 0.01, 0.05, 0.1,
+                0.15, 0.2, 0.25, 0.5, 1.0, 10.0,
+            ],
         )
         .map_err(|e| miette::miette!("Failed to set buckets: {}", e))?
         .set_buckets_for_metric(
