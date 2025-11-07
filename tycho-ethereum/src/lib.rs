@@ -2,14 +2,10 @@
 #[macro_use]
 extern crate pretty_assertions;
 
-#[cfg(feature = "onchain_data")]
 pub mod entrypoint_tracer;
-#[cfg(feature = "onchain_data")]
 pub mod erc20;
 pub mod errors;
-#[cfg(feature = "onchain_data")]
 pub mod rpc;
-#[cfg(feature = "onchain_data")]
 pub mod services;
 
 #[cfg(test)]

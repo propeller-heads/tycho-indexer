@@ -33,10 +33,5 @@ mockito.workspace = true
 rstest.workspace = true
 tracing-test = "0.2.5"
 
-[features]
-default = []
-onchain_data = []
-
 [[example]]
 name = "run-analysis"
-required-features = ["onchain_data"]
