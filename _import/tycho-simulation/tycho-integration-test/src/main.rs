@@ -665,6 +665,11 @@ async fn process_state(
         );
         metrics::record_get_amount_out_duration(&component.protocol_system, duration_seconds);
 
+        // Sometimes the expected amount out might be zero (e.g. pool is depleted in one direction)
+        // Then execution will fail with TychoRouter__UndefinedMinAmountOut
+        if expected_amount_out == BigUint::ZERO {
+            continue
+        }
         // Simulate execution amount out against the RPC
         let (solution, transaction) = match encode_swap(
             &component,
