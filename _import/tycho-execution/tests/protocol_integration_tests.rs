@@ -927,3 +927,49 @@ fn test_single_encoding_strategy_hashflow() {
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_hashflow", hex_calldata.as_str());
 }
+
+#[test]
+fn test_single_encoding_strategy_fluid() {
+    let fluid_dex = ProtocolComponent {
+        id: String::from("0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b"),
+        protocol_system: String::from("fluid_v1"),
+        ..Default::default()
+    };
+    let token_in = Bytes::from("0x9d39a5de30e57443bff2a8307a4256c8797a3497");
+    let token_out = Bytes::from("0xdac17f958d2ee523a2206206994597c13d831ec7");
+    let alice = Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap();
+    let swap = SwapBuilder::new(fluid_dex, token_in.clone(), token_out.clone()).build();
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: token_in,
+        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+        checked_token: token_out,
+        checked_amount: BigUint::from_str("1000").unwrap(),
+        // Alice
+        sender: alice.clone(),
+        receiver: alice,
+        swaps: vec![swap],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFrom,
+        &eth(),
+        None,
+    )
+    .unwrap()
+    .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_single_encoding_strategy_fluid_v1", hex_calldata.as_str());
+}

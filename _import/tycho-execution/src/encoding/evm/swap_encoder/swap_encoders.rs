@@ -1008,6 +1008,55 @@ impl SwapEncoder for HashflowSwapEncoder {
     }
 }
 
+#[derive(Clone)]
+pub struct FluidV1SwapEncoder {
+    executor_address: Bytes,
+}
+
+impl SwapEncoder for FluidV1SwapEncoder {
+    fn new(
+        executor_address: Bytes,
+        _chain: Chain,
+        _config: Option<HashMap<String, String>>,
+    ) -> Result<Self, EncodingError> {
+        Ok(Self { executor_address })
+    }
+
+    fn encode_swap(
+        &self,
+        swap: &Swap,
+        encoding_context: &EncodingContext,
+    ) -> Result<Vec<u8>, EncodingError> {
+        let component_id = AlloyBytes::from_str(&swap.component.id).map_err(|_| {
+            EncodingError::FatalError(format!(
+                "Failed parsing FluidV1 component id as bytes: {}",
+                &swap.component.id
+            ))
+        })?;
+
+        let args = (
+            Address::try_from(component_id.as_ref()).map_err(|_| {
+                EncodingError::FatalError(format!(
+                    "Failed to parse FluidV1 component id as dex address: {}",
+                    &component_id
+                ))
+            })?,
+            swap.token_in < swap.token_out,
+            bytes_to_address(&encoding_context.receiver)?,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
+        );
+        Ok(args.abi_encode_packed())
+    }
+
+    fn executor_address(&self) -> &Bytes {
+        &self.executor_address
+    }
+
+    fn clone_box(&self) -> Box<dyn SwapEncoder> {
+        Box::new(self.clone())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -2266,6 +2315,58 @@ mod tests {
                 "01", // approval needed
             ));
             assert_eq!(hex_swap, expected_swap + &hashflow_calldata.to_string()[2..]);
+        }
+    }
+
+    mod fluid_v1 {
+        use super::*;
+        #[test]
+        fn test_encode_fluid_v1() {
+            // sUSDe -> (fluid_v1) -> USDT
+            let fluid_dex = ProtocolComponent {
+                id: String::from("0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b"),
+                protocol_system: String::from("fluid_v1"),
+                ..Default::default()
+            };
+            let token_in = Bytes::from("0x9d39a5de30e57443bff2a8307a4256c8797a3497");
+            let token_out = Bytes::from("0xdac17f958d2ee523a2206206994597c13d831ec7");
+            let swap = SwapBuilder::new(fluid_dex, token_in.clone(), token_out.clone()).build();
+            let encoding_context = EncodingContext {
+                // The receiver was generated with `makeAddr("bob") using forge`
+                receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
+                exact_out: false,
+                router_address: Some(Bytes::default()),
+                group_token_in: token_in.clone(),
+                group_token_out: token_out.clone(),
+                transfer_type: TransferType::TransferFrom,
+                historical_trade: false,
+            };
+            let encoder = FluidV1SwapEncoder::new(
+                Bytes::from("0x212224D2F2d262cd093eE13240ca4873fcCBbA3C"),
+                Chain::Ethereum,
+                None,
+            )
+            .unwrap();
+
+            let encoded_swap = encoder
+                .encode_swap(&swap, &encoding_context)
+                .unwrap();
+            let hex_swap = encode(&encoded_swap);
+
+            assert_eq!(
+                hex_swap,
+                String::from(concat!(
+                    // dex
+                    "1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b",
+                    // zero2one
+                    "01",
+                    // receiver
+                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
+                    // transferFrom
+                    "00",
+                ))
+                .to_lowercase()
+            );
         }
     }
 }
