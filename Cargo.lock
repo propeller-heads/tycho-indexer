@@ -7232,7 +7232,6 @@ name = "tycho-ethereum"
 version = "0.101.1"
 dependencies = [
  "alloy",
- "anyhow",
  "async-trait",
  "chrono",
  "futures 0.3.31",

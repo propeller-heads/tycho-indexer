@@ -8,7 +8,6 @@ use alloy::{
     },
     sol_types::SolCall,
 };
-use anyhow::{bail, ensure, Context, Result};
 use tycho_common::{
     models::{
         blockchain::BlockTag,
@@ -45,8 +44,7 @@ impl TokenAnalyzer for TraceCallDetector {
         &self,
         token: Bytes,
         block: BlockTag,
-    ) -> std::result::Result<(TokenQuality, Option<TransferCost>, Option<TransferTax>), String>
-    {
+    ) -> Result<(TokenQuality, Option<TransferCost>, Option<TransferTax>), String> {
         let (quality, transfer_cost, tax) = self
             .detect_impl(Address::from_bytes(&token), block)
             .await
@@ -230,8 +228,10 @@ impl TraceCallDetector {
         amount: U256,
         middle_amount: U256,
         take_from: Address,
-    ) -> Result<(TokenQuality, Option<U256>, Option<U256>)> {
-        ensure!(traces.len() == 8, "unexpected number of traces");
+    ) -> Result<(TokenQuality, Option<U256>, Option<U256>), String> {
+        if traces.len() != 8 {
+            return Err("unexpected number of traces".to_string());
+        }
 
         let gas_in = match ensure_transaction_ok_and_get_gas(&traces[1])? {
             Ok(gas) => gas,
@@ -396,7 +396,7 @@ impl TraceCallDetector {
         balance_after_in: U256,
         balance_recipient_before: U256,
         balance_recipient_after: U256,
-    ) -> Result<U256, anyhow::Error> {
+    ) -> Result<U256, String> {
         Ok(
             match (
                 balance_after_in != error_add(balance_before_in, amount)?,
@@ -477,24 +477,24 @@ pub(crate) fn call_request(
     req
 }
 
-fn error_add(a: U256, b: U256) -> Result<U256, anyhow::Error> {
+fn error_add(a: U256, b: U256) -> Result<U256, String> {
     a.checked_add(b)
-        .ok_or_else(|| anyhow::format_err!("overflow"))
+        .ok_or_else(|| "overflow".to_string())
 }
 
-fn error_sub(a: U256, b: U256) -> Result<U256, anyhow::Error> {
+fn error_sub(a: U256, b: U256) -> Result<U256, String> {
     a.checked_sub(b)
-        .ok_or_else(|| anyhow::format_err!("overflow"))
+        .ok_or_else(|| "overflow".to_string())
 }
 
-fn error_div(a: U256, b: U256) -> Result<U256, anyhow::Error> {
+fn error_div(a: U256, b: U256) -> Result<U256, String> {
     a.checked_div(b)
-        .ok_or_else(|| anyhow::format_err!("overflow"))
+        .ok_or_else(|| "overflow".to_string())
 }
 
-fn error_mul(a: U256, b: U256) -> Result<U256, anyhow::Error> {
+fn error_mul(a: U256, b: U256) -> Result<U256, String> {
     a.checked_mul(b)
-        .ok_or_else(|| anyhow::format_err!("overflow"))
+        .ok_or_else(|| "overflow".to_string())
 }
 
 /// Returns none if the length of the bytes in the trace output is not 32.
@@ -508,17 +508,17 @@ fn decode_u256(trace: &TraceResults) -> Option<U256> {
 
 // The outer result signals communication failure with the node.
 // The inner result is Ok(gas_price) or Err if the transaction failed.
-fn ensure_transaction_ok_and_get_gas(trace: &TraceResults) -> Result<Result<U256, String>> {
+fn ensure_transaction_ok_and_get_gas(trace: &TraceResults) -> Result<Result<U256, String>, String> {
     let transaction_traces = &trace.trace;
     let first = transaction_traces
         .first()
-        .context("expected at least one trace")?;
+        .ok_or_else(|| "expected at least one trace".to_string())?;
     if let Some(error) = &first.error {
         return Ok(Err(format!("transaction failed: {error}")));
     }
     let call_result = match &first.result {
         Some(TraceOutput::Call(call)) => call,
-        _ => bail!("no error but also no call result"),
+        _ => return Err("no error but also no call result".to_string()),
     };
     Ok(Ok(U256::from(call_result.gas_used)))
 }
