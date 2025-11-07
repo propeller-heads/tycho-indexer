@@ -374,13 +374,12 @@ impl EVMBatchAccountExtractor {
         max_batch_size: usize,
         request: &StorageSnapshotRequest,
     ) -> Result<HashMap<Bytes, Option<Bytes>>, RPCError> {
-        let mut storage_requests = Vec::with_capacity(max_batch_size);
-
         let mut result = HashMap::new();
 
         match request.slots.clone() {
             Some(slots) => {
                 for slot_batch in slots.chunks(max_batch_size) {
+                    let mut storage_requests = Vec::with_capacity(slot_batch.len());
                     let mut storage_batch = self.provider.new_batch();
 
                     for slot in slot_batch {
