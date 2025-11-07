@@ -854,4 +854,49 @@ mod tests {
 
         Ok(())
     }
+
+    /// Test if rpc correctly handles RPC responses with both `"storage": null` and `"storage": {}`
+    /// TODO - verify that we want to support `"storage": null` and adjust the implementation.
+    #[rstest]
+    #[ignore = "currently does not pass"]
+    #[case::null_storage(r#"{"id":1,"jsonrpc":"2.0","result":{"storage":null,"nextKey":null}}"#)]
+    #[case::empty_storage(r#"{"id":1,"jsonrpc":"2.0","result":{"storage":{},"nextKey":null}}"#)]
+    #[tokio::test]
+    async fn test_debug_storage_range_at_handles_empty_storage(#[case] json_response: &str) {
+        let mut server = mockito::Server::new_async().await;
+        let mock_url = server.url();
+
+        // Mock the debug_storageRangeAt response
+        let _mock = server
+            .mock("POST", "/")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(json_response)
+            .create_async()
+            .await;
+
+        let client = EthereumRpcClient::new(&mock_url).expect("Failed to create client");
+
+        let address = Address::from_str("0xa6c8d7514785c4314ee05ed566cb41151d43c0c0")
+            .expect("Failed to parse address");
+        let block_hash =
+            B256::from_str("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+                .expect("Failed to parse block hash");
+
+        let result = client
+            .debug_storage_range_at(block_hash, address, B256::ZERO)
+            .await;
+
+        // Verify that alloy handles both null and empty storage correctly
+        println!("{:?}", result);
+        assert!(result.is_ok(), "Should handle empty storage gracefully");
+        let storage_result = result.unwrap();
+
+        // Both null and empty storage should result in empty HashMap
+        assert!(
+            storage_result.storage.0.is_empty(),
+            "Empty storage (null or {{}}) should result in empty storage map"
+        );
+        assert!(storage_result.next_key.is_none(), "nextKey should be None");
+    }
 }
