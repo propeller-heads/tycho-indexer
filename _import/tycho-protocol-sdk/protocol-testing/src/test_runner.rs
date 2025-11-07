@@ -75,6 +75,7 @@ pub struct TestTypeRange {
 
 pub struct TestRunner {
     test_type: TestType,
+    chain: Chain,
     db_url: String,
     substreams_path: PathBuf,
     config_file_path: PathBuf,
@@ -89,6 +90,7 @@ impl TestRunner {
     pub fn new(
         test_type: TestType,
         root_path: PathBuf,
+        chain: Chain,
         protocol: String,
         db_url: String,
         rpc_url: String,
@@ -112,7 +114,7 @@ impl TestRunner {
             format!(
                 "integration_test_{}.tycho.yaml",
                 protocol
-                    .replace("ethereum-", "")
+                    .replace(format!("{chain}-").as_str(), "")
                     .replace('-', "_")
             )
         } else {
@@ -125,6 +127,7 @@ impl TestRunner {
 
         Ok(Self {
             test_type,
+            chain,
             db_url,
             substreams_path,
             config_file_path,
@@ -281,7 +284,7 @@ impl TestRunner {
         };
         let tests_count = tests.len();
 
-        info!("Running {} tests ...\n", tests_count);
+        info!("Running {} tests on Chain {}...\n", tests_count, self.chain);
 
         let mut failed_tests: Vec<String> = Vec::new();
         let mut count = 1;
@@ -401,7 +404,7 @@ impl TestRunner {
         self.empty_database()
             .into_diagnostic()
             .wrap_err("Failed to empty the database")?;
-        Ok(TychoRunner::new(self.db_url.to_string(), initialized_accounts))
+        Ok(TychoRunner::new(self.chain, self.db_url.to_string(), initialized_accounts))
     }
 
     /// Fetches protocol data from the Tycho RPC server and prepares it for validation and
@@ -449,7 +452,7 @@ impl TestRunner {
             .into_diagnostic()
             .wrap_err("Failed to create Tycho client")?;
 
-        let chain = Chain::Ethereum;
+        let chain = self.chain;
 
         // Fetch data from Tycho RPC. We use block_on to avoid using async functions on the testing
         // module, in order to simplify debugging
@@ -625,7 +628,7 @@ impl TestRunner {
 
         let all_tokens = self
             .runtime
-            .block_on(tycho_client.get_tokens(Chain::Ethereum, None, None))
+            .block_on(tycho_client.get_tokens(self.chain, None, None))
             .into_diagnostic()
             .wrap_err("Failed to get tokens")?;
         debug!("Loaded {} tokens", all_tokens.len());
@@ -1022,6 +1025,7 @@ mod tests {
         TestRunner::new(
             TestType::Range(TestTypeRange { match_test: None }),
             current_dir,
+            Chain::Ethereum,
             "test-protocol".to_string(),
             "".to_string(),
             rpc_url,

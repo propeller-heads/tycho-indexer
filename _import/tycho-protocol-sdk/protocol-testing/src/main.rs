@@ -16,6 +16,7 @@ use clap::{Args, Parser, Subcommand};
 use dotenv::dotenv;
 use miette::{miette, IntoDiagnostic, WrapErr};
 use tracing_subscriber::EnvFilter;
+use tycho_simulation::tycho_common::dto::Chain;
 
 use crate::test_runner::{TestRunner, TestType, TestTypeFull, TestTypeRange};
 
@@ -59,6 +60,7 @@ impl FullTestCommand {
                 stop_block: self.stop_block,
             }),
             args.root_path()?,
+            args.chain,
             args.package,
             args.db_url,
             args.rpc_url,
@@ -86,6 +88,7 @@ impl RangeTestCommand {
         TestRunner::new(
             TestType::Range(TestTypeRange { match_test: self.match_test.clone() }),
             args.root_path()?,
+            args.chain,
             args.package,
             args.db_url,
             args.rpc_url,
@@ -105,6 +108,10 @@ struct CommonArgs {
     /// Name of the package to test
     #[arg(long)]
     package: String,
+
+    /// Name of the chain to test
+    #[arg(long, default_value = "ethereum")]
+    chain: Chain,
 
     /// Postgres database URL for the Tycho indexer
     #[arg(

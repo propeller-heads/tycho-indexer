@@ -25,6 +25,10 @@ cargo run -- range --package "ethereum-balancer-v2"
 # To run the full test, that will index from the protocol creation block to the latest:
 cargo run -- full --package "ethereum-balancer-v2"
 
+# Run tests on a specific chain. Default is Ethereum.
+# Make sure to set the RPC_URL environment variable to match the target network.
+cargo run -- range --package "base-aerodrome-slipstreams" --chain base
+
 # Clean up
 docker compose down
 ```

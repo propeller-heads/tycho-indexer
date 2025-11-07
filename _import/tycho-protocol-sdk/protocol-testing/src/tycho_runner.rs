@@ -8,8 +8,9 @@ use std::{
 
 use miette::{IntoDiagnostic, WrapErr};
 use tracing::{debug, info};
-
+use tycho_simulation::tycho_common::dto::Chain;
 pub struct TychoRunner {
+    chain: Chain,
     db_url: String,
     initialized_accounts: Vec<String>,
 }
@@ -20,8 +21,8 @@ pub struct TychoRpcServer {
 }
 
 impl TychoRunner {
-    pub fn new(db_url: String, initialized_accounts: Vec<String>) -> Self {
-        Self { db_url, initialized_accounts }
+    pub fn new(chain: Chain, db_url: String, initialized_accounts: Vec<String>) -> Self {
+        Self { chain, db_url, initialized_accounts }
     }
 
     pub fn run_tycho(
@@ -44,7 +45,13 @@ impl TychoRunner {
         cmd.args([
             "--database-url",
             self.db_url.as_str(),
+            "--endpoint",
+            get_default_endpoint(&self.chain)
+                .unwrap_or_else(|| panic!("Unknown endpoint for chain {}", self.chain))
+                .as_str(),
             "run",
+            "--chain",
+            self.chain.to_string().as_str(),
             "--spkg",
             spkg_path,
             "--module",
@@ -171,5 +178,14 @@ impl TychoRunner {
                 }
             });
         }
+    }
+}
+
+pub fn get_default_endpoint(chain: &Chain) -> Option<String> {
+    match chain {
+        Chain::Ethereum => Some("https://mainnet.streamingfast.io:443".to_string()),
+        Chain::Base => Some("https://base-mainnet.streamingfast.io:443".to_string()),
+        Chain::Unichain => Some("https://mainnet.unichain.streamingfast.io:443".to_string()),
+        _ => None,
     }
 }
