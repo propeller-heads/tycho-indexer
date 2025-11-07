@@ -27,7 +27,13 @@ pub struct BatchingConfig {
 
 impl Default for BatchingConfig {
     fn default() -> Self {
-        Self { max_batch_size: 50, max_storage_slot_batch_size: 1000 }
+        let max_storage_slot_batch_size =
+            std::env::var("TYCHO_BATCH_ACCOUNT_EXTRACTOR_STORAGE_MAX_BATCH_SIZE")
+                .unwrap_or_else(|_| "1000".to_string())
+                .parse::<usize>()
+                .unwrap_or(1000);
+
+        Self { max_batch_size: 50, max_storage_slot_batch_size }
     }
 }
 
