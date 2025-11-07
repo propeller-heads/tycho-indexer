@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    env,
     error::Error,
 };
 
@@ -553,7 +554,13 @@ impl AccountExtractor for EVMBatchAccountExtractor {
         // TODO: Handle rate limiting / individual connection failures & retries
 
         let max_batch_size = 50;
-        let storage_max_batch_size = 1000;
+        // TODO: This is a hotfix to be able to sync on Unichain, we need to make this configurable
+        // in a nicer way.
+        let storage_max_batch_size =
+            env::var("TYCHO_BATCH_ACCOUNT_EXTRACTOR_STORAGE_MAX_BATCH_SIZE")
+                .unwrap_or_else(|_| "1000".to_string())
+                .parse::<usize>()
+                .unwrap_or(1000);
         info!(
             total_requests = unique_requests.len(),
             max_batch_size,
