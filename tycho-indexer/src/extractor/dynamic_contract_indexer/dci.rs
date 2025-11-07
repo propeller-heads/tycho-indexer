@@ -456,6 +456,7 @@ where
                     Ok(accounts) => break accounts,
                     Err(e) => {
                         if retry_count < max_retries {
+                            warn!(error = ?e, "DCI: Account extraction error, will retry");
                             retry_count += 1;
                             tokio::time::sleep(tokio::time::Duration::from_millis(retry_delay_ms))
                                 .await;
