@@ -26,7 +26,9 @@ use tycho_common::{
     },
     storage::Gateway,
 };
-use tycho_ethereum::{entrypoint_tracer::tracer::EVMEntrypointService, rpc::EthereumRpcClient};
+use tycho_ethereum::{
+    rpc::EthereumRpcClient, services::entrypoint_tracer::tracer::EVMEntrypointService,
+};
 use utoipa::{
     openapi::security::{ApiKey, ApiKeyValue, SecurityScheme},
     Modify, OpenApi,

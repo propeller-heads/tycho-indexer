@@ -1441,7 +1441,9 @@ mod tests {
         storage::WithTotal,
         traits::MockEntryPointTracer,
     };
-    use tycho_ethereum::{entrypoint_tracer::tracer::EVMEntrypointService, rpc::EthereumRpcClient};
+    use tycho_ethereum::{
+        rpc::EthereumRpcClient, services::entrypoint_tracer::tracer::EVMEntrypointService,
+    };
 
     use super::*;
     use crate::testing::{evm_contract_slots, MockGateway};

@@ -2,7 +2,6 @@
 #[macro_use]
 extern crate pretty_assertions;
 
-pub mod entrypoint_tracer;
 pub mod erc20;
 pub mod errors;
 pub mod rpc;

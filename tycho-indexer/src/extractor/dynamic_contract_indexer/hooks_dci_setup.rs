@@ -9,10 +9,10 @@ use tycho_common::{
     traits::{AccountExtractor, EntryPointTracer},
 };
 use tycho_ethereum::{
-    entrypoint_tracer::{
+    rpc::EthereumRpcClient,
+    services::entrypoint_tracer::{
         balance_slot_detector::EVMBalanceSlotDetector, slot_detector::SlotDetectorConfig,
     },
-    rpc::EthereumRpcClient,
 };
 
 use crate::extractor::dynamic_contract_indexer::{

@@ -1799,11 +1799,11 @@ mod tests {
 
         use tracing::info;
         use tycho_ethereum::{
-            entrypoint_tracer::{
+            rpc::EthereumRpcClient,
+            services::entrypoint_tracer::{
                 balance_slot_detector::EVMBalanceSlotDetector, slot_detector::SlotDetectorConfig,
                 tracer::EVMEntrypointService,
             },
-            rpc::EthereumRpcClient,
         };
 
         use super::*;

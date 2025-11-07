@@ -18,7 +18,7 @@ use tycho_common::{
     Bytes,
 };
 
-use crate::{entrypoint_tracer::tracer::EVMEntrypointService, rpc::EthereumRpcClient};
+use crate::{rpc::EthereumRpcClient, services::entrypoint_tracer::tracer::EVMEntrypointService};
 
 /// Type alias for intermediate slot detection results: maps token address to (all_slots,
 /// expected_value)
@@ -876,14 +876,14 @@ mod tests {
     };
 
     use crate::{
-        entrypoint_tracer::{
+        rpc::EthereumRpcClient,
+        services::entrypoint_tracer::{
             balance_slot_detector::BalanceStrategy,
             slot_detector::{
                 BatchRequestData, SlotDetectionStrategy, SlotDetector, SlotDetectorConfig,
                 SlotDetectorError, SlotMetadata,
             },
         },
-        rpc::EthereumRpcClient,
         test_fixtures::TestFixture,
     };
 

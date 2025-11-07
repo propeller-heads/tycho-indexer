@@ -8,7 +8,7 @@ use tycho_common::{
     Bytes,
 };
 
-use crate::entrypoint_tracer::slot_detector::{
+use crate::services::entrypoint_tracer::slot_detector::{
     SlotDetectionStrategy, SlotDetector, SlotDetectorError,
 };
 
@@ -73,7 +73,7 @@ mod tests {
 
     use super::{BalanceStrategy, SlotDetectionStrategy, *};
     use crate::{
-        entrypoint_tracer::slot_detector::SlotDetectorConfig,
+        services::entrypoint_tracer::slot_detector::SlotDetectorConfig,
         test_fixtures::{TestFixture, STETH_STR, USDC_HOLDER_ADDR, USDC_STR, USDT_STR, WETH_STR},
     };
 

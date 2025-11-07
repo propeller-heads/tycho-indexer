@@ -8,7 +8,7 @@ use tycho_common::{
     Bytes,
 };
 
-use crate::entrypoint_tracer::slot_detector::{
+use crate::services::entrypoint_tracer::slot_detector::{
     SlotDetectionStrategy, SlotDetector, SlotDetectorError,
 };
 
@@ -76,7 +76,9 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::{entrypoint_tracer::slot_detector::SlotDetectorConfig, rpc::EthereumRpcClient};
+    use crate::{
+        rpc::EthereumRpcClient, services::entrypoint_tracer::slot_detector::SlotDetectorConfig,
+    };
 
     #[test]
     fn test_encode_allowance_calldata() {
