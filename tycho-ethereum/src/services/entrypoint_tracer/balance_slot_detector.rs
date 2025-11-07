@@ -129,11 +129,6 @@ mod tests {
 
         let holder_address = Address::from_str(holder_address_hex).expect("Invalid Holder address");
 
-        println!("WETH address: {weth}");
-        println!("USDC address: {usdc}");
-        println!("USDT address: {usdt}");
-        println!("{holder_name} address: {holder_address}");
-
         let tokens = vec![weth.clone(), usdc.clone(), usdt.clone()];
 
         // Use a recent block
@@ -144,9 +139,6 @@ mod tests {
         let results = detector
             .detect_balance_slots(&tokens, holder_address, block_hash)
             .await;
-
-        println!("Results for {holder_name}: {results:?}");
-        println!("Number of tokens with results: {}", results.len());
 
         // We should get results for the tokens
         assert!(!results.is_empty(), "Expected results for at least one token, but got none");

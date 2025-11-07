@@ -75,10 +75,16 @@ impl AllowanceSlotDetector for EVMAllowanceSlotDetector {
 mod tests {
     use std::str::FromStr;
 
+    use rstest::rstest;
+
     use super::*;
     use crate::{
-        rpc::EthereumRpcClient, services::entrypoint_tracer::slot_detector::SlotDetectorConfig,
+        rpc::EthereumRpcClient,
+        services::entrypoint_tracer::slot_detector::SlotDetectorConfig,
+        test_fixtures::{USDC_STR, USDT_STR, WETH_STR},
     };
+
+    const BLOCK_HASH: &str = "0x658814e4cb074359f10dd71237cc57b1ae6791fc9de59fde570e724bd884cbb0";
 
     #[test]
     fn test_encode_allowance_calldata() {
@@ -135,6 +141,102 @@ mod tests {
             }
             Some(Err(e)) => panic!("Failed to detect slot: {e:?}"),
             None => panic!("No result returned for TRUF"),
+        }
+    }
+
+    #[rstest]
+    // Random EOA - Tycho Router
+    #[case(
+        "f847a638E44186F3287ee9F8cAF73FF4d4B80784",
+        "fD0b31d2E955fA55e3fa641Fe90e08b677188d35",
+        "ZeroAllowanceUser"
+    )]
+    // TychoRouter - Balancer Vault
+    #[case(
+        "fD0b31d2E955fA55e3fa641Fe90e08b677188d35",
+        "BA12222222228d8Ba445958a75a0704d566BF2C8",
+        "NonZeroAllowanceUser"
+    )]
+    #[tokio::test]
+    #[ignore = "require RPC connection"]
+    async fn test_detect_allowance_slots_integration(
+        #[case] owner_address_hex: &str,
+        #[case] spender_address_hex: &str,
+        #[case] user_name: &str,
+    ) {
+        let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
+        let rpc = EthereumRpcClient::new(&rpc_url).expect("Failed to create RPC client");
+        println!("Using RPC URL: {}", rpc_url);
+        let config = SlotDetectorConfig {
+            max_batch_size: 5,
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5000,
+        };
+
+        let weth = Address::from_str(WETH_STR).expect("Invalid WETH address");
+        let usdc = Address::from_str(USDC_STR).expect("Invalid USDC address");
+        let usdt = Address::from_str(USDT_STR).expect("Invalid USDT address");
+
+        let owner_address = Address::from_str(owner_address_hex).expect("Invalid owner address");
+        let spender_address =
+            Address::from_str(spender_address_hex).expect("Invalid spender address");
+
+        let tokens = vec![weth.clone(), usdc.clone(), usdt.clone()];
+
+        // Use a recent block
+        let block_hash = BlockHash::from_str(BLOCK_HASH).expect("Invalid block hash");
+        println!("Block hash: {block_hash}");
+
+        let detector = EVMAllowanceSlotDetector::new(config, &rpc);
+        let results = detector
+            .detect_allowance_slots(&tokens, owner_address, spender_address, block_hash)
+            .await;
+
+        // We should get results for the tokens
+        assert!(!results.is_empty(), "Expected results for at least one token, but got none");
+
+        // Check individual tokens
+        if let Some(weth_result) = results.get(&weth) {
+            match weth_result {
+                Ok((storage_addr, slot)) => {
+                    println!(
+                        "WETH slot detected for {user_name} - Storage: {storage_addr}, Slot: {slot}",
+                    );
+                }
+                Err(e) => panic!("Failed to detect WETH allowance slot for {}: {}", user_name, e),
+            }
+        } else {
+            panic!("No result for WETH token for {}", user_name);
+        }
+
+        if let Some(usdc_result) = results.get(&usdc) {
+            match usdc_result {
+                Ok((storage_addr, slot)) => {
+                    println!(
+                        "USDC slot detected for {user_name} - Storage: {storage_addr}, Slot: {slot}",
+
+                    );
+                }
+                Err(e) => panic!("Failed to detect USDC allowance slot for {}: {}", user_name, e),
+            }
+        } else {
+            panic!("No result for USDC token for {}", user_name);
+        }
+
+        if let Some(usdt_result) = results.get(&usdt) {
+            match usdt_result {
+                Ok((storage_addr, slot)) => {
+                    println!(
+                          "USDT slot detected for {user_name} - Storage: {storage_addr}, Slot: {slot}",
+
+                    );
+                    assert_eq!(storage_addr, &usdt, "Storage address should match token address");
+                }
+                Err(e) => panic!("Failed to detect USDT allowance slot for {}: {}", user_name, e),
+            }
+        } else {
+            panic!("No result for USDT token for {}", user_name);
         }
     }
 }
