@@ -50,7 +50,12 @@ tracing-subscriber = { version = "0.3.17", default-features = false, features = 
 ] }
 once_cell = "1.18.0"
 actix = "0.13.1"
-actix-web = "4.4.0"
+# Disable default compression features as we only want zstd
+actix-web = { version = "4.4.0", default-features = false, features = [
+    "macros",
+    "compress-zstd",
+    "http2",
+] }
 actix-web-actors = "4.2.0"
 actix-web-opentelemetry = "0.16.0"
 actix-cors = "0.6.5"
@@ -74,7 +79,9 @@ num-traits = "0.2.19"
 num_cpus = "1.16.0"
 tycho-substreams = "0.6.0"
 rand.workspace = true
+alloy-sol-types = "1.2.1"
 alloy = { workspace = true, default-features = false, features = ["sol-types", "reqwest"] }
+zstd = "0.13"
 
 [dev-dependencies]
 pretty_assertions.workspace = true

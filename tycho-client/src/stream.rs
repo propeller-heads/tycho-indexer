@@ -16,7 +16,7 @@ use crate::{
         component_tracker::ComponentFilter, synchronizer::ProtocolStateSynchronizer, BlockHeader,
         BlockSynchronizer, BlockSynchronizerError, FeedMessage,
     },
-    rpc::RPCClient,
+    rpc::{HttpRPCClientOptions, RPCClient},
     HttpRPCClient, WsDeltasClient,
 };
 
@@ -64,6 +64,7 @@ pub struct TychoStreamBuilder {
     auth_key: Option<String>,
     no_tls: bool,
     include_tvl: bool,
+    compression: bool,
 }
 
 impl TychoStreamBuilder {
@@ -91,6 +92,7 @@ impl TychoStreamBuilder {
             auth_key: None,
             no_tls: true,
             include_tvl: false,
+            compression: true,
         }
     }
 
@@ -191,6 +193,13 @@ impl TychoStreamBuilder {
         self
     }
 
+    /// Disables compression for RPC and WebSocket communication.
+    /// By default, messages are compressed using zstd.
+    pub fn disable_compression(mut self) -> Self {
+        self.compression = false;
+        self
+    }
+
     /// Builds and starts the Tycho client, connecting to the Tycho server and
     /// setting up the synchronization of exchange components.
     pub async fn build(
@@ -236,8 +245,13 @@ impl TychoStreamBuilder {
             ),
         }
         .map_err(|e| StreamError::SetUpError(e.to_string()))?;
-        let rpc_client = HttpRPCClient::new(&tycho_rpc_url, auth_key.as_deref())
-            .map_err(|e| StreamError::SetUpError(e.to_string()))?;
+        let rpc_client = HttpRPCClient::new(
+            &tycho_rpc_url,
+            HttpRPCClientOptions::new()
+                .with_auth_key(auth_key)
+                .with_compression(self.compression),
+        )
+        .map_err(|e| StreamError::SetUpError(e.to_string()))?;
         let ws_jh = ws_client
             .connect()
             .await
@@ -266,6 +280,7 @@ impl TychoStreamBuilder {
                     retry_config.cooldown,
                     !self.no_state,
                     self.include_tvl,
+                    self.compression,
                     rpc_client.clone(),
                     ws_client.clone(),
                     self.block_time + self.timeout,
@@ -376,6 +391,12 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_default_compression() {
+        let builder = TychoStreamBuilder::new("localhost:4242", Chain::Ethereum);
+        assert!(builder.compression, "Compression should be enabled by default.");
+    }
+
     #[tokio::test]
     async fn test_no_exchanges() {
         let receiver = TychoStreamBuilder::new("localhost:4242", Chain::Ethereum)
@@ -387,7 +408,7 @@ mod tests {
 
     #[ignore = "require tycho gateway"]
     #[tokio::test]
-    async fn teat_simple_build() {
+    async fn test_simple_build() {
         let token = env::var("TYCHO_AUTH_TOKEN").unwrap();
         let receiver = TychoStreamBuilder::new("tycho-beta.propellerheads.xyz", Chain::Ethereum)
             .exchange("uniswap_v2", ComponentFilter::with_tvl_range(100.0, 100.0))

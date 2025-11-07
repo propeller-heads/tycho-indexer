@@ -426,9 +426,14 @@ impl ExtractorConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum DCIType {
     /// RPC DCI plugin - uses the RPC endpoint to fetch the account data
+    #[serde(rename = "rpc")]
     RPC,
+    /// UniswapV4Hooks DCI plugin - wrapper for the RPC DCI plugin that generates hook entrypoints
+    /// for tracing
+    UniswapV4Hooks { pool_manager_address: String },
 }
 
 pub struct ExtractorBuilder {
@@ -539,6 +544,60 @@ impl ExtractorBuilder {
         Ok(())
     }
 
+    /// Creates a rpc DynamicContractIndexer with account extractor and tracer configured
+    async fn create_rpc_dci(
+        rpc_url: &str,
+        chain: Chain,
+        extractor_name: String,
+        cached_gw: &CachedGateway,
+    ) -> Result<
+        DynamicContractIndexer<EVMBatchAccountExtractor, EVMEntrypointService, CachedGateway>,
+        ExtractionError,
+    > {
+        let account_extractor = EVMBatchAccountExtractor::new(rpc_url, chain)
+            .await
+            .map_err(|err| {
+                ExtractionError::Setup(format!(
+                    "Failed to create account extractor for {rpc_url}: {err}"
+                ))
+            })?;
+
+        // Use TRACE_RPC_URL if available, otherwise fall back to RPC_URL
+        let trace_rpc_url = std::env::var("TRACE_RPC_URL").unwrap_or_else(|_| rpc_url.to_string());
+
+        let max_retries = std::env::var("TRACE_MAX_RETRIES")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(3);
+
+        let retry_delay_ms = std::env::var("TRACE_RETRY_DELAY_MS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(200);
+
+        let tracer = EVMEntrypointService::try_from_url_with_config(
+            &trace_rpc_url,
+            max_retries,
+            retry_delay_ms,
+        )
+        .map_err(|err| {
+            ExtractionError::Setup(format!(
+                "Failed to create entrypoint tracer for {trace_rpc_url}: {err}"
+            ))
+        })?;
+
+        let mut rpc_dci = DynamicContractIndexer::new(
+            chain,
+            extractor_name,
+            cached_gw.clone(),
+            account_extractor,
+            tracer,
+        );
+        rpc_dci.initialize().await?;
+
+        Ok(rpc_dci)
+    }
+
     pub async fn build(
         mut self,
         chain_state: ChainState,
@@ -596,73 +655,48 @@ impl ExtractorBuilder {
                         )
                     })?;
 
-                    let account_extractor = EVMAccountExtractor::new(rpc_client, self.config.chain)
-                        .await
-                        .map_err(|err| {
-                            ExtractionError::Setup(format!(
-                                "Failed to create account extractor: {err}"
-                            ))
-                        })?;
-
-                    // Tracer uses dedicated TRACE_RPC_URL if available, and falls back to the main
-                    // rpc client otherwise.
-                    let tracer_rpc_client =
-                        if let Ok(tracer_rpc_url) = std::env::var("TRACE_RPC_URL") {
-                            EthereumRpcClient::new(&tracer_rpc_url).map_err(|err| {
-                                ExtractionError::Setup(format!(
-                                    "Failed to create RPC client for {tracer_rpc_url}: {err}"
-                                ))
-                            })?
-                        } else {
-                            rpc_client.clone()
-                        };
-
-                    let max_retries = std::env::var("TRACE_MAX_RETRIES")
-                        .ok()
-                        .and_then(|s| s.parse().ok())
-                        .unwrap_or(3);
-
-                    let retry_delay_ms = std::env::var("TRACE_RETRY_DELAY_MS")
-                        .ok()
-                        .and_then(|s| s.parse().ok())
-                        .unwrap_or(200);
-
-                    let tracer = EVMEntrypointService::new_with_config(
-                        &tracer_rpc_client,
-                        max_retries,
-                        retry_delay_ms,
-                    );
-                    let mut base_dci = DynamicContractIndexer::new(
+                    let rpc_dci = Self::create_rpc_dci(
+                        rpc_url,
                         self.config.chain,
                         self.config.name.clone(),
-                        cached_gw.clone(),
-                        account_extractor,
-                        tracer,
-                    );
-                    base_dci.initialize().await?;
+                        cached_gw,
+                    )
+                    .await?;
 
-                    // Check if this is a UniswapV4 extractor
-                    let is_uniswap_v4 = self
-                        .config
-                        .protocol_types
-                        .iter()
-                        .any(|pt| {
-                            pt.name
-                                .to_lowercase()
-                                .contains("uniswap_v4")
-                        });
+                    let rpc_dci = Self::create_rpc_dci(
+                        rpc_url,
+                        self.config.chain,
+                        self.config.name.clone(),
+                        cached_gw,
+                    )
+                    .await?;
 
-                    if is_uniswap_v4 {
-                        // Wrap the base DCI with UniswapV4HookDCI for UniswapV4 extractors
-                        // Default UniswapV4 addresses - these should ideally be configurable
-                        let router_address =
-                            Address::from("0x2e234DAe75C793f67A35089C9d99245E1C58470b"); // V4Router
-                        let pool_manager =
-                            Address::from("0x000000000004444c5dc75cB358380D2e3dE08A90"); // PoolManager
+                    DCIPlugin::Standard(rpc_dci)
+                }
+                DCIType::UniswapV4Hooks { pool_manager_address } => {
+                    let rpc_url = self.rpc_url.as_ref().ok_or_else(|| {
+                        ExtractionError::Setup(
+                            "RPC URL is required for UniswapV4Hooks DCI plugin but not provided"
+                                .to_string(),
+                        )
+                    })?;
 
-                        let mut hooks_dci = create_testing_hooks_dci(
-                            base_dci,
-                            rpc_client,
+                    // random address to deploy our mini router to
+                    let router_address =
+                        Address::from("0x2e234DAe75C793f67A35089C9d99245E1C58470b");
+                    let pool_manager = Address::from(pool_manager_address.as_str());
+
+                    let base_dci = Self::create_rpc_dci(
+                        rpc_url,
+                        self.config.chain,
+                        self.config.name.clone(),
+                        cached_gw,
+                    )
+                    .await?;
+
+                    let mut hooks_dci = create_testing_hooks_dci(
+                        base_dci,
+                        rpc_client,
                             rpc_url.clone(),
                             router_address,
                             pool_manager,
@@ -673,9 +707,7 @@ impl ExtractorBuilder {
                         );
                         hooks_dci.initialize().await?;
                         DCIPlugin::UniswapV4Hooks(Box::new(hooks_dci))
-                    } else {
-                        DCIPlugin::Standard(base_dci)
-                    }
+
                 }
             })
         } else {
@@ -818,6 +850,108 @@ async fn download_file_from_s3(
 mod test {
     use super::*;
     use crate::extractor::MockExtractor;
+
+    #[test]
+    fn test_extractor_config_without_dci_plugin() {
+        let yaml = r#"
+name: uniswap_v2
+chain: ethereum
+implementation_type: Custom
+sync_batch_size: 1000
+start_block: 10008300
+protocol_types:
+  - name: uniswap_v2_pool
+    financial_type: Swap
+spkg: substreams/ethereum-uniswap-v2/ethereum-uniswap-v2-v0.3.0.spkg
+module_name: map_pool_events
+"#;
+
+        let config: ExtractorConfig =
+            serde_yaml::from_str(yaml).expect("Failed to deserialize YAML");
+
+        // Verify basic fields
+        assert_eq!(config.name, "uniswap_v2");
+
+        // Verify DCI plugin is None (optional field)
+        assert!(config.dci_plugin.is_none());
+    }
+
+    #[test]
+    fn test_dci_extractor_config() {
+        let yaml = r#"
+name: uniswap_v3
+chain: ethereum
+implementation_type: Custom
+sync_batch_size: 1000
+start_block: 12369621
+protocol_types:
+  - name: uniswap_v3_pool
+    financial_type: Swap
+spkg: substreams/ethereum-uniswap-v3/ethereum-uniswap-v3-logs-only-0.1.1.spkg
+module_name: map_protocol_changes
+dci_plugin:
+  type: rpc
+"#;
+
+        let config: ExtractorConfig =
+            serde_yaml::from_str(yaml).expect("Failed to deserialize YAML");
+
+        // Verify basic fields
+        assert_eq!(config.name, "uniswap_v3");
+
+        // Verify DCI plugin is RPC
+        assert!(
+            matches!(config.dci_plugin, Some(DCIType::RPC)),
+            "Expected RPC DCI plugin but got {:?}",
+            config.dci_plugin
+        );
+    }
+
+    #[test]
+    fn test_uniswap_v4_hooks_dci_extractor_config() {
+        let yaml = r#"
+name: uniswap_v4
+chain: ethereum
+implementation_type: Custom
+sync_batch_size: 1000
+start_block: 21688329
+protocol_types:
+  - name: uniswap_v4_pool
+    financial_type: Swap
+spkg: substreams/ethereum-uniswap-v4/ethereum-uniswap-v4-v0.2.1.spkg
+module_name: map_protocol_changes
+dci_plugin:
+  type: uniswap_v4_hooks
+  router_address: "0x2e234DAe75C793f67A35089C9d99245E1C58470b"
+  pool_manager_address: "0x000000000004444c5dc75cB358380D2e3dE08A90"
+"#;
+
+        let config: ExtractorConfig =
+            serde_yaml::from_str(yaml).expect("Failed to deserialize YAML");
+
+        // Verify basic fields
+        assert_eq!(config.name, "uniswap_v4");
+        assert_eq!(config.chain, Chain::Ethereum);
+        assert_eq!(config.sync_batch_size, 1000);
+        assert_eq!(config.start_block, 21688329);
+
+        // Verify protocol types
+        assert_eq!(config.protocol_types.len(), 1);
+        assert_eq!(config.protocol_types[0].name, "uniswap_v4_pool");
+
+        // Verify DCI plugin configuration
+        let dci_plugin = config
+            .dci_plugin
+            .expect("Expected dci_plugin to be set");
+        match dci_plugin {
+            DCIType::UniswapV4Hooks { pool_manager_address } => {
+                assert_eq!(pool_manager_address, "0x000000000004444c5dc75cB358380D2e3dE08A90");
+            }
+            _ => {
+                panic!("Expected UniswapV4Hooks DCI plugin but got RPC");
+            }
+        }
+    }
 
     #[tokio::test]
     async fn test_extractor_runner_builder() {

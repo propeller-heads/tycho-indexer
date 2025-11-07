@@ -36,5 +36,4 @@ pub mod stream;
 extern crate pretty_assertions;
 
 pub use deltas::{DeltasError, WsDeltasClient};
-pub use feed::component_tracker::EntrypointRelations;
 pub use rpc::{HttpRPCClient, RPCError, SnapshotParameters};

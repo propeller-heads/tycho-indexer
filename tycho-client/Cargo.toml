@@ -34,7 +34,7 @@ anyhow.workspace = true
 tracing-appender.workspace = true
 lru.workspace = true
 clap = { workspace = true, features = ["derive", "env"] }
-reqwest = { version = "0.12.7", features = ["json"] }
+reqwest = { version = "0.12.7", features = ["json", "zstd"] }
 tracing-subscriber = { version = "0.3.17", default-features = false, features = [
     "env-filter",
     "fmt",
@@ -43,6 +43,7 @@ tracing-subscriber = { version = "0.3.17", default-features = false, features = 
 hyper = "0.14.27"
 backoff = { version = "0.4.0", features = ["tokio", "futures"] }
 time = "0.3.41"
+zstd = "0.13"
 
 [dev-dependencies]
 pretty_assertions.workspace = true

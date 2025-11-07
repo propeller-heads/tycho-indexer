@@ -158,8 +158,17 @@ impl fmt::Display for ExtractorIdentity {
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
 #[serde(tag = "method", rename_all = "lowercase")]
 pub enum Command {
-    Subscribe { extractor_id: ExtractorIdentity, include_state: bool },
-    Unsubscribe { subscription_id: Uuid },
+    Subscribe {
+        extractor_id: ExtractorIdentity,
+        include_state: bool,
+        /// Enable zstd compression for messages in this subscription.
+        /// Defaults to false for backward compatibility.
+        #[serde(default)]
+        compression: bool,
+    },
+    Unsubscribe {
+        subscription_id: Uuid,
+    },
 }
 
 /// A easy serializable version of `models::error::WebsocketError`
@@ -182,6 +191,9 @@ pub enum WebsocketError {
 
     #[error("Failed to subscribe to extractor: {0}")]
     SubscribeError(ExtractorIdentity),
+
+    #[error("Failed to compress message for subscription: {0}, error: {1}")]
+    CompressionError(Uuid, String),
 }
 
 impl From<crate::models::error::WebsocketError> for WebsocketError {
@@ -198,6 +210,9 @@ impl From<crate::models::error::WebsocketError> for WebsocketError {
             }
             crate::models::error::WebsocketError::SubscribeError(eid) => {
                 Self::SubscribeError(eid.into())
+            }
+            crate::models::error::WebsocketError::CompressionError(sid, error) => {
+                Self::CompressionError(sid, error.to_string())
             }
         }
     }
@@ -1993,6 +2008,51 @@ mod test {
     use super::*;
 
     #[test]
+    fn test_compression_backward_compatibility() {
+        // Test old format (without compression field) - should default to false
+        let json_without_compression = r#"{
+            "method": "subscribe",
+            "extractor_id": {
+                "chain": "ethereum",
+                "name": "test"
+            },
+            "include_state": true
+        }"#;
+
+        let command: Command = serde_json::from_str(json_without_compression)
+            .expect("Failed to deserialize Subscribe without compression field");
+
+        if let Command::Subscribe { compression, .. } = command {
+            assert_eq!(
+                compression, false,
+                "compression should default to false when not specified"
+            );
+        } else {
+            panic!("Expected Subscribe command");
+        }
+
+        // Test new format (with compression field)
+        let json_with_compression = r#"{
+            "method": "subscribe",
+            "extractor_id": {
+                "chain": "ethereum",
+                "name": "test"
+            },
+            "include_state": true,
+            "compression": true
+        }"#;
+
+        let command_with_compression: Command = serde_json::from_str(json_with_compression)
+            .expect("Failed to deserialize Subscribe with compression field");
+
+        if let Command::Subscribe { compression, .. } = command_with_compression {
+            assert_eq!(compression, true, "compression should be true as specified in the JSON");
+        } else {
+            panic!("Expected Subscribe command");
+        }
+    }
+
+    #[test]
     fn test_tracing_result_backward_compatibility() {
         use serde_json::json;
 
@@ -2954,6 +3014,13 @@ mod test {
         let json = serde_json::to_string(&error).unwrap();
         let deserialized: WebsocketError = serde_json::from_str(&json).unwrap();
         assert_eq!(error, deserialized);
+
+        // Test CompressionError serialization
+        let error =
+            WebsocketError::CompressionError(subscription_id, "Compression failed".to_string());
+        let json = serde_json::to_string(&error).unwrap();
+        let deserialized: WebsocketError = serde_json::from_str(&json).unwrap();
+        assert_eq!(error, deserialized);
     }
 
     #[test]
@@ -3007,6 +3074,17 @@ mod test {
         let models_error = ModelsError::SubscribeError(extractor_id.clone());
         let dto_error: WebsocketError = models_error.into();
         assert_eq!(dto_error, WebsocketError::SubscribeError(extractor_id.into()));
+
+        // Test CompressionError conversion
+        let io_error = std::io::Error::other("Compression failed");
+        let models_error = ModelsError::CompressionError(subscription_id, io_error);
+        let dto_error: WebsocketError = models_error.into();
+        if let WebsocketError::CompressionError(sub_id, msg) = &dto_error {
+            assert_eq!(*sub_id, subscription_id);
+            assert!(msg.contains("Compression failed"));
+        } else {
+            panic!("Expected CompressionError variant");
+        }
     }
 }
 

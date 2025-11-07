@@ -44,7 +44,7 @@ use tokio::{
     net::TcpStream,
     sync::{
         mpsc::{self, error::TrySendError, Receiver, Sender},
-        oneshot, Mutex, Notify,
+        oneshot, Mutex, MutexGuard, Notify,
     },
     task::JoinHandle,
     time::sleep,
@@ -62,6 +62,7 @@ use tycho_common::dto::{
     BlockChanges, Command, ExtractorIdentity, Response, WebSocketMessage, WebsocketError,
 };
 use uuid::Uuid;
+use zstd;
 
 use crate::TYCHO_SERVER_VERSION;
 
@@ -115,11 +116,12 @@ pub enum DeltasError {
 #[derive(Clone, Debug)]
 pub struct SubscriptionOptions {
     include_state: bool,
+    compression: bool,
 }
 
 impl Default for SubscriptionOptions {
     fn default() -> Self {
-        Self { include_state: true }
+        Self { include_state: true, compression: true }
     }
 }
 
@@ -129,6 +131,10 @@ impl SubscriptionOptions {
     }
     pub fn with_state(mut self, val: bool) -> Self {
         self.include_state = val;
+        self
+    }
+    pub fn with_compression(mut self, val: bool) -> Self {
+        self.compression = val;
         self
     }
 }
@@ -506,24 +512,7 @@ impl WsDeltasClient {
                 Ok(value) => match serde_json::from_value::<WebSocketMessage>(value) {
                     Ok(ws_message) => match ws_message {
                         WebSocketMessage::BlockChanges { subscription_id, deltas } => {
-                            trace!(?deltas, "Received a block state change, sending to channel");
-                            let inner = guard
-                                .as_mut()
-                                .ok_or_else(|| DeltasError::NotConnected)?;
-                            match inner.send(&subscription_id, deltas) {
-                                Err(DeltasError::BufferFull) => {
-                                    error!(?subscription_id, "Buffer full, unsubscribing!");
-                                    Self::force_unsubscribe(subscription_id, inner).await;
-                                }
-                                Err(_) => {
-                                    warn!(
-                                        ?subscription_id,
-                                        "Receiver for has gone away, unsubscribing!"
-                                    );
-                                    Self::force_unsubscribe(subscription_id, inner).await;
-                                }
-                                _ => { /* Do nothing */ }
-                            }
+                            Self::handle_block_changes_msg(&mut guard, subscription_id, deltas).await?;
                         }
                         WebSocketMessage::Response(Response::NewSubscription {
                             extractor_id,
@@ -566,6 +555,14 @@ impl WsDeltasClient {
                                     error.clone(),
                                 ))
                             }
+                            WebsocketError::CompressionError(subscription_id, e) => {
+                                return Err(DeltasError::ServerError(
+                                    format!(
+                                        "Server failed to compress message for subscription: {subscription_id}, error: {e}"
+                                    ),
+                                    error.clone(),
+                                ))
+                            }
                             WebsocketError::SubscribeError(extractor_id) => {
                                 let inner = guard
                                     .as_mut()
@@ -586,6 +583,40 @@ impl WsDeltasClient {
                         "Failed to deserialize message: invalid JSON. {} \nMessage: {}",
                         e, text
                     );
+                }
+            },
+            Ok(tungstenite::protocol::Message::Binary(data)) => {
+                // Decompress the zstd-compressed data,
+                // Note that we only support compressed BlockChanges messages for now.
+                match zstd::decode_all(data.as_slice()) {
+                    Ok(decompressed) => match serde_json::from_slice::<serde_json::Value>(decompressed.as_slice()) {
+                                Ok(value) => match serde_json::from_value::<WebSocketMessage>(value.clone()) {
+                                    Ok(ws_message) => match ws_message {
+                                        WebSocketMessage::BlockChanges { subscription_id, deltas } => {
+                                            Self::handle_block_changes_msg(&mut guard, subscription_id, deltas).await?;
+                                        }
+                                        _ => {
+                                            error!(
+                                                "Received unsupported compressed WebSocketMessage variant. \nMessage: {ws_message:?}",
+                                            );
+                                        }
+
+                                    },
+                                    Err(e) => {
+                                        error!(
+                                            "Failed to deserialize compressed WebSocketMessage: {e}. \nMessage: {value:?}",
+                                        );
+                                    }
+                                },
+                                Err(e) => {
+                                    error!(
+                                        "Failed to deserialize compressed message: invalid JSON. {e}",
+                                    );
+                                }
+                            },
+                    Err(e) => {
+                        error!("Failed to decompress zstd data: {}", e);
+                    }
                 }
             },
             Ok(tungstenite::protocol::Message::Ping(_)) => {
@@ -624,6 +655,29 @@ impl WsDeltasClient {
                 });
             }
         };
+        Ok(())
+    }
+
+    async fn handle_block_changes_msg(
+        guard: &mut MutexGuard<'_, Option<Inner>>,
+        subscription_id: Uuid,
+        deltas: BlockChanges,
+    ) -> Result<(), DeltasError> {
+        trace!(?deltas, "Received a block state change, sending to channel");
+        let inner = guard
+            .as_mut()
+            .ok_or_else(|| DeltasError::NotConnected)?;
+        match inner.send(&subscription_id, deltas) {
+            Err(DeltasError::BufferFull) => {
+                error!(?subscription_id, "Buffer full, unsubscribing!");
+                Self::force_unsubscribe(subscription_id, inner).await;
+            }
+            Err(_) => {
+                warn!(?subscription_id, "Receiver for has gone away, unsubscribing!");
+                Self::force_unsubscribe(subscription_id, inner).await;
+            }
+            _ => { /* Do nothing */ }
+        }
         Ok(())
     }
 
@@ -700,7 +754,11 @@ impl DeltasClient for WsDeltasClient {
                 .ok_or_else(|| DeltasError::NotConnected)?;
             trace!("Sending subscribe command");
             inner.new_subscription(&extractor_id, ready_tx)?;
-            let cmd = Command::Subscribe { extractor_id, include_state: options.include_state };
+            let cmd = Command::Subscribe {
+                extractor_id,
+                include_state: options.include_state,
+                compression: options.compression,
+            };
             inner
                 .ws_send(tungstenite::protocol::Message::Text(
                     serde_json::to_string(&cmd).map_err(|e| {
@@ -977,111 +1035,140 @@ mod tests {
         (addr, jh)
     }
 
-    #[tokio::test]
-    async fn test_subscribe_receive() {
-        let exp_comm = [
-            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(r#"
-                {
-                    "method":"subscribe",
-                    "extractor_id":{
-                        "chain":"ethereum",
-                        "name":"vm:ambient"
-                    },
-                    "include_state": true
-                }"#.to_owned().replace(|c: char| c.is_whitespace(), "")
-            )),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(r#"
-                {
-                    "method":"newsubscription",
-                    "extractor_id":{
-                    "chain":"ethereum",
-                    "name":"vm:ambient"
-                    },
-                    "subscription_id":"30b740d1-cf09-4e0e-8cfe-b1434d447ece"
-                }"#.to_owned().replace(|c: char| c.is_whitespace(), "")
-            )),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(r#"
-                {
-                    "subscription_id": "30b740d1-cf09-4e0e-8cfe-b1434d447ece",
-                    "deltas": {
-                        "extractor": "vm:ambient",
+    const SUBSCRIBE: &str = r#"
+        {
+            "method":"subscribe",
+            "extractor_id":{
+                "chain":"ethereum",
+                "name":"vm:ambient"
+            },
+            "include_state": true,
+            "compression": false
+        }"#;
+
+    const SUBSCRIPTION_CONFIRMATION: &str = r#"
+        {
+            "method": "newsubscription",
+            "extractor_id":{
+                "chain": "ethereum",
+                "name": "vm:ambient"
+            },
+            "subscription_id": "30b740d1-cf09-4e0e-8cfe-b1434d447ece"
+        }"#;
+
+    const BLOCK_DELTAS: &str = r#"
+        {
+            "subscription_id": "30b740d1-cf09-4e0e-8cfe-b1434d447ece",
+            "deltas": {
+                "extractor": "vm:ambient",
+                "chain": "ethereum",
+                "block": {
+                    "number": 123,
+                    "hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "parent_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "chain": "ethereum",
+                    "ts": "2023-09-14T00:00:00"
+                },
+                "finalized_block_height": 0,
+                "revert": false,
+                "new_tokens": {},
+                "account_updates": {
+                    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
+                        "address": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
                         "chain": "ethereum",
-                        "block": {
-                            "number": 123,
-                            "hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                            "parent_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                            "chain": "ethereum",             
-                            "ts": "2023-09-14T00:00:00"
-                        },
-                        "finalized_block_height": 0,
-                        "revert": false,
-                        "new_tokens": {},
-                        "account_updates": {
-                            "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
-                                "address": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
-                                "chain": "ethereum",
-                                "slots": {},
+                        "slots": {},
+                        "balance": "0x01f4",
+                        "code": "",
+                        "change": "Update"
+                    }
+                },
+                "state_updates": {
+                    "component_1": {
+                        "component_id": "component_1",
+                        "updated_attributes": {"attr1": "0x01"},
+                        "deleted_attributes": ["attr2"]
+                    }
+                },
+                "new_protocol_components":
+                    { "protocol_1": {
+                            "id": "protocol_1",
+                            "protocol_system": "system_1",
+                            "protocol_type_name": "type_1",
+                            "chain": "ethereum",
+                            "tokens": ["0x01", "0x02"],
+                            "contract_ids": ["0x01", "0x02"],
+                            "static_attributes": {"attr1": "0x01f4"},
+                            "change": "Update",
+                            "creation_tx": "0x01",
+                            "created_at": "2023-09-14T00:00:00"
+                        }
+                    },
+                "deleted_protocol_components": {},
+                "component_balances": {
+                    "protocol_1":
+                        {
+                            "0x01": {
+                                "token": "0x01",
                                 "balance": "0x01f4",
-                                "code": "",
-                                "change": "Update"
+                                "balance_float": 0.0,
+                                "modify_tx": "0x01",
+                                "component_id": "protocol_1"
                             }
-                        },
-                        "state_updates": {
-                            "component_1": {
-                                "component_id": "component_1",
-                                "updated_attributes": {"attr1": "0x01"},
-                                "deleted_attributes": ["attr2"]
-                            }
-                        },
-                        "new_protocol_components": 
-                            { "protocol_1": {
-                                    "id": "protocol_1",
-                                    "protocol_system": "system_1",
-                                    "protocol_type_name": "type_1",
-                                    "chain": "ethereum",
-                                    "tokens": ["0x01", "0x02"],
-                                    "contract_ids": ["0x01", "0x02"],
-                                    "static_attributes": {"attr1": "0x01f4"},
-                                    "change": "Update",
-                                    "creation_tx": "0x01",
-                                    "created_at": "2023-09-14T00:00:00"
-                                }
-                            },
-                        "deleted_protocol_components": {},
-                        "component_balances": {
-                            "protocol_1":
-                                {
-                                    "0x01": {
-                                        "token": "0x01",
-                                        "balance": "0x01f4",
-                                        "balance_float": 0.0,
-                                        "modify_tx": "0x01",
-                                        "component_id": "protocol_1"
-                                    }
-                                }
-                        },
-                        "account_balances": {
-                            "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
-                                "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
-                                    "account": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
-                                    "token": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
-                                    "balance": "0x01f4",
-                                    "modify_tx": "0x01"
-                                }
-                            }
-                        },
-                        "component_tvl": {
-                            "protocol_1": 1000.0
-                        },
-                        "dci_update": {
-                            "new_entrypoints": {},
-                            "new_entrypoint_params": {},
-                            "trace_results": {}
+                        }
+                },
+                "account_balances": {
+                    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
+                        "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
+                            "account": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+                            "token": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+                            "balance": "0x01f4",
+                            "modify_tx": "0x01"
                         }
                     }
+                },
+                "component_tvl": {
+                    "protocol_1": 1000.0
+                },
+                "dci_update": {
+                    "new_entrypoints": {},
+                    "new_entrypoint_params": {},
+                    "trace_results": {}
                 }
-                "#.to_owned()
-            ))
+            }
+        }
+        "#;
+
+    const UNSUBSCRIBE: &str = r#"
+        {
+            "method": "unsubscribe",
+            "subscription_id": "30b740d1-cf09-4e0e-8cfe-b1434d447ece"
+        }
+        "#;
+
+    const SUBSCRIPTION_ENDED: &str = r#"
+        {
+            "method": "subscriptionended",
+            "subscription_id": "30b740d1-cf09-4e0e-8cfe-b1434d447ece"
+        }
+        "#;
+
+    #[tokio::test]
+    async fn test_uncompressed_subscribe_receive() {
+        let exp_comm = [
+            ExpectedComm::Receive(
+                100,
+                tungstenite::protocol::Message::Text(
+                    SUBSCRIBE
+                        .to_owned()
+                        .replace(|c: char| c.is_whitespace(), ""),
+                ),
+            ),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(
+                SUBSCRIPTION_CONFIRMATION
+                    .to_owned()
+                    .replace(|c: char| c.is_whitespace(), ""),
+            )),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(BLOCK_DELTAS.to_owned())),
         ];
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
 
@@ -1094,7 +1181,71 @@ mod tests {
             Duration::from_millis(100),
             client.subscribe(
                 ExtractorIdentity::new(Chain::Ethereum, "vm:ambient"),
-                SubscriptionOptions::new(),
+                SubscriptionOptions::new().with_compression(false),
+            ),
+        )
+        .await
+        .expect("subscription timed out")
+        .expect("subscription failed");
+        let _ = timeout(Duration::from_millis(100), rx.recv())
+            .await
+            .expect("awaiting message timeout out")
+            .expect("receiving message failed");
+        timeout(Duration::from_millis(100), client.close())
+            .await
+            .expect("close timed out")
+            .expect("close failed");
+        jh.await
+            .expect("ws loop errored")
+            .unwrap();
+        server_thread.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_compressed_subscribe_receive() {
+        let compressed_block_deltas = zstd::encode_all(
+            BLOCK_DELTAS.as_bytes(),
+            0, // default compression level
+        )
+        .expect("Failed to compress block deltas message");
+
+        let exp_comm = [
+            ExpectedComm::Receive(
+                100,
+                tungstenite::protocol::Message::Text(
+                    r#"
+                {
+                    "method":"subscribe",
+                    "extractor_id":{
+                        "chain":"ethereum",
+                        "name":"vm:ambient"
+                    },
+                    "include_state": true,
+                    "compression": true
+                }"#
+                    .to_owned()
+                    .replace(|c: char| c.is_whitespace(), ""),
+                ),
+            ),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(
+                SUBSCRIPTION_CONFIRMATION
+                    .to_owned()
+                    .replace(|c: char| c.is_whitespace(), ""),
+            )),
+            ExpectedComm::Send(tungstenite::protocol::Message::Binary(compressed_block_deltas)),
+        ];
+        let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
+
+        let client = WsDeltasClient::new(&format!("ws://{addr}"), None).unwrap();
+        let jh = client
+            .connect()
+            .await
+            .expect("connect failed");
+        let (_, mut rx) = timeout(
+            Duration::from_millis(100),
+            client.subscribe(
+                ExtractorIdentity::new(Chain::Ethereum, "vm:ambient"),
+                SubscriptionOptions::new().with_compression(true),
             ),
         )
         .await
@@ -1120,54 +1271,28 @@ mod tests {
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    r#"
-                {
-                    "method": "subscribe",
-                    "extractor_id":{
-                        "chain": "ethereum",
-                        "name": "vm:ambient"
-                    },
-                    "include_state": true
-                }"#
-                    .to_owned()
-                    .replace(|c: char| c.is_whitespace(), ""),
+                    SUBSCRIBE
+                        .to_owned()
+                        .replace(|c: char| c.is_whitespace(), ""),
                 ),
             ),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(
-                r#"
-                {
-                    "method": "newsubscription",
-                    "extractor_id":{
-                        "chain": "ethereum",
-                        "name": "vm:ambient"
-                    },
-                    "subscription_id": "30b740d1-cf09-4e0e-8cfe-b1434d447ece"
-                }"#
-                .to_owned()
-                .replace(|c: char| c.is_whitespace(), ""),
+                SUBSCRIPTION_CONFIRMATION
+                    .to_owned()
+                    .replace(|c: char| c.is_whitespace(), ""),
             )),
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    r#"
-                {
-                    "method": "unsubscribe",
-                    "subscription_id": "30b740d1-cf09-4e0e-8cfe-b1434d447ece"
-                }
-                "#
-                    .to_owned()
-                    .replace(|c: char| c.is_whitespace(), ""),
+                    UNSUBSCRIBE
+                        .to_owned()
+                        .replace(|c: char| c.is_whitespace(), ""),
                 ),
             ),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(
-                r#"
-                {
-                    "method": "subscriptionended",
-                    "subscription_id": "30b740d1-cf09-4e0e-8cfe-b1434d447ece"
-                }
-                "#
-                .to_owned()
-                .replace(|c: char| c.is_whitespace(), ""),
+                SUBSCRIPTION_ENDED
+                    .to_owned()
+                    .replace(|c: char| c.is_whitespace(), ""),
             )),
         ];
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
@@ -1181,7 +1306,7 @@ mod tests {
             Duration::from_millis(100),
             client.subscribe(
                 ExtractorIdentity::new(Chain::Ethereum, "vm:ambient"),
-                SubscriptionOptions::new(),
+                SubscriptionOptions::new().with_compression(false),
             ),
         )
         .await
@@ -1215,40 +1340,20 @@ mod tests {
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    r#"
-                {
-                    "method":"subscribe",
-                    "extractor_id":{
-                        "chain":"ethereum",
-                        "name":"vm:ambient"
-                    },
-                    "include_state": true
-                }"#
-                    .to_owned()
-                    .replace(|c: char| c.is_whitespace(), ""),
+                    SUBSCRIBE
+                        .to_owned()
+                        .replace(|c: char| c.is_whitespace(), ""),
                 ),
             ),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(
-                r#"
-                {
-                    "method":"newsubscription",
-                    "extractor_id":{
-                        "chain":"ethereum",
-                        "name":"vm:ambient"
-                    },
-                    "subscription_id":"30b740d1-cf09-4e0e-8cfe-b1434d447ece"
-                }"#
-                .to_owned()
-                .replace(|c: char| c.is_whitespace(), ""),
+                SUBSCRIPTION_CONFIRMATION
+                    .to_owned()
+                    .replace(|c: char| c.is_whitespace(), ""),
             )),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(
-                r#"
-                {
-                    "method": "subscriptionended",
-                    "subscription_id": "30b740d1-cf09-4e0e-8cfe-b1434d447ece"
-                }"#
-                .to_owned()
-                .replace(|c: char| c.is_whitespace(), ""),
+                SUBSCRIPTION_ENDED
+                    .to_owned()
+                    .replace(|c: char| c.is_whitespace(), ""),
             )),
         ];
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
@@ -1262,7 +1367,7 @@ mod tests {
             Duration::from_millis(100),
             client.subscribe(
                 ExtractorIdentity::new(Chain::Ethereum, "vm:ambient"),
-                SubscriptionOptions::new(),
+                SubscriptionOptions::new().with_compression(false),
             ),
         )
         .await
@@ -1288,25 +1393,10 @@ mod tests {
     #[test_log::test(tokio::test)]
     async fn test_reconnect() {
         let exp_comm = [
-            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(r#"
-                {
-                    "method":"subscribe",
-                    "extractor_id":{
-                        "chain":"ethereum",
-                        "name":"vm:ambient"
-                    },
-                    "include_state": true
-                }"#.to_owned().replace(|c: char| c.is_whitespace(), "")
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(SUBSCRIBE.to_owned().replace(|c: char| c.is_whitespace(), "")
             )),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(r#"
-                {
-                    "method":"newsubscription",
-                    "extractor_id":{
-                    "chain":"ethereum",
-                    "name":"vm:ambient"
-                    },
-                    "subscription_id":"30b740d1-cf09-4e0e-8cfe-b1434d447ece"
-                }"#.to_owned().replace(|c: char| c.is_whitespace(), "")
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(
+                SUBSCRIPTION_CONFIRMATION.to_owned().replace(|c: char| c.is_whitespace(), "")
             )),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(r#"
                 {
@@ -1412,7 +1502,7 @@ mod tests {
                 Duration::from_millis(200),
                 client.subscribe(
                     ExtractorIdentity::new(Chain::Ethereum, "vm:ambient"),
-                    SubscriptionOptions::new(),
+                    SubscriptionOptions::new().with_compression(false),
                 ),
             )
             .await
@@ -1530,30 +1620,14 @@ mod tests {
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    r#"
-                {
-                    "method":"subscribe",
-                    "extractor_id":{
-                        "chain":"ethereum",
-                        "name":"vm:ambient"
-                    },
-                    "include_state": true
-                }"#
+                    SUBSCRIBE
                     .to_owned()
                     .replace(|c: char| c.is_whitespace(), ""),
                 ),
             ),
             // 2. Server confirms subscription
             ExpectedComm::Send(tungstenite::protocol::Message::Text(
-                r#"
-                {
-                    "method":"newsubscription",
-                    "extractor_id":{
-                        "chain":"ethereum",
-                        "name":"vm:ambient"
-                    },
-                    "subscription_id":"30b740d1-cf09-4e0e-8cfe-b1434d447ece"
-                }"#
+                SUBSCRIPTION_CONFIRMATION
                 .to_owned()
                 .replace(|c: char| c.is_whitespace(), ""),
             )),
@@ -1629,24 +1703,14 @@ mod tests {
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    r#"
-                {
-                    "method": "unsubscribe",
-                    "subscription_id": "30b740d1-cf09-4e0e-8cfe-b1434d447ece"
-                }
-                "#
+                    UNSUBSCRIBE
                     .to_owned()
                     .replace(|c: char| c.is_whitespace(), ""),
                 ),
             ),
             // 6. Server confirms unsubscription
             ExpectedComm::Send(tungstenite::protocol::Message::Text(
-                r#"
-                {
-                    "method": "subscriptionended",
-                    "subscription_id": "30b740d1-cf09-4e0e-8cfe-b1434d447ece"
-                }
-                "#
+                SUBSCRIPTION_ENDED
                 .to_owned()
                 .replace(|c: char| c.is_whitespace(), ""),
             )),
@@ -1673,7 +1737,7 @@ mod tests {
             Duration::from_millis(100),
             client.subscribe(
                 ExtractorIdentity::new(Chain::Ethereum, "vm:ambient"),
-                SubscriptionOptions::new(),
+                SubscriptionOptions::new().with_compression(false),
             ),
         )
         .await
@@ -1746,7 +1810,7 @@ mod tests {
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true}"#.to_string()
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true,"compression":true}"#.to_string()
                 ),
             ),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
@@ -1804,7 +1868,7 @@ mod tests {
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true}"#.to_string()
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true,"compression":true}"#.to_string()
                 ),
             ),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(format!(
@@ -1879,7 +1943,7 @@ mod tests {
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true}"#.to_string()
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true,"compression":true}"#.to_string()
                 ),
             ),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json))
@@ -1915,6 +1979,58 @@ mod tests {
         server_thread.await.unwrap();
     }
 
+    #[test_log::test(tokio::test)]
+    async fn test_compression_error_handling() {
+        use tycho_common::dto::{Response, WebSocketMessage, WebsocketError};
+
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "test_extractor");
+        let subscription_id = Uuid::new_v4();
+        let error_response = WebSocketMessage::Response(Response::Error(
+            WebsocketError::CompressionError(subscription_id, "Compression failed".to_string()),
+        ));
+        let error_json = serde_json::to_string(&error_response).unwrap();
+
+        let exp_comm = [
+            // subscribe first so connect can finish successfully
+            ExpectedComm::Receive(
+                100,
+                tungstenite::protocol::Message::Text(
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true,"compression":true}"#.to_string()
+                ),
+            ),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json))
+        ];
+
+        let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
+
+        let client = WsDeltasClient::new(&format!("ws://{addr}"), None).unwrap();
+        let jh = client
+            .connect()
+            .await
+            .expect("connect failed");
+
+        // Subscribe successfully with compression disabled
+        let _ = timeout(
+            Duration::from_millis(100),
+            client.subscribe(extractor_id, SubscriptionOptions::new()),
+        )
+        .await
+        .expect("subscription timed out");
+
+        // The client should receive the parse error
+        let result = jh
+            .await
+            .expect("ws loop should complete");
+        assert!(result.is_err());
+        if let Err(DeltasError::ServerError(message, _)) = result {
+            assert!(message.contains("Server failed to compress message for subscription"));
+        } else {
+            panic!("Expected DeltasError::ServerError, got: {:?}", result);
+        }
+
+        server_thread.await.unwrap();
+    }
+
     #[tokio::test]
     async fn test_subscribe_error_handling() {
         use tycho_common::dto::{Response, WebSocketMessage, WebsocketError};
@@ -1930,7 +2046,7 @@ mod tests {
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"failing_extractor"},"include_state":true}"#.to_string()
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"failing_extractor"},"include_state":true,"compression":true}"#.to_string()
                 ),
             ),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
@@ -1986,7 +2102,7 @@ mod tests {
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true}"#.to_string()
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true,"compression":true}"#.to_string()
                 ),
             ),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
@@ -2058,7 +2174,7 @@ mod tests {
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"vm:ambient"},"include_state":true}"#.to_string()
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"vm:ambient"},"include_state":true,"compression":true}"#.to_string()
                 ),
             ),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(format!(

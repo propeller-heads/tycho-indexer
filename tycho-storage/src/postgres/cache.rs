@@ -15,7 +15,7 @@ use tokio::{
     sync::{mpsc, oneshot, Mutex},
     task::JoinHandle,
 };
-use tracing::{debug, info, info_span, instrument, trace, warn, Instrument};
+use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 use tycho_common::{
     models::{
         self,
@@ -420,6 +420,10 @@ impl DBCacheWriteExecutor {
 
         if res.is_ok() {
             debug!("DBTransactionCommitted");
+        }
+
+        if let Err(e) = &res {
+            error!(error = ?e, "DBTransactionFailed");
         }
 
         match self.persisted_block.as_ref() {

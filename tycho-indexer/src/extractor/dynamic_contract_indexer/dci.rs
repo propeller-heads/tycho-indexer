@@ -45,13 +45,37 @@ where
     max_retry_count: u32,
 }
 
-static MANUAL_BLACKLIST: LazyLock<Vec<Address>> = LazyLock::new(|| {
-    vec![
-        // UniswapV4 Pool Manager - cannot be fully tracked
-        Address::from_str("0x000000000004444c5dc75cB358380D2e3dE08A90").unwrap(),
-        // UniswapV2 Permit2
-        Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3").unwrap(),
-    ]
+static DCI_BLACKLIST: LazyLock<Vec<Address>> = LazyLock::new(|| {
+    // Try to read from environment variable
+    if let Ok(blacklist_str) = std::env::var("DCI_BLACKLIST_ADDRESSES") {
+        let addresses: Result<Vec<_>, _> = blacklist_str
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(Address::from_str)
+            .collect();
+
+        match addresses {
+            Ok(addrs) if !addrs.is_empty() => {
+                info!(
+                    count = addrs.len(),
+                    "Loaded DCI blacklist from DCI_BLACKLIST_ADDRESSES environment variable"
+                );
+                return addrs;
+            }
+            Ok(_) => {
+                warn!("DCI_BLACKLIST_ADDRESSES is set but contains no valid addresses");
+            }
+            Err(e) => {
+                warn!(
+                    error = %e,
+                    "Failed to parse DCI_BLACKLIST_ADDRESSES"
+                );
+            }
+        }
+    }
+
+    vec![] // Default to no blacklist
 });
 
 #[async_trait]
@@ -743,8 +767,8 @@ where
             }
         }
 
-        // Load manual blacklist into cache
-        for address in MANUAL_BLACKLIST.iter() {
+        // Load blacklist into cache
+        for address in DCI_BLACKLIST.iter() {
             self.cache
                 .blacklisted_addresses
                 .insert_permanent(address.clone(), true);
@@ -2195,6 +2219,12 @@ mod tests {
         );
 
         dci.initialize().await.unwrap();
+
+        // Add blacklisted address to cache (due to LazyLock, we cannot rely on the environment
+        // variable)
+        dci.cache
+            .blacklisted_addresses
+            .insert_permanent(blacklisted_address, true);
 
         let mut block_changes = get_block_changes_with_token(blacklisted_address_for_block_changes);
         dci.process_block_update(&mut block_changes)

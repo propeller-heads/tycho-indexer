@@ -335,6 +335,7 @@ impl<T, O> WithOrdinal<T, O> {
     }
 }
 
+#[derive(Debug)]
 struct PostgresError(StorageError);
 
 impl From<diesel::result::Error> for PostgresError {

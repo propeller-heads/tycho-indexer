@@ -1,3 +1,126 @@
+## [0.108.0](https://github.com/propeller-heads/tycho-indexer/compare/0.107.1...0.108.0) (2025-11-07)
+
+
+### Features
+
+* add client support for both `ws` and `rpc` compression ([#753](https://github.com/propeller-heads/tycho-indexer/issues/753)) ([fb0f702](https://github.com/propeller-heads/tycho-indexer/commit/fb0f702c91a41c20ae5c75b4e3f523023dbcb328))
+* add configurable options and zstd compression support to `HttpRPCClient` and WebSocket subscriptions ([c9d1ae2](https://github.com/propeller-heads/tycho-indexer/commit/c9d1ae24e84ebb100c5374374ffa8d5147786b35))
+
+## [0.107.1](https://github.com/propeller-heads/tycho-indexer/compare/0.107.0...0.107.1) (2025-11-07)
+
+
+### Bug Fixes
+
+* **account_extractor:** gracefully handle null storage responses ([6a63a6c](https://github.com/propeller-heads/tycho-indexer/commit/6a63a6cf1bf408fb42a7710e743a200061564577))
+* **account_extractor:** gracefully handle null storage responses ([#769](https://github.com/propeller-heads/tycho-indexer/issues/769)) ([cbb4a4f](https://github.com/propeller-heads/tycho-indexer/commit/cbb4a4f278a8c44bc4d5e5d2f3c512808af1245f))
+* handle null storage value in storage fetch response ([789fe2e](https://github.com/propeller-heads/tycho-indexer/commit/789fe2eff4ded788cd9da92e812662d68b4976f0))
+
+## [0.107.0](https://github.com/propeller-heads/tycho-indexer/compare/0.106.0...0.107.0) (2025-11-07)
+
+
+### Features
+
+* Call all account_extractor futures together ([357bbe9](https://github.com/propeller-heads/tycho-indexer/commit/357bbe98babce6f1149712261099a31bc8a2090a))
+* sequentially process storage futures instead of concurrently ([1bc92e4](https://github.com/propeller-heads/tycho-indexer/commit/1bc92e4fbb9200948771f5ce229771dd60549c88))
+
+
+### Bug Fixes
+
+* Fix batch account storage requests handling ([#766](https://github.com/propeller-heads/tycho-indexer/issues/766)) ([66f57d7](https://github.com/propeller-heads/tycho-indexer/commit/66f57d7159687f0d2e0b686d22e2963d8d98d33d))
+* Fix batch vec initialization by recreating it for every batch ([2d7b2cb](https://github.com/propeller-heads/tycho-indexer/commit/2d7b2cb9563ec8d45cb7ae16a81e2fcd707d8418))
+
+## [0.106.0](https://github.com/propeller-heads/tycho-indexer/compare/0.105.4...0.106.0) (2025-11-06)
+
+
+### Features
+
+* Add custom bytecode for Unichain V4 MiniRouter ([af86232](https://github.com/propeller-heads/tycho-indexer/commit/af862328a8111fd4b167e7234c3070afa1eb1332))
+* Add custom bytecode for Unichain V4 MiniRouter ([#765](https://github.com/propeller-heads/tycho-indexer/issues/765)) ([6b585d8](https://github.com/propeller-heads/tycho-indexer/commit/6b585d892108f9a1beea04bad32966de54d79cf3))
+
+## [0.105.4](https://github.com/propeller-heads/tycho-indexer/compare/0.105.3...0.105.4) (2025-11-06)
+
+## [0.105.3](https://github.com/propeller-heads/tycho-indexer/compare/0.105.2...0.105.3) (2025-11-06)
+
+## [0.105.2](https://github.com/propeller-heads/tycho-indexer/compare/0.105.1...0.105.2) (2025-11-06)
+
+
+### Bug Fixes
+
+* use a correct tracing router address ([a3b2f8a](https://github.com/propeller-heads/tycho-indexer/commit/a3b2f8a227be861e8712bef673bdb6cdbf75d7ad))
+* use a correct tracing router address ([#760](https://github.com/propeller-heads/tycho-indexer/issues/760)) ([298d398](https://github.com/propeller-heads/tycho-indexer/commit/298d398dc6d403530ff733c7a7091f6780add549))
+
+## [0.105.1](https://github.com/propeller-heads/tycho-indexer/compare/0.105.0...0.105.1) (2025-11-06)
+
+## [0.105.0](https://github.com/propeller-heads/tycho-indexer/compare/0.104.1...0.105.0) (2025-11-06)
+
+
+### Features
+
+* add dedicated UniswapV4Hooks dci plugin config type ([9d1f3cc](https://github.com/propeller-heads/tycho-indexer/commit/9d1f3cc42c099bcc98e1167e62b0b14c6ba45182))
+* make dci blacklist addresses configurable ([8e1db98](https://github.com/propeller-heads/tycho-indexer/commit/8e1db9826086bfcb82527c33eb58f786aca262df))
+* make uniswap v4 hooks DCI plugin chain agnostic ([#756](https://github.com/propeller-heads/tycho-indexer/issues/756)) ([95257d3](https://github.com/propeller-heads/tycho-indexer/commit/95257d3f2ecfe6159c93fb422952f0c3fd7c3cf9))
+* set trace router address to hardcoded random address ([27ad55c](https://github.com/propeller-heads/tycho-indexer/commit/27ad55ccd722606e76e70e70ba3493f25bf53f31))
+
+
+### Bug Fixes
+
+* argument order of usv4 hook dci creation ([208c6c9](https://github.com/propeller-heads/tycho-indexer/commit/208c6c9b7a369e48d597f4284857933b17689e01))
+
+## [0.104.1](https://github.com/propeller-heads/tycho-indexer/compare/0.104.0...0.104.1) (2025-11-05)
+
+
+### Bug Fixes
+
+* Decrease max batch size on account extractor ([16c477b](https://github.com/propeller-heads/tycho-indexer/commit/16c477be24efc4e67b6d65a88c3f779725bc0b0a))
+* Decrease max batch size on account extractor ([#758](https://github.com/propeller-heads/tycho-indexer/issues/758)) ([fd4524d](https://github.com/propeller-heads/tycho-indexer/commit/fd4524d60a196b845a369242afa48090e89e43aa))
+
+## [0.104.0](https://github.com/propeller-heads/tycho-indexer/compare/0.103.1...0.104.0) (2025-11-05)
+
+
+### Features
+
+* Add ability to register default Hook Orchestrator ([1b1b5c9](https://github.com/propeller-heads/tycho-indexer/commit/1b1b5c9a00a15a6d9c2cd1781a3d774a67f1fb7b))
+* Enriches component metadata with balance updates ([7c78ef7](https://github.com/propeller-heads/tycho-indexer/commit/7c78ef71962d87bb0b9719e2c4ee423d75e48c1f))
+* Index all composable hooks ([#746](https://github.com/propeller-heads/tycho-indexer/issues/746)) ([a90ec11](https://github.com/propeller-heads/tycho-indexer/commit/a90ec11d0e510aa967ff3a3b06c6f0018d5c4e6d))
+* Move the metadata enrichment logic to the hook orchestrator ([bc842c3](https://github.com/propeller-heads/tycho-indexer/commit/bc842c38020d0e00b5280da83ae9c06e85b0e22b))
+
+## [0.103.1](https://github.com/propeller-heads/tycho-indexer/compare/0.103.0...0.103.1) (2025-11-05)
+
+## [0.103.0](https://github.com/propeller-heads/tycho-indexer/compare/0.102.0...0.103.0) (2025-11-05)
+
+
+### Features
+
+* add zstd compression support for WebSocket subscriptions ([4cf8256](https://github.com/propeller-heads/tycho-indexer/commit/4cf8256e77e97625060d5ec439a9b8190e5d0891))
+* changed `CompressionError` handling for WebSocket communication from retry to fatal ([4a469bf](https://github.com/propeller-heads/tycho-indexer/commit/4a469bfd2d7677e07fe7b5a01599ceb18585bce2))
+* enable zstd compression support in `tycho-indexer` ws ([#749](https://github.com/propeller-heads/tycho-indexer/issues/749)) ([2e2e3d9](https://github.com/propeller-heads/tycho-indexer/commit/2e2e3d99fe4626366fea4c03aa855b3946183b9a))
+
+## [0.102.0](https://github.com/propeller-heads/tycho-indexer/compare/0.101.4...0.102.0) (2025-11-05)
+
+
+### Features
+
+* enable zstd compression support in `tycho-indexer` HTTP responses and add tests for compression behavior ([50be5b5](https://github.com/propeller-heads/tycho-indexer/commit/50be5b5314df36bf9444ad8c94453467c899204c))
+* enable zstd compression support in `tycho-indexer` rpc ([#748](https://github.com/propeller-heads/tycho-indexer/issues/748)) ([ae13a7d](https://github.com/propeller-heads/tycho-indexer/commit/ae13a7d4e20a160284c6181f8950246820e73375))
+
+## [0.101.4](https://github.com/propeller-heads/tycho-indexer/compare/0.101.3...0.101.4) (2025-11-05)
+
+## [0.101.3](https://github.com/propeller-heads/tycho-indexer/compare/0.101.2...0.101.3) (2025-11-04)
+
+
+### Bug Fixes
+
+* Fix tracer batch request response parsing order ([a5fb8d3](https://github.com/propeller-heads/tycho-indexer/commit/a5fb8d3846eeb35bee228c631d8577f9d7d339f4))
+* Fix tracer batch request response parsing order ([#752](https://github.com/propeller-heads/tycho-indexer/issues/752)) ([f7500bf](https://github.com/propeller-heads/tycho-indexer/commit/f7500bff4e77da92e821254177ec4dbe4ed34f7a))
+
+## [0.101.2](https://github.com/propeller-heads/tycho-indexer/compare/0.101.1...0.101.2) (2025-11-04)
+
+
+### Bug Fixes
+
+* BlockParam creation in synchronizer ([dc797c4](https://github.com/propeller-heads/tycho-indexer/commit/dc797c4b55ca8f316885ea635c0e37dfda4ca558))
+* BlockParam creation in synchronizer ([#754](https://github.com/propeller-heads/tycho-indexer/issues/754)) ([1658a74](https://github.com/propeller-heads/tycho-indexer/commit/1658a7426c53d25cda6ec0421924e9dbe20464ff))
+
 ## [0.101.1](https://github.com/propeller-heads/tycho-indexer/compare/0.101.0...0.101.1) (2025-11-04)
 
 

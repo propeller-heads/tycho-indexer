@@ -42,7 +42,9 @@ type SlotId = U256;
 // - Overrides msgSender() to return address(this)
 // - Implements _pay() to burn tokens from the payer
 // - Exposes execute(bytes calldata params) to call _executeActions
-const V4_MINI_ROUTER_BYTECODE: &[u8] = include_bytes!("assets/V4MiniRouter.evm.runtime");
+pub const V4_MINI_ROUTER_BYTECODE: &[u8] = include_bytes!("assets/V4MiniRouter.evm.runtime");
+pub const UNICHAIN_V4_MINI_ROUTER_BYTECODE: &[u8] =
+    include_bytes!("assets/UnichainV4MiniRouter.evm.runtime");
 
 // V4Router action constants
 // These correspond to the actions enum in V4Router
