@@ -7,6 +7,7 @@ use actix_web::{
 };
 use metrics::{counter, histogram};
 use tracing::instrument;
+use tycho_common::dto::PaginationLimits;
 
 /// Middleware to record metrics for RPC requests.
 #[instrument(skip_all, fields(user_identity))]
@@ -87,17 +88,12 @@ pub(super) fn compression_middleware() -> middleware::Compress {
 }
 
 /// Validates pagination limits with compression-aware maximums.
-pub trait PaginationValidation {
-    // Maximum page size allowed without compression.
-    const UNCOMPRESSED_MAX: i64;
-    // Compression factor when zstd compression is supported.
-    const COMPRESSION_FACTOR: f64;
-
+pub trait ReqwestPaginationValidation: PaginationLimits {
     fn validate_pagination(
         &self,
         req: &actix_web::HttpRequest,
     ) -> Result<(), super::rpc::RpcError> {
-        let page_size = self.get_page_size();
+        let page_size = self.pagination().page_size;
 
         let supports_compression = req
             .headers()
@@ -106,11 +102,7 @@ pub trait PaginationValidation {
             .map(|enc| enc.contains("zstd"))
             .unwrap_or(false);
 
-        let max_allowed = if supports_compression {
-            (Self::UNCOMPRESSED_MAX as f64 * Self::COMPRESSION_FACTOR) as i64
-        } else {
-            Self::UNCOMPRESSED_MAX
-        };
+        let max_allowed = Self::effective_max_page_size(supports_compression);
 
         if page_size > max_allowed {
             Err(super::rpc::RpcError::Pagination(max_allowed as usize))
@@ -118,28 +110,9 @@ pub trait PaginationValidation {
             Ok(())
         }
     }
-
-    fn get_page_size(&self) -> i64;
 }
 
-/// Generates [PaginationValidation] trait implementations.
-///
-/// Usage: `impl_pagination_validation! { RequestType => (max, factor), ... }`
-#[macro_export]
-macro_rules! impl_pagination_validation {
-    ($($type:ty => ($uncompressed:expr, $factor:expr)),* $(,)?) => {
-        $(
-            impl $crate::services::middleware::PaginationValidation for $type {
-                const UNCOMPRESSED_MAX: i64 = $uncompressed;
-                const COMPRESSION_FACTOR: f64 = $factor;
-
-                fn get_page_size(&self) -> i64 {
-                    self.pagination.page_size
-                }
-            }
-        )*
-    };
-}
+impl<T: PaginationLimits> ReqwestPaginationValidation for T {}
 
 #[cfg(test)]
 mod tests {
@@ -163,18 +136,22 @@ mod tests {
     }
 
     // Define constants that match TestPaginationRequest implementation
-    const UNCOMPRESSED_MAX: i64 = 100;
-    const COMPRESSION_FACTOR: f64 = 2.0;
+    const MAX_PAGE_SIZE_UNCOMPRESSED: i64 = 100;
+    const MAX_PAGE_SIZE_COMPRESSED: i64 = 200;
 
-    // Implement PaginationValidation for TestPaginationRequest
-    impl_pagination_validation! {
-        TestPaginationRequest => (UNCOMPRESSED_MAX, COMPRESSION_FACTOR),
+    impl PaginationLimits for TestPaginationRequest {
+        const MAX_PAGE_SIZE_COMPRESSED: i64 = MAX_PAGE_SIZE_COMPRESSED;
+        const MAX_PAGE_SIZE_UNCOMPRESSED: i64 = MAX_PAGE_SIZE_UNCOMPRESSED;
+
+        fn pagination(&self) -> &PaginationParams {
+            &self.pagination
+        }
     }
 
     #[actix_web::test]
     async fn test_pagination_validation_compression_aware() {
-        let uncompressed_max = UNCOMPRESSED_MAX;
-        let compressed_max = (UNCOMPRESSED_MAX as f64 * COMPRESSION_FACTOR) as i64;
+        let uncompressed_max = MAX_PAGE_SIZE_UNCOMPRESSED;
+        let compressed_max = MAX_PAGE_SIZE_COMPRESSED;
 
         // Derive test values from constants
         let over_uncompressed = uncompressed_max + 1;

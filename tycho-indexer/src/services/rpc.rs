@@ -28,11 +28,10 @@ use tycho_common::{
 
 use crate::{
     extractor::reorg_buffer::{BlockNumberOrTimestamp, CommitStatus},
-    impl_pagination_validation,
     services::{
         cache::RpcCache,
         deltas_buffer::{PendingDeltasBuffer, PendingDeltasError},
-        middleware::PaginationValidation,
+        middleware::ReqwestPaginationValidation,
     },
 };
 
@@ -86,20 +85,6 @@ impl ResponseError for RpcError {
             RpcError::Unknown(e) => HttpResponse::InternalServerError().body(e.to_string()),
         }
     }
-}
-
-// Implement pagination validation for all request types that support pagination.
-// This checks that the requested page size does not exceed the maximum allowed size.
-// The first value in the tuple is the maximum page size, and the second value is
-// the multiplication factor for the compressed maximum page size.
-// The compression factors were obtained empirically by testing with zstd compression.
-impl_pagination_validation! {
-    dto::StateRequestBody => (100, 12.0),
-    dto::TokensRequestBody => (3000, 4.3),
-    dto::ProtocolComponentsRequestBody => (500, 5.1),
-    dto::ProtocolStateRequestBody => (100, 3.6),
-    dto::ProtocolSystemsRequestBody => (100, 1.0),
-    dto::TracedEntryPointRequestBody => (100, 1.0),
 }
 
 pub struct RpcHandler<G, T> {
