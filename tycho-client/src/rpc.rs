@@ -436,34 +436,66 @@ pub trait RPCClient: Send + Sync {
         traded_n_days_ago: Option<u64>,
         chunk_size: usize,
     ) -> Result<Vec<ResponseToken>, RPCError> {
-        let mut request_page = 0;
-        let mut all_tokens = Vec::new();
-        loop {
-            let mut response = self
-                .get_tokens(&TokensRequestBody {
+        let concurrency: usize = 10;
+        let semaphore = Arc::new(Semaphore::new(concurrency));
+
+        // Make initial request to get total count
+        let page_size = chunk_size.try_into().map_err(|_| {
+            RPCError::FormatRequest("Failed to convert chunk_size into i64".to_string())
+        })?;
+
+        let initial_request = TokensRequestBody {
+            token_addresses: None,
+            min_quality,
+            traded_n_days_ago,
+            pagination: PaginationParams { page: 0, page_size },
+            chain,
+        };
+
+        let first_response = self
+            .get_tokens(&initial_request)
+            .await?;
+        let total_items = first_response.pagination.total;
+        let total_pages = (total_items as f64 / chunk_size as f64).ceil() as i64;
+
+        let mut all_tokens = first_response.tokens;
+
+        // If only one page, return immediately
+        if total_pages <= 1 {
+            return Ok(all_tokens);
+        }
+
+        // Create a task for each remaining page
+        let tasks: Vec<_> = (1..total_pages)
+            .map(|page| {
+                let sem = semaphore.clone();
+                let request = TokensRequestBody {
                     token_addresses: None,
                     min_quality,
                     traded_n_days_ago,
-                    pagination: PaginationParams {
-                        page: request_page,
-                        page_size: chunk_size.try_into().map_err(|_| {
-                            RPCError::FormatRequest(
-                                "Failed to convert chunk_size into i64".to_string(),
-                            )
-                        })?,
-                    },
+                    pagination: PaginationParams { page, page_size },
                     chain,
-                })
-                .await?;
+                };
 
-            let num_tokens = response.tokens.len();
+                async move {
+                    // Semaphore controls how many requests are actually in-flight
+                    let _permit = sem
+                        .acquire()
+                        .await
+                        .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
+                    self.get_tokens(&request).await
+                }
+            })
+            .collect();
+
+        // Join all tasks - semaphore ensures only 'concurrency' execute at once
+        let responses = try_join_all(tasks).await?;
+
+        // Aggregate all tokens from all pages
+        for mut response in responses {
             all_tokens.append(&mut response.tokens);
-            request_page += 1;
-
-            if num_tokens < chunk_size {
-                break;
-            }
         }
+
         Ok(all_tokens)
     }
 
