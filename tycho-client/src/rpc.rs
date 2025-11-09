@@ -725,12 +725,6 @@ impl HttpRPCClient {
                 .map_err(|e| RPCError::FormatRequest(format!("Invalid user agent format: {e}")))?,
         );
 
-        // Add Accept-Encoding header when compression is enabled
-        // Note: reqwest with zstd feature will automatically decompress responses
-        if options.compression {
-            headers.insert(header::ACCEPT_ENCODING, header::HeaderValue::from_static("zstd"));
-        }
-
         // Add Authorization if one is given
         if let Some(key) = options.auth_key.as_deref() {
             let mut auth_value = header::HeaderValue::from_str(key).map_err(|e| {
@@ -740,11 +734,19 @@ impl HttpRPCClient {
             headers.insert(header::AUTHORIZATION, auth_value);
         }
 
-        let client = ClientBuilder::new()
+        let mut client_builder = ClientBuilder::new()
             .default_headers(headers)
-            .http2_prior_knowledge()
+            .http2_prior_knowledge();
+
+        // When compression is disabled, turn off all automatic compression
+        if !options.compression {
+            client_builder = client_builder.no_zstd();
+        }
+
+        let client = client_builder
             .build()
             .map_err(|e| RPCError::HttpClient(e.to_string(), e))?;
+
         Ok(Self {
             http_client: client,
             url: uri,
@@ -2700,10 +2702,13 @@ mod tests {
         let mut server = Server::new_async().await;
         let server_resp = GET_CONTRACT_STATE_RESP;
 
-        // Server sends plain text response
+        // Verify client does NOT send Accept-Encoding: zstd when compression is disabled
+        // Instead, server should receive request without compression headers
         let mocked_server = server
             .mock("POST", "/v1/contract_state")
             .expect(1)
+            .match_header("Accept-Encoding", mockito::Matcher::Missing)
+            .with_status(200)
             .with_body(server_resp)
             .create_async()
             .await;
@@ -2721,6 +2726,7 @@ mod tests {
             .expect("get state");
         let accounts = response.accounts;
 
+        // Verify the mock was called (client sent request without Accept-Encoding header)
         mocked_server.assert();
         assert_eq!(accounts.len(), 1);
         assert_eq!(accounts[0].native_balance, Bytes::from(500u16.to_be_bytes()));
