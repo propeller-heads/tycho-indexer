@@ -288,6 +288,14 @@ impl ProtocolStreamBuilder {
         self
     }
 
+    /// Disable compression for the connection.
+    pub fn disable_compression(mut self) -> Self {
+        self.stream_builder = self
+            .stream_builder
+            .disable_compression();
+        self
+    }
+
     /// Sets the stream end policy.
     ///
     /// Controls when the stream should stop based on synchronizer states.
