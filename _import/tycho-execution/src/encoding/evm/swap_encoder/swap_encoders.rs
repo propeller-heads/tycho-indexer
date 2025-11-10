@@ -1027,20 +1027,15 @@ impl SwapEncoder for FluidV1SwapEncoder {
         swap: &Swap,
         encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
-        let component_id = AlloyBytes::from_str(&swap.component.id).map_err(|_| {
+        let dex_address = Address::from_str(&swap.component.id).map_err(|_| {
             EncodingError::FatalError(format!(
-                "Failed parsing FluidV1 component id as bytes: {}",
+                "Failed parsing FluidV1 component id as ethereum address: {}",
                 &swap.component.id
             ))
         })?;
 
         let args = (
-            Address::try_from(component_id.as_ref()).map_err(|_| {
-                EncodingError::FatalError(format!(
-                    "Failed to parse FluidV1 component id as dex address: {}",
-                    &component_id
-                ))
-            })?,
+            dex_address,
             swap.token_in < swap.token_out,
             bytes_to_address(&encoding_context.receiver)?,
             (encoding_context.transfer_type as u8).to_be_bytes(),

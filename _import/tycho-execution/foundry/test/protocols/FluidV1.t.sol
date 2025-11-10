@@ -2,9 +2,7 @@
 pragma solidity ^0.8.26;
 
 import "../TychoRouterTestSetup.sol";
-import {
-    FluidV1Executor, IFluidV1Dex
-} from "@src/executors/FluidV1Executor.sol";
+import {FluidV1Executor, IFluidV1Dex} from "@src/executors/FluidV1Executor.sol";
 import {Constants} from "../Constants.sol";
 import "forge-std/Test.sol";
 
@@ -81,7 +79,7 @@ contract FluidV1ExecutorTest is Test, Constants {
         address dexAddress = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
         IFluidV1Dex dex = IFluidV1Dex(dexAddress);
         RestrictTransferFrom.TransferType transferType =
-            RestrictTransferFrom.TransferType.Transfer;
+        RestrictTransferFrom.TransferType.Transfer;
 
         executor.setSwapParams(dex, transferType);
         address dexVal = executor.getCurrentDex();
@@ -148,6 +146,10 @@ contract FluidV1ExecutorTest is Test, Constants {
 }
 
 contract TychoRouterForFluidV1Test is TychoRouterTestSetup {
+    function getForkBlock() public pure override returns (uint256) {
+        return 23768324;
+    }
+
     function testSingleSwap() public {
         IERC20 sUSDe = IERC20(0x9D39A5DE30e57443BfF2A8307A4256c8797A3497);
         IERC20 USDT = IERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
@@ -163,8 +165,28 @@ contract TychoRouterForFluidV1Test is TychoRouterTestSetup {
 
         uint256 balanceAfter = USDT.balanceOf(ALICE);
         assertTrue(success, "Call Failed");
-        assertEq(balanceAfter - balanceBefore, 1159660);
+        assertEq(balanceAfter - balanceBefore, 1201540);
         assertEq(sUSDe.balanceOf(tychoRouterAddr), 0);
         assertEq(USDT.balanceOf(tychoRouterAddr), 0);
+    }
+
+    function testSequentialSwap() public {
+        IERC20 sUSDe = IERC20(0x9D39A5DE30e57443BfF2A8307A4256c8797A3497);
+        IERC20 USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+        uint256 amountIn = 10e18;
+        deal(address(sUSDe), ALICE, amountIn);
+        uint256 balanceBefore = USDC.balanceOf(ALICE);
+        vm.startPrank(ALICE);
+        sUSDe.approve(tychoRouterAddr, type(uint256).max);
+        bytes memory callData =
+            loadCallDataFromFile("test_sequential_encoding_strategy_fluid_v1");
+
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        uint256 balanceAfter = USDC.balanceOf(ALICE);
+        assertTrue(success, "Call Failed");
+        assertEq(balanceAfter - balanceBefore, 1201417);
+        assertEq(sUSDe.balanceOf(tychoRouterAddr), 0);
+        assertEq(USDC.balanceOf(tychoRouterAddr), 0);
     }
 }

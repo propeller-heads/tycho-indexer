@@ -158,6 +158,9 @@ contract Constants is Test, BaseConstants {
     // Uniswap v4 pool manager
     address POOL_MANAGER = 0x000000000004444c5dc75cB358380D2e3dE08A90;
 
+    // Fluid liquidity contract on mainnet
+    address FLUIDV1_LIQUIDITY = 0x52Aa899454998Be5b000Ad077a46Bbe360F4e497;
+
     /**
      * @dev Deploys a dummy contract with non-empty bytecode
      */

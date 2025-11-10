@@ -14,6 +14,7 @@ interface IFluidV1Dex {
     ) external payable returns (uint256 amountOut_);
 }
 
+error FluidV1Executor__ZeroLiquidityAddress();
 error FluidV1Executor__InvalidDataLength();
 error FluidV1Executor__InvalidCallback();
 
@@ -30,6 +31,9 @@ contract FluidV1Executor is IExecutor, ICallback, RestrictTransferFrom {
     constructor(address _liquidity, address _permit2)
         RestrictTransferFrom(_permit2)
     {
+        if (_liquidity == address(0)) {
+            revert FluidV1Executor__ZeroLiquidityAddress();
+        }
         liquidity = _liquidity;
     }
 
@@ -55,8 +59,9 @@ contract FluidV1Executor is IExecutor, ICallback, RestrictTransferFrom {
     function _setSwapParams(IFluidV1Dex dex, TransferType transferType)
         internal
     {
-        bytes32 value =
-            bytes32(bytes20(address(dex))) | bytes32(uint256(transferType));
+        bytes32 value = bytes32(bytes20(address(dex)))
+            | bytes32(uint256(transferType));
+        // slither-disable-next-line assembly
         assembly {
             tstore(_CURRENT_SWAP_PARAMS_SLOT, value)
         }
@@ -64,6 +69,7 @@ contract FluidV1Executor is IExecutor, ICallback, RestrictTransferFrom {
 
     function _getCurrentDex() internal view returns (address dex) {
         bytes32 value;
+        // slither-disable-next-line assembly
         assembly {
             value := tload(_CURRENT_SWAP_PARAMS_SLOT)
         }
@@ -72,6 +78,7 @@ contract FluidV1Executor is IExecutor, ICallback, RestrictTransferFrom {
 
     function _getTransferType() internal view returns (TransferType) {
         uint256 value;
+        // slither-disable-next-line assembly
         assembly {
             value := tload(_CURRENT_SWAP_PARAMS_SLOT)
         }
