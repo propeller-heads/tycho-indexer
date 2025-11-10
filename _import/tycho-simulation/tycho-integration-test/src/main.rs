@@ -509,10 +509,28 @@ async fn process_update(
             }
         }
         .clone();
+
+        let state = {
+            let current_state = tycho_state
+                .read()
+                .map_err(|e| miette!("Failed to acquire read lock on Tycho state: {e}"))?;
+
+            match current_state
+                .states
+                .get(&execution_info.component_id)
+            {
+                Some(state) => state.clone(),
+                None => {
+                    error!(id=%execution_info.component_id, "State not found in saved protocol states");
+                    continue;
+                }
+            }
+        };
         (n_reverts, n_failures) = process_execution_result(
             simulation_id,
             result,
             execution_info,
+            state,
             (*block).clone(),
             chain.id().to_string(),
             n_reverts,
@@ -717,10 +735,12 @@ async fn process_state(
         component_id = %execution_info.component_id,
     )
 )]
+#[allow(clippy::too_many_arguments)]
 fn process_execution_result(
     simulation_id: &String,
     result: &TychoExecutionResult,
     execution_info: TychoExecutionInput,
+    state: Box<dyn ProtocolSim>,
     block: Block,
     chain_id: String,
     mut n_reverts: i32,
@@ -755,6 +775,11 @@ fn process_execution_result(
 
             info!(
                 event_type = "execution_slippage",
+                state = ?state,
+                token_in = %execution_info.token_in,
+                token_out = %execution_info.token_out,
+                simulated_amount  = %amount_out,
+                executed_amount = %execution_info.expected_amount_out,
                 slippage_ratio = slippage,
                 "Execution slippage: {:.2}%",
                 slippage
@@ -798,6 +823,7 @@ fn process_execution_result(
                 error_message = %revert_reason,
                 error_name = %error_name,
                 error_category = %error_category,
+                state = ?state,
                 token_in = %execution_info.token_in,
                 token_out = %execution_info.token_out,
                 tenderly_url = %tenderly_url,
