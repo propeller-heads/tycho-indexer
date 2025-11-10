@@ -112,6 +112,7 @@ async fn main() {
             tycho_url.as_str(),
             false,
             Some(tycho_api_key.as_str()),
+            true,
             chain,
             None,
             None,
