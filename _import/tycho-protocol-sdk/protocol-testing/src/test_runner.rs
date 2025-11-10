@@ -26,15 +26,9 @@ use tycho_execution::encoding::evm::utils::bytes_to_address;
 use tycho_simulation::{
     evm::{decoder::TychoStreamDecoder, protocol::u256_num::bytes_to_u256},
     protocol::models::{DecoderContext, Update},
-    tycho_client::feed::{
-        synchronizer::{ComponentWithState, Snapshot, StateSyncMessage},
-        BlockHeader, FeedMessage,
-    },
+    tycho_client::feed::{synchronizer::StateSyncMessage, BlockHeader, FeedMessage},
     tycho_common::{
-        dto::{
-            Chain, EntryPointWithTracingParams, ProtocolComponent, ResponseAccount,
-            ResponseProtocolState, TracingResult,
-        },
+        dto::{Chain, ProtocolComponent, ResponseProtocolState},
         models::token::Token,
         Bytes,
     },
@@ -472,22 +466,6 @@ impl TestRunner {
             expected_component_ids
         };
 
-        let protocol_states = self
-            .runtime
-            .block_on(tycho_client.get_protocol_state(
-                protocol_system,
-                expected_component_ids.clone(),
-                chain,
-            ))
-            .into_diagnostic()
-            .wrap_err("Failed to get protocol state")?;
-
-        let vm_storages = self
-            .runtime
-            .block_on(tycho_client.get_contract_state(protocol_system, chain))
-            .into_diagnostic()
-            .wrap_err("Failed to get contract state")?;
-
         let traced_entry_points = self
             .runtime
             .block_on(tycho_client.get_traced_entry_points(
@@ -508,9 +486,35 @@ impl TestRunner {
             components_by_id.retain(|id, _| expected_component_ids.contains(id))
         };
 
-        let protocol_states_by_id: HashMap<String, ResponseProtocolState> = protocol_states
+        let contract_ids: Vec<Bytes> = protocol_components
             .into_iter()
-            .map(|s| (s.component_id.to_lowercase(), s))
+            .flat_map(|component| component.contract_ids)
+            .chain(
+                traced_entry_points
+                    .values()
+                    .flatten()
+                    .flat_map(|(_, results)| results.accessed_slots.keys().cloned()),
+            )
+            .collect();
+
+        let snapshot = self
+            .runtime
+            .block_on(tycho_client.get_snapshots(
+                chain,
+                stop_block,
+                protocol_system,
+                &components_by_id,
+                &contract_ids,
+                &traced_entry_points,
+            ))
+            .into_diagnostic()
+            .wrap_err("Failed to get snapshot")?;
+
+        let protocol_states_by_id: HashMap<String, ResponseProtocolState> = snapshot
+            .states
+            .clone()
+            .into_iter()
+            .map(|(id, component_with_state)| (id.to_lowercase(), component_with_state.state))
             .collect();
 
         debug!("Found {} protocol components", components_by_id.len());
@@ -550,7 +554,7 @@ impl TestRunner {
 
         // Clear the shared database state to ensure test isolation
         // This prevents state from previous tests from affecting the current test
-        tycho_simulation::evm::engine_db::SHARED_TYCHO_DB.clear();
+        let _ = tycho_simulation::evm::engine_db::SHARED_TYCHO_DB.clear();
 
         let mut decoder = TychoStreamDecoder::new();
         decoder.skip_state_decode_failures(true);
@@ -560,46 +564,6 @@ impl TestRunner {
             decoder_context = decoder_context.vm_adapter_path(vm_adapter_path);
         }
         register_decoder_for_protocol(&mut decoder, protocol_system, decoder_context)?;
-
-        // Mock a stream message, with only a Snapshot and no deltas
-        let mut states: HashMap<String, ComponentWithState> = HashMap::new();
-        for (id, component) in &components_by_id {
-            let component_id = id;
-
-            let state = protocol_states_by_id
-                .get(component_id)
-                .wrap_err(format!("No state found for component: {id}"))?
-                .clone();
-
-            let traced_entry_points: Vec<(EntryPointWithTracingParams, TracingResult)> =
-                traced_entry_points
-                    .get(component_id)
-                    .map(|inner| {
-                        inner
-                            .iter()
-                            .map(|(k, v)| (k.clone(), v.clone()))
-                            .collect::<Vec<_>>()
-                    })
-                    .unwrap_or_default();
-
-            let component_with_state = ComponentWithState {
-                state,
-                component: component.clone(),
-                component_tvl: None,
-                // Neither UniswapV4 with hooks not certain balancer pools are currently supported
-                // for SDK testing
-                entrypoints: traced_entry_points,
-            };
-            states.insert(component_id.clone(), component_with_state);
-        }
-
-        // Convert vm_storages to a HashMap
-        let vm_storage: HashMap<Bytes, ResponseAccount> = vm_storages
-            .into_iter()
-            .map(|x| (x.address.clone(), x))
-            .collect();
-
-        let snapshot = Snapshot { states, vm_storage };
 
         // Get block header to extract the timestamp
         let block_header = self

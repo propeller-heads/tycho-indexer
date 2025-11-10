@@ -2680,6 +2680,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a2330da5de22e8a3cb63252ce2abb30116bf5265e89c0e01bc17015ce30a476"
 
 [[package]]
+name = "deepsize"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1cdb987ec36f6bf7bfbea3f928b75590b736fc42af8e54d97592481351b2b96c"
+dependencies = [
+ "deepsize_derive",
+]
+
+[[package]]
+name = "deepsize_derive"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "990101d41f3bc8c1a45641024377ee284ecc338e5ecf3ea0f0e236d897c72796"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "der"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8319,6 +8339,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-tungstenite"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d25a406cddcc431a75d3d9afc6a7c0f7428d4891dd973e4d54c56b46127bf857"
+dependencies = [
+ "futures-util",
+ "log",
+ "native-tls",
+ "tokio",
+ "tokio-native-tls",
+ "tungstenite 0.28.0",
+]
+
+[[package]]
 name = "tokio-util"
 version = "0.7.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8700,10 +8734,28 @@ dependencies = [
 ]
 
 [[package]]
-name = "tycho-client"
-version = "0.91.0"
+name = "tungstenite"
+version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dffe1cda887c4881434dc352528bed0479f979a8ba28ca00da1d177eb60102dd"
+checksum = "8628dcc84e5a09eb3d8423d6cb682965dea9133204e8fb3efee74c2a0c259442"
+dependencies = [
+ "bytes",
+ "data-encoding",
+ "http 1.3.1",
+ "httparse",
+ "log",
+ "native-tls",
+ "rand 0.9.2",
+ "sha1",
+ "thiserror 2.0.16",
+ "utf-8",
+]
+
+[[package]]
+name = "tycho-client"
+version = "0.107.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa775b8c613a132254ba7fe1e780ff6316aa40e28a6948c132e70da787dd8488"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8730,14 +8782,15 @@ dependencies = [
 
 [[package]]
 name = "tycho-common"
-version = "0.91.0"
+version = "0.107.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "285e1e41af389e1b07e86b71f49e87d6f411aeacc3bc627f43e393bb6b85c9ad"
+checksum = "6fc3b3d860b7865855a114d767962e424a956fb19538bff740a05ef97c35bfd1"
 dependencies = [
  "anyhow",
  "async-trait",
  "bytes",
  "chrono",
+ "deepsize",
  "hex",
  "num-bigint",
  "rand 0.8.5",
@@ -8755,9 +8808,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-ethereum"
-version = "0.91.0"
+version = "0.107.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fd0d889b035eef1a915a54d1d6b6c89e1ceae99d8df78c904cbdbf10c533140"
+checksum = "ddef1edc1d6805677689653971443c885e6a05e46eb55fdaf0a664128c0cc552"
 dependencies = [
  "alloy",
  "alloy-rpc-types-trace",
@@ -8783,9 +8836,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.129.0"
+version = "0.131.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25ca41c17dcfd093bec5597f3564fc4855fc9e084945f4951fb7ef9ad6e42b2f"
+checksum = "3e82904134653ad1ae8be54ee935e078c941c03dcfc3295ebdb25110e49f2a2b"
 dependencies = [
  "alloy",
  "chrono",
@@ -8805,8 +8858,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.167.0"
-source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.167.0#3ac76a8e2da85fdc8b98b7ca558a2a7e48d71489"
+version = "0.191.0"
+source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.191.0#823d5d0665ddec4a00f7ba2904f653b39d8ec4ed"
 dependencies = [
  "alloy",
  "async-stream",
@@ -8839,7 +8892,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
- "tokio-tungstenite 0.26.2",
+ "tokio-tungstenite 0.28.0",
  "tracing",
  "tycho-client",
  "tycho-common",

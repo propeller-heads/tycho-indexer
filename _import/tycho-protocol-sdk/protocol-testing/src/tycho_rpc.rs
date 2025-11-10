@@ -2,14 +2,16 @@ use std::{collections::HashMap, error::Error as StdError, fmt};
 
 use tracing::debug;
 use tycho_simulation::{
-    tycho_client::{rpc::RPCClient, HttpRPCClient},
+    tycho_client::{
+        feed::synchronizer::Snapshot, rpc::RPCClient, HttpRPCClient, SnapshotParameters,
+    },
     tycho_common::{
         dto::{
             Chain, EntryPointWithTracingParams, PaginationParams, ProtocolComponent,
-            ProtocolComponentsRequestBody, ResponseAccount, ResponseProtocolState, ResponseToken,
-            StateRequestBody, TracedEntryPointRequestBody, TracingResult, VersionParam,
+            ProtocolComponentsRequestBody, ResponseToken, TracedEntryPointRequestBody,
+            TracingResult,
         },
-        models::token::Token,
+        models::{token::Token, ComponentId},
         Bytes,
     },
 };
@@ -73,70 +75,6 @@ impl TychoClient {
         Ok(response.protocol_components)
     }
 
-    /// Gets protocol state from the RPC server
-    pub async fn get_protocol_state(
-        &self,
-        protocol_system: &str,
-        component_ids: Vec<String>,
-        chain: Chain,
-    ) -> Result<Vec<ResponseProtocolState>, RpcError> {
-        let chunk_size = 100;
-        let concurrency = 1;
-        let version: tycho_simulation::tycho_common::dto::VersionParam = VersionParam::default();
-
-        let protocol_states = self
-            .http_client
-            .get_protocol_states_paginated(
-                chain,
-                &component_ids,
-                protocol_system,
-                true,
-                &version,
-                chunk_size,
-                concurrency,
-            )
-            .await?;
-
-        Ok(protocol_states.states)
-    }
-
-    /// Gets contract state from the RPC server
-    pub async fn get_contract_state(
-        &self,
-        protocol_system: &str,
-        chain: Chain,
-    ) -> Result<Vec<ResponseAccount>, RpcError> {
-        let mut all_accounts = Vec::new();
-        let mut page = 0;
-        let page_size = 100;
-
-        loop {
-            let request_body = StateRequestBody {
-                contract_ids: None,
-                protocol_system: protocol_system.to_string(),
-                version: Default::default(),
-                chain,
-                pagination: PaginationParams { page, page_size },
-            };
-
-            let response = self
-                .http_client
-                .get_contract_state(&request_body)
-                .await?;
-
-            let returned_count = response.accounts.len();
-            all_accounts.extend(response.accounts);
-
-            if returned_count < page_size as usize {
-                break;
-            }
-
-            page += 1;
-        }
-
-        Ok(all_accounts)
-    }
-
     pub async fn get_tokens(
         &self,
         chain: Chain,
@@ -190,5 +128,29 @@ impl TychoClient {
             .await?;
 
         Ok(traced_entry_points.traced_entry_points)
+    }
+
+    pub async fn get_snapshots(
+        &self,
+        chain: Chain,
+        block_number: u64,
+        protocol_system: &str,
+        components: &HashMap<ComponentId, ProtocolComponent>,
+        contract_ids: &[Bytes],
+        entrypoints: &HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>,
+    ) -> Result<Snapshot, RpcError> {
+        let params =
+            SnapshotParameters::new(chain, protocol_system, components, contract_ids, block_number)
+                .entrypoints(entrypoints);
+
+        let chunk_size = 100;
+        let concurrency = 1;
+
+        let response = self
+            .http_client
+            .get_snapshots(&params, chunk_size, concurrency)
+            .await?;
+
+        Ok(response)
     }
 }
