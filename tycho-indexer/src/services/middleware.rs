@@ -124,6 +124,7 @@ mod tests {
         MetricKind,
     };
     use once_cell::sync::OnceCell;
+    use rstest::rstest;
     use tycho_common::dto::PaginationParams;
 
     use super::*;
@@ -148,111 +149,49 @@ mod tests {
         }
     }
 
+    #[rstest]
+    #[case::at_uncompressed_limit(MAX_PAGE_SIZE_UNCOMPRESSED, None, true)]
+    #[case::over_uncompressed_limit(MAX_PAGE_SIZE_UNCOMPRESSED + 1, None, false)]
+    #[case::over_uncompressed_with_zstd(MAX_PAGE_SIZE_UNCOMPRESSED + 1, Some("zstd"), true)]
+    #[case::at_compressed_limit_with_zstd(MAX_PAGE_SIZE_COMPRESSED, Some("zstd"), true)]
+    #[case::over_compressed_limit_with_zstd(MAX_PAGE_SIZE_COMPRESSED + 1, Some("zstd"), false)]
+    #[case::over_uncompressed_with_gzip(MAX_PAGE_SIZE_UNCOMPRESSED + 1, Some("gzip"), false)]
+    #[case::over_uncompressed_with_multiple_encodings(
+        MAX_PAGE_SIZE_UNCOMPRESSED + 1,
+        Some("gzip, zstd, br"),
+        true
+    )]
     #[actix_web::test]
-    async fn test_pagination_validation_compression_aware() {
-        let uncompressed_max = MAX_PAGE_SIZE_UNCOMPRESSED;
-        let compressed_max = MAX_PAGE_SIZE_COMPRESSED;
+    async fn test_pagination_validation(
+        #[case] page_size: i64,
+        #[case] accept_encoding: Option<&str>,
+        #[case] should_pass: bool,
+    ) {
+        let request = TestPaginationRequest { pagination: PaginationParams { page: 0, page_size } };
 
-        // Derive test values from constants
-        let over_uncompressed = uncompressed_max + 1;
-        let over_compressed = compressed_max + 1;
-
-        // Test with a valid page size without compression (under limit)
-        let req_body = TestPaginationRequest {
-            pagination: PaginationParams { page: 0, page_size: uncompressed_max },
-        };
-        let req = test::TestRequest::default().to_http_request();
-        assert!(
-            req_body
-                .validate_pagination(&req)
-                .is_ok(),
-            "Page size {uncompressed_max} should be allowed without compression"
-        );
-
-        // Test with page size over uncompressed limit - should fail without compression
-        let req_body = TestPaginationRequest {
-            pagination: PaginationParams { page: 0, page_size: over_uncompressed },
-        };
-        let req = test::TestRequest::default().to_http_request();
-        let result = req_body.validate_pagination(&req);
-        assert!(
-            result.is_err(),
-            "Page size {over_uncompressed} should be rejected without compression"
-        );
-        if let Err(RpcError::Pagination(limit)) = result {
-            assert_eq!(
-                limit, uncompressed_max as usize,
-                "Error should report uncompressed limit of {uncompressed_max}"
-            );
+        let mut req_builder = test::TestRequest::get();
+        if let Some(encoding) = accept_encoding {
+            req_builder = req_builder.insert_header(("accept-encoding", encoding));
         }
+        let req = req_builder.to_http_request();
 
-        // Test with the same page size and zstd compression - should pass (under compressed limit)
-        let req_body = TestPaginationRequest {
-            pagination: PaginationParams { page: 0, page_size: over_uncompressed },
-        };
-        let req = test::TestRequest::default()
-            .insert_header(("accept-encoding", "zstd"))
-            .to_http_request();
-        assert!(
-            req_body
-                .validate_pagination(&req)
-                .is_ok(),
-            "Page size {over_uncompressed} should be allowed with zstd compression"
-        );
+        let result = request.validate_pagination(&req);
 
-        // Test with page size over compressed limit - should fail even with compression
-        let req_body = TestPaginationRequest {
-            pagination: PaginationParams { page: 0, page_size: over_compressed },
-        };
-        let req = test::TestRequest::default()
-            .insert_header(("accept-encoding", "zstd"))
-            .to_http_request();
-        let result = req_body.validate_pagination(&req);
-        assert!(
-            result.is_err(),
-            "Page size {over_compressed} should be rejected even with compression"
-        );
-        if let Err(RpcError::Pagination(limit)) = result {
-            assert_eq!(
-                limit, compressed_max as usize,
-                "Error should report compressed limit of {compressed_max}"
-            );
+        if should_pass {
+            assert!(result.is_ok(), "Expected validation to pass for page_size={page_size}, encoding={accept_encoding:?}");
+        } else {
+            assert!(result.is_err(), "Expected validation to fail for page_size={page_size}, encoding={accept_encoding:?}");
+
+            if let Err(RpcError::Pagination(limit)) = result {
+                let has_zstd = accept_encoding.is_some_and(|e| e.contains("zstd"));
+                let expected_limit = if has_zstd {
+                    MAX_PAGE_SIZE_COMPRESSED as usize
+                } else {
+                    MAX_PAGE_SIZE_UNCOMPRESSED as usize
+                };
+                assert_eq!(limit, expected_limit, "Wrong limit reported");
+            }
         }
-
-        // Test with unsupported compression type (gzip) - should use uncompressed limit
-        // This is useful as other compression methods will have different compression ratios
-        // and we only have the compression factor specified for zstd compression.
-        let req_body = TestPaginationRequest {
-            pagination: PaginationParams { page: 0, page_size: over_uncompressed },
-        };
-        let req = test::TestRequest::default()
-            .insert_header(("accept-encoding", "gzip"))
-            .to_http_request();
-        let result = req_body.validate_pagination(&req);
-        assert!(
-            result.is_err(),
-            "Page size {over_uncompressed} should be rejected with unsupported compression (gzip)"
-        );
-        if let Err(RpcError::Pagination(limit)) = result {
-            assert_eq!(
-                limit, uncompressed_max as usize,
-                "Error should report uncompressed limit of {uncompressed_max}"
-            );
-        }
-
-        // Test with multiple encodings including zstd - should use compressed limit
-        let req_body = TestPaginationRequest {
-            pagination: PaginationParams { page: 0, page_size: over_uncompressed },
-        };
-        let req = test::TestRequest::default()
-            .insert_header(("accept-encoding", "gzip, zstd, br"))
-            .to_http_request();
-        assert!(
-            req_body
-                .validate_pagination(&req)
-                .is_ok(),
-            "Page size {over_uncompressed} should be allowed when zstd is in list"
-        );
     }
 
     fn init_metrics() -> Snapshotter {
