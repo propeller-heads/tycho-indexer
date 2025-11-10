@@ -774,7 +774,7 @@ pub struct PaginationParams {
     pub page: i64,
     /// How many results to return per page
     #[serde(default)]
-    #[schema(default = 10)]
+    #[schema(default = 100)]
     pub page_size: i64,
 }
 
@@ -786,7 +786,7 @@ impl PaginationParams {
 
 impl Default for PaginationParams {
     fn default() -> Self {
-        PaginationParams { page: 0, page_size: 20 }
+        PaginationParams { page: 0, page_size: 100 }
     }
 }
 
