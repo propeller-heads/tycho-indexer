@@ -2352,7 +2352,7 @@ mod test {
                 }),
             },
             chain: Chain::Ethereum,
-            pagination: PaginationParams { page: 0, page_size: 20 },
+            pagination: PaginationParams { page: 0, page_size: 100 },
         };
 
         assert_eq!(result, expected);
