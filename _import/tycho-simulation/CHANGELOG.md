@@ -1,3 +1,10 @@
+## [0.192.1](https://github.com/propeller-heads/tycho-simulation/compare/0.192.0...0.192.1) (2025-11-10)
+
+
+### Bug Fixes
+
+* Show current state in execution slippage and failure logs ([c0176b1](https://github.com/propeller-heads/tycho-simulation/commit/c0176b1aa754ce9ff6eec18a329eb04e7f2c00f8))
+
 ## [0.192.0](https://github.com/propeller-heads/tycho-simulation/compare/0.191.1...0.192.0) (2025-11-07)
 
 
