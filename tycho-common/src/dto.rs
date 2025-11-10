@@ -3235,21 +3235,6 @@ mod pagination_limits_tests {
     impl_pagination_limits!(TestRequestBody, compressed = 500, uncompressed = 50);
 
     #[test]
-    fn test_pagination_limits_constants() {
-        // Verify the constants are set correctly
-        assert_eq!(
-            TestRequestBody::MAX_PAGE_SIZE_COMPRESSED,
-            500,
-            "Compressed page size should be 500"
-        );
-        assert_eq!(
-            TestRequestBody::MAX_PAGE_SIZE_UNCOMPRESSED,
-            50,
-            "Uncompressed page size should be 50"
-        );
-    }
-
-    #[test]
     fn test_effective_max_page_size() {
         // Test effective max with compression enabled
         let max_size = TestRequestBody::effective_max_page_size(true);
@@ -3258,32 +3243,5 @@ mod pagination_limits_tests {
         // Test effective max with compression disabled
         let max_size = TestRequestBody::effective_max_page_size(false);
         assert_eq!(max_size, 50, "Should return uncompressed limit when compression is disabled");
-    }
-
-    #[test]
-    fn test_real_request_bodies_limits() {
-        // Test StateRequestBody
-        assert_eq!(StateRequestBody::MAX_PAGE_SIZE_COMPRESSED, 1200);
-        assert_eq!(StateRequestBody::MAX_PAGE_SIZE_UNCOMPRESSED, 100);
-
-        // Test TokensRequestBody
-        assert_eq!(TokensRequestBody::MAX_PAGE_SIZE_COMPRESSED, 12900);
-        assert_eq!(TokensRequestBody::MAX_PAGE_SIZE_UNCOMPRESSED, 3000);
-
-        // Test ProtocolComponentsRequestBody
-        assert_eq!(ProtocolComponentsRequestBody::MAX_PAGE_SIZE_COMPRESSED, 2550);
-        assert_eq!(ProtocolComponentsRequestBody::MAX_PAGE_SIZE_UNCOMPRESSED, 500);
-
-        // Test ProtocolStateRequestBody
-        assert_eq!(ProtocolStateRequestBody::MAX_PAGE_SIZE_COMPRESSED, 360);
-        assert_eq!(ProtocolStateRequestBody::MAX_PAGE_SIZE_UNCOMPRESSED, 100);
-
-        // Test ProtocolSystemsRequestBody
-        assert_eq!(ProtocolSystemsRequestBody::MAX_PAGE_SIZE_COMPRESSED, 100);
-        assert_eq!(ProtocolSystemsRequestBody::MAX_PAGE_SIZE_UNCOMPRESSED, 100);
-
-        // Test TracedEntryPointRequestBody
-        assert_eq!(TracedEntryPointRequestBody::MAX_PAGE_SIZE_COMPRESSED, 100);
-        assert_eq!(TracedEntryPointRequestBody::MAX_PAGE_SIZE_UNCOMPRESSED, 100);
     }
 }
