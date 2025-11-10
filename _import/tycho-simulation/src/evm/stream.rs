@@ -71,6 +71,7 @@
 //!         "tycho-beta.propellerheads.xyz",
 //!         false,
 //!         Some("sampletoken"),
+//!         true,
 //!         Chain::Ethereum,
 //!         None,
 //!         None,
