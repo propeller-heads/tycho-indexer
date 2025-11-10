@@ -31,7 +31,7 @@ use crate::{
     services::{
         cache::RpcCache,
         deltas_buffer::{PendingDeltasBuffer, PendingDeltasError},
-        middleware::ReqwestPaginationValidation,
+        middleware::RequestPaginationValidation,
     },
 };
 

@@ -88,7 +88,7 @@ pub(super) fn compression_middleware() -> middleware::Compress {
 }
 
 /// Validates pagination limits with compression-aware maximums.
-pub trait ReqwestPaginationValidation: PaginationLimits {
+pub trait RequestPaginationValidation: PaginationLimits {
     fn validate_pagination(
         &self,
         req: &actix_web::HttpRequest,
@@ -112,7 +112,7 @@ pub trait ReqwestPaginationValidation: PaginationLimits {
     }
 }
 
-impl<T: PaginationLimits> ReqwestPaginationValidation for T {}
+impl<T: PaginationLimits> RequestPaginationValidation for T {}
 
 #[cfg(test)]
 mod tests {
