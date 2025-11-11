@@ -18,6 +18,7 @@
   "base": {
     "uniswap_v2": "0xF744EBfaA580cF3fFc25aD046E92BD8B770a0700",
     "uniswap_v3": "0x647bffbf8bd72bf6341ecba8b0279e090313a40d",
+    "pancakeswap_v3": "0x21A97f2Aa8D9AE7144BfD080266Ee87cC2369656",
     "uniswap_v4": "0x8a3520889fE0bbF9E1F4a9724C27d8D6Ed9f0e29",
     "uniswap_v4_hooks": "0x8a3520889fE0bbF9E1F4a9724C27d8D6Ed9f0e29",
     "rfq:bebop": "0x489A3f531dA3873D6585BF3f8E0dEE48CAC6F7BC"

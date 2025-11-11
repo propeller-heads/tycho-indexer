@@ -31,9 +31,11 @@ contract HashflowUtils is Test {
         );
     }
 
-    function encodeRfqtQuoteWithDefaults(
-        IHashflowRouter.RFQTQuote memory quote
-    ) internal pure returns (bytes memory) {
+    function encodeRfqtQuoteWithDefaults(IHashflowRouter.RFQTQuote memory quote)
+        internal
+        pure
+        returns (bytes memory)
+    {
         return
             encodeRfqtQuote(quote, true, RestrictTransferFrom.TransferType.None);
     }

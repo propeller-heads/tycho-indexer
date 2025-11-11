@@ -6,9 +6,16 @@ import "forge-std/Test.sol";
 contract BaseConstants {
     address BASE_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
     address BASE_MAG7 = 0x9E6A46f294bB67c20F1D1E7AfB0bBEf614403B55;
+    address BASE_cbBTC = 0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf;
 
     // Uniswap v2
     address USDC_MAG7_POOL = 0x739c2431670A12E2cF8e11E3603eB96e6728a789;
+
+    //Pancakeswap v3
+    address PANCAKESWAPV3_cbBTC_USDC_POOL =
+        0xb94b22332ABf5f89877A14Cc88f2aBC48c34B3Df;
+
+    address PANCAKESWAPV3_DEPLOYER = 0x41ff9AA7e16B8B1a8a8dc4f0eFacd93D02d071c9;
 }
 
 contract Constants is Test, BaseConstants {
