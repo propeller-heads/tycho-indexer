@@ -1701,7 +1701,6 @@ mod tests {
         assert_eq!(result, expected);
     }
 
-
     #[test]
     fn test_calculate_swap_fees_with_dynamic_fee() {
         // Test that dynamic fees default to 0 when no override is provided
@@ -1741,14 +1740,11 @@ mod tests {
         #[case] lp_fee: u32,
         #[case] expected: u32,
     ) {
-        // Test cases where the subtraction term (protocol * lp / 1M) significantly affects the result
+        // Test cases where the subtraction term (protocol * lp / 1M) significantly affects the
+        // result
         let fees = UniswapV4Fees::new(protocol_fee, protocol_fee, lp_fee);
         let result = fees.calculate_swap_fees_pips(true, None);
-        assert_eq!(
-            result, expected,
-            "Failed for protocol={}, lp={}",
-            protocol_fee, lp_fee
-        );
+        assert_eq!(result, expected, "Failed for protocol={}, lp={}", protocol_fee, lp_fee);
     }
 
     #[test]
