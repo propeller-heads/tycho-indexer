@@ -28,6 +28,7 @@ use crate::evm::protocol::{
     },
     utils::uniswap::{
         i24_be_bytes_to_i32, liquidity_math, lp_fee,
+        lp_fee::is_dynamic,
         sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
         swap_math,
         tick_list::{TickInfo, TickList, TickListErrorKind},
@@ -92,8 +93,21 @@ impl UniswapV4Fees {
     }
 
     fn calculate_swap_fees_pips(&self, zero_for_one: bool, lp_fee_override: Option<u32>) -> u32 {
-        let protocol_fees = if zero_for_one { self.zero_for_one } else { self.one_for_zero };
-        protocol_fees + lp_fee_override.unwrap_or(self.lp_fee)
+        let protocol_fee = if zero_for_one { self.zero_for_one } else { self.one_for_zero };
+        let lp_fee = lp_fee_override.unwrap_or_else(|| {
+            // If a protocol has dynamic fees,
+            if is_dynamic(self.lp_fee) {
+                0
+            } else {
+                self.lp_fee
+            }
+        });
+
+        // UniswapV4 formula: protocolFee + lpFee - (protocolFee * lpFee / 1_000_000)
+        // Source: https://raw.githubusercontent.com/Uniswap/v4-core/main/src/libraries/ProtocolFeeLibrary.sol
+        // This accounts for the fact that protocol fee is taken first, then LP fee applies to
+        // remainder
+        protocol_fee + lp_fee - ((protocol_fee as u64 * lp_fee as u64 / 1_000_000) as u32)
     }
 }
 
@@ -202,6 +216,10 @@ impl UniswapV4State {
             next_tick = next_tick.clamp(MIN_TICK, MAX_TICK);
 
             let sqrt_price_next = get_sqrt_ratio_at_tick(next_tick)?;
+            let fee_pips = self
+                .fees
+                .calculate_swap_fees_pips(zero_for_one, lp_fee_override);
+
             let (sqrt_price, amount_in, amount_out, fee_amount) = swap_math::compute_swap_step(
                 state.sqrt_price,
                 UniswapV4State::get_sqrt_ratio_target(sqrt_price_next, price_limit, zero_for_one),
@@ -210,8 +228,7 @@ impl UniswapV4State {
                 // if it's < 0 it's exact out. The compute_swap_step assumes the
                 // opposite (it's like that for univ3).
                 -state.amount_remaining,
-                self.fees
-                    .calculate_swap_fees_pips(zero_for_one, lp_fee_override),
+                fee_pips,
             )?;
             state.sqrt_price = sqrt_price;
 
@@ -1606,13 +1623,16 @@ mod tests {
         // Test that calculate_swap_fees_pips works correctly with overridden fees
         let fees = UniswapV4Fees::new(100, 90, 500);
 
-        // Without override, should use LP fee + protocol fee
+        // Without override, should use UniswapV4 formula: protocol + lp - (protocol * lp /
+        // 1_000_000)
         let total_zero_for_one = fees.calculate_swap_fees_pips(true, None);
-        assert_eq!(total_zero_for_one, 600); // 100 (protocol) + 500 (lp)
+        // 100 + 500 - (100 * 500 / 1_000_000) = 600 - 0 = 600 (rounded down)
+        assert_eq!(total_zero_for_one, 600);
 
-        // With override, should use override fee + protocol fee
+        // With override, should use override fee + protocol fee with same formula
         let total_with_override = fees.calculate_swap_fees_pips(true, Some(1000));
-        assert_eq!(total_with_override, 1100); // 100 (protocol) + 1000 (override)
+        // 100 + 1000 - (100 * 1000 / 1_000_000) = 1100 - 0 = 1100 (rounded down)
+        assert_eq!(total_with_override, 1100);
     }
 
     #[test]
@@ -1621,9 +1641,9 @@ mod tests {
         let fees = UniswapV4Fees::new(1000, 1000, 1000);
         let total = fees.calculate_swap_fees_pips(true, Some(lp_fee::MAX_LP_FEE));
 
-        // Total should be 1001000 (1000 protocol + 1000000 LP override)
-        // This would overflow in compute_swap_step, but that's expected to be validated earlier
-        assert_eq!(total, 1_001_000);
+        // Using UniswapV4 formula: 1000 + 1000000 - (1000 * 1000000 / 1_000_000)
+        // = 1001000 - 1000 = 1000000
+        assert_eq!(total, 1_000_000);
     }
 
     #[test]
