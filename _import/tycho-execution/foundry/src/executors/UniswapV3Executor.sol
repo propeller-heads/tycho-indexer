@@ -121,9 +121,15 @@ contract UniswapV3Executor is IExecutor, ICallback, RestrictTransferFrom {
         int256, /* amount0Delta */
         int256, /* amount1Delta */
         bytes calldata /* data */
-    )
-        external
-    {
+    ) external {
+        handleCallback(msg.data);
+    }
+
+    function pancakeV3SwapCallback(
+        int256, /* amount0Delta */
+        int256, /* amount1Delta */
+        bytes calldata /* data */
+    ) external {
         handleCallback(msg.data);
     }
 
