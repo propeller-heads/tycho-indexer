@@ -1,3 +1,10 @@
+## [0.193.0](https://github.com/propeller-heads/tycho-simulation/compare/0.192.1...0.193.0) (2025-11-11)
+
+
+### Features
+
+* add uniswap v4 and pancakeswap v3 in Base integration tests ([82cabd0](https://github.com/propeller-heads/tycho-simulation/commit/82cabd0ae3c04104e3a350c9f3ba453ccfffc141))
+
 ## [0.192.1](https://github.com/propeller-heads/tycho-simulation/compare/0.192.0...0.192.1) (2025-11-10)
 
 
