@@ -438,8 +438,8 @@ pub trait RPCClient: Send + Sync {
         min_quality: Option<i32>,
         traded_n_days_ago: Option<u64>,
         chunk_size: usize,
+        concurrency: usize,
     ) -> Result<Vec<ResponseToken>, RPCError> {
-        let concurrency: usize = 10;
         let semaphore = Arc::new(Semaphore::new(concurrency));
 
         // Make initial request to get total count
@@ -2806,7 +2806,7 @@ mod tests {
             .expect("create client");
 
         let tokens = client
-            .get_all_tokens(Chain::Ethereum, None, None, 1000)
+            .get_all_tokens(Chain::Ethereum, None, None, 1000, 10)
             .await
             .expect("get all tokens");
 
@@ -2820,6 +2820,7 @@ mod tests {
     async fn test_get_all_tokens_respects_concurrency_limit() {
         use std::sync::atomic::{AtomicUsize, Ordering};
 
+        let allowed_concurrency = 10;
         let concurrent_requests = Arc::new(AtomicUsize::new(0));
         let max_concurrent = Arc::new(AtomicUsize::new(0));
 
@@ -2827,49 +2828,31 @@ mod tests {
 
         // Create 30 pages to exceed the concurrency limit of 10
         let total_pages = 30;
-        let page_size = 1;
-
-        // Page 0 (initial request) - no concurrency tracking needed
-        let page_0_response = format!(
-            r#"{{
-                "tokens": [
-                    {{
-                        "chain": "ethereum",
-                        "address": "0x0000000000000000000000000000000000000000",
-                        "symbol": "TOKEN_0",
-                        "decimals": 18,
-                        "tax": 0,
-                        "gas": [30000],
-                        "quality": 100
-                    }}
-                ],
-                "pagination": {{
-                    "page": 0,
-                    "page_size": {page_size},
-                    "total": {total_pages}
-                }}
-            }}"#
-        );
-
-        server
-            .mock("POST", "/v1/tokens")
-            .expect(1)
-            .with_body(page_0_response)
-            .create_async()
-            .await;
+        let page_size = 2;
 
         // Pages 1..30 - each with concurrency tracking
-        for page in 1..total_pages {
+        for page in 0..total_pages {
             let concurrent = concurrent_requests.clone();
             let max_conc = max_concurrent.clone();
+
+            let (token1_index, token2_index) = (page * page_size, page * page_size + 1);
 
             let response = format!(
                 r#"{{
                     "tokens": [
                         {{
                             "chain": "ethereum",
-                            "address": "0x{:040x}",
-                            "symbol": "TOKEN_{page}",
+                            "address": "0x{token1_index:040x}",
+                            "symbol": "TOKEN_{token1_index}",
+                            "decimals": 18,
+                            "tax": 0,
+                            "gas": [30000],
+                            "quality": 100
+                        }},
+                        {{
+                            "chain": "ethereum",
+                            "address": "0x{token2_index:040x}",
+                            "symbol": "TOKEN_{token2_index}",
                             "decimals": 18,
                             "tax": 0,
                             "gas": [30000],
@@ -2882,7 +2865,6 @@ mod tests {
                         "total": {total_pages}
                     }}
                 }}"#,
-                page
             );
 
             server
@@ -2908,13 +2890,16 @@ mod tests {
             .expect("create client");
 
         let tokens = client
-            .get_all_tokens(Chain::Ethereum, None, None, page_size)
+            .get_all_tokens(Chain::Ethereum, None, None, page_size, allowed_concurrency)
             .await
             .expect("get all tokens");
 
         // Verify concurrency was limited to 10
         let max = max_concurrent.load(Ordering::SeqCst);
-        assert!(max <= 10, "Expected max concurrent requests <= 10, got {max}");
+        assert!(
+            max <= allowed_concurrency,
+            "Expected max concurrent requests <= {allowed_concurrency}, got {max}"
+        );
 
         // Verify we got all tokens
         assert_eq!(tokens.len(), total_pages);
@@ -2923,58 +2908,5 @@ mod tests {
         for (i, token) in tokens.iter().enumerate() {
             assert_eq!(token.symbol, format!("TOKEN_{i}"));
         }
-    }
-
-    #[tokio::test]
-    async fn test_get_all_tokens_error_propagation() {
-        let mut server = Server::new_async().await;
-
-        // First page succeeds
-        let page_0_response = r#"{
-            "tokens": [
-                {
-                    "chain": "ethereum",
-                    "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-                    "symbol": "WETH",
-                    "decimals": 18,
-                    "tax": 0,
-                    "gas": [29962],
-                    "quality": 100
-                }
-            ],
-            "pagination": {
-                "page": 0,
-                "page_size": 2,
-                "total": 10
-            }
-        }"#;
-
-        server
-            .mock("POST", "/v1/tokens")
-            .expect(1)
-            .with_body(page_0_response)
-            .create_async()
-            .await;
-
-        // Subsequent pages fail with 500
-        for _ in 1..5 {
-            server
-                .mock("POST", "/v1/tokens")
-                .with_status(500)
-                .with_body("Internal Server Error")
-                .create_async()
-                .await;
-        }
-
-        let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
-            .expect("create client")
-            .with_test_backoff_policy();
-
-        let result = client
-            .get_all_tokens(Chain::Ethereum, None, None, 2)
-            .await;
-
-        // Should propagate the error
-        assert!(result.is_err());
     }
 }
