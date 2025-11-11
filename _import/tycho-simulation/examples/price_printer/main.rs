@@ -16,6 +16,7 @@ use tycho_simulation::{
         protocol::{
             ekubo::state::EkuboState,
             filters::{balancer_v2_pool_filter, curve_pool_filter},
+            pancakeswap_v2::state::PancakeswapV2State,
             uniswap_v2::state::UniswapV2State,
             uniswap_v3::state::UniswapV3State,
             uniswap_v4::state::UniswapV4State,
@@ -46,7 +47,10 @@ fn register_exchanges(
         Chain::Ethereum => {
             builder = builder
                 .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
+                .exchange::<UniswapV2State>("sushiswap_v2", tvl_filter.clone(), None)
+                .exchange::<PancakeswapV2State>("pancakeswap_v2", tvl_filter.clone(), None)
                 .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
+                .exchange::<UniswapV3State>("pancakeswap_v3", tvl_filter.clone(), None)
                 .exchange::<EVMPoolState<PreCachedDB>>(
                     "vm:balancer_v2",
                     tvl_filter.clone(),
@@ -58,10 +62,9 @@ fn register_exchanges(
                     Some(curve_pool_filter),
                 )
                 .exchange::<EkuboState>("ekubo_v2", tvl_filter.clone(), None)
-                .exchange::<UniswapV4State>("uniswap_v4", tvl_filter.clone(), None);
+                .exchange::<UniswapV4State>("uniswap_v4", tvl_filter.clone(), None)
+                .exchange::<UniswapV4State>("uniswap_v4_hooks", tvl_filter.clone(), None);
             // COMING SOON!
-            // .exchange::<UniswapV4State>("uniswap_v4_hooks", tvl_filter.clone(),
-            // Some(uniswap_v4_pool_with_euler_hook_filter));
             // .exchange::<EVMPoolState<PreCachedDB>>("vm:maverick_v2", tvl_filter.clone(), None)
         }
         Chain::Base => {
