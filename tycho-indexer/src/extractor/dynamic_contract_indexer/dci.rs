@@ -197,6 +197,7 @@ where
             // Skip tracing entrypoints that are spammy and unsupported (Unichain specific)
             // TODO: remove once unichain has synced/traces are more efficient
             if entrypoint_id == "0xb4960cd4f9147f9e37a7aa9005df7156f61e4444:execute(bytes)" {
+                debug!("Skipping tracing entrypoint {:?}", entrypoint_id);
                 continue;
             }
 
@@ -260,11 +261,12 @@ where
         let retriggered_entrypoints: HashMap<EntryPointWithTracingParams, &Transaction> =
             self.detect_retriggers(&block_changes.block_contract_changes)?;
 
-        // TODO: set to debug
-        info!(
-            retriggered_entrypoints = retriggered_entrypoints.len(),
-            "DCI: Retriggered entrypoints"
-        );
+        if !retriggered_entrypoints.is_empty() {
+            debug!(
+                retriggered_entrypoints = retriggered_entrypoints.len(),
+                "DCI: Retriggered entrypoints"
+            );
+        }
 
         // Update the entrypoint results with the retriggered entrypoints
         entrypoints_to_analyze.extend(retriggered_entrypoints);
