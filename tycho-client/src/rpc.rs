@@ -42,6 +42,9 @@ use crate::{
     TYCHO_SERVER_VERSION,
 };
 
+/// Suggested concurrency level for RPC clients.
+pub const RPC_CLIENT_SUGGESTED_CONCURRENCY: usize = 4;
+
 /// Request body for fetching a snapshot of protocol states and VM storage.
 ///
 /// This struct helps to coordinate fetching  multiple pieces of related data
@@ -2553,7 +2556,7 @@ mod tests {
         );
 
         let response = client
-            .get_snapshots(&request, 100, 4)
+            .get_snapshots(&request, 100, RPC_CLIENT_SUGGESTED_CONCURRENCY)
             .await
             .expect("get snapshots");
 
@@ -2601,7 +2604,7 @@ mod tests {
         );
 
         let response = client
-            .get_snapshots(&request, 100, 4)
+            .get_snapshots(&request, 100, RPC_CLIENT_SUGGESTED_CONCURRENCY)
             .await
             .expect("get snapshots");
 
@@ -2674,7 +2677,7 @@ mod tests {
         .include_tvl(false);
 
         let response = client
-            .get_snapshots(&request, 100, 4)
+            .get_snapshots(&request, 100, RPC_CLIENT_SUGGESTED_CONCURRENCY)
             .await
             .expect("get snapshots");
 
