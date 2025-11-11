@@ -1,3 +1,16 @@
+## [0.195.0](https://github.com/propeller-heads/tycho-simulation/compare/0.194.0...0.195.0) (2025-11-11)
+
+
+### Features
+
+* add pool count frame ([a9bffe9](https://github.com/propeller-heads/tycho-simulation/commit/a9bffe90d11f1c0298241dfb13abb00edf8a4a84))
+* Fix amount overflow and add filters to price printer ([eb0f253](https://github.com/propeller-heads/tycho-simulation/commit/eb0f253d38320e6dda51fe589941cb26d986555f))
+
+
+### Bug Fixes
+
+* Remove uniV4 hooks filter ([261ceee](https://github.com/propeller-heads/tycho-simulation/commit/261ceeeac88ed8f87ccd32b332e65b93932990d9))
+
 ## [0.194.0](https://github.com/propeller-heads/tycho-simulation/compare/0.193.0...0.194.0) (2025-11-11)
 
 
