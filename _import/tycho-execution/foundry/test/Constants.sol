@@ -6,9 +6,15 @@ import "forge-std/Test.sol";
 contract BaseConstants {
     address BASE_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
     address BASE_MAG7 = 0x9E6A46f294bB67c20F1D1E7AfB0bBEf614403B55;
-
+    address BASE_WETH = 0x4200000000000000000000000000000000000006;
+    address BASE_cbBTC = 0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf;
     // Uniswap v2
     address USDC_MAG7_POOL = 0x739c2431670A12E2cF8e11E3603eB96e6728a789;
+
+    // Aerodrome Slipstreams Factory
+    address SLIPSTREAMS_FACTORY_BASE = 0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A;
+    // Aerodrome Slipstreams
+    address SLIPSTREAMS_WETH_USDC_POOL = 0xb2cc224c1c9feE385f8ad6a55b4d94E92359DC59;
 }
 
 contract Constants is Test, BaseConstants {

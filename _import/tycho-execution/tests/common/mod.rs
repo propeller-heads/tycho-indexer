@@ -81,6 +81,19 @@ pub fn get_tycho_router_encoder(user_transfer_type: UserTransferType) -> Box<dyn
         .expect("Failed to build encoder")
 }
 
+pub fn get_base_tycho_router_encoder(
+    user_transfer_type: UserTransferType,
+) -> Box<dyn TychoEncoder> {
+    let executors_addresses = fs::read_to_string("config/test_executor_addresses.json").unwrap();
+    TychoRouterEncoderBuilder::new()
+        .chain(Chain::Base)
+        .user_transfer_type(user_transfer_type)
+        .executors_addresses(executors_addresses)
+        .router_address(router_address())
+        .build()
+        .expect("Failed to build encoder")
+}
+
 /// Builds the complete Bebop calldata in the format expected by the encoder
 /// Returns: [ partial_fill_offset (u8) | original_taker_amount (U256) | calldata (bytes (selector +
 /// ABI encoded params)) ]

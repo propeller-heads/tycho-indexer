@@ -15,6 +15,7 @@ import {
     IUniswapV3Pool
 } from "../src/executors/UniswapV3Executor.sol";
 import {UniswapV4Executor} from "../src/executors/UniswapV4Executor.sol";
+import {SlipstreamsExecutor} from "../src/executors/SlipstreamsExecutor.sol";
 
 // Test utilities and mocks
 import "./Constants.sol";
@@ -77,14 +78,20 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     BalancerV3Executor public balancerV3Executor;
     BebopExecutor public bebopExecutor;
     HashflowExecutor public hashflowExecutor;
+    SlipstreamsExecutor public slipstreamsExecutor;
+
+    function getChain() public view virtual returns (string memory) {
+        return "mainnet";
+    }
 
     function getForkBlock() public view virtual returns (uint256) {
         return 22082754;
     }
 
     function setUp() public virtual {
+        string memory chain = getChain();
         uint256 forkBlock = getForkBlock();
-        vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
+        vm.createSelectFork(vm.rpcUrl(chain), forkBlock);
 
         vm.startPrank(ADMIN);
         tychoRouter = deployRouter();
@@ -139,8 +146,9 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         bebopExecutor = new BebopExecutor(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
         hashflowExecutor =
             new HashflowExecutor(HASHFLOW_ROUTER, PERMIT2_ADDRESS);
+        slipstreamsExecutor = new SlipstreamsExecutor(SLIPSTREAMS_FACTORY_BASE, PERMIT2_ADDRESS);
 
-        address[] memory executors = new address[](11);
+        address[] memory executors = new address[](12);
         executors[0] = address(usv2Executor);
         executors[1] = address(usv3Executor);
         executors[2] = address(pancakev3Executor);
@@ -152,6 +160,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         executors[8] = address(balancerV3Executor);
         executors[9] = address(bebopExecutor);
         executors[10] = address(hashflowExecutor);
+        executors[11] = address(slipstreamsExecutor);
 
         return executors;
     }
@@ -221,6 +230,26 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
             tokenIn,
             tokenOut,
             pool.fee(),
+            receiver,
+            target,
+            zero2one,
+            transferType
+        );
+    }
+
+    function encodeSlipstreamsSwap(
+        address tokenIn,
+        address tokenOut,
+        address receiver,
+        address target,
+        bool zero2one,
+        RestrictTransferFrom.TransferType transferType
+    ) internal view returns (bytes memory) {
+        IUniswapV3Pool pool = IUniswapV3Pool(target);
+        return abi.encodePacked(
+            tokenIn,
+            tokenOut,
+            pool.tickSpacing(),
             receiver,
             target,
             zero2one,
