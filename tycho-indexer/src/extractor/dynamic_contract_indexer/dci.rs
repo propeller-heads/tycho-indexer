@@ -194,6 +194,12 @@ where
         let mut entrypoints_to_analyze: HashMap<EntryPointWithTracingParams, &Transaction> =
             HashMap::new();
         for (entrypoint_id, tracing_params) in all_entrypoint_params.iter() {
+            // Skip tracing entrypoints that are spammy and unsupported (Unichain specific)
+            // TODO: remove once unichain has synced/traces are more efficient
+            if entrypoint_id == "0xb4960cd4f9147f9e37a7aa9005df7156f61e4444:execute(bytes)" {
+                continue;
+            }
+
             for (tx, param) in tracing_params.iter() {
                 let entrypoint = new_entrypoints
                     .get(entrypoint_id)
@@ -253,6 +259,12 @@ where
         // Use block storage changes to detect retriggered entrypoints
         let retriggered_entrypoints: HashMap<EntryPointWithTracingParams, &Transaction> =
             self.detect_retriggers(&block_changes.block_contract_changes)?;
+
+        // TODO: set to debug
+        info!(
+            retriggered_entrypoints = retriggered_entrypoints.len(),
+            "DCI: Retriggered entrypoints"
+        );
 
         // Update the entrypoint results with the retriggered entrypoints
         entrypoints_to_analyze.extend(retriggered_entrypoints);
