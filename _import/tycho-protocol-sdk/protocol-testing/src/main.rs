@@ -44,7 +44,8 @@ pub struct FullTestCommand {
     initial_block: Option<u64>,
 
     /// Stop the test at this block number.
-    /// If not provided, it will use the latest block fetched from the protocol.
+    /// If not provided, it will use the latest block of the chain at the time of running the
+    /// command.
     #[arg(long)]
     stop_block: Option<u64>,
 }
@@ -63,6 +64,7 @@ impl FullTestCommand {
             args.db_url,
             args.rpc_url,
             args.vm_simulation_traces,
+            args.skip_indexing,
         )?
         .run()
     }
@@ -90,6 +92,7 @@ impl RangeTestCommand {
             args.db_url,
             args.rpc_url,
             args.vm_simulation_traces,
+            args.skip_indexing,
         )?
         .run()
     }
@@ -127,6 +130,10 @@ struct CommonArgs {
     /// Enable tracing during execution simulations
     #[arg(long, default_value_t = false)]
     execution_traces: bool,
+
+    /// Skip indexing and run directly against the database
+    #[arg(long, default_value_t = false)]
+    skip_indexing: bool,
 }
 
 impl CommonArgs {

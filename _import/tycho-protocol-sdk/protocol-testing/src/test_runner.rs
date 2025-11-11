@@ -85,6 +85,7 @@ pub struct TestRunner {
     adapter_contract_builder: AdapterContractBuilder,
     runtime: Runtime,
     rpc_provider: RPCProvider,
+    skip_indexing: bool,
 }
 
 impl TestRunner {
@@ -97,6 +98,7 @@ impl TestRunner {
         db_url: String,
         rpc_url: String,
         vm_simulation_traces: bool,
+        skip_indexing: bool,
     ) -> miette::Result<Self> {
         let base_protocol = CLONE_TO_BASE_PROTOCOL
             .get(protocol.as_str())
@@ -136,6 +138,7 @@ impl TestRunner {
             adapter_contract_builder,
             runtime,
             rpc_provider,
+            skip_indexing,
         })
     }
 
@@ -209,22 +212,14 @@ impl TestRunner {
                     })?
             }
         };
-        let spkg_path =
-            build_spkg(substreams_yaml_path, start_block).wrap_err("Failed to build spkg")?;
-        let initialized_accounts = config
-            .initialized_accounts
-            .clone()
-            .unwrap_or_default();
-        let tycho_runner = self.tycho_runner(initialized_accounts.clone())?;
+
         let stop_block = match &test_type.stop_block {
             Some(b) => *b,
             None => {
-                let rpc_server = tycho_runner.start_rpc_server()?;
                 let block = self
                     .runtime
                     .block_on(self.rpc_provider.get_current_block())
                     .wrap_err("Failed to get current block number");
-                tycho_runner.stop_rpc_server(rpc_server)?;
                 match block {
                     Ok(b) => b.header.number,
                     Err(e) => {
@@ -233,16 +228,23 @@ impl TestRunner {
                 }
             }
         };
-        tycho_runner
-            .run_tycho(
-                &spkg_path,
-                start_block,
-                stop_block,
-                &config.protocol_type_names,
-                &config.protocol_system,
-                config.module_name.clone(),
-            )
-            .wrap_err("Failed to run Tycho")?;
+
+        let initialized_accounts = Vec::new();
+        let tycho_runner = self.tycho_runner(initialized_accounts.clone())?;
+        if !self.skip_indexing {
+            let spkg_path =
+                build_spkg(substreams_yaml_path, start_block).wrap_err("Failed to build spkg")?;
+            tycho_runner
+                .run_tycho(
+                    &spkg_path,
+                    start_block,
+                    stop_block,
+                    &config.protocol_type_names,
+                    &config.protocol_system,
+                    config.module_name.clone(),
+                )
+                .wrap_err("Failed to run Tycho")?;
+        }
         let test = IntegrationTest {
             name: "full_run".to_string(),
             start_block,
@@ -251,7 +253,7 @@ impl TestRunner {
             initialized_accounts: Some(initialized_accounts),
         };
         let rpc_server = tycho_runner.start_rpc_server()?;
-        let res = match self.run_test(&test, &config, stop_block) {
+        let res = match self.run_test(&test, &config, stop_block - 1) {
             Ok(_) => {
                 info!("✅ {} passed\n", test.name);
                 Ok(())
@@ -302,18 +304,22 @@ impl TestRunner {
                     .unwrap_or_default(),
             );
             let tycho_runner = self.tycho_runner(initialized_accounts)?;
-            let spkg_path = build_spkg(substreams_yaml_path, test.start_block)
-                .wrap_err("Failed to build spkg")?;
-            tycho_runner
-                .run_tycho(
-                    &spkg_path,
-                    test.start_block,
-                    test.stop_block,
-                    &config.protocol_type_names,
-                    &config.protocol_system,
-                    config.module_name.clone(),
-                )
-                .wrap_err("Failed to run Tycho")?;
+            if !self.skip_indexing {
+                let spkg_path = build_spkg(substreams_yaml_path, test.start_block)
+                    .wrap_err("Failed to build spkg")?;
+                tycho_runner
+                    .run_tycho(
+                        &spkg_path,
+                        test.start_block,
+                        test.stop_block,
+                        &config.protocol_type_names,
+                        &config.protocol_system,
+                        config.module_name.clone(),
+                    )
+                    .wrap_err("Failed to run Tycho")?;
+            } else {
+                info!("Skipping indexing")
+            }
             let rpc_server = tycho_runner.start_rpc_server()?;
             match self.run_test(test, &config, test.stop_block) {
                 Ok(_) => {
@@ -408,9 +414,12 @@ impl TestRunner {
     }
 
     fn tycho_runner(&self, initialized_accounts: Vec<String>) -> miette::Result<TychoRunner> {
-        self.empty_database()
-            .into_diagnostic()
-            .wrap_err("Failed to empty the database")?;
+        // If we skip indexing, reuse current db state
+        if !self.skip_indexing {
+            self.empty_database()
+                .into_diagnostic()
+                .wrap_err("Failed to empty the database")?;
+        }
         Ok(TychoRunner::new(self.chain, self.db_url.to_string(), initialized_accounts))
     }
 
@@ -514,7 +523,7 @@ impl TestRunner {
             .runtime
             .block_on(tycho_client.get_snapshots(
                 chain,
-                stop_block,
+                stop_block - 1,
                 protocol_system,
                 &components_by_id,
                 &contract_ids,
@@ -1058,6 +1067,7 @@ mod tests {
             "test-protocol".to_string(),
             "".to_string(),
             rpc_url,
+            false,
             false,
         )
         .unwrap()

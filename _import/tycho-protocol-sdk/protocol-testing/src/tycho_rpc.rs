@@ -3,7 +3,9 @@ use std::{collections::HashMap, error::Error as StdError, fmt};
 use tracing::debug;
 use tycho_simulation::{
     tycho_client::{
-        feed::synchronizer::Snapshot, rpc::RPCClient, HttpRPCClient, SnapshotParameters,
+        feed::synchronizer::Snapshot,
+        rpc::{HttpRPCClientOptions, RPCClient},
+        HttpRPCClient, SnapshotParameters,
     },
     tycho_common::{
         dto::{
@@ -51,8 +53,8 @@ pub struct TychoClient {
 
 impl TychoClient {
     pub fn new(host: &str) -> Result<Self, RpcError> {
-        let http_client =
-            HttpRPCClient::new(host, None).map_err(|e| RpcError::ClientError(e.to_string()))?;
+        let http_client = HttpRPCClient::new(host, HttpRPCClientOptions::default())
+            .map_err(|e| RpcError::ClientError(e.to_string()))?;
         Ok(Self { http_client })
     }
 
