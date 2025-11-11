@@ -501,6 +501,25 @@ impl App {
                     .border_style(Style::new().fg(self.colors.footer_border_color)),
             );
         frame.render_widget(info_footer, area);
+
+        // Render pool count on the bottom right
+        let pool_count_text = format!(" Pools: {} ", self.items.len());
+        let pool_count = Paragraph::new(pool_count_text)
+            .style(
+                Style::new()
+                    .fg(self.colors.header_fg)
+                    .bg(self.colors.buffer_bg),
+            )
+            .right_aligned();
+
+        // Position in the bottom right corner, inside the border
+        let count_area = Rect {
+            x: area.x + area.width.saturating_sub(20),
+            y: area.y + area.height.saturating_sub(1),
+            width: 20.min(area.width),
+            height: 1,
+        };
+        frame.render_widget(pool_count, count_area);
     }
 
     fn render_loading(&self, frame: &mut Frame) {
