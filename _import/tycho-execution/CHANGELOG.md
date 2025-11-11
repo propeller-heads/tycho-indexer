@@ -1,3 +1,10 @@
+## [0.132.0](https://github.com/propeller-heads/tycho-execution/compare/0.131.0...0.132.0) (2025-11-11)
+
+
+### Features
+
+* add pancakeswapV3 callback in v3 executor ([0c988ce](https://github.com/propeller-heads/tycho-execution/commit/0c988ceccbe57994a5b3a5c7fe5d0e493856ef8d))
+
 ## [0.131.0](https://github.com/propeller-heads/tycho-execution/compare/0.130.2...0.131.0) (2025-10-23)
 
 
