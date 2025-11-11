@@ -10,3 +10,4 @@ pub mod utils;
 pub mod vm;
 
 mod cpmm;
+pub mod fluid;
