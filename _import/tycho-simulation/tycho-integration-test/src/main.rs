@@ -1,6 +1,4 @@
-mod execution;
 mod metrics;
-mod stream_processor;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -9,14 +7,7 @@ use std::{
     time::Duration,
 };
 
-use alloy::{
-    eips::BlockNumberOrTag,
-    network::Ethereum,
-    primitives::Address,
-    providers::{Provider, ProviderBuilder, RootProvider},
-    rpc::types::Block,
-};
-use alloy_chains::NamedChain;
+use alloy::{eips::BlockNumberOrTag, primitives::Address, providers::Provider, rpc::types::Block};
 use clap::Parser;
 use dotenv::dotenv;
 use itertools::Itertools;
@@ -28,18 +19,13 @@ use tokio::sync::Semaphore;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 use tycho_common::simulation::protocol_sim::ProtocolSim;
-use tycho_ethereum::entrypoint_tracer::{
-    allowance_slot_detector::{AllowanceSlotDetectorConfig, EVMAllowanceSlotDetector},
-    balance_slot_detector::{BalanceSlotDetectorConfig, EVMBalanceSlotDetector},
-};
 use tycho_simulation::{
     protocol::models::ProtocolComponent,
     rfq::protocols::hashflow::{client::HashflowClient, state::HashflowState},
     tycho_common::models::Chain,
     utils::load_all_tokens,
 };
-
-use crate::{
+use tycho_test::{
     execution::{
         encoding::encode_swap,
         models::{TychoExecutionInput, TychoExecutionResult},
@@ -173,7 +159,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
     let cli = Arc::new(cli);
     let chain = cli.chain;
 
-    let rpc_tools = RPCTools::new(&cli.rpc_url, &chain).await?;
+    let rpc_tools = tycho_test::RPCTools::new(&cli.rpc_url, &chain).await?;
 
     // Load tokens from Tycho
     info!(%cli.tycho_url, "Loading tokens...");
@@ -247,7 +233,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
 async fn process_update(
     cli: Arc<Cli>,
     chain: Chain,
-    rpc_tools: RPCTools,
+    rpc_tools: tycho_test::RPCTools,
     tycho_state: Arc<RwLock<TychoState>>,
     update: &StreamUpdate,
 ) -> miette::Result<()> {
@@ -490,6 +476,7 @@ async fn process_update(
         block_execution_info.clone(),
         &block,
         cli.block_wait_time,
+        None,
     )
     .await
     {
@@ -510,7 +497,7 @@ async fn process_update(
         }
         .clone();
 
-        let state = {
+        let state_str = {
             let current_state = tycho_state
                 .read()
                 .map_err(|e| miette!("Failed to acquire read lock on Tycho state: {e}"))?;
@@ -519,18 +506,15 @@ async fn process_update(
                 .states
                 .get(&execution_info.component_id)
             {
-                Some(state) => state.clone(),
-                None => {
-                    error!(id=%execution_info.component_id, "State not found in saved protocol states");
-                    continue;
-                }
+                Some(state) => format!("{:?}", state),
+                None => "".to_string(),
             }
         };
         (n_reverts, n_failures) = process_execution_result(
             simulation_id,
             result,
             execution_info,
-            state,
+            state_str,
             (*block).clone(),
             chain.id().to_string(),
             n_reverts,
@@ -691,11 +675,13 @@ async fn process_state(
         // Simulate execution amount out against the RPC
         let (solution, transaction) = match encode_swap(
             &component,
-            Arc::from(state.clone_box()),
+            Some(Arc::from(state.clone_box())),
             token_in,
             token_out,
             amount_in.clone(),
             chain,
+            None,
+            false,
         ) {
             Ok(res) => res,
             Err(e) => {
@@ -740,7 +726,8 @@ fn process_execution_result(
     simulation_id: &String,
     result: &TychoExecutionResult,
     execution_info: TychoExecutionInput,
-    state: Box<dyn ProtocolSim>,
+    state_str: String,
+
     block: Block,
     chain_id: String,
     mut n_reverts: i32,
@@ -775,7 +762,7 @@ fn process_execution_result(
 
             info!(
                 event_type = "execution_slippage",
-                state = ?state,
+                state = ?state_str,
                 token_in = %execution_info.token_in,
                 token_out = %execution_info.token_out,
                 simulated_amount  = %amount_out,
@@ -823,7 +810,7 @@ fn process_execution_result(
                 error_message = %revert_reason,
                 error_name = %error_name,
                 error_category = %error_category,
-                state = ?state,
+                state = ?state_str,
                 token_in = %execution_info.token_in,
                 token_out = %execution_info.token_out,
                 tenderly_url = %tenderly_url,
@@ -886,49 +873,6 @@ fn categorize_error(error_name: &str) -> &'static str {
         e if e.contains("0xf7bf5832") => "Fee token", /* Decodes to TychoRouter__AmountOutNotFullyReceived */
         e if e.contains("UniswapV2: K") => "Fee token",
         _ => "other",
-    }
-}
-
-#[derive(Clone)]
-struct RPCTools {
-    rpc_url: String,
-    provider: RootProvider<Ethereum>,
-    evm_balance_slot_detector: Arc<EVMBalanceSlotDetector>,
-    evm_allowance_slot_detector: Arc<EVMAllowanceSlotDetector>,
-}
-
-impl RPCTools {
-    pub async fn new(rpc_url: &str, chain: &Chain) -> miette::Result<Self> {
-        let provider: RootProvider<Ethereum> = ProviderBuilder::default()
-            .with_chain(
-                NamedChain::try_from(chain.id())
-                    .into_diagnostic()
-                    .wrap_err("Invalid chain")?,
-            )
-            .connect(rpc_url)
-            .await
-            .into_diagnostic()
-            .wrap_err("Failed to connect to provider")?;
-        let evm_balance_slot_detector = Arc::new(
-            EVMBalanceSlotDetector::new(BalanceSlotDetectorConfig {
-                rpc_url: rpc_url.to_string(),
-                ..Default::default()
-            })
-            .into_diagnostic()?,
-        );
-        let evm_allowance_slot_detector = Arc::new(
-            EVMAllowanceSlotDetector::new(AllowanceSlotDetectorConfig {
-                rpc_url: rpc_url.to_string(),
-                ..Default::default()
-            })
-            .into_diagnostic()?,
-        );
-        Ok(Self {
-            rpc_url: rpc_url.to_string(),
-            provider,
-            evm_balance_slot_detector,
-            evm_allowance_slot_detector,
-        })
     }
 }
 

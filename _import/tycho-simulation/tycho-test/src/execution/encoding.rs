@@ -1,6 +1,7 @@
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use alloy::{
+    primitives::{keccak256, FixedBytes},
     rpc::types::{state::AccountOverride, Block, TransactionRequest},
     sol_types::SolValue,
 };
@@ -25,9 +26,10 @@ use tycho_simulation::{
     protocol::models::ProtocolComponent,
 };
 
-use crate::{execution::tenderly::OverwriteMetadata, RPCTools};
+use crate::{execution::tenderly::OverwriteMetadata, rpc_tools::RPCTools};
 
 const USER_ADDR: &str = "0xf847a638E44186F3287ee9F8cAF73FF4d4B80784";
+pub const EXECUTOR_ADDRESS: &str = "0xaE04CA7E9Ed79cBD988f6c536CE11C621166f41B";
 
 /// Contains the detected storage slots for a token.
 #[derive(Debug, Clone, Default)]
@@ -38,13 +40,16 @@ pub struct TokenSlots {
     pub allowance_slot: Vec<u8>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn encode_swap(
     component: &ProtocolComponent,
-    state: Arc<dyn ProtocolSim>,
+    state: Option<Arc<dyn ProtocolSim>>,
     sell_token: &Token,
     buy_token: &Token,
     amount_in: BigUint,
     chain: Chain,
+    executors_json: Option<String>,
+    historical_trade: bool,
 ) -> miette::Result<(Solution, Transaction)> {
     let solution = create_solution(
         component.clone(),
@@ -54,13 +59,21 @@ pub fn encode_swap(
         amount_in.clone(),
     )?;
     let encoded_solution = {
-        let encoder = TychoRouterEncoderBuilder::new()
+        let mut builder = TychoRouterEncoderBuilder::new()
             .chain(chain)
-            .user_transfer_type(UserTransferType::TransferFrom)
+            .user_transfer_type(UserTransferType::TransferFrom);
+
+        if let Some(executors) = executors_json {
+            builder = builder.executors_addresses(executors);
+        }
+        if historical_trade {
+            builder = builder.historical_trade();
+        }
+
+        builder
             .build()
             .into_diagnostic()
-            .wrap_err("Failed to build encoder")?;
-        encoder
+            .wrap_err("Failed to build encoder")?
             .encode_solutions(vec![solution.clone()])
             .into_diagnostic()
             .wrap_err("Failed to encode router calldata")?
@@ -75,7 +88,7 @@ pub fn encode_swap(
 
 fn create_solution(
     component: ProtocolComponent,
-    state: Arc<dyn ProtocolSim>,
+    state: Option<Arc<dyn ProtocolSim>>,
     sell_token: Token,
     buy_token: Token,
     amount_in: BigUint,
@@ -83,11 +96,17 @@ fn create_solution(
     let user_address = Bytes::from_str(USER_ADDR).into_diagnostic()?;
 
     // Prepare data to encode. First we need to create a swap object
-    let simple_swap =
-        SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone())
-            .protocol_state(state)
-            .estimated_amount_in(amount_in.clone())
-            .build();
+    let simple_swap = {
+        let mut builder =
+            SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone())
+                .estimated_amount_in(amount_in.clone());
+
+        if let Some(state) = state {
+            builder = builder.protocol_state(state);
+        }
+
+        builder.build()
+    };
 
     Ok(Solution {
         sender: user_address.clone(),
@@ -356,4 +375,86 @@ fn calculate_gas_fees(block: &Block) -> miette::Result<(U256, U256)> {
         base_fee, max_priority_fee_per_gas, max_fee_per_gas
     );
     Ok((max_fee_per_gas, max_priority_fee_per_gas))
+}
+
+/// Calculate storage slot for Solidity mapping.
+///
+/// The solidity code:
+/// keccak256(abi.encodePacked(bytes32(key), bytes32(slot)))
+pub fn calculate_executor_storage_slot(key: Address) -> FixedBytes<32> {
+    // Convert key (20 bytes) to 32-byte left-padded array (uint256)
+    let mut key_bytes = [0u8; 32];
+    key_bytes[12..].copy_from_slice(key.as_slice());
+
+    // The base of the executor storage slot is 1, since there is only one
+    // variable that is initialized before it (which is _roles in AccessControl.sol).
+    // In this case, _roles gets slot 0.
+    // The slots are given in order to the parent contracts' variables first and foremost.
+    let slot = U256::from(1);
+
+    // Convert U256 slot to 32-byte big-endian array
+    let slot_bytes = slot.to_be_bytes::<32>();
+
+    // Concatenate key_bytes + slot_bytes, then keccak hash
+    let mut buf = [0u8; 64];
+    buf[..32].copy_from_slice(&key_bytes);
+    buf[32..].copy_from_slice(&slot_bytes);
+    keccak256(buf)
+}
+
+/// Sets up state overwrites for the Tycho router and its associated executor.
+///
+/// This function prepares the router for execution simulation by applying bytecode overwrites
+/// to both the router and executor contracts. It ensures that the router recognizes the executor
+/// as an approved executor by setting the appropriate storage slot values.
+///
+/// # Process
+/// 1. Override the router's bytecode with the provided router bytecode
+/// 2. Calculate and set the executor approval storage slot in the router
+/// 3. Override the executor's bytecode with the provided executor bytecode
+///
+/// # Arguments
+/// * `router_address` - The address where the Tycho router contract will be deployed/overridden
+/// * `router_bytecode` - The compiled runtime bytecode for the Tycho router contract
+/// * `executor_bytecode` - The compiled runtime bytecode for the protocol-specific executor
+///
+/// # Returns
+/// A HashMap containing account overwrites for both the router and executor addresses.
+/// The router override includes:
+///   - Router contract bytecode
+///   - Storage slot setting executor approval (executors mapping slot = 1)
+///
+/// The executor override includes:
+///   - Protocol-specific executor contract bytecode
+///
+/// # Errors
+/// Returns an error if:
+/// - Executor address parsing fails
+/// - Storage slot calculation fails
+pub async fn setup_router_overwrites(
+    router_address: Address,
+    router_bytecode: Vec<u8>,
+    executor_bytecode: Vec<u8>,
+) -> miette::Result<AddressHashMap<AccountOverride>> {
+    // Start with the router bytecode override
+    let mut state_overwrites = AddressHashMap::default();
+    let mut tycho_router_override = AccountOverride::default().with_code(router_bytecode);
+
+    let executor_address = Address::from_str(EXECUTOR_ADDRESS).into_diagnostic()?;
+
+    // Find executor address approval storage slot
+    let storage_slot = calculate_executor_storage_slot(executor_address);
+
+    // The executors mapping starts at storage value 1
+    let storage_value = FixedBytes::<32>::from(U256::ONE);
+
+    tycho_router_override =
+        tycho_router_override.with_state_diff(vec![(storage_slot, storage_value)]);
+
+    state_overwrites.insert(router_address, tycho_router_override);
+
+    // Add bytecode overwrite for the executor
+    state_overwrites
+        .insert(executor_address, AccountOverride::default().with_code(executor_bytecode.to_vec()));
+    Ok(state_overwrites)
 }

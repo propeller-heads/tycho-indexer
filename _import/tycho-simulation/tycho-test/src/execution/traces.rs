@@ -70,9 +70,9 @@ pub async fn decode_method_selector(input: &str) -> Option<String> {
         return Some(format!("{}({})", name, type_names.join(",")));
     }
 
-    // Return unknown if not found
+    // Return unknown if not found - print entire input
     if input.len() >= 10 {
-        Some(format!("{} (unknown)", &input[0..10]))
+        Some(format!("{} (unknown)", input))
     } else {
         None
     }
@@ -107,8 +107,8 @@ pub async fn decode_function_with_params(input: &str) -> Option<String> {
         return Some(format!("{}({})", name, input));
     }
 
-    // Return unknown if not found
-    Some(format!("{} (unknown)", &input[0..10]))
+    // Return unknown if not found - print entire input
+    Some(format!("{} (unknown)", input))
 }
 
 /// Format a parameter value for display
