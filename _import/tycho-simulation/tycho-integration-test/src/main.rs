@@ -20,7 +20,7 @@ use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 use tycho_common::simulation::protocol_sim::ProtocolSim;
 use tycho_simulation::{
-    protocol::models::ProtocolComponent,
+    protocol::{models::ProtocolComponent, validation::try_validate},
     rfq::protocols::hashflow::{client::HashflowClient, state::HashflowState},
     tycho_common::models::Chain,
     utils::load_all_tokens,
@@ -351,6 +351,7 @@ async fn process_update(
         let block = block.clone();
         let state_id = id.clone();
         let state = state.clone_box();
+        let provider = Arc::new(rpc_tools.provider.clone());
         let permit = semaphore
             .clone()
             .acquire_owned()
@@ -361,7 +362,8 @@ async fn process_update(
         let task = tokio::spawn(async move {
             let simulation_id = generate_simulation_id(&component.protocol_system, &state_id);
             let result =
-                process_state(&simulation_id, chain, component, &block, state_id, state).await;
+                process_state(&simulation_id, chain, component, &block, state_id, state, provider)
+                    .await;
             drop(permit);
             result
         });
@@ -434,6 +436,7 @@ async fn process_update(
         let block = block.clone();
         let state_id = id.clone();
         let state = state.clone_box();
+        let provider = Arc::new(rpc_tools.provider.clone());
         let permit = semaphore
             .clone()
             .acquire_owned()
@@ -444,7 +447,8 @@ async fn process_update(
         let task = tokio::spawn(async move {
             let simulation_id = generate_simulation_id(&component.protocol_system, &state_id);
             let result =
-                process_state(&simulation_id, chain, component, &block, state_id, state).await;
+                process_state(&simulation_id, chain, component, &block, state_id, state, provider)
+                    .await;
             drop(permit);
             result
         });
@@ -547,11 +551,45 @@ async fn process_state(
     block: &Block,
     state_id: String,
     state: Box<dyn ProtocolSim>,
+    rpc_provider: Arc<alloy::providers::RootProvider<alloy::network::Ethereum>>,
 ) -> HashMap<String, TychoExecutionInput> {
     let tokens_len = component.tokens.len();
     if tokens_len < 2 {
         error!("Component has less than 2 tokens, skipping...");
         return HashMap::new();
+    }
+
+    // Validate state against on-chain data if the type implements Validator
+    if let Some(result) = try_validate(
+        state.as_ref(),
+        rpc_provider.clone(),
+        block.header.number,
+        &component.id,
+        &component.tokens,
+    )
+    .await
+    {
+        match result {
+            Ok(true) => {
+                info!(
+                    component_id = ?component.id,
+                    "State validation passed"
+                );
+            }
+            Ok(false) => {
+                warn!(
+                    component_id = ?component.id,
+                    "State validation failed"
+                );
+            }
+            Err(e) => {
+                error!(
+                    component_id = ?component.id,
+                    error = %e,
+                    "Error validating state"
+                );
+            }
+        }
     }
     // Get all the possible swap directions
     let swap_directions = match component.protocol_system.as_str() {
