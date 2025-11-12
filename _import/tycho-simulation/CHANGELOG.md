@@ -1,3 +1,10 @@
+## [0.196.1](https://github.com/propeller-heads/tycho-simulation/compare/0.196.0...0.196.1) (2025-11-12)
+
+
+### Bug Fixes
+
+* Fix versions of test packages ([df74545](https://github.com/propeller-heads/tycho-simulation/commit/df7454563def2f121857bf37e8d61dc56526c02a))
+
 ## [0.196.0](https://github.com/propeller-heads/tycho-simulation/compare/0.195.0...0.196.0) (2025-11-12)
 
 
