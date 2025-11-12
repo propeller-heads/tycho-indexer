@@ -9690,7 +9690,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-integration-test"
-version = "0.1.0"
+version = "0.196.0"
 dependencies = [
  "actix-web",
  "alloy",
@@ -9776,7 +9776,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-test"
-version = "0.1.0"
+version = "0.196.0"
 dependencies = [
  "actix-web",
  "alloy",
