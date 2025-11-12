@@ -1,3 +1,10 @@
+## [0.196.2](https://github.com/propeller-heads/tycho-simulation/compare/0.196.1...0.196.2) (2025-11-12)
+
+
+### Bug Fixes
+
+* Fix UniswapV4 dynamic fee calculation ([cb28db7](https://github.com/propeller-heads/tycho-simulation/commit/cb28db7e73fe27b3fd3b596ba82cf9c52f24bcd5))
+
 ## [0.196.1](https://github.com/propeller-heads/tycho-simulation/compare/0.196.0...0.196.1) (2025-11-12)
 
 
