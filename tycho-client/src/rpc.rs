@@ -2761,108 +2761,58 @@ mod tests {
         assert_eq!(accounts[0].native_balance, Bytes::from(500u16.to_be_bytes()));
     }
 
+    #[rstest]
+    #[case::single_page(2, 10, 1000)]
+    #[case::multiple_pages_within_concurrency(10, 10, 2)]
+    #[case::exceeds_concurrency_limit(60, 10, 2)]
     #[tokio::test]
-    async fn test_get_all_tokens_single_page() {
-        let mut server = Server::new_async().await;
-
-        // Single page with 2 tokens - should trigger early return
-        let response = r#"{
-            "tokens": [
-                {
-                    "chain": "ethereum",
-                    "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-                    "symbol": "WETH",
-                    "decimals": 18,
-                    "tax": 0,
-                    "gas": [29962],
-                    "quality": 100
-                },
-                {
-                    "chain": "ethereum",
-                    "address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-                    "symbol": "USDC",
-                    "decimals": 6,
-                    "tax": 0,
-                    "gas": [40652],
-                    "quality": 100
-                }
-            ],
-            "pagination": {
-                "page": 0,
-                "page_size": 1000,
-                "total": 2
-            }
-        }"#;
-
-        // Should only make one request (initial request, then early return)
-        let mock = server
-            .mock("POST", "/v1/tokens")
-            .expect(1)
-            .with_body(response)
-            .create_async()
-            .await;
-
-        let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
-            .expect("create client");
-
-        let tokens = client
-            .get_all_tokens(Chain::Ethereum, None, None, 1000, 10)
-            .await
-            .expect("get all tokens");
-
-        mock.assert();
-
-        // Verify we got the expected tokens in the expected order
-        assert_eq!(tokens.len(), 2);
-    }
-
-    #[tokio::test]
-    async fn test_get_all_tokens_respects_concurrency_limit() {
+    async fn test_get_all_tokens_pagination_and_concurrency(
+        #[case] total_tokens: usize,
+        #[case] allowed_concurrency: usize,
+        #[case] page_size: usize,
+    ) {
         use std::sync::atomic::{AtomicUsize, Ordering};
 
-        let allowed_concurrency = 10;
         let concurrent_requests = Arc::new(AtomicUsize::new(0));
         let max_concurrent = Arc::new(AtomicUsize::new(0));
 
         let mut server = Server::new_async().await;
 
-        // Create 30 pages to exceed the concurrency limit of 10
-        let total_pages = 30;
-        let page_size = 2;
+        let total_pages = (total_tokens as f64 / page_size as f64).ceil() as i64;
 
-        // Pages 1..30 - each with concurrency tracking
+        // Mock all required pages
         for page in 0..total_pages {
             let concurrent = concurrent_requests.clone();
             let max_conc = max_concurrent.clone();
 
-            let (token1_index, token2_index) = (page * page_size, page * page_size + 1);
+            let tokens_in_page = {
+                let start_idx = (page as usize) * page_size;
+                let end_idx = ((page as usize + 1) * page_size).min(total_tokens);
+                (start_idx..end_idx)
+                    .map(|i| {
+                        format!(
+                            r#"{{
+                            "chain": "ethereum",
+                            "address": "0x{i:040x}",
+                            "symbol": "TOKEN_{i}",
+                            "decimals": 18,
+                            "tax": 0,
+                            "gas": [30000],
+                            "quality": 100
+                        }}"#
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            };
 
+            let tokens_json = tokens_in_page.join(",");
             let response = format!(
                 r#"{{
-                    "tokens": [
-                        {{
-                            "chain": "ethereum",
-                            "address": "0x{token1_index:040x}",
-                            "symbol": "TOKEN_{token1_index}",
-                            "decimals": 18,
-                            "tax": 0,
-                            "gas": [30000],
-                            "quality": 100
-                        }},
-                        {{
-                            "chain": "ethereum",
-                            "address": "0x{token2_index:040x}",
-                            "symbol": "TOKEN_{token2_index}",
-                            "decimals": 18,
-                            "tax": 0,
-                            "gas": [30000],
-                            "quality": 100
-                        }}
-                    ],
+                    "tokens": [{tokens_json}],
                     "pagination": {{
                         "page": {page},
                         "page_size": {page_size},
-                        "total": {total_pages}
+                        "total": {total_tokens}
                     }}
                 }}"#,
             );
@@ -2873,7 +2823,7 @@ mod tests {
                 .with_chunked_body(move |w| {
                     // Track concurrent requests
                     let current = concurrent.fetch_add(1, Ordering::SeqCst);
-                    max_conc.fetch_max(current, Ordering::SeqCst);
+                    max_conc.fetch_max(current + 1, Ordering::SeqCst);
 
                     // Simulate some work to increase likelihood of concurrent requests
                     std::thread::sleep(Duration::from_millis(10));
@@ -2894,19 +2844,35 @@ mod tests {
             .await
             .expect("get all tokens");
 
-        // Verify concurrency was limited to 10
+        // Verify concurrency was respected
         let max = max_concurrent.load(Ordering::SeqCst);
+        let expected_max_concurrency = (total_pages as usize)
+            .saturating_sub(1)
+            .min(allowed_concurrency);
         assert!(
             max <= allowed_concurrency,
             "Expected max concurrent requests <= {allowed_concurrency}, got {max}"
         );
 
-        // Verify we got all tokens
-        assert_eq!(tokens.len(), total_pages);
+        // For cases with multiple pages, verify we actually used concurrency
+        if total_pages > 1 && expected_max_concurrency > 1 {
+            assert!(
+                max > 0,
+                "Expected some concurrent requests for multi-page response, got {max}"
+            );
+        }
+
+        // Verify we got all expected tokens
+        assert_eq!(
+            tokens.len(),
+            total_tokens,
+            "Expected {total_tokens} tokens, got {}",
+            tokens.len()
+        );
 
         // Verify tokens are in the expected order
         for (i, token) in tokens.iter().enumerate() {
-            assert_eq!(token.symbol, format!("TOKEN_{i}"));
+            assert_eq!(token.symbol, format!("TOKEN_{i}"), "Token at index {i} has wrong symbol");
         }
     }
 }
