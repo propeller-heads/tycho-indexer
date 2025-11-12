@@ -1,3 +1,10 @@
+## [0.196.0](https://github.com/propeller-heads/tycho-simulation/compare/0.195.0...0.196.0) (2025-11-12)
+
+
+### Features
+
+* Create tycho-test lib ([2d70ab4](https://github.com/propeller-heads/tycho-simulation/commit/2d70ab45d02ed9bd6cafe8bafbfd78948b884e44))
+
 ## [0.195.0](https://github.com/propeller-heads/tycho-simulation/compare/0.194.0...0.195.0) (2025-11-11)
 
 
