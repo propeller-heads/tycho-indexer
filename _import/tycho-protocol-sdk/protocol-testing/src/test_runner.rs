@@ -841,7 +841,6 @@ impl TestRunner {
                                 (protocol_system):EXECUTOR_ADDRESS
                             }
                         });
-                        println!("this is the prootcol system: {protocol_system:?}");
                         let chain_model =
                             tycho_simulation::tycho_common::models::Chain::from(self.chain);
                         let (solution, calldata) = encode_swap(
@@ -854,12 +853,6 @@ impl TestRunner {
                             Some(executors_json.to_string()),
                             true,
                         )?;
-                        println!("🔍 Solution created: given_token={}, checked_token={}, token_in={}, token_out={}", 
-                            hex::encode(&solution.given_token), 
-                            hex::encode(&solution.checked_token),
-                            hex::encode(&token_in.address),
-                            hex::encode(&token_out.address)
-                        );
                         info!("Simulating swap at historical block {}", block.number());
 
                         // Prepare router overwrites data
