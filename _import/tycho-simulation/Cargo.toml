@@ -12,7 +12,7 @@ categories = ["finance", "cryptography::cryptocurrencies"]
 readme = "README.md"
 
 [workspace]
-members = ["tycho-integration-test", "tycho_simulation_py"]
+members = ["tycho-integration-test", "tycho-test", "tycho_simulation_py"]
 
 [workspace.dependencies]
 # Serialization/Deserialization

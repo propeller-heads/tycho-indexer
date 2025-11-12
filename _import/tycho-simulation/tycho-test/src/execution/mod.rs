@@ -10,15 +10,19 @@ use tokio_retry2::{
     strategy::{jitter, ExponentialFactorBackoff},
     Retry, RetryError,
 };
+use tycho_execution::encoding::evm::utils::bytes_to_address;
 use tycho_simulation::{
     evm::protocol::u256_num::u256_to_biguint, foundry_evm::revm::primitives::map::AddressHashMap,
 };
 
 use crate::{
     execution::{
-        encoding::detect_token_slots,
+        encoding::{detect_token_slots, setup_router_overwrites},
         execution_simulator::ExecutionSimulator,
-        models::{SimulationInput, SimulationResult, TychoExecutionInput, TychoExecutionResult},
+        models::{
+            RouterOverwritesData, SimulationInput, SimulationResult, TychoExecutionInput,
+            TychoExecutionResult,
+        },
     },
     RPCTools,
 };
@@ -35,6 +39,7 @@ pub async fn simulate_swap_transaction(
     execution_info: HashMap<String, TychoExecutionInput>,
     block: &Block,
     block_wait_time_secs: u64,
+    router_overwrites_data: Option<RouterOverwritesData>,
 ) -> Result<
     HashMap<String, TychoExecutionResult>,
     (miette::Error, Option<AddressHashMap<AccountOverride>>, Option<tenderly::OverwriteMetadata>),
@@ -59,6 +64,21 @@ pub async fn simulate_swap_transaction(
 
     let token_slots = detect_token_slots(rpc_tools, block, &token_addresses, &to_address).await;
 
+    let router_overwrites: Option<AddressHashMap<AccountOverride>> =
+        if let Some(router_overwrites_data) = router_overwrites_data {
+            Some(
+                setup_router_overwrites(
+                    bytes_to_address(&to_address).map_err(|e| (miette!("{e}"), None, None))?,
+                    router_overwrites_data.router_bytecode,
+                    router_overwrites_data.executor_bytecode,
+                )
+                .await
+                .map_err(|e| (e, None, None))?,
+            )
+        } else {
+            None
+        };
+
     for (simulation_id, info) in &execution_info {
         let request = match encoding::swap_request(&info.transaction, block) {
             Ok(request) => request,
@@ -73,7 +93,7 @@ pub async fn simulate_swap_transaction(
             }
         };
 
-        let (state_overwrites, metadata) = match token_slots.get(&info.solution.given_token) {
+        let (mut state_overwrites, metadata) = match token_slots.get(&info.solution.given_token) {
             Some(slots) => encoding::setup_user_overwrites(
                 &to_address,
                 &info.solution.given_token,
@@ -93,6 +113,9 @@ pub async fn simulate_swap_transaction(
                 continue;
             }
         };
+        if let Some(ref router_overwrites) = router_overwrites {
+            state_overwrites.extend(router_overwrites.clone());
+        }
 
         inputs.insert(
             simulation_id.clone(),
