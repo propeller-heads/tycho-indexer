@@ -94,7 +94,7 @@ fn main() -> Result<(), anyhow::Error> {
             run_spkg(global_args, run_args).map_err(|e| anyhow!(e))?;
         }
         Command::AnalyzeTokens(analyze_args) => {
-            run_tycho_ethereum(global_args, analyze_args).map_err(|e| anyhow!(e))?;
+            run_analyze_tokens(global_args, analyze_args).map_err(|e| anyhow!(e))?;
         }
         Command::Rpc => {
             run_rpc(global_args).map_err(|e| anyhow!(e))?;
@@ -613,7 +613,7 @@ async fn shutdown_handler(
 }
 
 #[tokio::main]
-async fn run_tycho_ethereum(
+async fn run_analyze_tokens(
     global_args: GlobalArgs,
     analyzer_args: AnalyzeTokenArgs,
 ) -> Result<(), anyhow::Error> {
@@ -623,7 +623,7 @@ async fn run_tycho_ethereum(
         .build()
         .await?;
     let cached_gw = Arc::new(cached_gw);
-    let analyze_thread = analyze_tokens(analyzer_args, cached_gw.clone());
+    let analyze_thread = analyze_tokens(global_args, analyzer_args, cached_gw.clone());
     select! {
          res = analyze_thread => {
             res?;
