@@ -1,11 +1,9 @@
 mod adapter_builder;
 mod config;
-mod encoding;
 mod execution;
 mod rpc;
 mod state_registry;
 mod test_runner;
-mod traces;
 mod tycho_rpc;
 mod tycho_runner;
 mod utils;
@@ -65,7 +63,6 @@ impl FullTestCommand {
             args.db_url,
             args.rpc_url,
             args.vm_simulation_traces,
-            args.execution_traces,
         )?
         .run()
     }
@@ -93,7 +90,6 @@ impl RangeTestCommand {
             args.db_url,
             args.rpc_url,
             args.vm_simulation_traces,
-            args.execution_traces,
         )?
         .run()
     }

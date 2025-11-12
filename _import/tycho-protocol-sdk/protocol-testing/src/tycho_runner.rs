@@ -183,7 +183,7 @@ impl TychoRunner {
 
 pub fn get_default_endpoint(chain: &Chain) -> Option<String> {
     match chain {
-        Chain::Ethereum => Some("https://mainnet.streamingfast.io:443".to_string()),
+        Chain::Ethereum => Some("https://mainnet.eth.streamingfast.io:443".to_string()),
         Chain::Base => Some("https://base-mainnet.streamingfast.io:443".to_string()),
         Chain::Unichain => Some("https://mainnet.unichain.streamingfast.io:443".to_string()),
         _ => None,

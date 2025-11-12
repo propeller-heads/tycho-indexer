@@ -20,6 +20,7 @@ use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive, Zero};
 use postgres::{Client, Error, NoTls};
 use regex::Regex;
+use serde_json::json;
 use tokio::runtime::Runtime;
 use tracing::{debug, error, info, warn};
 use tycho_execution::encoding::evm::utils::bytes_to_address;
@@ -33,11 +34,18 @@ use tycho_simulation::{
         Bytes,
     },
 };
+use tycho_test::{
+    execution::{
+        encoding::{encode_swap, EXECUTOR_ADDRESS},
+        models::{TychoExecutionInput, TychoExecutionResult},
+        simulate_swap_transaction,
+    },
+    RPCTools,
+};
 
 use crate::{
     adapter_builder::AdapterContractBuilder,
     config::{IntegrationTest, IntegrationTestsConfig, ProtocolComponentWithTestConfig},
-    encoding::encode_swap,
     execution,
     rpc::RPCProvider,
     state_registry::register_decoder_for_protocol,
@@ -89,7 +97,6 @@ impl TestRunner {
         db_url: String,
         rpc_url: String,
         vm_simulation_traces: bool,
-        execution_traces: bool,
     ) -> miette::Result<Self> {
         let base_protocol = CLONE_TO_BASE_PROTOCOL
             .get(protocol.as_str())
@@ -116,7 +123,7 @@ impl TestRunner {
         };
         let config_file_path = substreams_path.join(&config_file_name);
 
-        let rpc_provider = RPCProvider::new(rpc_url, execution_traces);
+        let rpc_provider = RPCProvider::new(rpc_url);
         let runtime = Runtime::new().into_diagnostic()?;
 
         Ok(Self {
@@ -374,7 +381,13 @@ impl TestRunner {
         }
 
         // Step 3: Run Tycho Simulation and Execution
-        self.simulate_and_execute(&update, &component_tokens, &block, &test.expected_components)?;
+        self.simulate_and_execute(
+            &update,
+            &component_tokens,
+            &block,
+            &test.expected_components,
+            &config.protocol_system,
+        )?;
 
         Ok(())
     }
@@ -723,6 +736,7 @@ impl TestRunner {
         component_tokens: &HashMap<String, Vec<Token>>,
         block: &Block,
         expected_components: &[ProtocolComponentWithTestConfig],
+        protocol_system: &String,
     ) -> miette::Result<()> {
         let skip_simulation: HashSet<_> = expected_components
             .iter()
@@ -734,6 +748,12 @@ impl TestRunner {
             .filter(|c| c.skip_execution)
             .map(|c| c.base.id.to_lowercase())
             .collect();
+
+        // Create RPCTools once for all executions
+        let rpc_tools = self.runtime.block_on(async {
+            let chain_model = tycho_simulation::tycho_common::models::Chain::from(self.chain);
+            RPCTools::new(self.rpc_provider.url.as_ref(), &chain_model).await
+        })?;
 
         for (id, state) in update.states.iter() {
             if skip_simulation.contains(id) {
@@ -816,25 +836,77 @@ impl TestRunner {
                         }
 
                         let protocol_component = update.new_pairs.get(id).unwrap();
-
-                        let (calldata, solution) = encode_swap(
+                        let executors_json = json!({
+                            "ethereum": {
+                                (protocol_system):EXECUTOR_ADDRESS
+                            }
+                        });
+                        println!("this is the prootcol system: {protocol_system:?}");
+                        let chain_model =
+                            tycho_simulation::tycho_common::models::Chain::from(self.chain);
+                        let (solution, calldata) = encode_swap(
                             protocol_component,
-                            &token_in.address,
-                            &token_out.address,
-                            &amount_in,
-                            &amount_out_result.amount,
+                            None,
+                            token_in,
+                            token_out,
+                            amount_in.clone(),
+                            chain_model,
+                            Some(executors_json.to_string()),
+                            true,
                         )?;
-
+                        println!("🔍 Solution created: given_token={}, checked_token={}, token_in={}, token_out={}", 
+                            hex::encode(&solution.given_token), 
+                            hex::encode(&solution.checked_token),
+                            hex::encode(&token_in.address),
+                            hex::encode(&token_out.address)
+                        );
                         info!("Simulating swap at historical block {}", block.number());
-                        // Simulate the trade using debug_traceCall with overwrites
-                        let execution_amount_out =
-                            self.runtime
-                                .block_on(execution::simulate_trade_with_eth_call(
-                                    &self.rpc_provider,
-                                    &calldata,
-                                    &solution,
-                                    block,
-                                ));
+
+                        // Prepare router overwrites data
+                        let router_overwrites_data =
+                            Some(execution::create_router_overwrites_data(protocol_system)?);
+
+                        // Create execution input
+                        let simulation_id = format!("test_{}", protocol_component.id);
+                        let mut execution_info = HashMap::new();
+                        execution_info.insert(
+                            simulation_id.clone(),
+                            TychoExecutionInput {
+                                solution: solution.clone(),
+                                transaction: calldata.clone(),
+                                expected_amount_out: amount_out_result.amount.clone(),
+                                protocol_system: protocol_system.to_string(),
+                                component_id: protocol_component.id.to_string(),
+                                token_in: token_in.symbol.clone(),
+                                token_out: token_out.symbol.clone(),
+                            },
+                        );
+
+                        let execution_results = self
+                            .runtime
+                            .block_on(simulate_swap_transaction(
+                                &rpc_tools,
+                                execution_info,
+                                block,
+                                0,
+                                router_overwrites_data,
+                            ));
+
+                        let execution_amount_out = match execution_results {
+                            Ok(mut results) => match results.remove(&simulation_id) {
+                                Some(TychoExecutionResult::Success { amount_out, .. }) => {
+                                    Ok(amount_out)
+                                }
+                                Some(TychoExecutionResult::Revert { reason, .. }) => {
+                                    Err(miette::miette!("Transaction reverted: {}", reason))
+                                }
+                                Some(TychoExecutionResult::Failed { error_msg }) => {
+                                    Err(miette::miette!("Execution failed: {}", error_msg))
+                                }
+                                None => Err(miette::miette!("No result found for simulation")),
+                            },
+                            Err((error, _, _)) => Err(error),
+                        };
 
                         match execution_amount_out {
                             Ok(amount_out) => {
@@ -852,9 +924,9 @@ impl TestRunner {
 
                                 let slippage: BigRational =
                                     BigRational::new(diff.abs(), BigInt::from(amount_out));
-                                if slippage.to_f64() > Some(0.05) {
+                                if slippage.to_f64() > Some(0.005) {
                                     return Err(miette!(
-                                    "Execution amount and simulation amount differ more than 5%!"
+                                    "Execution amount and simulation amount differ more than 0.05%!"
                                 ));
                                 }
                             }
@@ -993,7 +1065,6 @@ mod tests {
             "test-protocol".to_string(),
             "".to_string(),
             rpc_url,
-            false,
             false,
         )
         .unwrap()
