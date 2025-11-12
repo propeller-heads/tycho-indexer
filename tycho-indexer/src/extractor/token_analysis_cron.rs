@@ -16,9 +16,10 @@ use tycho_common::{
 };
 use tycho_ethereum::token_analyzer::trace_call::TraceCallDetector;
 
-use crate::cli::AnalyzeTokenArgs;
+use crate::cli::{AnalyzeTokenArgs, GlobalArgs};
 
 pub async fn analyze_tokens(
+    global_args: GlobalArgs,
     analyze_args: AnalyzeTokenArgs,
     gw: Arc<dyn ProtocolGateway + Send + Sync>,
 ) -> anyhow::Result<()> {
@@ -46,7 +47,7 @@ pub async fn analyze_tokens(
             .map(|chunk| {
                 analyze_batch(
                     analyze_args.chain,
-                    analyze_args.rpc_url.clone(),
+                    global_args.rpc_url.clone(),
                     chunk.to_vec(),
                     sem.clone(),
                     gw.clone(),
@@ -199,8 +200,8 @@ mod test {
             concurrency: 10,
             update_batch_size: 100,
             fetch_batch_size: 100,
-            rpc_url: rpc,
         };
+        let global_args = GlobalArgs { rpc_url: rpc, ..Default::default() };
         let mut gw = testing::MockGateway::new();
         gw.expect_get_tokens()
             .returning(|_, _, _, _, _| {
@@ -301,7 +302,7 @@ mod test {
                 Box::pin(async { Ok(()) })
             });
 
-        analyze_tokens(args, Arc::new(gw))
+        analyze_tokens(global_args, args, Arc::new(gw))
             .await
             .expect("analyze tokens failed");
     }
