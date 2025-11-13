@@ -22,10 +22,7 @@ use tracing_subscriber::EnvFilter;
 use tycho_common::simulation::protocol_sim::ProtocolSim;
 use tycho_simulation::{
     evm::protocol::uniswap_v2::state::UniswapV2State,
-    protocol::{
-        models::ProtocolComponent,
-        validation::{batch_validate_components, Validator},
-    },
+    protocol::models::ProtocolComponent,
     rfq::protocols::hashflow::{client::HashflowClient, state::HashflowState},
     tycho_common::models::Chain,
     utils::load_all_tokens,
@@ -40,6 +37,7 @@ use tycho_test::{
         protocol_stream_processor::ProtocolStreamProcessor,
         rfq_stream_processor::RFQStreamProcessor, StreamUpdate, UpdateType,
     },
+    validation::{batch_validate_components, Validator},
 };
 
 #[derive(Parser, Clone)]

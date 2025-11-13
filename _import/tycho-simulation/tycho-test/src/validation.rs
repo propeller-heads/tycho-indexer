@@ -11,8 +11,7 @@ use alloy::{
 };
 use async_trait::async_trait;
 use tycho_common::{models::token::Token, simulation::protocol_sim::ProtocolSim, Bytes};
-
-use crate::evm::protocol::uniswap_v2::state::UniswapV2State;
+use tycho_simulation::evm::protocol::uniswap_v2::state::UniswapV2State;
 
 sol! {
     #[sol(rpc)]
@@ -224,11 +223,8 @@ impl Validator for UniswapV2State {
 
         // Encode balanceOf calls for both tokens
         let call_0 = IERC20::balanceOfCall { account: pool_address }.abi_encode();
-
         let call_1 = IERC20::balanceOfCall { account: pool_address }.abi_encode();
-
         let calls = vec![(token_0_address, call_0.into()), (token_1_address, call_1.into())];
-
         Ok(calls)
     }
 
