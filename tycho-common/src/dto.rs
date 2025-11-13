@@ -1244,6 +1244,8 @@ pub struct ProtocolComponentsRequestBody {
     pub pagination: PaginationParams,
 }
 
+impl_pagination_limits!(ProtocolComponentsRequestBody, compressed = 2550, uncompressed = 500);
+
 // Implement PartialEq where tvl is considered equal if the difference is less than 1e-6
 impl PartialEq for ProtocolComponentsRequestBody {
     fn eq(&self, other: &Self) -> bool {
@@ -1316,8 +1318,6 @@ impl ProtocolComponentsRequestBody {
         Self { protocol_system, component_ids, tvl_gt, chain, pagination }
     }
 }
-
-impl_pagination_limits!(ProtocolComponentsRequestBody, compressed = 2550, uncompressed = 500);
 
 #[deprecated(note = "Use ProtocolComponentsRequestBody instead")]
 #[derive(Serialize, Deserialize, Default, Debug, IntoParams)]
@@ -1429,6 +1429,8 @@ pub struct ProtocolStateRequestBody {
     #[serde(default)]
     pub pagination: PaginationParams,
 }
+
+impl_pagination_limits!(ProtocolStateRequestBody, compressed = 360, uncompressed = 100);
 
 impl ProtocolStateRequestBody {
     pub fn id_filtered<I, T>(ids: I) -> Self
@@ -1549,8 +1551,6 @@ impl<'de> Deserialize<'de> for ProtocolStateRequestBody {
         )
     }
 }
-
-impl_pagination_limits!(ProtocolStateRequestBody, compressed = 360, uncompressed = 100);
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, DeepSizeOf)]
 pub struct ProtocolStateRequestResponse {
