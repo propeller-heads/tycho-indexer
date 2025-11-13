@@ -71,6 +71,7 @@
 //!         "tycho-beta.propellerheads.xyz",
 //!         false,
 //!         Some("sampletoken"),
+//!         true,
 //!         Chain::Ethereum,
 //!         None,
 //!         None,
@@ -285,6 +286,14 @@ impl ProtocolStreamBuilder {
     /// This is not recommended for production use.
     pub fn no_tls(mut self, no_tls: bool) -> Self {
         self.stream_builder = self.stream_builder.no_tls(no_tls);
+        self
+    }
+
+    /// Disable compression for the connection.
+    pub fn disable_compression(mut self) -> Self {
+        self.stream_builder = self
+            .stream_builder
+            .disable_compression();
         self
     }
 

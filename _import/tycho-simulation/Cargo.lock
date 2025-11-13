@@ -2676,6 +2676,8 @@ dependencies = [
  "compression-core",
  "flate2",
  "memchr",
+ "zstd",
+ "zstd-safe",
 ]
 
 [[package]]
@@ -9585,9 +9587,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.107.0"
+version = "0.109.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa775b8c613a132254ba7fe1e780ff6316aa40e28a6948c132e70da787dd8488"
+checksum = "6d306d53a1805386302b76ac7c1b1c605832c1c9351365caf11ed37e2d7c250e"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9610,13 +9612,14 @@ dependencies = [
  "tracing-subscriber 0.3.20",
  "tycho-common",
  "uuid 1.18.1",
+ "zstd",
 ]
 
 [[package]]
 name = "tycho-common"
-version = "0.107.0"
+version = "0.109.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fc3b3d860b7865855a114d767962e424a956fb19538bff740a05ef97c35bfd1"
+checksum = "811c6b040b942d9e8b0697fbfaa12bbfbf2e0a447f99fed1d229f0f763c44f93"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9640,9 +9643,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-ethereum"
-version = "0.107.0"
+version = "0.109.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddef1edc1d6805677689653971443c885e6a05e46eb55fdaf0a664128c0cc552"
+checksum = "f1aaae8bf530963c13516bc0c2663662c3da816731a78845fe621a1828a1a47e"
 dependencies = [
  "alloy",
  "alloy-rpc-types-trace",
