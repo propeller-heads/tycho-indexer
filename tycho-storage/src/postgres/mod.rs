@@ -128,15 +128,24 @@
 //! into a single transaction. This guarantees preservation of valid state
 //! throughout the application lifetime, even if the process panics during
 //! database operations.
-use std::{collections::HashMap, hash::Hash, ops::Deref, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Write,
+    hash::Hash,
+    ops::Deref,
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
 
-use chrono::NaiveDateTime;
+use chrono::{Days, NaiveDateTime, Utc};
 use diesel::prelude::*;
 use diesel_async::{
     pooled_connection::{deadpool::Pool, AsyncDieselConnectionManager},
     AsyncPgConnection, RunQueryDsl,
 };
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use itertools::Itertools;
 use tracing::{debug, info};
 use tycho_common::{
     models::{Chain, TxHash},
@@ -706,6 +715,87 @@ fn run_migrations(db_url: &str) {
     let mut conn = PgConnection::establish(db_url).expect("Connection to database should succeed");
     conn.run_pending_migrations(MIGRATIONS)
         .expect("migrations should execute without errors");
+}
+
+#[derive(diesel::QueryableByName, Debug)]
+struct Partition {
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    tablename: String,
+}
+
+pub async fn ensure_partitions_exist(
+    pool: &diesel_async::pooled_connection::deadpool::Pool<diesel_async::AsyncPgConnection>,
+    retention_horizon: chrono::NaiveDateTime,
+) -> Result<(), tycho_common::storage::StorageError> {
+    const PARTITIONED_TABLES: &[&str] =
+        &["protocol_state", "contract_storage", "component_balance"];
+
+    let mut all_missing: HashMap<String, Vec<String>> = HashMap::new();
+    let mut conn = pool
+        .get()
+        .await
+        .map_err(|e| tycho_common::storage::StorageError::Unexpected(e.to_string()))?;
+
+    for &table_name in PARTITIONED_TABLES {
+        let pattern = format!("{}_p%", table_name);
+
+        let existing_partitions_result: Vec<Partition> = diesel::sql_query(
+            "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE $1",
+        )
+        .bind::<diesel::sql_types::Text, _>(&pattern)
+        .get_results(&mut conn)
+        .await
+        .map_err(|e| tycho_common::storage::StorageError::Unexpected(e.to_string()))?;
+
+        let existing_partitions: HashSet<String> = existing_partitions_result
+            .into_iter()
+            .map(|p| p.tablename)
+            .collect();
+
+        let mut missing_for_table = Vec::new();
+        let mut current_date = retention_horizon.date();
+        let end_date = Utc::now().date_naive();
+
+        while current_date <= end_date {
+            let expected_partition = format!("{}_p{}", table_name, current_date.format("%Y_%m_%d"));
+
+            if !existing_partitions.contains(&expected_partition) {
+                missing_for_table.push(
+                    current_date
+                        .format("%Y-%m-%d")
+                        .to_string(),
+                );
+            }
+
+            current_date = current_date
+                .succ_opt()
+                .unwrap_or(end_date + Days::new(1));
+        }
+
+        if !missing_for_table.is_empty() {
+            all_missing.insert(table_name.to_string(), missing_for_table);
+        }
+    }
+
+    if !all_missing.is_empty() {
+        let mut error_message = String::from(
+            "Database is missing required partitions! This will cause storage errors.\n",
+        );
+        for (table, missing) in all_missing {
+            let dates = missing.iter().join(", ");
+            writeln!(&mut error_message, "Missing partitions for '{}': [{}]", table, dates)
+                .unwrap();
+        }
+        write!(
+            &mut error_message,
+            "Please run the pg_partman maintenance procedure to create the missing partitions."
+        )
+        .unwrap();
+
+        panic!("{}", error_message);
+    }
+
+    Ok(())
 }
 
 // TODO: add cfg(test) once we have better mocks to be used in indexer crate

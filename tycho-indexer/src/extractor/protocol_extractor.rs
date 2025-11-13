@@ -2623,6 +2623,7 @@ mod test {
 /// between this component and the actual db interactions
 #[cfg(test)]
 mod test_serial_db {
+    use chrono::Utc;
     use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection};
     use mockall::mock;
     use tycho_common::{
@@ -2768,6 +2769,7 @@ mod test_serial_db {
         let (cached_gw, _jh) = GatewayBuilder::new(db_url.as_str())
             .set_chains(&[Chain::Ethereum])
             .set_protocol_systems(&["test".to_string()])
+            .set_retention_horizon(Utc::now().naive_utc() + Duration::days(1))
             .build()
             .await
             .expect("failed to build postgres gateway");
@@ -3167,6 +3169,7 @@ mod test_serial_db {
             let (cached_gw, _gw_writer_thread) = GatewayBuilder::new(database_url.as_str())
                 .set_chains(&[Chain::Ethereum])
                 .set_protocol_systems(&["native_protocol_system".to_string()])
+                .set_retention_horizon(Utc::now().naive_utc() + Duration::days(1))
                 .build()
                 .await
                 .unwrap();
@@ -3352,6 +3355,7 @@ mod test_serial_db {
             let (cached_gw, _gw_writer_thread) = GatewayBuilder::new(database_url.as_str())
                 .set_chains(&[Chain::Ethereum])
                 .set_protocol_systems(&["vm_protocol_system".to_string()])
+                .set_retention_horizon(Utc::now().naive_utc() + Duration::days(1))
                 .build()
                 .await
                 .unwrap();
@@ -3561,6 +3565,7 @@ mod test_serial_db {
             let (cached_gw, _gw_writer_thread) = GatewayBuilder::new(database_url.as_str())
                 .set_chains(&[Chain::Ethereum])
                 .set_protocol_systems(&["vm_protocol_system".to_string()])
+                .set_retention_horizon(Utc::now().naive_utc() + Duration::days(1))
                 .build()
                 .await
                 .unwrap();
