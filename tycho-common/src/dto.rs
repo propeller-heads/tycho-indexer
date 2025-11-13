@@ -1666,6 +1666,8 @@ pub struct ComponentTvlRequestBody {
     pub pagination: PaginationParams,
 }
 
+impl_pagination_limits!(ComponentTvlRequestBody, compressed = 100, uncompressed = 100);
+
 impl ComponentTvlRequestBody {
     pub fn system_filtered(system: &str, chain: Chain) -> Self {
         Self {
