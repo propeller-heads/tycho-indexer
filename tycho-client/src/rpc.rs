@@ -43,7 +43,7 @@ use crate::{
 };
 
 /// Suggested concurrency level for RPC clients.
-pub const RPC_CLIENT_SUGGESTED_CONCURRENCY: usize = 4;
+pub const RPC_CLIENT_CONCURRENCY: usize = 4;
 
 /// Request body for fetching a snapshot of protocol states and VM storage.
 ///
@@ -2556,7 +2556,7 @@ mod tests {
         );
 
         let response = client
-            .get_snapshots(&request, 100, RPC_CLIENT_SUGGESTED_CONCURRENCY)
+            .get_snapshots(&request, 100, RPC_CLIENT_CONCURRENCY)
             .await
             .expect("get snapshots");
 
@@ -2604,7 +2604,7 @@ mod tests {
         );
 
         let response = client
-            .get_snapshots(&request, 100, RPC_CLIENT_SUGGESTED_CONCURRENCY)
+            .get_snapshots(&request, 100, RPC_CLIENT_CONCURRENCY)
             .await
             .expect("get snapshots");
 
@@ -2677,7 +2677,7 @@ mod tests {
         .include_tvl(false);
 
         let response = client
-            .get_snapshots(&request, 100, RPC_CLIENT_SUGGESTED_CONCURRENCY)
+            .get_snapshots(&request, 100, RPC_CLIENT_CONCURRENCY)
             .await
             .expect("get snapshots");
 

@@ -7,7 +7,7 @@ use tycho_common::{
 };
 
 use crate::{
-    rpc::{RPCClient, RPC_CLIENT_SUGGESTED_CONCURRENCY},
+    rpc::{RPCClient, RPC_CLIENT_CONCURRENCY},
     RPCError,
 };
 
@@ -145,7 +145,7 @@ where
         };
         self.components = self
             .rpc_client
-            .get_protocol_components_paginated(&body, 500, RPC_CLIENT_SUGGESTED_CONCURRENCY)
+            .get_protocol_components_paginated(&body, 500, RPC_CLIENT_CONCURRENCY)
             .await?
             .protocol_components
             .into_iter()
