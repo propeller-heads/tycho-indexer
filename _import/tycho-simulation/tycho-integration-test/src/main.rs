@@ -3,6 +3,7 @@ mod metrics;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
+    str::FromStr,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -20,7 +21,11 @@ use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 use tycho_common::simulation::protocol_sim::ProtocolSim;
 use tycho_simulation::{
-    protocol::{models::ProtocolComponent, validation::try_validate},
+    evm::protocol::uniswap_v2::state::UniswapV2State,
+    protocol::{
+        models::ProtocolComponent,
+        validation::{batch_validate_components, Validator},
+    },
     rfq::protocols::hashflow::{client::HashflowClient, state::HashflowState},
     tycho_common::models::Chain,
     utils::load_all_tokens,
@@ -313,10 +318,11 @@ async fn process_update(
         metrics::record_protocol_sync_state(protocol, sync_state);
     }
 
-    // Process updated states in parallel
-    let semaphore = Arc::new(Semaphore::new(cli.parallel_simulations as usize));
-    let mut tasks = Vec::new();
+    // Collect all components to process (both updated and stale) for batch validation
+    let mut components_to_process: Vec<(String, ProtocolComponent, Box<dyn ProtocolSim>)> =
+        Vec::new();
 
+    // Collect updated components
     for (id, state) in update
         .update
         .states
@@ -332,9 +338,7 @@ async fn process_update(
                 match states.get(id) {
                     Some(comp) => comp.clone(),
                     None => {
-                        warn!(id=%id, "Component not found in cached protocol pairs. Potential causes: \
-                        there was an error decoding the component, the component was evicted from the cache, \
-                        or the component was never added to the cache. Skipping...");
+                        warn!(id=%id, "Component not found in cached protocol pairs. Skipping...");
                         continue;
                     }
                 }
@@ -342,35 +346,15 @@ async fn process_update(
             UpdateType::Rfq => match update.update.new_pairs.get(id) {
                 Some(comp) => comp.clone(),
                 None => {
-                    warn!(id=%id, "Component not found in update's new pairs. Potential cause: \
-                    the `states` and `new_pairs` lists don't contain the same items. Skipping...");
+                    warn!(id=%id, "Component not found in update's new pairs. Skipping...");
                     continue;
                 }
             },
         };
-        let block = block.clone();
-        let state_id = id.clone();
-        let state = state.clone_box();
-        let provider = Arc::new(rpc_tools.provider.clone());
-        let permit = semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .into_diagnostic()
-            .wrap_err("Failed to acquire permit")?;
-
-        let task = tokio::spawn(async move {
-            let simulation_id = generate_simulation_id(&component.protocol_system, &state_id);
-            let result =
-                process_state(&simulation_id, chain, component, &block, state_id, state, provider)
-                    .await;
-            drop(permit);
-            result
-        });
-        tasks.push(task);
+        components_to_process.push((id.clone(), component, state.clone_box()));
     }
 
-    // Select states that were not updated in this block to test simulation and execution
+    // Collect stale components (not updated in this block)
     let selected_ids = {
         let current_state = tycho_state
             .read()
@@ -378,11 +362,15 @@ async fn process_update(
 
         let mut all_selected_ids = Vec::new();
 
-        // Add component IDs from always_test_components that are not in the current update
         for component_id in &cli.always_test_components {
-            if !update.update.states.keys().contains(component_id)
-                // Ensure that the component exists in the Tycho DB
-                && current_state.components.contains_key(component_id)
+            if !update
+                .update
+                .states
+                .keys()
+                .contains(component_id) &&
+                current_state
+                    .components
+                    .contains_key(component_id)
             {
                 all_selected_ids.push(component_id.clone());
             }
@@ -392,7 +380,6 @@ async fn process_update(
             .component_ids_by_protocol
             .values()
         {
-            // Filter out IDs that are in the current update or already in all_selected_ids
             let available_ids: Vec<_> = component_ids
                 .iter()
                 .filter(|id| {
@@ -414,13 +401,13 @@ async fn process_update(
         all_selected_ids
     };
 
-    for id in selected_ids {
+    for id in &selected_ids {
         let (component, state) = {
             let current_state = tycho_state
                 .read()
                 .map_err(|e| miette!("Failed to acquire read lock on Tycho state: {e}"))?;
 
-            match (current_state.components.get(&id), current_state.states.get(&id)) {
+            match (current_state.components.get(id), current_state.states.get(id)) {
                 (Some(comp), Some(state)) => (comp.clone(), state.clone()),
                 (None, _) => {
                     error!(id=%id, "Component not found in saved protocol components.");
@@ -432,11 +419,70 @@ async fn process_update(
                 }
             }
         };
+        components_to_process.push((id.clone(), component, state.clone_box()));
+    }
 
+    let mut validation_results: HashMap<String, bool> = HashMap::new();
+
+    // Collect components that implement Validator for batch validation
+    let mut validator_components: Vec<(
+        &dyn Validator,
+        tycho_common::Bytes,
+        Vec<tycho_common::models::token::Token>,
+    )> = Vec::new();
+
+    for (id, component, state) in &components_to_process {
+        let component_id = tycho_common::Bytes::from_str(id)
+            .unwrap_or_else(|_| tycho_common::Bytes::from(id.as_bytes()));
+
+        // Try to downcast to concrete types that implement Validator
+        // The downcast_ref::<T>() method requires T to be a concrete, Sized type.
+        // Trait objects like dyn Validator are !Sized (unsized) - their size isn't known at
+        // compile time, so you can't downcast to them. For this reason, we must add protocol types
+        // here as they implement Validator.
+        // TODO: Come up with better solution.
+        if let Some(uniswap_v2) = state
+            .as_any()
+            .downcast_ref::<UniswapV2State>()
+        {
+            validator_components.push((
+                uniswap_v2 as &dyn Validator,
+                component_id,
+                component.tokens.clone(),
+            ));
+        }
+    }
+
+    // Batch validate all components of this block in a single call
+    if !validator_components.is_empty() {
+        let results =
+            batch_validate_components(&cli.rpc_url, &validator_components, block.header.number)
+                .await;
+
+        for (i, result) in results.iter().enumerate() {
+            let component_id = &validator_components[i].1;
+            match result {
+                Ok(passed) => {
+                    validation_results.insert(component_id.to_string(), *passed);
+                }
+                Err(e) => {
+                    error!(
+                        component_id = %component_id,
+                        error = %e,
+                        "Error validating component"
+                    );
+                }
+            }
+        }
+    }
+
+    // Process all components (updated and stale) in parallel
+    let semaphore = Arc::new(Semaphore::new(cli.parallel_simulations as usize));
+    let mut tasks = Vec::new();
+
+    for (id, component, state) in components_to_process {
         let block = block.clone();
-        let state_id = id.clone();
-        let state = state.clone_box();
-        let provider = Arc::new(rpc_tools.provider.clone());
+        let validation_result = validation_results.get(&id).copied();
         let permit = semaphore
             .clone()
             .acquire_owned()
@@ -445,10 +491,17 @@ async fn process_update(
             .wrap_err("Failed to acquire permit")?;
 
         let task = tokio::spawn(async move {
-            let simulation_id = generate_simulation_id(&component.protocol_system, &state_id);
-            let result =
-                process_state(&simulation_id, chain, component, &block, state_id, state, provider)
-                    .await;
+            let simulation_id = generate_simulation_id(&component.protocol_system, &id);
+            let result = process_state(
+                &simulation_id,
+                chain,
+                component,
+                &block,
+                id,
+                state,
+                validation_result,
+            )
+            .await;
             drop(permit);
             result
         });
@@ -551,7 +604,7 @@ async fn process_state(
     block: &Block,
     state_id: String,
     state: Box<dyn ProtocolSim>,
-    rpc_provider: Arc<alloy::providers::RootProvider<alloy::network::Ethereum>>,
+    validation_result: Option<bool>,
 ) -> HashMap<String, TychoExecutionInput> {
     let tokens_len = component.tokens.len();
     if tokens_len < 2 {
@@ -559,36 +612,18 @@ async fn process_state(
         return HashMap::new();
     }
 
-    // Validate state against on-chain data if the type implements Validator
-    if let Some(result) = try_validate(
-        state.as_ref(),
-        rpc_provider.clone(),
-        block.header.number,
-        &component.id,
-        &component.tokens,
-    )
-    .await
-    {
-        match result {
-            Ok(true) => {
-                info!(
-                    component_id = ?component.id,
-                    "State validation passed"
-                );
-            }
-            Ok(false) => {
-                warn!(
-                    component_id = ?component.id,
-                    "State validation failed"
-                );
-            }
-            Err(e) => {
-                error!(
-                    component_id = ?component.id,
-                    error = %e,
-                    "Error validating state"
-                );
-            }
+    // Log validation result if it was computed
+    if let Some(passed) = validation_result {
+        if passed {
+            info!(
+                component_id = ?component.id,
+                "State validation passed"
+            );
+        } else {
+            error!(
+                component_id = ?component.id,
+                "State validation failed"
+            );
         }
     }
     // Get all the possible swap directions
