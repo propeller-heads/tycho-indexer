@@ -97,7 +97,7 @@ fn main() -> Result<(), anyhow::Error> {
             run_spkg(global_args, run_args).map_err(|e| anyhow!(e))?;
         }
         Command::AnalyzeTokens(analyze_args) => {
-            run_tycho_ethereum(global_args, analyze_args).map_err(|e| anyhow!(e))?;
+            run_analyze_tokens(global_args, analyze_args).map_err(|e| anyhow!(e))?;
         }
         Command::Rpc => {
             run_rpc(global_args).map_err(|e| anyhow!(e))?;
@@ -620,7 +620,7 @@ async fn shutdown_handler(
 }
 
 #[tokio::main]
-async fn run_tycho_ethereum(
+async fn run_analyze_tokens(
     global_args: GlobalArgs,
     analyzer_args: AnalyzeTokenArgs,
 ) -> Result<(), anyhow::Error> {

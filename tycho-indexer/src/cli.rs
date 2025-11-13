@@ -37,6 +37,7 @@ pub enum Command {
 }
 
 #[derive(Parser, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Default))]
 #[command(version, about, long_about = None)]
 pub struct GlobalArgs {
     /// PostgresDB Connection Url
@@ -179,9 +180,6 @@ impl RunSpkgArgs {
 
 #[derive(Args, Debug, Clone, PartialEq, Eq)]
 pub struct AnalyzeTokenArgs {
-    /// Ethereum node rpc url
-    #[clap(env, long)]
-    pub rpc_url: String,
     /// Blockchain to execute analysis for.
     #[clap(long)]
     pub chain: Chain,

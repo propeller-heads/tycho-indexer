@@ -1,3 +1,13 @@
+## [0.109.2](https://github.com/propeller-heads/tycho-indexer/compare/0.109.1...0.109.2) (2025-11-13)
+
+
+### Bug Fixes
+
+* prevent reqwest enabling compression by default ([1f55643](https://github.com/propeller-heads/tycho-indexer/commit/1f55643fc90d2e2fd2afad88d728968c340cf5ad))
+* prevent reqwest enabling compression by default ([#772](https://github.com/propeller-heads/tycho-indexer/issues/772)) ([052f5d0](https://github.com/propeller-heads/tycho-indexer/commit/052f5d0e8f1587dd9d7fa7c3bbde43142632bc8c))
+
+## [0.109.1](https://github.com/propeller-heads/tycho-indexer/compare/0.109.0...0.109.1) (2025-11-12)
+
 ## [0.109.0](https://github.com/propeller-heads/tycho-indexer/compare/0.108.0...0.109.0) (2025-11-07)
 
 

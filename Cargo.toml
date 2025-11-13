@@ -10,7 +10,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.109.0"
+version = "0.109.2"
 repository = "https://github.com/propeller-heads/tycho-indexer"
 homepage = "https://www.propellerheads.xyz/tycho"
 documentation = "https://docs.propellerheads.xyz/tycho"
@@ -45,10 +45,10 @@ uuid = { version = "1.4.1", features = [
     "macro-diagnostics",
 ] }
 hex = "0.4.3"
-tycho-common = { path = "./tycho-common", version = "0.109.0" }
-tycho-storage = { path = "./tycho-storage", version = "0.109.0" }
-tycho-ethereum = { path = "./tycho-ethereum", version = "0.109.0" }
-tycho-client = { path = "./tycho-client", version = "0.109.0" }
+tycho-common = { path = "./tycho-common", version = "0.109.2" }
+tycho-storage = { path = "./tycho-storage", version = "0.109.2" }
+tycho-ethereum = { path = "./tycho-ethereum", version = "0.109.2" }
+tycho-client = { path = "./tycho-client", version = "0.109.2" }
 futures03 = { version = "0.3.1", package = "futures", features = ["compat"] }
 thiserror = "1"
 tracing = "0.1.37"

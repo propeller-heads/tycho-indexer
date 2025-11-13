@@ -194,7 +194,6 @@ mod test {
             concurrency: 10,
             update_batch_size: 100,
             fetch_batch_size: 100,
-            rpc_url,
         };
         let mut gw = testing::MockGateway::new();
         gw.expect_get_tokens()
