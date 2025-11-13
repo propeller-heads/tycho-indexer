@@ -1,3 +1,11 @@
+## [0.196.3](https://github.com/propeller-heads/tycho-simulation/compare/0.196.2...0.196.3) (2025-11-13)
+
+
+### Bug Fixes
+
+* update `load_all_tokens` calls to include caching_enabled parameter ([d10f7eb](https://github.com/propeller-heads/tycho-simulation/commit/d10f7ebaef164bc87d3b11ac5a9d2f5cb28446f7))
+* update EVM stream example to include caching_enabled parameter ([72b4403](https://github.com/propeller-heads/tycho-simulation/commit/72b440317ebcfaed1bc6d956eeb62668b5d63c6c))
+
 ## [0.196.2](https://github.com/propeller-heads/tycho-simulation/compare/0.196.1...0.196.2) (2025-11-12)
 
 
