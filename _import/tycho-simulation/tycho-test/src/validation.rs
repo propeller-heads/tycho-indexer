@@ -13,6 +13,33 @@ use async_trait::async_trait;
 use tycho_common::{models::token::Token, simulation::protocol_sim::ProtocolSim, Bytes};
 use tycho_simulation::evm::protocol::uniswap_v2::state::UniswapV2State;
 
+/// Helper function to get a Validator reference from a ProtocolSim trait object
+///
+/// This centralizes the downcasting logic for protocols that implement the Validator trait.
+/// Add new protocol types here as they implement Validator.
+///
+/// # Arguments
+///
+/// * `protocol_system` - The protocol system name (e.g., "uniswap_v2")
+/// * `state` - The protocol state as a ProtocolSim trait object
+///
+/// # Returns
+///
+/// Returns `Some(&dyn Validator)` if the protocol implements Validator, `None` otherwise.
+pub fn get_validator<'a>(
+    protocol_system: &str,
+    state: &'a dyn ProtocolSim,
+) -> Option<&'a dyn Validator> {
+    match protocol_system {
+        "uniswap_v2" => state
+            .as_any()
+            .downcast_ref::<UniswapV2State>()
+            .map(|s| s as &dyn Validator),
+        // Add more protocols here as they implement Validator
+        _ => None,
+    }
+}
+
 sol! {
     #[sol(rpc)]
     interface IERC20 {

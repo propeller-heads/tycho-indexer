@@ -21,7 +21,6 @@ use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 use tycho_common::simulation::protocol_sim::ProtocolSim;
 use tycho_simulation::{
-    evm::protocol::uniswap_v2::state::UniswapV2State,
     protocol::models::ProtocolComponent,
     rfq::protocols::hashflow::{client::HashflowClient, state::HashflowState},
     tycho_common::models::Chain,
@@ -37,7 +36,7 @@ use tycho_test::{
         protocol_stream_processor::ProtocolStreamProcessor,
         rfq_stream_processor::RFQStreamProcessor, StreamUpdate, UpdateType,
     },
-    validation::{batch_validate_components, Validator},
+    validation::{batch_validate_components, get_validator, Validator},
 };
 
 #[derive(Parser, Clone)]
@@ -434,18 +433,9 @@ async fn process_update(
         let component_id = tycho_common::Bytes::from_str(id)
             .unwrap_or_else(|_| tycho_common::Bytes::from(id.as_bytes()));
 
-        // Try to downcast to concrete types that implement Validator
-        // The downcast_ref::<T>() method requires T to be a concrete, Sized type.
-        // Trait objects like dyn Validator are !Sized (unsized) - their size isn't known at
-        // compile time, so you can't downcast to them. For this reason, we must add protocol types
-        // here as they implement Validator.
-        // TODO: Come up with better solution.
-        if let Some(uniswap_v2) = state
-            .as_any()
-            .downcast_ref::<UniswapV2State>()
-        {
+        if let Some(validator) = get_validator(&component.protocol_system, state.as_ref()) {
             validator_components.push((
-                uniswap_v2 as &dyn Validator,
+                validator,
                 component_id,
                 component.tokens.clone(),
                 component.protocol_system.clone(),
