@@ -1,0 +1,2 @@
+ALTER TABLE "protocol_component_has_entry_point_tracing_params" RENAME TO "debug_protocol_component_has_entry_point_tracing_params";
+

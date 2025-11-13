@@ -155,8 +155,8 @@ impl PostgresGateway {
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
         use schema::{
-            debug_protocol_component_has_entry_point_tracing_params::dsl::*,
             entry_point_tracing_params::dsl::*,
+            protocol_component_has_entry_point_tracing_params::dsl::*,
         };
 
         let input_external_ids: Vec<EntryPointId> = new_data.keys().cloned().collect();
@@ -268,7 +268,7 @@ impl PostgresGateway {
                 });
             }
 
-            diesel::insert_into(debug_protocol_component_has_entry_point_tracing_params)
+            diesel::insert_into(protocol_component_has_entry_point_tracing_params)
                 .values(&pc_tracing_params_links)
                 .on_conflict_do_nothing()
                 .execute(conn)

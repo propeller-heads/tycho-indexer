@@ -30,13 +30,12 @@ use tycho_common::{
 use super::{
     schema::{
         account, account_balance, block, chain, component_balance, component_balance_default,
-        component_tvl, contract_code, contract_storage, contract_storage_default,
-        debug_protocol_component_has_entry_point_tracing_params, entry_point,
+        component_tvl, contract_code, contract_storage, contract_storage_default, entry_point,
         entry_point_tracing_params, entry_point_tracing_params_calls_account,
         entry_point_tracing_result, extraction_state, protocol_component,
-        protocol_component_holds_contract, protocol_component_holds_token,
-        protocol_component_uses_entry_point, protocol_state, protocol_state_default,
-        protocol_system, protocol_type, token, transaction,
+        protocol_component_has_entry_point_tracing_params, protocol_component_holds_contract,
+        protocol_component_holds_token, protocol_component_uses_entry_point, protocol_state,
+        protocol_state_default, protocol_system, protocol_type, token, transaction,
     },
     versioning::{StoredVersionedRow, VersionedRow},
     PostgresError, MAX_TS, MAX_VERSION_TS,
@@ -2065,7 +2064,7 @@ pub struct NewEntryPointTracingResult {
 }
 
 #[derive(Insertable)]
-#[diesel(table_name = debug_protocol_component_has_entry_point_tracing_params)]
+#[diesel(table_name = protocol_component_has_entry_point_tracing_params)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewProtocolComponentHasEntryPointTracingParams {
     pub protocol_component_id: i64,
