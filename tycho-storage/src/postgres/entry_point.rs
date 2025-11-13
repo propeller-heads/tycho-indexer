@@ -306,7 +306,7 @@ impl PostgresGateway {
     {
         use schema::{
             entry_point as ep, entry_point_tracing_params as eptp, protocol_component as pc,
-            protocol_component_uses_entry_point as pcuep,
+            protocol_component_has_entry_point_tracing_params as pcheptp,
         };
 
         let ps_id = self.get_protocol_system_id(&filter.protocol_system)?;
@@ -338,10 +338,19 @@ impl PostgresGateway {
             None
         };
 
+        // PERF: 4 inner joins is not very efficient.
+        // Note: it is important that we use the protocol_component_has_entry_point_tracing_params
+        // table to link components to the params they generate. The reasons are:
+        // - our retracing logic relies on knowing which component generated which params.
+        // - if we instead link components to entrypoints and fetch all the params for that entry
+        //   point, we run the risk of returning excessive amounts of duplicate params for every
+        //   component that uses it. This is especially evident for entry points that have
+        //   auto-generated params, such as the hooks dci. This has potential to exponentially
+        //   increase memory usage.
         let results = schema::entry_point::table
             .inner_join(eptp::table.on(ep::id.eq(eptp::entry_point_id)))
-            .inner_join(pcuep::table.on(ep::id.eq(pcuep::entry_point_id)))
-            .inner_join(pc::table.on(pcuep::protocol_component_id.eq(pc::id)))
+            .inner_join(pcheptp::table.on(eptp::id.eq(pcheptp::entry_point_tracing_params_id)))
+            .inner_join(pc::table.on(pcheptp::protocol_component_id.eq(pc::id)))
             .filter(pc::id.eq_any(component_query))
             .select((
                 pc::external_id,
@@ -962,54 +971,44 @@ mod test {
         let _chain_id = setup_data(&mut conn).await;
         let gw = PostgresGateway::from_connection(&mut conn).await;
 
-        gw.insert_entry_points(
-            &HashMap::from([
-                ("pc_0".to_string(), HashSet::from([rpc_tracer_entry_point(0)])),
-                (
-                    "pc_1".to_string(),
-                    HashSet::from([rpc_tracer_entry_point(0), rpc_tracer_entry_point(1)]),
-                ),
-                ("pc_2".to_string(), HashSet::from([rpc_tracer_entry_point(1)])),
-                ("unknown_pc".to_string(), HashSet::from([rpc_tracer_entry_point(0)])),
-            ]),
-            &Chain::Ethereum,
-            &mut conn,
-        )
-        .await
-        .unwrap();
+        let insert_ep_data = &HashMap::from([
+            ("pc_0".to_string(), HashSet::from([rpc_tracer_entry_point(0)])),
+            (
+                "pc_1".to_string(),
+                HashSet::from([rpc_tracer_entry_point(0), rpc_tracer_entry_point(1)]),
+            ),
+            ("pc_2".to_string(), HashSet::from([rpc_tracer_entry_point(1)])),
+            ("unknown_pc".to_string(), HashSet::from([rpc_tracer_entry_point(0)])),
+        ]);
+        gw.insert_entry_points(insert_ep_data, &Chain::Ethereum, &mut conn)
+            .await
+            .unwrap();
 
-        gw.insert_entry_point_tracing_params(
-            &HashMap::from([
-                (
-                    rpc_tracer_entry_point(0)
-                        .external_id
-                        .clone(),
-                    HashSet::from([(tracing_params(0), Some("pc_0".to_string()))]),
-                ),
-                (
-                    rpc_tracer_entry_point(1)
-                        .external_id
-                        .clone(),
-                    HashSet::from([(tracing_params(1), None), (tracing_params(0), None)]),
-                ),
-                (
-                    rpc_tracer_entry_point(1)
-                        .external_id
-                        .clone(),
-                    HashSet::from([(tracing_params(1), Some("pc_2".to_string()))]),
-                ),
-                (
-                    rpc_tracer_entry_point(0)
-                        .external_id
-                        .clone(),
-                    HashSet::from([(tracing_params(0), Some("unknown_pc".to_string()))]),
-                ),
-            ]),
-            &Chain::Ethereum,
-            &mut conn,
-        )
-        .await
-        .unwrap();
+        let insert_eptp_data = &HashMap::from([
+            (
+                rpc_tracer_entry_point(0)
+                    .external_id
+                    .clone(),
+                HashSet::from([
+                    (tracing_params(0), Some("pc_0".to_string())),
+                    (tracing_params(0), Some("unknown_pc".to_string())),
+                    (tracing_params(1), Some("pc_1".to_string())),
+                ]),
+            ),
+            (
+                rpc_tracer_entry_point(1)
+                    .external_id
+                    .clone(),
+                HashSet::from([
+                    (tracing_params(0), Some("pc_1".to_string())),
+                    (tracing_params(1), Some("pc_2".to_string())),
+                ]),
+            ),
+        ]);
+        dbg!(&insert_eptp_data);
+        gw.insert_entry_point_tracing_params(insert_eptp_data, &Chain::Ethereum, &mut conn)
+            .await
+            .unwrap();
 
         let filter = EntryPointFilter::new("test_protocol".to_string());
         let retrieved_entry_points = gw
@@ -1025,11 +1024,11 @@ mod test {
                     HashSet::from([
                         EntryPointWithTracingParams::new(
                             rpc_tracer_entry_point(0),
-                            tracing_params(0)
+                            tracing_params(1)
                         ),
                         EntryPointWithTracingParams::new(
                             rpc_tracer_entry_point(1),
-                            tracing_params(1)
+                            tracing_params(0)
                         ),
                     ])
                 ),
@@ -1062,8 +1061,8 @@ mod test {
             HashMap::from([(
                 "pc_1".to_string(),
                 HashSet::from([
-                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(1), tracing_params(1)),
-                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(0)),
+                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(1)),
+                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(1), tracing_params(0)),
                 ])
             ),])
         );
@@ -1080,8 +1079,8 @@ mod test {
             HashMap::from([(
                 "pc_1".to_string(),
                 HashSet::from([
-                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(1), tracing_params(1)),
-                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(0)),
+                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(1)),
+                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(1), tracing_params(0)),
                 ])
             ),])
         );
