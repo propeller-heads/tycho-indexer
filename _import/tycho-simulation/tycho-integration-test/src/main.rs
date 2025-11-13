@@ -419,8 +419,6 @@ async fn process_update(
         components_to_process.push((id.clone(), component, state.clone_box()));
     }
 
-    let mut validation_results: HashMap<String, bool> = HashMap::new();
-
     // Collect components that implement Validator for batch validation
     let mut validator_components: Vec<(
         &dyn Validator,
@@ -460,8 +458,16 @@ async fn process_update(
             let protocol = &validator_components[i].3;
             match result {
                 Ok(passed) => {
-                    validation_results.insert(component_id.to_string(), *passed);
-                    if !passed {
+                    if *passed {
+                        info!(
+                            component_id = %component_id,
+                            "State validation passed"
+                        );
+                    } else {
+                        error!(
+                            component_id = %component_id,
+                            "State validation failed"
+                        );
                         metrics::record_validation_failure(protocol);
                     }
                 }
@@ -483,7 +489,6 @@ async fn process_update(
 
     for (id, component, state) in components_to_process {
         let block = block.clone();
-        let validation_result = validation_results.get(&id).copied();
         let permit = semaphore
             .clone()
             .acquire_owned()
@@ -493,16 +498,7 @@ async fn process_update(
 
         let task = tokio::spawn(async move {
             let simulation_id = generate_simulation_id(&component.protocol_system, &id);
-            let result = process_state(
-                &simulation_id,
-                chain,
-                component,
-                &block,
-                id,
-                state,
-                validation_result,
-            )
-            .await;
+            let result = process_state(&simulation_id, chain, component, &block, id, state).await;
             drop(permit);
             result
         });
@@ -605,27 +601,11 @@ async fn process_state(
     block: &Block,
     state_id: String,
     state: Box<dyn ProtocolSim>,
-    validation_result: Option<bool>,
 ) -> HashMap<String, TychoExecutionInput> {
     let tokens_len = component.tokens.len();
     if tokens_len < 2 {
         error!("Component has less than 2 tokens, skipping...");
         return HashMap::new();
-    }
-
-    // Log validation result if it was computed
-    if let Some(passed) = validation_result {
-        if passed {
-            info!(
-                component_id = ?component.id,
-                "State validation passed"
-            );
-        } else {
-            error!(
-                component_id = ?component.id,
-                "State validation failed"
-            );
-        }
     }
     // Get all the possible swap directions
     let swap_directions = match component.protocol_system.as_str() {
