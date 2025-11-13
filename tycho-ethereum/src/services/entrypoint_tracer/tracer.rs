@@ -14,7 +14,7 @@ use alloy::{
         },
         AccessListResult, BlockId, TransactionInput, TransactionRequest,
     },
-    transports::RpcError,
+    transports::{RpcError, TransportErrorKind},
 };
 use async_trait::async_trait;
 use serde_json::{json, Map, Value};
@@ -230,12 +230,7 @@ impl EVMEntrypointService {
         // Add debug_traceCall call
         let trace_future = batch
             .add_call::<_, GethTrace>("debug_traceCall", &trace_call_params)
-            .map_err(|e| {
-                // Transport/Network errors are impossible here
-                RPCError::UnknownError(format!(
-                    "Failed to add trace call to batch for {target} (block: {block_hash}): {e}"
-                ))
-            })?;
+            .map_err(RPCError::from)?;
 
         // Send batch
         batch.send().await.map_err(|e| {
@@ -257,6 +252,12 @@ impl EVMEntrypointService {
         // Await access list result
         let access_list_data = access_list_future.await.map_err(|e| {
             match e {
+                // Batch Id not found in the responses
+                RpcError::Transport(TransportErrorKind::MissingBatchResponse(id)) => {
+                    RPCError::UnknownError(format!(
+                        "Missing batch response for ID {id} for {target} (block: {block_hash})"
+                    ))
+                }
                 // Transport/Network errors
                 RpcError::Transport(e) => {
                     RPCError::RequestError(RequestError::Reqwest(ReqwestError {
@@ -286,6 +287,12 @@ impl EVMEntrypointService {
         // Await trace result
         let pre_state_trace = trace_future.await.map_err(|e| {
             match e {
+                // Batch Id not found in the responses
+                RpcError::Transport(TransportErrorKind::MissingBatchResponse(id)) => {
+                    RPCError::UnknownError(format!(
+                        "Missing batch response for ID {id} for {target} (block: {block_hash})"
+                    ))
+                }
                 // Transport/Network errors
                 RpcError::Transport(e) => {
                     RPCError::RequestError(RequestError::Reqwest(ReqwestError {

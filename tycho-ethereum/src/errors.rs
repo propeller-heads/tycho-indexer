@@ -1,6 +1,8 @@
 use std::{error::Error, fmt::Display};
 
-use alloy::transports::{RpcError as AlloyRpcError, TransportErrorKind};
+use alloy::transports::{
+    RpcError as AlloyRpcError, TransportErrorKind, TransportErrorKind::MissingBatchResponse,
+};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -71,11 +73,16 @@ impl From<AlloyRpcError<TransportErrorKind>> for RPCError {
                 source: err,
             }),
 
-            // Transport/Network errors - these are retryable
-            AlloyRpcError::Transport(e) => {
+            // In case the server did not respond to a batch request we re
+            AlloyRpcError::Transport(MissingBatchResponse(id)) => {
+                RPCError::UnknownError(format!("Missing batch response for request ID {}", id))
+            }
+
+            // Other transport errors
+            AlloyRpcError::Transport(err) => {
                 RPCError::RequestError(RequestError::Reqwest(ReqwestError {
-                    msg: "RPC transport error".to_string(),
-                    source: e,
+                    msg: "HTTP transport error".to_string(),
+                    source: err,
                 }))
             }
 
