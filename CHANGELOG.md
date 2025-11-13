@@ -1,3 +1,16 @@
+## [0.110.0](https://github.com/propeller-heads/tycho-indexer/compare/0.109.2...0.110.0) (2025-11-13)
+
+
+### Features
+
+* rename component to params link table ([bdac794](https://github.com/propeller-heads/tycho-indexer/commit/bdac794efc7f3a52e8d8f1d6dea53bbc642f0c8f))
+* utilise component to params link table to fetch only relevant params per component ([#775](https://github.com/propeller-heads/tycho-indexer/issues/775)) ([90acaa5](https://github.com/propeller-heads/tycho-indexer/commit/90acaa5dab13863925e295d2d22f9caf3667d1e6))
+
+
+### Bug Fixes
+
+* fetch only directly linked params per component ([095061b](https://github.com/propeller-heads/tycho-indexer/commit/095061b0f24ed730d1c2347b035139f9377da85c))
+
 ## [0.109.2](https://github.com/propeller-heads/tycho-indexer/compare/0.109.1...0.109.2) (2025-11-13)
 
 
