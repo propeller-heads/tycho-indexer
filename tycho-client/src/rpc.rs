@@ -26,12 +26,12 @@ use tracing::{debug, error, instrument, trace, warn};
 use tycho_common::{
     dto::{
         BlockParam, Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse,
-        EntryPointWithTracingParams, PaginationParams, PaginationResponse, ProtocolComponent,
-        ProtocolComponentRequestResponse, ProtocolComponentsRequestBody, ProtocolStateRequestBody,
-        ProtocolStateRequestResponse, ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse,
-        ResponseToken, StateRequestBody, StateRequestResponse, TokensRequestBody,
-        TokensRequestResponse, TracedEntryPointRequestBody, TracedEntryPointRequestResponse,
-        TracingResult, VersionParam,
+        EntryPointWithTracingParams, PaginationLimits, PaginationParams, PaginationResponse,
+        ProtocolComponent, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
+        ProtocolStateRequestBody, ProtocolStateRequestResponse, ProtocolSystemsRequestBody,
+        ProtocolSystemsRequestResponse, ResponseToken, StateRequestBody, StateRequestResponse,
+        TokensRequestBody, TokensRequestResponse, TracedEntryPointRequestBody,
+        TracedEntryPointRequestResponse, TracingResult, VersionParam,
     },
     models::ComponentId,
     Bytes,
@@ -142,6 +142,9 @@ pub enum RPCError {
 #[cfg_attr(test, automock)]
 #[async_trait]
 pub trait RPCClient: Send + Sync {
+    /// Returns whether compression is enabled for requests.
+    fn compression(&self) -> bool;
+
     /// Retrieves a snapshot of contract state.
     async fn get_contract_state(
         &self,
@@ -154,7 +157,7 @@ pub trait RPCClient: Send + Sync {
         ids: &[Bytes],
         protocol_system: &str,
         version: &VersionParam,
-        chunk_size: usize,
+        chunk_size: Option<usize>,
         concurrency: usize,
     ) -> Result<StateRequestResponse, RPCError> {
         let semaphore = Arc::new(Semaphore::new(concurrency));
@@ -162,6 +165,9 @@ pub trait RPCClient: Send + Sync {
         // Sort the ids to maximize server-side cache hits
         let mut sorted_ids = ids.to_vec();
         sorted_ids.sort();
+
+        let chunk_size = chunk_size
+            .unwrap_or(StateRequestBody::effective_max_page_size(self.compression()) as usize);
 
         let chunked_bodies = sorted_ids
             .chunks(chunk_size)
@@ -213,10 +219,14 @@ pub trait RPCClient: Send + Sync {
     async fn get_protocol_components_paginated(
         &self,
         request: &ProtocolComponentsRequestBody,
-        chunk_size: usize,
+        chunk_size: Option<usize>,
         concurrency: usize,
     ) -> Result<ProtocolComponentRequestResponse, RPCError> {
         let semaphore = Arc::new(Semaphore::new(concurrency));
+
+        let chunk_size = chunk_size.unwrap_or(
+            ProtocolComponentsRequestBody::effective_max_page_size(self.compression()) as usize,
+        );
 
         // If a set of component IDs is specified, the maximum return size is already known,
         // allowing us to pre-compute the number of requests to be made.
@@ -371,13 +381,18 @@ pub trait RPCClient: Send + Sync {
         protocol_system: &str,
         include_balances: bool,
         version: &VersionParam,
-        chunk_size: usize,
+        chunk_size: Option<usize>,
         concurrency: usize,
     ) -> Result<ProtocolStateRequestResponse, RPCError>
     where
         T: AsRef<str> + Sync + 'static,
     {
         let semaphore = Arc::new(Semaphore::new(concurrency));
+
+        let chunk_size = chunk_size.unwrap_or(ProtocolStateRequestBody::effective_max_page_size(
+            self.compression(),
+        ) as usize);
+
         let chunked_bodies = ids
             .chunks(chunk_size)
             .map(|c| ProtocolStateRequestBody {
@@ -437,9 +452,12 @@ pub trait RPCClient: Send + Sync {
         chain: Chain,
         min_quality: Option<i32>,
         traded_n_days_ago: Option<u64>,
-        chunk_size: usize,
+        chunk_size: Option<usize>,
         concurrency: usize,
     ) -> Result<Vec<ResponseToken>, RPCError> {
+        let chunk_size = chunk_size
+            .unwrap_or(TokensRequestBody::effective_max_page_size(self.compression()) as usize);
+
         let semaphore = Arc::new(Semaphore::new(concurrency));
 
         // Make initial request to get total count
@@ -515,10 +533,14 @@ pub trait RPCClient: Send + Sync {
     async fn get_component_tvl_paginated(
         &self,
         request: &ComponentTvlRequestBody,
-        chunk_size: usize,
+        chunk_size: Option<usize>,
         concurrency: usize,
     ) -> Result<ComponentTvlRequestResponse, RPCError> {
         let semaphore = Arc::new(Semaphore::new(concurrency));
+
+        let chunk_size = chunk_size.unwrap_or(ComponentTvlRequestBody::effective_max_page_size(
+            self.compression(),
+        ) as usize);
 
         match request.component_ids {
             Some(ref ids) => {
@@ -647,10 +669,15 @@ pub trait RPCClient: Send + Sync {
         chain: Chain,
         protocol_system: &str,
         component_ids: &[String],
-        chunk_size: usize,
+        chunk_size: Option<usize>,
         concurrency: usize,
     ) -> Result<TracedEntryPointRequestResponse, RPCError> {
         let semaphore = Arc::new(Semaphore::new(concurrency));
+
+        let chunk_size = chunk_size.unwrap_or(
+            TracedEntryPointRequestBody::effective_max_page_size(self.compression()) as usize,
+        );
+
         let chunked_bodies = component_ids
             .chunks(chunk_size)
             .map(|c| TracedEntryPointRequestBody {
@@ -695,7 +722,7 @@ pub trait RPCClient: Send + Sync {
     async fn get_snapshots<'a>(
         &self,
         request: &SnapshotParameters<'a>,
-        chunk_size: usize,
+        chunk_size: Option<usize>,
         concurrency: usize,
     ) -> Result<Snapshot, RPCError>;
 }
@@ -742,6 +769,7 @@ pub struct HttpRPCClient {
     retry_after: Arc<RwLock<Option<SystemTime>>>,
     backoff_policy: ExponentialBackoff,
     server_restart_duration: Duration,
+    compression: bool,
 }
 
 impl HttpRPCClient {
@@ -796,6 +824,7 @@ impl HttpRPCClient {
                 .with_max_elapsed_time(Some(Duration::from_secs(125)))
                 .build(),
             server_restart_duration: Duration::from_secs(120),
+            compression: options.compression,
         })
     }
 
@@ -931,6 +960,10 @@ fn parse_retry_value(val: &str) -> Option<SystemTime> {
 
 #[async_trait]
 impl RPCClient for HttpRPCClient {
+    fn compression(&self) -> bool {
+        self.compression
+    }
+
     #[instrument(skip(self, request))]
     async fn get_contract_state(
         &self,
@@ -1184,7 +1217,7 @@ impl RPCClient for HttpRPCClient {
     async fn get_snapshots<'a>(
         &self,
         request: &SnapshotParameters<'a>,
-        chunk_size: usize,
+        chunk_size: Option<usize>,
         concurrency: usize,
     ) -> Result<Snapshot, RPCError> {
         let component_ids: Vec<_> = request
@@ -2558,7 +2591,7 @@ mod tests {
         );
 
         let response = client
-            .get_snapshots(&request, 100, RPC_CLIENT_CONCURRENCY)
+            .get_snapshots(&request, None, RPC_CLIENT_CONCURRENCY)
             .await
             .expect("get snapshots");
 
@@ -2606,7 +2639,7 @@ mod tests {
         );
 
         let response = client
-            .get_snapshots(&request, 100, RPC_CLIENT_CONCURRENCY)
+            .get_snapshots(&request, None, RPC_CLIENT_CONCURRENCY)
             .await
             .expect("get snapshots");
 
@@ -2679,7 +2712,7 @@ mod tests {
         .include_tvl(false);
 
         let response = client
-            .get_snapshots(&request, 100, RPC_CLIENT_CONCURRENCY)
+            .get_snapshots(&request, None, RPC_CLIENT_CONCURRENCY)
             .await
             .expect("get snapshots");
 

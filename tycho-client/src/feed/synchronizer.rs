@@ -282,7 +282,7 @@ where
                     self.extractor_id.chain,
                     &self.extractor_id.name,
                     &component_ids,
-                    100,
+                    None,
                     RPC_CLIENT_CONCURRENCY,
                 )
                 .await?;
@@ -312,7 +312,7 @@ where
         .include_tvl(self.include_tvl);
         let snapshot_response = self
             .rpc_client
-            .get_snapshots(&request, 100, RPC_CLIENT_CONCURRENCY)
+            .get_snapshots(&request, None, RPC_CLIENT_CONCURRENCY)
             .await?;
 
         trace!(states=?&snapshot_response.states, "Retrieved ProtocolStates");
@@ -742,12 +742,16 @@ mod test {
         async fn get_snapshots<'a>(
             &self,
             request: &SnapshotParameters<'a>,
-            chunk_size: usize,
+            chunk_size: Option<usize>,
             concurrency: usize,
         ) -> Result<Snapshot, RPCError> {
             self.0
                 .get_snapshots(request, chunk_size, concurrency)
                 .await
+        }
+
+        fn compression(&self) -> bool {
+            self.0.compression()
         }
     }
 
@@ -826,10 +830,17 @@ mod test {
         }
     }
 
+    fn make_mock_client() -> MockRPCClient {
+        let mut m = MockRPCClient::new();
+        m.expect_compression()
+            .return_const(false);
+        m
+    }
+
     #[test(tokio::test)]
     async fn test_get_snapshots_native() {
         let header = BlockHeader::default();
-        let mut rpc = MockRPCClient::new();
+        let mut rpc = make_mock_client();
         let component = ProtocolComponent { id: "Component1".to_string(), ..Default::default() };
 
         let component_clone = component.clone();
@@ -904,7 +915,7 @@ mod test {
     #[test(tokio::test)]
     async fn test_get_snapshots_native_with_tvl() {
         let header = BlockHeader::default();
-        let mut rpc = MockRPCClient::new();
+        let mut rpc = make_mock_client();
         let component = ProtocolComponent { id: "Component1".to_string(), ..Default::default() };
 
         let component_clone = component.clone();
@@ -1023,7 +1034,7 @@ mod test {
     #[test(tokio::test)]
     async fn test_get_snapshots_vm() {
         let header = BlockHeader::default();
-        let mut rpc = MockRPCClient::new();
+        let mut rpc = make_mock_client();
 
         let traced_ep_response = traced_entry_point_response();
         rpc.expect_get_snapshots()
@@ -1139,7 +1150,7 @@ mod test {
     #[test(tokio::test)]
     async fn test_get_snapshots_vm_with_tvl() {
         let header = BlockHeader::default();
-        let mut rpc = MockRPCClient::new();
+        let mut rpc = make_mock_client();
         let component = ProtocolComponent {
             id: "Component1".to_string(),
             contract_ids: vec![Bytes::from("0x0badc0ffee"), Bytes::from("0xbabe42")],
@@ -1223,7 +1234,7 @@ mod test {
     }
 
     fn mock_clients_for_state_sync() -> (MockRPCClient, MockDeltasClient, Sender<BlockChanges>) {
-        let mut rpc_client = MockRPCClient::new();
+        let mut rpc_client = make_mock_client();
         // Mocks for the start_tracking call, these need to come first because they are more
         // specific, see: https://docs.rs/mockall/latest/mockall/#matching-multiple-calls
         rpc_client
@@ -1250,11 +1261,15 @@ mod test {
         // Mock get_snapshots for Component3
         rpc_client
             .expect_get_snapshots()
-            .withf(|request: &SnapshotParameters, _chunk_size: &usize, _concurrency: &usize| {
-                request
-                    .components
-                    .contains_key("Component3")
-            })
+            .withf(
+                |request: &SnapshotParameters,
+                 _chunk_size: &Option<usize>,
+                 _concurrency: &usize| {
+                    request
+                        .components
+                        .contains_key("Component3")
+                },
+            )
             .returning(|_request, _chunk_size, _concurrency| {
                 Ok(Snapshot {
                     states: [(
@@ -1592,7 +1607,7 @@ mod test {
         let remove_tvl_threshold = 5.0;
         let add_tvl_threshold = 7.0;
 
-        let mut rpc_client = MockRPCClient::new();
+        let mut rpc_client = make_mock_client();
         let mut deltas_client = MockDeltasClient::new();
 
         rpc_client
@@ -1618,11 +1633,15 @@ mod test {
         // Mock get_snapshots for Component3
         rpc_client
             .expect_get_snapshots()
-            .withf(|request: &SnapshotParameters, _chunk_size: &usize, _concurrency: &usize| {
-                request
-                    .components
-                    .contains_key("Component3")
-            })
+            .withf(
+                |request: &SnapshotParameters,
+                 _chunk_size: &Option<usize>,
+                 _concurrency: &usize| {
+                    request
+                        .components
+                        .contains_key("Component3")
+                },
+            )
             .returning(|_request, _chunk_size, _concurrency| {
                 Ok(Snapshot {
                     states: [(
@@ -1871,7 +1890,7 @@ mod test {
         // - close() fails after already closed
         // This tests the full start/close lifecycle via the public API
 
-        let mut rpc_client = MockRPCClient::new();
+        let mut rpc_client = make_mock_client();
         let mut deltas_client = MockDeltasClient::new();
 
         // Mock the initial components call
@@ -1935,7 +1954,7 @@ mod test {
         // Specifically tests: RPC errors during snapshot retrieval cause proper cleanup.
         // Verifies: shared.last_synced_block reset + subscription unsubscribe on errors
 
-        let mut rpc_client = MockRPCClient::new();
+        let mut rpc_client = make_mock_client();
         let mut deltas_client = MockDeltasClient::new();
 
         // Mock the initial components call
@@ -2059,7 +2078,7 @@ mod test {
         // Tests close signal handling during the initial "waiting for deltas" phase.
         // This is the earliest possible close scenario - before any deltas are received.
         // Verifies: close signal received while waiting for first message triggers cleanup
-        let mut rpc_client = MockRPCClient::new();
+        let mut rpc_client = make_mock_client();
         let mut deltas_client = MockDeltasClient::new();
 
         rpc_client
@@ -2131,7 +2150,7 @@ mod test {
         // then close signal is received while waiting for subsequent deltas.
         // Verifies: close signal in main loop (after initialization) triggers cleanup
 
-        let mut rpc_client = MockRPCClient::new();
+        let mut rpc_client = make_mock_client();
         let mut deltas_client = MockDeltasClient::new();
 
         // Mock the initial components call
@@ -2268,7 +2287,7 @@ mod test {
         // Test that when max_retries is exceeded, the final error is sent through the channel
         // to the receiver and the synchronizer task exits cleanly
 
-        let mut rpc_client = MockRPCClient::new();
+        let mut rpc_client = make_mock_client();
         let mut deltas_client = MockDeltasClient::new();
 
         // Mock the initial components call to succeed
@@ -2401,7 +2420,7 @@ mod test {
         // Test that on synchronizer restart with the next expected block,
         // get_snapshot is not called and only deltas are sent
 
-        let mut rpc_client = MockRPCClient::new();
+        let mut rpc_client = make_mock_client();
         let mut deltas_client = MockDeltasClient::new();
 
         // Mock the initial components call
@@ -2536,7 +2555,7 @@ mod test {
         // Test that the synchronizer skips messages for blocks that have already been processed
         // This simulates a service restart scenario where old messages are re-emitted
 
-        let mut rpc_client = MockRPCClient::new();
+        let mut rpc_client = make_mock_client();
         let mut deltas_client = MockDeltasClient::new();
 
         // Mock the initial components call
