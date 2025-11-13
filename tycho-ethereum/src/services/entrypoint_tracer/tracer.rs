@@ -1554,7 +1554,7 @@ mod tests {
                         let response = r#"[
                             {
                                 "jsonrpc": "2.0",
-                                "id": 1,
+                                "id": 0,
                                 "result": {
                                     "accessList": [
                                         {
@@ -1567,7 +1567,7 @@ mod tests {
                             },
                             {
                                 "jsonrpc": "2.0",
-                                "id": 2,
+                                "id": 1,
                                 "result": {
                                     "0x0000000000000000000000000000000000000001": {
                                         "balance": "0x1"
@@ -1656,7 +1656,7 @@ mod tests {
                         let response = r#"[
                             {
                                 "jsonrpc": "2.0",
-                                "id": 2,
+                                "id": 1,
                                 "result": {
                                     "0x0000000000000000000000000000000000000001": {
                                         "balance": "0x1"
@@ -1665,7 +1665,7 @@ mod tests {
                             },
                             {
                                 "jsonrpc": "2.0",
-                                "id": 1,
+                                "id": 0,
                                 "result": {
                                     "accessList": [
                                         {
@@ -1760,7 +1760,7 @@ mod tests {
                         let response = r#"[
                             {
                                 "jsonrpc": "2.0",
-                                "id": 1,
+                                "id": 0,
                                 "result": {
                                     "accessList": [],
                                     "gasUsed": "0x5dc0"
