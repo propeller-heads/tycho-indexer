@@ -423,7 +423,6 @@ async fn process_update(
     let mut validator_components: Vec<(
         &dyn Validator,
         tycho_common::Bytes,
-        Vec<tycho_common::models::token::Token>,
         String, // protocol_system
     )> = Vec::new();
 
@@ -432,22 +431,16 @@ async fn process_update(
             .unwrap_or_else(|_| tycho_common::Bytes::from(id.as_bytes()));
 
         if let Some(validator) = get_validator(&component.protocol_system, state.as_ref()) {
-            validator_components.push((
-                validator,
-                component_id,
-                component.tokens.clone(),
-                component.protocol_system.clone(),
-            ));
+            validator_components.push((validator, component_id, component.protocol_system.clone()));
         }
     }
 
     // Batch validate all components of this block in a single call
     if !validator_components.is_empty() {
         // Extract just the validator data (without protocol_system) for batch_validate_components
-        // TODO do this neater
         let validator_data: Vec<_> = validator_components
             .iter()
-            .map(|(validator, id, tokens, _protocol)| (*validator, id.clone(), tokens.clone()))
+            .map(|(validator, id, _protocol)| (*validator, id.clone()))
             .collect();
 
         let results =
@@ -455,7 +448,7 @@ async fn process_update(
 
         for (i, result) in results.iter().enumerate() {
             let component_id = &validator_components[i].1;
-            let protocol = &validator_components[i].3;
+            let protocol = &validator_components[i].2;
             match result {
                 Ok(passed) => {
                     if *passed {

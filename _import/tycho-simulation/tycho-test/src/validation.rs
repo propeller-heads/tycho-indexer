@@ -10,7 +10,7 @@ use alloy::{
     sol_types::SolCall,
 };
 use async_trait::async_trait;
-use tycho_common::{models::token::Token, simulation::protocol_sim::ProtocolSim, Bytes};
+use tycho_common::{simulation::protocol_sim::ProtocolSim, Bytes};
 use tycho_simulation::evm::protocol::uniswap_v2::state::UniswapV2State;
 
 /// Helper function to get a Validator reference from a ProtocolSim trait object
@@ -42,8 +42,8 @@ pub fn get_validator<'a>(
 
 sol! {
     #[sol(rpc)]
-    interface IERC20 {
-        function balanceOf(address account) external view returns (uint256);
+    interface IUniswapV2Pair {
+        function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
     }
 }
 
@@ -62,8 +62,7 @@ async fn execute_batched_calls(
     rpc_url: &str,
     component_calls: &[(Bytes, Vec<(Address, AlloyBytes)>)],
     block_id: u64,
-) -> Result<HashMap<Bytes, Vec<alloy::primitives::U256>>, Box<dyn std::error::Error + Send + Sync>>
-{
+) -> Result<HashMap<Bytes, Vec<AlloyBytes>>, Box<dyn std::error::Error + Send + Sync>> {
     if component_calls.is_empty() {
         return Ok(HashMap::new());
     }
@@ -93,8 +92,7 @@ async fn execute_batched_calls(
         let mut component_results = Vec::new();
         for fut in futures {
             let bytes: AlloyBytes = fut.await?;
-            let balance = alloy::primitives::U256::from_be_slice(bytes.as_ref());
-            component_results.push(balance);
+            component_results.push(bytes);
         }
         results.insert(component_id, component_results);
     }
@@ -113,12 +111,11 @@ pub trait Validator: ProtocolSim {
     ///
     /// Returns a list of (contract_address, call_data) pairs representing the contract
     /// calls that need to be made to validate the given component. The call data should
-    /// be ABI-encoded function calls (e.g., balanceOf, etc.).
+    /// be ABI-encoded function calls (e.g., getReserves, etc.).
     ///
     /// # Arguments
     ///
     /// * `component_id` - The component/pool address
-    /// * `tokens` - The tokens in the component
     ///
     /// # Returns
     ///
@@ -127,7 +124,6 @@ pub trait Validator: ProtocolSim {
     fn prepare_validation_calls(
         &self,
         component_id: &Bytes,
-        tokens: &[Token],
     ) -> Result<Vec<(Address, AlloyBytes)>, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Validate with batched results
@@ -138,8 +134,7 @@ pub trait Validator: ProtocolSim {
     /// # Arguments
     ///
     /// * `component_id` - The component/pool address
-    /// * `tokens` - The tokens in the pool
-    /// * `results` - The results from the batched RPC calls
+    /// * `results` - The raw bytes from the batched RPC calls
     ///
     /// # Returns
     ///
@@ -148,8 +143,7 @@ pub trait Validator: ProtocolSim {
     fn validate_with_results(
         &self,
         component_id: &Bytes,
-        tokens: &[Token],
-        results: &[alloy::primitives::U256],
+        results: &[AlloyBytes],
     ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>>;
 }
 
@@ -160,7 +154,7 @@ pub trait Validator: ProtocolSim {
 /// # Arguments
 ///
 /// * `rpc_url` - The HTTP RPC endpoint URL
-/// * `components` - List of (state, component_id, tokens) tuples to validate
+/// * `components` - List of (state, component_id) tuples to validate
 /// * `block_id` - The block number to query at
 ///
 /// # Returns
@@ -170,7 +164,7 @@ pub trait Validator: ProtocolSim {
 /// or `Err` if there was an error.
 pub async fn batch_validate_components(
     rpc_url: &str,
-    components: &[(&dyn Validator, Bytes, Vec<Token>)],
+    components: &[(&dyn Validator, Bytes)],
     block_id: u64,
 ) -> Vec<Result<bool, Box<dyn std::error::Error + Send + Sync>>> {
     if components.is_empty() {
@@ -180,8 +174,8 @@ pub async fn batch_validate_components(
     // Prepare calls for each component individually
     let mut component_calls = Vec::with_capacity(components.len());
 
-    for (state, component_id, tokens) in components {
-        match state.prepare_validation_calls(component_id, tokens) {
+    for (state, component_id) in components {
+        match state.prepare_validation_calls(component_id) {
             Ok(calls) => {
                 component_calls.push((component_id.clone(), calls));
             }
@@ -208,11 +202,11 @@ pub async fn batch_validate_components(
     // Validate each component with its results
     let mut results = Vec::with_capacity(components.len());
 
-    for (state, component_id, tokens) in components {
+    for (state, component_id) in components {
         match results_map.get(component_id) {
             Some(component_results) => {
                 let validation_result =
-                    state.validate_with_results(component_id, tokens, component_results);
+                    state.validate_with_results(component_id, component_results);
                 results.push(validation_result);
             }
             None => {
@@ -233,61 +227,44 @@ impl Validator for UniswapV2State {
     fn prepare_validation_calls(
         &self,
         component_id: &Bytes,
-        tokens: &[Token],
     ) -> Result<Vec<(Address, AlloyBytes)>, Box<dyn std::error::Error + Send + Sync>> {
-        if tokens.len() != 2 {
-            return Err(format!(
-                "UniswapV2 component {} must have 2 tokens, got {}",
-                hex::encode(component_id),
-                tokens.len()
-            )
-            .into());
-        }
-
         let pool_address = Address::from_slice(&component_id[..20]);
-        let token_0_address = Address::from_slice(&tokens[0].address[..20]);
-        let token_1_address = Address::from_slice(&tokens[1].address[..20]);
 
-        // Encode balanceOf calls for both tokens
-        let call_0 = IERC20::balanceOfCall { account: pool_address }.abi_encode();
-        let call_1 = IERC20::balanceOfCall { account: pool_address }.abi_encode();
-        let calls = vec![(token_0_address, call_0.into()), (token_1_address, call_1.into())];
+        // Encode getReserves call for the pool
+        let call = IUniswapV2Pair::getReservesCall {}.abi_encode();
+        let calls = vec![(pool_address, call.into())];
         Ok(calls)
     }
 
     fn validate_with_results(
         &self,
         component_id: &Bytes,
-        tokens: &[Token],
-        results: &[alloy::primitives::U256],
+        results: &[AlloyBytes],
     ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-        if tokens.len() != 2 {
-            return Err("UniswapV2 pool must have 2 tokens".into());
-        }
-
-        if results.len() != 2 {
+        if results.len() != 1 {
             return Err(format!(
-                "Expected 2 results for UniswapV2 validation, got {}",
+                "Expected 1 result for UniswapV2 validation, got {}",
                 results.len()
             )
             .into());
         }
 
-        let balance_0 = results[0];
-        let balance_1 = results[1];
+        // Decode getReserves return value
+        let reserves = IUniswapV2Pair::getReservesCall::abi_decode_returns(&results[0])?;
 
-        let reserves_match = self.reserve0 == balance_0 && self.reserve1 == balance_1;
+        let onchain_reserve0 = alloy::primitives::U256::from(reserves.reserve0);
+        let onchain_reserve1 = alloy::primitives::U256::from(reserves.reserve1);
+
+        let reserves_match = self.reserve0 == onchain_reserve0 && self.reserve1 == onchain_reserve1;
 
         if !reserves_match {
             tracing::warn!(
                 component_id = %hex::encode(component_id),
                 state_reserve0 = %self.reserve0,
                 state_reserve1 = %self.reserve1,
-                onchain_balance0 = %balance_0,
-                onchain_balance1 = %balance_1,
-                token_0 = %tokens[0].symbol,
-                token_1 = %tokens[1].symbol,
-                "UniswapV2 reserve validation failed: state reserves do not match on-chain balances"
+                onchain_reserve0 = %onchain_reserve0,
+                onchain_reserve1 = %onchain_reserve1,
+                "UniswapV2 reserve validation failed: state reserves do not match on-chain reserves"
             );
         }
 
@@ -300,58 +277,34 @@ mod tests {
     use std::str::FromStr;
 
     use alloy::primitives::U256;
-    use tycho_common::models::Chain;
 
     use super::*;
 
     #[tokio::test]
-    #[ignore] // This test requires an RPC connection
+    // #[ignore] // This test requires an RPC connection
     async fn test_batch_validate_multiple_components() {
         let block_id = 23775987;
 
         // Component with correct reserves
         let pool_id_1 = "0x132BC4EA9E5282889fDcfE7Bc7A91Ea901a686D6";
-        let token_0_addr_1 = "0xa9D54F37EbB99f83B603Cc95fc1a5f3907AacCfd";
-        let token_1_addr_1 = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
-
-        let token_0_1 = Token::new(
-            &Bytes::from_str(token_0_addr_1).unwrap(),
-            "PIKA",
-            18,
-            0,
-            &[Some(10_000)],
-            Chain::Ethereum,
-            100,
-        );
-        let token_1_1 = Token::new(
-            &Bytes::from_str(token_1_addr_1).unwrap(),
-            "WETH",
-            18,
-            0,
-            &[Some(10_000)],
-            Chain::Ethereum,
-            100,
-        );
 
         let state_1 = UniswapV2State::new(
             U256::from(7791135770602459893220844917132_u128),
             U256::from(80274590426947493401_u128),
         );
         let component_id_1 = Bytes::from_str(pool_id_1).unwrap();
-        let tokens_1 = vec![token_0_1, token_1_1];
 
         // Component with incorrect reserves to show validation failure
         let state_2 = UniswapV2State::new(U256::from(1000), U256::from(2000));
         let component_id_2 = Bytes::from_str(pool_id_1).unwrap(); // Same component but wrong state
-        let tokens_2 = tokens_1.clone();
 
         let rpc_url = std::env::var("RPC_URL")
             .expect("RPC_URL environment variable must be set for this test");
 
         // Batch validate both components
         let components = vec![
-            (&state_1 as &dyn Validator, component_id_1.clone(), tokens_1.clone()),
-            (&state_2 as &dyn Validator, component_id_2.clone(), tokens_2.clone()),
+            (&state_1 as &dyn Validator, component_id_1.clone()),
+            (&state_2 as &dyn Validator, component_id_2.clone()),
         ];
 
         let results = batch_validate_components(&rpc_url, &components, block_id).await;
