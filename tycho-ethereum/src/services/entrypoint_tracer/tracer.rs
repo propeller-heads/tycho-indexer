@@ -1030,40 +1030,37 @@ mod tests {
                         } else {
                             // Success response with properly structured mock trace data matching
                             // PreStateTracer format (based on actual RPC response)
-                            let response = r#"[
-                                {
+                            let first_id = current_call * 2;
+                            let second_id = current_call * 2 + 1;
+
+                            format!(
+                                r#"[
+                                {{
                                     "jsonrpc": "2.0",
-                                    "id": first_id_placeholder,
-                                    "result": {
+                                    "id": {first_id},
+                                    "result": {{
                                         "accessList": [],
                                         "gasUsed": "0x5dc0"
-                                    }
-                                },
-                                {
+                                    }}
+                                }},
+                                {{
                                     "jsonrpc": "2.0",
-                                    "id": second_id_placeholder,
-                                    "result": {
-                                        "0x0000000000000000000000000000000000000000": {
+                                    "id": {second_id},
+                                    "result": {{
+                                        "0x0000000000000000000000000000000000000000": {{
                                             "balance": "0x2fda439328c1d25c3c5"
-                                        },
-                                        "0x0000000000000000000000000000000000000001": {
+                                        }},
+                                        "0x0000000000000000000000000000000000000001": {{
                                             "balance": "0x31535e82bbce260fd"
-                                        },
-                                        "0x4838b106fce9647bdf1e7877bf73ce8b0bad5f97": {
+                                        }},
+                                        "0x4838b106fce9647bdf1e7877bf73ce8b0bad5f97": {{
                                             "balance": "0x4ba0584a354bc705",
                                             "nonce": 1735918
-                                        }
-                                    }
-                                }
-                            ]"#;
-
-                            // The RPC increments IDs by 1 for each request, so we simulate that
-                            response
-                                .replace("first_id_placeholder", &format!("{}", current_call * 2))
-                                .replace(
-                                    "second_id_placeholder",
-                                    &format!("{}", current_call * 2 + 1),
-                                )
+                                        }}
+                                    }}
+                                }}
+                            ]"#
+                            )
                         };
 
                         let http_response = format!(
@@ -1242,36 +1239,33 @@ mod tests {
                             return; // Close connection to simulate network failure
                         } else {
                             // Success response for first and third requests
-                            let raw_string = r#"[
-                                {
+                            let first_id = current_call * 2;
+                            let second_id = current_call * 2 + 1;
+
+                            format!(
+                                r#"[
+                                {{
                                     "jsonrpc": "2.0",
-                                    "id": first_id_placeholder,
-                                    "result": {
+                                    "id": {first_id},
+                                    "result": {{
                                         "accessList": [],
                                         "gasUsed": "0x5dc0"
-                                    }
-                                },
-                                {
+                                    }}
+                                }},
+                                {{
                                     "jsonrpc": "2.0",
-                                    "id": second_id_placeholder,
-                                    "result": {
-                                        "0x0000000000000000000000000000000000000000": {
+                                    "id": {second_id},
+                                    "result": {{
+                                        "0x0000000000000000000000000000000000000000": {{
                                             "balance": "0x2fda439328c1d25c3c5"
-                                        },
-                                        "0x0000000000000000000000000000000000000001": {
+                                        }},
+                                        "0x0000000000000000000000000000000000000001": {{
                                             "balance": "0x31535e82bbce260fd"
-                                        }
-                                    }
-                                }
-                            ]"#;
-
-                            // The RPC increments IDs by 1 for each request, so we simulate that
-                            raw_string
-                                .replace("first_id_placeholder", &format!("{}", current_call * 2))
-                                .replace(
-                                    "second_id_placeholder",
-                                    &format!("{}", current_call * 2 + 1),
-                                )
+                                        }}
+                                    }}
+                                }}
+                            ]"#
+                            )
                         };
 
                         let http_response = format!(
