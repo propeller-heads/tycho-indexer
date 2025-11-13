@@ -55,6 +55,10 @@ pub fn initialize_metrics() {
         "tycho_integration_protocol_update_block_delay_blocks",
         "Number of blocks behind current that protocol updates are received"
     );
+    describe_counter!(
+        "tycho_integration_validation_failures_total",
+        "Total number of failed state validations"
+    );
 }
 
 /// Record the duration between block timestamp and component receipt
@@ -160,6 +164,15 @@ pub fn record_protocol_update_skipped() {
 /// Record the block delay of protocol updates
 pub fn record_protocol_update_block_delay(block_delay: u64) {
     histogram!("tycho_integration_protocol_update_block_delay_blocks").record(block_delay as f64);
+}
+
+/// Record a failed validation
+pub fn record_validation_failure(protocol: &str) {
+    counter!(
+        "tycho_integration_validation_failures_total",
+        "protocol" => protocol.to_string(),
+    )
+    .increment(1);
 }
 
 /// Creates and runs the Prometheus metrics exporter using Actix Web.

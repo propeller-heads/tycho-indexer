@@ -427,6 +427,7 @@ async fn process_update(
         &dyn Validator,
         tycho_common::Bytes,
         Vec<tycho_common::models::token::Token>,
+        String, // protocol_system
     )> = Vec::new();
 
     for (id, component, state) in &components_to_process {
@@ -447,21 +448,32 @@ async fn process_update(
                 uniswap_v2 as &dyn Validator,
                 component_id,
                 component.tokens.clone(),
+                component.protocol_system.clone(),
             ));
         }
     }
 
     // Batch validate all components of this block in a single call
     if !validator_components.is_empty() {
+        // Extract just the validator data (without protocol_system) for batch_validate_components
+        // TODO do this neater
+        let validator_data: Vec<_> = validator_components
+            .iter()
+            .map(|(validator, id, tokens, _protocol)| (*validator, id.clone(), tokens.clone()))
+            .collect();
+
         let results =
-            batch_validate_components(&cli.rpc_url, &validator_components, block.header.number)
-                .await;
+            batch_validate_components(&cli.rpc_url, &validator_data, block.header.number).await;
 
         for (i, result) in results.iter().enumerate() {
             let component_id = &validator_components[i].1;
+            let protocol = &validator_components[i].3;
             match result {
                 Ok(passed) => {
                     validation_results.insert(component_id.to_string(), *passed);
+                    if !passed {
+                        metrics::record_validation_failure(protocol);
+                    }
                 }
                 Err(e) => {
                     error!(
@@ -469,6 +481,7 @@ async fn process_update(
                         error = %e,
                         "Error validating component"
                     );
+                    metrics::record_validation_failure(protocol);
                 }
             }
         }
