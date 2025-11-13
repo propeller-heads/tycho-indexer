@@ -189,37 +189,26 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for AerodromeSlipstreamsS
 
         ticks.sort_by_key(|tick| tick.index);
 
-        let observations: Result<Vec<_>, _> = snapshot
+        let observations: Vec<Observation> = snapshot
             .state
             .attributes
             .iter()
             .filter_map(|(key, value)| {
-                if key.starts_with("observations/") {
-                    Some(
-                        key.split('/')
-                            .nth(1)?
-                            .parse::<i32>()
-                            .map_err(|err| InvalidSnapshotError::ValueError(err.to_string()))
-                            .and_then(|observation_idx| {
-                                Observation::from_attribute(observation_idx, &value.clone())
-                                    .map_err(|err| {
-                                        InvalidSnapshotError::ValueError(err.to_string())
-                                    })
-                            }),
-                    )
-                } else {
-                    None
-                }
+                key.strip_prefix("observations/")?
+                    .parse::<i32>()
+                    .ok()
+                    .and_then(|idx| Observation::from_attribute(idx, value).ok())
             })
             .collect();
 
-        let mut observations = match observations {
-            Ok(observations) if !observations.is_empty() => observations
-                .into_iter()
-                .filter(|t| t.initialized)
-                .collect::<Vec<_>>(),
-            _ => return Err(InvalidSnapshotError::MissingAttribute("observations".to_string())),
-        };
+        let mut observations: Vec<_> = observations
+            .into_iter()
+            .filter(|t| t.initialized)
+            .collect();
+
+        if observations.is_empty() {
+            return Err(InvalidSnapshotError::MissingAttribute("observations".to_string()));
+        }
 
         observations.sort_by_key(|observation| observation.index);
 

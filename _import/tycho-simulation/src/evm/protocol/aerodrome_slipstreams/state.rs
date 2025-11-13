@@ -1,9 +1,9 @@
 use std::{any::Any, collections::HashMap};
 
 use alloy::primitives::{Sign, I256, U256};
-use num_bigint::BigUint;
-use num_traits::Zero;
-use tracing::trace;
+use num_bigint::{BigInt, BigUint};
+use num_traits::{ToPrimitive, Zero};
+use tracing::{trace, warn};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -404,6 +404,14 @@ impl ProtocolSim for AerodromeSlipstreamsState {
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
+        if let Some(block_timestamp) = delta
+            .updated_attributes
+            .get("block_timestamp")
+        {
+            self.block_timestamp = BigInt::from_signed_bytes_be(block_timestamp)
+                .to_u64()
+                .unwrap();
+        }
         // apply attribute changes
         if let Some(liquidity) = delta
             .updated_attributes
@@ -507,16 +515,12 @@ impl ProtocolSim for AerodromeSlipstreamsState {
             }
 
             // observations keys are in the format "observations/{observation_index}"
-            if key.starts_with("observations/") {
-                let parts: Vec<&str> = key.split('/').collect();
-                self.observations
-                    .upsert_observation(
-                        parts[1]
-                            .parse::<i32>()
-                            .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
-                        &value.clone(),
-                    )
-                    .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
+            if let Some(idx_str) = key.strip_prefix("observations/") {
+                if let Ok(idx) = idx_str.parse::<i32>() {
+                    let _ = self
+                        .observations
+                        .upsert_observation(idx, value);
+                }
             }
         }
         // delete ticks - ignores deletes for attributes other than tick liquidity
@@ -535,16 +539,12 @@ impl ProtocolSim for AerodromeSlipstreamsState {
             }
 
             // observations keys are in the format "observations/{observation_index}"
-            if key.starts_with("observations/") {
-                let parts: Vec<&str> = key.split('/').collect();
-                self.observations
-                    .upsert_observation(
-                        parts[1]
-                            .parse::<i32>()
-                            .map_err(|err| TransitionError::DecodeError(err.to_string()))?,
-                        &[],
-                    )
-                    .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
+            if let Some(idx_str) = key.strip_prefix("observations/") {
+                if let Ok(idx) = idx_str.parse::<i32>() {
+                    let _ = self
+                        .observations
+                        .upsert_observation(idx, &[]);
+                }
             }
         }
         Ok(())
