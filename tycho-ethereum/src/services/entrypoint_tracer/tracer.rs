@@ -542,6 +542,7 @@ impl EntryPointTracer for EVMEntrypointService {
 mod tests {
     use std::str::FromStr;
 
+    use mockito::Server;
     use rstest::rstest;
     use tycho_common::{
         keccak256,
@@ -996,93 +997,64 @@ mod tests {
 
     #[tokio::test]
     async fn test_retry_with_mock_rpc_server() {
-        use std::sync::{
-            atomic::{AtomicUsize, Ordering},
-            Arc,
-        };
-
-        use tokio::{
-            io::{AsyncReadExt, AsyncWriteExt},
-            net::TcpListener,
-        };
-
         // Create a mock RPC server that fails the first few requests
-        let call_count = Arc::new(AtomicUsize::new(0));
-        let call_count_clone = call_count.clone();
+        let mut server = Server::new_async().await;
 
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .await
-            .unwrap();
-        let addr = listener.local_addr().unwrap();
+        // First two attempts fail with 500 errors
+        let _m1 = server
+            .mock("POST", "/")
+            .with_status(500)
+            .expect(1)
+            .create_async()
+            .await;
 
-        tokio::spawn(async move {
-            while let Ok((mut socket, _)) = listener.accept().await {
-                let call_count = call_count_clone.clone();
-                tokio::spawn(async move {
-                    let mut buffer = vec![0; 4096];
-                    if let Ok(n) = socket.read(&mut buffer).await {
-                        let _request = String::from_utf8_lossy(&buffer[..n]);
-                        let current_call = call_count.fetch_add(1, Ordering::SeqCst);
+        let _m2 = server
+            .mock("POST", "/")
+            .with_status(500)
+            .expect(1)
+            .create_async()
+            .await;
 
-                        let response = if current_call < 2 {
-                            // Fail first 2 requests with connection error
-                            return; // Just close connection to simulate network failure
-                        } else {
-                            // Success response with properly structured mock trace data matching
-                            // PreStateTracer format (based on actual RPC response)
-                            let first_id = current_call * 2;
-                            let second_id = current_call * 2 + 1;
-
-                            format!(
-                                r#"[
-                                {{
-                                    "jsonrpc": "2.0",
-                                    "id": {first_id},
-                                    "result": {{
-                                        "accessList": [],
-                                        "gasUsed": "0x5dc0"
-                                    }}
-                                }},
-                                {{
-                                    "jsonrpc": "2.0",
-                                    "id": {second_id},
-                                    "result": {{
-                                        "0x0000000000000000000000000000000000000000": {{
-                                            "balance": "0x2fda439328c1d25c3c5"
-                                        }},
-                                        "0x0000000000000000000000000000000000000001": {{
-                                            "balance": "0x31535e82bbce260fd"
-                                        }},
-                                        "0x4838b106fce9647bdf1e7877bf73ce8b0bad5f97": {{
-                                            "balance": "0x4ba0584a354bc705",
-                                            "nonce": 1735918
-                                        }}
-                                    }}
-                                }}
-                            ]"#
-                            )
-                        };
-
-                        let http_response = format!(
-                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-                            response.len(),
-                            response
-                        );
-
-                        let _ = socket
-                            .write_all(http_response.as_bytes())
-                            .await;
+        // Third attempt succeeds with proper JSON-RPC batch response
+        // IDs are 4 and 5 because the id counter increments per request (0, 1, 2, 3, 4, 5...)
+        let _m3 = server
+            .mock("POST", "/")
+            .with_status(200)
+            .with_body(
+                r#"[
+                {
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "result": {
+                        "accessList": [],
+                        "gasUsed": "0x5dc0"
                     }
-                });
-            }
-        });
-
-        // Give the server a moment to start
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 5,
+                    "result": {
+                        "0x0000000000000000000000000000000000000000": {
+                            "balance": "0x2fda439328c1d25c3c5"
+                        },
+                        "0x0000000000000000000000000000000000000001": {
+                            "balance": "0x31535e82bbce260fd"
+                        },
+                        "0x4838b106fce9647bdf1e7877bf73ce8b0bad5f97": {
+                            "balance": "0x4ba0584a354bc705",
+                            "nonce": 1735918
+                        }
+                    }
+                }
+            ]"#,
+            )
+            .expect(1)
+            .create_async()
+            .await;
 
         // Create tracer with fast retries
-        let rpc = EthereumRpcClient::new(&format!("http://127.0.0.1:{}", addr.port()))
-            .expect("Failed to create EthereumRpcClient");
+        let rpc =
+            EthereumRpcClient::new(&server.url()).expect("Failed to create EthereumRpcClient");
         let tracer = EVMEntrypointService::new_with_config(
             &rpc, 3,  // max_retries
             10, // retry_delay_ms
@@ -1110,13 +1082,7 @@ mod tests {
             .trace(block_hash, entry_points)
             .await;
 
-        // Verify that the mock server was called exactly 3 times (2 failures + 1 success)
-        let total_calls = call_count.load(Ordering::SeqCst);
-        assert_eq!(
-            total_calls, 3,
-            "Expected exactly 3 RPC calls (2 failures + 1 success), but got {}",
-            total_calls
-        );
+        _m3.assert();
 
         // Should return exactly one result
         assert_eq!(results.len(), 1);
@@ -1521,80 +1487,59 @@ mod tests {
         assert!(result.is_none());
     }
 
+    /// Test batch response handling with different response orderings
+    /// This verifies that the client correctly matches responses by ID, not by array position
+    #[rstest]
+    #[case::correct_order(vec![0, 1])]
+    #[case::reversed_order(vec![1, 0])]
     #[tokio::test]
-    async fn test_batch_response_correct_order() {
-        use std::sync::{
-            atomic::{AtomicUsize, Ordering},
-            Arc,
-        };
+    async fn test_batch_response_ordering(#[case] id_order: Vec<usize>) {
+        // Create a mock RPC server that returns responses in various orderings
+        let mut server = Server::new_async().await;
 
-        use tokio::{
-            io::{AsyncReadExt, AsyncWriteExt},
-            net::TcpListener,
-        };
-
-        // Create a mock RPC server that returns responses in the correct order (id=1 then id=2)
-        let call_count = Arc::new(AtomicUsize::new(0));
-        let call_count_clone = call_count.clone();
-
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .await
-            .unwrap();
-        let addr = listener.local_addr().unwrap();
-
-        tokio::spawn(async move {
-            while let Ok((mut socket, _)) = listener.accept().await {
-                let call_count = call_count_clone.clone();
-                tokio::spawn(async move {
-                    let mut buffer = vec![0; 8192];
-                    if let Ok(n) = socket.read(&mut buffer).await {
-                        let _request = String::from_utf8_lossy(&buffer[..n]);
-                        let _current_call = call_count.fetch_add(1, Ordering::SeqCst);
-
-                        // Respond with correct order: id=1 (access list) then id=2 (trace)
-                        let response = r#"[
-                            {
-                                "jsonrpc": "2.0",
-                                "id": 0,
-                                "result": {
-                                    "accessList": [
-                                        {
-                                            "address": "0x0000000000000000000000000000000000000001",
-                                            "storageKeys": ["0x0000000000000000000000000000000000000000000000000000000000000001"]
-                                        }
-                                    ],
-                                    "gasUsed": "0x5dc0"
-                                }
-                            },
-                            {
-                                "jsonrpc": "2.0",
-                                "id": 1,
-                                "result": {
-                                    "0x0000000000000000000000000000000000000001": {
-                                        "balance": "0x1"
-                                    }
-                                }
-                            }
-                        ]"#;
-
-                        let http_response = format!(
-                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-                            response.len(),
-                            response
-                        );
-
-                        let _ = socket
-                            .write_all(http_response.as_bytes())
-                            .await;
+        // Define the two response bodies
+        let access_list_response = r#"{
+            "jsonrpc": "2.0",
+            "id": 0,
+            "result": {
+                "accessList": [
+                    {
+                        "address": "0x0000000000000000000000000000000000000001",
+                        "storageKeys": ["0x0000000000000000000000000000000000000000000000000000000000000001"]
                     }
-                });
+                ],
+                "gasUsed": "0x5dc0"
             }
-        });
+        }"#;
 
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        let trace_response = r#"{
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "0x0000000000000000000000000000000000000001": {
+                    "balance": "0x1"
+                }
+            }
+        }"#;
 
-        let rpc = EthereumRpcClient::new(&format!("http://127.0.0.1:{}", addr.port()))
-            .expect("Failed to create EthereumRpcClient");
+        // Order responses based on the test case
+        let responses = [access_list_response, trace_response];
+        let ordered_responses: Vec<&str> = id_order
+            .iter()
+            .map(|&i| responses[i])
+            .collect();
+        let response_body = format!("[{}]", ordered_responses.join(","));
+
+        let _m = server
+            .mock("POST", "/")
+            .with_status(200)
+            .with_body(response_body)
+            .expect(1)
+            .create_async()
+            .await;
+
+        let rpc =
+            EthereumRpcClient::new(&server.url()).expect("Failed to create EthereumRpcClient");
         let tracer = EVMEntrypointService::new_with_config(&rpc, 0, 10);
 
         let entry_points = vec![EntryPointWithTracingParams::new(
@@ -1617,176 +1562,44 @@ mod tests {
             .trace(block_hash, entry_points)
             .await;
 
-        assert_eq!(results.len(), 1);
-        assert!(results[0].is_ok(), "Expected success with correct order, got: {:?}", results[0]);
-    }
-
-    #[tokio::test]
-    async fn test_batch_response_reversed_order() {
-        use std::sync::{
-            atomic::{AtomicUsize, Ordering},
-            Arc,
-        };
-
-        use tokio::{
-            io::{AsyncReadExt, AsyncWriteExt},
-            net::TcpListener,
-        };
-
-        // Create a mock RPC server that returns responses in REVERSED order (id=2 then id=1)
-        // This tests that we correctly match by ID, not by array position
-        let call_count = Arc::new(AtomicUsize::new(0));
-        let call_count_clone = call_count.clone();
-
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .await
-            .unwrap();
-        let addr = listener.local_addr().unwrap();
-
-        tokio::spawn(async move {
-            while let Ok((mut socket, _)) = listener.accept().await {
-                let call_count = call_count_clone.clone();
-                tokio::spawn(async move {
-                    let mut buffer = vec![0; 8192];
-                    if let Ok(n) = socket.read(&mut buffer).await {
-                        let _request = String::from_utf8_lossy(&buffer[..n]);
-                        let _current_call = call_count.fetch_add(1, Ordering::SeqCst);
-
-                        // Respond with REVERSED order: id=2 (trace) then id=1 (access list)
-                        // This should still work because we match by ID, not position
-                        let response = r#"[
-                            {
-                                "jsonrpc": "2.0",
-                                "id": 1,
-                                "result": {
-                                    "0x0000000000000000000000000000000000000001": {
-                                        "balance": "0x1"
-                                    }
-                                }
-                            },
-                            {
-                                "jsonrpc": "2.0",
-                                "id": 0,
-                                "result": {
-                                    "accessList": [
-                                        {
-                                            "address": "0x0000000000000000000000000000000000000001",
-                                            "storageKeys": ["0x0000000000000000000000000000000000000000000000000000000000000001"]
-                                        }
-                                    ],
-                                    "gasUsed": "0x5dc0"
-                                }
-                            }
-                        ]"#;
-
-                        let http_response = format!(
-                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-                            response.len(),
-                            response
-                        );
-
-                        let _ = socket
-                            .write_all(http_response.as_bytes())
-                            .await;
-                    }
-                });
-            }
-        });
-
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-
-        let rpc = EthereumRpcClient::new(&format!("http://127.0.0.1:{}", addr.port()))
-            .expect("Failed to create EthereumRpcClient");
-        let tracer = EVMEntrypointService::new_with_config(&rpc, 0, 10);
-
-        let entry_points = vec![EntryPointWithTracingParams::new(
-            EntryPoint::new(
-                "test:func()".to_string(),
-                Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
-                "func()".to_string(),
-            ),
-            TracingParams::RPCTracer(RPCTracerParams::new(
-                None,
-                Bytes::from(&keccak256("func()")[0..4]),
-            )),
-        )];
-
-        let block_hash =
-            Bytes::from_str("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
-                .unwrap();
-
-        let results = tracer
-            .trace(block_hash, entry_points)
-            .await;
+        _m.assert();
 
         assert_eq!(results.len(), 1);
         assert!(
             results[0].is_ok(),
-            "Expected success with reversed order (correct ID matching), got: {:?}",
+            "Expected success regardless of response order, got: {:?}",
             results[0]
         );
     }
 
     #[tokio::test]
     async fn test_batch_response_missing_id() {
-        use std::sync::{
-            atomic::{AtomicUsize, Ordering},
-            Arc,
-        };
+        // Create a mock RPC server that returns a response with a missing ID
+        // We send two requests (id=0 for access list, id=1 for trace) but only get back id=0
+        let mut server = Server::new_async().await;
 
-        use tokio::{
-            io::{AsyncReadExt, AsyncWriteExt},
-            net::TcpListener,
-        };
-
-        // Create a mock RPC server that returns responses with a missing ID
-        let call_count = Arc::new(AtomicUsize::new(0));
-        let call_count_clone = call_count.clone();
-
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .await
-            .unwrap();
-        let addr = listener.local_addr().unwrap();
-
-        tokio::spawn(async move {
-            while let Ok((mut socket, _)) = listener.accept().await {
-                let call_count = call_count_clone.clone();
-                tokio::spawn(async move {
-                    let mut buffer = vec![0; 8192];
-                    if let Ok(n) = socket.read(&mut buffer).await {
-                        let _request = String::from_utf8_lossy(&buffer[..n]);
-                        let _current_call = call_count.fetch_add(1, Ordering::SeqCst);
-
-                        // Return only one response with id=1, missing id=2
-                        let response = r#"[
-                            {
-                                "jsonrpc": "2.0",
-                                "id": 0,
-                                "result": {
-                                    "accessList": [],
-                                    "gasUsed": "0x5dc0"
-                                }
-                            }
-                        ]"#;
-
-                        let http_response = format!(
-                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-                            response.len(),
-                            response
-                        );
-
-                        let _ = socket
-                            .write_all(http_response.as_bytes())
-                            .await;
+        // Mock response with only id=0, missing id=1
+        let _m = server
+            .mock("POST", "/")
+            .with_status(200)
+            .with_body(
+                r#"[
+                {
+                    "jsonrpc": "2.0",
+                    "id": 0,
+                    "result": {
+                        "accessList": [],
+                        "gasUsed": "0x5dc0"
                     }
-                });
-            }
-        });
+                }
+            ]"#,
+            )
+            .expect(1)
+            .create_async()
+            .await;
 
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-
-        let rpc = EthereumRpcClient::new(&format!("http://127.0.0.1:{}", addr.port()))
-            .expect("Failed to create EthereumRpcClient");
+        let rpc =
+            EthereumRpcClient::new(&server.url()).expect("Failed to create EthereumRpcClient");
         let tracer = EVMEntrypointService::new_with_config(&rpc, 0, 10);
 
         let entry_points = vec![EntryPointWithTracingParams::new(
@@ -1809,6 +1622,7 @@ mod tests {
             .trace(block_hash, entry_points)
             .await;
 
+        _m.assert();
         assert_eq!(results.len(), 1);
         // Should fail because batch response doesn't have correct length
         assert!(matches!(results[0], Err(RPCError::UnknownError(_))));
