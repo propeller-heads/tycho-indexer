@@ -1,6 +1,6 @@
 specVersion: v0.1.0
 package:
-  name: "ethereum_template"
+  name: "ethereum_lido"
   version: v0.1.0
 
 protobuf:
@@ -9,12 +9,13 @@ protobuf:
     - tycho/evm/v1/common.proto
     - tycho/evm/v1/utils.proto
   importPaths:
+    - ./proto/v1
     - ../../proto
 
 binaries:
   default:
     type: wasm/rust-v1
-    file: ../target/wasm32-unknown-unknown/release/ethereum_template_factory.wasm
+    file: ../target/wasm32-unknown-unknown/release/ethereum_lido.wasm
 
 
 network: mainnet

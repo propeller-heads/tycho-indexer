@@ -1,10 +1,10 @@
 [package]
-name = "ethereum-template-factory"
+name = "ethereum-lido"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "ethereum_template_factory"
+name = "ethereum_lido"
 crate-type = ["cdylib"]
 
 [dependencies]

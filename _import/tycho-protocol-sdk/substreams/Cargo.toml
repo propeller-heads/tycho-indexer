@@ -18,6 +18,7 @@ members = [
     "ethereum-uniswap-v4/with-hooks",
     "ethereum-ekubo-v2",
     "ethereum-maverick-v2",
+    "ethereum-lido",
     "ethereum-balancer-v3",
     "base-aerodrome-slipstreams",
 ]
