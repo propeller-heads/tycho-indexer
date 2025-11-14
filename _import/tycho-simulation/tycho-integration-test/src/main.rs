@@ -1,4 +1,5 @@
 mod metrics;
+mod stream_processor;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -25,16 +26,15 @@ use tycho_simulation::{
     tycho_common::models::Chain,
     utils::load_all_tokens,
 };
-use tycho_test::{
-    execution::{
-        encoding::encode_swap,
-        models::{TychoExecutionInput, TychoExecutionResult},
-        simulate_swap_transaction, tenderly,
-    },
-    stream_processor::{
-        protocol_stream_processor::ProtocolStreamProcessor,
-        rfq_stream_processor::RFQStreamProcessor, StreamUpdate, UpdateType,
-    },
+use tycho_test::execution::{
+    encoding::encode_swap,
+    models::{TychoExecutionInput, TychoExecutionResult},
+    simulate_swap_transaction, tenderly,
+};
+
+use crate::stream_processor::{
+    protocol_stream_processor::ProtocolStreamProcessor, rfq_stream_processor::RFQStreamProcessor,
+    StreamUpdate, UpdateType,
 };
 
 #[derive(Parser, Clone)]
