@@ -308,7 +308,13 @@ where
                 .zip(tracing_results)
             {
                 match result {
-                    Ok(tracing_result) => traced_entry_points.push(tracing_result),
+                    Ok(tracing_result) => {
+                        traced_entry_points.push(tracing_result);
+                        debug!(
+                            entrypoint = ?ep.entry_point.external_id,
+                            "DCI: Successfully traced entrypoint"
+                        );
+                    }
                     Err(e) => {
                         tracing::warn!("DCI: Failed to trace entrypoint {:?}: {:?}", ep, e);
                         failed_entrypoints.push((ep.clone(), *tx));

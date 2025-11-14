@@ -379,6 +379,11 @@ impl EVMBatchAccountExtractor {
 
         match request.slots.clone() {
             Some(slots) => {
+                debug!(
+                    address = ?request.address,
+                    n_slots = slots.len(),
+                    "Fetching specific storage slots for address"
+                );
                 for slot_batch in slots.chunks(max_batch_size) {
                     let mut storage_requests = Vec::with_capacity(slot_batch.len());
                     let mut storage_batch = self.provider.new_batch();
@@ -401,6 +406,11 @@ impl EVMBatchAccountExtractor {
                     }
 
                     let request_size = slot_batch.len();
+                    debug!(
+                        address = ?request.address,
+                        batch_size = request_size,
+                        "Sending storage batch request"
+                    );
                     storage_batch
                         .send()
                         .await
