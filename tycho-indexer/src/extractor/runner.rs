@@ -655,13 +655,6 @@ impl ExtractorBuilder {
                     DCIPlugin::Standard(rpc_dci)
                 }
                 DCIType::UniswapV4Hooks { pool_manager_address } => {
-                    let rpc_url = self.rpc_url.as_ref().ok_or_else(|| {
-                        ExtractionError::Setup(
-                            "RPC URL is required for UniswapV4Hooks DCI plugin but not provided"
-                                .to_string(),
-                        )
-                    })?;
-
                     // random address to deploy our mini router to
                     let router_address =
                         Address::from("0x2e234DAe75C793f67A35089C9d99245E1C58470b");
@@ -678,7 +671,6 @@ impl ExtractorBuilder {
                     let mut hooks_dci = UniswapV4HookDCIBuilder::new(
                         base_dci,
                         rpc_client,
-                        rpc_url.clone(),
                         router_address,
                         pool_manager,
                         cached_gw.clone(),

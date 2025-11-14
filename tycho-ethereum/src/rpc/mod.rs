@@ -46,6 +46,7 @@ impl Default for BatchingConfig {
 pub struct EthereumRpcClient {
     pub(crate) inner: ReqwestClient,
     pub(crate) batching: Option<BatchingConfig>,
+    pub(crate) url: String,
 }
 
 impl EthereumRpcClient {
@@ -66,11 +67,15 @@ impl EthereumRpcClient {
         let rpc = ClientBuilder::default().http_with_client(http_client, url);
         let batching = Some(BatchingConfig::default());
 
-        Ok(Self { inner: rpc, batching })
+        Ok(Self { inner: rpc, batching, url: rpc_url.to_string() })
+    }
+
+    pub fn get_url(&self) -> &str {
+        &self.url
     }
 
     pub async fn with_batching(self, batching: Option<BatchingConfig>) -> Result<Self, RPCError> {
-        Ok(Self { inner: self.inner, batching })
+        Ok(Self { inner: self.inner, batching, url: self.url })
     }
 
     pub async fn get_block_number(&self) -> Result<u64, RPCError> {
@@ -478,7 +483,7 @@ mod tests {
         pub(crate) fn create_rpc_client(&self, batching: bool) -> EthereumRpcClient {
             let batching = if batching { Some(BatchingConfig::default()) } else { None };
 
-            EthereumRpcClient { inner: self.inner_rpc.clone(), batching }
+            EthereumRpcClient { inner: self.inner_rpc.clone(), batching, url: self.url.clone() }
         }
     }
 

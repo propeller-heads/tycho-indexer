@@ -104,6 +104,7 @@ static RPC_CLIENT: LazyLock<ReqwestClient> = LazyLock::new(|| {
 pub struct TestFixture {
     pub block: Block,
     pub inner_rpc: ReqwestClient,
+    pub url: String,
 }
 
 impl TestFixture {
@@ -127,7 +128,8 @@ impl TestFixture {
             Default::default(),
         );
 
-        Self { block, inner_rpc }
+        let url = std::env::var("RPC_URL").expect("RPC_URL must be set for testing");
+        Self { block, inner_rpc, url }
     }
 }
 

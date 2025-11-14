@@ -46,7 +46,6 @@ where
 {
     inner_dci: DynamicContractIndexer<AE, T, G>,
     rpc: EthereumRpcClient,
-    rpc_url: String,
     router_address: Address,
     pool_manager: Address,
     db_gateway: G,
@@ -69,7 +68,6 @@ where
     pub(crate) fn new(
         inner_dci: DynamicContractIndexer<AE, T, G>,
         rpc: &EthereumRpcClient,
-        rpc_url: String,
         router_address: Address,
         pool_manager: Address,
         db_gateway: G,
@@ -78,7 +76,6 @@ where
         Self {
             inner_dci,
             rpc: rpc.clone(),
-            rpc_url,
             router_address,
             pool_manager,
             db_gateway,
@@ -126,7 +123,7 @@ where
             &mut generator_registry,
             &mut parser_registry,
             &mut provider_registry,
-            self.rpc_url.clone(),
+            self.rpc.get_url().to_string(),
         );
 
         // Register default RPC provider
@@ -283,7 +280,6 @@ mod tests {
         let builder = UniswapV4HookDCIBuilder::new(
             inner_dci,
             &rpc,
-            rpc_url.clone(),
             router_address.clone(),
             pool_manager.clone(),
             db_gateway,
@@ -304,7 +300,7 @@ mod tests {
         assert_eq!(builder.chain, Chain::Ethereum);
         assert_eq!(builder.router_address, router_address);
         assert_eq!(builder.pool_manager, pool_manager);
-        assert_eq!(builder.rpc_url, rpc_url);
+        assert_eq!(builder.rpc.get_url(), rpc_url);
 
         // Build the Hook DCI
         let _ = builder
