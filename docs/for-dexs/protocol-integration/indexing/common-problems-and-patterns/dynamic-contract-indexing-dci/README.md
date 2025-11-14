@@ -7,17 +7,17 @@ The Dynamic Contract Indexing (DCI) system is a Tycho feature that addresses thi
 * the contracts were created long before the protocol's first indexed block (`startBlock` on the substreams configuration file)
 * the dependency is updatable and which contracts are called may change during the protocol's lifetime. For example: a protocol switches oracle provider.
 
-Using predefined tracing information (known as entry points), Tycho's DCI assumes responsibility for these edge cases, with Substreams supplying only the core subset of the data for simulation.&#x20;
+Using predefined tracing information (known as entry points), Tycho's DCI assumes responsibility for these edge cases, with Substreams supplying only the core subset of the data for simulation.
 
 ### Understanding Entry Points
 
-DCI relies on the substreams package to supply tracing information for it to analyse and detect dependency contracts. It is important to understand the protocol being integrated and know where it might make external calls during simulations (swaps, price etc). These external calls need to be able to be defined fully by the combination of 'Entry Points' and 'Tracing Parameters'. See [limitations](dynamic-contract-indexing-dci.md#motivation-1) below for more information on what is not covered by the current DCI implementation.
+DCI relies on the substreams package to supply tracing information for it to analyse and detect dependency contracts. It is important to understand the protocol being integrated and know where it might make external calls during simulations (swaps, price etc). These external calls need to be able to be defined fully by the combination of 'Entry Points' and 'Tracing Parameters'. See [limitations](./#motivation-1) below for more information on what is not covered by the current DCI implementation.
 
 When an entry point is traced, all subsequent calls to other external contracts are automatically traced. Only the initial entry point needs to be supplied.
 
 #### Entry Point
 
-An entry point defines an external call in very simple terms:&#x20;
+An entry point defines an external call in very simple terms:
 
 * **address** of the contract called
 * **signature** of the function called on that contract
@@ -45,11 +45,11 @@ To use the DCI system, you will need to extend your substream package to emit th
 
 #### 1. Data to perform a trace <a href="#motivation" id="motivation"></a>
 
-For successful tracing we need to define: \
+For successful tracing we need to define:\
 \- An '**Entry Point'** for each call made to an external contract during a simulation action (swap, price calculation, etc.).\
 \- **Tracing parameters** for the entry point. For every entry point defined, at least 1 set of tracing parameters must be supplied.\
 \
-It is vital that every component that uses an entry point is explicitly linked to that entry point. \
+It is vital that every component that uses an entry point is explicitly linked to that entry point.\
 \
 Some useful helper functions are provided to facilitate building the entry point messages:
 
@@ -141,5 +141,5 @@ DCI is currently limited to only support cases that can be covered by explicitly
 
 ### Frequently Asked Questions <a href="#motivation" id="motivation"></a>
 
-**Q: Is it okay to redefine the same entry point multiple times?** \
+**Q: Is it okay to redefine the same entry point multiple times?**\
 A: _Yes. Tycho will deduplicate entry points, allowing you to add the same entry point for every new component without needing to track which ones already exist. Using storage on a substreams module affects the performance of the module so should be avoided where possible._
