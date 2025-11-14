@@ -1,3 +1,11 @@
+## [0.111.1](https://github.com/propeller-heads/tycho-indexer/compare/0.111.0...0.111.1) (2025-11-14)
+
+
+### Bug Fixes
+
+* address errors in swagger API ([#733](https://github.com/propeller-heads/tycho-indexer/issues/733)) ([1d5bc57](https://github.com/propeller-heads/tycho-indexer/commit/1d5bc574355f62d48a817fd8ebd9444c62155bd1))
+* adjust schema definitions and resolve the swagger UI errors ([5ee04ee](https://github.com/propeller-heads/tycho-indexer/commit/5ee04eedb35bd723c2aa8c35ddc6ad618f980205))
+
 ## [0.111.0](https://github.com/propeller-heads/tycho-indexer/compare/0.110.0...0.111.0) (2025-11-14)
 
 
