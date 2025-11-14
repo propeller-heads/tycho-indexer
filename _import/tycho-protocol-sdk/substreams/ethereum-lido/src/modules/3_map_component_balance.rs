@@ -2,8 +2,11 @@ use crate::pool_factories::StakingStatus;
 use anyhow::Result;
 use itertools::Itertools;
 use std::collections::HashMap;
-use substreams::{hex, prelude::*, Hex};
-use substreams_ethereum::pb::eth;
+use substreams::{hex, prelude::*};
+use substreams_ethereum::pb::eth::{
+    self,
+    v2::{Call, StorageChange},
+};
 use tycho_substreams::prelude::*;
 
 const STORAGE_SLOT_TOTAL_SHARES: [u8; 32] =
@@ -16,7 +19,9 @@ const STORAGE_SLOT_STAKE_LIMIT: [u8; 32] =
     hex!("a3678de4a579be090bed1177e0a24f77cc29d181ac22fd7688aca344d8938015");
 
 const ST_ETH_ADDRESS: [u8; 20] = hex!("17144556fd3424EDC8Fc8A4C940B2D04936d17eb");
+const ST_ETH_ADDRESS_COMPONENT_ID: &str = "0x17144556fd3424edc8fc8a4c940b2d04936d17eb";
 const WST_ETH_ADDRESS: [u8; 20] = hex!("7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0");
+const WST_ETH_ADDRESS_COMPONENT_ID: &str = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
 const ZERO_STAKING_LIMIT: &str = "000000000000000000000000";
 
 /// Extracts balances per component
@@ -29,7 +34,6 @@ pub fn map_component_balance(
     block: eth::v2::Block,
     _store: StoreGetRaw,
 ) -> Result<BlockChanges, substreams::errors::Error> {
-    // substreams::log::println("map_component_balance");
     let mut block_entity_changes: BlockChanges =
         BlockChanges { block: Some((&block).into()), changes: vec![] };
 
@@ -38,14 +42,8 @@ pub fn map_component_balance(
     handle_sync(&block, &mut tx_changes);
 
     let mut tx_entity_changes_map = HashMap::new();
+
     for partial_changes in tx_changes.values() {
-        substreams::log::println(format!("partial_changes: {:?}", partial_changes));
-        substreams::log::println(format!(
-            "partial_changes_2: {:?}",
-            partial_changes
-                .clone()
-                .consolidate_entity_changes()
-        ));
         tx_entity_changes_map.insert(
             partial_changes.transaction.hash.clone(),
             TransactionChanges {
@@ -103,101 +101,106 @@ impl PartialChanges {
 }
 
 fn handle_sync(block: &eth::v2::Block, tx_changes: &mut HashMap<Vec<u8>, PartialChanges>) {
-    for _tx in block.transactions() {
-        for call in _tx.calls.iter() {
-            if call.address == ST_ETH_ADDRESS {
-                let mut comp_id = Hex::encode(ST_ETH_ADDRESS);
-                comp_id.insert_str(0, "0x");
-                let tx_change = tx_changes
-                    .entry(_tx.hash.clone())
-                    .or_insert_with(|| PartialChanges {
-                        transaction: _tx.into(),
-                        entity_changes: HashMap::new(),
-                    });
-                for storage_change in call.storage_changes.iter() {
-                    if storage_change.key == STORAGE_SLOT_TOTAL_SHARES {
-                        tx_change.entity_changes.insert(
-                            ComponentKey::new(comp_id.clone(), "total_shares".to_owned()),
-                            Attribute {
-                                name: "total_shares".to_owned(),
-                                value: storage_change.new_value.clone(),
-                                change: ChangeType::Update.into(),
-                            },
-                        );
-                    } else if storage_change.key == STORAGE_SLOT_POOLED_ETH {
-                        tx_change.entity_changes.insert(
-                            ComponentKey::new(comp_id.clone(), "total_pooled_eth".to_owned()),
-                            Attribute {
-                                name: "total_pooled_eth".to_owned(),
-                                value: storage_change.new_value.clone(),
-                                change: ChangeType::Update.into(),
-                            },
-                        );
-                    } else if storage_change.key == STORAGE_SLOT_STAKE_LIMIT {
-                        let stake_limit_new_hex = hex::encode(storage_change.new_value.clone());
-                        let (staking_status, staking_limit) = if stake_limit_new_hex.get(0..24) ==
-                            Some(ZERO_STAKING_LIMIT) &&
-                            stake_limit_new_hex.get(32..56) != Some(ZERO_STAKING_LIMIT)
-                        {
-                            (StakingStatus::Unlimited, BigInt::zero())
-                        } else if stake_limit_new_hex.get(32..56) == Some(ZERO_STAKING_LIMIT) {
-                            (StakingStatus::Paused, BigInt::zero())
-                        } else {
-                            (
-                                StakingStatus::Limited,
-                                BigInt::from(
-                                    num_bigint::BigInt::parse_bytes(
-                                        stake_limit_new_hex
-                                            .get(0..24)
-                                            .unwrap()
-                                            .as_bytes(),
-                                        16,
-                                    )
-                                    .unwrap(),
-                                ),
-                            )
-                        };
+    for tx in block.transactions() {
+        for call in tx.calls.iter() {
+            let entity_changes = if call.address.as_slice() == ST_ETH_ADDRESS {
+                st_eth_entity_changes(call)
+            } else if call.address.as_slice() == WST_ETH_ADDRESS {
+                wst_eth_entity_changes(call)
+            } else {
+                HashMap::new()
+            };
 
-                        tx_change.entity_changes.insert(
-                            ComponentKey::new(comp_id.clone(), "staking_status".to_owned()),
-                            Attribute {
-                                name: "staking_status".to_owned(),
-                                value: staking_status.as_str_name().into(),
-                                change: ChangeType::Update.into(),
-                            },
-                        );
-                        tx_change.entity_changes.insert(
-                            ComponentKey::new(comp_id.clone(), "staking_limit".to_owned()),
-                            Attribute {
-                                name: "staking_limit".to_owned(),
-                                value: staking_limit.to_signed_bytes_be(),
-                                change: ChangeType::Update.into(),
-                            },
-                        );
-                    }
-                }
-            } else if call.address == WST_ETH_ADDRESS {
-                let mut comp_id = Hex::encode(WST_ETH_ADDRESS);
-                comp_id.insert_str(0, "0x");
-                let tx_change = tx_changes
-                    .entry(_tx.hash.clone())
-                    .or_insert_with(|| PartialChanges {
-                        transaction: _tx.into(),
-                        entity_changes: HashMap::new(),
-                    });
-                for storage_change in call.storage_changes.iter() {
-                    if storage_change.key == STORAGE_SLOT_WRAPPED_ETH {
-                        tx_change.entity_changes.insert(
-                            ComponentKey::new(comp_id.clone(), "total_wstETH".to_owned()),
-                            Attribute {
-                                name: "total_wstETH".to_owned(),
-                                value: storage_change.new_value.clone(),
-                                change: ChangeType::Update.into(),
-                            },
-                        );
-                    }
-                }
+            if entity_changes.is_empty() {
+                continue;
             }
+
+            let tx_change = tx_changes
+                .entry(tx.hash.clone())
+                .or_insert_with(|| PartialChanges {
+                    transaction: tx.into(),
+                    entity_changes: HashMap::new(),
+                });
+
+            tx_change
+                .entity_changes
+                .extend(entity_changes);
         }
     }
+}
+
+fn staking_status_and_limit(storage_change: &StorageChange) -> (StakingStatus, BigInt) {
+    let stake_limit_new_hex = hex::encode(storage_change.new_value.clone());
+    if stake_limit_new_hex.get(0..24) == Some(ZERO_STAKING_LIMIT) &&
+        stake_limit_new_hex.get(32..56) != Some(ZERO_STAKING_LIMIT)
+    {
+        (StakingStatus::Unlimited, BigInt::zero())
+    } else if stake_limit_new_hex.get(32..56) == Some(ZERO_STAKING_LIMIT) {
+        (StakingStatus::Paused, BigInt::zero())
+    } else {
+        (
+            StakingStatus::Limited,
+            BigInt::from(
+                num_bigint::BigInt::parse_bytes(
+                    stake_limit_new_hex
+                        .get(0..24)
+                        .unwrap()
+                        .as_bytes(),
+                    16,
+                )
+                .unwrap(),
+            ),
+        )
+    }
+}
+
+fn st_eth_entity_changes(call: &Call) -> HashMap<ComponentKey<String>, Attribute> {
+    let mut entity_changes: HashMap<ComponentKey<String>, Attribute> = HashMap::new();
+    for storage_change in call.storage_changes.iter() {
+        if storage_change.key == STORAGE_SLOT_TOTAL_SHARES {
+            let (key, attr) =
+                create_entity_change("total_shares", storage_change.new_value.clone(), false);
+            entity_changes.insert(key, attr);
+        } else if storage_change.key == STORAGE_SLOT_POOLED_ETH {
+            let (key, attr) =
+                create_entity_change("total_pooled_eth", storage_change.new_value.clone(), false);
+            entity_changes.insert(key, attr);
+        } else if storage_change.key == STORAGE_SLOT_STAKE_LIMIT {
+            let (staking_status, staking_limit) = staking_status_and_limit(storage_change);
+            let (key, attr) =
+                create_entity_change("staking_status", staking_status.as_str_name().into(), false);
+            entity_changes.insert(key, attr);
+            let (key, attr) =
+                create_entity_change("staking_limit", staking_limit.to_signed_bytes_be(), false);
+            entity_changes.insert(key, attr);
+        };
+    }
+    entity_changes
+}
+
+fn wst_eth_entity_changes(call: &Call) -> HashMap<ComponentKey<String>, Attribute> {
+    let mut entity_changes: HashMap<ComponentKey<String>, Attribute> = HashMap::new();
+    for storage_change in call.storage_changes.iter() {
+        if storage_change.key == STORAGE_SLOT_WRAPPED_ETH {
+            let (key, attr) =
+                create_entity_change("total_wstETH", storage_change.new_value.clone(), true);
+            entity_changes.insert(key, attr);
+        }
+    }
+    entity_changes
+}
+
+fn create_entity_change(
+    name: &str,
+    value: Vec<u8>,
+    wrapped: bool,
+) -> (ComponentKey<String>, Attribute) {
+    (
+        ComponentKey::new(
+            if wrapped { WST_ETH_ADDRESS_COMPONENT_ID } else { ST_ETH_ADDRESS_COMPONENT_ID }
+                .to_owned(),
+            name.to_owned(),
+        ),
+        Attribute { name: name.to_owned(), value, change: ChangeType::Update.into() },
+    )
 }
