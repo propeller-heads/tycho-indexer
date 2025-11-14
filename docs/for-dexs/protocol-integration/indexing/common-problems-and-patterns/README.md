@@ -23,7 +23,7 @@ If these contracts need to be dynamically determined or their creation event is 
 
 For contracts that cannot be statically determined at time of integration or their creation events are not observable by the substreams package, Dynamic Contract Indexer (DCI) support is provided. Keep in mind using this feature adds indexing latency and should be avoided if possible.
 
-The DCI allows you to specify external contract call information, which it will use to trace and identify all contract dependencies. It then automates the indexing of those identified contracts and their relevant storage slots. See[ Dynamic Contract Indexer](dynamic-contract-indexing-dci/).
+The DCI allows you to specify external contract call information, which it will use to trace and identify all contract dependencies. It then automates the indexing of those identified contracts and their relevant storage slots. See[ Dynamic Contract Indexer](dynamic-contract-indexing-dci.md).
 
 ### Using relative component balances
 
