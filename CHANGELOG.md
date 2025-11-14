@@ -1,3 +1,11 @@
+## [0.112.0](https://github.com/propeller-heads/tycho-indexer/compare/0.111.1...0.112.0) (2025-11-14)
+
+
+### Features
+
+* improve token retrieval with concurrent paginated requests ([#771](https://github.com/propeller-heads/tycho-indexer/issues/771)) ([a5a7bc6](https://github.com/propeller-heads/tycho-indexer/commit/a5a7bc6fd30c2709762ba2d8dac147feec021515))
+* make concurrency limit configurable in `get_all_tokens` ([1103dac](https://github.com/propeller-heads/tycho-indexer/commit/1103dacb639148c9d74af721ce5aaf5972fc1798))
+
 ## [0.111.1](https://github.com/propeller-heads/tycho-indexer/compare/0.111.0...0.111.1) (2025-11-14)
 
 
