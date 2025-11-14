@@ -49,6 +49,7 @@ use tycho_substreams::{
 /// as well as all necessary metadata for routing and encoding.
 #[substreams::handlers::map]
 fn map_protocol_components(block: eth::v2::Block) -> Result<BlockTransactionProtocolComponents> {
+    // TODO: add flag to emit only once
     Ok(BlockTransactionProtocolComponents {
         tx_components: block
             .transactions()
@@ -56,7 +57,6 @@ fn map_protocol_components(block: eth::v2::Block) -> Result<BlockTransactionProt
                 let components = tx
                     .logs_with_calls()
                     .filter_map(|(log, call)| {
-                        // TODO: ensure this method is implemented correctly
                         pool_factories::maybe_create_component(call.call, log, tx)
                     })
                     .collect::<Vec<_>>();
