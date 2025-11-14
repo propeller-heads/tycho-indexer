@@ -1,3 +1,10 @@
+## [0.134.0](https://github.com/propeller-heads/tycho-execution/compare/0.133.0...0.134.0) (2025-11-14)
+
+
+### Features
+
+* update tycho dependency to 0.113.0 ([c4579f1](https://github.com/propeller-heads/tycho-execution/commit/c4579f1af68ff929becd20a2b8da239ac9d03e47))
+
 ## [0.133.0](https://github.com/propeller-heads/tycho-execution/compare/0.132.0...0.133.0) (2025-11-14)
 
 
