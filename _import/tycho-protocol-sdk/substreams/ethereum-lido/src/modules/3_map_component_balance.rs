@@ -1,37 +1,3 @@
-//! Template for Protocols with contract factories
-//!
-//! This template provides foundational maps and store substream modules for indexing a
-//! protocol where each component (e.g., pool) is deployed to a separate contract. Each
-//! contract is expected to escrow its ERC-20 token balances.
-//!
-//! If your protocol supports native ETH, you may need to adjust the balance tracking
-//! logic in `map_relative_component_balance` to account for native token handling.
-//!
-//! ## Assumptions
-//! - Assumes each pool has a single newly deployed contract linked to it
-//! - Assumes pool identifier equals the deployed contract address
-//! - Assumes any price or liquidity updated correlates with a pools contract storage update.
-//!
-//! ## Alternative Module
-//! If your protocol uses a vault-like contract to manage balances, or if pools are
-//! registered within a singleton contract, refer to the `ethereum-template-singleton`
-//! substream for an appropriate alternative.
-//!
-//! ## Warning
-//! This template provides a general framework for indexing a protocol. However, it is
-//! likely that you will need to adapt the steps to suit your specific use case. Use the
-//! provided code with care and ensure you fully understand each step before proceeding
-//! with your implementation.
-//!
-//! ## Example Use Case
-//! For an Uniswap-like protocol where each liquidity pool is deployed as a separate
-//! contract, you can use this template to:
-//! - Track relative component balances (e.g., ERC-20 token balances in each pool).
-//! - Index individual pool contracts as they are created by the factory contract.
-//!
-//! Adjustments to the template may include:
-//! - Handling native ETH balances alongside token balances.
-//! - Customizing indexing logic for specific factory contract behavior.
 use crate::pool_factories::StakingStatus;
 use anyhow::Result;
 use itertools::Itertools;
@@ -39,6 +5,19 @@ use std::collections::HashMap;
 use substreams::{hex, prelude::*, Hex};
 use substreams_ethereum::pb::eth;
 use tycho_substreams::prelude::*;
+
+const STORAGE_SLOT_TOTAL_SHARES: [u8; 32] =
+    hex!("e3b4b636e601189b5f4c6742edf2538ac12bb61ed03e6da26949d69838fa447e");
+const STORAGE_SLOT_POOLED_ETH: [u8; 32] =
+    hex!("ed310af23f61f96daefbcd140b306c0bdbf8c178398299741687b90e794772b0");
+const STORAGE_SLOT_WRAPPED_ETH: [u8; 32] =
+    hex!("0000000000000000000000000000000000000000000000000000000000000002");
+const STORAGE_SLOT_STAKE_LIMIT: [u8; 32] =
+    hex!("a3678de4a579be090bed1177e0a24f77cc29d181ac22fd7688aca344d8938015");
+
+const ST_ETH_ADDRESS: [u8; 20] = hex!("17144556fd3424EDC8Fc8A4C940B2D04936d17eb");
+const WST_ETH_ADDRESS: [u8; 20] = hex!("7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0");
+const ZERO_STAKING_LIMIT: &str = "000000000000000000000000";
 
 /// Extracts balances per component
 ///
@@ -87,19 +66,6 @@ pub fn map_component_balance(
 
     Ok(block_entity_changes)
 }
-
-const STORAGE_SLOT_TOTAL_SHARES: [u8; 32] =
-    hex!("e3b4b636e601189b5f4c6742edf2538ac12bb61ed03e6da26949d69838fa447e");
-const STORAGE_SLOT_POOLED_ETH: [u8; 32] =
-    hex!("ed310af23f61f96daefbcd140b306c0bdbf8c178398299741687b90e794772b0");
-const STORAGE_SLOT_WRAPPED_ETH: [u8; 32] =
-    hex!("0000000000000000000000000000000000000000000000000000000000000002");
-const STORAGE_SLOT_STAKE_LIMIT: [u8; 32] =
-    hex!("a3678de4a579be090bed1177e0a24f77cc29d181ac22fd7688aca344d8938015");
-
-const ST_ETH_ADDRESS: [u8; 20] = hex!("17144556fd3424EDC8Fc8A4C940B2D04936d17eb");
-const WST_ETH_ADDRESS: [u8; 20] = hex!("7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0");
-const ZERO_STAKING_LIMIT: &str = "000000000000000000000000";
 
 #[derive(Clone, Hash, Eq, PartialEq, Debug)]
 struct ComponentKey<T> {
