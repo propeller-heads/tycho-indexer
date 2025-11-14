@@ -12,7 +12,7 @@ use tycho_common::models::{
     Address, BlockHash, ComponentId, EntryPointId, StoreKey,
 };
 
-use super::hook_dci::ComponentProcessingState;
+use super::hooks::hook_dci::ComponentProcessingState;
 
 /// A unique identifier for a storage location, consisting of an address and a storage key.
 type StorageLocation = (Address, StoreKey);
@@ -618,14 +618,14 @@ where
 
     /// Returns full permanent state (only available in tests).
     #[cfg(test)]
-    pub fn get_full_permanent_state(&self) -> &HashMap<K, V> {
+    pub(super) fn get_full_permanent_state(&self) -> &HashMap<K, V> {
         &self.permanent
     }
 
     /// Validates block order and ensures the corresponding block layer exists (only available in
     /// tests).
     #[cfg(test)]
-    pub fn validate_and_ensure_block_layer_test(
+    pub(super) fn validate_and_ensure_block_layer_test(
         &mut self,
         block: &Block,
     ) -> Result<(), DCICacheError> {

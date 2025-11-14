@@ -12,22 +12,21 @@ use tycho_common::{
     Bytes,
 };
 
-use crate::extractor::dynamic_contract_indexer::component_metadata::{
+use crate::extractor::dynamic_contract_indexer::hooks::component_metadata::{
     MetadataError, MetadataRequest, MetadataRequestGenerator, MetadataRequestType,
     MetadataResponseParser, MetadataValue, RpcTransport,
 };
 
-pub struct EulerMetadataGenerator {
+pub(super) struct EulerMetadataGenerator {
     rpc_url: String,
 }
 
 impl EulerMetadataGenerator {
-    #[allow(dead_code)]
-    pub fn new(rpc_url: String) -> Self {
+    pub(super) fn new(rpc_url: String) -> Self {
         Self { rpc_url }
     }
 }
-const EULER_LENS_BYTECODE_BYTES: &[u8] = include_bytes!("../assets/EulerLimitsLens.evm.runtime");
+const EULER_LENS_BYTECODE_BYTES: &[u8] = include_bytes!("./assets/EulerLimitsLens.evm.runtime");
 
 impl MetadataRequestGenerator for EulerMetadataGenerator {
     fn generate_requests(
@@ -170,8 +169,7 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
     }
 }
 
-#[allow(dead_code)] //TODO: remove this once it's used
-pub struct EulerMetadataResponseParser;
+pub(super) struct EulerMetadataResponseParser;
 
 impl MetadataResponseParser for EulerMetadataResponseParser {
     fn parse_response(
@@ -180,7 +178,7 @@ impl MetadataResponseParser for EulerMetadataResponseParser {
         request: &MetadataRequest,
         response: &Value,
     ) -> Result<MetadataValue, MetadataError> {
-        match &request.request_type {
+        match &request.request_type() {
             MetadataRequestType::ComponentBalance { .. } => {
                 if component.tokens.len() < 2 {
                     return Err(MetadataError::MissingData(
@@ -228,12 +226,12 @@ impl MetadataResponseParser for EulerMetadataResponseParser {
 
                 let entrypoint = (|| {
                     let request = request
-                        .transport
+                        .transport()
                         .as_any()
                         .downcast_ref::<RpcTransport>()
                         .ok_or(MetadataError::UnknownError("Not RpcTransport".to_string()))?;
 
-                    let params = &request.params[0];
+                    let params = &request.params()[0];
 
                     let target = component
                         .static_attributes
@@ -295,7 +293,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::extractor::dynamic_contract_indexer::{
+    use crate::extractor::dynamic_contract_indexer::hooks::{
         component_metadata::{RequestProvider, RequestTransport},
         rpc_metadata_provider::RPCMetadataProvider,
     };
@@ -340,80 +338,82 @@ mod tests {
         assert_eq!(requests.len(), 3);
 
         // Balance request
-        assert_eq!(requests[0].component_id, component.id);
+        assert_eq!(requests[0].component_id(), &component.id);
         assert_eq!(
-            requests[0].request_type,
-            MetadataRequestType::ComponentBalance { token_addresses: component.tokens.clone() }
+            requests[0].request_type(),
+            &MetadataRequestType::ComponentBalance { token_addresses: component.tokens.clone() }
         );
         assert_eq!(
-            requests[0].request_id,
-            "euler_balance_0x000000000000000000000000000000000000beef".to_string()
+            requests[0].request_id(),
+            "euler_balance_0x000000000000000000000000000000000000beef"
         );
-        assert_eq!(requests[0].transport.routing_key(), "rpc_default".to_string());
+        assert_eq!(requests[0].transport().routing_key(), "rpc_default".to_string());
         assert_eq!(
-            requests[0].transport.deduplication_id(),
+            requests[0].transport().deduplication_id(),
             "eth_call_[{\"data\":\"0x0902f1ac\",\"to\":\"0x000000000000000000000000000000000000beef\"},\"0x3039\"]".to_string()
         );
 
         // Limits request 0 to 1
-        assert_eq!(requests[1].component_id, component.id);
+        assert_eq!(requests[1].component_id(), &component.id);
         assert_eq!(
-            requests[1].request_type,
-            MetadataRequestType::Limits {
+            requests[1].request_type(),
+            &MetadataRequestType::Limits {
                 token_pair: vec![(component.tokens[0].clone(), component.tokens[1].clone())]
             }
         );
         assert_eq!(
-            requests[1].request_id,
-            "euler_limits_0x000000000000000000000000000000000000beef_0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48_to_0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".to_string()
+            requests[1].request_id(),
+            "euler_limits_0x000000000000000000000000000000000000beef_0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48_to_0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
         );
-        assert_eq!(requests[1].transport.routing_key(), "rpc_default".to_string());
+        assert_eq!(requests[1].transport().routing_key(), "rpc_default".to_string());
 
         // The deduplication_id will now include the state & code override parameters
         assert!(requests[1]
-            .transport
+            .transport()
             .deduplication_id()
             .starts_with("eth_call_"));
 
-        dbg!(&requests[1].transport.deduplication_id());
+        dbg!(&requests[1]
+            .transport()
+            .deduplication_id());
 
         assert!(requests[1]
-            .transport
+            .transport()
             .deduplication_id()
             .contains("code"));
 
         assert!(requests[1]
-            .transport
+            .transport()
             .deduplication_id()
             .contains("state"));
 
         // Limits request 1 to 0
-        assert_eq!(requests[2].component_id, component.id);
+        assert_eq!(requests[2].component_id(), &component.id);
         assert_eq!(
-            requests[2].request_type,
-            MetadataRequestType::Limits {
+            requests[2].request_type(),
+            &MetadataRequestType::Limits {
                 token_pair: vec![(component.tokens[1].clone(), component.tokens[0].clone())]
             }
         );
         assert_eq!(
-            requests[2].request_id,
-            "euler_limits_0x000000000000000000000000000000000000beef_0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2_to_0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_string()
+            requests[2].request_id(),
+            "euler_limits_0x000000000000000000000000000000000000beef_0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2_to_0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
         );
-        assert_eq!(requests[2].transport.routing_key(), "rpc_default".to_string());
+        assert_eq!(requests[2].transport().routing_key(), "rpc_default".to_string());
 
         // The deduplication_id will now include the state & code override parameters
         assert!(requests[2]
-            .transport
+            .transport()
             .deduplication_id()
             .starts_with("eth_call_"));
 
         assert!(requests[2]
-            .transport
+            .transport()
             .deduplication_id()
             .contains("code"));
 
         assert!(requests[2]
-            .transport
+            .transport()
             .deduplication_id()
             .contains("state"));
     }
@@ -430,18 +430,18 @@ mod tests {
             .unwrap();
 
         assert_eq!(requests.len(), 1);
-        assert_eq!(requests[0].component_id, component.id);
+        assert_eq!(requests[0].component_id(), &component.id);
         assert_eq!(
-            requests[0].request_type,
-            MetadataRequestType::ComponentBalance { token_addresses: component.tokens.clone() }
+            requests[0].request_type(),
+            &MetadataRequestType::ComponentBalance { token_addresses: component.tokens.clone() }
         );
         assert_eq!(
-            requests[0].request_id,
-            "euler_balance_0x000000000000000000000000000000000000beef".to_string()
+            requests[0].request_id(),
+            &"euler_balance_0x000000000000000000000000000000000000beef".to_string()
         );
-        assert_eq!(requests[0].transport.routing_key(), "rpc_default".to_string());
+        assert_eq!(requests[0].transport().routing_key(), "rpc_default");
         assert_eq!(
-            requests[0].transport.deduplication_id(),
+            requests[0].transport().deduplication_id(),
             "eth_call_[{\"data\":\"0x0902f1ac\",\"to\":\"0x000000000000000000000000000000000000beef\"},\"0x3039\"]".to_string()
         );
     }
@@ -506,12 +506,12 @@ mod tests {
 
         let id_to_request = requests
             .iter()
-            .map(|request| (request.transport.deduplication_id(), request.clone()))
+            .map(|request| (request.transport().deduplication_id(), request.clone()))
             .collect::<HashMap<String, MetadataRequest>>();
 
         let rpc_requests: Vec<Box<dyn RequestTransport>> = requests
             .iter()
-            .map(|request| request.transport.clone_box())
+            .map(|request| request.transport().clone_box())
             .collect();
 
         let results = rpc_provider
@@ -656,13 +656,13 @@ mod tests {
         let mut mock_responses = vec![];
         for request in &requests {
             let transport = request
-                .transport
+                .transport()
                 .as_any()
                 .downcast_ref::<RpcTransport>()
                 .unwrap();
-            let id = transport.id;
+            let id = transport.id();
 
-            let response = match request.request_id.as_str() {
+            let response = match request.request_id().as_str() {
                 "euler_balance_0xc88b618c2c670c2e2a42e06b466b6f0e82a6e8a8" => {
                     json!({
                         "jsonrpc": "2.0",
@@ -685,7 +685,7 @@ mod tests {
                         "result": "0x000000000000000000000000000000000000000000000ecaa543f127a7d928800000000000000000000000000000000000000000000000000000000030598d13"
                     })
                 }
-                _ => panic!("Unexpected request ID: {}", request.request_id),
+                _ => panic!("Unexpected request ID: {}", request.request_id()),
             };
 
             mock_responses.push(response);
@@ -701,12 +701,12 @@ mod tests {
 
         let id_to_request = requests
             .iter()
-            .map(|request| (request.transport.deduplication_id(), request.clone()))
+            .map(|request| (request.transport().deduplication_id(), request.clone()))
             .collect::<HashMap<String, MetadataRequest>>();
 
         let rpc_requests: Vec<Box<dyn RequestTransport>> = requests
             .iter()
-            .map(|request| request.transport.clone_box())
+            .map(|request| request.transport().clone_box())
             .collect();
 
         let results = rpc_provider
@@ -803,12 +803,12 @@ mod tests {
 
         let id_to_request = requests
             .iter()
-            .map(|request| (request.transport.deduplication_id(), request.clone()))
+            .map(|request| (request.transport().deduplication_id(), request.clone()))
             .collect::<HashMap<String, MetadataRequest>>();
 
         let rpc_requests: Vec<Box<dyn RequestTransport>> = requests
             .iter()
-            .map(|request| request.transport.clone_box())
+            .map(|request| request.transport().clone_box())
             .collect();
 
         let results = rpc_provider
@@ -826,7 +826,7 @@ mod tests {
                 .get(&request_id)
                 .expect("Request ID should be present in the request map");
 
-            match &request.request_type {
+            match &request.request_type() {
                 MetadataRequestType::ComponentBalance { .. } => {
                     if let Ok(result_value) = result {
                         let parsed_result =
@@ -910,7 +910,7 @@ mod tests {
             .unwrap();
         let limits_request = requests
             .iter()
-            .find(|r| matches!(r.request_type, MetadataRequestType::Limits { .. }))
+            .find(|r| matches!(r.request_type(), MetadataRequestType::Limits { .. }))
             .expect("Should have limits request");
 
         // Parse the response to get the entry point

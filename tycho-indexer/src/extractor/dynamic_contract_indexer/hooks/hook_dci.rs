@@ -6,8 +6,6 @@ use std::{collections::HashMap, slice};
 use deepsize::DeepSizeOf;
 use tonic::async_trait;
 use tracing::{debug, error, info, instrument, span, warn, Level};
-#[cfg(test)]
-use tycho_common::models::Address;
 use tycho_common::{
     models::{
         blockchain::Transaction, protocol::ProtocolComponent, BlockHash, Chain, ComponentId, TxHash,
@@ -15,21 +13,24 @@ use tycho_common::{
     storage::{EntryPointFilter, EntryPointGateway, ProtocolGateway},
     traits::{AccountExtractor, EntryPointTracer},
 };
-#[cfg(test)]
-use tycho_ethereum::rpc::EthereumRpcClient;
 
 use crate::extractor::{
     dynamic_contract_indexer::{
-        cache::HooksDCICache, component_metadata::ComponentTracingMetadata,
-        dci::DynamicContractIndexer, hook_orchestrator::HookOrchestratorRegistry,
-        hook_permissions_detector::HookPermissionsDetector,
-        metadata_orchestrator::BlockMetadataOrchestrator, PausingReason,
+        cache::HooksDCICache,
+        dci::DynamicContractIndexer,
+        hooks::{
+            component_metadata::ComponentTracingMetadata,
+            hook_orchestrator::HookOrchestratorRegistry,
+            hook_permissions_detector::HookPermissionsDetector,
+            metadata_orchestrator::BlockMetadataOrchestrator,
+        },
+        PausingReason,
     },
     models::{insert_state_attribute_update, BlockChanges},
     ExtractionError, ExtractorExtension,
 };
 
-pub struct UniswapV4HookDCI<AE, T, G>
+pub(crate) struct UniswapV4HookDCI<AE, T, G>
 where
     AE: AccountExtractor + Send + Sync,
     T: EntryPointTracer + Send + Sync,
@@ -56,7 +57,7 @@ where
     T: EntryPointTracer + Send + Sync,
     G: EntryPointGateway + ProtocolGateway + Send + Sync,
 {
-    pub fn new(
+    pub(super) fn new(
         inner_dci: DynamicContractIndexer<AE, T, G>,
         metadata_orchestrator: BlockMetadataOrchestrator,
         hook_orchestrator_registry: HookOrchestratorRegistry,
@@ -77,37 +78,8 @@ where
         }
     }
 
-    /// Creates a UniswapV4HookDCI instance configured for testing with Euler hooks
-    #[cfg(test)]
-    #[allow(clippy::too_many_arguments)]
-    pub fn new_for_testing(
-        inner_dci: DynamicContractIndexer<AE, T, G>,
-        rpc: &EthereumRpcClient,
-        rpc_url: String,
-        router_address: Address,
-        pool_manager: Address,
-        db_gateway: G,
-        chain: Chain,
-        pause_after_retries: u32,
-        max_retries: u32,
-    ) -> Self {
-        use crate::extractor::dynamic_contract_indexer::hooks_dci_setup::create_testing_hooks_dci;
-
-        create_testing_hooks_dci(
-            inner_dci,
-            rpc,
-            rpc_url,
-            router_address,
-            pool_manager,
-            db_gateway,
-            chain,
-            pause_after_retries,
-            max_retries,
-        )
-    }
-
     #[instrument(skip(self), fields(chain = %self.chain))]
-    pub async fn initialize(&mut self) -> Result<(), ExtractionError> {
+    pub(crate) async fn initialize(&mut self) -> Result<(), ExtractionError> {
         info!("Initializing UniswapV4HookDCI");
 
         // Initialize the inner DCI
@@ -332,17 +304,17 @@ where
             let mut errors = Vec::new();
 
             // Check for balance errors
-            if let Some(Err(balance_error)) = &metadata.balances {
+            if let Some(Err(balance_error)) = &metadata.balances() {
                 errors.push(format!("Balance error: {balance_error:?}"));
             }
 
             // Check for limits errors
-            if let Some(Err(limits_error)) = &metadata.limits {
+            if let Some(Err(limits_error)) = &metadata.limits() {
                 errors.push(format!("Limits error: {limits_error:?}"));
             }
 
             // Check for TVL errors
-            if let Some(Err(tvl_error)) = &metadata.tvl {
+            if let Some(Err(tvl_error)) = &metadata.tvl() {
                 errors.push(format!("TVL error: {tvl_error:?}"));
             }
 
@@ -606,14 +578,14 @@ where
 
 // Component state tracking
 #[derive(Clone, Debug, DeepSizeOf)]
-pub struct ComponentProcessingState {
-    pub status: ProcessingStatus,
-    pub retry_count: u32,
-    pub last_error: Option<ProcessingError>,
+pub(crate) struct ComponentProcessingState {
+    status: ProcessingStatus,
+    retry_count: u32,
+    last_error: Option<ProcessingError>,
 }
 
 #[derive(Clone, Debug, DeepSizeOf)]
-pub enum ProcessingStatus {
+pub(super) enum ProcessingStatus {
     Unprocessed,     // Never processed or needs full processing
     TracingComplete, // Has entrypoints generated, only needs balance updates
     Failed,          // Processing failed, can retry
@@ -621,7 +593,7 @@ pub enum ProcessingStatus {
 
 // TODO: Use anyhow error
 #[derive(Clone, Debug, DeepSizeOf)]
-pub enum ProcessingError {
+pub(super) enum ProcessingError {
     MetadataError(String), // Before entrypoint generation
     TracingError(String),  // During/after entrypoint generation
 }
@@ -945,10 +917,10 @@ mod tests {
         Bytes,
     };
 
-    use super::*;
+    use super::{super::component_metadata::MetadataError, *};
     use crate::{
         extractor::{
-            dynamic_contract_indexer::component_metadata::{
+            dynamic_contract_indexer::hooks::component_metadata::{
                 MetadataGeneratorRegistry, MetadataResponseParserRegistry, ProviderRegistry,
             },
             models::BlockChanges,
@@ -1621,13 +1593,13 @@ mod tests {
             .validate_and_ensure_block_layer_test(&block)
             .unwrap();
 
-        // Create component metadata with tracing errors
-        let tracing_metadata = ComponentTracingMetadata {
-            tx_hash: tx.hash.clone(),
-            balances: Some(Err(crate::extractor::dynamic_contract_indexer::component_metadata::MetadataError::RequestFailed("RPC timeout during tracing".to_string()))),
-            limits: Some(Err(crate::extractor::dynamic_contract_indexer::component_metadata::MetadataError::ProviderFailed("Simulation failed: insufficient gas".to_string()))),
-            tvl: None,
-        };
+        let tracing_metadata = ComponentTracingMetadata::new(tx.hash.clone())
+            .with_balances(Err(MetadataError::RequestFailed(
+                "RPC timeout during tracing".to_string(),
+            )))
+            .with_limits(Err(MetadataError::ProviderFailed(
+                "Simulation failed: insufficient gas".to_string(),
+            )));
 
         let component_metadata = vec![(component.clone(), tracing_metadata)];
 
@@ -1834,7 +1806,7 @@ mod tests {
         };
 
         use super::*;
-        use crate::extractor::dynamic_contract_indexer::{
+        use crate::extractor::dynamic_contract_indexer::hooks::{
             component_metadata::{
                 MetadataGeneratorRegistry, MetadataResponseParserRegistry, ProviderRegistry,
             },
@@ -1842,8 +1814,8 @@ mod tests {
                 DefaultSwapAmountEstimator, HookEntrypointConfig, HookEntrypointGenerator,
                 UniswapV4DefaultHookEntrypointGenerator,
             },
-            euler::metadata_generator::{EulerMetadataGenerator, EulerMetadataResponseParser},
             hook_orchestrator::{DefaultUniswapV4HookOrchestrator, HookOrchestratorRegistry},
+            integrations::register_integrations,
             metadata_orchestrator::BlockMetadataOrchestrator,
             rpc_metadata_provider::RPCMetadataProvider,
         };
@@ -1959,14 +1931,14 @@ mod tests {
 
             let hook_address = Address::from("0x55dcf9455eee8fd3f5eed17606291272cde428a8");
 
-            let config = HookEntrypointConfig {
-                max_sample_size: Some(4),
-                min_samples: 1,
-                router_address: Some(router_address.clone()),
-                sender: None,
-                router_code: None,
-                pool_manager: pool_manager.clone(),
-            };
+            let config = HookEntrypointConfig::new(
+                Some(4),
+                1,
+                Some(router_address.clone()),
+                None,
+                None,
+                pool_manager.clone(),
+            );
 
             let balance_slot_detector_config = SlotDetectorConfig {
                 max_batch_size: 5,
@@ -2001,13 +1973,12 @@ mod tests {
 
             let hook_address = Address::from("0x55dcf9455eee8fd3f5eed17606291272cde428a8");
 
-            generator_registry.register_hook_generator(
-                hook_address,
-                Box::new(EulerMetadataGenerator::new(rpc_url)),
+            register_integrations(
+                &mut generator_registry,
+                &mut parser_registry,
+                &mut provider_registry,
+                rpc_url,
             );
-
-            parser_registry
-                .register_parser("euler".to_string(), Box::new(EulerMetadataResponseParser));
 
             provider_registry.register_provider(
                 "rpc_default".to_string(),

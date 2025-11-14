@@ -25,7 +25,7 @@ use tycho_common::models::Address;
 /// let hook_address = Address::from("0x8dAaE9702d913633E639CAB6B494A3779F89E8A8");
 /// assert!(HookPermissionsDetector::has_swap_hooks(&hook_address));
 /// ```
-pub struct HookPermissionsDetector {}
+pub(super) struct HookPermissionsDetector {}
 
 impl HookPermissionsDetector {
     /// Flag for the beforeSwap hook permission (bit 7)
@@ -97,7 +97,7 @@ impl HookPermissionsDetector {
     /// # Returns
     ///
     /// `true` if the beforeSwap permission (bit 7) is set
-    pub fn has_before_swap_hook(address: &Address) -> bool {
+    pub(super) fn has_before_swap_hook(address: &Address) -> bool {
         Self::has_permission(address, Self::BEFORE_SWAP_FLAG)
     }
 
@@ -110,7 +110,7 @@ impl HookPermissionsDetector {
     /// # Returns
     ///
     /// `true` if the afterSwap permission (bit 6) is set
-    pub fn has_after_swap_hook(address: &Address) -> bool {
+    pub(super) fn has_after_swap_hook(address: &Address) -> bool {
         Self::has_permission(address, Self::AFTER_SWAP_FLAG)
     }
 
@@ -126,7 +126,7 @@ impl HookPermissionsDetector {
     ///
     /// `true` if either beforeSwap or afterSwap permission is set
     #[instrument(fields(address = %address))]
-    pub fn has_swap_hooks(address: &Address) -> bool {
+    pub(super) fn has_swap_hooks(address: &Address) -> bool {
         let has_before_swap = Self::has_before_swap_hook(address);
         let has_after_swap = Self::has_after_swap_hook(address);
         let has_any_swap = has_before_swap || has_after_swap;
