@@ -6,8 +6,6 @@ use std::{collections::HashMap, slice};
 use deepsize::DeepSizeOf;
 use tonic::async_trait;
 use tracing::{debug, error, info, instrument, span, warn, Level};
-#[cfg(test)]
-use tycho_common::models::Address;
 use tycho_common::{
     models::{
         blockchain::Transaction, protocol::ProtocolComponent, BlockHash, Chain, ComponentId, TxHash,
@@ -15,8 +13,6 @@ use tycho_common::{
     storage::{EntryPointFilter, EntryPointGateway, ProtocolGateway},
     traits::{AccountExtractor, EntryPointTracer},
 };
-#[cfg(test)]
-use tycho_ethereum::rpc::EthereumRpcClient;
 
 use crate::extractor::{
     dynamic_contract_indexer::{
@@ -80,35 +76,6 @@ where
             max_retries,
             pause_after_retries,
         }
-    }
-
-    /// Creates a UniswapV4HookDCI instance configured for testing with Euler hooks
-    #[cfg(test)]
-    #[allow(clippy::too_many_arguments)]
-    pub(super) fn new_for_testing(
-        inner_dci: DynamicContractIndexer<AE, T, G>,
-        rpc: &EthereumRpcClient,
-        rpc_url: String,
-        router_address: Address,
-        pool_manager: Address,
-        db_gateway: G,
-        chain: Chain,
-        pause_after_retries: u32,
-        max_retries: u32,
-    ) -> Self {
-        use crate::extractor::dynamic_contract_indexer::hooks::hooks_dci_setup::create_testing_hooks_dci;
-
-        create_testing_hooks_dci(
-            inner_dci,
-            rpc,
-            rpc_url,
-            router_address,
-            pool_manager,
-            db_gateway,
-            chain,
-            pause_after_retries,
-            max_retries,
-        )
     }
 
     #[instrument(skip(self), fields(chain = %self.chain))]

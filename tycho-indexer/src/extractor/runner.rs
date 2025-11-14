@@ -36,7 +36,7 @@ use crate::{
         chain_state::ChainState,
         dynamic_contract_indexer::{
             dci::DynamicContractIndexer,
-            hooks::{hook_dci::UniswapV4HookDCI, hooks_dci_setup::create_testing_hooks_dci},
+            hooks::{hook_dci::UniswapV4HookDCI, hooks_dci_setup::UniswapV4HookDCIBuilder},
         },
         post_processors::POST_PROCESSOR_REGISTRY,
         protocol_cache::ProtocolMemoryCache,
@@ -675,8 +675,7 @@ impl ExtractorBuilder {
                     )
                     .await?;
 
-                    // TODO: weird
-                    let mut hooks_dci = create_testing_hooks_dci(
+                    let mut hooks_dci = UniswapV4HookDCIBuilder::new(
                         base_dci,
                         rpc_client,
                         rpc_url.clone(),
@@ -684,9 +683,11 @@ impl ExtractorBuilder {
                         pool_manager,
                         cached_gw.clone(),
                         self.config.chain,
-                        3, // pause_after_retries
-                        5, // max_retries
-                    );
+                    )
+                    .pause_after_retries(3)
+                    .max_retries(5)
+                    .build()?;
+
                     hooks_dci.initialize().await?;
                     DCIPlugin::UniswapV4Hooks(Box::new(hooks_dci))
                 }
