@@ -12,7 +12,7 @@ use metrics::{counter, gauge, histogram};
 use mockall::automock;
 use prost::Message;
 use tokio::{sync::Mutex, task::JoinHandle};
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{debug, error, info, instrument, span, trace, warn, Instrument};
 use tycho_common::{
     models::{
         blockchain::{
@@ -254,6 +254,7 @@ where
         }
     }
 
+    #[instrument(skip(self, msg), level = "debug")]
     async fn periodically_report_metrics(&self, msg: &mut BlockChanges, is_syncing: bool) {
         let mut state = self.inner.lock().await;
         let now = chrono::Local::now().naive_utc();
@@ -406,6 +407,7 @@ where
     ///
     /// Will return the requested balances at the tip of the reorg buffer. Might need
     /// to go to storage to retrieve balances that are not stored within the buffer.
+    #[instrument(skip_all, level = "debug")]
     async fn get_component_balances(
         &self,
         reorg_buffer: &ReorgBuffer<BlockUpdateWithCursor<BlockChanges>>,
@@ -485,6 +487,7 @@ where
     ///
     /// Will return the requested balances at the tip of the reorg buffer. Might need
     /// to go to storage to retrieve account balances that are not stored within the buffer.
+    #[instrument(skip_all, level = "debug")]
     async fn get_account_balances(
         &self,
         reorg_buffer: &ReorgBuffer<BlockUpdateWithCursor<BlockChanges>>,
@@ -849,6 +852,16 @@ where
         // If we have blocks to commit, wait for the previous async commit task to finish and then
         // spawn a new task that will commit the new blocks and update the committed block height.
         if let Some(last_block) = blocks_to_commit.last() {
+            let commit_span = span!(
+                tracing::Level::DEBUG,
+                "commit_blocks",
+                batch_size = blocks_to_commit.len(),
+                block_height = last_block.block_update.block.number,
+                extractor_id = %self.name,
+                chain = %self.chain
+            );
+            let _enter = commit_span.enter();
+
             let mut commit_handle_guard = self.gateway.commit_handle.lock().await;
             let gateway = self.gateway.inner.clone();
             let committed_block_height = self
@@ -885,34 +898,44 @@ where
             }
 
             // Spawn a new task to commit the new blocks and update the committed block height
-            let new_handle = tokio::spawn(async move {
-                let now = std::time::Instant::now();
+            let commit_task_span = span!(
+                tracing::Level::DEBUG,
+                "commit_task",
+                batch_size,
+                block_height = last_block_height,
+                extractor_id = %extractor_name,
+                chain = %chain
+            );
+            let new_handle = tokio::spawn(
+                async move {
+                    let now = std::time::Instant::now();
 
-                let mut it = blocks_to_commit.iter().peekable();
-                while let Some(block) = it.next() {
-                    // Force a database commit if we're not syncing and this is the last block
-                    // to be sent. Otherwise, wait to accumulate a full
-                    // batch before committing.
-                    let force_db_commit = if is_syncing { false } else { it.peek().is_none() };
+                    let mut it = blocks_to_commit.iter().peekable();
+                    while let Some(block) = it.next() {
+                        // Force a database commit if we're not syncing and this is the last block
+                        // to be sent. Otherwise, wait to accumulate a full batch before committing.
+                        let force_db_commit = if is_syncing { false } else { it.peek().is_none() };
 
-                    gateway
-                        .advance(block.block_update(), block.cursor(), force_db_commit)
-                        .await
-                        .map_err(ExtractionError::Storage)?;
+                        gateway
+                            .advance(block.block_update(), block.cursor(), force_db_commit)
+                            .await
+                            .map_err(ExtractionError::Storage)?;
+                    }
+
+                    let mut committed_hieght_guard = committed_block_height.lock().await;
+                    *committed_hieght_guard = Some(last_block_height);
+
+                    trace!(batch_size, block_height = last_block_height, extractor_id = extractor_name, chain = %chain, "CommitTaskCompleted");
+
+                    histogram!(
+                        "database_commit_duration_ms", "chain" => chain.to_string(), "extractor" => extractor_name
+                    )
+                    .record(now.elapsed().as_millis() as f64);
+
+                    Ok(())
                 }
-
-                let mut committed_hieght_guard = committed_block_height.lock().await;
-                *committed_hieght_guard = Some(last_block_height);
-
-                trace!(batch_size, block_height = last_block_height, extractor_id = extractor_name, chain = %chain, "CommitTaskCompleted");
-
-                histogram!(
-                    "database_commit_duration_ms", "chain" => chain.to_string(), "extractor" => extractor_name
-                )
-                .record(now.elapsed().as_millis() as f64);
-
-                Ok(())
-            });
+                .instrument(commit_task_span),
+            );
 
             *commit_handle_guard = Some(new_handle);
 
