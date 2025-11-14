@@ -2813,16 +2813,17 @@ mod tests {
     }
 
     #[rstest]
-    #[case::single_page(2, 10, 1000)]
-    #[case::multiple_pages_within_concurrency(10, 10, 2)]
-    #[case::exceeds_concurrency_limit(60, 10, 2)]
+    #[case::single_page(2, 1000)]
+    #[case::multiple_pages_within_concurrency(10, 2)]
+    #[case::exceeds_concurrency_limit(60, 2)]
     #[tokio::test]
     async fn test_get_all_tokens_pagination_and_concurrency(
         #[case] total_tokens: usize,
-        #[case] allowed_concurrency: usize,
         #[case] page_size: usize,
     ) {
         use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let allowed_concurrency = 10;
 
         let concurrent_requests = Arc::new(AtomicUsize::new(0));
         let max_concurrent = Arc::new(AtomicUsize::new(0));
@@ -2891,7 +2892,7 @@ mod tests {
             .expect("create client");
 
         let tokens = client
-            .get_all_tokens(Chain::Ethereum, None, None, page_size, allowed_concurrency)
+            .get_all_tokens(Chain::Ethereum, None, None, Some(page_size), allowed_concurrency)
             .await
             .expect("get all tokens");
 
