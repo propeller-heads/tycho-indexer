@@ -1,3 +1,10 @@
+## [0.196.4](https://github.com/propeller-heads/tycho-simulation/compare/0.196.3...0.196.4) (2025-11-14)
+
+
+### Bug Fixes
+
+* update Tycho dependencies to v0.113.0 and resolve breaking changes ([918a87d](https://github.com/propeller-heads/tycho-simulation/commit/918a87dfc22c7755170ad56ef59c6a6afab286b4))
+
 ## [0.196.3](https://github.com/propeller-heads/tycho-simulation/compare/0.196.2...0.196.3) (2025-11-13)
 
 
