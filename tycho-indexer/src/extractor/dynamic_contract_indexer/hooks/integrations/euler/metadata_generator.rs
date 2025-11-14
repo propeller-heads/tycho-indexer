@@ -12,7 +12,7 @@ use tycho_common::{
     Bytes,
 };
 
-use crate::extractor::dynamic_contract_indexer::component_metadata::{
+use crate::extractor::dynamic_contract_indexer::hooks::component_metadata::{
     MetadataError, MetadataRequest, MetadataRequestGenerator, MetadataRequestType,
     MetadataResponseParser, MetadataValue, RpcTransport,
 };
@@ -295,7 +295,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::extractor::dynamic_contract_indexer::{
+    use crate::extractor::dynamic_contract_indexer::hooks::{
         component_metadata::{RequestProvider, RequestTransport},
         rpc_metadata_provider::RPCMetadataProvider,
     };

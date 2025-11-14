@@ -1,8 +1,8 @@
-use crate::extractor::dynamic_contract_indexer::{
+use crate::extractor::dynamic_contract_indexer::hooks::{
     component_metadata::{
         MetadataGeneratorRegistry, MetadataResponseParserRegistry, ProviderRegistry,
     },
-    hooks::integrations::euler::metadata_generator::{
+    integrations::euler::metadata_generator::{
         EulerMetadataGenerator, EulerMetadataResponseParser,
     },
 };

@@ -12,7 +12,7 @@ use tycho_common::models::{
     Address, BlockHash, ComponentId, EntryPointId, StoreKey,
 };
 
-use super::hook_dci::ComponentProcessingState;
+use super::hooks::hook_dci::ComponentProcessingState;
 
 /// A unique identifier for a storage location, consisting of an address and a storage key.
 type StorageLocation = (Address, StoreKey);

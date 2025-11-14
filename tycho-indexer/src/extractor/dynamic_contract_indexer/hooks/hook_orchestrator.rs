@@ -15,7 +15,7 @@ use tycho_common::{
 };
 
 use crate::extractor::{
-    dynamic_contract_indexer::{
+    dynamic_contract_indexer::hooks::{
         component_metadata::{Balances, ComponentTracingMetadata},
         entrypoint_generator::{
             DefaultSwapAmountEstimator, EntrypointGenerationError, HookEntrypointData,
@@ -677,7 +677,7 @@ mod tests {
 
     use super::*;
     use crate::extractor::{
-        dynamic_contract_indexer::entrypoint_generator::{
+        dynamic_contract_indexer::hooks::entrypoint_generator::{
             DefaultSwapAmountEstimator, UniswapV4DefaultHookEntrypointGenerator,
         },
         models::BlockChanges,

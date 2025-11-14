@@ -1,4 +1,4 @@
-use crate::extractor::dynamic_contract_indexer::component_metadata::{
+use crate::extractor::dynamic_contract_indexer::hooks::component_metadata::{
     MetadataGeneratorRegistry, MetadataResponseParserRegistry, ProviderRegistry,
 };
 

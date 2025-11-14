@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use tracing::{debug, error, info, instrument, warn};
 use tycho_common::models::{blockchain::Block, protocol::ProtocolComponent, TxHash};
 
-use crate::extractor::dynamic_contract_indexer::component_metadata::{
+use super::component_metadata::{
     ComponentTracingMetadata, MetadataError, MetadataGeneratorRegistry, MetadataRequest,
     MetadataResponseParserRegistry, MetadataResult, ProviderRegistry,
 };
@@ -424,10 +424,12 @@ mod tests {
         Bytes,
     };
 
-    use super::*;
-    use crate::extractor::dynamic_contract_indexer::component_metadata::{
-        MetadataRequestType, MetadataValue, MockMetadataRequestGenerator,
-        MockMetadataResponseParser, MockRequestProvider, RequestTransport, RpcTransport,
+    use super::{
+        super::component_metadata::{
+            MetadataRequestType, MetadataValue, MockMetadataRequestGenerator,
+            MockMetadataResponseParser, MockRequestProvider, RequestTransport, RpcTransport,
+        },
+        *,
     };
 
     fn create_test_block() -> Block {

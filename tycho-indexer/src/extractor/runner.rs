@@ -35,8 +35,8 @@ use crate::{
     extractor::{
         chain_state::ChainState,
         dynamic_contract_indexer::{
-            dci::DynamicContractIndexer, hook_dci::UniswapV4HookDCI,
-            hooks_dci_setup::create_testing_hooks_dci,
+            dci::DynamicContractIndexer,
+            hooks::{hook_dci::UniswapV4HookDCI, hooks_dci_setup::create_testing_hooks_dci},
         },
         post_processors::POST_PROCESSOR_REGISTRY,
         protocol_cache::ProtocolMemoryCache,

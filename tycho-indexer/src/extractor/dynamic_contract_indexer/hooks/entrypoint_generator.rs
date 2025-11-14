@@ -34,7 +34,7 @@ use tycho_common::{
     Bytes,
 };
 
-use crate::extractor::dynamic_contract_indexer::component_metadata::ComponentTracingMetadata;
+use super::component_metadata::ComponentTracingMetadata;
 type SlotId = U256;
 
 // V4MiniRouter compiled bytecode

@@ -17,20 +17,22 @@ use tycho_ethereum::{
 };
 
 use crate::extractor::dynamic_contract_indexer::{
-    component_metadata::{
-        MetadataGeneratorRegistry, MetadataResponseParserRegistry, ProviderRegistry,
-    },
     dci::DynamicContractIndexer,
-    entrypoint_generator::{
-        DefaultSwapAmountEstimator, HookEntrypointConfig, HookEntrypointGenerator,
-        UniswapV4DefaultHookEntrypointGenerator, UNICHAIN_V4_MINI_ROUTER_BYTECODE,
-        V4_MINI_ROUTER_BYTECODE,
+    hooks::{
+        component_metadata::{
+            MetadataGeneratorRegistry, MetadataResponseParserRegistry, ProviderRegistry,
+        },
+        entrypoint_generator::{
+            DefaultSwapAmountEstimator, HookEntrypointConfig, HookEntrypointGenerator,
+            UniswapV4DefaultHookEntrypointGenerator, UNICHAIN_V4_MINI_ROUTER_BYTECODE,
+            V4_MINI_ROUTER_BYTECODE,
+        },
+        hook_dci::UniswapV4HookDCI,
+        hook_orchestrator::{DefaultUniswapV4HookOrchestrator, HookOrchestratorRegistry},
+        integrations::register_integrations,
+        metadata_orchestrator::BlockMetadataOrchestrator,
+        rpc_metadata_provider::{RPCMetadataProvider, RPCRetryConfig},
     },
-    hook_dci::UniswapV4HookDCI,
-    hook_orchestrator::{DefaultUniswapV4HookOrchestrator, HookOrchestratorRegistry},
-    hooks::integrations::register_integrations,
-    metadata_orchestrator::BlockMetadataOrchestrator,
-    rpc_metadata_provider::{RPCMetadataProvider, RPCRetryConfig},
 };
 
 /// Sets up all necessary registries for Hooks DCI testing with Euler support

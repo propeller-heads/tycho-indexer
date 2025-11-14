@@ -1,14 +1,6 @@
 pub mod cache;
-mod component_metadata;
 pub(super) mod dci;
-mod entrypoint_generator;
-pub(crate) mod hook_dci;
-mod hook_orchestrator;
-mod hook_permissions_detector;
-mod hooks;
-pub(crate) mod hooks_dci_setup;
-mod metadata_orchestrator;
-mod rpc_metadata_provider;
+pub(super) mod hooks;
 
 enum PausingReason {
     #[allow(dead_code)]

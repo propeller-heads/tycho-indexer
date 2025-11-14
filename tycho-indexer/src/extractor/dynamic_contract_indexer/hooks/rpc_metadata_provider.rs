@@ -10,7 +10,7 @@ use thiserror::Error;
 use tonic::async_trait;
 use tracing::{debug, error, warn};
 
-use crate::extractor::dynamic_contract_indexer::component_metadata::{
+use super::component_metadata::{
     DeduplicationId, MetadataError, RequestProvider, RequestTransport, RpcTransport,
 };
 

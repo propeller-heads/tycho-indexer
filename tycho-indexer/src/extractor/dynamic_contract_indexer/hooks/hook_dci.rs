@@ -20,10 +20,15 @@ use tycho_ethereum::rpc::EthereumRpcClient;
 
 use crate::extractor::{
     dynamic_contract_indexer::{
-        cache::HooksDCICache, component_metadata::ComponentTracingMetadata,
-        dci::DynamicContractIndexer, hook_orchestrator::HookOrchestratorRegistry,
-        hook_permissions_detector::HookPermissionsDetector,
-        metadata_orchestrator::BlockMetadataOrchestrator, PausingReason,
+        cache::HooksDCICache,
+        dci::DynamicContractIndexer,
+        hooks::{
+            component_metadata::ComponentTracingMetadata,
+            hook_orchestrator::HookOrchestratorRegistry,
+            hook_permissions_detector::HookPermissionsDetector,
+            metadata_orchestrator::BlockMetadataOrchestrator,
+        },
+        PausingReason,
     },
     models::{insert_state_attribute_update, BlockChanges},
     ExtractionError, ExtractorExtension,
@@ -91,7 +96,7 @@ where
         pause_after_retries: u32,
         max_retries: u32,
     ) -> Self {
-        use crate::extractor::dynamic_contract_indexer::hooks_dci_setup::create_testing_hooks_dci;
+        use crate::extractor::dynamic_contract_indexer::hooks::hooks_dci_setup::create_testing_hooks_dci;
 
         create_testing_hooks_dci(
             inner_dci,
@@ -945,10 +950,10 @@ mod tests {
         Bytes,
     };
 
-    use super::*;
+    use super::{super::component_metadata::MetadataError, *};
     use crate::{
         extractor::{
-            dynamic_contract_indexer::component_metadata::{
+            dynamic_contract_indexer::hooks::component_metadata::{
                 MetadataGeneratorRegistry, MetadataResponseParserRegistry, ProviderRegistry,
             },
             models::BlockChanges,
@@ -1624,8 +1629,12 @@ mod tests {
         // Create component metadata with tracing errors
         let tracing_metadata = ComponentTracingMetadata {
             tx_hash: tx.hash.clone(),
-            balances: Some(Err(crate::extractor::dynamic_contract_indexer::component_metadata::MetadataError::RequestFailed("RPC timeout during tracing".to_string()))),
-            limits: Some(Err(crate::extractor::dynamic_contract_indexer::component_metadata::MetadataError::ProviderFailed("Simulation failed: insufficient gas".to_string()))),
+            balances: Some(Err(MetadataError::RequestFailed(
+                "RPC timeout during tracing".to_string(),
+            ))),
+            limits: Some(Err(MetadataError::ProviderFailed(
+                "Simulation failed: insufficient gas".to_string(),
+            ))),
             tvl: None,
         };
 
@@ -1834,7 +1843,7 @@ mod tests {
         };
 
         use super::*;
-        use crate::extractor::dynamic_contract_indexer::{
+        use crate::extractor::dynamic_contract_indexer::hooks::{
             component_metadata::{
                 MetadataGeneratorRegistry, MetadataResponseParserRegistry, ProviderRegistry,
             },
@@ -1843,7 +1852,7 @@ mod tests {
                 UniswapV4DefaultHookEntrypointGenerator,
             },
             hook_orchestrator::{DefaultUniswapV4HookOrchestrator, HookOrchestratorRegistry},
-            hooks::integrations::register_integrations,
+            integrations::register_integrations,
             metadata_orchestrator::BlockMetadataOrchestrator,
             rpc_metadata_provider::RPCMetadataProvider,
         };
