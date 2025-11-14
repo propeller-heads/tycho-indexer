@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use tracing::info;
-use tycho_client::{rpc::RPCClient, HttpRPCClient, RPCError};
+use tycho_client::{
+    rpc::{HttpRPCClientOptions, RPCClient},
+    HttpRPCClient, RPCError,
+};
 use tycho_common::{
     models::{token::Token, Chain},
     simulation::errors::SimulationError,
@@ -59,6 +62,7 @@ pub async fn load_all_tokens(
     tycho_url: &str,
     no_tls: bool,
     auth_key: Option<&str>,
+    compression: bool,
     chain: Chain,
     min_quality: Option<i32>,
     max_days_since_last_trade: Option<u64>,
@@ -66,7 +70,12 @@ pub async fn load_all_tokens(
     info!("Loading tokens from Tycho...");
     let rpc_url =
         if no_tls { format!("http://{tycho_url}") } else { format!("https://{tycho_url}") };
-    let rpc_client = HttpRPCClient::new(rpc_url.as_str(), auth_key)
+
+    let rpc_options = HttpRPCClientOptions::new()
+        .with_auth_key(auth_key.map(|s| s.to_string()))
+        .with_compression(compression);
+
+    let rpc_client = HttpRPCClient::new(rpc_url.as_str(), rpc_options)
         .map_err(|err| map_rpc_error(err, "Failed to create Tycho RPC client"))?;
 
     // Chain specific defaults for special case chains. Otherwise defaults to 42 days.

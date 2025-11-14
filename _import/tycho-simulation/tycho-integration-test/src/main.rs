@@ -165,10 +165,17 @@ async fn run(cli: Cli) -> miette::Result<()> {
 
     // Load tokens from Tycho
     info!(%cli.tycho_url, "Loading tokens...");
-    let all_tokens =
-        load_all_tokens(&cli.tycho_url, false, Some(cli.tycho_api_key.as_str()), chain, None, None)
-            .await
-            .map_err(|e| miette!("Failed to load tokens: {e:?}"))?;
+    let all_tokens = load_all_tokens(
+        &cli.tycho_url,
+        false,
+        Some(cli.tycho_api_key.as_str()),
+        true,
+        chain,
+        None,
+        None,
+    )
+    .await
+    .map_err(|e| miette!("Failed to load tokens: {e:?}"))?;
     info!(%cli.tycho_url, "Loaded tokens");
 
     // Run streams in background tasks

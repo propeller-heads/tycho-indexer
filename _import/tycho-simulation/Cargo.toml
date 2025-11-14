@@ -12,7 +12,7 @@ keywords = ["propellerheads", "solver", "defi", "dex", "mev"]
 license = "MIT"
 categories = ["finance", "cryptography::cryptocurrencies"]
 readme = "README.md"
-version = "0.196.2"
+version = "0.196.3"
 
 [workspace]
 members = ["tycho-integration-test", "tycho-test", "tycho_simulation_py"]
@@ -37,9 +37,9 @@ dotenv = "0.15.0"
 itertools = "0.10.5"
 
 # Tycho dependencies
-tycho-client = ">=0.91.0"
-tycho-common = ">=0.91.0"
-tycho-ethereum = { version = ">=0.91.0", features = ["onchain_data"] }
+tycho-client = ">=0.109.0"
+tycho-common = ">=0.109.0"
+tycho-ethereum = { version = ">=0.109.0", features = ["onchain_data"] }
 tycho-execution = ">=0.129.1"
 
 # EVM dependencies
