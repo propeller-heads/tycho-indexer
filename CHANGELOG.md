@@ -1,3 +1,22 @@
+## [0.111.0](https://github.com/propeller-heads/tycho-indexer/compare/0.110.0...0.111.0) (2025-11-14)
+
+
+### Features
+
+* major refactor of `tycho-ethereum` ([#742](https://github.com/propeller-heads/tycho-indexer/issues/742)) ([ab16908](https://github.com/propeller-heads/tycho-indexer/commit/ab169081cd1f54fb1854e420dc2225a21dd47b09))
+* make `max_storage_slot_batch_size` configurable via environment variable in `BatchingConfig` ([ed88c90](https://github.com/propeller-heads/tycho-indexer/commit/ed88c905bb42a2ecf4182cdbc47262446f959d8a))
+
+
+### Bug Fixes
+
+* adjust the tracer tests that were added on main to match the refactored version of tycho ethereum ([21fe442](https://github.com/propeller-heads/tycho-indexer/commit/21fe4425b36dd868a51f344859007337160e13f2))
+* correct JSON-RPC response IDs in entrypoint tracer tests ([9f87dde](https://github.com/propeller-heads/tycho-indexer/commit/9f87ddee65038565a82de9a1dcf60a9fda5f37ac))
+* create a dedicated trace rpc client consistent with the previous design. Additionally, streamline the `EVMEntrypointService` initialization of an unnecessary Result wrapping ([91c4f5d](https://github.com/propeller-heads/tycho-indexer/commit/91c4f5d2f5d0767991b17d1f95192039a7304875))
+* fix compilation issues ([a83a59a](https://github.com/propeller-heads/tycho-indexer/commit/a83a59a5d69446346efd0100ab70ce2cbf7712f1))
+* handle `MissingBatchResponse` errors in RPC operations and improve error messages to fix test failing ([505f792](https://github.com/propeller-heads/tycho-indexer/commit/505f79258e905e856e8b7efaed7d503eb4cfda68))
+* replace placeholder logic with `format!` for constructing JSON-RPC response in tracer tests ([797f420](https://github.com/propeller-heads/tycho-indexer/commit/797f4209f94790f04822cf139a5773418a9133d3))
+* use dynamic `self.chain` instead of hardcoded `Chain::Ethereum` in block processing logic ([0445a3c](https://github.com/propeller-heads/tycho-indexer/commit/0445a3cfd53f1cd9dfe1b23fbbc741f5d972fde5))
+
 ## [0.110.0](https://github.com/propeller-heads/tycho-indexer/compare/0.109.2...0.110.0) (2025-11-13)
 
 
