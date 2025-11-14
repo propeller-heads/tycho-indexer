@@ -20,7 +20,8 @@ contract BaseConstants {
 
 contract Constants is Test, BaseConstants {
     address ADMIN = makeAddr("admin"); //admin=us
-    address BOB = makeAddr("bob"); //bob=someone!=us
+    // Changed this since someone deployed a drainer contract to makeAddr("bob")
+    address BOB = makeAddr("bob*"); //bob=someone!=us
     address FUND_RESCUER = makeAddr("fundRescuer");
     address EXECUTOR_SETTER = makeAddr("executorSetter");
     address ALICE = 0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2;

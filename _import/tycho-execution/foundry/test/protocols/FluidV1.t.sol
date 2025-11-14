@@ -18,7 +18,8 @@ contract FluidV1ExecutorExposed is FluidV1Executor {
             IFluidV1Dex dex,
             bool zero2one,
             address receiver,
-            TransferType transferType
+            TransferType transferType,
+            bool isNative
         )
     {
         return _decodeData(data);
@@ -56,14 +57,19 @@ contract FluidV1ExecutorTest is Test, Constants {
     function testDecodeData() public view {
         address dex = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
         bytes memory params = abi.encodePacked(
-            dex, true, address(this), RestrictTransferFrom.TransferType.Transfer
+            dex,
+            true,
+            address(this),
+            RestrictTransferFrom.TransferType.Transfer,
+            false
         );
         IFluidV1Dex dexVal;
         bool zero2oneVal;
         address receiverVal;
         RestrictTransferFrom.TransferType transferTypeVal;
+        bool isNative;
 
-        (dexVal, zero2oneVal, receiverVal, transferTypeVal) =
+        (dexVal, zero2oneVal, receiverVal, transferTypeVal, isNative) =
             executor.decodeData(params);
 
         assertEq(address(dexVal), dex);
@@ -133,7 +139,11 @@ contract FluidV1ExecutorTest is Test, Constants {
         IERC20 USDT = IERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
         uint256 amountIn = 10e18;
         bytes memory params = abi.encodePacked(
-            dex, true, address(BOB), RestrictTransferFrom.TransferType.Transfer
+            dex,
+            true,
+            address(BOB),
+            RestrictTransferFrom.TransferType.Transfer,
+            false
         );
         deal(address(sUSDe), address(executor), amountIn);
         uint256 balanceBefore = USDT.balanceOf(BOB);
@@ -141,6 +151,46 @@ contract FluidV1ExecutorTest is Test, Constants {
         uint256 amountOut = executor.swap(amountIn, params);
 
         uint256 balanceAfter = USDT.balanceOf(BOB);
+        assertEq(balanceAfter - balanceBefore, amountOut);
+    }
+
+    function testSellNative() public {
+        address dex = 0xDD72157A021804141817d46D9852A97addfB9F59;
+        IERC20 ezETH = IERC20(0xbf5495Efe5DB9ce00f80364C8B423567e58d2110);
+        uint256 amountIn = 10e18;
+        bytes memory params = abi.encodePacked(
+            dex,
+            false,
+            address(BOB),
+            RestrictTransferFrom.TransferType.Transfer,
+            true
+        );
+        deal(address(executor), amountIn);
+        uint256 balanceBefore = ezETH.balanceOf(BOB);
+
+        uint256 amountOut = executor.swap(amountIn, params);
+
+        uint256 balanceAfter = ezETH.balanceOf(BOB);
+        assertEq(balanceAfter - balanceBefore, amountOut);
+    }
+
+    function testBuyNative() public {
+        address dex = 0xDD72157A021804141817d46D9852A97addfB9F59;
+        IERC20 ezETH = IERC20(0xbf5495Efe5DB9ce00f80364C8B423567e58d2110);
+        uint256 amountIn = 10e18;
+        bytes memory params = abi.encodePacked(
+            dex,
+            true,
+            address(BOB),
+            RestrictTransferFrom.TransferType.Transfer,
+            false
+        );
+        deal(address(ezETH), address(executor), amountIn);
+        uint256 balanceBefore = BOB.balance;
+
+        uint256 amountOut = executor.swap(amountIn, params);
+
+        uint256 balanceAfter = BOB.balance;
         assertEq(balanceAfter - balanceBefore, amountOut);
     }
 }
@@ -188,5 +238,9 @@ contract TychoRouterForFluidV1Test is TychoRouterTestSetup {
         assertEq(balanceAfter - balanceBefore, 1201417);
         assertEq(sUSDe.balanceOf(tychoRouterAddr), 0);
         assertEq(USDC.balanceOf(tychoRouterAddr), 0);
+    }
+
+    function testExportContract() public {
+        exportRuntimeBytecode(address(fluidV1Executor), "FluidV1");
     }
 }

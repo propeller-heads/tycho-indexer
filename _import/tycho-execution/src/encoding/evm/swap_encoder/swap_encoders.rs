@@ -18,6 +18,7 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,
+        constants::ETH_ADDRESS,
         utils::{
             biguint_to_u256, bytes_to_address, get_runtime, get_static_attribute, pad_to_fixed_size,
         },
@@ -1011,6 +1012,7 @@ impl SwapEncoder for HashflowSwapEncoder {
 #[derive(Clone)]
 pub struct FluidV1SwapEncoder {
     executor_address: Bytes,
+    native_address: Bytes,
 }
 
 impl SwapEncoder for FluidV1SwapEncoder {
@@ -1019,7 +1021,10 @@ impl SwapEncoder for FluidV1SwapEncoder {
         _chain: Chain,
         _config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
-        Ok(Self { executor_address })
+        Ok(Self {
+            executor_address,
+            native_address: Bytes::from("0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"),
+        })
     }
 
     fn encode_swap(
@@ -1036,9 +1041,11 @@ impl SwapEncoder for FluidV1SwapEncoder {
 
         let args = (
             dex_address,
-            swap.token_in < swap.token_out,
+            self.coerce_native_address(&swap.token_in) <
+                self.coerce_native_address(&swap.token_out),
             bytes_to_address(&encoding_context.receiver)?,
             (encoding_context.transfer_type as u8).to_be_bytes(),
+            if &swap.token_in == ETH_ADDRESS { true } else { false },
         );
         Ok(args.abi_encode_packed())
     }
@@ -1049,6 +1056,16 @@ impl SwapEncoder for FluidV1SwapEncoder {
 
     fn clone_box(&self) -> Box<dyn SwapEncoder> {
         Box::new(self.clone())
+    }
+}
+
+impl FluidV1SwapEncoder {
+    fn coerce_native_address<'a>(&'a self, address: &'a Bytes) -> &'a Bytes {
+        if address == ETH_ADDRESS {
+            &self.native_address
+        } else {
+            address
+        }
     }
 }
 
@@ -2359,6 +2376,8 @@ mod tests {
                     "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                     // transferFrom
                     "00",
+                    // isNativeSell
+                    "00"
                 ))
                 .to_lowercase()
             );

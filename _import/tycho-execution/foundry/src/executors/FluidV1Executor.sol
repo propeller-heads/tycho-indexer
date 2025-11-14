@@ -12,6 +12,13 @@ interface IFluidV1Dex {
         uint256 amountOutMin_,
         address to_
     ) external payable returns (uint256 amountOut_);
+
+    function swapIn(
+        bool swap0to1_,
+        uint256 amountIn_,
+        uint256 amountOutMin_,
+        address to_
+    ) external payable returns (uint256 amountOut_);
 }
 
 error FluidV1Executor__ZeroLiquidityAddress();
@@ -46,13 +53,22 @@ contract FluidV1Executor is IExecutor, ICallback, RestrictTransferFrom {
         bool zero2one;
         address receiver;
         TransferType transferType;
+        bool isNativeSell;
 
-        (dex, zero2one, receiver, transferType) = _decodeData(data);
+        (dex, zero2one, receiver, transferType, isNativeSell) =
+            _decodeData(data);
 
-        _setSwapParams(dex, transferType);
-
-        calculatedAmount =
-            dex.swapInWithCallback(zero2one, givenAmount, 0, receiver);
+        if (!isNativeSell) {
+            _setSwapParams(dex, transferType);
+            calculatedAmount =
+                dex.swapInWithCallback(zero2one, givenAmount, 0, receiver);
+        } else {
+            // This is safe since the router asserts that we received the required output token in return
+            // slither-disable-next-line arbitrary-send-eth
+            calculatedAmount = dex.swapIn{value: givenAmount}(
+                zero2one, givenAmount, 0, receiver
+            );
+        }
     }
 
     // Stores swap parameter packed into transient storage
@@ -92,7 +108,8 @@ contract FluidV1Executor is IExecutor, ICallback, RestrictTransferFrom {
             IFluidV1Dex dex,
             bool zero2one,
             address receiver,
-            TransferType transferType
+            TransferType transferType,
+            bool isNativeSell
         )
     {
         // expected calldata layout
@@ -101,14 +118,16 @@ contract FluidV1Executor is IExecutor, ICallback, RestrictTransferFrom {
         // 20 | zero2one
         // 21 | receiver
         // 41 | transferType
-        // 42 | EOF
-        if (data.length != 42) {
+        // 42 | is_native
+        // 43 | EOF
+        if (data.length != 43) {
             revert FluidV1Executor__InvalidDataLength();
         }
         dex = IFluidV1Dex(address(bytes20(data[0:20])));
         zero2one = uint8(data[20]) > 0;
         receiver = address(bytes20(data[21:41]));
         transferType = TransferType(uint8(data[41]));
+        isNativeSell = uint8(data[42]) > 0;
     }
 
     function handleCallback(bytes calldata data)
