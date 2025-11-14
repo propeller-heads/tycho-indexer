@@ -675,6 +675,7 @@ impl ExtractorBuilder {
                     )
                     .await?;
 
+                    // TODO: weird
                     let mut hooks_dci = create_testing_hooks_dci(
                         base_dci,
                         rpc_client,

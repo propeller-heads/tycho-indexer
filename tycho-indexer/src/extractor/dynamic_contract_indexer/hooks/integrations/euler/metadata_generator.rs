@@ -27,7 +27,7 @@ impl EulerMetadataGenerator {
         Self { rpc_url }
     }
 }
-const EULER_LENS_BYTECODE_BYTES: &[u8] = include_bytes!("../assets/EulerLimitsLens.evm.runtime");
+const EULER_LENS_BYTECODE_BYTES: &[u8] = include_bytes!("./assets/EulerLimitsLens.evm.runtime");
 
 impl MetadataRequestGenerator for EulerMetadataGenerator {
     fn generate_requests(

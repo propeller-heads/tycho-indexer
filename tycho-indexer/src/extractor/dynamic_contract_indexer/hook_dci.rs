@@ -1842,8 +1842,8 @@ mod tests {
                 DefaultSwapAmountEstimator, HookEntrypointConfig, HookEntrypointGenerator,
                 UniswapV4DefaultHookEntrypointGenerator,
             },
-            euler::metadata_generator::{EulerMetadataGenerator, EulerMetadataResponseParser},
             hook_orchestrator::{DefaultUniswapV4HookOrchestrator, HookOrchestratorRegistry},
+            hooks::integrations::register_integrations,
             metadata_orchestrator::BlockMetadataOrchestrator,
             rpc_metadata_provider::RPCMetadataProvider,
         };
@@ -2001,13 +2001,12 @@ mod tests {
 
             let hook_address = Address::from("0x55dcf9455eee8fd3f5eed17606291272cde428a8");
 
-            generator_registry.register_hook_generator(
-                hook_address,
-                Box::new(EulerMetadataGenerator::new(rpc_url)),
+            register_integrations(
+                &mut generator_registry,
+                &mut parser_registry,
+                &mut provider_registry,
+                rpc_url,
             );
-
-            parser_registry
-                .register_parser("euler".to_string(), Box::new(EulerMetadataResponseParser));
 
             provider_registry.register_provider(
                 "rpc_default".to_string(),

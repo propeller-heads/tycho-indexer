@@ -26,17 +26,12 @@ use crate::extractor::dynamic_contract_indexer::{
         UniswapV4DefaultHookEntrypointGenerator, UNICHAIN_V4_MINI_ROUTER_BYTECODE,
         V4_MINI_ROUTER_BYTECODE,
     },
-    euler::metadata_generator::{EulerMetadataGenerator, EulerMetadataResponseParser},
     hook_dci::UniswapV4HookDCI,
     hook_orchestrator::{DefaultUniswapV4HookOrchestrator, HookOrchestratorRegistry},
+    hooks::integrations::register_integrations,
     metadata_orchestrator::BlockMetadataOrchestrator,
     rpc_metadata_provider::{RPCMetadataProvider, RPCRetryConfig},
 };
-
-#[derive(Deserialize)]
-struct EulerHooks {
-    pool_addresses: Vec<String>,
-}
 
 /// Sets up all necessary registries for Hooks DCI testing with Euler support
 pub fn setup_metadata_registries(
@@ -46,18 +41,17 @@ pub fn setup_metadata_registries(
     let mut parser_registry = MetadataResponseParserRegistry::new();
     let mut provider_registry = ProviderRegistry::new();
 
-    // Register Euler metadata generator for all hook addresses
-    generator_registry.register_hook_identifier(
-        "euler_v1".to_string(),
-        Box::new(EulerMetadataGenerator::new(rpc_url.clone())),
+    register_integrations(
+        &mut generator_registry,
+        &mut parser_registry,
+        &mut provider_registry,
+        rpc_url,
     );
-
-    // Register Euler response parser
-    parser_registry.register_parser("euler".to_string(), Box::new(EulerMetadataResponseParser));
 
     // Register RPC provider with default routing key and retry configuration
     let retry_config =
         RPCRetryConfig { max_retries: 5, initial_backoff_ms: 150, max_backoff_ms: 5000 };
+
     provider_registry.register_provider(
         "rpc_default".to_string(),
         Arc::new(RPCMetadataProvider::new_with_retry_config(50, retry_config)), // batch size limit with retry config
