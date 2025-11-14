@@ -1,3 +1,13 @@
+/// FluidV1 simulation logic.
+///
+/// This implementation is a port from the [Kyberswap reference implementation](https://github.com/KyberNetwork/kyberswap-dex-lib/blob/main/pkg/liquidity-source/fluid/dex-t1/pool_simulator.go)
+/// functions and errors are ported equivalently and then used to implement the ProtocolSim
+/// interface.
+///
+/// ## Differences
+/// - Native ETH: Tycho uses a zero-byte address while Fluid uses 0xeee... address
+/// - Limits: Tycho uses binary search to find limits that will actually execute
+/// - State: Tycho uses the local VM to retrieve and update the state of each pool
 use std::{
     any::Any,
     collections::HashMap,
@@ -19,7 +29,13 @@ use tycho_common::{
     Bytes,
 };
 
-use crate::evm::protocol::u256_num::{biguint_to_u256, u256_to_biguint, u256_to_f64};
+use crate::evm::{
+    engine_db::{create_engine, SHARED_TYCHO_DB},
+    protocol::{
+        fluid::{v1::constant::RESERVES_RESOLVER, vm},
+        u256_num::{biguint_to_u256, u256_to_biguint, u256_to_f64},
+    },
+};
 
 mod constant {
     use alloy::{hex, primitives::U256};
@@ -34,10 +50,12 @@ mod constant {
     pub const FEE_PERCENT_PRECISION: U256 = U256::from_limbs([10000, 0, 0, 0]);
     pub const ZERO_ADDRESS: &[u8] = &hex!("0x0000000000000000000000000000000000000000");
     pub const NATIVE_ADDRESS: &[u8] = &hex!("0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE");
+    pub const RESERVES_RESOLVER: &[u8] = &hex!("0xc93876c0eed99645dd53937b25433e311881a27c");
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FluidV1 {
+    pool_address: Bytes,
     token0: Token,
     token1: Token,
     collateral_reserves: CollateralReserves,
@@ -95,7 +113,7 @@ enum SwapError {
     VerifyReservesRatiosInvalid,
     #[error("No pools are enabled")]
     NoPoolsEnabled,
-    #[error("InvalidAmountIn")]
+    #[error("InvalidAmountIn: Amount too low")]
     InvalidAmountIn,
 }
 
@@ -107,6 +125,7 @@ impl From<SwapError> for SimulationError {
 impl FluidV1 {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
+        pool_address: &Bytes,
         token0: &Token,
         token1: &Token,
         collateral_reserves: CollateralReserves,
@@ -134,14 +153,15 @@ impl FluidV1 {
         // potentially flip token0 and token1 since ETH address is different from our eth marker
         // address
         let (token0_normalized, token1_normalized) =
-            if FluidV1::to_fluid_native_address(&token0.address) <
-                FluidV1::to_fluid_native_address(&token1.address)
+            if FluidV1::normalize_native_address(&token0.address) <
+                FluidV1::normalize_native_address(&token1.address)
             {
                 (token0.clone(), token1.clone())
             } else {
                 (token1.clone(), token0.clone())
             };
         Self {
+            pool_address: pool_address.clone(),
             token0: token0_normalized,
             token1: token1_normalized,
             collateral_reserves,
@@ -155,7 +175,7 @@ impl FluidV1 {
         }
     }
 
-    fn to_fluid_native_address(address: &Bytes) -> &[u8] {
+    fn normalize_native_address(address: &Bytes) -> &[u8] {
         if address == constant::ZERO_ADDRESS {
             constant::NATIVE_ADDRESS
         } else {
@@ -166,7 +186,7 @@ impl FluidV1 {
 
 impl ProtocolSim for FluidV1 {
     fn fee(&self) -> f64 {
-        u256_to_f64(self.fee).expect("Fluid fees are safe to convert") / 10000.0
+        u256_to_f64(self.fee).expect("Fluid fee values are safe to convert") / 10000.0
     }
 
     fn spot_price(&self, base: &Token, _quote: &Token) -> Result<f64, SimulationError> {
@@ -239,6 +259,7 @@ impl ProtocolSim for FluidV1 {
             u256_to_biguint(amount_out),
             155433.to_biguint().expect("infallible"),
             Box::new(Self {
+                pool_address: self.pool_address.clone(),
                 token0: self.token0.clone(),
                 token1: self.token1.clone(),
                 collateral_reserves: new_col_reserves,
@@ -321,15 +342,49 @@ impl ProtocolSim for FluidV1 {
         ))
     }
 
-    // TODO: since we don't get any VM updates from DCI, how do we mark this as updated?
-    //  We need this to be called on DCI contract changes or at least every 5m
     fn delta_transition(
         &mut self,
         _delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
-        todo!()
+        let engine = create_engine(SHARED_TYCHO_DB.clone(), false).expect("Infallible");
+
+        let state = vm::decode_from_vm(
+            &self.pool_address,
+            &self.token0,
+            &self.token1,
+            RESERVES_RESOLVER,
+            engine,
+        )?;
+
+        self.collateral_reserves = state.collateral_reserves;
+        self.debt_reserves = state.debt_reserves;
+        self.dex_limits = state.dex_limits;
+        self.center_price = state.center_price;
+        self.fee = state.fee;
+        self.sync_time = state.sync_time;
+
+        self.pool_reserve0 = get_max_reserves(
+            self.token0.decimals as u8,
+            &self.dex_limits.withdrawable_token0,
+            &self.dex_limits.borrowable_token0,
+            &self
+                .collateral_reserves
+                .token0_real_reserves,
+            &self.debt_reserves.token0_real_reserves,
+        );
+        self.pool_reserve1 = get_max_reserves(
+            self.token1.decimals as u8,
+            &self.dex_limits.withdrawable_token1,
+            &self.dex_limits.borrowable_token1,
+            &self
+                .collateral_reserves
+                .token1_real_reserves,
+            &self.debt_reserves.token1_real_reserves,
+        );
+
+        Ok(())
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {
@@ -1186,6 +1241,7 @@ mod test {
         );
 
         let pool = FluidV1::new(
+            &Bytes::from_str("0x0B1a513ee24972DAEf112bC777a5610d4325C9e7").unwrap(),
             &wsteth,
             &eth,
             CollateralReserves {
@@ -2615,6 +2671,7 @@ mod test {
             100,
         );
         let pool = FluidV1::new(
+            &Bytes::from_str("0x0B1a513ee24972DAEf112bC777a5610d4325C9e7").unwrap(),
             &wsteth,
             &eth,
             CollateralReserves {
