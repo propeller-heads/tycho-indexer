@@ -1,7 +1,13 @@
 use std::{cmp, sync::Arc};
 
-use alloy::primitives::{Address, U256};
-use anyhow::{bail, ensure, Context, Result};
+use alloy::{
+    primitives::{keccak256, Address, U256},
+    rpc::types::{
+        trace::parity::{TraceOutput, TraceResults},
+        BlockNumberOrTag, TransactionInput, TransactionRequest,
+    },
+    sol_types::SolCall,
+};
 use tycho_common::{
     models::{
         blockchain::BlockTag,
@@ -10,12 +16,12 @@ use tycho_common::{
     traits::{TokenAnalyzer, TokenOwnerFinding},
     Bytes,
 };
-use web3::{
-    signing::keccak256,
-    types::{BlockNumber, BlockTrace, CallRequest, Res},
-};
 
-use crate::{erc20_abi, token_analyzer::trace_many, BlockTagWrapper, BytesCodec};
+use crate::{
+    erc20::{approveCall, balanceOfCall, transferCall},
+    rpc::EthereumRpcClient,
+    BytesCodec,
+};
 
 /// Detects whether a token is "bad" (works in unexpected ways that are
 /// problematic for solving) by simulating several transfers of a token. To find
@@ -25,7 +31,7 @@ use crate::{erc20_abi, token_analyzer::trace_many, BlockTagWrapper, BytesCodec};
 /// - transfer into the settlement contract or back out fails
 /// - a transfer loses total balance
 pub struct TraceCallDetector {
-    pub rpc_url: String,
+    pub rpc: EthereumRpcClient,
     pub finder: Arc<dyn TokenOwnerFinding>,
     pub settlement_contract: Address,
 }
@@ -38,10 +44,9 @@ impl TokenAnalyzer for TraceCallDetector {
         &self,
         token: Bytes,
         block: BlockTag,
-    ) -> std::result::Result<(TokenQuality, Option<TransferCost>, Option<TransferTax>), String>
-    {
+    ) -> Result<(TokenQuality, Option<TransferCost>, Option<TransferTax>), String> {
         let (quality, transfer_cost, tax) = self
-            .detect_impl(Address::from_bytes(&token), BlockTagWrapper(block).into())
+            .detect_impl(Address::from_bytes(&token), block)
             .await
             .map_err(|e| e.to_string())?;
         tracing::debug!(?token, ?quality, "determined token quality");
@@ -59,9 +64,9 @@ enum TraceRequestType {
 }
 
 impl TraceCallDetector {
-    pub fn new(url: &str, finder: Arc<dyn TokenOwnerFinding>) -> Self {
+    pub fn new(rpc: &EthereumRpcClient, finder: Arc<dyn TokenOwnerFinding>) -> Self {
         Self {
-            rpc_url: url.to_string(),
+            rpc: rpc.clone(),
             finder,
             // middle contract used to check for fees, set to cowswap settlement
             settlement_contract: "0xc9f2e6ea1637E499406986ac50ddC92401ce1f58"
@@ -73,8 +78,10 @@ impl TraceCallDetector {
     pub async fn detect_impl(
         &self,
         token: Address,
-        block: BlockNumber,
+        block: BlockTag,
     ) -> Result<(TokenQuality, Option<U256>, Option<U256>), String> {
+        let block_tag = map_block_tag(block);
+
         // Arbitrary amount that is large enough that small relative fees should be
         // visible.
         const MIN_AMOUNT: u64 = 100_000;
@@ -124,10 +131,11 @@ impl TraceCallDetector {
         // Note that gas use can depend on the recipient because for the standard
         // implementation sending to an address that does not have any balance
         // yet (implicitly 0) causes an allocation.
-        let request = self
-            .create_trace_request(token, amount, take_from, TraceRequestType::SimpleTransfer)
-            .map_err(|e| e.to_string())?;
-        let traces = trace_many::trace_many(request, &self.rpc_url, block)
+        let request =
+            self.create_trace_request(token, amount, take_from, TraceRequestType::SimpleTransfer);
+        let simple_transfer_traces = self
+            .rpc
+            .trace_call_many(request, block_tag)
             .await
             .map_err(|e| e.to_string())?;
 
@@ -139,23 +147,24 @@ impl TraceCallDetector {
         information.\
         ";
         let bad = TokenQuality::Bad { reason: message.to_string() };
-        let middle_balance = match decode_u256(&traces[2]) {
+        let middle_balance = match decode_u256(&simple_transfer_traces[2]) {
             Some(balance) => balance,
             None => return Ok((bad, None, None)),
         };
 
-        let request = self
-            .create_trace_request(
-                token,
-                amount,
-                take_from,
-                TraceRequestType::DoubleTransfer(middle_balance),
-            )
-            .map_err(|e| e.to_string())?;
-        let traces = trace_many::trace_many(request, &self.rpc_url, block)
+        let request = self.create_trace_request(
+            token,
+            amount,
+            take_from,
+            TraceRequestType::DoubleTransfer(middle_balance),
+        );
+        let double_transfer_traces = self
+            .rpc
+            .trace_call_many(request, block_tag)
             .await
             .map_err(|e| e.to_string())?;
-        Self::handle_response(&traces, amount, middle_balance, take_from).map_err(|e| e.to_string())
+        Self::handle_response(&double_transfer_traces, amount, middle_balance, take_from)
+            .map_err(|e| e.to_string())
     }
 
     // For the out transfer we use an arbitrary address without balance to detect
@@ -173,57 +182,56 @@ impl TraceCallDetector {
         amount: U256,
         take_from: Address,
         request_type: TraceRequestType,
-    ) -> Result<Vec<CallRequest>, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Vec<TransactionRequest> {
         let mut requests = Vec::new();
 
         // 0 Get balance of settlement_contract before
-        let calldata = encode_balance_of(self.settlement_contract)?;
+        let calldata = balanceOfCall { _owner: self.settlement_contract }.abi_encode();
         requests.push(call_request(None, token, calldata));
 
         // 1 Transfer from take_from to settlement_contract
-        let calldata = encode_transfer(self.settlement_contract, amount)?;
+        let calldata = transferCall { _to: self.settlement_contract, _value: amount }.abi_encode();
         requests.push(call_request(Some(take_from), token, calldata));
 
         // 2 Get balance of settlement_contract after
-        let calldata = encode_balance_of(self.settlement_contract)?;
+        let calldata = balanceOfCall { _owner: self.settlement_contract }.abi_encode();
         requests.push(call_request(None, token, calldata));
 
         // 3 Get balance of arbitrary_recipient before
         let recipient = Self::arbitrary_recipient();
-        let calldata = encode_balance_of(recipient)?;
+        let calldata = balanceOfCall { _owner: recipient }.abi_encode();
         requests.push(call_request(None, token, calldata));
 
-        match request_type {
-            TraceRequestType::SimpleTransfer => Ok(requests),
-            TraceRequestType::DoubleTransfer(middle_amount) => {
-                // 4 Transfer from settlement_contract to arbitrary_recipient
-                let calldata = encode_transfer(recipient, middle_amount)?;
-                requests.push(call_request(Some(self.settlement_contract), token, calldata));
+        if let TraceRequestType::DoubleTransfer(middle_amount) = request_type {
+            // 4 Transfer from settlement_contract to arbitrary_recipient
+            let calldata = transferCall { _to: recipient, _value: middle_amount }.abi_encode();
+            requests.push(call_request(Some(self.settlement_contract), token, calldata));
 
-                // 5 Get balance of settlement_contract after
-                let calldata = encode_balance_of(self.settlement_contract)?;
-                requests.push(call_request(None, token, calldata));
+            // 5 Get balance of settlement_contract after
+            let calldata = balanceOfCall { _owner: self.settlement_contract }.abi_encode();
+            requests.push(call_request(None, token, calldata));
 
-                // 6 Get balance of arbitrary_recipient after
-                let calldata = encode_balance_of(recipient)?;
-                requests.push(call_request(None, token, calldata));
+            // 6 Get balance of arbitrary_recipient after
+            let calldata = balanceOfCall { _owner: recipient }.abi_encode();
+            requests.push(call_request(None, token, calldata));
 
-                // 7 Approve max with settlement_contract
-                let calldata = encode_approve(recipient, U256::MAX)?;
-                requests.push(call_request(Some(self.settlement_contract), token, calldata));
-
-                Ok(requests)
-            }
+            // 7 Approve max with settlement_contract
+            let calldata = approveCall { _spender: recipient, _value: U256::MAX }.abi_encode();
+            requests.push(call_request(Some(self.settlement_contract), token, calldata));
         }
+
+        requests
     }
 
     fn handle_response(
-        traces: &[BlockTrace],
+        traces: &[TraceResults],
         amount: U256,
         middle_amount: U256,
         take_from: Address,
-    ) -> Result<(TokenQuality, Option<U256>, Option<U256>)> {
-        ensure!(traces.len() == 8, "unexpected number of traces");
+    ) -> Result<(TokenQuality, Option<U256>, Option<U256>), String> {
+        if traces.len() != 8 {
+            return Err("unexpected number of traces".to_string());
+        }
 
         let gas_in = match ensure_transaction_ok_and_get_gas(&traces[1])? {
             Ok(gas) => gas,
@@ -388,7 +396,7 @@ impl TraceCallDetector {
         balance_after_in: U256,
         balance_recipient_before: U256,
         balance_recipient_after: U256,
-    ) -> Result<U256, anyhow::Error> {
+    ) -> Result<U256, String> {
         Ok(
             match (
                 balance_after_in != error_add(balance_before_in, amount)?,
@@ -441,63 +449,57 @@ impl TraceCallDetector {
     }
 }
 
-// Helper functions for encoding ERC20 calls
-fn encode_balance_of(
-    account: Address,
-) -> Result<web3::types::Bytes, Box<dyn std::error::Error + Send + Sync>> {
-    let calldata = erc20_abi::encode_balance_of(account)?;
-    Ok(web3::types::Bytes(calldata))
-}
-
-fn encode_transfer(
-    to: Address,
-    amount: U256,
-) -> Result<web3::types::Bytes, Box<dyn std::error::Error + Send + Sync>> {
-    let calldata = erc20_abi::encode_transfer(to, amount)?;
-    Ok(web3::types::Bytes(calldata))
-}
-
-fn encode_approve(
-    spender: Address,
-    amount: U256,
-) -> Result<web3::types::Bytes, Box<dyn std::error::Error + Send + Sync>> {
-    let calldata = erc20_abi::encode_approve(spender, amount)?;
-    Ok(web3::types::Bytes(calldata))
-}
-
-fn call_request(from: Option<Address>, to: Address, calldata: web3::types::Bytes) -> CallRequest {
-    use web3::types::H160;
-    CallRequest {
-        from: from.map(|a| H160::from_slice(a.as_ref())),
-        to: Some(H160::from_slice(to.as_ref())),
-        data: Some(calldata),
-        ..Default::default()
+/// Converts a tycho BlockTag to an alloy BlockNumberOrTag.
+fn map_block_tag(block: BlockTag) -> BlockNumberOrTag {
+    match block {
+        BlockTag::Finalized => BlockNumberOrTag::Finalized,
+        BlockTag::Safe => BlockNumberOrTag::Safe,
+        BlockTag::Latest => BlockNumberOrTag::Latest,
+        BlockTag::Earliest => BlockNumberOrTag::Earliest,
+        BlockTag::Pending => BlockNumberOrTag::Pending,
+        BlockTag::Number(n) => BlockNumberOrTag::Number(n),
     }
 }
 
-fn error_add(a: U256, b: U256) -> Result<U256, anyhow::Error> {
+pub(crate) fn call_request(
+    from: Option<Address>,
+    to: Address,
+    calldata: Vec<u8>,
+) -> TransactionRequest {
+    let mut req = TransactionRequest::default()
+        .to(to)
+        .input(TransactionInput::both(calldata.into()));
+
+    if let Some(addr) = from {
+        req = req.from(addr);
+    }
+
+    req
+}
+
+fn error_add(a: U256, b: U256) -> Result<U256, String> {
     a.checked_add(b)
-        .ok_or_else(|| anyhow::format_err!("overflow"))
+        .ok_or_else(|| "overflow".to_string())
 }
 
-fn error_sub(a: U256, b: U256) -> Result<U256, anyhow::Error> {
+fn error_sub(a: U256, b: U256) -> Result<U256, String> {
     a.checked_sub(b)
-        .ok_or_else(|| anyhow::format_err!("overflow"))
+        .ok_or_else(|| "overflow".to_string())
 }
 
-fn error_div(a: U256, b: U256) -> Result<U256, anyhow::Error> {
+fn error_div(a: U256, b: U256) -> Result<U256, String> {
     a.checked_div(b)
-        .ok_or_else(|| anyhow::format_err!("overflow"))
+        .ok_or_else(|| "overflow".to_string())
 }
 
-fn error_mul(a: U256, b: U256) -> Result<U256, anyhow::Error> {
+fn error_mul(a: U256, b: U256) -> Result<U256, String> {
     a.checked_mul(b)
-        .ok_or_else(|| anyhow::format_err!("overflow"))
+        .ok_or_else(|| "overflow".to_string())
 }
 
 /// Returns none if the length of the bytes in the trace output is not 32.
-fn decode_u256(trace: &BlockTrace) -> Option<U256> {
-    let bytes = trace.output.0.as_slice();
+fn decode_u256(trace: &TraceResults) -> Option<U256> {
+    let bytes = trace.output.iter().as_slice();
     if bytes.len() != 32 {
         return None;
     }
@@ -506,64 +508,55 @@ fn decode_u256(trace: &BlockTrace) -> Option<U256> {
 
 // The outer result signals communication failure with the node.
 // The inner result is Ok(gas_price) or Err if the transaction failed.
-fn ensure_transaction_ok_and_get_gas(trace: &BlockTrace) -> Result<Result<U256, String>> {
-    let transaction_traces = trace
-        .trace
-        .as_ref()
-        .context("trace not set")?;
+fn ensure_transaction_ok_and_get_gas(trace: &TraceResults) -> Result<Result<U256, String>, String> {
+    let transaction_traces = &trace.trace;
     let first = transaction_traces
         .first()
-        .context("expected at least one trace")?;
+        .ok_or_else(|| "expected at least one trace".to_string())?;
     if let Some(error) = &first.error {
         return Ok(Err(format!("transaction failed: {error}")));
     }
     let call_result = match &first.result {
-        Some(Res::Call(call)) => call,
-        _ => bail!("no error but also no call result"),
+        Some(TraceOutput::Call(call)) => call,
+        _ => return Err("no error but also no call result".to_string()),
     };
-    // Convert web3::types::U256 to alloy::primitives::U256
-    let gas_used_bytes = {
-        let mut bytes = [0u8; 32];
-        call_result
-            .gas_used
-            .to_big_endian(&mut bytes);
-        bytes
-    };
-    Ok(Ok(U256::from_be_bytes(gas_used_bytes)))
+    Ok(Ok(U256::from(call_result.gas_used)))
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, env, str::FromStr, sync::Arc};
+    use std::{str::FromStr, sync::Arc};
 
     use alloy::primitives::Address;
-    use tycho_common::{models::token::TokenOwnerStore, Bytes};
-    use web3::types::BlockNumber;
+    use tycho_common::models::token::TokenOwnerStore;
 
     use super::*;
+    use crate::test_fixtures::{TestFixture, TEST_BLOCK_NUMBER, TOKEN_HOLDERS, USDC_STR};
+
+    impl TestFixture {
+        fn create_trace_call_detector(&self) -> TraceCallDetector {
+            // We do not enable batching as the token pre-processor does not leverage it currently
+            let rpc = self.create_rpc_client(false);
+
+            // Use shared token holders
+            let token_finder = TokenOwnerStore::new(TOKEN_HOLDERS.clone());
+
+            TraceCallDetector::new(&rpc, Arc::new(token_finder))
+        }
+    }
 
     #[tokio::test]
-    #[ignore = "This test requires real RPC connection"]
+    #[ignore = "require RPC connection"]
     async fn test_detect_impl_usdc() {
-        let rpc_url = env::var("RPC_URL").expect("RPC_URL environment variable must be set");
+        let fixture = TestFixture::new();
+        let detector = fixture.create_trace_call_detector();
 
         // USDC mainnet address
-        let usdc_address = Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
-
-        // Using USV4 pool manager
-        let holder = Bytes::from_str("0x000000000004444c5dc75cB358380D2e3dE08A90").unwrap();
-        let large_balance = Bytes::from_str("0x43f6e8f16703").unwrap(); // Large balance
-
-        let token_finder = TokenOwnerStore::new(HashMap::from([(
-            usdc_address.to_bytes(),
-            (holder, large_balance),
-        )]));
-
-        let detector = TraceCallDetector::new(&rpc_url, Arc::new(token_finder));
+        let usdc_address = Address::from_str(USDC_STR).unwrap();
 
         // Test with the latest block
         let result = detector
-            .detect_impl(usdc_address, BlockNumber::Number(23475728.into()))
+            .detect_impl(usdc_address, BlockTag::Number(TEST_BLOCK_NUMBER))
             .await;
 
         match result {
@@ -587,5 +580,15 @@ mod tests {
                 panic!("Failed to analyze USDC: {}", e);
             }
         }
+    }
+
+    #[test]
+    fn test_map_block_tag() {
+        assert_eq!(map_block_tag(BlockTag::Finalized), BlockNumberOrTag::Finalized);
+        assert_eq!(map_block_tag(BlockTag::Safe), BlockNumberOrTag::Safe);
+        assert_eq!(map_block_tag(BlockTag::Latest), BlockNumberOrTag::Latest);
+        assert_eq!(map_block_tag(BlockTag::Earliest), BlockNumberOrTag::Earliest);
+        assert_eq!(map_block_tag(BlockTag::Pending), BlockNumberOrTag::Pending);
+        assert_eq!(map_block_tag(BlockTag::Number(123)), BlockNumberOrTag::Number(123));
     }
 }

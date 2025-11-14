@@ -1,101 +1,18 @@
-#[cfg(feature = "onchain_data")]
-pub mod account_extractor;
-#[cfg(feature = "onchain_data")]
-#[allow(unused)] //TODO: Remove when used
-pub mod entrypoint_tracer;
-#[cfg(feature = "onchain_data")]
-pub mod erc20_abi;
-#[cfg(feature = "onchain_data")]
-pub mod token_analyzer;
-#[cfg(feature = "onchain_data")]
-pub mod token_pre_processor;
-
 #[cfg(test)]
 #[macro_use]
 extern crate pretty_assertions;
 
-use std::fmt::Display;
+pub mod erc20;
+pub mod errors;
+pub mod rpc;
+pub mod services;
+
+#[cfg(test)]
+pub mod test_fixtures;
 
 use alloy::primitives::{Address, B256, U256};
-use thiserror::Error;
-use tycho_common::{models::blockchain::BlockTag, Bytes};
-use web3::types::BlockNumber;
-
-#[derive(Error, Debug)]
-pub struct SerdeJsonError {
-    msg: String,
-    #[source]
-    source: serde_json::Error,
-}
-
-impl Display for SerdeJsonError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.msg, self.source)
-    }
-}
-
-#[derive(Error, Debug)]
-pub struct ReqwestError {
-    msg: String,
-    #[source]
-    source: reqwest::Error,
-}
-
-impl Display for ReqwestError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.msg, self.source)
-    }
-}
-
-#[derive(Error, Debug)]
-pub enum RequestError {
-    Reqwest(ReqwestError),
-    Other(String),
-}
-
-impl Display for RequestError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RequestError::Reqwest(e) => write!(f, "{}: {}", e.msg, e.source),
-            RequestError::Other(e) => write!(f, "{e}"),
-        }
-    }
-}
-
-#[derive(Error, Debug)]
-pub enum RPCError {
-    #[error("RPC setup error: {0}")]
-    SetupError(String),
-    #[error("Request error: {0}")]
-    RequestError(RequestError),
-    #[error("Tracing failure: {0}")]
-    TracingFailure(String),
-    #[error("Serialize error: {0}")]
-    SerializeError(SerdeJsonError),
-    #[error("Unknown error: {0}")]
-    UnknownError(String),
-}
-
-impl RPCError {
-    pub fn should_retry(&self) -> bool {
-        matches!(self, Self::RequestError(_))
-    }
-}
-
-pub struct BlockTagWrapper(BlockTag);
-
-impl From<BlockTagWrapper> for BlockNumber {
-    fn from(value: BlockTagWrapper) -> Self {
-        match value.0 {
-            BlockTag::Finalized => BlockNumber::Finalized,
-            BlockTag::Safe => BlockNumber::Safe,
-            BlockTag::Latest => BlockNumber::Latest,
-            BlockTag::Earliest => BlockNumber::Earliest,
-            BlockTag::Pending => BlockNumber::Pending,
-            BlockTag::Number(n) => BlockNumber::Number(n.into()),
-        }
-    }
-}
+pub(crate) use errors::*;
+use tycho_common::Bytes;
 
 /// A trait for converting types to and from `Bytes`.
 ///

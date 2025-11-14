@@ -1,4 +1,10 @@
 #![doc = include_str!("../../README.md")]
+
+// TODO: We need to use `use pretty_assertions::{assert_eq, assert_ne}` per test module.
+#[cfg(test)]
+#[macro_use]
+extern crate pretty_assertions;
+
 use std::{
     collections::HashMap,
     env,
@@ -35,8 +41,10 @@ use tycho_common::{
     Bytes,
 };
 use tycho_ethereum::{
-    account_extractor::contract::EVMAccountExtractor,
-    token_analyzer::rpc_client::EthereumRpcClient, token_pre_processor::EthereumTokenPreProcessor,
+    rpc::EthereumRpcClient,
+    services::{
+        account_extractor::EVMAccountExtractor, token_pre_processor::EthereumTokenPreProcessor,
+    },
 };
 use tycho_indexer::{
     cli::{AnalyzeTokenArgs, Cli, Command, GlobalArgs, IndexArgs, RunSpkgArgs, SubstreamsArgs},
@@ -55,11 +63,6 @@ use tycho_indexer::{
 use tycho_storage::postgres::{builder::GatewayBuilder, cache::CachedGateway};
 
 mod ot;
-
-// TODO: We need to use `use pretty_assertions::{assert_eq, assert_ne}` per test module.
-#[cfg(test)]
-#[macro_use]
-extern crate pretty_assertions;
 
 #[derive(Debug, Deserialize)]
 struct ExtractorConfigs {
@@ -321,6 +324,9 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
 async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
     create_tracing_subscriber();
 
+    let rpc_client = EthereumRpcClient::new(&global_args.rpc_url)
+        .map_err(|e| ExtractionError::Setup(format!("Failed to create RPC client: {e}")))?;
+
     let direct_gw = GatewayBuilder::new(&global_args.database_url)
         .set_chains(&[Chain::Ethereum]) // TODO: handle multichain
         .build_direct_gw()
@@ -333,7 +339,7 @@ async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
     })?;
 
     let (server_handle, server_task) =
-        ServicesBuilder::new(direct_gw.clone(), global_args.rpc_url.clone(), api_key)
+        ServicesBuilder::new(direct_gw.clone(), rpc_client.clone(), api_key)
             .prefix(&global_args.server_version_prefix)
             .bind(&global_args.server_ip)
             .port(global_args.server_port)
@@ -353,7 +359,9 @@ async fn create_indexing_tasks(
     extractors_config: ExtractorConfigs,
     extraction_runtime: Option<&Handle>,
 ) -> Result<(ExtractionTasks, ServerTasks), ExtractionError> {
-    let rpc_client = EthereumRpcClient::new_from_url(&global_args.rpc_url.clone());
+    let rpc_client = EthereumRpcClient::new(&global_args.rpc_url)
+        .map_err(|e| ExtractionError::Setup(format!("Failed to create RPC client: {e}")))?;
+
     let block_number = rpc_client
         .get_block_number()
         .await
@@ -373,8 +381,8 @@ async fn create_indexing_tasks(
         .set_retention_horizon(retention_horizon)
         .build()
         .await?;
-    let token_processor = EthereumTokenPreProcessor::new_from_url(
-        &global_args.rpc_url.clone(),
+    let token_processor = EthereumTokenPreProcessor::new(
+        &rpc_client,
         *chains
             .first()
             .expect("No chain provided"), //TODO: handle multichain?
@@ -382,7 +390,7 @@ async fn create_indexing_tasks(
 
     let (runners, extractor_handles): (Vec<_>, Vec<_>) =
         // TODO: accept substreams configuration from cli.
-        build_all_extractors(&extractors_config, chain_state, chains, &global_args.endpoint_url, global_args.s3_bucket.as_deref(), &substreams_args.substreams_api_token, &cached_gw, global_args.database_insert_batch_size, &token_processor, &global_args.rpc_url.clone(), extraction_runtime)
+        build_all_extractors(&extractors_config, chain_state, chains, &global_args.endpoint_url, global_args.s3_bucket.as_deref(), &substreams_args.substreams_api_token, &cached_gw, global_args.database_insert_batch_size, &token_processor, &global_args.rpc_url, &rpc_client, extraction_runtime)
             .await
             .map_err(|e| ExtractionError::Setup(format!("Failed to create extractors: {e}")))?
             .into_iter()
@@ -393,7 +401,7 @@ async fn create_indexing_tasks(
         ExtractionError::Setup("AUTH_API_KEY environment variable is not set".to_string())
     })?;
     let (server_handle, server_task) =
-        ServicesBuilder::new(cached_gw.clone(), global_args.rpc_url.clone(), api_key)
+        ServicesBuilder::new(cached_gw.clone(), rpc_client.clone(), api_key)
             .prefix(&global_args.server_version_prefix)
             .bind(&global_args.server_ip)
             .port(global_args.server_port)
@@ -424,6 +432,7 @@ async fn build_all_extractors(
     database_insert_batch_size: usize,
     token_pre_processor: &EthereumTokenPreProcessor,
     rpc_url: &str,
+    rpc: &EthereumRpcClient,
     runtime: Option<&tokio::runtime::Handle>,
 ) -> Result<Vec<(ExtractorRunner, ExtractorHandle)>, ExtractionError> {
     let mut extractor_handles = Vec::new();
@@ -444,7 +453,7 @@ async fn build_all_extractors(
                 .initialized_accounts
                 .clone(),
             extractor_config.initialized_accounts_block,
-            rpc_url,
+            rpc,
             *chains.first().unwrap(),
             cached_gw,
         )
@@ -458,7 +467,7 @@ async fn build_all_extractors(
             ExtractorBuilder::new(extractor_config, endpoint_url, s3_bucket, substreams_api_token)
                 .rpc_url(rpc_url)
                 .database_insert_batch_size(database_insert_batch_size)
-                .build(chain_state, cached_gw, token_pre_processor, &protocol_cache)
+                .build(chain_state, cached_gw, token_pre_processor, &protocol_cache, rpc)
                 .await?
                 .set_runtime(runtime)
                 .into_runner()
@@ -487,15 +496,15 @@ where
 #[instrument(skip_all, fields(n_accounts = %accounts.len(), block_id = block_id))]
 async fn initialize_accounts(
     accounts: Vec<Address>,
-    block_id: i64,
-    rpc_url: &str,
+    block_id: u64,
+    rpc: &EthereumRpcClient,
     chain: Chain,
     cached_gw: &CachedGateway,
 ) {
     if accounts.is_empty() {
         return;
     }
-    let (block, extracted_accounts) = get_accounts_data(accounts, block_id, rpc_url, chain).await;
+    let (block, extracted_accounts) = get_accounts_data(accounts, block_id, rpc, chain).await;
 
     info!(block_number = block.number, "Initializing accounts");
 
@@ -559,13 +568,11 @@ async fn initialize_accounts(
 
 async fn get_accounts_data(
     accounts: Vec<Address>,
-    block_id: i64,
-    rpc_url: &str,
+    block_id: u64,
+    rpc: &EthereumRpcClient,
     chain: Chain,
 ) -> (Block, HashMap<Bytes, AccountDelta>) {
-    let account_extractor = EVMAccountExtractor::new(rpc_url, chain)
-        .await
-        .expect("Failed to create account extractor");
+    let account_extractor = EVMAccountExtractor::new(rpc, chain);
 
     let block = account_extractor
         .get_block_data(block_id)
@@ -617,13 +624,16 @@ async fn run_analyze_tokens(
     global_args: GlobalArgs,
     analyzer_args: AnalyzeTokenArgs,
 ) -> Result<(), anyhow::Error> {
+    let rpc_client = EthereumRpcClient::new(&global_args.rpc_url)
+        .map_err(|e| anyhow!("Failed to create RPC client: {e}"))?;
+
     create_tracing_subscriber();
     let (cached_gw, gw_writer_thread) = GatewayBuilder::new(&global_args.database_url)
         .set_chains(&[analyzer_args.chain])
         .build()
         .await?;
     let cached_gw = Arc::new(cached_gw);
-    let analyze_thread = analyze_tokens(global_args, analyzer_args, cached_gw.clone());
+    let analyze_thread = analyze_tokens(analyzer_args, &rpc_client, cached_gw.clone());
     select! {
          res = analyze_thread => {
             res?;
@@ -637,9 +647,15 @@ async fn run_analyze_tokens(
 
 #[cfg(test)]
 mod test_serial_db {
+    use once_cell::sync::Lazy;
     use tycho_storage::postgres::testing::run_against_db;
 
     use super::*;
+
+    static RPC: Lazy<EthereumRpcClient> = Lazy::new(|| {
+        let rpc_url = std::env::var("RPC_URL").expect("RPC URL must be set for testing");
+        EthereumRpcClient::new(&rpc_url).expect("Failed to create RPC client")
+    });
 
     #[tokio::test]
     #[ignore = "require archive node (RPC)"]
@@ -648,7 +664,6 @@ mod test_serial_db {
             let accounts =
                 vec![Address::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8").unwrap()];
             let block_id = 20378314;
-            let rpc_url = std::env::var("RPC_URL").expect("RPC URL must be set for testing");
             let db_url =
                 std::env::var("DATABASE_URL").expect("Database URL must be set for testing");
 
@@ -659,7 +674,7 @@ mod test_serial_db {
                 .build()
                 .await
                 .expect("Failed to create Gateway");
-            initialize_accounts(accounts, block_id, rpc_url.as_str(), chain, &cached_gw).await;
+            initialize_accounts(accounts, block_id, &RPC, chain, &cached_gw).await;
 
             let contracts = cached_gw
                 .get_contracts(&chain, None, None, true, None)
@@ -681,7 +696,6 @@ mod test_serial_db {
                 Address::from_str("0x3175Df0976dFA876431C2E9eE6Bc45b65d3473CC").unwrap(),
             ];
             let block_id = 20378314;
-            let rpc_url = std::env::var("RPC_URL").expect("RPC URL must be set for testing");
             let db_url =
                 std::env::var("DATABASE_URL").expect("Database URL must be set for testing");
             let chain = Chain::Ethereum;
@@ -692,7 +706,7 @@ mod test_serial_db {
                 .await
                 .expect("Failed to create Gateway");
 
-            initialize_accounts(accounts, block_id, rpc_url.as_str(), chain, &cached_gw).await;
+            initialize_accounts(accounts, block_id, &RPC, chain, &cached_gw).await;
 
             let contracts = cached_gw
                 .get_contracts(&chain, None, None, true, None)
@@ -712,7 +726,6 @@ mod test_serial_db {
             let accounts =
                 vec![Address::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8").unwrap()];
             let block_id = 20378314;
-            let rpc_url = std::env::var("RPC_URL").expect("RPC URL must be set for testing");
             let db_url =
                 std::env::var("DATABASE_URL").expect("Database URL must be set for testing");
             let chain = Chain::Ethereum;
@@ -723,10 +736,10 @@ mod test_serial_db {
                 .await
                 .expect("Failed to create Gateway");
 
-            initialize_accounts(accounts, block_id, rpc_url.as_str(), chain, &cached_gw).await;
+            initialize_accounts(accounts, block_id, &RPC, chain, &cached_gw).await;
             let accounts =
                 vec![Address::from_str("0x3175Df0976dFA876431C2E9eE6Bc45b65d3473CC").unwrap()];
-            initialize_accounts(accounts, 20378315, rpc_url.as_str(), chain, &cached_gw).await;
+            initialize_accounts(accounts, 20378315, &RPC, chain, &cached_gw).await;
 
             let contracts = cached_gw
                 .get_contracts(&chain, None, None, true, None)
@@ -749,13 +762,16 @@ mod test_serial_db {
                 std::env::var("DATABASE_URL").expect("Database URL must be set for testing");
             let chain = Chain::Ethereum;
 
+            // RPC client won't be used since an account list is empty, so we can create a stub one
+            let rpc = EthereumRpcClient::new(rpc_url).expect("Failed to create RPC client");
+
             let (cached_gw, _) = GatewayBuilder::new(db_url.as_str())
                 .set_chains(&[chain])
                 .build()
                 .await
                 .expect("Failed to create Gateway");
 
-            initialize_accounts(accounts, block_id, rpc_url, chain, &cached_gw).await;
+            initialize_accounts(accounts, block_id, &rpc, chain, &cached_gw).await;
         })
         .await;
     }

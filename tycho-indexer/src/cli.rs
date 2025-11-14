@@ -149,7 +149,7 @@ pub struct RunSpkgArgs {
 
     /// Block number to initialize the accounts at
     #[clap(long, default_value = "0")]
-    pub initialization_block: i64,
+    pub initialization_block: u64,
 
     /// DCI plugin to use
     ///

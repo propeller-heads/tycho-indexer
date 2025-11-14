@@ -19,12 +19,15 @@ use tokio_stream::StreamExt;
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 use tycho_common::{
     models::{Address, Chain, ExtractorIdentity, FinancialType, ImplementationType, ProtocolType},
+    traits::AccountExtractor,
     Bytes,
 };
 use tycho_ethereum::{
-    account_extractor::contract::EVMBatchAccountExtractor,
-    entrypoint_tracer::tracer::EVMEntrypointService,
-    token_pre_processor::EthereumTokenPreProcessor,
+    rpc::EthereumRpcClient,
+    services::{
+        account_extractor::EVMAccountExtractor, entrypoint_tracer::tracer::EVMEntrypointService,
+        token_pre_processor::EthereumTokenPreProcessor,
+    },
 };
 use tycho_storage::postgres::cache::CachedGateway;
 
@@ -49,15 +52,13 @@ use crate::{
 
 /// Enum to handle both standard DCI and UniswapV4 Hook DCI
 #[allow(clippy::large_enum_variant)]
-pub(crate) enum DCIPlugin {
-    Standard(DynamicContractIndexer<EVMBatchAccountExtractor, EVMEntrypointService, CachedGateway>),
-    UniswapV4Hooks(
-        Box<UniswapV4HookDCI<EVMBatchAccountExtractor, EVMEntrypointService, CachedGateway>>,
-    ),
+pub(crate) enum DCIPlugin<AE: AccountExtractor + Send + Sync> {
+    Standard(DynamicContractIndexer<AE, EVMEntrypointService, CachedGateway>),
+    UniswapV4Hooks(Box<UniswapV4HookDCI<AE, EVMEntrypointService, CachedGateway>>),
 }
 
 #[async_trait]
-impl ExtractorExtension for DCIPlugin {
+impl<AE: AccountExtractor + Send + Sync> ExtractorExtension for DCIPlugin<AE> {
     async fn process_block_update(
         &mut self,
         block_changes: &mut crate::extractor::models::BlockChanges,
@@ -197,13 +198,13 @@ impl ExtractorRunner {
         let runtime = self
             .runtime_handle
             .clone()
-            .unwrap_or_else(|| tokio::runtime::Handle::current());
+            .unwrap_or_else(|| Handle::current());
 
         runtime.spawn(async move {
             let id = self.extractor.get_id();
             loop {
                 // this is the main info span of an extractor
-                let loop_span = tracing::info_span!(
+                let loop_span = info_span!(
                     parent: None,  // don't attach this to the parent (builder) span to keep spans short
                     "extractor",
                     extractor_id = %id,
@@ -382,7 +383,7 @@ pub struct ExtractorConfig {
     #[serde(default)]
     pub initialized_accounts: Vec<Bytes>,
     #[serde(default)]
-    pub initialized_accounts_block: i64,
+    pub initialized_accounts_block: u64,
     #[serde(default)]
     pub post_processor: Option<String>,
     #[serde(default)]
@@ -402,7 +403,7 @@ impl ExtractorConfig {
         spkg: String,
         module_name: String,
         initialized_accounts: Vec<Bytes>,
-        initialized_accounts_block: i64,
+        initialized_accounts_block: u64,
         post_processor: Option<String>,
         dci_plugin: Option<DCIType>,
     ) -> Self {
@@ -545,24 +546,27 @@ impl ExtractorBuilder {
 
     /// Creates a rpc DynamicContractIndexer with account extractor and tracer configured
     async fn create_rpc_dci(
-        rpc_url: &str,
+        rpc_client: &EthereumRpcClient,
         chain: Chain,
         extractor_name: String,
         cached_gw: &CachedGateway,
     ) -> Result<
-        DynamicContractIndexer<EVMBatchAccountExtractor, EVMEntrypointService, CachedGateway>,
+        DynamicContractIndexer<EVMAccountExtractor, EVMEntrypointService, CachedGateway>,
         ExtractionError,
     > {
-        let account_extractor = EVMBatchAccountExtractor::new(rpc_url, chain)
-            .await
-            .map_err(|err| {
-                ExtractionError::Setup(format!(
-                    "Failed to create account extractor for {rpc_url}: {err}"
-                ))
-            })?;
+        let account_extractor = EVMAccountExtractor::new(rpc_client, chain);
 
-        // Use TRACE_RPC_URL if available, otherwise fall back to RPC_URL
-        let trace_rpc_url = std::env::var("TRACE_RPC_URL").unwrap_or_else(|_| rpc_url.to_string());
+        // Tracer uses dedicated TRACE_RPC_URL if available, and falls back to the main
+        // rpc client otherwise.
+        let tracer_rpc_client = if let Ok(tracer_rpc_url) = std::env::var("TRACE_RPC_URL") {
+            EthereumRpcClient::new(&tracer_rpc_url).map_err(|err| {
+                ExtractionError::Setup(format!(
+                    "Failed to create RPC client for {tracer_rpc_url}: {err}"
+                ))
+            })?
+        } else {
+            rpc_client.clone()
+        };
 
         let max_retries = std::env::var("TRACE_MAX_RETRIES")
             .ok()
@@ -574,16 +578,8 @@ impl ExtractorBuilder {
             .and_then(|s| s.parse().ok())
             .unwrap_or(200);
 
-        let tracer = EVMEntrypointService::try_from_url_with_config(
-            &trace_rpc_url,
-            max_retries,
-            retry_delay_ms,
-        )
-        .map_err(|err| {
-            ExtractionError::Setup(format!(
-                "Failed to create entrypoint tracer for {trace_rpc_url}: {err}"
-            ))
-        })?;
+        let tracer =
+            EVMEntrypointService::new_with_config(&tracer_rpc_client, max_retries, retry_delay_ms);
 
         let mut rpc_dci = DynamicContractIndexer::new(
             chain,
@@ -603,6 +599,7 @@ impl ExtractorBuilder {
         cached_gw: &CachedGateway,
         token_pre_processor: &EthereumTokenPreProcessor,
         protocol_cache: &ProtocolMemoryCache,
+        rpc_client: &EthereumRpcClient,
     ) -> Result<Self, ExtractionError> {
         let protocol_types = self
             .config
@@ -647,14 +644,8 @@ impl ExtractorBuilder {
         let dci_plugin = if let Some(ref dci_type) = self.config.dci_plugin {
             Some(match dci_type {
                 DCIType::RPC => {
-                    let rpc_url = self.rpc_url.as_ref().ok_or_else(|| {
-                        ExtractionError::Setup(
-                            "RPC URL is required for RPC DCI plugin but not provided".to_string(),
-                        )
-                    })?;
-
                     let rpc_dci = Self::create_rpc_dci(
-                        rpc_url,
+                        rpc_client,
                         self.config.chain,
                         self.config.name.clone(),
                         cached_gw,
@@ -677,7 +668,7 @@ impl ExtractorBuilder {
                     let pool_manager = Address::from(pool_manager_address.as_str());
 
                     let base_dci = Self::create_rpc_dci(
-                        rpc_url,
+                        rpc_client,
                         self.config.chain,
                         self.config.name.clone(),
                         cached_gw,
@@ -686,6 +677,7 @@ impl ExtractorBuilder {
 
                     let mut hooks_dci = create_testing_hooks_dci(
                         base_dci,
+                        rpc_client,
                         rpc_url.clone(),
                         router_address,
                         pool_manager,
@@ -707,7 +699,7 @@ impl ExtractorBuilder {
             .unwrap_or_default();
 
         self.extractor = Some(Arc::new(
-            ProtocolExtractor::<ExtractorPgGateway, EthereumTokenPreProcessor, DCIPlugin>::new(
+            ProtocolExtractor::<ExtractorPgGateway, EthereumTokenPreProcessor, DCIPlugin<_>>::new(
                 gw,
                 database_insert_batch_size,
                 &self.config.name,

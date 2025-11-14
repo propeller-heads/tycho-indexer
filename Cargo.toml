@@ -37,7 +37,7 @@ serde_json = "1.0.120"
 serde = { version = "1.0.204", features = ["rc"] }
 strum = "0.25.0"
 strum_macros = "0.25.2"
-alloy-primitives = { version = "0.6.2", features = ["serde"] }
+alloy = { version = "1.0.41", default-features = false }
 uuid = { version = "1.4.1", features = [
     "serde",
     "v4",
@@ -47,7 +47,7 @@ uuid = { version = "1.4.1", features = [
 hex = "0.4.3"
 tycho-common = { path = "./tycho-common", version = "0.110.0" }
 tycho-storage = { path = "./tycho-storage", version = "0.110.0" }
-tycho-ethereum = { path = "./tycho-ethereum", features = ["onchain_data"], version = "0.110.0" }
+tycho-ethereum = { path = "./tycho-ethereum", version = "0.110.0" }
 tycho-client = { path = "./tycho-client", version = "0.110.0" }
 futures03 = { version = "0.3.1", package = "futures", features = ["compat"] }
 thiserror = "1"

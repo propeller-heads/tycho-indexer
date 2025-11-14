@@ -4,13 +4,16 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use alloy_primitives::{hex, U256};
-use alloy_sol_types::{
-    private::{
-        primitives::aliases::{I24, U24},
-        Address as SolAddress, Bytes as SolBytes,
+use alloy::{
+    core::sol,
+    primitives::{hex, U256},
+    sol_types::{
+        private::{
+            primitives::aliases::{I24, U24},
+            Address as SolAddress, Bytes as SolBytes,
+        },
+        SolValue,
     },
-    sol, SolValue,
 };
 use async_trait::async_trait;
 use num_bigint::BigInt;
