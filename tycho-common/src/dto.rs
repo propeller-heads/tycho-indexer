@@ -765,7 +765,90 @@ impl ProtocolStateDelta {
     }
 }
 
-/// Maximum page size for this endpoint is 100
+/// Pagination parameter
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash, DeepSizeOf)]
+#[serde(deny_unknown_fields)]
+pub struct PaginationParams {
+    /// What page to retrieve
+    #[serde(default)]
+    pub page: i64,
+    /// How many results to return per page
+    #[serde(default)]
+    #[schema(default = 100)]
+    pub page_size: i64,
+}
+
+impl PaginationParams {
+    pub fn new(page: i64, page_size: i64) -> Self {
+        Self { page, page_size }
+    }
+}
+
+impl Default for PaginationParams {
+    fn default() -> Self {
+        PaginationParams { page: 0, page_size: 100 }
+    }
+}
+
+/// Defines pagination size limits for request types.
+///
+/// Different limits apply based on whether compression is enabled,
+/// as compressed responses can safely transfer more data.
+pub trait PaginationLimits {
+    /// Maximum page size when compression is enabled (e.g., zstd)
+    const MAX_PAGE_SIZE_COMPRESSED: i64;
+
+    /// Maximum page size when compression is disabled
+    const MAX_PAGE_SIZE_UNCOMPRESSED: i64;
+
+    /// Returns the effective maximum page size based on compression setting
+    fn effective_max_page_size(compression: bool) -> i64 {
+        if compression {
+            Self::MAX_PAGE_SIZE_COMPRESSED
+        } else {
+            Self::MAX_PAGE_SIZE_UNCOMPRESSED
+        }
+    }
+
+    /// Returns a reference to the pagination parameters
+    fn pagination(&self) -> &PaginationParams;
+}
+
+/// Macro to implement PaginationLimits for request types
+macro_rules! impl_pagination_limits {
+    ($type:ty, compressed = $comp:expr, uncompressed = $uncomp:expr) => {
+        impl $crate::dto::PaginationLimits for $type {
+            const MAX_PAGE_SIZE_COMPRESSED: i64 = $comp;
+            const MAX_PAGE_SIZE_UNCOMPRESSED: i64 = $uncomp;
+
+            fn pagination(&self) -> &$crate::dto::PaginationParams {
+                &self.pagination
+            }
+        }
+    };
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash, DeepSizeOf)]
+#[serde(deny_unknown_fields)]
+pub struct PaginationResponse {
+    pub page: i64,
+    pub page_size: i64,
+    /// The total number of items available across all pages of results
+    pub total: i64,
+}
+
+/// Current pagination information
+impl PaginationResponse {
+    pub fn new(page: i64, page_size: i64, total: i64) -> Self {
+        Self { page, page_size, total }
+    }
+
+    pub fn total_pages(&self) -> i64 {
+        // ceil(total / page_size)
+        (self.total + self.page_size - 1) / self.page_size
+    }
+}
+
 #[derive(
     Clone, Serialize, Debug, Default, Deserialize, PartialEq, ToSchema, Eq, Hash, DeepSizeOf,
 )]
@@ -818,6 +901,8 @@ impl StateRequestBody {
         }
     }
 }
+
+impl_pagination_limits!(StateRequestBody, compressed = 1200, uncompressed = 100);
 
 /// Response from Tycho server for a contract state request.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, DeepSizeOf)]
@@ -1079,6 +1164,8 @@ pub struct TokensRequestBody {
     pub chain: Chain,
 }
 
+impl_pagination_limits!(TokensRequestBody, compressed = 12900, uncompressed = 3000);
+
 /// Response from Tycho server for a tokens request.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash, DeepSizeOf)]
 pub struct TokensRequestResponse {
@@ -1089,52 +1176,6 @@ pub struct TokensRequestResponse {
 impl TokensRequestResponse {
     pub fn new(tokens: Vec<ResponseToken>, pagination_request: &PaginationResponse) -> Self {
         Self { tokens, pagination: pagination_request.clone() }
-    }
-}
-
-/// Pagination parameter
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash, DeepSizeOf)]
-#[serde(deny_unknown_fields)]
-pub struct PaginationParams {
-    /// What page to retrieve
-    #[serde(default)]
-    pub page: i64,
-    /// How many results to return per page
-    #[serde(default)]
-    #[schema(default = 10)]
-    pub page_size: i64,
-}
-
-impl PaginationParams {
-    pub fn new(page: i64, page_size: i64) -> Self {
-        Self { page, page_size }
-    }
-}
-
-impl Default for PaginationParams {
-    fn default() -> Self {
-        PaginationParams { page: 0, page_size: 20 }
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash, DeepSizeOf)]
-#[serde(deny_unknown_fields)]
-pub struct PaginationResponse {
-    pub page: i64,
-    pub page_size: i64,
-    /// The total number of items available across all pages of results
-    pub total: i64,
-}
-
-/// Current pagination information
-impl PaginationResponse {
-    pub fn new(page: i64, page_size: i64, total: i64) -> Self {
-        Self { page, page_size, total }
-    }
-
-    pub fn total_pages(&self) -> i64 {
-        // ceil(total / page_size)
-        (self.total + self.page_size - 1) / self.page_size
     }
 }
 
@@ -1202,6 +1243,8 @@ pub struct ProtocolComponentsRequestBody {
     #[serde(default)]
     pub pagination: PaginationParams,
 }
+
+impl_pagination_limits!(ProtocolComponentsRequestBody, compressed = 2550, uncompressed = 500);
 
 // Implement PartialEq where tvl is considered equal if the difference is less than 1e-6
 impl PartialEq for ProtocolComponentsRequestBody {
@@ -1387,6 +1430,8 @@ pub struct ProtocolStateRequestBody {
     pub pagination: PaginationParams,
 }
 
+impl_pagination_limits!(ProtocolStateRequestBody, compressed = 360, uncompressed = 100);
+
 impl ProtocolStateRequestBody {
     pub fn id_filtered<I, T>(ids: I) -> Self
     where
@@ -1544,6 +1589,8 @@ pub struct ProtocolSystemsRequestBody {
     pub pagination: PaginationParams,
 }
 
+impl_pagination_limits!(ProtocolSystemsRequestBody, compressed = 100, uncompressed = 100);
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
 pub struct ProtocolSystemsRequestResponse {
     /// List of currently supported protocol systems
@@ -1619,6 +1666,8 @@ pub struct ComponentTvlRequestBody {
     pub pagination: PaginationParams,
 }
 
+impl_pagination_limits!(ComponentTvlRequestBody, compressed = 100, uncompressed = 100);
+
 impl ComponentTvlRequestBody {
     pub fn system_filtered(system: &str, chain: Chain) -> Self {
         Self {
@@ -1667,6 +1716,8 @@ pub struct TracedEntryPointRequestBody {
     #[serde(default)]
     pub pagination: PaginationParams,
 }
+
+impl_pagination_limits!(TracedEntryPointRequestBody, compressed = 100, uncompressed = 100);
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash, DeepSizeOf)]
 pub struct EntryPoint {
@@ -2303,7 +2354,7 @@ mod test {
                 }),
             },
             chain: Chain::Ethereum,
-            pagination: PaginationParams { page: 0, page_size: 20 },
+            pagination: PaginationParams { page: 0, page_size: 100 },
         };
 
         assert_eq!(result, expected);
@@ -3169,5 +3220,30 @@ mod memory_size_tests {
             "Size difference ({} bytes) should reflect the additional slot data",
             size_diff
         );
+    }
+}
+
+#[cfg(test)]
+mod pagination_limits_tests {
+    use super::*;
+
+    // Test struct for pagination limits
+    #[derive(Clone, Debug)]
+    struct TestRequestBody {
+        pagination: PaginationParams,
+    }
+
+    // Implement pagination limits for test struct
+    impl_pagination_limits!(TestRequestBody, compressed = 500, uncompressed = 50);
+
+    #[test]
+    fn test_effective_max_page_size() {
+        // Test effective max with compression enabled
+        let max_size = TestRequestBody::effective_max_page_size(true);
+        assert_eq!(max_size, 500, "Should return compressed limit when compression is enabled");
+
+        // Test effective max with compression disabled
+        let max_size = TestRequestBody::effective_max_page_size(false);
+        assert_eq!(max_size, 50, "Should return uncompressed limit when compression is disabled");
     }
 }
