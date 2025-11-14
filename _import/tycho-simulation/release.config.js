@@ -39,7 +39,7 @@ const config = {
                 publishCmd:
                     'echo "NEXT_RELEASE_VERSION=${nextRelease.version}" >> $GITHUB_OUTPUT',
                 prepareCmd: [
-                    "toml set --toml-path Cargo.toml package.version ${nextRelease.version}",
+                    "toml set --toml-path Cargo.toml workspace.package.version ${nextRelease.version}",
                     "toml set --toml-path tycho_simulation_py/Cargo.toml package.version ${nextRelease.version}",
                     "toml set --toml-path tycho_simulation_py/pyproject.toml project.version ${nextRelease.version}",
                     "cargo update -p tycho-simulation",
