@@ -342,7 +342,9 @@ async fn process_update(
                 match states.get(id) {
                     Some(comp) => comp.clone(),
                     None => {
-                        warn!(id=%id, "Component not found in cached protocol pairs. Skipping...");
+                        warn!(id=%id, "Component not found in cached protocol pairs. Potential causes: \
+                        there was an error decoding the component, the component was evicted from the cache, \
+                        or the component was never added to the cache. Skipping...");
                         continue;
                     }
                 }
@@ -350,7 +352,8 @@ async fn process_update(
             UpdateType::Rfq => match update.update.new_pairs.get(id) {
                 Some(comp) => comp.clone(),
                 None => {
-                    warn!(id=%id, "Component not found in update's new pairs. Skipping...");
+                    warn!(id=%id, "Component not found in update's new pairs. Potential cause: \
+                    the `states` and `new_pairs` lists don't contain the same items. Skipping...");
                     continue;
                 }
             },
