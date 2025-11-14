@@ -379,12 +379,18 @@ impl EVMBatchAccountExtractor {
 
         match request.slots.clone() {
             Some(slots) => {
+                let n_slots = slots.len();
+                // Calculate total batches: ceiling division
+                #[allow(clippy::manual_div_ceil)]
+                let total_batches = (n_slots + max_batch_size - 1) / max_batch_size;
                 debug!(
                     address = ?request.address,
-                    n_slots = slots.len(),
+                    n_slots = n_slots,
+                    total_batches = total_batches,
+                    batch_size = max_batch_size,
                     "Fetching specific storage slots for address"
                 );
-                for slot_batch in slots.chunks(max_batch_size) {
+                for (batch_idx, slot_batch) in slots.chunks(max_batch_size).enumerate() {
                     let mut storage_requests = Vec::with_capacity(slot_batch.len());
                     let mut storage_batch = self.provider.new_batch();
 
@@ -438,6 +444,16 @@ impl EVMBatchAccountExtractor {
                         };
 
                         result.insert(slot.clone(), value);
+                    }
+
+                    // Add delay between batches to respect rate limits (250 requests/second)
+                    // Calculate delay based on batch size to stay under the limit
+                    // Rate limit: 250 req/s, so delay = 1000ms / (250 / batch_size) = 1000 * batch_size / 250
+                    // For safety, add 10% buffer: delay = 1100 * batch_size / 250
+                    if batch_idx + 1 < total_batches {
+                        let delay_ms = (1100 * max_batch_size) / 250;
+                        tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms as u64))
+                            .await;
                     }
                 }
             }
