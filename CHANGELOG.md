@@ -1,3 +1,12 @@
+## [0.113.0](https://github.com/propeller-heads/tycho-indexer/compare/0.112.0...0.113.0) (2025-11-14)
+
+
+### Features
+
+* add compression-aware pagination validation in `tycho-indexer` ([#768](https://github.com/propeller-heads/tycho-indexer/issues/768)) ([39b29e3](https://github.com/propeller-heads/tycho-indexer/commit/39b29e30cbc9b55b6a70c30a9efe558fa062ba5e))
+* add compression-aware pagination validation in `tycho-indexer` RPC services ([98b636c](https://github.com/propeller-heads/tycho-indexer/commit/98b636c80952e26200474130a2bffca87c75a141))
+* add pagination validation to `component_tvl` RPC handler and define limits for `ComponentTvlRequestBody` ([e717457](https://github.com/propeller-heads/tycho-indexer/commit/e7174572d0a635bd7353afcddabcfafab9422b23))
+
 ## [0.112.0](https://github.com/propeller-heads/tycho-indexer/compare/0.111.1...0.112.0) (2025-11-14)
 
 
