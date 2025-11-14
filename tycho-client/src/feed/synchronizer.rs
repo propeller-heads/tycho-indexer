@@ -27,7 +27,7 @@ use crate::{
         component_tracker::{ComponentFilter, ComponentTracker},
         BlockHeader, HeaderLike,
     },
-    rpc::{RPCClient, RPCError, SnapshotParameters},
+    rpc::{RPCClient, RPCError, SnapshotParameters, RPC_CLIENT_CONCURRENCY},
     DeltasError,
 };
 
@@ -283,7 +283,7 @@ where
                     &self.extractor_id.name,
                     &component_ids,
                     100,
-                    4,
+                    RPC_CLIENT_CONCURRENCY,
                 )
                 .await?;
             self.component_tracker
@@ -312,7 +312,7 @@ where
         .include_tvl(self.include_tvl);
         let snapshot_response = self
             .rpc_client
-            .get_snapshots(&request, 100, 4)
+            .get_snapshots(&request, 100, RPC_CLIENT_CONCURRENCY)
             .await?;
 
         trace!(states=?&snapshot_response.states, "Retrieved ProtocolStates");

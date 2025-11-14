@@ -6,7 +6,10 @@ use tycho_common::{
     models::{Address, ComponentId, ProtocolSystem},
 };
 
-use crate::{rpc::RPCClient, RPCError};
+use crate::{
+    rpc::{RPCClient, RPC_CLIENT_CONCURRENCY},
+    RPCError,
+};
 
 #[derive(Clone, Debug)]
 pub(crate) enum ComponentFilterVariant {
@@ -142,7 +145,7 @@ where
         };
         self.components = self
             .rpc_client
-            .get_protocol_components_paginated(&body, 500, 4)
+            .get_protocol_components_paginated(&body, 500, RPC_CLIENT_CONCURRENCY)
             .await?
             .protocol_components
             .into_iter()
