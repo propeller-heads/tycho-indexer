@@ -18,7 +18,6 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,
-        constants::ETH_ADDRESS,
         utils::{
             biguint_to_u256, bytes_to_address, get_runtime, get_static_attribute, pad_to_fixed_size,
         },
@@ -1013,17 +1012,19 @@ impl SwapEncoder for HashflowSwapEncoder {
 pub struct FluidV1SwapEncoder {
     executor_address: Bytes,
     native_address: Bytes,
+    chain: Chain,
 }
 
 impl SwapEncoder for FluidV1SwapEncoder {
     fn new(
         executor_address: Bytes,
-        _chain: Chain,
+        chain: Chain,
         _config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
         Ok(Self {
             executor_address,
             native_address: Bytes::from("0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"),
+            chain,
         })
     }
 
@@ -1045,7 +1046,7 @@ impl SwapEncoder for FluidV1SwapEncoder {
                 self.coerce_native_address(&swap.token_out),
             bytes_to_address(&encoding_context.receiver)?,
             (encoding_context.transfer_type as u8).to_be_bytes(),
-            if &swap.token_in == ETH_ADDRESS { true } else { false },
+            if &swap.token_in == &self.chain.native_token().address { true } else { false },
         );
         Ok(args.abi_encode_packed())
     }
@@ -1061,7 +1062,7 @@ impl SwapEncoder for FluidV1SwapEncoder {
 
 impl FluidV1SwapEncoder {
     fn coerce_native_address<'a>(&'a self, address: &'a Bytes) -> &'a Bytes {
-        if address == ETH_ADDRESS {
+        if address == &self.chain.native_token().address {
             &self.native_address
         } else {
             address

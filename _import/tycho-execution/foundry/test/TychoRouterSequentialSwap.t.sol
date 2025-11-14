@@ -516,6 +516,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
 contract TychoRouterSequentialSwapTestForBebop is TychoRouterTestSetup {
     // old BOB address with drainer contract here to avoid changing hardcoded test fixtures
     address BOB_OLD = makeAddr("bob"); //bob=someone!=us
+
     function getForkBlock() public pure override returns (uint256) {
         return 23139046;
     }

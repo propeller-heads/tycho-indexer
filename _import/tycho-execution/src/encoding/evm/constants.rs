@@ -1,13 +1,10 @@
 use std::{collections::HashSet, sync::LazyLock};
 
-use alloy::hex;
-
 pub const DEFAULT_EXECUTORS_JSON: &str = include_str!("../../../config/executor_addresses.json");
 pub const DEFAULT_ROUTERS_JSON: &str = include_str!("../../../config/router_addresses.json");
 pub const PROTOCOL_SPECIFIC_CONFIG: &str =
     include_str!("../../../config/protocol_specific_addresses.json");
 
-pub const ETH_ADDRESS: &[u8] = &hex!("0x0000000000000000000000000000000000000000");
 /// These protocols support the optimization of grouping swaps.
 ///
 /// This requires special encoding to send call data of multiple swaps to a single executor,
