@@ -151,6 +151,8 @@ pub trait RPCClient: Send + Sync {
         request: &StateRequestBody,
     ) -> Result<StateRequestResponse, RPCError>;
 
+    /// Retrieves a snapshot of contract state for a set of contract IDs.
+    /// If the `chunk_size` is `None`, it defaults to the maximum page size
     async fn get_contract_state_paginated(
         &self,
         chain: Chain,
@@ -216,6 +218,8 @@ pub trait RPCClient: Send + Sync {
         request: &ProtocolComponentsRequestBody,
     ) -> Result<ProtocolComponentRequestResponse, RPCError>;
 
+    /// Retrieves protocol components.
+    /// If the `chunk_size` is `None`, it defaults to the maximum page size.
     async fn get_protocol_components_paginated(
         &self,
         request: &ProtocolComponentsRequestBody,
@@ -373,6 +377,8 @@ pub trait RPCClient: Send + Sync {
         request: &ProtocolStateRequestBody,
     ) -> Result<ProtocolStateRequestResponse, RPCError>;
 
+    /// Retrieves protocol states for a set of protocol IDs.
+    /// If the `chunk_size` is `None`, it defaults to the maximum page size.
     #[allow(clippy::too_many_arguments)]
     async fn get_protocol_states_paginated<T>(
         &self,
@@ -447,6 +453,8 @@ pub trait RPCClient: Send + Sync {
         request: &TokensRequestBody,
     ) -> Result<TokensRequestResponse, RPCError>;
 
+    /// Retrieves all tokens matching the given criteria.
+    /// If the `chunk_size` is `None`, it defaults to the maximum page size.
     async fn get_all_tokens(
         &self,
         chain: Chain,
@@ -530,6 +538,8 @@ pub trait RPCClient: Send + Sync {
         request: &ComponentTvlRequestBody,
     ) -> Result<ComponentTvlRequestResponse, RPCError>;
 
+    /// Retrieves component TVL for a set of component IDs.
+    /// If the `chunk_size` is `None`, it defaults to the maximum page size.
     async fn get_component_tvl_paginated(
         &self,
         request: &ComponentTvlRequestBody,
@@ -664,6 +674,8 @@ pub trait RPCClient: Send + Sync {
         request: &TracedEntryPointRequestBody,
     ) -> Result<TracedEntryPointRequestResponse, RPCError>;
 
+    /// Retrieves traced entry points for a set of component IDs.
+    /// If the `chunk_size` is `None`, it defaults to the maximum page size.
     async fn get_traced_entry_points_paginated(
         &self,
         chain: Chain,
