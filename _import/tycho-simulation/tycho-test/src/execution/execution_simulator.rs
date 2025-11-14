@@ -217,6 +217,7 @@ impl ExecutionSimulator {
                 tracing_options: tracing_options.clone(),
                 state_overrides: input.state_overwrites.clone(),
                 block_overrides: None,
+                tx_index: None,
             };
             let fut =
                 batch.add_call("debug_traceCall", &(input.tx.clone(), block_id, trace_options))?;

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use tracing::info;
 use tycho_client::{
-    rpc::{HttpRPCClientOptions, RPCClient},
+    rpc::{HttpRPCClientOptions, RPCClient, RPC_CLIENT_CONCURRENCY},
     HttpRPCClient, RPCError,
 };
 use tycho_common::{
@@ -90,7 +90,8 @@ pub async fn load_all_tokens(
                 .get(&chain)
                 .or(Some(&42))
                 .copied()),
-            3_000,
+            None,
+            RPC_CLIENT_CONCURRENCY,
         )
         .await
         .map_err(|err| map_rpc_error(err, "Unable to load tokens"))?;
