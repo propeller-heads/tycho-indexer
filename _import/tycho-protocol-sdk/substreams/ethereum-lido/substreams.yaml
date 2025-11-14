@@ -37,14 +37,14 @@ modules:
     inputs:
       - map: map_protocol_components
 
-  - name: map_relative_component_balance
+  - name: map_component_balance
     kind: map
-    initialBlock: 1
+    initialBlock: 23740315
     inputs:
       - source: sf.ethereum.type.v2.Block
       - store: store_protocol_components
     output:
-      type: proto:tycho.evm.v1.BlockBalanceDeltas
+      type: proto:tycho.evm.v1.BlockChanges
 
   - name: store_balances
     kind: store
