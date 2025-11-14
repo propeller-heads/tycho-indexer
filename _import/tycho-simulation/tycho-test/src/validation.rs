@@ -13,6 +13,10 @@ use async_trait::async_trait;
 use tycho_common::{simulation::protocol_sim::ProtocolSim, Bytes};
 use tycho_simulation::evm::protocol::uniswap_v2::state::UniswapV2State;
 
+type ComponentId = Bytes;
+type CallTarget = Address;
+type CallData = AlloyBytes;
+
 /// Helper function to get a Validator reference from a ProtocolSim trait object
 ///
 /// This centralizes the downcasting logic for protocols that implement the Validator trait.
@@ -60,9 +64,9 @@ sol! {
 /// * `block_id` - The block number to query at
 async fn execute_batched_calls(
     rpc_url: &str,
-    component_calls: &[(Bytes, Vec<(Address, AlloyBytes)>)],
+    component_calls: &[(ComponentId, Vec<(CallTarget, CallData)>)],
     block_id: u64,
-) -> Result<HashMap<Bytes, Vec<AlloyBytes>>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<HashMap<ComponentId, Vec<CallData>>, Box<dyn std::error::Error + Send + Sync>> {
     if component_calls.is_empty() {
         return Ok(HashMap::new());
     }
@@ -123,8 +127,8 @@ pub trait Validator: ProtocolSim {
     /// the contract calls that need to be made, or an error if preparation fails.
     fn prepare_validation_calls(
         &self,
-        component_id: &Bytes,
-    ) -> Result<Vec<(Address, AlloyBytes)>, Box<dyn std::error::Error + Send + Sync>>;
+        component_id: &ComponentId,
+    ) -> Result<Vec<(CallTarget, CallData)>, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Validate with batched results
     ///
@@ -142,8 +146,8 @@ pub trait Validator: ProtocolSim {
     /// or `Err` if there was an error during validation.
     fn validate_with_results(
         &self,
-        component_id: &Bytes,
-        results: &[AlloyBytes],
+        component_id: &ComponentId,
+        results: &[CallData],
     ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>>;
 }
 
@@ -164,7 +168,7 @@ pub trait Validator: ProtocolSim {
 /// or `Err` if there was an error.
 pub async fn batch_validate_components(
     rpc_url: &str,
-    components: &[(&dyn Validator, Bytes)],
+    components: &[(&dyn Validator, ComponentId)],
     block_id: u64,
 ) -> Vec<Result<bool, Box<dyn std::error::Error + Send + Sync>>> {
     if components.is_empty() {
@@ -226,9 +230,9 @@ pub async fn batch_validate_components(
 impl Validator for UniswapV2State {
     fn prepare_validation_calls(
         &self,
-        component_id: &Bytes,
-    ) -> Result<Vec<(Address, AlloyBytes)>, Box<dyn std::error::Error + Send + Sync>> {
-        let pool_address = Address::from_slice(&component_id[..20]);
+        component_id: &ComponentId,
+    ) -> Result<Vec<(CallTarget, CallData)>, Box<dyn std::error::Error + Send + Sync>> {
+        let pool_address = CallTarget::from_slice(&component_id[..20]);
 
         // Encode getReserves call for the pool
         let call = IUniswapV2Pair::getReservesCall {}.abi_encode();
@@ -238,8 +242,8 @@ impl Validator for UniswapV2State {
 
     fn validate_with_results(
         &self,
-        component_id: &Bytes,
-        results: &[AlloyBytes],
+        component_id: &ComponentId,
+        results: &[CallData],
     ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         if results.len() != 1 {
             return Err(format!(
