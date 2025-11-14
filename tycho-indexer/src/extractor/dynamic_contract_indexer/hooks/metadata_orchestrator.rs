@@ -8,15 +8,14 @@ use super::component_metadata::{
     MetadataResponseParserRegistry, MetadataResult, ProviderRegistry,
 };
 
-pub struct BlockMetadataOrchestrator {
+pub(super) struct BlockMetadataOrchestrator {
     generator_registry: MetadataGeneratorRegistry,
     response_parser_registry: MetadataResponseParserRegistry,
     provider_registry: ProviderRegistry,
 }
 
 impl BlockMetadataOrchestrator {
-    #[allow(dead_code)] // TODO: Remove this once it's used
-    pub fn new(
+    pub(super) fn new(
         generator_registry: MetadataGeneratorRegistry,
         response_parser_registry: MetadataResponseParserRegistry,
         provider_registry: ProviderRegistry,
@@ -29,7 +28,7 @@ impl BlockMetadataOrchestrator {
         balance_only_count = balance_only.len(),
         full_processing_count = full_processing.len()
     ))]
-    pub async fn collect_metadata_for_block(
+    pub(super) async fn collect_metadata_for_block(
         &self,
         balance_only: &[(TxHash, ProtocolComponent)],
         full_processing: &[(TxHash, ProtocolComponent)],
@@ -175,7 +174,7 @@ impl BlockMetadataOrchestrator {
         let mut routing_key_counts: HashMap<String, usize> = HashMap::new();
 
         for req in requests {
-            let routing_key = req.transport.routing_key();
+            let routing_key = req.transport().routing_key();
             *routing_key_counts
                 .entry(routing_key.clone())
                 .or_insert(0) += 1;
@@ -238,22 +237,22 @@ impl BlockMetadataOrchestrator {
 
             let ids_to_requests: HashMap<_, _> = requests
                 .iter()
-                .map(|r| (r.transport.deduplication_id(), r))
+                .map(|r| (r.transport().deduplication_id(), r))
                 .collect();
 
             let component_ids_by_dedup_id: HashMap<String, HashSet<String>> =
                 requests
                     .iter()
                     .fold(HashMap::new(), |mut acc, req| {
-                        acc.entry(req.transport.deduplication_id())
+                        acc.entry(req.transport().deduplication_id())
                             .or_default()
-                            .insert(req.component_id.clone());
+                            .insert(req.component_id().clone());
                         acc
                     });
 
             let transports: Vec<_> = requests
                 .iter()
-                .map(|r| r.transport.clone_box())
+                .map(|r| r.transport().clone_box())
                 .collect();
 
             let results = provider
@@ -298,7 +297,7 @@ impl BlockMetadataOrchestrator {
                         Ok(success) => {
                             debug!(
                                 component_id = %comp_id,
-                                request_type = ?request.request_type,
+                                request_type = ?request.request_type(),
                                 "Parsing successful response"
                             );
                             parser.parse_response(&component.1, request, success)
@@ -306,7 +305,7 @@ impl BlockMetadataOrchestrator {
                         Err(e) => {
                             error!(
                                 component_id = %comp_id,
-                                request_type = ?request.request_type,
+                                request_type = ?request.request_type(),
                                 error = %e,
                                 "Provider returned error for request"
                             );
@@ -314,12 +313,14 @@ impl BlockMetadataOrchestrator {
                         }
                     };
 
-                    all_results.push(MetadataResult {
-                        request_id: request.request_id.clone(),
-                        component_id: component.1.id.clone(),
-                        request_type: request.request_type.clone(),
-                        result: metadata_value,
-                    });
+                    let metadata_result = MetadataResult::new(
+                        request.request_id().clone(),
+                        component.1.id.clone(),
+                        request.request_type().clone(),
+                        metadata_value,
+                    );
+
+                    all_results.push(metadata_result);
                 }
             }
         }
@@ -356,31 +357,31 @@ impl BlockMetadataOrchestrator {
         let mut failed_results = 0;
 
         for result in results {
-            match &result.result {
+            match &result.result() {
                 Ok(_) => {
                     successful_results += 1;
                     debug!(
-                        component_id = %result.component_id,
-                        request_type = ?result.request_type,
+                        component_id = %result.component_id(),
+                        request_type = ?result.request_type(),
                         "Processing successful result"
                     );
                 }
                 Err(e) => {
                     failed_results += 1;
                     debug!(
-                        component_id = %result.component_id,
-                        request_type = ?result.request_type,
+                        component_id = %result.component_id(),
+                        request_type = ?result.request_type(),
                         error = %e,
                         "Processing failed result"
                     );
                 }
             }
             let tx_hash = tx_hash_by_component
-                .get(&result.component_id)
+                .get(result.component_id())
                 .expect("Tx hash must exist");
 
             metadata_map
-                .entry(result.component_id.clone())
+                .entry(result.component_id().clone())
                 .or_insert_with(|| ComponentTracingMetadata::new(tx_hash.clone()))
                 .add_result(result);
         }
@@ -706,12 +707,8 @@ mod tests {
         assert_eq!(metadata_results.len(), 1);
 
         let (_, metadata) = &metadata_results[0];
-        assert!(metadata.balances.is_some());
-        assert!(metadata
-            .balances
-            .as_ref()
-            .unwrap()
-            .is_err());
+        assert!(metadata.balances().is_some());
+        assert!(metadata.balances().unwrap().is_err());
     }
 
     #[test]
@@ -795,7 +792,7 @@ mod tests {
         assert!(result.is_ok());
         let requests = result.unwrap();
         assert_eq!(requests.len(), 1);
-        assert_eq!(requests[0].component_id, "component1");
+        assert_eq!(requests[0].component_id(), "component1");
     }
 
     #[test]
@@ -837,7 +834,7 @@ mod tests {
         assert!(result.is_ok());
         let requests = result.unwrap();
         assert_eq!(requests.len(), 1);
-        assert_eq!(requests[0].component_id, "component1");
+        assert_eq!(requests[0].component_id(), "component1");
     }
 
     #[test]
@@ -852,26 +849,22 @@ mod tests {
         all_components.insert(component1.id.clone(), (tx_hash1.clone(), component1.clone()));
         all_components.insert(component2.id.clone(), (tx_hash2.clone(), component2.clone()));
 
-        let results = vec![
-            MetadataResult {
-                request_id: "test_request_1".to_string(),
-                component_id: "component1".to_string(),
-                request_type: MetadataRequestType::ComponentBalance {
-                    token_addresses: vec![Address::from([2u8; 20])],
-                },
-                result: {
-                    let mut balances = HashMap::new();
-                    balances.insert(Address::from([2u8; 20]), Bytes::from(vec![100u8]));
-                    Ok(MetadataValue::Balances(balances))
-                },
+        let result1 = MetadataResult::new(
+            "test_request_1".to_string(),
+            "component1".to_string(),
+            MetadataRequestType::ComponentBalance {
+                token_addresses: vec![Address::from([2u8; 20])],
             },
-            MetadataResult {
-                request_id: "test_request_2".to_string(),
-                component_id: "component2".to_string(),
-                request_type: MetadataRequestType::Tvl,
-                result: Ok(MetadataValue::Tvl(1000.0)),
-            },
-        ];
+            Ok(MetadataValue::Balances(HashMap::new())),
+        );
+        let result2 = MetadataResult::new(
+            "test_request_2".to_string(),
+            "component2".to_string(),
+            MetadataRequestType::Tvl,
+            Ok(MetadataValue::Tvl(1000.0)),
+        );
+
+        let results = vec![result1, result2];
 
         let generator_registry = MetadataGeneratorRegistry::new();
         let parser_registry = MetadataResponseParserRegistry::new();
@@ -893,11 +886,13 @@ mod tests {
             .iter()
             .find(|(component, _)| component.id == "component1")
             .unwrap();
-        assert!(component1_metadata.1.balances.is_some());
         assert!(component1_metadata
             .1
-            .balances
-            .as_ref()
+            .balances()
+            .is_some());
+        assert!(component1_metadata
+            .1
+            .balances()
             .unwrap()
             .is_ok());
 
@@ -906,11 +901,10 @@ mod tests {
             .iter()
             .find(|(component, _)| component.id == "component2")
             .unwrap();
-        assert!(component2_metadata.1.tvl.is_some());
+        assert!(component2_metadata.1.tvl().is_some());
         assert!(component2_metadata
             .1
-            .tvl
-            .as_ref()
+            .tvl()
             .unwrap()
             .is_ok());
     }
@@ -925,14 +919,14 @@ mod tests {
         let mut all_components = HashMap::new();
         all_components.insert(component.id.clone(), (tx_hash.clone(), component.clone()));
 
-        let results = vec![MetadataResult {
-            request_id: "test_request_1".to_string(),
-            component_id: "component1".to_string(),
-            request_type: MetadataRequestType::ComponentBalance {
+        let results = vec![MetadataResult::new(
+            "test_request_1".to_string(),
+            "component1".to_string(),
+            MetadataRequestType::ComponentBalance {
                 token_addresses: vec![Address::from([2u8; 20])],
             },
-            result: Err(MetadataError::GenerationFailed("Test error".to_string())),
-        }];
+            Err(MetadataError::GenerationFailed("Test error".to_string())),
+        )];
 
         let generator_registry = MetadataGeneratorRegistry::new();
         let parser_registry = MetadataResponseParserRegistry::new();
@@ -950,11 +944,7 @@ mod tests {
         assert_eq!(metadata_results.len(), 1);
 
         let (_, metadata) = &metadata_results[0];
-        assert!(metadata.balances.is_some());
-        assert!(metadata
-            .balances
-            .as_ref()
-            .unwrap()
-            .is_err());
+        assert!(metadata.balances().is_some());
+        assert!(metadata.balances().unwrap().is_err());
     }
 }

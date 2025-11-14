@@ -4,7 +4,7 @@ use crate::extractor::dynamic_contract_indexer::hooks::component_metadata::{
 
 pub(super) mod euler;
 
-pub(crate) fn register_integrations(
+pub(super) fn register_integrations(
     generator_registry: &mut MetadataGeneratorRegistry,
     parser_registry: &mut MetadataResponseParserRegistry,
     provider_registry: &mut ProviderRegistry,

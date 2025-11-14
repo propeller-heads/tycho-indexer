@@ -605,7 +605,7 @@ where
     T: EntryPointTracer + Send + Sync,
     G: EntryPointGateway + ProtocolGateway + Send + Sync,
 {
-    pub fn new(
+    pub(crate) fn new(
         chain: Chain,
         protocol: String,
         entrypoint_gw: G,
@@ -639,14 +639,14 @@ where
     /// dci.with_max_retry_count(10); // Allow up to 10 retries
     /// ```
     #[allow(dead_code)]
-    pub fn with_max_retry_count(&mut self, count: u32) {
+    pub(crate) fn with_max_retry_count(&mut self, count: u32) {
         self.max_retry_count = count;
     }
 
     /// Initialize the DynamicContractIndexer. Loads all the entrypoints and their respective
     /// trace results from the gateway.
     #[instrument(skip_all, fields(chain = % self.chain, protocol = % self.protocol))]
-    pub async fn initialize(&mut self) -> Result<(), ExtractionError> {
+    pub(crate) async fn initialize(&mut self) -> Result<(), ExtractionError> {
         let entrypoint_filter = EntryPointFilter::new(self.protocol.clone());
 
         // We need to call the gateway twice, once to get the entrypoints and their tracing params,

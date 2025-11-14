@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 
-use serde::Deserialize;
 use tycho_common::{
     models::{Address, Chain},
     storage::{EntryPointGateway, ProtocolGateway},
@@ -36,7 +35,7 @@ use crate::extractor::dynamic_contract_indexer::{
 };
 
 /// Sets up all necessary registries for Hooks DCI testing with Euler support
-pub fn setup_metadata_registries(
+pub(super) fn setup_metadata_registries(
     rpc_url: String,
 ) -> (MetadataGeneratorRegistry, MetadataResponseParserRegistry, ProviderRegistry) {
     let mut generator_registry = MetadataGeneratorRegistry::new();
@@ -51,8 +50,7 @@ pub fn setup_metadata_registries(
     );
 
     // Register RPC provider with default routing key and retry configuration
-    let retry_config =
-        RPCRetryConfig { max_retries: 5, initial_backoff_ms: 150, max_backoff_ms: 5000 };
+    let retry_config = RPCRetryConfig::new(5, 150, 5000);
 
     provider_registry.register_provider(
         "rpc_default".to_string(),
@@ -63,7 +61,7 @@ pub fn setup_metadata_registries(
 }
 
 /// Sets up hook orchestrator registry with a default orchestrator for all hooks
-pub fn setup_hook_orchestrator_registry(
+pub(super) fn setup_hook_orchestrator_registry(
     router_address: Address,
     pool_manager: Address,
     rpc: &EthereumRpcClient,
@@ -91,15 +89,14 @@ pub fn setup_hook_orchestrator_registry(
         }
     };
 
-    // Create hook entrypoint configuration
-    let config = HookEntrypointConfig {
-        max_sample_size: Some(10), // Reasonable default
-        min_samples: 1,
-        router_address: Some(router_address.clone()),
-        sender: Some(router_address),
-        router_code: Some(router_code), // Use default V4MiniRouter bytecode
-        pool_manager: pool_manager.clone(),
-    };
+    let config = HookEntrypointConfig::new(
+        Some(10),
+        1,
+        Some(router_address.clone()),
+        Some(router_address),
+        Some(router_code),
+        pool_manager.clone(),
+    );
 
     // Create entrypoint generator with default swap amount estimator (preferring balances)
     let mut entrypoint_generator = UniswapV4DefaultHookEntrypointGenerator::new(
@@ -119,7 +116,7 @@ pub fn setup_hook_orchestrator_registry(
 
 /// Creates a fully configured UniswapV4HookDCI for testing with Euler support
 #[allow(clippy::too_many_arguments)]
-pub fn create_testing_hooks_dci<AE, T, G>(
+pub(crate) fn create_testing_hooks_dci<AE, T, G>(
     inner_dci: DynamicContractIndexer<AE, T, G>,
     rpc: &EthereumRpcClient,
     rpc_url: String,

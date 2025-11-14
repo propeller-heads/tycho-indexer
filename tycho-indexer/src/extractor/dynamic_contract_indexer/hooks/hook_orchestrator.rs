@@ -28,7 +28,7 @@ use crate::extractor::{
 
 // Implementation reference only - the custom errors will be defined during the implementation.
 #[derive(Debug, Error)]
-pub enum HookOrchestratorError {
+pub(super) enum HookOrchestratorError {
     #[error("Prepare components failed: {0}")]
     PrepareComponentsFailed(String),
     #[error("Generate entrypoint params failed: {0}")]
@@ -38,7 +38,7 @@ pub enum HookOrchestratorError {
 /// Trait for hook orchestration operations
 #[cfg_attr(test, automock)]
 #[async_trait::async_trait]
-pub trait HookOrchestrator: Send + Sync {
+pub(super) trait HookOrchestrator: Send + Sync {
     /// Main Entrypoint for the orchestrator.
     ///
     /// This method is called for each block and is responsible for
@@ -56,24 +56,24 @@ pub trait HookOrchestrator: Send + Sync {
     ) -> Result<(), HookOrchestratorError>;
 }
 
-pub struct HookOrchestratorRegistry {
+pub(crate) struct HookOrchestratorRegistry {
     hooks: HashMap<Address, Box<dyn HookOrchestrator>>,
     hook_identifiers: HashMap<String, Box<dyn HookOrchestrator>>,
     default_orchestrator: Option<Box<dyn HookOrchestrator>>,
 }
 
 impl HookOrchestratorRegistry {
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self { hooks: HashMap::new(), hook_identifiers: HashMap::new(), default_orchestrator: None }
     }
 
     /// Sets a default orchestrator to use when no specific orchestrator is found for a component
-    pub fn set_default_orchestrator(&mut self, orchestrator: Box<dyn HookOrchestrator>) {
+    pub(super) fn set_default_orchestrator(&mut self, orchestrator: Box<dyn HookOrchestrator>) {
         self.default_orchestrator = Some(orchestrator);
     }
 
     #[allow(dead_code)]
-    pub fn register_hook_orchestrator(
+    pub(super) fn register_hook_orchestrator(
         &mut self,
         hook_address: Address,
         orchestrator: Box<dyn HookOrchestrator>,
@@ -83,7 +83,7 @@ impl HookOrchestratorRegistry {
     }
 
     #[allow(dead_code)]
-    pub fn register_hook_identifier(
+    pub(super) fn register_hook_identifier(
         &mut self,
         hook_identifier: String,
         orchestrator: Box<dyn HookOrchestrator>,
@@ -92,7 +92,7 @@ impl HookOrchestratorRegistry {
             .insert(hook_identifier, orchestrator);
     }
 
-    pub fn get_orchestrator_for_component(
+    pub(super) fn get_orchestrator_for_component(
         &self,
         component: &ProtocolComponent,
     ) -> Option<&dyn HookOrchestrator> {
@@ -125,7 +125,7 @@ impl HookOrchestratorRegistry {
     }
 }
 
-pub struct DefaultUniswapV4HookOrchestrator<B>
+pub(crate) struct DefaultUniswapV4HookOrchestrator<B>
 where
     B: BalanceSlotDetector,
 {
@@ -136,7 +136,7 @@ impl<B> DefaultUniswapV4HookOrchestrator<B>
 where
     B: BalanceSlotDetector,
 {
-    pub fn new(
+    pub(crate) fn new(
         entrypoint_generator: UniswapV4DefaultHookEntrypointGenerator<
             DefaultSwapAmountEstimator,
             B,
@@ -171,12 +171,12 @@ where
 
         for (component_id, metadata) in metadata {
             let tx_idx = tx_vec_idx_by_hash
-                .get(&metadata.tx_hash)
+                .get(metadata.tx_hash())
                 .expect("Tx hash should be present in the block changes");
 
             let tx_delta = &mut block_changes.txs_with_update[*tx_idx];
 
-            if let Some(Ok(limit)) = &metadata.limits {
+            if let Some(Ok(limit)) = &metadata.limits() {
                 components_with_limits += 1;
                 debug!(
                     component_id = %component_id,
@@ -248,7 +248,7 @@ where
                 }
             }
 
-            if let Some(Ok(balances)) = metadata.balances.clone() {
+            if let Some(Ok(balances)) = metadata.balances() {
                 components_with_balances += 1;
                 total_balance_updates += balances.len();
 
@@ -259,7 +259,7 @@ where
                 );
 
                 let component_balance = balances
-                    .into_iter()
+                    .iter()
                     .map(|(token, balance)| {
                         let balance_float = bytes_to_f64(balance.as_ref()).ok_or_else(|| {
                             error!(
@@ -284,8 +284,8 @@ where
                         Ok((
                             token.clone(),
                             ComponentBalance::new(
-                                token,
-                                balance,
+                                token.clone(),
+                                balance.clone(),
                                 balance_float,
                                 tx_delta.tx.hash.clone(),
                                 component_id,
@@ -452,8 +452,7 @@ where
                 let tx_hash =
                     Self::find_latest_tx_hash_for_component(&component_id, block_changes)?;
 
-                let mut metadata = ComponentTracingMetadata::new(tx_hash);
-                metadata.balances = Some(Ok(balances));
+                let metadata = ComponentTracingMetadata::new(tx_hash).with_balances(Ok(balances));
                 Some((component_id, metadata))
             })
             .collect();
@@ -564,12 +563,12 @@ where
                     "Generating entrypoints for component"
                 );
 
-                let data = HookEntrypointData {
-                    component: component.clone(),
-                    component_metadata: component_metadata.clone(),
-                    hook_address: hook_address.clone(),
-                    use_balance_overwrites: true, // Use balance overwrites
-                };
+                let data = HookEntrypointData::new(
+                    component.clone(),
+                    component_metadata.clone(),
+                    hook_address.clone(),
+                    true, // Use balance overwrites
+                );
 
                 let context = HookTracerContext::new(block.clone());
 
@@ -597,7 +596,7 @@ where
 
                 let component_entrypoints = eps
                     .into_iter()
-                    .map(|ep| (component_metadata.tx_hash.clone(), ep))
+                    .map(|ep| (component_metadata.tx_hash().clone(), ep))
                     .collect::<Vec<_>>();
 
                 result.insert(component.id.clone(), component_entrypoints);
@@ -809,7 +808,7 @@ mod tests {
 
         // Check component1 enrichment
         let comp1_metadata = result.get("comp1").unwrap();
-        if let Some(Ok(balances)) = &comp1_metadata.balances {
+        if let Some(Ok(balances)) = comp1_metadata.balances() {
             assert_eq!(balances.len(), 2, "Component1 should have 2 balance entries");
             assert_eq!(balances.get(&token1).unwrap(), &Bytes::from(1000u64));
             assert_eq!(balances.get(&token2).unwrap(), &Bytes::from(2000u64));
@@ -819,7 +818,7 @@ mod tests {
 
         // Check component2 enrichment
         let comp2_metadata = result.get("comp2").unwrap();
-        if let Some(Ok(balances)) = &comp2_metadata.balances {
+        if let Some(Ok(balances)) = comp2_metadata.balances() {
             assert_eq!(balances.len(), 2, "Component2 should have 2 balance entries");
             assert_eq!(balances.get(&token2).unwrap(), &Bytes::from(3000u64));
             assert_eq!(balances.get(&token3).unwrap(), &Bytes::from(4000u64));
@@ -851,7 +850,7 @@ mod tests {
 
         // Verify that the latest balance value is used
         let comp1_metadata = result.get("comp1").unwrap();
-        if let Some(Ok(balances)) = &comp1_metadata.balances {
+        if let Some(Ok(balances)) = comp1_metadata.balances() {
             assert_eq!(
                 balances.get(&token1).unwrap(),
                 &Bytes::from(5000u64),
@@ -910,7 +909,7 @@ mod tests {
         assert_eq!(result.len(), 1, "Should include component with mixed zero/non-zero balances");
 
         let comp1_metadata = result.get("comp1").unwrap();
-        if let Some(Ok(balances)) = &comp1_metadata.balances {
+        if let Some(Ok(balances)) = comp1_metadata.balances() {
             assert_eq!(balances.len(), 2, "Should include all balance entries, even zero ones");
             assert_eq!(balances.get(&token1).unwrap(), &Bytes::from(0u64));
             assert_eq!(balances.get(&token2).unwrap(), &Bytes::from(1000u64));

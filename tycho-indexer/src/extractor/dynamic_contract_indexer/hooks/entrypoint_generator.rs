@@ -42,8 +42,8 @@ type SlotId = U256;
 // - Overrides msgSender() to return address(this)
 // - Implements _pay() to burn tokens from the payer
 // - Exposes execute(bytes calldata params) to call _executeActions
-pub const V4_MINI_ROUTER_BYTECODE: &[u8] = include_bytes!("assets/V4MiniRouter.evm.runtime");
-pub const UNICHAIN_V4_MINI_ROUTER_BYTECODE: &[u8] =
+pub(super) const V4_MINI_ROUTER_BYTECODE: &[u8] = include_bytes!("assets/V4MiniRouter.evm.runtime");
+pub(super) const UNICHAIN_V4_MINI_ROUTER_BYTECODE: &[u8] =
     include_bytes!("assets/UnichainV4MiniRouter.evm.runtime");
 
 // V4Router action constants
@@ -82,49 +82,74 @@ sol! {
 }
 
 /// Configuration for hook entrypoint generation
-pub struct HookEntrypointConfig {
+pub(super) struct HookEntrypointConfig {
     /// Ideal number of entrypoints to generate for each component.
-    pub max_sample_size: Option<usize>,
+    max_sample_size: Option<usize>,
     /// Minimum number of entrypoints to generate for each component.
-    pub min_samples: usize,
+    min_samples: usize,
     /// Router address to use for the entrypoints. If not provided, uses a random address.
-    pub router_address: Option<Address>,
+    router_address: Option<Address>,
     /// Sender address for transactions. If not provided, uses a default address.
     /// Could be defined by a custom Hook Orchestrator.
-    pub sender: Option<Address>,
+    sender: Option<Address>,
     /// Router bytecode to use for state overrides. If not provided, uses V4MiniRouter bytecode.
-    pub router_code: Option<Bytes>,
+    router_code: Option<Bytes>,
     /// Pool manager address (required)
-    pub pool_manager: Address,
+    pool_manager: Address,
 }
+
+impl HookEntrypointConfig {
+    pub(super) fn new(
+        max_sample_size: Option<usize>,
+        min_samples: usize,
+        router_address: Option<Address>,
+        sender: Option<Address>,
+        router_code: Option<Bytes>,
+        pool_manager: Address,
+    ) -> Self {
+        Self { max_sample_size, min_samples, router_address, sender, router_code, pool_manager }
+    }
+}
+
 /// Data required for generating hook entrypoints
-pub struct HookEntrypointData {
+pub(super) struct HookEntrypointData {
     /// The address of the hook contract
-    pub hook_address: Address,
+    hook_address: Address,
     /// Component should provide, via static attributes - all the information required for PoolKey.
     /// PoolKey is generated from tokens, LPfee, tickSpacing and hooks address.
     /// https://github.com/Uniswap/v4-core/blob/main/src/types/PoolKey.sol
-    pub component: ProtocolComponent,
+    component: ProtocolComponent,
     /// Metadata for component tracing (balances, limits, etc.)
-    pub component_metadata: ComponentTracingMetadata,
+    component_metadata: ComponentTracingMetadata,
     /// Whether to use balance slot overwrites for ERC20 tokens
-    pub use_balance_overwrites: bool,
+    use_balance_overwrites: bool,
+}
+
+impl HookEntrypointData {
+    pub(super) fn new(
+        component: ProtocolComponent,
+        component_metadata: ComponentTracingMetadata,
+        hook_address: Address,
+        use_balance_overwrites: bool,
+    ) -> Self {
+        Self { component, component_metadata, hook_address, use_balance_overwrites }
+    }
 }
 
 /// Context for hook tracing
-pub struct HookTracerContext {
+pub(super) struct HookTracerContext {
     /// The block at which to trace
     block: Block,
 }
 
 impl HookTracerContext {
-    pub fn new(block: Block) -> Self {
+    pub(super) fn new(block: Block) -> Self {
         Self { block }
     }
 }
 
 #[derive(Debug, Clone, Error)]
-pub enum EntrypointGenerationError {
+pub(super) enum EntrypointGenerationError {
     /// Failed to estimate swap amounts
     #[error("Failed to estimate swap amounts: {0}")]
     AmountsEstimationFailed(String),
@@ -139,7 +164,7 @@ pub enum EntrypointGenerationError {
 /// Trait for generating hook entrypoints
 #[allow(dead_code)]
 #[async_trait]
-pub trait HookEntrypointGenerator<B>
+pub(super) trait HookEntrypointGenerator<B>
 where
     B: BalanceSlotDetector,
 {
@@ -158,7 +183,7 @@ where
 }
 
 /// Trait for estimating swap amounts for entrypoint generation
-pub trait SwapAmountEstimator {
+pub(super) trait SwapAmountEstimator {
     /// Estimate the swap amounts for a given component.
     /// If limits are available, use different fractions of it; use 1, 10, 50 and 95% of the limits,
     /// to cover different bands. Else, use fractions of balances.
@@ -213,7 +238,7 @@ impl ContractCompiler {
     ///
     /// - For `Solidity`, the slot is computed as `keccak256(key + map_base_slot)`.
     /// - For `Vyper`, the slot is computed as `keccak256(map_base_slot + key)`.
-    pub fn compute_map_slot(&self, map_base_slot: &[u8], key: &[u8]) -> SlotId {
+    pub(super) fn compute_map_slot(&self, map_base_slot: &[u8], key: &[u8]) -> SlotId {
         let concatenated = match &self {
             ContractCompiler::Solidity => [key, map_base_slot].concat(),
             ContractCompiler::Vyper => [map_base_slot, key].concat(),
@@ -257,7 +282,7 @@ impl ERC6909Overwrites {
 
 /// Preferred method for estimating swap amounts
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum EstimationMethod {
+pub(super) enum EstimationMethod {
     /// Prefer limits for estimation (if available)
     Limits,
     /// Prefer balances for estimation (if available)
@@ -266,23 +291,23 @@ pub enum EstimationMethod {
 
 /// Default implementation of SwapAmountEstimator
 /// Can be configured to prefer either limits or balances
-pub struct DefaultSwapAmountEstimator {
-    pub preferred_method: EstimationMethod,
+pub(super) struct DefaultSwapAmountEstimator {
+    preferred_method: EstimationMethod,
 }
 
 impl DefaultSwapAmountEstimator {
     /// Create a new estimator with the specified preferred method
-    pub fn new(preferred_method: EstimationMethod) -> Self {
+    pub(super) fn new(preferred_method: EstimationMethod) -> Self {
         Self { preferred_method }
     }
 
     /// Create an estimator that prefers limits
-    pub fn with_limits() -> Self {
+    pub(super) fn with_limits() -> Self {
         Self::new(EstimationMethod::Limits)
     }
 
     /// Create an estimator that prefers balances
-    pub fn with_balances() -> Self {
+    pub(super) fn with_balances() -> Self {
         Self::new(EstimationMethod::Balances)
     }
 }
@@ -290,8 +315,8 @@ impl DefaultSwapAmountEstimator {
 impl SwapAmountEstimator for DefaultSwapAmountEstimator {
     #[instrument(skip(self, metadata), fields(
         token_count = tokens.len(),
-        has_limits = metadata.limits.is_some(),
-        has_balances = metadata.balances.is_some(),
+        has_limits = metadata.limits().is_some(),
+        has_balances = metadata.balances().is_some(),
         preferred_method = ?self.preferred_method
     ))]
     fn estimate_swap_amounts(
@@ -345,7 +370,7 @@ impl DefaultSwapAmountEstimator {
     ) -> HashMap<(Address, Address), Vec<Bytes>> {
         let mut result = HashMap::new();
 
-        if let Some(Ok(limits)) = &metadata.limits {
+        if let Some(Ok(limits)) = metadata.limits() {
             debug!(limit_count = limits.len(), "Found limits data, trying estimation");
             if !limits.is_empty() {
                 let mut valid_limits = 0;
@@ -425,7 +450,7 @@ impl DefaultSwapAmountEstimator {
     ) -> HashMap<(Address, Address), Vec<Bytes>> {
         let mut result = HashMap::new();
 
-        if let Some(Ok(balances)) = &metadata.balances {
+        if let Some(Ok(balances)) = metadata.balances() {
             debug!(balance_count = balances.len(), "Found balance data, using for estimation");
 
             let mut tokens_with_balance = 0;
@@ -510,7 +535,7 @@ impl DefaultSwapAmountEstimator {
 
 /// Default implementation of HookEntrypointGenerator for Uniswap V4 hooks
 /// Generates entrypoints using V4MiniRouter for tracing hook interactions
-pub struct UniswapV4DefaultHookEntrypointGenerator<E, B>
+pub(super) struct UniswapV4DefaultHookEntrypointGenerator<E, B>
 where
     E: SwapAmountEstimator,
     B: BalanceSlotDetector,
@@ -525,7 +550,7 @@ where
     E: SwapAmountEstimator,
     B: BalanceSlotDetector,
 {
-    pub fn new(estimator: E, pool_manager: Address, balance_slot_detector: B) -> Self {
+    pub(super) fn new(estimator: E, pool_manager: Address, balance_slot_detector: B) -> Self {
         Self {
             config: HookEntrypointConfig {
                 max_sample_size: Some(4),
@@ -968,26 +993,16 @@ mod tests {
     fn create_metadata_with_limits(
         limits: Vec<((Address, Address), (Bytes, Bytes))>,
     ) -> ComponentTracingMetadata {
-        ComponentTracingMetadata {
-            tx_hash: TxHash::from([0u8; 32]),
-            balances: None,
-            limits: Some(Ok(limits
-                .into_iter()
-                .map(|(tokens, (l0, l1))| (tokens, (l0, l1, None)))
-                .collect())),
-            tvl: None,
-        }
+        ComponentTracingMetadata::new(TxHash::from([0u8; 32])).with_limits(Ok(limits
+            .into_iter()
+            .map(|(tokens, (l0, l1))| (tokens, (l0, l1, None)))
+            .collect()))
     }
 
     fn create_metadata_with_balances(
         balances: HashMap<Address, Bytes>,
     ) -> ComponentTracingMetadata {
-        ComponentTracingMetadata {
-            tx_hash: TxHash::from([0u8; 32]),
-            balances: Some(Ok(balances)),
-            limits: None,
-            tvl: None,
-        }
+        ComponentTracingMetadata::new(TxHash::from([0u8; 32])).with_balances(Ok(balances))
     }
 
     #[tokio::test]
@@ -1060,12 +1075,7 @@ mod tests {
         let estimator = DefaultSwapAmountEstimator::with_balances();
         let tokens = create_test_tokens();
 
-        let metadata = ComponentTracingMetadata {
-            tx_hash: TxHash::from([0u8; 32]),
-            balances: None,
-            limits: None,
-            tvl: None,
-        };
+        let metadata = ComponentTracingMetadata::new(TxHash::from([0u8; 32]));
 
         let result = estimator.estimate_swap_amounts(&metadata, &tokens);
 

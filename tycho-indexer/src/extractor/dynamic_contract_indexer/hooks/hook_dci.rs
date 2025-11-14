@@ -34,7 +34,7 @@ use crate::extractor::{
     ExtractionError, ExtractorExtension,
 };
 
-pub struct UniswapV4HookDCI<AE, T, G>
+pub(crate) struct UniswapV4HookDCI<AE, T, G>
 where
     AE: AccountExtractor + Send + Sync,
     T: EntryPointTracer + Send + Sync,
@@ -61,7 +61,7 @@ where
     T: EntryPointTracer + Send + Sync,
     G: EntryPointGateway + ProtocolGateway + Send + Sync,
 {
-    pub fn new(
+    pub(super) fn new(
         inner_dci: DynamicContractIndexer<AE, T, G>,
         metadata_orchestrator: BlockMetadataOrchestrator,
         hook_orchestrator_registry: HookOrchestratorRegistry,
@@ -85,7 +85,7 @@ where
     /// Creates a UniswapV4HookDCI instance configured for testing with Euler hooks
     #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
-    pub fn new_for_testing(
+    pub(super) fn new_for_testing(
         inner_dci: DynamicContractIndexer<AE, T, G>,
         rpc: &EthereumRpcClient,
         rpc_url: String,
@@ -112,7 +112,7 @@ where
     }
 
     #[instrument(skip(self), fields(chain = %self.chain))]
-    pub async fn initialize(&mut self) -> Result<(), ExtractionError> {
+    pub(crate) async fn initialize(&mut self) -> Result<(), ExtractionError> {
         info!("Initializing UniswapV4HookDCI");
 
         // Initialize the inner DCI
@@ -337,17 +337,17 @@ where
             let mut errors = Vec::new();
 
             // Check for balance errors
-            if let Some(Err(balance_error)) = &metadata.balances {
+            if let Some(Err(balance_error)) = &metadata.balances() {
                 errors.push(format!("Balance error: {balance_error:?}"));
             }
 
             // Check for limits errors
-            if let Some(Err(limits_error)) = &metadata.limits {
+            if let Some(Err(limits_error)) = &metadata.limits() {
                 errors.push(format!("Limits error: {limits_error:?}"));
             }
 
             // Check for TVL errors
-            if let Some(Err(tvl_error)) = &metadata.tvl {
+            if let Some(Err(tvl_error)) = &metadata.tvl() {
                 errors.push(format!("TVL error: {tvl_error:?}"));
             }
 
@@ -611,14 +611,14 @@ where
 
 // Component state tracking
 #[derive(Clone, Debug, DeepSizeOf)]
-pub struct ComponentProcessingState {
-    pub status: ProcessingStatus,
-    pub retry_count: u32,
-    pub last_error: Option<ProcessingError>,
+pub(crate) struct ComponentProcessingState {
+    status: ProcessingStatus,
+    retry_count: u32,
+    last_error: Option<ProcessingError>,
 }
 
 #[derive(Clone, Debug, DeepSizeOf)]
-pub enum ProcessingStatus {
+pub(super) enum ProcessingStatus {
     Unprocessed,     // Never processed or needs full processing
     TracingComplete, // Has entrypoints generated, only needs balance updates
     Failed,          // Processing failed, can retry
@@ -626,7 +626,7 @@ pub enum ProcessingStatus {
 
 // TODO: Use anyhow error
 #[derive(Clone, Debug, DeepSizeOf)]
-pub enum ProcessingError {
+pub(super) enum ProcessingError {
     MetadataError(String), // Before entrypoint generation
     TracingError(String),  // During/after entrypoint generation
 }
@@ -1626,17 +1626,13 @@ mod tests {
             .validate_and_ensure_block_layer_test(&block)
             .unwrap();
 
-        // Create component metadata with tracing errors
-        let tracing_metadata = ComponentTracingMetadata {
-            tx_hash: tx.hash.clone(),
-            balances: Some(Err(MetadataError::RequestFailed(
+        let tracing_metadata = ComponentTracingMetadata::new(tx.hash.clone())
+            .with_balances(Err(MetadataError::RequestFailed(
                 "RPC timeout during tracing".to_string(),
-            ))),
-            limits: Some(Err(MetadataError::ProviderFailed(
+            )))
+            .with_limits(Err(MetadataError::ProviderFailed(
                 "Simulation failed: insufficient gas".to_string(),
-            ))),
-            tvl: None,
-        };
+            )));
 
         let component_metadata = vec![(component.clone(), tracing_metadata)];
 
@@ -1968,14 +1964,14 @@ mod tests {
 
             let hook_address = Address::from("0x55dcf9455eee8fd3f5eed17606291272cde428a8");
 
-            let config = HookEntrypointConfig {
-                max_sample_size: Some(4),
-                min_samples: 1,
-                router_address: Some(router_address.clone()),
-                sender: None,
-                router_code: None,
-                pool_manager: pool_manager.clone(),
-            };
+            let config = HookEntrypointConfig::new(
+                Some(4),
+                1,
+                Some(router_address.clone()),
+                None,
+                None,
+                pool_manager.clone(),
+            );
 
             let balance_slot_detector_config = SlotDetectorConfig {
                 max_batch_size: 5,

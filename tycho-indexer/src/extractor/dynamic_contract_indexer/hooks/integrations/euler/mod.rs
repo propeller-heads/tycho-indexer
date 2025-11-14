@@ -7,7 +7,7 @@ use crate::extractor::dynamic_contract_indexer::hooks::{
     },
 };
 
-pub(crate) mod metadata_generator;
+pub(super) mod metadata_generator;
 
 pub(super) fn register_euler_integrations(
     generator_registry: &mut MetadataGeneratorRegistry,
