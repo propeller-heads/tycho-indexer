@@ -17,10 +17,16 @@ use alloy::{
     transports::http::reqwest,
 };
 use serde::Deserialize;
+use errors::extract_error_chain;
 use tracing::{debug, info, trace};
 use tycho_common::Bytes;
 
-use crate::{errors::extract_error_chain, RPCError, RequestError};
+use crate::{RPCError, RequestError};
+
+pub mod errors;
+mod retry;
+
+use retry::RetryPolicy;
 
 // TODO: Optimize these configurable for preventing rate limiting.
 // TODO: Handle rate limiting / individual connection failures & retries
@@ -45,12 +51,13 @@ impl Default for BatchingConfig {
 // TODO: Consider adding rate limiting and retry logic for all RPC requests.
 // TODO: Consider adding fallback for batching requests to non-batched version on failure.
 /// This struct wraps the ReqwestClient and provides Ethereum-specific RPC methods
-/// with optional batching support.
+/// with optional batching support and automatic retry logic.
 /// It is cheap to clone, as the `inner` internally uses an Arc for the ReqwestClient.
 #[derive(Clone, Debug)]
 pub struct EthereumRpcClient {
     pub(crate) inner: ReqwestClient,
     pub(crate) batching: Option<BatchingConfig>,
+    retry_policy: RetryPolicy,
     url: String,
 }
 
@@ -71,34 +78,40 @@ impl EthereumRpcClient {
 
         let rpc = ClientBuilder::default().http_with_client(http_client, url);
         let batching = Some(BatchingConfig::default());
+        let retry_policy = RetryPolicy::default();
 
-        Ok(Self { inner: rpc, batching, url: rpc_url.to_string() })
+        Ok(Self { inner: rpc, batching, retry_policy, url: rpc_url.to_string() })
     }
 
     pub fn get_url(&self) -> &str {
         &self.url
     }
 
-    pub async fn with_batching(self, batching: Option<BatchingConfig>) -> Result<Self, RPCError> {
-        Ok(Self { inner: self.inner, batching, url: self.url })
+    pub fn with_batching(self, batching: Option<BatchingConfig>) -> Self {
+        Self { inner: self.inner, batching, retry_policy: self.retry_policy, url: self.url }
+    }
+
+    pub fn with_retry_policy(self, retry_policy: RetryPolicy) -> Self {
+        Self { inner: self.inner, batching: self.batching, retry_policy, url: self.url }
     }
 
     pub async fn get_block_number(&self) -> Result<u64, RPCError> {
-        let block_number: BlockNumberOrTag = self
-            .inner
-            .request_noparams("eth_blockNumber")
+        let block_number = self
+            .retry_policy
+            .retry_request(|| async {
+                self.inner
+                    .request_noparams("eth_blockNumber")
+                    .await
+            })
             .await
-            .map_err(|e| {
-                RPCError::RequestError(RequestError::Other(format!(
-                    "Failed to get block number: {}",
-                    e
-                )))
-            })?;
+            .map_err(|e| RPCError::from_alloy("Failed to get block number", e))?;
 
         if let BlockNumberOrTag::Number(num) = block_number {
             Ok(num)
         } else {
-            Err(RPCError::RequestError(RequestError::Other("Unexpected block ID type".to_string())))
+            Err(RPCError::RequestError(RequestError::Other(
+                "Failed to get block number: Unexpected block tag returned".to_string(),
+            )))
         }
     }
 
@@ -513,8 +526,10 @@ mod tests {
     impl TestFixture {
         pub(crate) fn create_rpc_client(&self, batching: bool) -> EthereumRpcClient {
             let batching = if batching { Some(BatchingConfig::default()) } else { None };
+            // Extremely short intervals for very fast testing
+            let retry_policy = RetryPolicy::for_testing();
 
-            EthereumRpcClient { inner: self.inner_rpc.clone(), batching, url: self.url.clone() }
+            EthereumRpcClient { inner: self.inner_rpc.clone(), batching, retry_policy, url: self.url.clone() }
         }
     }
 

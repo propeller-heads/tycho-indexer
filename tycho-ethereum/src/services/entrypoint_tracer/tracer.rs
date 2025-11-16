@@ -14,7 +14,7 @@ use alloy::{
         },
         AccessListResult, BlockId, TransactionInput, TransactionRequest,
     },
-    transports::{RpcError, TransportErrorKind},
+    transports::TransportErrorKind,
 };
 use async_trait::async_trait;
 use serde_json::{json, Map, Value};
@@ -230,47 +230,44 @@ impl EVMEntrypointService {
         // Add debug_traceCall call
         let trace_future = batch
             .add_call::<_, GethTrace>("debug_traceCall", &trace_call_params)
-            .map_err(RPCError::from)?;
+            .map_err(|e| {
+                RPCError::UnknownError(format!(
+                    "Failed to add batch for {target} (block: {block_hash}): {e}"
+                ))
+            })?;
 
         // Send batch
         batch.send().await.map_err(|e| {
-            match e {
-                // Transport/Network errors
-                RpcError::Transport(e) => {
-                    RPCError::RequestError(RequestError::Reqwest(ReqwestError {
-                        msg: format!("Failed to send batch for {target} (block: {block_hash})"),
-                        source: e,
-                    }))
-                }
-                // Other errors
-                _ => RPCError::UnknownError(format!(
+            if e.is_transport_error() {
+                RPCError::RequestError(RequestError::Reqwest(ReqwestError {
+                    msg: format!("Failed to send batch for {target} (block: {block_hash})"),
+                    source: e,
+                }))
+            } else {
+                RPCError::UnknownError(format!(
                     "Failed to send batch for {target} (block: {block_hash}): {e}"
-                )),
+                ))
             }
         })?;
 
         // Await access list result
         let access_list_data = access_list_future.await.map_err(|e| {
-            match e {
-                // Batch Id not found in the responses
-                RpcError::Transport(TransportErrorKind::MissingBatchResponse(id)) => {
-                    RPCError::UnknownError(format!(
+            if let Some(te) = e.as_transport_err() {
+                match te {
+                    TransportErrorKind::MissingBatchResponse(id) => RPCError::UnknownError(format!(
                         "Missing batch response for ID {id} for {target} (block: {block_hash})"
-                    ))
-                }
-                // Transport/Network errors
-                RpcError::Transport(e) => {
-                    RPCError::RequestError(RequestError::Reqwest(ReqwestError {
+                    )),
+                    _ => RPCError::RequestError(RequestError::Reqwest(ReqwestError {
                         msg: format!(
                             "Failed to get access list from batch for {target} (block: {block_hash})"
                         ),
                         source: e,
                     }))
                 }
-                // Other errors
-                _ => RPCError::UnknownError(format!(
+            } else {
+                RPCError::UnknownError(format!(
                     "Failed to get access list from batch for {target} (block: {block_hash}): {e}"
-                )),
+                ))
             }
         })?;
 
@@ -286,26 +283,24 @@ impl EVMEntrypointService {
 
         // Await trace result
         let pre_state_trace = trace_future.await.map_err(|e| {
-            match e {
-                // Batch Id not found in the responses
-                RpcError::Transport(TransportErrorKind::MissingBatchResponse(id)) => {
-                    RPCError::UnknownError(format!(
-                        "Missing batch response for ID {id} for {target} (block: {block_hash})"
-                    ))
-                }
-                // Transport/Network errors
-                RpcError::Transport(e) => {
-                    RPCError::RequestError(RequestError::Reqwest(ReqwestError {
+            if let Some(te) = e.as_transport_err() {
+                match te {
+                    TransportErrorKind::MissingBatchResponse(id) => {
+                        RPCError::UnknownError(format!(
+                            "Missing batch response for ID {id} for {target} (block: {block_hash})"
+                        ))
+                    }
+                    _ => RPCError::RequestError(RequestError::Reqwest(ReqwestError {
                         msg: format!(
                             "Failed to get trace from batch for {target} (block: {block_hash})"
                         ),
                         source: e,
-                    }))
+                    })),
                 }
-                // Other errors
-                _ => RPCError::UnknownError(format!(
+            } else {
+                RPCError::UnknownError(format!(
                     "Failed to get trace from batch for {target} (block: {block_hash}): {e}"
-                )),
+                ))
             }
         })?;
 
@@ -363,7 +358,7 @@ impl EVMEntrypointService {
                 tycho_common::Bytes::from(slot.as_slice()),
                 // This is safe since indices into B256 will always fit into u8
                 offset as u8,
-            ))
+            ));
         }
         None
     }
@@ -964,7 +959,7 @@ mod tests {
         );
 
         let params = RPCTracerParams::new(None, Bytes::from("0x09c5eabe00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000340000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000003060c0f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000001e00000000000000000000000000000000000000000000000000000000000000240000000000000000000000000000000000000000000000000000000000000016000000000000000000000000000000000000000000000000000000000000000200000000000000000000000007f39c581f595b53c5cb19bd0b3f8da6c935e2ca0000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20000000000000000000000000000000000000000000000000000000000000064000000000000000000000000000000000000000000000000000000000000000100000000000000000000000055dcf9455eee8fd3f5eed17606291272cde428a80000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000055b2aa381e13dc000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000120000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000400000000000000000000000007f39c581f595b53c5cb19bd0b3f8da6c935e2ca0000000000000000000000000000000000000000000000000055b2aa381e13dc00000000000000000000000000000000000000000000000000000000000000040000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20000000000000000000000000000000000000000000000000000000000000000"))
-        .with_state_overrides(state_overrides);
+            .with_state_overrides(state_overrides);
 
         let entry_points = vec![EntryPointWithTracingParams::new(
             EntryPoint::new(

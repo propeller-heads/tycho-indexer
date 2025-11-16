@@ -15,8 +15,10 @@ use tycho_common::{
 };
 
 use crate::{
-    errors::{RPCError, RequestError},
-    rpc::EthereumRpcClient,
+    rpc::{
+        errors::{RPCError, RequestError},
+        EthereumRpcClient,
+    },
     BytesCodec,
 };
 
