@@ -46,7 +46,7 @@ tycho-ethereum = ">=0.120.0"
 tycho-execution = ">=0.143.0"
 
 # EVM dependencies
-alloy = { version = "1.0.30", features = ["providers", "signer-local", "rpc-types-eth"] }
+alloy = { version = "1.0.30", features = ["providers", "signer-local", "rpc-types-eth", "rand", "eip712"] }
 
 [dependencies]
 # Serialization/Deserialization
@@ -86,11 +86,8 @@ tycho-common = { workspace = true }
 tycho-ethereum = { workspace = true }
 
 # EVM dependencies
-foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "d6daa0ac83fe6b3883072436bb3f95ba7820e5d9", optional = true }
-foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "d6daa0ac83fe6b3883072436bb3f95ba7820e5d9", optional = true }
-solar-config = "=0.1.7"
-solar-data-structures = "=0.1.7"
-alloy = { workspace = true, features = ["sol-types"], optional = true }
+foundry-block-explorers = { version = "0.22.0", optional = true }
+alloy = { workspace = true, features = ["sol-types", "rand"], optional = true }
 revm = { version = "29.0.1", features = ["alloydb", "serde"], optional = true }
 revm-inspectors = { version = "0.30.0", features = ["serde"], optional = true }
 num-bigint = { workspace = true }
@@ -109,6 +106,7 @@ tokio-tungstenite = { version = "0.28.0", features = ["native-tls"], optional = 
 async-stream = { version = "0.3.6", optional = true }
 http = { version = "1.0", optional = true }
 prost = { version = "0.13", optional = true }
+alloy-chains = "0.2.18"
 hex-literal.workspace = true
 
 
@@ -140,7 +138,7 @@ tracing-appender = "0.2.3"
 default = ["evm", "rfq"]
 network_tests = []
 evm = [
-    "dep:foundry-config", "dep:foundry-evm", "dep:revm", "dep:revm-inspectors", "dep:alloy",
+    "dep:foundry-block-explorers", "dep:revm", "dep:revm-inspectors", "dep:alloy", "dep:reqwest"
 ]
 rfq = ["dep:reqwest", "dep:async-trait", "dep:tokio-tungstenite", "dep:async-stream", "dep:http", "dep:prost"]
 

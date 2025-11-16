@@ -7,7 +7,7 @@ pub mod engine_db;
 pub mod protocol;
 pub mod simulation;
 pub mod stream;
-pub mod traces;
+pub(crate) mod traces;
 pub mod tycho_models;
 
 pub type SlotId = U256;
