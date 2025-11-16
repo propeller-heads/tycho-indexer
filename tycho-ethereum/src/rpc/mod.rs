@@ -14,10 +14,9 @@ use alloy::{
             Block, BlockId, BlockNumberOrTag, TransactionRequest,
         },
     },
-    transports::http::reqwest,
+    transports::{http::reqwest, RpcError, TransportErrorKind},
 };
 use serde::Deserialize;
-use errors::extract_error_chain;
 use tracing::{debug, info, trace};
 use tycho_common::Bytes;
 
@@ -122,14 +121,20 @@ impl EthereumRpcClient {
         let full_tx_objects = false;
 
         let result: Option<Block> = self
-            .inner
-            .request("eth_getBlockByNumber", (block_id, full_tx_objects))
+            .retry_policy
+            .retry_request(|| async {
+                self.inner
+                    .request("eth_getBlockByNumber", (block_id, full_tx_objects))
+                    .await
+            })
             .await
             .map_err(|e| {
-                RPCError::RequestError(RequestError::Other(format!("Failed to get block: {e}")))
+                RPCError::from_alloy(format!("Failed to get block for block id {block_id}"), e)
             })?;
 
-        result.ok_or(RPCError::RequestError(RequestError::Other("Block not found".to_string())))
+        result.ok_or(RPCError::RequestError(RequestError::Other(format!(
+            "Failed to get block for block id {block_id}: Block not found"
+        ))))
     }
 
     pub(crate) async fn eth_get_balance(
@@ -137,14 +142,18 @@ impl EthereumRpcClient {
         block_id: BlockNumberOrTag,
         address: Address,
     ) -> Result<U256, RPCError> {
-        self.inner
-            .request("eth_getBalance", (address, block_id))
+        self.retry_policy
+            .retry_request(|| async {
+                self.inner
+                    .request("eth_getBalance", (address, block_id))
+                    .await
+            })
             .await
             .map_err(|e| {
-                let error_chain = extract_error_chain(&e);
-                RPCError::RequestError(RequestError::Other(format!(
-                    "Failed to get balance: {error_chain}"
-                )))
+                RPCError::from_alloy(
+                    format!("Failed to get balance for address {address}, block {block_id}"),
+                    e,
+                )
             })
     }
 
@@ -153,14 +162,18 @@ impl EthereumRpcClient {
         block_id: BlockNumberOrTag,
         address: Address,
     ) -> Result<Bytes, RPCError> {
-        self.inner
-            .request("eth_getCode", (address, block_id))
+        self.retry_policy
+            .retry_request(|| async {
+                self.inner
+                    .request("eth_getCode", (address, block_id))
+                    .await
+            })
             .await
             .map_err(|e| {
-                let error_chain = extract_error_chain(&e);
-                RPCError::RequestError(RequestError::Other(format!(
-                    "Failed to get code: {error_chain}"
-                )))
+                RPCError::from_alloy(
+                    format!("Failed to get code for address {address}, block {block_id}"),
+                    e,
+                )
             })
     }
 
@@ -199,15 +212,18 @@ impl EthereumRpcClient {
         );
 
         // Use the wrapper type to handle nodes that return null instead of {} for empty storage
-        let wrapper: StorageRangeResultWrapper = self
-            .inner
-            .request("debug_storageRangeAt", params)
+        let wrapper: StorageRangeResultWrapper = self.retry_policy
+            .retry_request(|| async {
+                self.inner
+                    .request("debug_storageRangeAt", params)
+                    .await
+            })
             .await
             .map_err(|e| {
-                let error_chain = extract_error_chain(&e);
-                RPCError::RequestError(RequestError::Other(format!(
-                    "Failed to get storage: {error_chain}, address: {address}, block: {block_hash}",
-                )))
+                RPCError::from_alloy(
+                    format!("Failed to get storage for address {address}, block {block_hash}"),
+                    e,
+                )
             })?;
 
         Ok(wrapper.into())
@@ -284,85 +300,61 @@ impl EthereumRpcClient {
 
         // perf: consider running multiple batches in parallel using map of futures
         for chunk_addresses in addresses.chunks(batching.max_batch_size) {
-            let mut batch = self.inner.new_batch();
-            let mut code_requests = Vec::with_capacity(batching.max_batch_size);
-            let mut balance_requests = Vec::with_capacity(batching.max_batch_size);
+            let batch_call = || async {
+                let mut batch = self.inner.new_batch();
 
-            for address in chunk_addresses {
-                code_requests.push(Box::pin(
-                    batch
-                        .add_call::<_, Bytes>("eth_getCode", &(address, block_id))
-                        .map_err(|e| {
-                            RPCError::RequestError(RequestError::Other(format!(
-                                "Failed to get code: {e}"
-                            )))
-                        })?,
-                ));
-
-                balance_requests.push(Box::pin(
-                    batch
-                        .add_call::<_, U256>("eth_getBalance", &(address, block_id))
-                        .map_err(|e| {
-                            RPCError::RequestError(RequestError::Other(format!(
-                                "Failed to get balance: {e}"
-                            )))
-                        })?,
-                ));
-            }
-
-            debug!(
-                total_requests = chunk_addresses.len() * 2, // code + balance for each address
-                block_id = block_id.to_string(),
-                "Sending batch request to RPC provider"
-            );
-
-            // Add debugging to understand when the URL issue occurs
-            debug!(
-                "About to send batch with {} code requests and {} balance requests",
-                code_requests.len(),
-                balance_requests.len()
-            );
-
-            batch.send().await.map_err(|e| {
-                let error_chain = extract_error_chain(&e);
-                let printable_addresses = chunk_addresses
+                let code_balance_requests = chunk_addresses
                     .iter()
-                    .map(|addr| format!("{:?}", addr))
-                    .collect::<Vec<String>>()
-                    .join(", ");
-                RPCError::RequestError(RequestError::Other(format!(
-                    "Failed to send batch request for code & balance: {error_chain}. Block: {block_id}, Addresses count: {}, Addresses: [{}]",
-                    chunk_addresses.len(),
-                    printable_addresses
-                )))
-            })?;
+                    .map(|&address| {
+                        Ok((
+                            batch.add_call::<_, Bytes>("eth_getCode", &(address, block_id))?,
+                            batch.add_call::<_, U256>("eth_getBalance", &(address, block_id))?,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, RpcError<TransportErrorKind>>>()?;
 
-            info!(
-                chunk_size = chunk_addresses.len(),
-                block_id = block_id.to_string(),
-                "Successfully sent batch request for account code and balance"
-            );
+                debug!(
+                    total_requests = chunk_addresses.len() * 2, // code + balance for each address
+                    block_id = block_id.to_string(),
+                    "Sending batch request to RPC provider"
+                );
 
-            for (idx, address) in chunk_addresses.iter().enumerate() {
-                let code_result = code_requests[idx]
-                    .as_mut()
-                    .await
-                    .map_err(|e| {
-                        RPCError::RequestError(RequestError::Other(format!(
-                            "Failed to collect code request data: {e}"
-                        )))
-                    })?;
+                batch.send().await?;
 
-                let balance_result = balance_requests[idx]
-                    .as_mut()
-                    .await
-                    .map_err(|e| {
-                        RPCError::RequestError(RequestError::Other(format!(
-                            "Failed to collect balance request data: {e}"
-                        )))
-                    })?;
+                info!(
+                    chunk_size = chunk_addresses.len(),
+                    block_id = block_id.to_string(),
+                    "Successfully sent batch request for account code and balance"
+                );
 
-                codes_and_balances.insert(*address, (code_result, balance_result));
+                let mut code_balance_res = Vec::with_capacity(chunk_addresses.len());
+                for (code_fut, balance_fut) in code_balance_requests {
+                    let code = code_fut.await?;
+                    let balance = balance_fut.await?;
+                    code_balance_res.push((code, balance));
+                }
+
+                Ok(code_balance_res)
+            };
+
+            let code_balance_res = self.retry_policy.retry_request(batch_call).await
+            .map_err(|e| {
+                    let printable_addresses = chunk_addresses
+                        .iter()
+                        .map(|addr| format!("{:?}", addr))
+                        .collect::<Vec<String>>()
+                        .join(", ");
+                    RPCError::from_alloy(format!(
+                        "Failed to send batch request for code & balance for block {block_id}, address count {}, addresses [{printable_addresses}]",
+                        chunk_addresses.len(),
+                    ), e)
+                })?;
+
+            for (value, &address) in code_balance_res
+                .into_iter()
+                .zip(chunk_addresses.iter())
+            {
+                codes_and_balances.insert(address, value);
             }
         }
 
@@ -378,15 +370,20 @@ impl EthereumRpcClient {
         let mut result = HashMap::with_capacity(slots.len());
 
         for slot in slots {
-            let storage_value = self
-                .inner
-                .request("eth_getStorageAt", (&address, slot, block_id))
-                .await
-                .map_err(|e| {
-                    RPCError::RequestError(RequestError::Other(format!(
-                        "Failed to get storage: {e}, address: {address}, block: {block_id}, slot: {slot}",
-                    )))
-                })?;
+            let storage_value = self.retry_policy
+            .retry_request(|| async {
+                self
+                    .inner
+                    .request("eth_getStorageAt", (&address, slot, block_id))
+                    .await
+                                })
+            .await
+            .map_err(|e| {
+                RPCError::from_alloy(
+                    format!("Failed to get storage for address {address}, block {block_id}, slot {slot}"),
+                    e,
+                )
+            })?;
 
             let value = if storage_value == [0; 32] { None } else { Some(storage_value) };
 
@@ -409,50 +406,52 @@ impl EthereumRpcClient {
                 "BatchingConfig is required for batch operations".to_string(),
             ))?;
 
-        let mut storage_requests = Vec::with_capacity(batching.max_storage_slot_batch_size);
-
         let mut result = HashMap::new();
 
         // perf: consider running multiple batches in parallel using map of futures
         for slot_batch in slots.chunks(batching.max_storage_slot_batch_size) {
-            let mut storage_batch = self.inner.new_batch();
+            let batch_call = || async {
+                let mut batch = self.inner.new_batch();
 
-            for slot in slot_batch {
-                storage_requests.push(Box::pin(
-                    storage_batch
-                        .add_call::<_, B256>("eth_getStorageAt", &(&address, slot, block_id))
-                        .map_err(|e| {
-                            RPCError::RequestError(RequestError::Other(format!(
-                                "Failed to get storage: {e}, address: {address}, block: {block_id}, slot: {slot}",
-                            )))
-                        })?,
-                ));
-            }
+                let mut storage_requests = slot_batch
+                    .iter()
+                    .map(|slot| {
+                        batch.add_call::<_, B256>("eth_getStorageAt", &(&address, slot, block_id))
+                    })
+                    .collect::<Result<Vec<_>, RpcError<TransportErrorKind>>>()?;
 
-            let request_size = slot_batch.len();
-            storage_batch
-                        .send()
-                        .await
-                        .map_err(|e| {
-                            let error_chain = extract_error_chain(&e);
-                            RPCError::RequestError(RequestError::Other(format!(
-                                "Failed to send storage batch request. Requested for {request_size} : {error_chain}"
-                            )))
-                        })?;
+                batch.send().await?;
 
-            for (idx, slot) in slot_batch.iter().enumerate() {
-                let storage_result = storage_requests[idx]
-                    .as_mut()
-                    .await
-                    .map_err(|e| {
-                        RPCError::RequestError(RequestError::Other(format!(
-                            "Failed to collect storage request data: {e}"
-                        )))
-                    })?;
+                let mut storage_res = Vec::with_capacity(slot_batch.len());
+                for storage_fut in storage_requests.iter_mut() {
+                    let storage_value = storage_fut.await?;
+                    storage_res.push(storage_value);
+                }
 
+                Ok(storage_res)
+            };
+
+            let storage_res = self.retry_policy.retry_request(batch_call).await
+            .map_err(|e| {
+                let printable_slots = slot_batch
+                    .iter()
+                    .map(|slot| format!("{:?}", slot))
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                RPCError::from_alloy(
+                    format!(
+                                    "Failed to get storage for address {address}, block {block_id}, slots {printable_slots}",
+                                ),
+                    e,
+                )
+            })?;
+
+            for (storage_result, &address) in storage_res
+                .into_iter()
+                .zip(slot_batch.iter())
+            {
                 let value = if storage_result == [0; 32] { None } else { Some(storage_result) };
-
-                result.insert(*slot, value);
+                result.insert(address, value);
             }
         }
 
@@ -473,14 +472,15 @@ impl EthereumRpcClient {
             .map(|request| (request, vec![TraceType::Trace]))
             .collect();
 
-        self.inner
-            .request("trace_callMany", (trace_requests, block))
+        self.retry_policy
+            .retry_request(|| async {
+                self.inner
+                    .request("trace_callMany", (&trace_requests, block))
+                    .await
+            })
             .await
             .map_err(|e| {
-                let error_chain = extract_error_chain(&e);
-                RPCError::RequestError(RequestError::Other(format!(
-                    "Failed to send trace_callMany request: {error_chain}"
-                )))
+                RPCError::from_alloy(format!("Failed to get trace call many for block {block}"), e)
             })
     }
 
@@ -493,11 +493,18 @@ impl EthereumRpcClient {
         request: TransactionRequest,
         block: BlockNumberOrTag,
     ) -> Result<Bytes, RPCError> {
-        self.inner
-            .request("eth_call", (request, block))
+        self.retry_policy
+            .retry_request(|| async {
+                self.inner
+                    .request("eth_call", (&request, block))
+                    .await
+            })
             .await
             .map_err(|e| {
-                RPCError::RequestError(RequestError::Other(format!("RPC eth_call failed: {e}")))
+                RPCError::from_alloy(
+                    format!("Failed to send an eth_call request for block {block}"),
+                    e,
+                )
             })
     }
 }
