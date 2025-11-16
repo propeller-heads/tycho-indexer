@@ -1,4 +1,4 @@
-use std::{error::Error, fmt::Display};
+use std::fmt::Display;
 
 use alloy::transports::{RpcError as AlloyRpcError, TransportErrorKind};
 use thiserror::Error;
@@ -44,7 +44,10 @@ pub enum RPCError {
 }
 
 impl RPCError {
-    pub(super) fn from_alloy(msg: &str, error: AlloyRpcError<TransportErrorKind>) -> Self {
+    pub(super) fn from_alloy<S: ToString>(
+        msg: S,
+        error: AlloyRpcError<TransportErrorKind>,
+    ) -> Self {
         RPCError::RequestError(RequestError::Reqwest(ReqwestError {
             msg: msg.to_string(),
             source: error,
@@ -53,22 +56,5 @@ impl RPCError {
 
     pub fn should_retry(&self) -> bool {
         matches!(self, Self::RequestError(_))
-    }
-}
-
-/// Helper function to extract the full error chain including source errors
-pub(crate) fn extract_error_chain(error: &dyn Error) -> String {
-    let mut chain = vec![error.to_string()];
-    let mut source = error.source();
-
-    while let Some(err) = source {
-        chain.push(err.to_string());
-        source = err.source();
-    }
-
-    if chain.len() == 1 {
-        chain[0].clone()
-    } else {
-        format!("{} (caused by: {})", chain[0], chain[1..].join(" -> "))
     }
 }
