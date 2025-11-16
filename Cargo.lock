@@ -383,6 +383,7 @@ dependencies = [
  "alloy-consensus",
  "alloy-core",
  "alloy-eips",
+ "alloy-json-rpc",
  "alloy-provider",
  "alloy-rpc-client",
  "alloy-rpc-types",
@@ -7227,6 +7228,7 @@ version = "0.119.2"
 dependencies = [
  "alloy",
  "async-trait",
+ "backoff",
  "chrono",
  "futures 0.3.31",
  "mockito",
