@@ -75,41 +75,6 @@ Some useful helper functions are provided to facilitate building the entry point
     builder.add_entrypoint(&entrypoint);
     builder.add_entrypoint_params(&entrypoint_params);
     ```
-*   To add new tracing params to an existing entry point, use: `tycho_substreams::entrypoint::add_entrypoint_params`. Add the created entry point parameter message to the `TransactionChangesBuilder`using `add_entrypoint_params`:
-
-    ```rust
-    use tycho_substreams::entrypoint::add_entrypoint_params;
-
-    // defined example trace data
-    let trace_data = TraceData::Rpc(RpcTraceData{
-        caller: None, // None means a default caller will be used
-        calldata: "0xabcd123400000000000012345678901234567890", // 0xabcd1234 - function selector, 00000000000012345678901234567890 - input address
-    });
-
-    let entrypoint_params = add_entrypoint_params(
-        target: target_address,
-        signature: "getFees(fromAddress)",
-        trace_data,
-        component_id: Some("pool_id"), // optional to link to a component
-    )
-
-    // use the TransactionChangesBuilder linked to an appropriate tx (up to your discretion)
-    builder.add_entrypoint_params(&entrypoint_params);
-    ```
-*   To link a new component to an existing entry point, use: `tycho_substreams::entrypoint::add_component_to_entrypoint`. Add the created entry point message to the `TransactionChangesBuilder`using `add_entrypoint`:
-
-    ```rust
-    use tycho_substreams::entrypoint::add_component_to_entrypoint;
-
-    let entrypoint = add_component_to_entrypoint(
-        target: target_address,
-        signature: "getFees(fromAddress)",
-        component_id: "pool_id",
-    )
-
-    // use the TransactionChangesBuilder for the tx where component [pool_id] was created
-    builder.add_entrypoint(&entrypoint);
-    ```
 
 #### **2. All contract changes that occurred on the current block** <a href="#motivation" id="motivation"></a>
 
