@@ -28,7 +28,6 @@ pub(crate) async fn handle_traces(
     mut result: TraceResult,
     etherscan_api_key: Option<String>,
     chain: tycho_common::models::Chain,
-    _decode_internal: bool, // Not supported in simplified version
 ) -> Result<(), Box<dyn std::error::Error>> {
     let offline = etherscan_api_key.is_none();
     let trace_config = TraceConfig::new(chain)

@@ -219,7 +219,6 @@ where
                     trace_res,
                     env::var("ETHERSCAN_API_KEY").ok(),
                     tycho_common::models::Chain::Ethereum,
-                    true,
                 )
                 .await
                 .map_err(|err| SimulationEngineError::TraceError(err.to_string()))
