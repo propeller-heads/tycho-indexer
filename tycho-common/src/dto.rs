@@ -815,6 +815,11 @@ pub trait PaginationLimits {
 }
 
 /// Macro to implement PaginationLimits for request types
+///
+/// When INCREASING these limits, ensure to immediately redeploy the servers.
+///
+/// Why: pagination limits are shared. Clients use these constants to set their max page size.
+/// When clients upgrade before servers, they request more than old servers allow and get errors.
 macro_rules! impl_pagination_limits {
     ($type:ty, compressed = $comp:expr, uncompressed = $uncomp:expr) => {
         impl $crate::dto::PaginationLimits for $type {
@@ -870,6 +875,11 @@ pub struct StateRequestBody {
     pub pagination: PaginationParams,
 }
 
+// When INCREASING these limits, please read the warning in the macro definition.
+// TODO: Revert to higher limits once we are ready to redeploy servers.
+// impl_pagination_limits!(StateRequestBody, compressed = 1200, uncompressed = 100);
+impl_pagination_limits!(StateRequestBody, compressed = 100, uncompressed = 100);
+
 impl StateRequestBody {
     pub fn new(
         contract_ids: Option<Vec<Bytes>>,
@@ -901,8 +911,6 @@ impl StateRequestBody {
         }
     }
 }
-
-impl_pagination_limits!(StateRequestBody, compressed = 1200, uncompressed = 100);
 
 /// Response from Tycho server for a contract state request.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, DeepSizeOf)]
@@ -1164,7 +1172,10 @@ pub struct TokensRequestBody {
     pub chain: Chain,
 }
 
-impl_pagination_limits!(TokensRequestBody, compressed = 12900, uncompressed = 3000);
+// When INCREASING these limits, please read the warning in the macro definition.
+// TODO: Revert to higher limits once we are ready to redeploy servers.
+// impl_pagination_limits!(TokensRequestBody, compressed = 12900, uncompressed = 3000);
+impl_pagination_limits!(TokensRequestBody, compressed = 3000, uncompressed = 3000);
 
 /// Response from Tycho server for a tokens request.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash, DeepSizeOf)]
@@ -1244,7 +1255,10 @@ pub struct ProtocolComponentsRequestBody {
     pub pagination: PaginationParams,
 }
 
-impl_pagination_limits!(ProtocolComponentsRequestBody, compressed = 2550, uncompressed = 500);
+// When INCREASING these limits, please read the warning in the macro definition.
+// TODO: Revert to higher limits once we are ready to redeploy servers.
+// impl_pagination_limits!(ProtocolComponentsRequestBody, compressed = 2550, uncompressed = 500);
+impl_pagination_limits!(ProtocolComponentsRequestBody, compressed = 500, uncompressed = 500);
 
 // Implement PartialEq where tvl is considered equal if the difference is less than 1e-6
 impl PartialEq for ProtocolComponentsRequestBody {
@@ -1430,7 +1444,10 @@ pub struct ProtocolStateRequestBody {
     pub pagination: PaginationParams,
 }
 
-impl_pagination_limits!(ProtocolStateRequestBody, compressed = 360, uncompressed = 100);
+// When INCREASING these limits, please read the warning in the macro definition.
+// TODO: Revert to higher limits once we are ready to redeploy servers.
+// impl_pagination_limits!(ProtocolStateRequestBody, compressed = 360, uncompressed = 100);
+impl_pagination_limits!(ProtocolStateRequestBody, compressed = 100, uncompressed = 100);
 
 impl ProtocolStateRequestBody {
     pub fn id_filtered<I, T>(ids: I) -> Self
@@ -1589,6 +1606,7 @@ pub struct ProtocolSystemsRequestBody {
     pub pagination: PaginationParams,
 }
 
+// When INCREASING these limits, please read the warning in the macro definition.
 impl_pagination_limits!(ProtocolSystemsRequestBody, compressed = 100, uncompressed = 100);
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
@@ -1666,6 +1684,7 @@ pub struct ComponentTvlRequestBody {
     pub pagination: PaginationParams,
 }
 
+// When INCREASING these limits, please read the warning in the macro definition.
 impl_pagination_limits!(ComponentTvlRequestBody, compressed = 100, uncompressed = 100);
 
 impl ComponentTvlRequestBody {
@@ -1717,6 +1736,7 @@ pub struct TracedEntryPointRequestBody {
     pub pagination: PaginationParams,
 }
 
+// When INCREASING these limits, please read the warning in the macro definition.
 impl_pagination_limits!(TracedEntryPointRequestBody, compressed = 100, uncompressed = 100);
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash, DeepSizeOf)]
