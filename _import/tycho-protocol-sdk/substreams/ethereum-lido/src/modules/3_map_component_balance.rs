@@ -9,6 +9,8 @@ use substreams_ethereum::pb::eth::{
 };
 use tycho_substreams::prelude::*;
 
+use crate::modules::map_protocol_components::StakingStatus;
+
 const STORAGE_SLOT_TOTAL_SHARES: [u8; 32] =
     hex!("e3b4b636e601189b5f4c6742edf2538ac12bb61ed03e6da26949d69838fa447e");
 const STORAGE_SLOT_POOLED_ETH: [u8; 32] =
@@ -18,11 +20,13 @@ const STORAGE_SLOT_WRAPPED_ETH: [u8; 32] =
 const STORAGE_SLOT_STAKE_LIMIT: [u8; 32] =
     hex!("a3678de4a579be090bed1177e0a24f77cc29d181ac22fd7688aca344d8938015");
 
-const ST_ETH_ADDRESS: [u8; 20] = hex!("17144556fd3424EDC8Fc8A4C940B2D04936d17eb");
+pub const ST_ETH_ADDRESS: [u8; 20] = hex!("17144556fd3424EDC8Fc8A4C940B2D04936d17eb");
 const ST_ETH_ADDRESS_COMPONENT_ID: &str = "0x17144556fd3424edc8fc8a4c940b2d04936d17eb";
-const WST_ETH_ADDRESS: [u8; 20] = hex!("7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0");
+pub const WST_ETH_ADDRESS: [u8; 20] = hex!("7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0");
 const WST_ETH_ADDRESS_COMPONENT_ID: &str = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
 const ZERO_STAKING_LIMIT: &str = "000000000000000000000000";
+pub const ETH_ADDRESS: [u8; 20] = hex!("EeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE");
+const ETH_ADDRESS_COMPONENT_ID: &str = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 
 /// Extracts balances per component
 ///
@@ -52,7 +56,9 @@ pub fn map_component_balance(
                 entity_changes: partial_changes
                     .clone()
                     .consolidate_entity_changes(),
-                balance_changes: vec![],
+                balance_changes: partial_changes
+                    .clone()
+                    .consolidate_balance_changes(),
                 component_changes: vec![],
             },
         );
@@ -80,6 +86,7 @@ impl<T> ComponentKey<T> {
 struct PartialChanges {
     transaction: Transaction,
     entity_changes: HashMap<ComponentKey<String>, Attribute>,
+    balance_changes: HashMap<ComponentKey<Vec<u8>>, BalanceChange>,
 }
 
 impl PartialChanges {
@@ -98,17 +105,27 @@ impl PartialChanges {
             .map(|(component_id, attributes)| EntityChanges { component_id, attributes })
             .collect()
     }
+
+    fn consolidate_balance_changes(self) -> Vec<BalanceChange> {
+        self.balance_changes
+            .into_iter()
+            .map(|(key, attribute)| (key.component_id, attribute))
+            .into_group_map()
+            .into_iter()
+            .flat_map(|(_, attributes)| attributes)
+            .collect()
+    }
 }
 
 fn handle_sync(block: &eth::v2::Block, tx_changes: &mut HashMap<Vec<u8>, PartialChanges>) {
     for tx in block.transactions() {
         for call in tx.calls.iter() {
-            let entity_changes = if call.address.as_slice() == ST_ETH_ADDRESS {
+            let (entity_changes, balance_changes) = if call.address == ST_ETH_ADDRESS {
                 st_eth_entity_changes(call)
-            } else if call.address.as_slice() == WST_ETH_ADDRESS {
-                wst_eth_entity_changes(call)
+            } else if call.address == WST_ETH_ADDRESS {
+                (wst_eth_entity_changes(call), HashMap::new())
             } else {
-                HashMap::new()
+                (HashMap::new(), HashMap::new())
             };
 
             if entity_changes.is_empty() {
@@ -120,11 +137,16 @@ fn handle_sync(block: &eth::v2::Block, tx_changes: &mut HashMap<Vec<u8>, Partial
                 .or_insert_with(|| PartialChanges {
                     transaction: tx.into(),
                     entity_changes: HashMap::new(),
+                    balance_changes: HashMap::new(),
                 });
 
             tx_change
                 .entity_changes
                 .extend(entity_changes);
+
+            tx_change
+                .balance_changes
+                .extend(balance_changes);
         }
     }
 }
@@ -154,8 +176,13 @@ fn staking_status_and_limit(storage_change: &StorageChange) -> (StakingStatus, B
     }
 }
 
-fn st_eth_entity_changes(call: &Call) -> HashMap<ComponentKey<String>, Attribute> {
+fn st_eth_entity_changes(
+    call: &Call,
+) -> (HashMap<ComponentKey<String>, Attribute>, HashMap<ComponentKey<Vec<u8>>, BalanceChange>) {
     let mut entity_changes: HashMap<ComponentKey<String>, Attribute> = HashMap::new();
+
+    let mut balance_changes = HashMap::new();
+
     for storage_change in call.storage_changes.iter() {
         if storage_change.key == STORAGE_SLOT_TOTAL_SHARES {
             let (key, attr) =
@@ -164,7 +191,20 @@ fn st_eth_entity_changes(call: &Call) -> HashMap<ComponentKey<String>, Attribute
         } else if storage_change.key == STORAGE_SLOT_POOLED_ETH {
             let (key, attr) =
                 create_entity_change("total_pooled_eth", storage_change.new_value.clone(), false);
-            entity_changes.insert(key, attr);
+
+            entity_changes.insert(key, attr.clone());
+
+            balance_changes.insert(
+                ComponentKey::new(
+                    ETH_ADDRESS_COMPONENT_ID.to_owned(),
+                    "total_pooled_eth".as_bytes().to_owned(),
+                ),
+                BalanceChange {
+                    token: ETH_ADDRESS.into(),
+                    balance: attr.value,
+                    component_id: ETH_ADDRESS.to_vec(),
+                },
+            );
         } else if storage_change.key == STORAGE_SLOT_STAKE_LIMIT {
             let (staking_status, staking_limit) = staking_status_and_limit(storage_change);
             let (key, attr) =
@@ -175,7 +215,7 @@ fn st_eth_entity_changes(call: &Call) -> HashMap<ComponentKey<String>, Attribute
             entity_changes.insert(key, attr);
         };
     }
-    entity_changes
+    (entity_changes, balance_changes)
 }
 
 fn wst_eth_entity_changes(call: &Call) -> HashMap<ComponentKey<String>, Attribute> {
