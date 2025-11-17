@@ -88,7 +88,7 @@ tycho-ethereum = { workspace = true }
 # EVM dependencies
 foundry-block-explorers = { version = "0.22.0", optional = true }
 alloy = { workspace = true, features = ["sol-types", "rand"], optional = true }
-revm = { version = "29.0.1", features = ["alloydb", "serde"], optional = true }
+revm = { version = "29.0.1", features = ["alloydb", "serde", "optional_eip3607"], optional = true }
 revm-inspectors = { version = "0.30.0", features = ["serde"], optional = true }
 num-bigint = { workspace = true }
 tokio-stream = "0.1.16"

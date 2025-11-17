@@ -124,7 +124,7 @@ where
 
         let mut cfg_env: CfgEnv<SpecId> = CfgEnv::new_with_spec(SpecId::PRAGUE);
         cfg_env.disable_nonce_check = true;
-        // EIP-3607 disabled by default in newer revm versions
+        cfg_env.disable_eip3607 = true;
 
         let context = Context::mainnet()
             .with_cfg(cfg_env)
