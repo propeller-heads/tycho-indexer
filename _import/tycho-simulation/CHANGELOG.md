@@ -1,3 +1,10 @@
+## [0.196.5](https://github.com/propeller-heads/tycho-simulation/compare/0.196.4...0.196.5) (2025-11-14)
+
+
+### Bug Fixes
+
+* Don't increase the block number +1 to simulate execution ([bc2c28e](https://github.com/propeller-heads/tycho-simulation/commit/bc2c28e5006aa4872c86c38eef3c0cdcd9b876b5))
+
 ## [0.196.4](https://github.com/propeller-heads/tycho-simulation/compare/0.196.3...0.196.4) (2025-11-14)
 
 
