@@ -94,7 +94,9 @@ impl CallTraceDecoder {
     }
 
     /// Create a decoder with configuration
-    pub async fn with_config(config: &TraceConfig) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn with_config(
+        config: &TraceConfig,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let mut decoder = Self::new();
 
         // Add custom labels from config
@@ -150,7 +152,7 @@ impl CallTraceDecoder {
     pub async fn identify_trace(
         &mut self,
         arena: &CallTraceArena,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Collect unknown addresses
         let unknown_addresses: Vec<Address> = arena
             .nodes()
@@ -228,7 +230,7 @@ impl CallTraceDecoder {
     pub async fn decode_arena(
         &mut self,
         arena: &mut CallTraceArena,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // First identify unknown addresses and signatures
         self.identify_trace(arena).await?;
 

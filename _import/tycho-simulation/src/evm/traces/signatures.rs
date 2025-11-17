@@ -1,4 +1,7 @@
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    time::Duration,
+};
 
 use alloy::{
     json_abi::{Event, Function},
@@ -6,7 +9,7 @@ use alloy::{
 };
 use reqwest::Client;
 use serde::Deserialize;
-use tokio::time::sleep;
+use tokio::{sync::RwLock, time::sleep};
 
 /// Response from 4byte.directory API for function signatures
 #[derive(Debug, Deserialize)]
@@ -34,28 +37,36 @@ struct EventSignature {
 pub struct SignaturesIdentifier {
     client: Client,
     /// Cache for function signatures
-    function_cache: HashMap<Selector, Function>,
+    function_cache: RwLock<HashMap<Selector, Function>>,
     /// Cache for event signatures
-    event_cache: HashMap<B256, Event>,
+    event_cache: RwLock<HashMap<B256, Event>>,
     /// Whether to work in offline mode
     offline: bool,
 }
 
 impl SignaturesIdentifier {
     /// Create a new signature identifier
-    pub fn new(offline: bool) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(offline: bool) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let client = Client::builder()
             .timeout(Duration::from_secs(10))
             .build()?;
 
-        Ok(Self { client, function_cache: HashMap::new(), event_cache: HashMap::new(), offline })
+        Ok(Self {
+            client,
+            function_cache: RwLock::new(HashMap::new()),
+            event_cache: RwLock::new(HashMap::new()),
+            offline,
+        })
     }
 
     /// Identify a function by its selector
-    pub async fn identify_function(&mut self, selector: Selector) -> Option<Function> {
+    pub async fn identify_function(&self, selector: Selector) -> Option<Function> {
         // Check cache first
-        if let Some(func) = self.function_cache.get(&selector) {
-            return Some(func.clone());
+        {
+            let lock_guard = self.function_cache.read().await;
+            if let Some(func) = lock_guard.get(&selector) {
+                return Some(func.clone());
+            }
         }
 
         // Don't make network calls if offline
@@ -78,8 +89,8 @@ impl SignaturesIdentifier {
                 {
                     if let Some(sig) = data.results.first() {
                         if let Ok(function) = Function::parse(&sig.text_signature) {
-                            self.function_cache
-                                .insert(selector, function.clone());
+                            let mut lock_guard = self.function_cache.write().await;
+                            lock_guard.insert(selector, function.clone());
                             return Some(function);
                         }
                     }
@@ -94,10 +105,13 @@ impl SignaturesIdentifier {
     }
 
     /// Identify an event by its topic hash
-    pub async fn identify_event(&mut self, topic: B256) -> Option<Event> {
+    pub async fn identify_event(&self, topic: B256) -> Option<Event> {
         // Check cache first
-        if let Some(event) = self.event_cache.get(&topic) {
-            return Some(event.clone());
+        {
+            let cache_guard = self.event_cache.read().await;
+            if let Some(event) = cache_guard.get(&topic) {
+                return Some(event.clone());
+            }
         }
 
         // Don't make network calls if offline
@@ -120,8 +134,8 @@ impl SignaturesIdentifier {
                 {
                     if let Some(sig) = data.results.first() {
                         if let Ok(event) = Event::parse(&sig.text_signature) {
-                            self.event_cache
-                                .insert(topic, event.clone());
+                            let mut cache_guard = self.event_cache.write().await;
+                            cache_guard.insert(topic, event.clone());
                             return Some(event);
                         }
                     }
@@ -137,9 +151,9 @@ impl SignaturesIdentifier {
 
     /// Identify multiple signatures at once
     pub async fn identify_batch(
-        &mut self,
+        &self,
         selectors: &[SelectorKind],
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if self.offline {
             return Ok(());
         }
@@ -162,28 +176,30 @@ impl SignaturesIdentifier {
             .collect();
 
         // Fetch functions
-        for selector in functions {
-            if !self
-                .function_cache
-                .contains_key(&selector)
-            {
-                if let Some(func) = self.identify_function(selector).await {
-                    self.function_cache
-                        .insert(selector, func);
+        {
+            let mut cache_guard = self.function_cache.write().await;
+            for selector in functions {
+                if let Entry::Vacant(e) = cache_guard.entry(selector) {
+                    if let Some(func) = self.identify_function(selector).await {
+                        e.insert(func);
+                    }
+                    // Rate limiting - don't overwhelm 4byte.directory
+                    sleep(Duration::from_millis(100)).await;
                 }
-                // Rate limiting - don't overwhelm 4byte.directory
-                sleep(Duration::from_millis(100)).await;
             }
         }
 
         // Fetch events
-        for topic in events {
-            if !self.event_cache.contains_key(&topic) {
-                if let Some(event) = self.identify_event(topic).await {
-                    self.event_cache.insert(topic, event);
+        {
+            let mut cache_guard = self.event_cache.write().await;
+            for topic in events {
+                if let Entry::Vacant(e) = cache_guard.entry(topic) {
+                    if let Some(event) = self.identify_event(topic).await {
+                        e.insert(event);
+                    }
+                    // Rate limiting
+                    sleep(Duration::from_millis(100)).await;
                 }
-                // Rate limiting
-                sleep(Duration::from_millis(100)).await;
             }
         }
 

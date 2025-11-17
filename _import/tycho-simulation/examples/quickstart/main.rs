@@ -20,9 +20,9 @@ use alloy::{
     signers::{local::PrivateKeySigner, SignerSync},
     sol_types::{eip712_domain, SolStruct, SolValue},
 };
+use alloy_chains::NamedChain;
 use clap::Parser;
 use dialoguer::{theme::ColorfulTheme, Select};
-use foundry_config::NamedChain;
 use futures::StreamExt;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;

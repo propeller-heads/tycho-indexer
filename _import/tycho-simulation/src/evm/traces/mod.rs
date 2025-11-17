@@ -10,6 +10,7 @@ use decoder::CallTraceDecoder;
 use renderer::render_trace_arena;
 // Re-export only what's needed by simulation.rs
 use revm_inspectors::tracing::CallTraceArena;
+pub use signatures::SignaturesIdentifier;
 
 /// Type alias for the traces collection (internal use only)
 type Traces = Vec<CallTraceArena>;
@@ -28,7 +29,7 @@ pub(crate) async fn handle_traces(
     mut result: TraceResult,
     etherscan_api_key: Option<String>,
     chain: tycho_common::models::Chain,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let offline = etherscan_api_key.is_none();
     let trace_config = TraceConfig::new(chain)
         .with_etherscan_api_key(etherscan_api_key.unwrap_or_default())
@@ -52,7 +53,7 @@ pub(crate) async fn handle_traces(
 async fn print_traces(
     result: &mut TraceResult,
     _decoder: &CallTraceDecoder, // Decoder already applied in handle_traces
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let traces = result
         .traces
         .as_ref()

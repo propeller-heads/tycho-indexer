@@ -53,7 +53,9 @@ pub struct EtherscanIdentifier {
 
 impl EtherscanIdentifier {
     /// Creates a new Etherscan identifier
-    pub fn new(config: &TraceConfig) -> Result<Option<Self>, Box<dyn std::error::Error>> {
+    pub fn new(
+        config: &TraceConfig,
+    ) -> Result<Option<Self>, Box<dyn std::error::Error + Send + Sync>> {
         // Don't use Etherscan if offline or no API key
         if config.offline || !config.can_use_etherscan() {
             return Ok(None);
