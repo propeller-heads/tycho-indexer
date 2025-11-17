@@ -53,8 +53,4 @@ impl RPCError {
             source: error,
         }))
     }
-
-    pub fn should_retry(&self) -> bool {
-        matches!(self, Self::RequestError(_))
-    }
 }
