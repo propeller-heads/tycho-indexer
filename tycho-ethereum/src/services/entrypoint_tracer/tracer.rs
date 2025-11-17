@@ -914,7 +914,6 @@ mod tests {
             .await;
 
         assert_eq!(traced_entry_points.len(), 1);
-        dbg!(&traced_entry_points[0]);
         assert!(matches!(traced_entry_points[0], Err(RPCError::RequestError(_))));
     }
 
