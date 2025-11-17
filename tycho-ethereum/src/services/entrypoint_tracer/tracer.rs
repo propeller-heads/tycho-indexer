@@ -764,7 +764,94 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
 
-        assert_eq!(traced_entry_points, vec![]);
+        assert_eq!(
+            traced_entry_points,
+            vec![TracedEntryPoint {
+                entry_point_with_params: entry_points[0].clone(),
+                detection_block_hash: Bytes::from_str(
+                    "0xf5e2c5bc64ba61e1230e34b2d5d8906416633100919b477d17a7c6fd69cde31d"
+                )
+                .unwrap(),
+                tracing_result: TracingResult::new(
+                    HashSet::from([
+                        (
+                            Bytes::from_str("0x1d8f8f00cfa6758d7be78336684788fb0ee0fa46")
+                                .unwrap(),
+                            AddressStorageLocation::new(
+                                Bytes::from_str(
+                                    "0x8c4f7d2b56bbfa7011cbc31adfb95271b91aa0cce467b7912ad0d1579d2335a7"
+                                )
+                                .unwrap(),
+                                12
+                            ),
+                        ),
+                        (
+                            Bytes::from_str("0xae78736cd615f374d3085123a210448e74fc6393")
+                                .unwrap(),
+                            AddressStorageLocation::new(
+                                Bytes::from_str(
+                                    "0x0000000000000000000000000000000000000000000000000000000000000000"
+                                )
+                                .unwrap(),
+                                11
+                            ),
+                        ),
+                        (
+                            Bytes::from_str("0x6cc65bf618f55ce2433f9d8d827fc44117d81399")
+                                .unwrap(),
+                            AddressStorageLocation::new(
+                                Bytes::from_str(
+                                    "0x0000000000000000000000000000000000000000000000000000000000000000"
+                                )
+                                .unwrap(),
+                                11
+                            ),
+                        ),
+                    ]),
+                    HashMap::from([
+                        (
+                            Bytes::from_str("0xae78736cd615f374d3085123a210448e74fc6393")
+                                .unwrap(),
+                            HashSet::from([Bytes::from_str(
+                                "0x0000000000000000000000000000000000000000000000000000000000000000"
+                            )
+                            .unwrap(),])
+                        ),
+                        (
+                            Bytes::from_str("0x6cc65bf618f55ce2433f9d8d827fc44117d81399")
+                                .unwrap(),
+                            HashSet::from([Bytes::from_str(
+                                "0x0000000000000000000000000000000000000000000000000000000000000000"
+                            )
+                            .unwrap(),])
+                        ),
+                        (
+                            Bytes::from_str("0x1a8f81c256aee9c640e14bb0453ce247ea0dfe6f")
+                                .unwrap(),
+                            HashSet::new()
+                        ),
+                        (
+                            Bytes::from_str("0x1d8f8f00cfa6758d7be78336684788fb0ee0fa46")
+                                .unwrap(),
+                            HashSet::from([
+                                Bytes::from_str(
+                                    "0x24661fa43cfcbbce20f500b5c12b4977ba40531f28ba0cac1a442597c665df81"
+                                )
+                                .unwrap(),
+                                Bytes::from_str(
+                                    "0x8c4f7d2b56bbfa7011cbc31adfb95271b91aa0cce467b7912ad0d1579d2335a7"
+                                )
+                                .unwrap(),
+                                Bytes::from_str(
+                                    "0x8a5e638174d8aca32e35588efcfb56d7d7c41fa53d63eea9543249b914ad2cf8"
+                                )
+                                .unwrap(),
+                            ])
+                        ),
+                    ]),
+                ),
+            },]
+        );
     }
 
     #[tokio::test]
