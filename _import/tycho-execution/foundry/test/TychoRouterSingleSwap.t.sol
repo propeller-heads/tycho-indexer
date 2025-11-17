@@ -203,16 +203,13 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
 
         IAllowanceTransfer.PermitSingle memory emptyPermitSingle =
-        IAllowanceTransfer.PermitSingle({
-            details: IAllowanceTransfer.PermitDetails({
-                token: address(0),
-                amount: 0,
-                expiration: 0,
-                nonce: 0
-            }),
-            spender: address(0),
-            sigDeadline: 0
-        });
+            IAllowanceTransfer.PermitSingle({
+                details: IAllowanceTransfer.PermitDetails({
+                    token: address(0), amount: 0, expiration: 0, nonce: 0
+                }),
+                spender: address(0),
+                sigDeadline: 0
+            });
 
         bytes memory protocolData = encodeUniswapV2Swap(
             WETH_ADDR,
@@ -338,8 +335,9 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
 
         vm.startPrank(ALICE);
         IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
-        bytes memory callData =
-            loadCallDataFromFile("test_single_swap_strategy_encoder_no_permit2");
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_swap_strategy_encoder_no_permit2"
+        );
         (bool success,) = tychoRouterAddr.call(callData);
 
         vm.stopPrank();

@@ -42,8 +42,7 @@ contract MaverickV2Executor is IExecutor, RestrictTransferFrom {
 
         bool isTokenAIn = pool.tokenA() == tokenIn;
         int32 tickLimit = isTokenAIn ? type(int32).max : type(int32).min;
-        IMaverickV2Pool.SwapParams memory swapParams = IMaverickV2Pool
-            .SwapParams({
+        IMaverickV2Pool.SwapParams memory swapParams = IMaverickV2Pool.SwapParams({
             amount: givenAmount,
             tokenAIn: isTokenAIn,
             exactOutput: false,

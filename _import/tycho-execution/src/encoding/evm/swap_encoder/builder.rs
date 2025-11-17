@@ -6,8 +6,8 @@ use crate::encoding::{
     errors::EncodingError,
     evm::swap_encoder::swap_encoders::{
         BalancerV2SwapEncoder, BalancerV3SwapEncoder, BebopSwapEncoder, CurveSwapEncoder,
-        EkuboSwapEncoder, FluidV1SwapEncoder, HashflowSwapEncoder, MaverickV2SwapEncoder, SlipstreamsSwapEncoder,
-        UniswapV2SwapEncoder, UniswapV3SwapEncoder, UniswapV4SwapEncoder,
+        EkuboSwapEncoder, FluidV1SwapEncoder, HashflowSwapEncoder, MaverickV2SwapEncoder,
+        SlipstreamsSwapEncoder, UniswapV2SwapEncoder, UniswapV3SwapEncoder, UniswapV4SwapEncoder,
     },
     swap_encoder::SwapEncoder,
 };

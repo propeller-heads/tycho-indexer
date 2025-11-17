@@ -11,19 +11,23 @@ import {
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {
-    Currency, CurrencyLibrary
+    Currency,
+    CurrencyLibrary
 } from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {PathKey} from "@uniswap/v4-periphery/src/libraries/PathKey.sol";
-import {IUnlockCallback} from
-    "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
-import {SafeCast as V4SafeCast} from
-    "@uniswap/v4-core/src/libraries/SafeCast.sol";
-import {TransientStateLibrary} from
-    "@uniswap/v4-core/src/libraries/TransientStateLibrary.sol";
+import {
+    IUnlockCallback
+} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
+import {
+    SafeCast as V4SafeCast
+} from "@uniswap/v4-core/src/libraries/SafeCast.sol";
+import {
+    TransientStateLibrary
+} from "@uniswap/v4-core/src/libraries/TransientStateLibrary.sol";
 import "../RestrictTransferFrom.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "../../lib/bytes/LibPrefixLengthEncodedByteArray.sol";
@@ -115,7 +119,9 @@ contract UniswapV4Executor is
             PathKey[] memory path = new PathKey[](pools.length);
             for (uint256 i = 0; i < pools.length; i++) {
                 path[i] = PathKey({
-                    intermediateCurrency: Currency.wrap(pools[i].intermediaryToken),
+                    intermediateCurrency: Currency.wrap(
+                        pools[i].intermediaryToken
+                    ),
                     fee: pools[i].fee,
                     tickSpacing: pools[i].tickSpacing,
                     hooks: IHooks(pools[i].hook),
@@ -305,8 +311,8 @@ contract UniswapV4Executor is
         Currency currencyIn = zeroForOne ? poolKey.currency0 : poolKey.currency1;
         _settle(currencyIn, amountIn, transferType);
         uint128 amountOut = _swap(
-            poolKey, zeroForOne, -int256(uint256(amountIn)), hookData
-        ).toUint128();
+                poolKey, zeroForOne, -int256(uint256(amountIn)), hookData
+            ).toUint128();
 
         Currency currencyOut =
             zeroForOne ? poolKey.currency1 : poolKey.currency0;
@@ -343,11 +349,11 @@ contract UniswapV4Executor is
                     pathKey.getPoolAndSwapDirection(swapCurrencyIn);
                 // The output delta will always be positive, except for when interacting with certain hook pools
                 amountOut = _swap(
-                    poolKey,
-                    zeroForOne,
-                    -int256(uint256(swapAmountIn)),
-                    pathKey.hookData
-                ).toUint128();
+                        poolKey,
+                        zeroForOne,
+                        -int256(uint256(swapAmountIn)),
+                        pathKey.hookData
+                    ).toUint128();
 
                 swapAmountIn = amountOut;
                 swapCurrencyIn = pathKey.intermediateCurrency;

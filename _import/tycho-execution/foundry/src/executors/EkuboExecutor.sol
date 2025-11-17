@@ -102,15 +102,18 @@ contract EkuboExecutor is
         }
     }
 
-    function payCallback(uint256, address /*token*/ ) external coreOnly {
+    function payCallback(
+        uint256,
+        address /*token*/
+    )
+        external
+        coreOnly
+    {
         // Without selector and locker id
         _payCallback(msg.data[36:]);
     }
 
-    function _lock(bytes memory data)
-        internal
-        returns (uint128 swappedAmount)
-    {
+    function _lock(bytes memory data) internal returns (uint128 swappedAmount) {
         address target = address(core);
 
         // slither-disable-next-line assembly

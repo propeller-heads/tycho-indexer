@@ -183,7 +183,9 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
     {
         return IHashflowRouter.RFQTQuote({
             pool: address(0x5d8853028fbF6a2da43c7A828cc5f691E9456B44),
-            externalAccount: address(0x9bA0CF1588E1DFA905eC948F7FE5104dD40EDa31),
+            externalAccount: address(
+                0x9bA0CF1588E1DFA905eC948F7FE5104dD40EDa31
+            ),
             trader: address(ALICE),
             effectiveTrader: address(ALICE),
             baseToken: WETH_ADDR,
@@ -243,7 +245,9 @@ contract HashflowExecutorNativeTest is Constants, HashflowUtils {
     {
         return IHashflowRouter.RFQTQuote({
             pool: address(0x713DC4Df480235dBe2fB766E7120Cbd4041Dcb58),
-            externalAccount: address(0x111BB8c3542F2B92fb41B8d913c01D3788431111),
+            externalAccount: address(
+                0x111BB8c3542F2B92fb41B8d913c01D3788431111
+            ),
             trader: address(ALICE),
             effectiveTrader: address(ALICE),
             baseToken: address(0x0000000000000000000000000000000000000000),
