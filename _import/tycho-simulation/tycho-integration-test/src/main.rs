@@ -95,10 +95,6 @@ struct Cli {
     #[arg(long, default_value_t = 600)]
     skip_messages_duration: u64,
 
-    /// Time to wait (in seconds) for block N+1 to exist before executing debug_traceCall
-    #[arg(long, default_value_t = 12)]
-    block_wait_time: u64,
-
     /// List of component IDs to always include in tests every block if not already selected
     #[arg(long, value_delimiter = ',')]
     always_test_components: Vec<String>,
@@ -478,18 +474,13 @@ async fn process_update(
         return Ok(())
     }
 
-    let results = match simulate_swap_transaction(
-        &rpc_tools,
-        block_execution_info.clone(),
-        &block,
-        cli.block_wait_time,
-        None,
-    )
-    .await
-    {
-        Ok(results) => results,
-        Err((e, _, _)) => return Err(e),
-    };
+    let results =
+        match simulate_swap_transaction(&rpc_tools, block_execution_info.clone(), &block, None)
+            .await
+        {
+            Ok(results) => results,
+            Err((e, _, _)) => return Err(e),
+        };
 
     let mut n_reverts = 0;
     let mut n_failures = 0;

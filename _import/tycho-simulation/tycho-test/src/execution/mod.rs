@@ -38,7 +38,6 @@ pub async fn simulate_swap_transaction(
     rpc_tools: &RPCTools,
     execution_info: HashMap<String, TychoExecutionInput>,
     block: &Block,
-    block_wait_time_secs: u64,
     router_overwrites_data: Option<RouterOverwritesData>,
 ) -> Result<
     HashMap<String, TychoExecutionResult>,
@@ -147,7 +146,7 @@ pub async fn simulate_swap_transaction(
 
         async move {
             match simulator
-                .batch_simulate_with_trace(inputs, block, block_wait_time_secs)
+                .batch_simulate_with_trace(inputs, block)
                 .await
             {
                 Ok(res) => Ok(res),
