@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Duration};
+use std::collections::HashMap;
 
 use alloy::{
     hex,
@@ -184,7 +184,6 @@ impl ExecutionSimulator {
         &mut self,
         inputs: HashMap<String, SimulationInput>,
         block: &Block,
-        block_wait_time_secs: u64,
     ) -> Result<HashMap<String, SimulationResult>, Box<dyn std::error::Error>> {
         // Configure tracing options - use callTracer for better formatted results
         let tracing_options = GethDebugTracingOptions {
@@ -203,9 +202,6 @@ impl ExecutionSimulator {
 
         let client = ClientBuilder::default().http(self.rpc_url.parse()?);
 
-        // Wait for block N+1 to exist by waiting the configured block time
-        let block_time = Duration::from_secs(block_wait_time_secs);
-        tokio::time::sleep(block_time).await;
         let mut batch = client.new_batch();
 
         let mut futures = Vec::new();
