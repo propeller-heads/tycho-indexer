@@ -18,8 +18,9 @@ use crate::modules::map_component_balance::{ETH_ADDRESS, ST_ETH_ADDRESS, WST_ETH
 /// This method instantiates hardcoded ProtocolComponents for the first block,
 ///  with a unique ids as well as all necessary metadata for routing and encoding.
 #[substreams::handlers::map]
-fn map_protocol_components(block: eth::v2::Block) -> Result<BlockTransactionProtocolComponents> {
-    // TODO: add flag to emit only once
+fn map_protocol_components(
+    params: String,
+    block: eth::v2::Block,
     Ok(BlockTransactionProtocolComponents {
         tx_components: block
             .transactions()
