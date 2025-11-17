@@ -654,6 +654,10 @@ impl EthereumRpcClient {
                              token,
                              test_value,
                          }| {
+                            // Format slot and value as 32-byte hex strings
+                            let test_value_hex = format!("0x{:064x}", test_value);
+                            let slot_hex = format!("0x{:064x}", slot);
+
                             let tracer_params = json!([
                                 {
                                     "to": token.to_string(),
@@ -663,7 +667,7 @@ impl EthereumRpcClient {
                                 {
                                     storage_address.to_string(): {
                                         "stateDiff": {
-                                            slot.to_string(): test_value
+                                            slot_hex: test_value_hex
                                         }
                                     }
                                 }
