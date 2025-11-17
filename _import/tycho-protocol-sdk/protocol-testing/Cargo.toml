@@ -8,9 +8,9 @@ glob = "0.3.0"
 miette = { version = "7.6.0", features = ["fancy"] }
 # Logging & Tracing
 tracing = "0.1.37"
-tycho-simulation = { git = "https://github.com/propeller-heads/tycho-simulation.git", tag = "0.196.1", features = ["evm"] }
-tycho-test = { git = "https://github.com/propeller-heads/tycho-simulation.git", package = "tycho-test", tag = "0.196.1" }
-tycho-execution = ">=0.129.1"
+tycho-simulation = { git = "https://github.com/propeller-heads/tycho-simulation.git", tag = "0.196.4", features = ["evm"] }
+tycho-test = { git = "https://github.com/propeller-heads/tycho-simulation.git", tag = "0.196.4" }
+tycho-execution = ">=0.134.0"
 num-bigint = "0.4"
 num-traits = "0.2"
 num-rational = "0.4.2"

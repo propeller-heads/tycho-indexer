@@ -66,12 +66,11 @@ impl TychoClient {
     ) -> Result<Vec<ProtocolComponent>, RpcError> {
         let request = ProtocolComponentsRequestBody::system_filtered(protocol_system, None, chain);
 
-        let chunk_size = 100;
         let concurrency = 1;
 
         let response = self
             .http_client
-            .get_protocol_components_paginated(&request, chunk_size, concurrency)
+            .get_protocol_components_paginated(&request, None, concurrency)
             .await?;
 
         Ok(response.protocol_components)
@@ -85,10 +84,12 @@ impl TychoClient {
     ) -> Result<HashMap<Bytes, Token>, RpcError> {
         debug!("Loading tokens from Tycho...");
 
+        let concurrency = 1;
+
         #[allow(clippy::mutable_key_type)]
         let res = self
             .http_client
-            .get_all_tokens(chain, min_quality, max_days_since_last_trade, 3_000)
+            .get_all_tokens(chain, min_quality, max_days_since_last_trade, None, concurrency)
             .await?
             .into_iter()
             .map(|token| {
@@ -145,12 +146,11 @@ impl TychoClient {
             SnapshotParameters::new(chain, protocol_system, components, contract_ids, block_number)
                 .entrypoints(entrypoints);
 
-        let chunk_size = 100;
         let concurrency = 1;
 
         let response = self
             .http_client
-            .get_snapshots(&params, chunk_size, concurrency)
+            .get_snapshots(&params, None, concurrency)
             .await?;
 
         Ok(response)
