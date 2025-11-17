@@ -1,3 +1,11 @@
+## [0.113.1](https://github.com/propeller-heads/tycho-indexer/compare/0.113.0...0.113.1) (2025-11-17)
+
+
+### Bug Fixes
+
+* have both compressed and uncompressed pagination limits equal ([4e50026](https://github.com/propeller-heads/tycho-indexer/commit/4e5002618ea7a7785aa797f474007032f2c9b500))
+* have both compressed and uncompressed pagination limits equal ([#780](https://github.com/propeller-heads/tycho-indexer/issues/780)) ([81285fc](https://github.com/propeller-heads/tycho-indexer/commit/81285fcca7fbdf979421fc1d0d768b27a724dc29))
+
 ## [0.113.0](https://github.com/propeller-heads/tycho-indexer/compare/0.112.0...0.113.0) (2025-11-14)
 
 
