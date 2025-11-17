@@ -865,7 +865,6 @@ mod tests {
 
         // Verify token1 result
         let token1_result = result.get(&token1).unwrap();
-        println!("{:?}", token1_result);
         assert!(token1_result.is_ok());
 
         // Verify token2 result
