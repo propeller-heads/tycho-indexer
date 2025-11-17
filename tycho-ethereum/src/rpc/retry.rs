@@ -116,9 +116,7 @@ impl<E: std::borrow::Borrow<RawValue>> RpcErrorExt for RpcError<TransportErrorKi
 
 /// Configuration for RPC retry behavior with exponential backoff.
 #[derive(Clone, Debug)]
-pub struct RetryPolicy {
-    policy: ExponentialBackoff,
-}
+pub struct RetryPolicy(ExponentialBackoff);
 
 impl Default for RetryPolicy {
     /// Creates a new retry policy with default values:
@@ -127,18 +125,22 @@ impl Default for RetryPolicy {
     /// - Max interval: 30s
     /// - Max elapsed time: 125s
     fn default() -> Self {
-        Self {
-            policy: ExponentialBackoffBuilder::new()
+        Self(
+            ExponentialBackoffBuilder::new()
                 .with_initial_interval(Duration::from_millis(250))
                 .with_multiplier(1.75)
                 .with_max_interval(Duration::from_secs(30))
                 .with_max_elapsed_time(Some(Duration::from_secs(125)))
                 .build(),
-        }
+        )
     }
 }
 
 impl RetryPolicy {
+    pub fn new(policy: ExponentialBackoff) -> Self {
+        Self(policy)
+    }
+
     /// Creates a retry policy with custom configuration.
     pub fn with_config(
         initial_interval: Duration,
@@ -153,7 +155,7 @@ impl RetryPolicy {
             .with_max_elapsed_time(Some(max_elapsed_time))
             .build();
 
-        Self { policy }
+        Self(policy)
     }
 
     /// Creates a retry policy optimized for testing (very short intervals).
@@ -166,7 +168,7 @@ impl RetryPolicy {
             .with_max_elapsed_time(Some(Duration::from_millis(50)))
             .build();
 
-        Self { policy }
+        Self(policy)
     }
 
     /// Executes an RPC request with automatic retry on transient failures.
@@ -195,7 +197,7 @@ impl RetryPolicy {
     /// Gets a clone of the underlying backoff policy.
     fn policy(&self) -> ExponentialBackoff {
         // TODO: consider if we should share state for concurrent retries from multiple tasks
-        self.policy.clone()
+        self.0.clone()
     }
 }
 
