@@ -6,7 +6,7 @@ use crate::encoding::{
     errors::EncodingError,
     evm::swap_encoder::swap_encoders::{
         BalancerV2SwapEncoder, BalancerV3SwapEncoder, BebopSwapEncoder, CurveSwapEncoder,
-        EkuboSwapEncoder, HashflowSwapEncoder, MaverickV2SwapEncoder, SlipstreamsSwapEncoder,
+        EkuboSwapEncoder, FluidV1SwapEncoder, HashflowSwapEncoder, MaverickV2SwapEncoder, SlipstreamsSwapEncoder,
         UniswapV2SwapEncoder, UniswapV3SwapEncoder, UniswapV4SwapEncoder,
     },
     swap_encoder::SwapEncoder,
@@ -97,6 +97,11 @@ impl SwapEncoderBuilder {
                 Ok(Box::new(BebopSwapEncoder::new(self.executor_address, self.chain, self.config)?))
             }
             "rfq:hashflow" => Ok(Box::new(HashflowSwapEncoder::new(
+                self.executor_address,
+                self.chain,
+                self.config,
+            )?)),
+            "fluid_v1" => Ok(Box::new(FluidV1SwapEncoder::new(
                 self.executor_address,
                 self.chain,
                 self.config,

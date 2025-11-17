@@ -11,6 +11,12 @@ contract BaseConstants {
     // Uniswap v2
     address USDC_MAG7_POOL = 0x739c2431670A12E2cF8e11E3603eB96e6728a789;
 
+    //Pancakeswap v3
+    address PANCAKESWAPV3_cbBTC_USDC_POOL =
+        0xb94b22332ABf5f89877A14Cc88f2aBC48c34B3Df;
+
+    address PANCAKESWAPV3_DEPLOYER = 0x41ff9AA7e16B8B1a8a8dc4f0eFacd93D02d071c9;
+    
     // Aerodrome Slipstreams Factory
     address SLIPSTREAMS_FACTORY_BASE =
         0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A;
@@ -21,7 +27,8 @@ contract BaseConstants {
 
 contract Constants is Test, BaseConstants {
     address ADMIN = makeAddr("admin"); //admin=us
-    address BOB = makeAddr("bob"); //bob=someone!=us
+    // Changed this since someone deployed a drainer contract to makeAddr("bob")
+    address BOB = makeAddr("bob*"); //bob=someone!=us
     address FUND_RESCUER = makeAddr("fundRescuer");
     address EXECUTOR_SETTER = makeAddr("executorSetter");
     address ALICE = 0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2;
@@ -157,6 +164,9 @@ contract Constants is Test, BaseConstants {
 
     // Uniswap v4 pool manager
     address POOL_MANAGER = 0x000000000004444c5dc75cB358380D2e3dE08A90;
+
+    // Fluid liquidity contract on mainnet
+    address FLUIDV1_LIQUIDITY = 0x52Aa899454998Be5b000Ad077a46Bbe360F4e497;
 
     /**
      * @dev Deploys a dummy contract with non-empty bytecode

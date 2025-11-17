@@ -266,4 +266,36 @@ contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
 
         vm.stopPrank();
     }
+
+    // Base Network Test
+    // Make sure to set the RPC_URL to base network
+    function testSwapPancakeswapBaseNetwork() public {
+        vm.skip(true);
+        vm.rollFork(38001287);
+
+        // Deploy the executor specifically on this Base fork
+        UniswapV3ExecutorExposed basePancakeV3Exposed = new UniswapV3ExecutorExposed(
+            PANCAKESWAPV3_DEPLOYER,
+            PANCAKEV3_POOL_CODE_INIT_HASH,
+            PERMIT2_ADDRESS
+        );
+
+        uint256 amountIn = 1000 * 10 ** 6;
+        bool zeroForOne = true;
+        bytes memory protocolData = encodeUniswapV3Swap(
+            BASE_USDC,
+            BASE_cbBTC,
+            BOB,
+            PANCAKESWAPV3_cbBTC_USDC_POOL,
+            zeroForOne,
+            RestrictTransferFrom.TransferType.Transfer
+        );
+
+        deal(BASE_USDC, address(basePancakeV3Exposed), amountIn);
+
+        basePancakeV3Exposed.swap(amountIn, protocolData);
+
+        // 1000 USDC ~= 0.0095 BTC -> 1 BTC ~= 105k USDC ✅
+        assertEq(IERC20(BASE_cbBTC).balanceOf(BOB), 950567);
+    }
 }

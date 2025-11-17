@@ -18,7 +18,7 @@ pub fn router_address() -> Bytes {
 }
 
 pub fn bob_address() -> Bytes {
-    Bytes::from_str("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e").unwrap()
+    Bytes::from_str("0x9964bFf29BAa37B47604F3F3F51F3B3C5149d6DE").unwrap()
 }
 
 pub fn alice_address() -> Bytes {

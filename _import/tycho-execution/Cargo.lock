@@ -1885,6 +1885,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "deepsize"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1cdb987ec36f6bf7bfbea3f928b75590b736fc42af8e54d97592481351b2b96c"
+dependencies = [
+ "deepsize_derive",
+]
+
+[[package]]
+name = "deepsize_derive"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "990101d41f3bc8c1a45641024377ee284ecc338e5ecf3ea0f0e236d897c72796"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "der"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4760,14 +4780,15 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tycho-common"
-version = "0.92.1"
+version = "0.113.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ac58252d3ed149da0e865ad27e808d5b18905d85ea67b3e210c11a584c2f652"
+checksum = "9a5dc8a59ffcf22844d9ed2a6e6707a910f623ab20cd3760da0c3731620b092f"
 dependencies = [
  "anyhow",
  "async-trait",
  "bytes",
  "chrono",
+ "deepsize",
  "hex",
  "num-bigint",
  "rand 0.8.5",
@@ -4785,7 +4806,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.131.0"
+version = "0.135.0"
 dependencies = [
  "alloy",
  "async-trait",
