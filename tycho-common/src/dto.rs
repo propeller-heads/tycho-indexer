@@ -902,7 +902,8 @@ impl StateRequestBody {
     }
 }
 
-impl_pagination_limits!(StateRequestBody, compressed = 1200, uncompressed = 100);
+// impl_pagination_limits!(StateRequestBody, compressed = 1200, uncompressed = 100);
+impl_pagination_limits!(StateRequestBody, compressed = 100, uncompressed = 100);
 
 /// Response from Tycho server for a contract state request.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, DeepSizeOf)]
@@ -1164,7 +1165,8 @@ pub struct TokensRequestBody {
     pub chain: Chain,
 }
 
-impl_pagination_limits!(TokensRequestBody, compressed = 12900, uncompressed = 3000);
+// impl_pagination_limits!(TokensRequestBody, compressed = 12900, uncompressed = 3000);
+impl_pagination_limits!(TokensRequestBody, compressed = 3000, uncompressed = 3000);
 
 /// Response from Tycho server for a tokens request.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash, DeepSizeOf)]
@@ -1244,7 +1246,8 @@ pub struct ProtocolComponentsRequestBody {
     pub pagination: PaginationParams,
 }
 
-impl_pagination_limits!(ProtocolComponentsRequestBody, compressed = 2550, uncompressed = 500);
+// impl_pagination_limits!(ProtocolComponentsRequestBody, compressed = 2550, uncompressed = 500);
+impl_pagination_limits!(ProtocolComponentsRequestBody, compressed = 500, uncompressed = 500);
 
 // Implement PartialEq where tvl is considered equal if the difference is less than 1e-6
 impl PartialEq for ProtocolComponentsRequestBody {
@@ -1430,7 +1433,8 @@ pub struct ProtocolStateRequestBody {
     pub pagination: PaginationParams,
 }
 
-impl_pagination_limits!(ProtocolStateRequestBody, compressed = 360, uncompressed = 100);
+// impl_pagination_limits!(ProtocolStateRequestBody, compressed = 360, uncompressed = 100);
+impl_pagination_limits!(ProtocolStateRequestBody, compressed = 100, uncompressed = 100);
 
 impl ProtocolStateRequestBody {
     pub fn id_filtered<I, T>(ids: I) -> Self
