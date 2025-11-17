@@ -1,3 +1,18 @@
+## [0.135.0](https://github.com/propeller-heads/tycho-execution/compare/0.134.0...0.135.0) (2025-11-17)
+
+
+### Features
+
+* Implement FluidV1 encoder & executor ([fea0065](https://github.com/propeller-heads/tycho-execution/commit/fea0065bfe39f835189142517aff41a348a1b0db))
+
+
+### Bug Fixes
+
+* Correctly handle fluid sequential swaps ([8451944](https://github.com/propeller-heads/tycho-execution/commit/8451944ce4a6801988713867d0ab6cd2c4229a6f))
+* Handle selling eth on FluidV1 ([827c007](https://github.com/propeller-heads/tycho-execution/commit/827c0079c07a895198fb302a774c760d54b2230b))
+* tests after changing bob address ([58f9517](https://github.com/propeller-heads/tycho-execution/commit/58f9517338ae50976b71f68d88f1274b2440a163))
+* use native token address from Chain struct ([38d120a](https://github.com/propeller-heads/tycho-execution/commit/38d120a4a7786f240276046381171f6510df7ada))
+
 ## [0.134.0](https://github.com/propeller-heads/tycho-execution/compare/0.133.0...0.134.0) (2025-11-14)
 
 
