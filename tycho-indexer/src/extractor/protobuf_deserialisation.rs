@@ -359,10 +359,8 @@ impl TryFromMessage for TxWithChanges {
         let mut account_balance_changes: HashMap<Address, HashMap<Address, AccountBalance>> =
             HashMap::new();
         let mut entrypoints: HashMap<ComponentId, HashSet<EntryPoint>> = HashMap::new();
-        let mut entrypoint_params: HashMap<
-            EntryPointId,
-            HashSet<(TracingParams, Option<ComponentId>)>,
-        > = HashMap::new();
+        let mut entrypoint_params: HashMap<EntryPointId, HashSet<(TracingParams, ComponentId)>> =
+            HashMap::new();
 
         // Parse the new protocol components
         for change in msg.component_changes.into_iter() {
@@ -447,7 +445,14 @@ impl TryFromMessage for TxWithChanges {
                 .clone();
             let component_id = msg_entrypoint_params
                 .component_id
-                .clone();
+                // component id is now required, however for backwards compatibility with older
+                // substream packages we will not change the protobuf message struct to remove the
+                // 'optional' condition of the field. Instead we make the indexer panic if this ever
+                // happens. This should cause new integrations to find any errors with this during
+                // testing. We do not expect this to panic during normal operation for protocols
+                // that have passed our tests.
+                .clone()
+                .expect("Entrypoint params should have a component id");
             let tracing_data = TracingParams::try_from_message(msg_entrypoint_params)?;
             entrypoint_params
                 .entry(entrypoint_id)

@@ -195,7 +195,7 @@ impl From<dto::Block> for Block {
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, DeepSizeOf)]
 pub struct DCIUpdate {
     pub new_entrypoints: HashMap<ComponentId, HashSet<EntryPoint>>,
-    pub new_entrypoint_params: HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+    pub new_entrypoint_params: HashMap<EntryPointId, HashSet<(TracingParams, ComponentId)>>,
     pub trace_results: HashMap<EntryPointId, TracingResult>,
 }
 
@@ -209,7 +209,7 @@ pub struct TxWithChanges {
     pub balance_changes: HashMap<ComponentId, HashMap<Address, ComponentBalance>>,
     pub account_balance_changes: HashMap<Address, HashMap<Address, AccountBalance>>,
     pub entrypoints: HashMap<ComponentId, HashSet<EntryPoint>>,
-    pub entrypoint_params: HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+    pub entrypoint_params: HashMap<EntryPointId, HashSet<(TracingParams, ComponentId)>>,
 }
 
 impl TxWithChanges {
@@ -222,7 +222,7 @@ impl TxWithChanges {
         balance_changes: HashMap<ComponentId, HashMap<Address, ComponentBalance>>,
         account_balance_changes: HashMap<Address, HashMap<Address, AccountBalance>>,
         entrypoints: HashMap<ComponentId, HashSet<EntryPoint>>,
-        entrypoint_params: HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+        entrypoint_params: HashMap<EntryPointId, HashSet<(TracingParams, ComponentId)>>,
     ) -> Self {
         Self {
             tx,
@@ -812,7 +812,7 @@ pub mod fixtures {
                         None,
                         Bytes::from_str("0x000001ef").unwrap(),
                     )),
-                    Some(component.id.clone()),
+                    component.id.clone(),
                 )]),
             )]),
         );
@@ -884,7 +884,7 @@ pub mod fixtures {
                         None,
                         Bytes::from_str("0x000001").unwrap(),
                     )),
-                    None,
+                    component.id.clone(),
                 )]),
             )]),
         );

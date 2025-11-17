@@ -1628,7 +1628,7 @@ pub struct DCIUpdate {
     pub new_entrypoints: HashMap<ComponentId, HashSet<EntryPoint>>,
     /// Map of entrypoint id to the new entrypoint params associtated with it (and optionally the
     /// component linked to those params)
-    pub new_entrypoint_params: HashMap<String, HashSet<(TracingParams, Option<String>)>>,
+    pub new_entrypoint_params: HashMap<String, HashSet<(TracingParams, String)>>,
     /// Map of entrypoint id to its trace result
     pub trace_results: HashMap<String, TracingResult>,
 }
@@ -2027,7 +2027,7 @@ impl From<TracedEntryPointRequestResponse> for DCIUpdate {
                 new_entrypoint_params
                     .entry(entrypoint_id.clone())
                     .or_insert_with(HashSet::new)
-                    .insert((entrypoint.params, Some(component.clone())));
+                    .insert((entrypoint.params, component.clone()));
 
                 // Collect trace results
                 trace_results

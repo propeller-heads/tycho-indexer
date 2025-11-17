@@ -1419,7 +1419,7 @@ mod test {
                                 state_overrides: None,
                                 prune_addresses: None,
                             }),
-                            Some("Component1".to_string()),
+                            "Component1".to_string(),
                         )]),
                     )]),
                     trace_results: HashMap::from([(
