@@ -20,7 +20,8 @@ contract BaseConstants {
 
 contract Constants is Test, BaseConstants {
     address ADMIN = makeAddr("admin"); //admin=us
-    address BOB = makeAddr("bob"); //bob=someone!=us
+    // Changed this since someone deployed a drainer contract to makeAddr("bob")
+    address BOB = makeAddr("bob*"); //bob=someone!=us
     address FUND_RESCUER = makeAddr("fundRescuer");
     address EXECUTOR_SETTER = makeAddr("executorSetter");
     address ALICE = 0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2;
@@ -157,6 +158,9 @@ contract Constants is Test, BaseConstants {
 
     // Uniswap v4 pool manager
     address POOL_MANAGER = 0x000000000004444c5dc75cB358380D2e3dE08A90;
+
+    // Fluid liquidity contract on mainnet
+    address FLUIDV1_LIQUIDITY = 0x52Aa899454998Be5b000Ad077a46Bbe360F4e497;
 
     /**
      * @dev Deploys a dummy contract with non-empty bytecode

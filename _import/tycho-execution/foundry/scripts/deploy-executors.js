@@ -91,6 +91,13 @@ const executors_to_deploy = {
             exchange: "HashflowExecutor",
             args: ["0x55084eE0fEf03f14a305cd24286359A35D735151", "0x000000000022D473030F116dDEE9F6B43aC78BA3"]
         },
+        // Args: liquidity, permit2
+        {
+            exchange: "FluidV1Executor", args: [
+                "0x52Aa899454998Be5b000Ad077a46Bbe360F4e497",
+                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+            ]
+        },
     ],
     "base": [
         // Args: Factory, Pool Init Code Hash, Permit2, Fee BPS
