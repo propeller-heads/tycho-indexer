@@ -21,6 +21,10 @@ use crate::modules::map_component_balance::{ETH_ADDRESS, ST_ETH_ADDRESS, WST_ETH
 fn map_protocol_components(
     params: String,
     block: eth::v2::Block,
+) -> Result<BlockTransactionProtocolComponents> {
+    if block.number != params.parse::<u64>().unwrap() {
+        return Ok(BlockTransactionProtocolComponents { tx_components: vec![] })
+    }
     Ok(BlockTransactionProtocolComponents {
         tx_components: block
             .transactions()
