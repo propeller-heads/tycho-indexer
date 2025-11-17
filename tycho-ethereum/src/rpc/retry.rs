@@ -204,6 +204,7 @@ impl RetryPolicy {
 #[cfg(test)]
 mod tests {
     use std::{
+        borrow::Cow,
         sync::{
             atomic::{AtomicUsize, Ordering},
             Arc,
@@ -521,6 +522,83 @@ mod tests {
             count, 4,
             "Should have retried {} times before timeout, got {} requests",
             4, count
+        );
+    }
+
+    /// Test that JSON-RPC error codes are classified correctly as retryable or non-retryable
+    /// TODO - confirm if we are willing to treat the error codes this way
+    #[rstest]
+    // Retryable error codes
+    #[case::header_not_found(-32000, true, "header not found - block may not be available yet")]
+    #[case::limit_exceeded(-32005, true, "limit exceeded - rate limiting")]
+    #[case::internal_error(-32603, true, "internal error - temporary server issue")]
+    // Non-retryable error codes
+    #[case::invalid_request(-32600, false, "invalid request - malformed request")]
+    #[case::method_not_found(-32601, false, "method not found - method doesn't exist")]
+    #[case::invalid_params(-32602, false, "invalid params - wrong parameters")]
+    #[case::method_not_supported(-32604, false, "method not supported - not supported by node")]
+    // Unknown error codes (should be retryable by default for safety)
+    #[case::unknown_error(-99999, true, "unknown error - should be retryable by default")]
+    #[ignore = "currently does not pass"]
+    fn test_json_rpc_error_code_classification(
+        #[case] error_code: i64,
+        #[case] expected_retryable: bool,
+        #[case] description: &str,
+    ) {
+        // Create an ErrorPayload with the specific error code
+        let error_payload = ErrorPayload {
+            code: error_code,
+            message: Cow::from(description.to_string()),
+            data: None,
+        };
+
+        let err = RpcError::<TransportErrorKind>::ErrorResp(error_payload);
+        let is_retryable = err.is_retryable();
+
+        assert_eq!(
+            is_retryable,
+            expected_retryable,
+            "Error code {} ({}) should be {}retryable",
+            error_code,
+            description,
+            if expected_retryable { "" } else { "non-" }
+        );
+    }
+
+    /// Test that specific JSON-RPC error codes in DeserError variant are classified correctly
+    #[test]
+    fn test_deser_error_with_json_rpc_codes() {
+        // Test retryable error code (-32005) in deserialization error
+        let json_with_retryable =
+            r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32005,"message":"Rate limited"}}"#;
+        let deser_err = RpcError::<TransportErrorKind>::DeserError {
+            err: serde_json::Error::custom("test"),
+            text: json_with_retryable.to_string(),
+        };
+        assert!(deser_err.is_retryable(), "DeserError with -32005 code should be retryable");
+
+        // Test non-retryable error code (-32600) in deserialization error
+        let json_with_non_retryable =
+            r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"Invalid request"}}"#;
+        let deser_err = RpcError::<TransportErrorKind>::DeserError {
+            err: serde_json::Error::custom("test"),
+            text: json_with_non_retryable.to_string(),
+        };
+        assert!(!deser_err.is_retryable(), "DeserError with -32600 code should not be retryable");
+    }
+
+    /// Test that DeserError with invalid JSON RPC (no id field) still parses error correctly
+    #[test]
+    fn test_deser_error_without_id_field() {
+        // Some providers send invalid JSON RPC without the id field
+        let json_without_id = r#"{"error":{"code":-32005,"message":"Rate limited"}}"#;
+        let deser_err = RpcError::<TransportErrorKind>::DeserError {
+            err: serde_json::Error::custom("test"),
+            text: json_without_id.to_string(),
+        };
+        assert!(
+            deser_err.is_retryable(),
+            "DeserError should parse error from invalid JSON RPC format"
         );
     }
 }

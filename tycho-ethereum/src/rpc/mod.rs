@@ -17,9 +17,10 @@ use alloy::{
             AccessListResult, Block, BlockId, BlockNumberOrTag, TransactionRequest,
         },
     },
-    transports::{http::reqwest, RpcError, TransportErrorKind},
+    transports::{http::reqwest, RpcError, TransportErrorKind, TransportResult},
 };
-use serde_json::Value;
+use futures::future::join_all;
+use serde_json::{json, Value};
 use serde::Deserialize;
 use tracing::{debug, info, trace};
 use tycho_common::Bytes;
@@ -31,12 +32,16 @@ pub(crate) mod retry;
 
 use retry::RetryPolicy;
 
+use crate::services::entrypoint_tracer::slot_detector::{
+    SlotDetectorSlotTestRequest, SlotDetectorValueRequest,
+};
+
 // TODO: Optimize these configurable for preventing rate limiting.
 // TODO: Handle rate limiting / individual connection failures & retries
 #[derive(Clone, Debug)]
 pub struct BatchingConfig {
-    max_batch_size: usize,
-    max_storage_slot_batch_size: usize,
+    pub(crate) max_batch_size: usize,
+    pub(crate) max_storage_slot_batch_size: usize,
 }
 
 impl Default for BatchingConfig {
@@ -559,6 +564,123 @@ impl EthereumRpcClient {
                 e,
             )
         })
+    }
+
+    pub(crate) async fn batch_slot_detector_trace(
+        &self,
+        requests: Vec<SlotDetectorValueRequest>,
+        calldata: &Bytes,
+        block_hash: &B256,
+    ) -> Result<Vec<(GethTrace, U256)>, RPCError> {
+        if self.batching.is_none() {
+            return Err(RPCError::SetupError(
+                "Batching must be enabled to use batch_slot_detector_trace".to_string(),
+            ));
+        }
+
+        let batch_call = || async {
+            let mut batch = self.inner.new_batch();
+
+            // perf: consider limiting batch size based on config
+            let batch_calls = requests
+                .iter()
+                .map(|SlotDetectorValueRequest { token, tracer_params }| {
+                    let trace_call =
+                        batch.add_call::<_, GethTrace>("debug_traceCall", tracer_params)?;
+
+                    let eth_call_param = json!([
+                        {
+                            "to": token.to_string(),
+                            "data": calldata.to_string()
+                        },
+                        block_hash.to_string()
+                    ]);
+                    let eth_call = batch.add_call::<_, U256>("eth_call", &eth_call_param)?;
+
+                    Ok((trace_call, eth_call))
+                })
+                .collect::<Result<Vec<_>, RpcError<TransportErrorKind>>>()?;
+
+            // Send batch
+            batch.send().await?;
+
+            let mut results = Vec::with_capacity(requests.len());
+            for (trace_call_fut, eth_call_fut) in batch_calls {
+                let trace = trace_call_fut.await?;
+                let value = eth_call_fut.await?;
+                results.push((trace, value));
+            }
+
+            Ok(results)
+        };
+
+        self.retry_policy
+            .retry_request(|| async { batch_call().await })
+            .await
+            .map_err(|e| {
+                RPCError::from_alloy(
+                    format!(
+                    "Failed to send batch request for slot detector traces for block {block_hash}"
+                ),
+                    e,
+                )
+            })
+    }
+
+    pub(crate) async fn batch_slot_detector_tests(
+        &self,
+        requests: &[SlotDetectorSlotTestRequest],
+        calldata: &Bytes,
+        block_hash: &B256,
+    ) -> Result<Vec<TransportResult<Value>>, RPCError> {
+        if self.batching.is_none() {
+            return Err(RPCError::SetupError(
+                "Batching must be enabled to use batch_slot_detector_tests".to_string(),
+            ));
+        }
+
+        let batch_call = || async {
+            let mut batch = self.inner.new_batch();
+
+            // perf: consider limiting batch size based on config
+            let batch_calls = requests
+                .iter()
+                .map(|SlotDetectorSlotTestRequest { storage_address, slot, token, test_value }| {
+                    let tracer_params = json!([
+                        {
+                            "to": token.to_string(),
+                            "data": calldata.to_string()
+                        },
+                        block_hash.to_string(),
+                        {
+                            storage_address.to_string(): {
+                                "stateDiff": {
+                                    slot.to_string(): test_value
+                                }
+                            }
+                        }
+                    ]);
+                    batch.add_call::<_, Value>("eth_call", &tracer_params)
+                })
+                .collect::<Result<Vec<_>, RpcError<TransportErrorKind>>>()?;
+
+            // Send batch
+            batch.send().await?;
+
+            Ok(join_all(batch_calls).await)
+        };
+
+        self.retry_policy
+            .retry_request(|| async { batch_call().await })
+            .await
+            .map_err(|e| {
+                RPCError::from_alloy(
+                    format!(
+                    "Failed to send batch request for slot detector tests for block {block_hash}"
+                ),
+                    e,
+                )
+            })
     }
 }
 
