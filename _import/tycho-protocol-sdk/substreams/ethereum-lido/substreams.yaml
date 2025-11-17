@@ -47,26 +47,5 @@ modules:
     output:
       type: proto:tycho.evm.v1.BlockChanges
 
-  - name: store_balances
-    kind: store
-    initialBlock: *start_block
-    updatePolicy: add
-    valueType: bigint
-    inputs:
-      - map: map_component_balance
-  
-  - name: map_protocol_changes
-    kind: map
-    initialBlock: *start_block
-    inputs:
-      - source: sf.ethereum.type.v2.Block
-      - map: map_protocol_components
-      - map: map_relative_component_balance
-      - store: store_protocol_components
-      - store: store_balances
-        mode: deltas
-    output:
-      type: proto:tycho.evm.v1.BlockChanges
-
 params:
   map_protocol_components: *start_block
