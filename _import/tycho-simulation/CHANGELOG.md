@@ -1,3 +1,10 @@
+## [0.196.6](https://github.com/propeller-heads/tycho-simulation/compare/0.196.5...0.196.6) (2025-11-17)
+
+
+### Bug Fixes
+
+* **cluster-test:** Remove block_wait_time logic ([2c7da4e](https://github.com/propeller-heads/tycho-simulation/commit/2c7da4e58f5e8cd597e6ee82b1e5ead7aa99dbfc))
+
 ## [0.196.5](https://github.com/propeller-heads/tycho-simulation/compare/0.196.4...0.196.5) (2025-11-14)
 
 
