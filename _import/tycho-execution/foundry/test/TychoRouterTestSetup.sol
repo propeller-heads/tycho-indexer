@@ -146,7 +146,8 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         bebopExecutor = new BebopExecutor(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
         hashflowExecutor =
             new HashflowExecutor(HASHFLOW_ROUTER, PERMIT2_ADDRESS);
-        slipstreamsExecutor = new SlipstreamsExecutor(SLIPSTREAMS_FACTORY_BASE, PERMIT2_ADDRESS);
+        slipstreamsExecutor =
+            new SlipstreamsExecutor(SLIPSTREAMS_FACTORY_BASE, PERMIT2_ADDRESS);
 
         address[] memory executors = new address[](12);
         executors[0] = address(usv2Executor);

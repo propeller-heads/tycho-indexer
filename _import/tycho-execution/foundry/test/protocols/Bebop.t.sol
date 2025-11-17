@@ -7,9 +7,8 @@ import "@src/executors/BebopExecutor.sol";
 import {Constants} from "../Constants.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Permit2TestHelper} from "../Permit2TestHelper.sol";
-import {
-    SafeERC20
-} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {SafeERC20} from
+    "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract BebopExecutorExposed is BebopExecutor {
     constructor(address _bebopSettlement, address _permit2)
@@ -115,7 +114,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         address tokenIn = WETH_ADDR;
         address tokenOut = WBTC_ADDR;
         RestrictTransferFrom.TransferType transferType =
-        RestrictTransferFrom.TransferType.None;
+            RestrictTransferFrom.TransferType.None;
         uint8 partialFillOffset = 12;
         uint256 amountIn = 1000000000000000000;
         bool approvalNeeded = true;
@@ -166,7 +165,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         address tokenIn = address(0);
         address tokenOut = WBTC_ADDR;
         RestrictTransferFrom.TransferType transferType =
-        RestrictTransferFrom.TransferType.None;
+            RestrictTransferFrom.TransferType.None;
         uint8 partialFillOffset = 12;
         uint256 amountIn = 1000000000000000000;
         bool approvalNeeded = false;
@@ -213,7 +212,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         address tokenIn = WETH_ADDR;
         address tokenOut = WBTC_ADDR;
         RestrictTransferFrom.TransferType transferType =
-        RestrictTransferFrom.TransferType.None;
+            RestrictTransferFrom.TransferType.None;
         uint8 partialFillOffset = 12;
         // filling only half of the quote
         uint256 amountIn = 1000000000000000000 / 2;
@@ -265,7 +264,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         address tokenIn = USDC_ADDR;
         address tokenOut = ONDO_ADDR;
         RestrictTransferFrom.TransferType transferType =
-        RestrictTransferFrom.TransferType.None;
+            RestrictTransferFrom.TransferType.None;
         uint8 partialFillOffset = 2;
         // filling only half of the quote
         uint256 amountIn = 20000000000;
@@ -319,7 +318,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         address tokenIn = USDC_ADDR;
         address tokenOut = ONDO_ADDR;
         RestrictTransferFrom.TransferType transferType =
-        RestrictTransferFrom.TransferType.None;
+            RestrictTransferFrom.TransferType.None;
         uint8 partialFillOffset = 2;
         // filling only half of the quote
         uint256 amountIn = 20000000000 / 2;

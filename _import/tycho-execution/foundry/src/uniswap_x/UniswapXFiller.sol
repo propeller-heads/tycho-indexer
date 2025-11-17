@@ -75,8 +75,9 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
         // The TychoRouter will take the input tokens from the filler
         if (tokenInApprovalNeeded) {
             // Native ETH input is not supported by UniswapX
-            IERC20(order.input.token)
-                .forceApprove(tychoRouter, type(uint256).max);
+            IERC20(order.input.token).forceApprove(
+                tychoRouter, type(uint256).max
+            );
         }
 
         // slither-disable-next-line low-level-calls

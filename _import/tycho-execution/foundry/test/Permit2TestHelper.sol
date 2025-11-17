@@ -25,17 +25,17 @@ contract Permit2TestHelper is Constants {
         uint256 amount_in
     ) internal returns (IAllowanceTransfer.PermitSingle memory, bytes memory) {
         IERC20(tokenIn).approve(PERMIT2_ADDRESS, amount_in);
-        IAllowanceTransfer.PermitSingle memory permitSingle =
-            IAllowanceTransfer.PermitSingle({
-                details: IAllowanceTransfer.PermitDetails({
-                    token: tokenIn,
-                    amount: uint160(amount_in),
-                    expiration: uint48(block.timestamp + 1 days),
-                    nonce: 0
-                }),
-                spender: spender,
-                sigDeadline: block.timestamp + 1 days
-            });
+        IAllowanceTransfer.PermitSingle memory permitSingle = IAllowanceTransfer
+            .PermitSingle({
+            details: IAllowanceTransfer.PermitDetails({
+                token: tokenIn,
+                amount: uint160(amount_in),
+                expiration: uint48(block.timestamp + 1 days),
+                nonce: 0
+            }),
+            spender: spender,
+            sigDeadline: block.timestamp + 1 days
+        });
 
         bytes memory signature = signPermit2(permitSingle, ALICE_PK);
         return (permitSingle, signature);
@@ -78,9 +78,8 @@ contract Permit2TestHelper is Constants {
             )
         );
 
-        bytes32 digest = keccak256(
-            abi.encodePacked("\x19\x01", domainSeparator, permitHash)
-        );
+        bytes32 digest =
+            keccak256(abi.encodePacked("\x19\x01", domainSeparator, permitHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
 
         return abi.encodePacked(r, s, v);

@@ -97,10 +97,9 @@ contract CurveExecutor is IExecutor, RestrictTransferFrom {
                     uint256(int256(i)), uint256(int256(j)), amountIn, 0, true
                 );
             } else {
-                CryptoPool(pool)
-                    .exchange(
-                        uint256(int256(i)), uint256(int256(j)), amountIn, 0
-                    );
+                CryptoPool(pool).exchange(
+                    uint256(int256(i)), uint256(int256(j)), amountIn, 0
+                );
             }
         }
 
@@ -152,7 +151,11 @@ contract CurveExecutor is IExecutor, RestrictTransferFrom {
         require(msg.sender.code.length != 0);
     }
 
-    function _balanceOf(address token) internal view returns (uint256 balance) {
+    function _balanceOf(address token)
+        internal
+        view
+        returns (uint256 balance)
+    {
         balance = token == nativeToken
             ? address(this).balance
             : IERC20(token).balanceOf(address(this));

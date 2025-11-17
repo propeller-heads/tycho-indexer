@@ -67,8 +67,9 @@ contract HashflowExecutor is IExecutor, RestrictTransferFrom {
 
         if (approvalNeeded && quote.baseToken != NATIVE_TOKEN) {
             // slither-disable-next-line unused-return
-            IERC20(quote.baseToken)
-                .forceApprove(hashflowRouter, type(uint256).max);
+            IERC20(quote.baseToken).forceApprove(
+                hashflowRouter, type(uint256).max
+            );
         }
 
         uint256 ethValue = 0;

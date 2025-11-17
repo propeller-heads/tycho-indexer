@@ -9,7 +9,9 @@ import {Permit2TestHelper} from "../Permit2TestHelper.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
 
 contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
-    constructor(address _factory, address _permit2) SlipstreamsExecutor(_factory, _permit2) {}
+    constructor(address _factory, address _permit2)
+        SlipstreamsExecutor(_factory, _permit2)
+    {}
 
     function decodeData(bytes calldata data)
         external
@@ -27,12 +29,22 @@ contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
         return _decodeData(data);
     }
 
-    function verifyPairAddress(address tokenA, address tokenB, int24 tick_spacing, address target) external view {
+    function verifyPairAddress(
+        address tokenA,
+        address tokenB,
+        int24 tick_spacing,
+        address target
+    ) external view {
         _verifyPairAddress(tokenA, tokenB, tick_spacing, target);
     }
 }
 
-contract SlipstreamsExecutorTest is Test, TestUtils, Constants, Permit2TestHelper {
+contract SlipstreamsExecutorTest is
+    Test,
+    TestUtils,
+    Constants,
+    Permit2TestHelper
+{
     using SafeERC20 for IERC20;
 
     SlipstreamsExecutorExposed slipstreamsExposed;
@@ -43,7 +55,9 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants, Permit2TestHelpe
         uint256 forkBlock = 37987780;
         vm.createSelectFork(vm.rpcUrl("base"), forkBlock);
 
-        slipstreamsExposed = new SlipstreamsExecutorExposed(SLIPSTREAMS_FACTORY_BASE, PERMIT2_ADDRESS);
+        slipstreamsExposed = new SlipstreamsExecutorExposed(
+            SLIPSTREAMS_FACTORY_BASE, PERMIT2_ADDRESS
+        );
         permit2 = IAllowanceTransfer(PERMIT2_ADDRESS);
     }
 
@@ -75,7 +89,10 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants, Permit2TestHelpe
         assertEq(receiver, address(2));
         assertEq(target, address(3));
         assertEq(zeroForOne, false);
-        assertEq(uint8(transferType), uint8(RestrictTransferFrom.TransferType.Transfer));
+        assertEq(
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.Transfer)
+        );
     }
 
     function testSwapIntegration() public {
@@ -100,21 +117,25 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants, Permit2TestHelpe
     }
 
     function testDecodeParamsInvalidDataLength() public {
-        bytes memory invalidParams = abi.encodePacked(BASE_WETH, address(2), address(3));
+        bytes memory invalidParams =
+            abi.encodePacked(BASE_WETH, address(2), address(3));
 
         vm.expectRevert(SlipstreamsExecutor__InvalidDataLength.selector);
         slipstreamsExposed.decodeData(invalidParams);
     }
 
     function testVerifyPairAddress() public view {
-        slipstreamsExposed.verifyPairAddress(BASE_WETH, BASE_USDC, 100, SLIPSTREAMS_WETH_USDC_POOL);
+        slipstreamsExposed.verifyPairAddress(
+            BASE_WETH, BASE_USDC, 100, SLIPSTREAMS_WETH_USDC_POOL
+        );
     }
 
     function testSlipstreamsCallback() public {
         uint24 poolTickSpacing = 100;
         uint256 amountOwed = 1000000000000000000;
         deal(BASE_WETH, address(slipstreamsExposed), amountOwed);
-        uint256 initialPoolReserve = IERC20(BASE_WETH).balanceOf(SLIPSTREAMS_WETH_USDC_POOL);
+        uint256 initialPoolReserve =
+            IERC20(BASE_WETH).balanceOf(SLIPSTREAMS_WETH_USDC_POOL);
 
         vm.startPrank(SLIPSTREAMS_WETH_USDC_POOL);
         bytes memory protocolData = abi.encodePacked(
@@ -138,7 +159,8 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants, Permit2TestHelpe
         slipstreamsExposed.handleCallback(callbackData);
         vm.stopPrank();
 
-        uint256 finalPoolReserve = IERC20(BASE_WETH).balanceOf(SLIPSTREAMS_WETH_USDC_POOL);
+        uint256 finalPoolReserve =
+            IERC20(BASE_WETH).balanceOf(SLIPSTREAMS_WETH_USDC_POOL);
         assertEq(finalPoolReserve - initialPoolReserve, amountOwed);
     }
 
@@ -171,7 +193,15 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants, Permit2TestHelpe
         RestrictTransferFrom.TransferType transferType
     ) internal view returns (bytes memory) {
         IUniswapV3Pool pool = IUniswapV3Pool(target);
-        return abi.encodePacked(tokenIn, tokenOut, pool.tickSpacing(), receiver, target, zero2one, transferType);
+        return abi.encodePacked(
+            tokenIn,
+            tokenOut,
+            pool.tickSpacing(),
+            receiver,
+            target,
+            zero2one,
+            transferType
+        );
     }
 
     function testExportContract() public {
@@ -195,7 +225,8 @@ contract TychoRouterForSlipstreamsTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         IERC20(BASE_WETH).approve(tychoRouterAddr, type(uint256).max);
 
-        bytes memory callData = loadCallDataFromFile("test_single_encoding_strategy_slipstreams");
+        bytes memory callData =
+            loadCallDataFromFile("test_single_encoding_strategy_slipstreams");
         (bool success,) = tychoRouterAddr.call(callData);
 
         uint256 balanceAfter = IERC20(BASE_USDC).balanceOf(ALICE);
@@ -212,7 +243,9 @@ contract TychoRouterForSlipstreamsTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         IERC20(BASE_WETH).approve(tychoRouterAddr, type(uint256).max);
 
-        bytes memory callData = loadCallDataFromFile("test_sequential_encoding_strategy_slipstreams");
+        bytes memory callData = loadCallDataFromFile(
+            "test_sequential_encoding_strategy_slipstreams"
+        );
         (bool success,) = tychoRouterAddr.call(callData);
 
         uint256 balanceAfter = IERC20(BASE_cbBTC).balanceOf(ALICE);

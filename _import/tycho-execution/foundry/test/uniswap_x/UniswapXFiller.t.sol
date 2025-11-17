@@ -92,7 +92,9 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
                 additionalValidationData: ""
             }),
             input: InputToken({
-                token: address(WETH_ADDR), amount: amountIn, maxAmount: amountIn
+                token: address(WETH_ADDR),
+                amount: amountIn,
+                maxAmount: amountIn
             }),
             outputs: outputs,
             sig: "",
@@ -130,10 +132,9 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
 
         vm.startPrank(address(0xD213e6F6dCB2DBaC03FA28b893F6dA1BD822e852));
         // Approve Permit2
-        IERC20(DAI_ADDR)
-            .approve(
-                address(0x000000000022D473030F116dDEE9F6B43aC78BA3), amountIn
-            );
+        IERC20(DAI_ADDR).approve(
+            address(0x000000000022D473030F116dDEE9F6B43aC78BA3), amountIn
+        );
         vm.stopPrank();
 
         // Tx 0x005d7b150017ba1b59d2f99395ccae7bda9b739938ade4e509817e32760aaf9d

@@ -250,13 +250,16 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
 
         IAllowanceTransfer.PermitSingle memory emptyPermitSingle =
-            IAllowanceTransfer.PermitSingle({
-                details: IAllowanceTransfer.PermitDetails({
-                    token: address(0), amount: 0, expiration: 0, nonce: 0
-                }),
-                spender: address(0),
-                sigDeadline: 0
-            });
+        IAllowanceTransfer.PermitSingle({
+            details: IAllowanceTransfer.PermitDetails({
+                token: address(0),
+                amount: 0,
+                expiration: 0,
+                nonce: 0
+            }),
+            spender: address(0),
+            sigDeadline: 0
+        });
         bytes memory protocolData = encodeUniswapV2Swap(
             WETH_ADDR,
             WETH_DAI_POOL,

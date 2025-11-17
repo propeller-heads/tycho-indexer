@@ -21,7 +21,8 @@ contract SlipstreamsExecutor is IExecutor, ICallback, RestrictTransferFrom {
     using SafeERC20 for IERC20;
 
     uint160 private constant MIN_SQRT_RATIO = 4295128739;
-    uint160 private constant MAX_SQRT_RATIO = 1461446703485210103287273052203988822378723970342;
+    uint160 private constant MAX_SQRT_RATIO =
+        1461446703485210103287273052203988822378723970342;
 
     address public immutable factory;
     address private immutable self;
@@ -33,7 +34,9 @@ contract SlipstreamsExecutor is IExecutor, ICallback, RestrictTransferFrom {
         int24 tickSpacing;
     }
 
-    constructor(address _factory, address _permit2) RestrictTransferFrom(_permit2) {
+    constructor(address _factory, address _permit2)
+        RestrictTransferFrom(_permit2)
+    {
         if (_factory == address(0)) {
             revert SlipstreamsExecutor__InvalidFactory();
         }
@@ -42,7 +45,11 @@ contract SlipstreamsExecutor is IExecutor, ICallback, RestrictTransferFrom {
     }
 
     // slither-disable-next-line locked-ether
-    function swap(uint256 amountIn, bytes calldata data) external payable returns (uint256 amountOut) {
+    function swap(uint256 amountIn, bytes calldata data)
+        external
+        payable
+        returns (uint256 amountOut)
+    {
         (
             address tokenIn,
             address tokenOut,
@@ -59,7 +66,9 @@ contract SlipstreamsExecutor is IExecutor, ICallback, RestrictTransferFrom {
         int256 amount1;
         IUniswapV3Pool pool = IUniswapV3Pool(target);
 
-        bytes memory callbackData = _makeSlipstreamsCallbackData(tokenIn, tokenOut, tick_spacing, transferType);
+        bytes memory callbackData = _makeSlipstreamsCallbackData(
+            tokenIn, tokenOut, tick_spacing, transferType
+        );
 
         {
             (amount0, amount1) = pool.swap(
@@ -79,7 +88,10 @@ contract SlipstreamsExecutor is IExecutor, ICallback, RestrictTransferFrom {
         }
     }
 
-    function handleCallback(bytes calldata msgData) public returns (bytes memory result) {
+    function handleCallback(bytes calldata msgData)
+        public
+        returns (bytes memory result)
+    {
         // The data has the following layout:
         // - selector (4 bytes)
         // - amount0Delta (32 bytes)
@@ -88,14 +100,16 @@ contract SlipstreamsExecutor is IExecutor, ICallback, RestrictTransferFrom {
         // - dataLength (32 bytes)
         // - protocolData (variable length)
 
-        (int256 amount0Delta, int256 amount1Delta) = abi.decode(msgData[4:68], (int256, int256));
+        (int256 amount0Delta, int256 amount1Delta) =
+            abi.decode(msgData[4:68], (int256, int256));
 
         address tokenIn = address(bytes20(msgData[132:152]));
         TransferType transferType = TransferType(uint8(msgData[175]));
 
         verifyCallback(msgData[132:]);
 
-        uint256 amountOwed = amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
+        uint256 amountOwed =
+            amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
 
         _transfer(msg.sender, transferType, tokenIn, amountOwed);
 
@@ -109,9 +123,11 @@ contract SlipstreamsExecutor is IExecutor, ICallback, RestrictTransferFrom {
         _verifyPairAddress(tokenIn, tokenOut, tickSpacing, msg.sender);
     }
 
-    function uniswapV3SwapCallback(int256, /* amount0Delta */ int256, /* amount1Delta */ bytes calldata /* data */ )
-        external
-    {
+    function uniswapV3SwapCallback(
+        int256, /* amount0Delta */
+        int256, /* amount1Delta */
+        bytes calldata /* data */
+    ) external {
         handleCallback(msg.data);
     }
 
@@ -146,15 +162,26 @@ contract SlipstreamsExecutor is IExecutor, ICallback, RestrictTransferFrom {
         int24 tick_spacing,
         TransferType transferType
     ) internal pure returns (bytes memory) {
-        return abi.encodePacked(tokenIn, tokenOut, tick_spacing, uint8(transferType));
+        return abi.encodePacked(
+            tokenIn, tokenOut, tick_spacing, uint8(transferType)
+        );
     }
 
-    function getPoolKey(address tokenA, address tokenB, int24 tickSpacing) internal pure returns (PoolKey memory) {
+    function getPoolKey(address tokenA, address tokenB, int24 tickSpacing)
+        internal
+        pure
+        returns (PoolKey memory)
+    {
         if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
-        return PoolKey({token0: tokenA, token1: tokenB, tickSpacing: tickSpacing});
+        return
+            PoolKey({token0: tokenA, token1: tokenB, tickSpacing: tickSpacing});
     }
 
-    function computeAddress(PoolKey memory key) internal view returns (address pool) {
+    function computeAddress(PoolKey memory key)
+        internal
+        view
+        returns (address pool)
+    {
         require(key.token0 < key.token1);
         pool = Clones.predictDeterministicAddress(
             ICLFactory(factory).poolImplementation(),
@@ -163,7 +190,12 @@ contract SlipstreamsExecutor is IExecutor, ICallback, RestrictTransferFrom {
         );
     }
 
-    function _verifyPairAddress(address tokenA, address tokenB, int24 tick_spacing, address target) internal view {
+    function _verifyPairAddress(
+        address tokenA,
+        address tokenB,
+        int24 tick_spacing,
+        address target
+    ) internal view {
         address pool = computeAddress(getPoolKey(tokenA, tokenB, tick_spacing));
         if (pool != target) {
             revert SlipstreamsExecutor__InvalidTarget();

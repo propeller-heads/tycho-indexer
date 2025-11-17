@@ -43,12 +43,7 @@ contract BalancerV3Executor is IExecutor, RestrictTransferFrom, ICallback {
         calculatedAmount = abi.decode(abi.decode(result, (bytes)), (uint256));
     }
 
-    function verifyCallback(
-        bytes calldata /*data*/
-    )
-        public
-        view
-    {
+    function verifyCallback(bytes calldata /*data*/ ) public view {
         if (msg.sender != address(VAULT)) {
             revert BalancerV3Executor__SenderIsNotVault(msg.sender);
         }
