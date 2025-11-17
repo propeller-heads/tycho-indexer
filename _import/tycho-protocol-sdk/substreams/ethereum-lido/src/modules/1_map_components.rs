@@ -11,6 +11,8 @@ use tycho_substreams::{
     prelude::*,
 };
 
+use crate::modules::map_component_balance::{ETH_ADDRESS, ST_ETH_ADDRESS, WST_ETH_ADDRESS};
+
 /// Create all relevant protocol components
 ///
 /// This method instantiates hardcoded ProtocolComponents for the first block,
@@ -54,6 +56,8 @@ impl StakingStatus {
     }
 }
 
+pub const ST_ETH_ADDRESS_OUTER: [u8; 20] = hex!("ae7ab96520DE3A18E5e111B5EaAb095312D7fE84");
+
 /// Potentially constructs a new ProtocolComponent given a call
 ///
 /// This method is given each individual call within a transaction, the corresponding
@@ -63,17 +67,11 @@ pub fn maybe_create_component(
     _log: &Log,
     _tx: &TransactionTrace,
 ) -> Option<ProtocolComponent> {
-    match *call.address {
-        hex!("17144556fd3424EDC8Fc8A4C940B2D04936d17eb") => Some(ProtocolComponent {
+    if *call.address == ST_ETH_ADDRESS {
+        Some(ProtocolComponent {
             id: "stETH".to_string(),
-            tokens: vec![
-                hex!("ae7ab96520DE3A18E5e111B5EaAb095312D7fE84").into(),
-                hex!("EeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE").into(),
-            ],
-            contracts: vec![
-                hex!("ae7ab96520DE3A18E5e111B5EaAb095312D7fE84").into(),
-                hex!("17144556fd3424EDC8Fc8A4C940B2D04936d17eb").into(),
-            ],
+            tokens: vec![ST_ETH_ADDRESS_OUTER.into(), ETH_ADDRESS.into()],
+            contracts: vec![ST_ETH_ADDRESS_OUTER.into(), ST_ETH_ADDRESS.into()],
             static_att: vec![
                 Attribute {
                     name: "total_shares".to_string(),
@@ -105,14 +103,12 @@ pub fn maybe_create_component(
                 attribute_schema: vec![],
                 implementation_type: ImplementationType::Vm.into(),
             }),
-        }),
-        hex!("7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0") => Some(ProtocolComponent {
+        })
+    } else if *call.address == WST_ETH_ADDRESS {
+        Some(ProtocolComponent {
             id: "wstETH".to_string(),
-            tokens: vec![
-                hex!("ae7ab96520DE3A18E5e111B5EaAb095312D7fE84").into(),
-                hex!("7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0").into(),
-            ],
-            contracts: vec![hex!("7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0").into()],
+            tokens: vec![ST_ETH_ADDRESS_OUTER.into(), WST_ETH_ADDRESS.into()],
+            contracts: vec![WST_ETH_ADDRESS.into()],
             static_att: vec![Attribute {
                 name: "total_wstETH".to_string(),
                 value: BigInt::from(0).to_signed_bytes_be(),
@@ -125,7 +121,8 @@ pub fn maybe_create_component(
                 attribute_schema: vec![],
                 implementation_type: ImplementationType::Vm.into(),
             }),
-        }),
-        _ => None,
+        })
+    } else {
+        None
     }
 }
