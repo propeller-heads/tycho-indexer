@@ -10,12 +10,16 @@ use alloy::{
         client::{ClientBuilder, ReqwestClient},
         types::{
             debug::{StorageMap, StorageRangeResult, StorageResult},
-            trace::parity::{TraceResults, TraceType},
-            Block, BlockId, BlockNumberOrTag, TransactionRequest,
+            trace::{
+                geth::GethTrace,
+                parity::{TraceResults, TraceType},
+            },
+            AccessListResult, Block, BlockId, BlockNumberOrTag, TransactionRequest,
         },
     },
     transports::{http::reqwest, RpcError, TransportErrorKind},
 };
+use serde_json::Value;
 use serde::Deserialize;
 use tracing::{debug, info, trace};
 use tycho_common::Bytes;
@@ -23,7 +27,7 @@ use tycho_common::Bytes;
 use crate::{RPCError, RequestError};
 
 pub mod errors;
-mod retry;
+pub(crate) mod retry;
 
 use retry::RetryPolicy;
 
@@ -506,6 +510,55 @@ impl EthereumRpcClient {
                     e,
                 )
             })
+    }
+
+    pub(crate) async fn batch_trace_and_access_list(
+        &self,
+        target: &Address,
+        block_hash: &B256,
+        access_list_params: &Value,
+        trace_call_params: &Value,
+    ) -> Result<(AccessListResult, GethTrace), RPCError> {
+        if self.batching.is_none() {
+            return Err(RPCError::SetupError(
+                "Batching must be enabled to use batch_trace_and_access_list".to_string(),
+            ));
+        }
+
+        let batch_call = || async {
+            let mut batch = self.inner.new_batch();
+
+            // Add eth_createAccessList call
+            let access_list_future = batch
+                .add_call::<_, AccessListResult>("eth_createAccessList", &access_list_params)?;
+
+            // Add debug_traceCall call
+            let trace_future =
+                batch.add_call::<_, GethTrace>("debug_traceCall", &trace_call_params)?;
+
+            // Send batch
+            batch.send().await?;
+
+            // Await access list result
+            let access_list_data = access_list_future.await?;
+
+            // Await trace result
+            let pre_state_trace = trace_future.await?;
+
+            Ok((access_list_data, pre_state_trace))
+        };
+
+        self.retry_policy.retry_request(|| async {
+            batch_call().await
+        }).await
+        .map_err(|e| {
+            RPCError::from_alloy(
+                format!(
+                    "Failed to send batch request for trace and access list for target {target}, block {block_hash}"
+                ),
+                e,
+            )
+        })
     }
 }
 

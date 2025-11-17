@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    time::Duration,
+};
 
 use alloy::{
     primitives::{
@@ -14,11 +17,10 @@ use alloy::{
         },
         AccessListResult, BlockId, TransactionInput, TransactionRequest,
     },
-    transports::TransportErrorKind,
 };
 use async_trait::async_trait;
+use backoff::ExponentialBackoffBuilder;
 use serde_json::{json, Map, Value};
-use tracing::error;
 use tycho_common::{
     models::{
         blockchain::{
@@ -31,13 +33,14 @@ use tycho_common::{
     Bytes,
 };
 
-use crate::{rpc::EthereumRpcClient, BytesCodec, RPCError, RequestError, ReqwestError};
+use crate::{
+    rpc::{retry::RetryPolicy, EthereumRpcClient},
+    BytesCodec, RPCError,
+};
 
 #[derive(Debug, Clone)]
 pub struct EVMEntrypointService {
     rpc: EthereumRpcClient,
-    max_retries: u32,
-    retry_delay_ms: u64,
 }
 
 impl EVMEntrypointService {
@@ -45,10 +48,21 @@ impl EVMEntrypointService {
         Self::new_with_config(rpc, 3, 200)
     }
 
+    // TODO: consider if we want to use the default retry policy from the rpc client
     pub fn new_with_config(rpc: &EthereumRpcClient, max_retries: u32, retry_delay_ms: u64) -> Self {
-        let rpc_client = rpc.clone();
+        // Calculate max elapsed time for retries to match the max allowed retries
+        let max_elapsed = (max_retries * (max_retries + 1) / 2) as u64 * retry_delay_ms + 1;
 
-        Self { rpc: rpc_client, max_retries, retry_delay_ms }
+        let retry_policy = ExponentialBackoffBuilder::default()
+            .with_initial_interval(Duration::from_millis(retry_delay_ms))
+            .with_max_elapsed_time(Some(Duration::from_millis(max_elapsed)))
+            .build();
+
+        let rpc_client = rpc
+            .clone()
+            .with_retry_policy(RetryPolicy::new(retry_policy));
+
+        Self { rpc: rpc_client }
     }
 
     fn create_access_list_params(
@@ -208,68 +222,15 @@ impl EVMEntrypointService {
         let access_list_params = Self::create_access_list_params(target, params, block_hash);
         let trace_call_params = Self::create_trace_call_params(target, params, block_hash);
 
-        if self.rpc.batching.is_none() {
-            return Err(RPCError::SetupError(
-                "Batching must be enabled to use batch_trace_and_access_list".to_string(),
-            ));
-        }
-
-        // Use RPC client's batch functionality
-        let mut batch = self.rpc.inner.new_batch();
-
-        // Add eth_createAccessList call
-        let access_list_future = batch
-            .add_call::<_, AccessListResult>("eth_createAccessList", &access_list_params)
-            .map_err(|e| {
-                // Transport/Network errors are impossible here
-                RPCError::UnknownError(format!(
-                    "Failed to add trace call to batch for {target} (block: {block_hash}): {e}"
-                ))
-            })?;
-
-        // Add debug_traceCall call
-        let trace_future = batch
-            .add_call::<_, GethTrace>("debug_traceCall", &trace_call_params)
-            .map_err(|e| {
-                RPCError::UnknownError(format!(
-                    "Failed to add batch for {target} (block: {block_hash}): {e}"
-                ))
-            })?;
-
-        // Send batch
-        batch.send().await.map_err(|e| {
-            if e.is_transport_error() {
-                RPCError::RequestError(RequestError::Reqwest(ReqwestError {
-                    msg: format!("Failed to send batch for {target} (block: {block_hash})"),
-                    source: e,
-                }))
-            } else {
-                RPCError::UnknownError(format!(
-                    "Failed to send batch for {target} (block: {block_hash}): {e}"
-                ))
-            }
-        })?;
-
-        // Await access list result
-        let access_list_data = access_list_future.await.map_err(|e| {
-            if let Some(te) = e.as_transport_err() {
-                match te {
-                    TransportErrorKind::MissingBatchResponse(id) => RPCError::UnknownError(format!(
-                        "Missing batch response for ID {id} for {target} (block: {block_hash})"
-                    )),
-                    _ => RPCError::RequestError(RequestError::Reqwest(ReqwestError {
-                        msg: format!(
-                            "Failed to get access list from batch for {target} (block: {block_hash})"
-                        ),
-                        source: e,
-                    }))
-                }
-            } else {
-                RPCError::UnknownError(format!(
-                    "Failed to get access list from batch for {target} (block: {block_hash}): {e}"
-                ))
-            }
-        })?;
+        let (access_list_data, pre_state_trace) = self
+            .rpc
+            .batch_trace_and_access_list(
+                &alloy::primitives::Address::from_bytes(target),
+                &B256::from_bytes(block_hash),
+                &access_list_params,
+                &trace_call_params,
+            )
+            .await?;
 
         let mut accessed_slots = Self::try_get_accessed_slots(&access_list_data)?;
 
@@ -280,29 +241,6 @@ impl EVMEntrypointService {
         if !accessed_slots.contains_key(target) {
             accessed_slots.insert(target.clone(), HashSet::new());
         }
-
-        // Await trace result
-        let pre_state_trace = trace_future.await.map_err(|e| {
-            if let Some(te) = e.as_transport_err() {
-                match te {
-                    TransportErrorKind::MissingBatchResponse(id) => {
-                        RPCError::UnknownError(format!(
-                            "Missing batch response for ID {id} for {target} (block: {block_hash})"
-                        ))
-                    }
-                    _ => RPCError::RequestError(RequestError::Reqwest(ReqwestError {
-                        msg: format!(
-                            "Failed to get trace from batch for {target} (block: {block_hash})"
-                        ),
-                        source: e,
-                    })),
-                }
-            } else {
-                RPCError::UnknownError(format!(
-                    "Failed to get trace from batch for {target} (block: {block_hash}): {e}"
-                ))
-            }
-        })?;
 
         Ok((accessed_slots, pre_state_trace))
     }
@@ -417,119 +355,75 @@ impl EntryPointTracer for EVMEntrypointService {
         block_hash: BlockHash,
         entry_points: Vec<EntryPointWithTracingParams>,
     ) -> Vec<Result<TracedEntryPoint, Self::Error>> {
-        let ep_count = entry_points.len();
-        let mut results_with_indices = Vec::with_capacity(ep_count);
-        let mut to_retry: Vec<(usize, EntryPointWithTracingParams)> = entry_points
-            .into_iter()
-            .enumerate()
-            .collect();
+        let mut results_with_indices = Vec::with_capacity(entry_points.len());
 
-        let mut retry_count = 0;
-        while !to_retry.is_empty() && retry_count <= self.max_retries {
-            if retry_count > 0 {
-                tracing::debug!(
-                    "EVMEntrypointService: Retry attempt {} for {} entrypoints",
-                    retry_count,
-                    to_retry.len()
-                );
-                tokio::time::sleep(tokio::time::Duration::from_millis(self.retry_delay_ms)).await;
-            }
-            let mut failed_retryable = Vec::new();
-            let is_last_retry = retry_count == self.max_retries;
-
-            for (original_index, entry_point) in &to_retry {
-                let result = match &entry_point.params {
-                    TracingParams::RPCTracer(ref rpc_entry_point) => {
-                        // Use batched RPC call for both access list and trace
-                        let (accessed_slots, pre_state_trace) = match self
-                            .batch_trace_and_access_list(
-                                &entry_point.entry_point.target,
-                                rpc_entry_point,
-                                &block_hash,
-                            )
-                            .await
-                        {
-                            Ok(trace) => trace,
-                            Err(e) => {
-                                if e.should_retry() && !is_last_retry {
-                                    failed_retryable.push((*original_index, entry_point.clone()));
-                                } else {
-                                    results_with_indices.push((*original_index, Err(e)));
-                                }
-                                continue;
-                            }
-                        };
-
-                        // Exclude ZERO_ADDRESS to avoid false positive retriggers on 0
-                        //  value slots or slots with small values
-                        let called_addresses: HashSet<Address> = accessed_slots
-                            .keys()
-                            .filter(|addr| addr.as_ref() != ZERO_ADDRESS)
-                            .cloned()
-                            .collect();
-
-                        // Provides a very simplistic way of finding retriggers. A better way would
-                        // involve using the structure of callframes. So basically iterate the call
-                        // tree in a parent child manner then search the
-                        // childs address in the prestate of parent.
-                        let retriggers = if let GethTrace::PreStateTracer(PreStateFrame::Default(
-                            PreStateMode(frame),
-                        )) = pre_state_trace
-                        {
-                            let mut retriggers = HashSet::new();
-                            for (address, account) in frame.iter() {
-                                let address_bytes =
-                                    tycho_common::Bytes::from(address.as_ref() as &[u8]);
-                                let storage = &account.storage;
-                                for (slot, val) in storage.iter() {
-                                    if let Some(storage_location) =
-                                        Self::detect_retrigger(&called_addresses, slot, val)
-                                    {
-                                        retriggers
-                                            .insert((address_bytes.clone(), storage_location));
-                                    }
-                                }
-                            }
-                            retriggers
-                        } else {
-                            results_with_indices.push((
-                                *original_index,
-                                Err(RPCError::UnknownError(
-                                    "invalid trace result for PreStateTracer".to_string(),
-                                )),
-                            ));
+        for entry_point in entry_points {
+            let result = match &entry_point.params {
+                TracingParams::RPCTracer(rpc_entry_point) => {
+                    // Use batched RPC call for both access list and trace
+                    let (accessed_slots, pre_state_trace) = match self
+                        .batch_trace_and_access_list(
+                            &entry_point.entry_point.target,
+                            rpc_entry_point,
+                            &block_hash,
+                        )
+                        .await
+                    {
+                        Ok(trace) => trace,
+                        Err(e) => {
+                            results_with_indices.push(Err(e));
                             continue;
-                        };
+                        }
+                    };
 
-                        Ok(TracedEntryPoint::new(
-                            entry_point.clone(),
-                            block_hash.clone(),
-                            TracingResult::new(retriggers, accessed_slots),
-                        ))
-                    }
-                };
-                results_with_indices.push((*original_index, result));
-            }
+                    // Exclude ZERO_ADDRESS to avoid false positive retriggers on 0
+                    //  value slots or slots with small values
+                    let called_addresses: HashSet<Address> = accessed_slots
+                        .keys()
+                        .filter(|addr| addr.as_ref() != ZERO_ADDRESS)
+                        .cloned()
+                        .collect();
 
-            // Update retry list and increment counter
-            to_retry = failed_retryable;
-            retry_count += 1;
+                    // Provides a very simplistic way of finding retriggers. A better way would
+                    // involve using the structure of callframes. So basically iterate the call
+                    // tree in a parent child manner then search the
+                    // childs address in the prestate of parent.
+                    let retriggers = if let GethTrace::PreStateTracer(PreStateFrame::Default(
+                        PreStateMode(frame),
+                    )) = pre_state_trace
+                    {
+                        let mut retriggers = HashSet::new();
+                        for (address, account) in frame.iter() {
+                            let address_bytes =
+                                tycho_common::Bytes::from(address.as_ref() as &[u8]);
+                            let storage = &account.storage;
+                            for (slot, val) in storage.iter() {
+                                if let Some(storage_location) =
+                                    Self::detect_retrigger(&called_addresses, slot, val)
+                                {
+                                    retriggers.insert((address_bytes.clone(), storage_location));
+                                }
+                            }
+                        }
+                        retriggers
+                    } else {
+                        results_with_indices.push(Err(RPCError::UnknownError(
+                            "invalid trace result for PreStateTracer".to_string(),
+                        )));
+                        continue;
+                    };
+
+                    Ok(TracedEntryPoint::new(
+                        entry_point.clone(),
+                        block_hash.clone(),
+                        TracingResult::new(retriggers, accessed_slots),
+                    ))
+                }
+            };
+            results_with_indices.push(result);
         }
 
-        // This should never happen, if it does, we log an error and return the results that we have
-        if !results_with_indices.len() == ep_count {
-            error!(
-                "Something went wrong with the tracing, expected {} results but got {}",
-                ep_count,
-                results_with_indices.len()
-            );
-        }
-
-        results_with_indices.sort_by_key(|(index, _)| *index);
         results_with_indices
-            .into_iter()
-            .map(|(_, result)| result)
-            .collect()
     }
 }
 
@@ -546,7 +440,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::{test_fixtures::TestFixture, RequestError};
+    use crate::{rpc::errors::ReqwestError, test_fixtures::TestFixture, RequestError};
 
     impl TestFixture {
         fn create_tracer() -> EVMEntrypointService {
@@ -995,17 +889,17 @@ mod tests {
         // Create a mock RPC server that fails the first few requests
         let mut server = Server::new_async().await;
 
-        // First two attempts fail with 500 errors
+        // First two attempts fail with 429 errors
         let _m1 = server
             .mock("POST", "/")
-            .with_status(500)
+            .with_status(429)
             .expect(1)
             .create_async()
             .await;
 
         let _m2 = server
             .mock("POST", "/")
-            .with_status(500)
+            .with_status(429)
             .expect(1)
             .create_async()
             .await;
@@ -1352,21 +1246,6 @@ mod tests {
     }
 
     #[test]
-    fn test_tracer_configuration() {
-        let rpc = EthereumRpcClient::new("http://localhost:8545")
-            .expect("Failed to create EthereumRpcClient");
-        // Test default configuration
-        let tracer = EVMEntrypointService::new(&rpc);
-        assert_eq!(tracer.max_retries, 3);
-        assert_eq!(tracer.retry_delay_ms, 200);
-
-        // Test custom configuration
-        let tracer = EVMEntrypointService::new_with_config(&rpc, 5, 500);
-        assert_eq!(tracer.max_retries, 5);
-        assert_eq!(tracer.retry_delay_ms, 500);
-    }
-
-    #[test]
     fn test_detect_retrigger_specific_example() {
         use std::str::FromStr;
 
@@ -1620,7 +1499,7 @@ mod tests {
         _m.assert();
         assert_eq!(results.len(), 1);
         // Should fail because batch response doesn't have correct length
-        assert!(matches!(results[0], Err(RPCError::UnknownError(_))));
+        assert!(matches!(results[0], Err(RPCError::RequestError(_))));
     }
 
     /// Integration test using real RPC to verify the fix works end-to-end.
