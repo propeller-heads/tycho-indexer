@@ -120,9 +120,11 @@ use crate::{
     evm::decoder::{StreamDecodeError, TychoStreamDecoder},
     protocol::{
         errors::InvalidSnapshotError,
-        models::{TryFromWithBlock, Update},
+        models::{DecoderContext, TryFromWithBlock, Update},
     },
 };
+
+const EXCHANGES_REQUIRING_FILTER: [&str; 3] = ["uniswap_v4", "vm:balancer_v2", "vm:curve"];
 
 #[derive(Default, Debug, Clone, Copy)]
 pub enum StreamEndPolicy {
@@ -214,7 +216,59 @@ impl ProtocolStreamBuilder {
                 .register_filter(name, predicate);
         }
 
-        if ["uniswap_v4", "vm:balancer_v2", "vm:curve"].contains(&name) && filter_fn.is_none() {
+        if EXCHANGES_REQUIRING_FILTER.contains(&name) && filter_fn.is_none() {
+            warn!("Warning: For exchange type '{}', it is necessary to set a filter function because not all pools are supported. See all filters at src/evm/protocol/filters.rs", name);
+        }
+
+        self
+    }
+
+    /// Adds a specific exchange to the stream with decoder context.
+    ///
+    /// This configures the builder to include a new protocol synchronizer for `name`,
+    /// filtering its components according to `filter` and optionally `filter_fn`. It also registers
+    /// the DecoderContext (this is useful to test protocols that are not live yet)
+    ///
+    /// The type parameter `T` specifies the decoder type for this exchange. All
+    /// component states for this exchange will be decoded into instances of `T`.
+    ///
+    /// # Parameters
+    ///
+    /// - `name`: The protocol or exchange name (e.g., `"uniswap_v4"`, `"vm:balancer_v2"`).
+    /// - `filter`: Defines the set of components to include in the stream.
+    /// - `filter_fn`: Optional custom filter function for client-side filtering of components not
+    ///   expressible in `filter`.
+    /// - `decoder_context`: The decoder context for this exchange
+    ///
+    /// # Notes
+    ///
+    /// For certain protocols (e.g., `"uniswap_v4"`, `"vm:balancer_v2"`, `"vm:curve"`), omitting
+    /// `filter_fn` may cause decoding errors or incorrect results. In these cases, a proper
+    /// filter function is required to ensure correct decoding and quoting logic.
+    pub fn exchange_with_decoder_context<T>(
+        mut self,
+        name: &str,
+        filter: ComponentFilter,
+        filter_fn: Option<fn(&ComponentWithState) -> bool>,
+        decoder_context: DecoderContext,
+    ) -> Self
+    where
+        T: ProtocolSim
+            + TryFromWithBlock<ComponentWithState, BlockHeader, Error = InvalidSnapshotError>
+            + Send
+            + 'static,
+    {
+        self.stream_builder = self
+            .stream_builder
+            .exchange(name, filter);
+        self.decoder
+            .register_decoder_with_context::<T>(name, decoder_context);
+        if let Some(predicate) = filter_fn {
+            self.decoder
+                .register_filter(name, predicate);
+        }
+
+        if EXCHANGES_REQUIRING_FILTER.contains(&name) && filter_fn.is_none() {
             warn!("Warning: For exchange type '{}', it is necessary to set a filter function because not all pools are supported. See all filters at src/evm/protocol/filters.rs", name);
         }
 
@@ -344,6 +398,10 @@ impl ProtocolStreamBuilder {
             .stream_builder
             .state_synchronizer_retry_config(config);
         self
+    }
+
+    pub fn get_decoder(&self) -> &TychoStreamDecoder<BlockHeader> {
+        &self.decoder
     }
 
     /// Builds and returns the configured protocol stream.
