@@ -95,7 +95,7 @@ contract SlipstreamsExecutorTest is
         );
     }
 
-    function testSwapIntegration() public {
+    function testSwap() public {
         uint256 amountIn = 10 ** 18;
         deal(BASE_WETH, address(slipstreamsExposed), amountIn);
 
