@@ -2130,7 +2130,7 @@ dependencies = [
  "bitflags 2.9.4",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.10.5",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -4770,7 +4770,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.0",
+ "socket2 0.5.10",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -6705,7 +6705,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.6.0",
+ "socket2 0.5.10",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
@@ -6742,7 +6742,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.0",
+ "socket2 0.5.10",
  "tracing",
  "windows-sys 0.60.2",
 ]
@@ -9353,9 +9353,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.113.0"
+version = "0.113.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c18c82029584513e4419149601fc4adef2138ad2c32dfaa1952e44aabeea0c9e"
+checksum = "d96184f741bd7ee0b9baa62bad31f8e2cde5ef2588be781cdbee2f9cd20c3c7d"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9383,9 +9383,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-common"
-version = "0.113.0"
+version = "0.113.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a5dc8a59ffcf22844d9ed2a6e6707a910f623ab20cd3760da0c3731620b092f"
+checksum = "7bf3dc0104644692572bac7378b56902a4448bda79d64261869dd4b53272192b"
 dependencies = [
  "anyhow",
  "async-trait",
