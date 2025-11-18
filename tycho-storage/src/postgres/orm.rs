@@ -639,7 +639,7 @@ pub struct NewProtocolComponentHoldsContract {
     pub contract_code_id: i64,
 }
 
-#[derive(Identifiable, Queryable, Associations, Selectable, Clone, Debug)]
+#[derive(Identifiable, Queryable, Associations, Selectable, Clone, Debug, QueryableByName)]
 #[diesel(belongs_to(ProtocolComponent))]
 #[diesel(table_name = protocol_state)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -1117,43 +1117,27 @@ impl PartitionedVersionedRow for NewProtocolState {
     where
         Self: Sized,
     {
-        let (pc_id, attr_name): (Vec<_>, Vec<_>) = ids.into_iter().unzip();
-        let tuple_ids = pc_id
-            .iter()
-            .zip(attr_name.iter())
-            .collect::<HashSet<_>>();
-
-        let results: Vec<ProtocolState> = protocol_state::table
-            .select(ProtocolState::as_select())
-            .into_boxed()
-            .filter(
-                protocol_state::protocol_component_id
-                    .eq_any(&pc_id)
-                    .and(protocol_state::attribute_name.eq_any(&attr_name))
-                    .and(protocol_state::valid_to.eq(MAX_TS)),
-            )
-            .get_results(conn)
-            .await
-            .map_err(PostgresError::from)?;
-
-        let found_ids: HashSet<_> = results
-            .iter()
-            .map(|ps| (&ps.protocol_component_id, &ps.attribute_name))
-            .collect();
-
-        let missing_ids: Vec<_> = tuple_ids
-            .clone()
-            .into_iter()
-            .filter(|id| !found_ids.contains(id))
-            .collect();
-
-        if !missing_ids.is_empty() {
-            trace!(n_missing_ids=?missing_ids.len(), "Got potentially missing IDs. Skipping query");
+        if ids.is_empty() {
+            return Ok(vec![]);
         }
+
+        let (pc_ids, attr_names): (Vec<_>, Vec<_>) = ids.into_iter().unzip();
+
+        let results: Vec<ProtocolState> = diesel::sql_query(
+            "SELECT ps.* 
+             FROM protocol_state_default ps
+             INNER JOIN unnest($1::bigint[], $2::text[]) AS pairs(pc_id, attr_name)
+               ON ps.protocol_component_id = pairs.pc_id 
+               AND ps.attribute_name = pairs.attr_name",
+        )
+        .bind::<diesel::sql_types::Array<diesel::sql_types::BigInt>, _>(&pc_ids)
+        .bind::<diesel::sql_types::Array<diesel::sql_types::Text>, _>(&attr_names)
+        .load(conn)
+        .await
+        .map_err(PostgresError::from)?;
 
         Ok(results
             .into_iter()
-            .filter(|ps| tuple_ids.contains(&(&ps.protocol_component_id, &ps.attribute_name)))
             .map(NewProtocolState::from)
             .collect())
     }
