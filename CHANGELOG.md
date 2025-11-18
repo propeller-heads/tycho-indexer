@@ -1,3 +1,11 @@
+## [0.114.0](https://github.com/propeller-heads/tycho-indexer/compare/0.113.2...0.114.0) (2025-11-18)
+
+
+### Features
+
+* add script to delete huge protocols ([bcdd54f](https://github.com/propeller-heads/tycho-indexer/commit/bcdd54f23cfa80302f7099c8af0dffb5f7ae8802))
+* add script to delete huge protocols ([#747](https://github.com/propeller-heads/tycho-indexer/issues/747)) ([b917e4f](https://github.com/propeller-heads/tycho-indexer/commit/b917e4f8a521f6c118636dab79e0cb3656235eec))
+
 ## [0.113.2](https://github.com/propeller-heads/tycho-indexer/compare/0.113.1...0.113.2) (2025-11-18)
 
 ## [0.113.1](https://github.com/propeller-heads/tycho-indexer/compare/0.113.0...0.113.1) (2025-11-17)
