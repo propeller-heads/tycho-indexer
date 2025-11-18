@@ -1,3 +1,10 @@
+## [0.197.0](https://github.com/propeller-heads/tycho-simulation/compare/0.196.6...0.197.0) (2025-11-18)
+
+
+### Features
+
+* Add exchange_with_decoder_context to ProtocolStreamBuilder ([b071121](https://github.com/propeller-heads/tycho-simulation/commit/b071121a4ff71454cddb617a627db41b4dac597a))
+
 ## [0.196.6](https://github.com/propeller-heads/tycho-simulation/compare/0.196.5...0.196.6) (2025-11-17)
 
 
