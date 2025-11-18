@@ -124,7 +124,7 @@ use crate::{
     },
 };
 
-const EXCHANGES_REQUIRED_FILTER: [&str; 3] = ["uniswap_v4", "vm:balancer_v2", "vm:curve"];
+const EXCHANGES_REQUIRING_FILTER: [&str; 3] = ["uniswap_v4", "vm:balancer_v2", "vm:curve"];
 
 #[derive(Default, Debug, Clone, Copy)]
 pub enum StreamEndPolicy {
