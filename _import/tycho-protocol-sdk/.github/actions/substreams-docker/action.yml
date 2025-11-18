@@ -41,7 +41,7 @@ runs:
     - name: Run protocol tests
       env:
         PROTOCOLS: ${{ inputs.protocols }}
-        RPC_URL: ${{ secrets.ETH_RPC_URL }}
+        RPC_URL: ${{ env.RPC_URL }}
         SUBSTREAMS_API_TOKEN: ${{ env.SUBSTREAMS_API_TOKEN }}
       run: |
         docker compose up --abort-on-container-exit --exit-code-from test-runner

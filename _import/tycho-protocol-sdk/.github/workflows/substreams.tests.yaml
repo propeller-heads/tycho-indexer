@@ -1,7 +1,7 @@
 name: Substreams Tests
 
 env:
-  RPC_URL: ${{ secrets.RPC_URL }}
+  RPC_URL: ${{ secrets.ETH_RPC_URL }}
   SUBSTREAMS_API_TOKEN: ${{ secrets.SUBSTREAMS_API_TOKEN }}
   AUTH_API_KEY: ${{ secrets.AUTH_API_KEY }}
   EXCLUDED_SUBSTREAMS: target|crates|ethereum-template-factory|ethereum-template-singleton
