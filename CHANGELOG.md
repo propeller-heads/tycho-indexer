@@ -1,3 +1,11 @@
+## [0.114.1](https://github.com/propeller-heads/tycho-indexer/compare/0.114.0...0.114.1) (2025-11-18)
+
+
+### Bug Fixes
+
+* Fix DCI cache initialisation. ([78d7206](https://github.com/propeller-heads/tycho-indexer/commit/78d720601ca0d46276fe7e79bd0623f4c63a54e0))
+* Fix DCI cache initialisation. ([#784](https://github.com/propeller-heads/tycho-indexer/issues/784)) ([54b321c](https://github.com/propeller-heads/tycho-indexer/commit/54b321c648723baf0e52eff36c8bef2fbb929b3d))
+
 ## [0.114.0](https://github.com/propeller-heads/tycho-indexer/compare/0.113.2...0.114.0) (2025-11-18)
 
 
