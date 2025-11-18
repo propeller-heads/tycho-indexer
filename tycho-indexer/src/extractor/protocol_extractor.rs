@@ -12,7 +12,7 @@ use metrics::{counter, gauge, histogram};
 use mockall::automock;
 use prost::Message;
 use tokio::{sync::Mutex, task::JoinHandle};
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 use tycho_common::{
     models::{
         blockchain::{
@@ -59,10 +59,12 @@ pub struct Inner {
     first_message_processed: bool,
 }
 
+type BatchCommitHandle = tracing::instrument::Instrumented<JoinHandle<Result<(), ExtractionError>>>;
+
 #[derive(Default)]
 struct GatewayInner<G> {
     inner: Arc<G>,
-    commit_handle: Mutex<Option<JoinHandle<Result<(), ExtractionError>>>>,
+    commit_handle: Mutex<Option<BatchCommitHandle>>,
     committed_block_height: Arc<Mutex<Option<u64>>>,
     commit_batch_size: usize,
 }
@@ -254,6 +256,7 @@ where
         }
     }
 
+    #[instrument(skip_all, fields(chain = % self.chain, name = % self.name, block_number = % msg.block.number))]
     async fn periodically_report_metrics(&self, msg: &mut BlockChanges, is_syncing: bool) {
         let mut state = self.inner.lock().await;
         let now = chrono::Local::now().naive_utc();
@@ -861,7 +864,9 @@ where
 
             // Consume the previous commit handle, leaving None in its place
             if let Some(db_commit_handle_to_join) = commit_handle_guard.take() {
-                let awaited_commit = !db_commit_handle_to_join.is_finished();
+                let awaited_commit = !db_commit_handle_to_join
+                    .inner()
+                    .is_finished();
                 let now = chrono::Utc::now().naive_utc();
 
                 match db_commit_handle_to_join.await {
@@ -912,7 +917,14 @@ where
                 .record(now.elapsed().as_millis() as f64);
 
                 Ok(())
-            });
+            }).instrument(info_span!(
+                parent: None,  // This task can outlive the current span, so we don't want to attach it to it
+                "commit_blocks_task",
+                batch_size,
+                block_height = last_block_height,
+                extractor_id = self.name.clone(),
+                chain = %chain,
+            ));
 
             *commit_handle_guard = Some(new_handle);
 
@@ -1936,7 +1948,7 @@ mod test {
             let guard = ex.gateway.commit_handle.lock().await;
             guard
                 .as_ref()
-                .is_some_and(|h| !h.is_finished())
+                .is_some_and(|h| !h.inner().is_finished())
         };
         let commit_task_is_none = async |ex: &ProtocolExtractor<_, _, _>| -> bool {
             ex.gateway
