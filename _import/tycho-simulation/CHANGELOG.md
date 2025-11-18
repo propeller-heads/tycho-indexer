@@ -1,3 +1,13 @@
+## [0.198.0](https://github.com/propeller-heads/tycho-simulation/compare/0.197.0...0.198.0) (2025-11-18)
+
+
+### Features
+
+* Add fluid_v1 to the integration test ([3958b20](https://github.com/propeller-heads/tycho-simulation/commit/3958b204fb2c2e0307e51212883d609374efba7b))
+* Implement fluid delta_transition ([4cd7094](https://github.com/propeller-heads/tycho-simulation/commit/4cd7094a3731f3409bb14e71d4b8e4d22b259fe9))
+* Integrate FluidV1 natively ([4116e39](https://github.com/propeller-heads/tycho-simulation/commit/4116e39d8c5d61b15db2ae641b0221cdfc2d54e4))
+* update tycho-client ([d68858c](https://github.com/propeller-heads/tycho-simulation/commit/d68858cd75d101201f1e1abea4d6a4d676a608e5))
+
 ## [0.197.0](https://github.com/propeller-heads/tycho-simulation/compare/0.196.6...0.197.0) (2025-11-18)
 
 
