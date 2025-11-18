@@ -216,7 +216,7 @@ impl ProtocolStreamBuilder {
                 .register_filter(name, predicate);
         }
 
-        if EXCHANGES_REQUIRED_FILTER.contains(&name) && filter_fn.is_none() {
+        if EXCHANGES_REQUIRING_FILTER.contains(&name) && filter_fn.is_none() {
             warn!("Warning: For exchange type '{}', it is necessary to set a filter function because not all pools are supported. See all filters at src/evm/protocol/filters.rs", name);
         }
 
@@ -268,7 +268,7 @@ impl ProtocolStreamBuilder {
                 .register_filter(name, predicate);
         }
 
-        if EXCHANGES_REQUIRED_FILTER.contains(&name) && filter_fn.is_none() {
+        if EXCHANGES_REQUIRING_FILTER.contains(&name) && filter_fn.is_none() {
             warn!("Warning: For exchange type '{}', it is necessary to set a filter function because not all pools are supported. See all filters at src/evm/protocol/filters.rs", name);
         }
 
