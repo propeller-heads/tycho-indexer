@@ -713,6 +713,20 @@ where
             .await
             .map_err(ExtractionError::from)?;
 
+        // Log a quick summary
+        debug!("Components with params: {}", entrypoints_with_params.len());
+        debug!(
+            "Components with tracing results: {}",
+            entrypoint_results
+                .keys()
+                .flat_map(|ep_id| ep_id_to_component_id
+                    .get(ep_id)
+                    .map(|comp| comp.iter()))
+                .flatten()
+                .collect::<HashSet<_>>()
+                .len()
+        );
+
         self.cache
             .ep_id_to_component_id
             .extend_permanent(ep_id_to_component_id);
@@ -796,32 +810,9 @@ where
         }
 
         // Build and populate component_id_to_entrypoint_params mapping
-        let mut component_to_entrypoint_params: HashMap<
-            ComponentId,
-            HashSet<EntryPointWithTracingParams>,
-        > = HashMap::new();
-
-        for (entrypoint_id, params_set) in entrypoints_with_params.iter() {
-            // Get all components that use this entrypoint
-            if let Some(component_ids) = self
-                .cache
-                .ep_id_to_component_id
-                .get(entrypoint_id)
-            {
-                for component_id in component_ids {
-                    for entrypoint_with_params in params_set.iter() {
-                        component_to_entrypoint_params
-                            .entry(component_id.clone())
-                            .or_default()
-                            .insert(entrypoint_with_params.clone());
-                    }
-                }
-            }
-        }
-
         self.cache
             .component_id_to_entrypoint_params
-            .extend_permanent(component_to_entrypoint_params);
+            .extend_permanent(entrypoints_with_params);
 
         // Load known tokens from database
         let quality_range = QualityRange::min_only(0);
@@ -1247,8 +1238,8 @@ where
                     slot_updates.retain(|slot, _| tracked_keys.contains(slot));
                 }
 
-                if !slot_updates.is_empty() ||
-                    contract_changes
+                if !slot_updates.is_empty()
+                    || contract_changes
                         .native_balance
                         .is_some()
                 {
@@ -1703,6 +1694,14 @@ mod tests {
                 (Bytes::from("0x22"), HashSet::from([Bytes::from("0x22")])),
             ])
         );
+
+        assert_eq!(
+            dci.cache
+                .component_id_to_entrypoint_params
+                .get_full_permanent_state()
+                .len(),
+            3
+        );
     }
 
     #[test_log::test(tokio::test)]
@@ -1757,11 +1756,11 @@ mod tests {
             .with(
                 eq(testing::block(2)),
                 predicate::function(|requests: &[StorageSnapshotRequest]| {
-                    requests.len() == 2 &&
-                        requests
+                    requests.len() == 2
+                        && requests
                             .iter()
-                            .any(|r| r.address == Bytes::from("0x09")) &&
-                        requests
+                            .any(|r| r.address == Bytes::from("0x09"))
+                        && requests
                             .iter()
                             .any(|r| r.address == Bytes::from("0x99"))
                 }),
@@ -1917,14 +1916,14 @@ mod tests {
                 eq(Bytes::from(4_u8).lpad(32, 0)),
                 // Entrypoints to trace
                 predicate::function(|ep_with_params: &Vec<EntryPointWithTracingParams>| {
-                    ep_with_params.len() == 2 &&
-                        ep_with_params.iter().any(|ep| {
+                    ep_with_params.len() == 2
+                        && ep_with_params.iter().any(|ep| {
                             ep == &EntryPointWithTracingParams::new(
                                 get_entrypoint(1),
                                 get_tracing_params(1),
                             )
-                        }) &&
-                        ep_with_params.iter().any(|ep| {
+                        })
+                        && ep_with_params.iter().any(|ep| {
                             ep == &EntryPointWithTracingParams::new(
                                 get_entrypoint(4),
                                 get_tracing_params(1),
@@ -1954,11 +1953,11 @@ mod tests {
             .with(
                 eq(testing::block(4)),
                 predicate::function(|requests: &[StorageSnapshotRequest]| {
-                    requests.len() == 2 &&
-                        requests
+                    requests.len() == 2
+                        && requests
                             .iter()
-                            .any(|r| r.address == Bytes::from("0x05")) &&
-                        requests
+                            .any(|r| r.address == Bytes::from("0x05"))
+                        && requests
                             .iter()
                             .any(|r| r.address == Bytes::from("0x55"))
                 }),
@@ -2103,16 +2102,16 @@ mod tests {
                 predicate::function({
                     let token_address = token_address.clone();
                     move |requests: &[StorageSnapshotRequest]| {
-                        requests.len() == 1 &&
-                            requests[0].address == token_address &&
-                            requests[0].slots.is_some() &&
-                            requests[0]
+                        requests.len() == 1
+                            && requests[0].address == token_address
+                            && requests[0].slots.is_some()
+                            && requests[0]
                                 .slots
                                 .as_ref()
                                 .unwrap()
-                                .len() ==
-                                1 &&
-                            requests[0]
+                                .len()
+                                == 1
+                            && requests[0]
                                 .slots
                                 .as_ref()
                                 .unwrap()
@@ -2201,16 +2200,16 @@ mod tests {
             .with(
                 eq(testing::block(2)),
                 predicate::function(move |requests: &[StorageSnapshotRequest]| {
-                    requests.len() == 1 &&
-                        requests[0].address == blacklisted_address_for_predicate &&
-                        requests[0].slots.is_some() &&
-                        requests[0]
+                    requests.len() == 1
+                        && requests[0].address == blacklisted_address_for_predicate
+                        && requests[0].slots.is_some()
+                        && requests[0]
                             .slots
                             .as_ref()
                             .unwrap()
-                            .len() ==
-                            1 &&
-                        requests[0]
+                            .len()
+                            == 1
+                        && requests[0]
                             .slots
                             .as_ref()
                             .unwrap()
@@ -2295,9 +2294,9 @@ mod tests {
             .with(
                 eq(testing::block(2)),
                 predicate::function(move |requests: &[StorageSnapshotRequest]| {
-                    requests.len() == 1 &&
-                        requests[0].address == normal_address_for_predicate &&
-                        requests[0].slots.is_none()
+                    requests.len() == 1
+                        && requests[0].address == normal_address_for_predicate
+                        && requests[0].slots.is_none()
                 }),
             )
             .return_once(move |_, _| {
@@ -2565,9 +2564,9 @@ mod tests {
                 predicate::function({
                     let tracked_address = tracked_address.clone();
                     move |requests: &[StorageSnapshotRequest]| {
-                        requests.len() == 1 &&
-                            requests[0].address == tracked_address &&
-                            requests[0].slots.is_none() // Should request all slots for non-tokens
+                        requests.len() == 1
+                            && requests[0].address == tracked_address
+                            && requests[0].slots.is_none() // Should request all slots for non-tokens
                     }
                 }),
             )
@@ -2651,16 +2650,16 @@ mod tests {
                     let token_address = token_address.clone();
                     let new_slot = new_slot.clone();
                     move |requests: &[StorageSnapshotRequest]| {
-                        requests.len() == 1 &&
-                            requests[0].address == token_address &&
-                            requests[0].slots.is_some() &&
-                            requests[0]
+                        requests.len() == 1
+                            && requests[0].address == token_address
+                            && requests[0].slots.is_some()
+                            && requests[0]
                                 .slots
                                 .as_ref()
                                 .unwrap()
-                                .len() ==
-                                1 &&
-                            requests[0]
+                                .len()
+                                == 1
+                            && requests[0]
                                 .slots
                                 .as_ref()
                                 .unwrap()
@@ -2753,10 +2752,10 @@ mod tests {
                 predicate::function({
                     let new_account = new_account.clone();
                     move |requests: &[StorageSnapshotRequest]| {
-                        requests.len() == 1 &&
-                            requests[0].address == new_account &&
-                            requests[0].slots.is_none() // Should request all slots for new
-                                                        // non-token account
+                        requests.len() == 1
+                            && requests[0].address == new_account
+                            && requests[0].slots.is_none() // Should request all slots for new
+                                                           // non-token account
                     }
                 }),
             )
@@ -3087,11 +3086,11 @@ mod tests {
             .with(
                 eq(Bytes::from(2_u8).lpad(32, 0)),
                 predicate::function(|entrypoints: &Vec<EntryPointWithTracingParams>| {
-                    entrypoints.len() == 2 &&
-                        entrypoints
+                    entrypoints.len() == 2
+                        && entrypoints
                             .iter()
-                            .any(|ep| ep.entry_point.external_id == "entrypoint_9") &&
-                        entrypoints
+                            .any(|ep| ep.entry_point.external_id == "entrypoint_9")
+                        && entrypoints
                             .iter()
                             .any(|ep| ep.entry_point.external_id == "entrypoint_10")
                 }),
@@ -3124,11 +3123,11 @@ mod tests {
             .with(
                 eq(testing::block(2)),
                 predicate::function(|requests: &[StorageSnapshotRequest]| {
-                    requests.len() == 2 &&
-                        requests
+                    requests.len() == 2
+                        && requests
                             .iter()
-                            .any(|r| r.address == Bytes::from("0x09")) &&
-                        requests
+                            .any(|r| r.address == Bytes::from("0x09"))
+                        && requests
                             .iter()
                             .any(|r| r.address == Bytes::from("0x99"))
                 }),
@@ -3638,12 +3637,11 @@ mod tests {
         let entrypoint_tracer = MockEntryPointTracer::new();
 
         let component_id = "component_1".to_string();
-        let entrypoint_id = "entrypoint_1".to_string();
         let entrypoint = get_entrypoint(1);
         let tracing_params = get_tracing_params(1);
 
         // Mock gateway responses for initialization
-        let entrypoint_id_clone = entrypoint_id.clone();
+        let component_id_clone = component_id.clone();
         let entrypoint_clone = entrypoint.clone();
         let tracing_params_clone = tracing_params.clone();
         gateway
@@ -3651,7 +3649,7 @@ mod tests {
             .return_once(move |_, _| {
                 Box::pin(async move {
                     Ok(gateway_response(HashMap::from([(
-                        entrypoint_id_clone,
+                        component_id_clone,
                         HashSet::from([EntryPointWithTracingParams::new(
                             entrypoint_clone,
                             tracing_params_clone,
