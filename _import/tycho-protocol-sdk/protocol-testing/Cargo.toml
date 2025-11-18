@@ -8,8 +8,8 @@ glob = "0.3.0"
 miette = { version = "7.6.0", features = ["fancy"] }
 # Logging & Tracing
 tracing = "0.1.37"
-tycho-simulation = { git = "https://github.com/propeller-heads/tycho-simulation.git", tag = "0.196.4", features = ["evm"] }
-tycho-test = { git = "https://github.com/propeller-heads/tycho-simulation.git", tag = "0.196.4" }
+tycho-simulation = { git = "https://github.com/propeller-heads/tycho-simulation.git", tag = "0.197.0", features = ["evm"] }
+tycho-test = { git = "https://github.com/propeller-heads/tycho-simulation.git", tag = "0.197.0" }
 tycho-execution = ">=0.134.0"
 num-bigint = "0.4"
 num-traits = "0.2"
@@ -18,6 +18,7 @@ num-rational = "0.4.2"
 alloy = { version = "1.0.30", features = ["arbitrary", "json", "dyn-abi", "sol-types", "contract", "provider-http", "providers", "signer-local", "rpc-types-eth", "rpc-types-trace"] }
 reqwest = { version = "0.12", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
+futures = "0.3"
 serde_json = "1.0.140"
 clap = "4.5.31"
 figment = { version = "0.10.19", features = ["yaml"] }
@@ -25,6 +26,7 @@ serde = { version = "1.0.218", features = ["derive"] }
 hex = "0.4.3"
 tracing-subscriber = "0.3.19"
 postgres = "0.19.10"
+tokio-postgres = "0.7"
 serde_yaml = "0.9.34"
 dotenv = "0.15.0"
 async-trait = "0.1.87"
@@ -34,3 +36,4 @@ termsize = "0.1.9"
 itertools = "0.14.0"
 tokio-retry2 = { version = "0.6.0", features = ["jitter"] }
 regex = "1.11.1"
+tempfile = "3.8.1"

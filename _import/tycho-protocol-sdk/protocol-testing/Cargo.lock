@@ -6483,6 +6483,7 @@ dependencies = [
  "colored",
  "dotenv",
  "figment",
+ "futures 0.3.31",
  "glob",
  "hex",
  "itertools 0.14.0",
@@ -6497,12 +6498,14 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "similar",
+ "tempfile",
  "termsize",
  "tokio",
+ "tokio-postgres",
  "tokio-retry2",
  "tracing",
  "tracing-subscriber 0.3.20",
- "tycho-execution 0.134.0",
+ "tycho-execution",
  "tycho-simulation",
  "tycho-test",
 ]
@@ -9106,31 +9109,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.133.0"
+version = "0.135.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd6408e00643817c82ca9604e2b966fe24a293e5ebe4548149c1abcf627c166b"
-dependencies = [
- "alloy",
- "chrono",
- "clap",
- "dotenv",
- "hex",
- "lazy_static",
- "num-bigint",
- "num-traits",
- "once_cell",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tycho-common",
-]
-
-[[package]]
-name = "tycho-execution"
-version = "0.134.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "572b374e2cbc2de7ab6f46f744238fb114f87817c94d88e094e53549e22f4b7e"
+checksum = "012ff349538aeee6b3a132dce156eab5048629f206fec484ad6bd82e48fa4c9a"
 dependencies = [
  "alloy",
  "chrono",
@@ -9150,8 +9131,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.196.4"
-source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.196.4#67bc620c309b91718617db53e9043c0def0d51b6"
+version = "0.197.0"
+source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.197.0#c4f4c6d2b9412707130fa7fdf88d80b89b938a22"
 dependencies = [
  "alloy",
  "async-stream",
@@ -9194,8 +9175,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-test"
-version = "0.196.0"
-source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.196.4#67bc620c309b91718617db53e9043c0def0d51b6"
+version = "0.197.0"
+source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.197.0#c4f4c6d2b9412707130fa7fdf88d80b89b938a22"
 dependencies = [
  "actix-web",
  "alloy",
@@ -9222,7 +9203,7 @@ dependencies = [
  "tycho-client",
  "tycho-common",
  "tycho-ethereum",
- "tycho-execution 0.133.0",
+ "tycho-execution",
  "tycho-simulation",
  "urlencoding",
 ]

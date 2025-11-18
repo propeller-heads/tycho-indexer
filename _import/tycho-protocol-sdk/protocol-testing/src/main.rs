@@ -31,7 +31,7 @@ enum TestSubcommand {
     Range(RangeTestCommand),
 }
 
-/// Run a test from a specific initial block to the latest block
+/// Run continuous sync test from a specific initial block
 #[derive(Args)]
 pub struct FullTestCommand {
     #[command(flatten)]
@@ -42,29 +42,20 @@ pub struct FullTestCommand {
     /// configuration.
     #[arg(long)]
     initial_block: Option<u64>,
-
-    /// Stop the test at this block number.
-    /// If not provided, it will use the latest block of the chain at the time of running the
-    /// command.
-    #[arg(long)]
-    stop_block: Option<u64>,
 }
 
 impl FullTestCommand {
     fn run(self) -> miette::Result<()> {
         let args = self.common_args;
         TestRunner::new(
-            TestType::Full(TestTypeFull {
-                initial_block: self.initial_block,
-                stop_block: self.stop_block,
-            }),
+            TestType::Full(TestTypeFull { initial_block: self.initial_block }),
             args.root_path()?,
             args.chain,
             args.package,
             args.db_url,
             args.rpc_url,
             args.vm_simulation_traces,
-            args.skip_indexing,
+            args.clear_db,
         )?
         .run()
     }
@@ -92,7 +83,7 @@ impl RangeTestCommand {
             args.db_url,
             args.rpc_url,
             args.vm_simulation_traces,
-            args.skip_indexing,
+            args.clear_db,
         )?
         .run()
     }
@@ -131,9 +122,11 @@ struct CommonArgs {
     #[arg(long, default_value_t = false)]
     execution_traces: bool,
 
-    /// Skip indexing and run directly against the database
-    #[arg(long, default_value_t = false)]
-    skip_indexing: bool,
+    /// If true (default), clears the DB and re-syncs from start. If false:
+    //   - for the ranged test, it skips indexing and uses the current state
+    //   - for the full test, it starts syncing from the last block in the db
+    #[arg(long, default_value_t = true)]
+    clear_db: bool,
 }
 
 impl CommonArgs {

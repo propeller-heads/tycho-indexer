@@ -83,14 +83,14 @@ impl RPCProvider {
             .and_then(|block_opt| block_opt.ok_or_else(|| miette::miette!("Block not found")))
     }
 
-    pub async fn get_current_block(&self) -> miette::Result<Block> {
-        info!("Fetching current block...");
+    pub async fn get_block(&self, block_number: BlockNumberOrTag) -> miette::Result<Block> {
+        info!("Fetching block {:?}...", block_number.as_number());
         let provider = ProviderBuilder::new().connect_http(self.url.clone());
         provider
-            .get_block_by_number(BlockNumberOrTag::Latest)
+            .get_block_by_number(block_number)
             .await
             .into_diagnostic()
-            .wrap_err("Failed to fetch current block")
+            .wrap_err(format!("Failed to fetch block {:?}", block_number))
             .and_then(|block_opt| block_opt.ok_or_else(|| miette::miette!("Block not found")))
     }
 }

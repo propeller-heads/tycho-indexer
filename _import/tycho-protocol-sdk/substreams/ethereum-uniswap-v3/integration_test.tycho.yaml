@@ -8,7 +8,7 @@ initialized_accounts:
 tests:
   - name: test_weth_now_pool
     start_block: 22182832
-    stop_block: 22182834
+    stop_block: 22182840
     expected_components:
       - id: "0x545b7db6632ab230fd84897488291def7912319c"
         tokens:

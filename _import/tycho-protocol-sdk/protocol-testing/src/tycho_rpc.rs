@@ -1,6 +1,7 @@
 use std::{collections::HashMap, error::Error as StdError, fmt};
 
-use tracing::debug;
+use tokio::time::{sleep, Duration};
+use tracing::{debug, info, warn};
 use tycho_simulation::{
     tycho_client::{
         feed::synchronizer::Snapshot,
@@ -52,9 +53,10 @@ pub struct TychoClient {
 }
 
 impl TychoClient {
-    pub fn new(host: &str) -> Result<Self, RpcError> {
-        let http_client = HttpRPCClient::new(host, HttpRPCClientOptions::default())
-            .map_err(|e| RpcError::ClientError(e.to_string()))?;
+    pub fn new(host: &str, auth_key: Option<String>) -> Result<Self, RpcError> {
+        let options = HttpRPCClientOptions::new().with_auth_key(auth_key);
+        let http_client =
+            HttpRPCClient::new(host, options).map_err(|e| RpcError::ClientError(e.to_string()))?;
         Ok(Self { http_client })
     }
 
@@ -66,11 +68,12 @@ impl TychoClient {
     ) -> Result<Vec<ProtocolComponent>, RpcError> {
         let request = ProtocolComponentsRequestBody::system_filtered(protocol_system, None, chain);
 
+        let chunk_size = 100;
         let concurrency = 1;
 
         let response = self
             .http_client
-            .get_protocol_components_paginated(&request, None, concurrency)
+            .get_protocol_components_paginated(&request, Some(chunk_size), concurrency)
             .await?;
 
         Ok(response.protocol_components)
@@ -89,7 +92,7 @@ impl TychoClient {
         #[allow(clippy::mutable_key_type)]
         let res = self
             .http_client
-            .get_all_tokens(chain, min_quality, max_days_since_last_trade, None, concurrency)
+            .get_all_tokens(chain, min_quality, max_days_since_last_trade, Some(3_000), concurrency)
             .await?
             .into_iter()
             .map(|token| {
@@ -146,13 +149,47 @@ impl TychoClient {
             SnapshotParameters::new(chain, protocol_system, components, contract_ids, block_number)
                 .entrypoints(entrypoints);
 
+        let chunk_size = 100;
         let concurrency = 1;
 
         let response = self
             .http_client
-            .get_snapshots(&params, None, concurrency)
+            .get_snapshots(&params, Some(chunk_size), concurrency)
             .await?;
 
         Ok(response)
+    }
+
+    /// Waits for the protocol to be synced and have components available
+    pub async fn wait_for_protocol_sync(
+        &self,
+        protocol_system: &str,
+        chain: Chain,
+    ) -> Result<(), RpcError> {
+        loop {
+            match self
+                .get_protocol_components(protocol_system, chain)
+                .await
+            {
+                Ok(components) => {
+                    info!("Found {} components for protocol {}", components.len(), protocol_system);
+                    if !components.is_empty() {
+                        return Ok(());
+                    }
+                    info!(
+                        "Protocol {} found but no components available yet, waiting...",
+                        protocol_system
+                    );
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to get protocol components for {}: {}. Retrying in 15 minutes...",
+                        protocol_system, e
+                    );
+                }
+            }
+
+            sleep(Duration::from_secs(15 * 60)).await;
+        }
     }
 }

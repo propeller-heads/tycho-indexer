@@ -1,5 +1,5 @@
 use std::{
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Write},
     process::{Child, Command, Stdio},
     sync::mpsc::{self, Receiver, Sender},
     thread,
@@ -7,6 +7,7 @@ use std::{
 };
 
 use miette::{IntoDiagnostic, WrapErr};
+use tempfile::NamedTempFile;
 use tracing::{debug, info};
 use tycho_simulation::tycho_common::dto::Chain;
 pub struct TychoRunner {
@@ -34,7 +35,7 @@ impl TychoRunner {
         protocol_system: &str,
         module_name: Option<String>,
     ) -> miette::Result<()> {
-        info!("Running Tycho indexer from block {start_block} to {end_block}...",);
+        info!("Running Tycho indexer from block {start_block} to {end_block}...");
 
         let mut cmd = Command::new("tycho-indexer");
         cmd.env("RUST_LOG", std::env::var("RUST_LOG").unwrap_or("tycho_indexer=info".to_string()))
@@ -157,6 +158,134 @@ impl TychoRunner {
         }
 
         Ok(())
+    }
+
+    pub fn run_tycho_index(
+        &self,
+        spkg_path: &str,
+        start_block: u64,
+        protocol_type_names: &[String],
+        protocol_system: &str,
+        module_name: Option<String>,
+    ) -> miette::Result<()> {
+        info!("Running Tycho indexer with Index command (continuous syncing + RPC server) from block {start_block}...");
+
+        // Create temporary extractors.yaml file
+        let extractors_config = self.create_extractors_config(
+            spkg_path,
+            start_block,
+            protocol_type_names,
+            protocol_system,
+            module_name,
+        )?;
+
+        let mut temp_file = NamedTempFile::new()
+            .into_diagnostic()
+            .wrap_err("Failed to create temporary extractors config file")?;
+
+        temp_file
+            .write_all(extractors_config.as_bytes())
+            .into_diagnostic()
+            .wrap_err("Failed to write extractors config")?;
+
+        let temp_path = temp_file
+            .path()
+            .to_str()
+            .ok_or_else(|| miette::miette!("Invalid temp file path"))?;
+
+        let mut cmd = Command::new("tycho-indexer");
+        cmd.env("RUST_LOG", std::env::var("RUST_LOG").unwrap_or("tycho_indexer=info".to_string()))
+            .env("AUTH_API_KEY", "dummy");
+
+        cmd.args([
+            "--database-url",
+            self.db_url.as_str(),
+            "--endpoint",
+            get_default_endpoint(&self.chain)
+                .unwrap_or_else(|| panic!("Unknown endpoint for chain {}", self.chain))
+                .as_str(),
+            "index",
+            "--extractors-config",
+            temp_path,
+            "--chains",
+            &self.chain.to_string(),
+            "--retention-horizon",
+            "2024-01-01T00:00:00",
+        ]);
+
+        cmd.stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        let mut process = cmd
+            .spawn()
+            .into_diagnostic()
+            .wrap_err("Error running Tycho indexer with Index command")?;
+
+        Self::handle_process_output(&mut process);
+
+        // Keep the temp file alive until process finishes
+        let _temp_file_guard = temp_file;
+
+        let status = process
+            .wait()
+            .into_diagnostic()
+            .wrap_err("Failed to wait on Tycho indexer process")?;
+
+        if !status.success() {
+            debug!("Tycho indexer Index process exited with status: {status}");
+        }
+
+        Ok(())
+    }
+
+    fn create_extractors_config(
+        &self,
+        spkg_path: &str,
+        start_block: u64,
+        protocol_type_names: &[String],
+        protocol_system: &str,
+        module_name: Option<String>,
+    ) -> miette::Result<String> {
+        let protocol_types = protocol_type_names
+            .iter()
+            .map(|name| {
+                format!(
+                    "    - name: \"{}\"\n      financial_type: Swap",
+                    name
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let initialized_accounts_section = if self.initialized_accounts.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "    initialized_accounts:\n{}\n    initialized_accounts_block: {}",
+                self.initialized_accounts
+                    .iter()
+                    .map(|acc| format!("      - \"{}\"", acc))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+                start_block
+            )
+        };
+
+        let config = format!(
+            "extractors:\n  {}:\n    name: \"{}\"\n    chain: {}\n    implementation_type: Vm\n    sync_batch_size: 1\n    start_block: {}\n    stop_block: null\n    protocol_types:\n{}\n    spkg: \"{}\"\n    module_name: \"{}\"\n{}\n    dci_plugin: RPC\n",
+            protocol_system,
+            protocol_system,
+            self.chain.to_string().to_lowercase(),
+            start_block,
+            protocol_types,
+            spkg_path,
+            module_name
+                .as_deref()
+                .unwrap_or("map_protocol_changes"),
+            initialized_accounts_section
+        );
+
+        Ok(config)
     }
 
     // Helper method to handle process output in separate threads
