@@ -798,7 +798,7 @@ where
                 }
             }
         }
-
+        debug!("Components with params {}", component_to_entrypoint_params.len());
         self.cache
             .component_id_to_entrypoint_params
             .extend_permanent(component_to_entrypoint_params);
