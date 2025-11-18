@@ -53,11 +53,10 @@ contract SlipstreamsExecutor is IExecutor, ICallback, RestrictTransferFrom {
         (
             address tokenIn,
             address tokenOut,
-            int24 tick_spacing,
+            int24 tick_spacing,,
             address receiver,
             address target,
-            bool zeroForOne,
-            TransferType transferType
+            bool zeroForOne
         ) = _decodeData(data);
 
         _verifyPairAddress(tokenIn, tokenOut, tick_spacing, target);
@@ -66,9 +65,7 @@ contract SlipstreamsExecutor is IExecutor, ICallback, RestrictTransferFrom {
         int256 amount1;
         IUniswapV3Pool pool = IUniswapV3Pool(target);
 
-        bytes memory callbackData = _makeSlipstreamsCallbackData(
-            tokenIn, tokenOut, tick_spacing, transferType
-        );
+        bytes memory callbackData = data[0:44];
 
         {
             (amount0, amount1) = pool.swap(
@@ -140,10 +137,10 @@ contract SlipstreamsExecutor is IExecutor, ICallback, RestrictTransferFrom {
             address tokenIn,
             address tokenOut,
             int24 tick_spacing,
+            TransferType transferType,
             address receiver,
             address target,
-            bool zeroForOne,
-            TransferType transferType
+            bool zeroForOne
         )
     {
         if (data.length != 85) {
@@ -152,21 +149,10 @@ contract SlipstreamsExecutor is IExecutor, ICallback, RestrictTransferFrom {
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
         tick_spacing = int24(uint24(bytes3(data[40:43])));
-        receiver = address(bytes20(data[43:63]));
-        target = address(bytes20(data[63:83]));
-        zeroForOne = uint8(data[83]) > 0;
-        transferType = TransferType(uint8(data[84]));
-    }
-
-    function _makeSlipstreamsCallbackData(
-        address tokenIn,
-        address tokenOut,
-        int24 tick_spacing,
-        TransferType transferType
-    ) internal pure returns (bytes memory) {
-        return abi.encodePacked(
-            tokenIn, tokenOut, tick_spacing, uint8(transferType)
-        );
+        transferType = TransferType(uint8(data[43]));
+        receiver = address(bytes20(data[44:64]));
+        target = address(bytes20(data[64:84]));
+        zeroForOne = uint8(data[84]) > 0;
     }
 
     function getPoolKey(address tokenA, address tokenB, int24 tickSpacing)

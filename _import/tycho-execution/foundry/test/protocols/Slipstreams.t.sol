@@ -20,10 +20,10 @@ contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
             address inToken,
             address outToken,
             int24 tick_spacing,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address target,
-            bool zeroForOne,
-            RestrictTransferFrom.TransferType transferType
+            bool zeroForOne
         )
     {
         return _decodeData(data);
@@ -67,20 +67,20 @@ contract SlipstreamsExecutorTest is
             BASE_WETH,
             BASE_USDC,
             expectedTickSpacing,
+            RestrictTransferFrom.TransferType.Transfer,
             address(2),
             address(3),
-            false,
-            RestrictTransferFrom.TransferType.Transfer
+            false
         );
 
         (
             address tokenIn,
             address tokenOut,
             int24 tick_spacing,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address target,
-            bool zeroForOne,
-            RestrictTransferFrom.TransferType transferType
+            bool zeroForOne
         ) = slipstreamsExposed.decodeData(data);
 
         assertEq(tokenIn, BASE_WETH);
@@ -101,13 +101,14 @@ contract SlipstreamsExecutorTest is
 
         bool zeroForOne = true;
 
-        bytes memory data = encodeSlipstreamsSwap(
+        bytes memory data = abi.encodePacked(
             BASE_WETH,
             BASE_USDC,
+            IUniswapV3Pool(SLIPSTREAMS_WETH_USDC_POOL).tickSpacing(),
+            RestrictTransferFrom.TransferType.Transfer,
             address(this),
             SLIPSTREAMS_WETH_USDC_POOL,
-            zeroForOne,
-            RestrictTransferFrom.TransferType.Transfer
+            zeroForOne
         );
 
         uint256 amountOut = slipstreamsExposed.swap(amountIn, data);
@@ -174,10 +175,10 @@ contract SlipstreamsExecutorTest is
             BASE_WETH,
             BASE_USDC,
             uint24(100),
+            RestrictTransferFrom.TransferType.Transfer,
             address(this),
             fakePool,
-            zeroForOne,
-            RestrictTransferFrom.TransferType.Transfer
+            zeroForOne
         );
 
         vm.expectRevert(SlipstreamsExecutor__InvalidTarget.selector);
@@ -197,10 +198,10 @@ contract SlipstreamsExecutorTest is
             tokenIn,
             tokenOut,
             pool.tickSpacing(),
+            transferType,
             receiver,
             target,
-            zero2one,
-            transferType
+            zero2one
         );
     }
 

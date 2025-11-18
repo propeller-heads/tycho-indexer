@@ -1116,10 +1116,10 @@ impl SwapEncoder for SlipstreamsSwapEncoder {
             token_in_address,
             token_out_address,
             tick_spacing_bytes_u24,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
             bytes_to_address(&encoding_context.receiver)?,
             component_id,
             zero_to_one,
-            (encoding_context.transfer_type as u8).to_be_bytes(),
         );
 
         Ok(args.abi_encode_packed())
