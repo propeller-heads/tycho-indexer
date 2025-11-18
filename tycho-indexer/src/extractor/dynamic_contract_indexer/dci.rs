@@ -693,6 +693,20 @@ where
             .await
             .map_err(ExtractionError::from)?;
 
+        // Log a quick summary
+        debug!("Components with params: {}", entrypoints_with_params.len());
+        debug!(
+            "Components with tracing results: {}",
+            entrypoint_results
+                .keys()
+                .flat_map(|ep_id| ep_id_to_component_id
+                    .get(ep_id)
+                    .map(|comp| comp.iter()))
+                .flatten()
+                .collect::<HashSet<_>>()
+                .len()
+        );
+
         self.cache
             .ep_id_to_component_id
             .extend_permanent(ep_id_to_component_id);
@@ -776,32 +790,9 @@ where
         }
 
         // Build and populate component_id_to_entrypoint_params mapping
-        let mut component_to_entrypoint_params: HashMap<
-            ComponentId,
-            HashSet<EntryPointWithTracingParams>,
-        > = HashMap::new();
-
-        for (entrypoint_id, params_set) in entrypoints_with_params.iter() {
-            // Get all components that use this entrypoint
-            if let Some(component_ids) = self
-                .cache
-                .ep_id_to_component_id
-                .get(entrypoint_id)
-            {
-                for component_id in component_ids {
-                    for entrypoint_with_params in params_set.iter() {
-                        component_to_entrypoint_params
-                            .entry(component_id.clone())
-                            .or_default()
-                            .insert(entrypoint_with_params.clone());
-                    }
-                }
-            }
-        }
-        debug!("Components with params {}", component_to_entrypoint_params.len());
         self.cache
             .component_id_to_entrypoint_params
-            .extend_permanent(component_to_entrypoint_params);
+            .extend_permanent(entrypoints_with_params);
 
         // Load known tokens from database
         let quality_range = QualityRange::min_only(0);
@@ -1682,6 +1673,14 @@ mod tests {
                 (Bytes::from("0x02"), HashSet::from([Bytes::from("0x22")])),
                 (Bytes::from("0x22"), HashSet::from([Bytes::from("0x22")])),
             ])
+        );
+
+        assert_eq!(
+            dci.cache
+                .component_id_to_entrypoint_params
+                .get_full_permanent_state()
+                .len(),
+            3
         );
     }
 
@@ -3618,12 +3617,11 @@ mod tests {
         let entrypoint_tracer = MockEntryPointTracer::new();
 
         let component_id = "component_1".to_string();
-        let entrypoint_id = "entrypoint_1".to_string();
         let entrypoint = get_entrypoint(1);
         let tracing_params = get_tracing_params(1);
 
         // Mock gateway responses for initialization
-        let entrypoint_id_clone = entrypoint_id.clone();
+        let component_id_clone = component_id.clone();
         let entrypoint_clone = entrypoint.clone();
         let tracing_params_clone = tracing_params.clone();
         gateway
@@ -3631,7 +3629,7 @@ mod tests {
             .return_once(move |_, _| {
                 Box::pin(async move {
                     Ok(gateway_response(HashMap::from([(
-                        entrypoint_id_clone,
+                        component_id_clone,
                         HashSet::from([EntryPointWithTracingParams::new(
                             entrypoint_clone,
                             tracing_params_clone,
