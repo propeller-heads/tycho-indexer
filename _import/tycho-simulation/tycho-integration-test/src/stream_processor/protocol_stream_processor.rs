@@ -18,6 +18,7 @@ use tycho_simulation::{
             filters::{
                 balancer_v2_pool_filter, curve_pool_filter, uniswap_v4_euler_hook_pool_filter,
             },
+            fluid::FluidV1,
             pancakeswap_v2::state::PancakeswapV2State,
             uniswap_v2::state::UniswapV2State,
             uniswap_v3::state::UniswapV3State,
@@ -143,7 +144,8 @@ impl ProtocolStreamProcessor {
                         "vm:maverick_v2",
                         tvl_filter.clone(),
                         None,
-                    );
+                    )
+                    .exchange::<FluidV1>("fluid_v1", tvl_filter.clone(), None);
             }
             Chain::Base => {
                 protocol_stream = protocol_stream
