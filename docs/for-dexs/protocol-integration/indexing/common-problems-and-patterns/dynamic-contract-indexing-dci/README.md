@@ -11,7 +11,7 @@ Using predefined tracing information (known as entry points), Tycho's DCI assume
 
 ### Understanding Entry Points
 
-DCI relies on the substreams package to supply tracing information for it to analyse and detect dependency contracts. It is important to understand the protocol being integrated and know where it might make external calls during simulations (swaps, price etc). These external calls need to be able to be defined fully by the combination of 'Entry Points' and 'Tracing Parameters'. See [limitations](dynamic-contract-indexing-dci.md#motivation-1) below for more information on what is not covered by the current DCI implementation.
+DCI relies on the substreams package to supply tracing information for it to analyse and detect dependency contracts. It is important to understand the protocol being integrated and know where it might make external calls during simulations (swaps, price etc). These external calls need to be able to be defined fully by the combination of 'Entry Points' and 'Tracing Parameters'. See [limitations](./#motivation-1) below for more information on what is not covered by the current DCI implementation.
 
 When an entry point is traced, all subsequent calls to other external contracts are automatically traced. Only the initial entry point needs to be supplied.
 
