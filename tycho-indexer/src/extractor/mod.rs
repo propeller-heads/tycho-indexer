@@ -40,6 +40,9 @@ pub mod runner;
 pub mod token_analysis_cron;
 mod u256_num;
 
+// Re-export RPCRetryConfig for CLI usage
+pub use dynamic_contract_indexer::RPCRetryConfig;
+
 #[derive(Error, Debug, PartialEq)]
 pub enum ExtractionError {
     #[error("Extractor setup failed: {0}")]

@@ -16,21 +16,24 @@ use tycho_ethereum::{
     },
 };
 
-use crate::extractor::dynamic_contract_indexer::{
-    component_metadata::{
-        MetadataGeneratorRegistry, MetadataResponseParserRegistry, ProviderRegistry,
+pub(crate) use crate::extractor::{
+    dynamic_contract_indexer::{
+        component_metadata::{
+            MetadataGeneratorRegistry, MetadataResponseParserRegistry, ProviderRegistry,
+        },
+        dci::DynamicContractIndexer,
+        entrypoint_generator::{
+            DefaultSwapAmountEstimator, HookEntrypointConfig, HookEntrypointGenerator,
+            UniswapV4DefaultHookEntrypointGenerator, UNICHAIN_V4_MINI_ROUTER_BYTECODE,
+            V4_MINI_ROUTER_BYTECODE,
+        },
+        euler::metadata_generator::{EulerMetadataGenerator, EulerMetadataResponseParser},
+        hook_dci::UniswapV4HookDCI,
+        hook_orchestrator::{DefaultUniswapV4HookOrchestrator, HookOrchestratorRegistry},
+        metadata_orchestrator::BlockMetadataOrchestrator,
+        rpc_metadata_provider::RPCMetadataProvider,
     },
-    dci::DynamicContractIndexer,
-    entrypoint_generator::{
-        DefaultSwapAmountEstimator, HookEntrypointConfig, HookEntrypointGenerator,
-        UniswapV4DefaultHookEntrypointGenerator, UNICHAIN_V4_MINI_ROUTER_BYTECODE,
-        V4_MINI_ROUTER_BYTECODE,
-    },
-    euler::metadata_generator::{EulerMetadataGenerator, EulerMetadataResponseParser},
-    hook_dci::UniswapV4HookDCI,
-    hook_orchestrator::{DefaultUniswapV4HookOrchestrator, HookOrchestratorRegistry},
-    metadata_orchestrator::BlockMetadataOrchestrator,
-    rpc_metadata_provider::{RPCMetadataProvider, RPCRetryConfig},
+    RPCRetryConfig,
 };
 
 #[derive(Deserialize)]
@@ -41,6 +44,7 @@ struct EulerHooks {
 /// Sets up all necessary registries for Hooks DCI testing with Euler support
 pub fn setup_metadata_registries(
     rpc_url: String,
+    rpc_retry_config: RPCRetryConfig,
 ) -> (MetadataGeneratorRegistry, MetadataResponseParserRegistry, ProviderRegistry) {
     let mut generator_registry = MetadataGeneratorRegistry::new();
     let mut parser_registry = MetadataResponseParserRegistry::new();
@@ -55,12 +59,10 @@ pub fn setup_metadata_registries(
     // Register Euler response parser
     parser_registry.register_parser("euler".to_string(), Box::new(EulerMetadataResponseParser));
 
-    // Register RPC provider with default routing key and retry configuration
-    let retry_config =
-        RPCRetryConfig { max_retries: 5, initial_backoff_ms: 150, max_backoff_ms: 5000 };
+    // Register RPC provider with default routing key
     provider_registry.register_provider(
         "rpc_default".to_string(),
-        Arc::new(RPCMetadataProvider::new_with_retry_config(50, retry_config)), // batch size limit with retry config
+        Arc::new(RPCMetadataProvider::new_with_retry_config(50, rpc_retry_config)), // batch size limit with retry config
     );
 
     (generator_registry, parser_registry, provider_registry)
@@ -127,6 +129,7 @@ pub fn create_testing_hooks_dci<AE, T, G>(
     inner_dci: DynamicContractIndexer<AE, T, G>,
     rpc: &EthereumRpcClient,
     rpc_url: String,
+    rpc_retry_config: RPCRetryConfig,
     router_address: Address,
     pool_manager: Address,
     db_gateway: G,
@@ -141,7 +144,7 @@ where
 {
     // Setup metadata registries
     let (generator_registry, parser_registry, provider_registry) =
-        setup_metadata_registries(rpc_url.clone());
+        setup_metadata_registries(rpc_url, rpc_retry_config);
 
     // Setup hook orchestrator registry
     let hook_orchestrator_registry =
@@ -171,7 +174,7 @@ mod tests {
     fn test_setup_metadata_registries() {
         let rpc_url = "https://eth-mainnet.alchemyapi.io/v2/test".to_string();
         let (_generator_registry, parser_registry, provider_registry) =
-            setup_metadata_registries(rpc_url);
+            setup_metadata_registries(rpc_url, RPCRetryConfig::default());
 
         // Verify parser registry has Euler parser
         assert!(parser_registry

@@ -41,7 +41,7 @@ use crate::{
         post_processors::POST_PROCESSOR_REGISTRY,
         protocol_cache::ProtocolMemoryCache,
         protocol_extractor::{ExtractorPgGateway, ProtocolExtractor},
-        ExtractionError, Extractor, ExtractorExtension, ExtractorMsg,
+        ExtractionError, Extractor, ExtractorExtension, ExtractorMsg, RPCRetryConfig,
     },
     pb::sf::substreams::v1::Package,
     substreams::{
@@ -449,6 +449,8 @@ pub struct ExtractorBuilder {
     runtime_handle: Option<Handle>,
     /// Global RPC URL to use for DCI plugins
     rpc_url: Option<String>,
+    /// Global RPC retry configuration to use for DCI plugins
+    rpc_retry_config: Option<RPCRetryConfig>,
 }
 
 impl ExtractorBuilder {
@@ -468,6 +470,7 @@ impl ExtractorBuilder {
             final_block_only: false,
             runtime_handle: None,
             rpc_url: None,
+            rpc_retry_config: None,
         }
     }
 
@@ -505,6 +508,12 @@ impl ExtractorBuilder {
     /// Set the global RPC URL to use for DCI plugins
     pub fn rpc_url(mut self, rpc_url: &str) -> Self {
         self.rpc_url = Some(rpc_url.to_string());
+        self
+    }
+
+    /// Set the global RPC retry configuration to use for DCI plugins
+    pub fn rpc_retry_config(mut self, rpc_retry_config: RPCRetryConfig) -> Self {
+        self.rpc_retry_config = Some(rpc_retry_config);
         self
     }
 
@@ -661,6 +670,12 @@ impl ExtractorBuilder {
                                 .to_string(),
                         )
                     })?;
+                    let rpc_retry_config = self.rpc_retry_config.as_ref().ok_or_else(|| {
+                        ExtractionError::Setup(
+                            "RPC retry config is required for UniswapV4Hooks DCI plugin but not provided"
+                                .to_string(),
+                        )
+                    })?;
 
                     // random address to deploy our mini router to
                     let router_address =
@@ -679,6 +694,7 @@ impl ExtractorBuilder {
                         base_dci,
                         rpc_client,
                         rpc_url.clone(),
+                        rpc_retry_config.clone(),
                         router_address,
                         pool_manager,
                         cached_gw.clone(),
