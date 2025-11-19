@@ -34,7 +34,7 @@ use tycho_common::{
 };
 
 use crate::{
-    rpc::{retry::RetryPolicy, EthereumRpcClient},
+    rpc::{retry::WithMaxAttemptsBackoff, EthereumRpcClient},
     BytesCodec, RPCError,
 };
 
@@ -50,17 +50,14 @@ impl EVMEntrypointService {
 
     // TODO: consider if we want to use the default retry policy from the rpc client
     pub fn new_with_config(rpc: &EthereumRpcClient, max_retries: u32, retry_delay_ms: u64) -> Self {
-        // Calculate max elapsed time for retries to match the max allowed retries
-        let max_elapsed = (max_retries * (max_retries + 1) / 2) as u64 * retry_delay_ms + 1;
-
-        let retry_policy = ExponentialBackoffBuilder::default()
+        let exp_policy = ExponentialBackoffBuilder::default()
             .with_initial_interval(Duration::from_millis(retry_delay_ms))
-            .with_max_elapsed_time(Some(Duration::from_millis(max_elapsed)))
+            .with_max_interval(Duration::from_millis(retry_delay_ms))
             .build();
 
-        let rpc_client = rpc
-            .clone()
-            .with_retry_policy(RetryPolicy::new(retry_policy));
+        let policy = WithMaxAttemptsBackoff::new(exp_policy, max_retries as usize);
+
+        let rpc_client = rpc.clone().with_retry_policy(policy);
 
         Self { rpc: rpc_client }
     }
