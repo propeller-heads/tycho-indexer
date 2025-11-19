@@ -7233,6 +7233,7 @@ dependencies = [
  "pretty_assertions",
  "rand 0.8.5",
  "rstest",
+ "serde",
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
