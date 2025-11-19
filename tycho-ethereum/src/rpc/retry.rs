@@ -238,10 +238,9 @@ pub(crate) mod tests {
 
     pub(crate) fn mock_retry_policy() -> WithMaxAttemptsBackoff<ExponentialBackoff> {
         let inner = ExponentialBackoffBuilder::new()
-            .with_initial_interval(Duration::from_millis(1))
-            .with_multiplier(1.1)
-            .with_max_interval(Duration::from_millis(5))
-            .with_max_elapsed_time(Some(Duration::from_millis(50)))
+            .with_initial_interval(Duration::from_millis(10))
+            .with_multiplier(2.0)
+            .with_max_interval(Duration::from_millis(100))
             .build();
 
         WithMaxAttemptsBackoff::new(inner, MOCK_RETRY_POLICY_MAX_ATTEMPTS)
