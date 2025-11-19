@@ -347,7 +347,9 @@ impl ProtocolStreamBuilder {
     pub async fn build(
         self,
     ) -> Result<impl Stream<Item = Result<Update, StreamDecodeError>>, StreamError> {
-        initialize_hook_handlers().unwrap();
+        initialize_hook_handlers().map_err(|e| {
+            StreamError::SetUpError(format!("Error initializing hook handlers: {e:?}"))
+        })?;
         let (_, rx) = self.stream_builder.build().await?;
         let decoder = Arc::new(self.decoder);
 

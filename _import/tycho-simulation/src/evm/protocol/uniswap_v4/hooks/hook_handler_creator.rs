@@ -143,8 +143,10 @@ lazy_static! {
 }
 
 pub fn initialize_hook_handlers() -> Result<(), SimulationError> {
-    let angstrom_hook_address =
-        Address::from_str("0x0000000aa232009084Bd71A5797d089AA4Edfad4").unwrap();
+    let angstrom_hook_address = Address::from_str("0x0000000aa232009084Bd71A5797d089AA4Edfad4")
+        .map_err(|_| {
+            SimulationError::FatalError("Failed to parse Angstrom hook address".to_string())
+        })?;
     register_hook_handler(angstrom_hook_address, Box::new(AngstromHookCreator))?;
 
     Ok(())
