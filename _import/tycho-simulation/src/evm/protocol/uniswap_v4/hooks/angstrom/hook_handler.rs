@@ -29,16 +29,12 @@ pub struct AngstromFees {
 pub(crate) struct AngstromHookHandler {
     address: Address,
     pool_manager: Address,
-    current_trading_pairs: HashMap<(Address, Address), AngstromFees>,
+    fees: AngstromFees,
 }
 
 impl AngstromHookHandler {
-    pub fn new(
-        address: Address,
-        pool_manager: Address,
-        current_trading_pairs: HashMap<(Address, Address), AngstromFees>,
-    ) -> Self {
-        Self { address, pool_manager, current_trading_pairs }
+    pub fn new(address: Address, pool_manager: Address, fees: AngstromFees) -> Self {
+        Self { address, pool_manager, fees }
     }
 }
 impl HookHandler for AngstromHookHandler {
@@ -70,17 +66,6 @@ impl HookHandler for AngstromHookHandler {
             gas_estimate += 10_000;
         }
 
-        // Validate that this pair is enabled for trading and get fees
-        let fees = self
-            .current_trading_pairs
-            .get(&(params.context.currency_0, params.context.currency_1))
-            .copied()
-            .ok_or_else(|| {
-                SimulationError::FatalError(
-                    "pair is not enabled for trading on angstrom".to_string(),
-                )
-            })?;
-
         // Gas for internal asset/pool lookup
         gas_estimate += 1000;
 
@@ -90,7 +75,7 @@ impl HookHandler for AngstromHookHandler {
         // Replicate the behaviour of the Angstrom hook:
         // swapFee = _unlockedFees[storeKey].unlockedFee | LPFeeLibrary.OVERRIDE_FEE_FLAG;
         const OVERRIDE_FEE_FLAG: u32 = 1 << 22;
-        let swap_fee_override = U24::from(fees.unlock.to::<u32>() | OVERRIDE_FEE_FLAG);
+        let swap_fee_override = U24::from(self.fees.unlock.to::<u32>() | OVERRIDE_FEE_FLAG);
 
         Ok(WithGasEstimate {
             gas_estimate,
@@ -109,18 +94,7 @@ impl HookHandler for AngstromHookHandler {
         _: Option<HashMap<Address, HashMap<U256, U256>>>,
         _: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<WithGasEstimate<AfterSwapDelta>, SimulationError> {
-        let fees = self
-            .current_trading_pairs
-            .get(&(params.context.currency_0, params.context.currency_1))
-            .copied()
-            .ok_or_else(|| {
-                SimulationError::FatalError(
-                    "pair is not enabled for trading on angstrom".to_string(),
-                )
-            })?;
-
-        // Use protocol_unlock fee (protocolUnlockedFee in Solidity)
-        let fee_rate_e6 = I128::unchecked_from(fees.protocol_unlock.to::<u32>());
+        let fee_rate_e6 = I128::unchecked_from(self.fees.protocol_unlock.to::<u32>());
         let one_e6 = I128::unchecked_from(1_000_000);
 
         let exact_input = params.swap_params.amount_specified < I256::ZERO;
@@ -158,54 +132,18 @@ impl HookHandler for AngstromHookHandler {
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
-        // Handle pool configuration updates
-        if let Some(fees) = delta
+        // Handle fee updates
+        if let Some(unlocked_fee) = delta
             .updated_attributes
-            .get("angstrom_pools_update")
+            .get("angstrom_unlocked_fee")
         {
-            if fees.is_empty() || (fees.len() - 1) % 46 != 0 {
-                return Err(TransitionError::DecodeError(
-                    "angstrom_pools_update attributes are not properly formatted".to_string(),
-                ));
-            }
-
-            let count = fees[0];
-            let mut offset = 1;
-
-            for _ in 0..count {
-                let token_0 = Address::from_slice(&fees[offset..offset + 20]);
-                let token_1 = Address::from_slice(&fees[offset + 20..offset + 40]);
-                let unlock = U24::from_be_slice(&fees[offset + 40..offset + 43]);
-                let protocol_unlock = U24::from_be_slice(&fees[offset + 43..offset + 46]);
-                self.current_trading_pairs
-                    .insert((token_0, token_1), AngstromFees { unlock, protocol_unlock });
-
-                offset += 46;
-            }
+            self.fees.unlock = U24::from_be_slice(unlocked_fee);
         }
-
-        // Handle pool removals
-        if let Some(fees) = delta
+        if let Some(protocol_unlocked_fee) = delta
             .updated_attributes
-            .get("angstrom_pools_removed")
+            .get("angstrom_protocol_unlocked_fee")
         {
-            if fees.is_empty() || (fees.len() - 1) % 40 != 0 {
-                return Err(TransitionError::DecodeError(
-                    "angstrom_pools_removed attributes are not properly formatted".to_string(),
-                ));
-            }
-
-            let count = fees[0];
-            let mut offset = 1;
-
-            for _ in 0..count {
-                let token_0 = Address::from_slice(&fees[offset..offset + 20]);
-                let token_1 = Address::from_slice(&fees[offset + 20..offset + 40]);
-                self.current_trading_pairs
-                    .remove(&(token_0, token_1));
-
-                offset += 40;
-            }
+            self.fees.protocol_unlock = U24::from_be_slice(protocol_unlocked_fee);
         }
 
         Ok(())
@@ -258,24 +196,20 @@ mod tests {
         // Case taken from tx 0xa9a8c90060e4d5e8bac9ad06eaf706d87d36cb4d11fd2d705f6a37b84918765d
         let token_0 = Address::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let token_1 = Address::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let mut pairs = HashMap::new();
-        pairs.insert(
-            (token_0, token_1),
-            AngstromFees {
-                // To get these values, enable storage access logs on tenderly,
-                // and look at the hex value retrieved right after calling afterSwap
-                //
-                // The value 1879048430 (hex: 0x700000EE) contains two packed uint24 values:
-                // Lower 24 bits (unlockedFee):      0x0000EE   = 238
-                // Upper 24 bits (protocolUnlockedFee): 0x70    = 112
-                unlock: U24::from(238),
-                protocol_unlock: U24::from(112),
-            },
-        );
+        let fees = AngstromFees {
+            // To get these values, enable storage access logs on tenderly,
+            // and look at the hex value retrieved right after calling afterSwap
+            //
+            // The value 1879048430 (hex: 0x700000EE) contains two packed uint24 values:
+            // Lower 24 bits (unlockedFee):      0x0000EE   = 238
+            // Upper 24 bits (protocolUnlockedFee): 0x70    = 112
+            unlock: U24::from(238),
+            protocol_unlock: U24::from(112),
+        };
         let handler = AngstromHookHandler::new(
             Address::from_str("0x0000000aa232009084bd71a5797d089aa4edfad4").unwrap(),
             Address::from_str("0x000000000004444c5dc75cb358380d2e3de08a90").unwrap(),
-            pairs,
+            fees,
         );
 
         let params = BeforeSwapParameters {
@@ -319,24 +253,21 @@ mod tests {
         // Case taken from tx 0xa9a8c90060e4d5e8bac9ad06eaf706d87d36cb4d11fd2d705f6a37b84918765d
         let token_0 = Address::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let token_1 = Address::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let mut pairs = HashMap::new();
-        pairs.insert(
-            (token_0, token_1),
-            AngstromFees {
-                // To get these values, enable storage access logs on tenderly,
-                // and look at the hex value retrieved right after calling afterSwap
-                //
-                // The value 1879048430 (hex: 0x70000DEE) contains two packed uint24 values:
-                // Lower 24 bits (unlockedFee):      0x0000EE   = 238
-                // Upper 24 bits (protocolUnlockedFee): 0x70    = 112
-                unlock: U24::from(238),
-                protocol_unlock: U24::from(112),
-            },
-        );
+
+        let fees = AngstromFees {
+            // To get these values, enable storage access logs on tenderly,
+            // and look at the hex value retrieved right after calling afterSwap
+            //
+            // The value 1879048430 (hex: 0x700000EE) contains two packed uint24 values:
+            // Lower 24 bits (unlockedFee):      0x0000EE   = 238
+            // Upper 24 bits (protocolUnlockedFee): 0x70    = 112
+            unlock: U24::from(238),
+            protocol_unlock: U24::from(112),
+        };
         let handler = AngstromHookHandler::new(
             Address::from_str("0x0000000aa232009084bd71a5797d089aa4edfad4").unwrap(),
             Address::from_str("0x000000000004444c5dc75cb358380d2e3de08a90").unwrap(),
-            pairs,
+            fees,
         );
 
         let params = AfterSwapParameters {
@@ -375,38 +306,33 @@ mod tests {
     }
 
     #[test]
-    fn test_delta_transition_adds_pools() {
-        let token_0 = Address::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let token_1 = Address::from_str("0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap();
-        let mut pairs = HashMap::new();
-        pairs.insert(
-            (token_0, token_1),
-            AngstromFees {
-                // How do I find the Angstrom fees for his specific pair?
-                // It doesn't show any storage access for afterSwap
-                unlock: U24::from(0),
-                protocol_unlock: U24::from(0),
-            },
-        );
+    fn test_delta_transition() {
+        let fees = AngstromFees {
+            // To get these values, enable storage access logs on tenderly,
+            // and look at the hex value retrieved right after calling afterSwap
+            //
+            // The value 1879048430 (hex: 0x700000EE) contains two packed uint24 values:
+            // Lower 24 bits (unlockedFee):      0x0000EE   = 238
+            // Upper 24 bits (protocolUnlockedFee): 0x70    = 112
+            unlock: U24::from(238),
+            protocol_unlock: U24::from(112),
+        };
         let mut handler = AngstromHookHandler::new(
             Address::from_str("0x0000000aa232009084bd71a5797d089aa4edfad4").unwrap(),
             Address::from_str("0x000000000004444c5dc75cb358380d2e3de08a90").unwrap(),
-            pairs,
+            fees,
         );
 
-        // Prepare data: [count:1][token0:20][token1:20][unlock:3][protocol_unlock:3]
-        let new_token_0 = Address::from([10u8; 20]);
-        let new_token_1 = Address::from([11u8; 20]);
-        let mut data = vec![1u8]; // count = 1
-        data.extend_from_slice(new_token_0.as_slice());
-        data.extend_from_slice(new_token_1.as_slice());
-        data.extend_from_slice(&U24::from(4000).to_be_bytes::<3>()); // unlock
-        data.extend_from_slice(&U24::from(600).to_be_bytes::<3>()); // protocol_unlock
+        // Change fees
+        let new_unlock_fee = &U24::from(4000).to_be_bytes::<3>();
+        let new_protocol_unlock_fee = &U24::from(3000).to_be_bytes::<3>();
 
         let mut updated_attributes = HashMap::new();
-        updated_attributes.insert("angstrom_pools_update".to_string(), Bytes::from(data));
+        updated_attributes.insert("angstrom_unlocked_fee".to_string(), new_unlock_fee.into());
+        updated_attributes
+            .insert("angstrom_protocol_unlocked_fee".to_string(), new_protocol_unlock_fee.into());
 
-        let delta = tycho_common::dto::ProtocolStateDelta {
+        let delta = ProtocolStateDelta {
             component_id: "test".to_string(),
             updated_attributes,
             deleted_attributes: HashSet::new(),
@@ -416,53 +342,6 @@ mod tests {
         assert!(result.is_ok());
 
         // Verify new pool was added
-        assert!(handler
-            .current_trading_pairs
-            .contains_key(&(new_token_0, new_token_1)));
-    }
-
-    #[test]
-    fn test_delta_transition_removes_pools() {
-        let token_0 = Address::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let token_1 = Address::from_str("0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap();
-        let mut pairs = HashMap::new();
-        pairs.insert(
-            (token_0, token_1),
-            AngstromFees {
-                // How do I find the Angstrom fees for his specific pair?
-                // It doesn't show any storage access for afterSwap
-                unlock: U24::from(0),
-                protocol_unlock: U24::from(0),
-            },
-        );
-        let mut handler = AngstromHookHandler::new(
-            Address::from_str("0x0000000aa232009084bd71a5797d089aa4edfad4").unwrap(),
-            Address::from_str("0x000000000004444c5dc75cb358380d2e3de08a90").unwrap(),
-            pairs,
-        );
-
-        // Prepare data to remove existing pool
-        let token_0 = Address::from([3u8; 20]);
-        let token_1 = Address::from([4u8; 20]);
-        let mut data = vec![1u8]; // count = 1
-        data.extend_from_slice(token_0.as_slice());
-        data.extend_from_slice(token_1.as_slice());
-
-        let mut updated_attributes = HashMap::new();
-        updated_attributes.insert("angstrom_pools_removed".to_string(), Bytes::from(data));
-
-        let delta = tycho_common::dto::ProtocolStateDelta {
-            component_id: "test".to_string(),
-            updated_attributes,
-            deleted_attributes: HashSet::new(),
-        };
-
-        let result = handler.delta_transition(delta, &HashMap::new(), &Default::default());
-        assert!(result.is_ok());
-
-        // Verify pool was removed
-        assert!(!handler
-            .current_trading_pairs
-            .contains_key(&(token_0, token_1)));
+        assert!(handler.fees.unlock == U24::from(4000));
     }
 }
