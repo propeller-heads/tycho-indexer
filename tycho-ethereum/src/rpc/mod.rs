@@ -270,7 +270,7 @@ impl EthereumRpcClient {
         Ok(all_slots)
     }
 
-    pub(crate) async fn non_batch_fetch_accounts_code_and_balance(
+    async fn non_batch_fetch_accounts_code_and_balance(
         &self,
         block_id: BlockNumberOrTag,
         addresses: &[Address],
@@ -291,7 +291,21 @@ impl EthereumRpcClient {
         .collect())
     }
 
-    pub(crate) async fn batch_fetch_accounts_code_and_balance(
+    pub(crate) async fn fetch_accounts_code_and_balance(
+        &self,
+        block_id: BlockNumberOrTag,
+        addresses: &[Address],
+    ) -> Result<HashMap<Address, (Bytes, U256)>, RPCError> {
+        if self.batching.is_some() {
+            self.batch_fetch_accounts_code_and_balance(block_id, addresses)
+                .await
+        } else {
+            self.non_batch_fetch_accounts_code_and_balance(block_id, addresses)
+                .await
+        }
+    }
+
+    async fn batch_fetch_accounts_code_and_balance(
         &self,
         block_id: BlockNumberOrTag,
         addresses: &[Address],
@@ -382,7 +396,22 @@ impl EthereumRpcClient {
         Ok(result)
     }
 
-    pub(crate) async fn non_batch_get_selected_storage(
+    pub(crate) async fn get_selected_storage(
+        &self,
+        block_id: BlockNumberOrTag,
+        address: Address,
+        slots: &[B256],
+    ) -> Result<HashMap<B256, Option<B256>>, RPCError> {
+        if self.batching.is_some() {
+            self.batch_get_selected_storage(block_id, address, slots)
+                .await
+        } else {
+            self.non_batch_get_selected_storage(block_id, address, slots)
+                .await
+        }
+    }
+
+    async fn non_batch_get_selected_storage(
         &self,
         block_id: BlockNumberOrTag,
         address: Address,
@@ -414,7 +443,7 @@ impl EthereumRpcClient {
         Ok(result)
     }
 
-    pub(crate) async fn batch_get_selected_storage(
+    async fn batch_get_selected_storage(
         &self,
         block_id: BlockNumberOrTag,
         address: Address,
