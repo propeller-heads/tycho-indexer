@@ -148,6 +148,7 @@ where
             EVMBalanceSlotDetector::new(config, &self.rpc)
         };
 
+        // TODO: refactor the MiniRouter contract to take the pool manager address as a parameter
         let router_code = match self.chain {
             Chain::Ethereum => Bytes::from(V4_MINI_ROUTER_BYTECODE),
             Chain::Unichain => Bytes::from(UNICHAIN_V4_MINI_ROUTER_BYTECODE),

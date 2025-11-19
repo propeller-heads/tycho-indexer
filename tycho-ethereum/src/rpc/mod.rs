@@ -46,7 +46,7 @@ impl Default for BatchingConfig {
 pub struct EthereumRpcClient {
     pub(crate) inner: ReqwestClient,
     pub(crate) batching: Option<BatchingConfig>,
-    pub(crate) url: String,
+    url: String,
 }
 
 impl EthereumRpcClient {
