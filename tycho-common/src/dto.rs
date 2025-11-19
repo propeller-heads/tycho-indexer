@@ -878,7 +878,7 @@ pub struct StateRequestBody {
 // When INCREASING these limits, please read the warning in the macro definition.
 // TODO: Revert to higher limits once we are ready to redeploy servers.
 // impl_pagination_limits!(StateRequestBody, compressed = 1200, uncompressed = 100);
-impl_pagination_limits!(StateRequestBody, compressed = 100, uncompressed = 100);
+impl_pagination_limits!(StateRequestBody, compressed = 100000, uncompressed = 100000);
 
 impl StateRequestBody {
     pub fn new(
@@ -1175,7 +1175,7 @@ pub struct TokensRequestBody {
 // When INCREASING these limits, please read the warning in the macro definition.
 // TODO: Revert to higher limits once we are ready to redeploy servers.
 // impl_pagination_limits!(TokensRequestBody, compressed = 12900, uncompressed = 3000);
-impl_pagination_limits!(TokensRequestBody, compressed = 3000, uncompressed = 3000);
+impl_pagination_limits!(TokensRequestBody, compressed = 100000, uncompressed = 100000);
 
 /// Response from Tycho server for a tokens request.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash, DeepSizeOf)]
@@ -1258,7 +1258,7 @@ pub struct ProtocolComponentsRequestBody {
 // When INCREASING these limits, please read the warning in the macro definition.
 // TODO: Revert to higher limits once we are ready to redeploy servers.
 // impl_pagination_limits!(ProtocolComponentsRequestBody, compressed = 2550, uncompressed = 500);
-impl_pagination_limits!(ProtocolComponentsRequestBody, compressed = 500, uncompressed = 500);
+impl_pagination_limits!(ProtocolComponentsRequestBody, compressed = 100000, uncompressed = 100000);
 
 // Implement PartialEq where tvl is considered equal if the difference is less than 1e-6
 impl PartialEq for ProtocolComponentsRequestBody {
@@ -1447,7 +1447,7 @@ pub struct ProtocolStateRequestBody {
 // When INCREASING these limits, please read the warning in the macro definition.
 // TODO: Revert to higher limits once we are ready to redeploy servers.
 // impl_pagination_limits!(ProtocolStateRequestBody, compressed = 360, uncompressed = 100);
-impl_pagination_limits!(ProtocolStateRequestBody, compressed = 100, uncompressed = 100);
+impl_pagination_limits!(ProtocolStateRequestBody, compressed = 100000, uncompressed = 100000);
 
 impl ProtocolStateRequestBody {
     pub fn id_filtered<I, T>(ids: I) -> Self
@@ -1607,7 +1607,7 @@ pub struct ProtocolSystemsRequestBody {
 }
 
 // When INCREASING these limits, please read the warning in the macro definition.
-impl_pagination_limits!(ProtocolSystemsRequestBody, compressed = 100, uncompressed = 100);
+impl_pagination_limits!(ProtocolSystemsRequestBody, compressed = 100000, uncompressed = 100000);
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
 pub struct ProtocolSystemsRequestResponse {
@@ -1685,7 +1685,7 @@ pub struct ComponentTvlRequestBody {
 }
 
 // When INCREASING these limits, please read the warning in the macro definition.
-impl_pagination_limits!(ComponentTvlRequestBody, compressed = 100, uncompressed = 100);
+impl_pagination_limits!(ComponentTvlRequestBody, compressed = 100000, uncompressed = 100000);
 
 impl ComponentTvlRequestBody {
     pub fn system_filtered(system: &str, chain: Chain) -> Self {
@@ -1737,7 +1737,7 @@ pub struct TracedEntryPointRequestBody {
 }
 
 // When INCREASING these limits, please read the warning in the macro definition.
-impl_pagination_limits!(TracedEntryPointRequestBody, compressed = 100, uncompressed = 100);
+impl_pagination_limits!(TracedEntryPointRequestBody, compressed = 100000, uncompressed = 100000);
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash, DeepSizeOf)]
 pub struct EntryPoint {
