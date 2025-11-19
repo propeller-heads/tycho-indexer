@@ -27,7 +27,7 @@ use tycho_common::Bytes;
 use crate::{RPCError, RequestError};
 
 pub mod errors;
-pub(crate) mod retry;
+pub mod retry;
 
 use crate::{
     rpc::retry::{has_custom_retry_code, RetryableError, WithMaxAttemptsBackoff},
@@ -41,8 +41,8 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct BatchingConfig {
     /// Maximum number of general (e.g., code) requests per batch.
-    pub(crate) max_batch_size: usize,
-    pub(crate) max_storage_slot_batch_size: usize,
+    pub max_batch_size: usize,
+    pub max_storage_slot_batch_size: usize,
 }
 
 impl Default for BatchingConfig {
