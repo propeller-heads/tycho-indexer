@@ -632,13 +632,13 @@ pub(crate) mod tests {
     async fn test_multiple_requests_with_shared_policy() {
         let mut server = mockito::Server::new_async().await;
 
-        // First request: TEST_RETRY_POLICY_MAX_ATTEMPTS failures then success
+        // First request: MOCK_RETRY_POLICY_MAX_ATTEMPTS failures then success
         for _ in 0..MOCK_RETRY_POLICY_MAX_ATTEMPTS {
             let _mock_rate_limit = mock_retryable_failure(&mut server).await;
         }
         let mock_success1 = mock_success(&mut server).await;
 
-        // Second request: TEST_RETRY_POLICY_MAX_ATTEMPTS failures then success
+        // Second request: MOCK_RETRY_POLICY_MAX_ATTEMPTS failures then success
         for _ in 0..MOCK_RETRY_POLICY_MAX_ATTEMPTS {
             let _mock_rate_limit = mock_retryable_failure(&mut server).await;
         }
