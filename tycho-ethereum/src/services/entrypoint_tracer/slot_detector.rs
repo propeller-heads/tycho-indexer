@@ -1,7 +1,6 @@
 use std::{
     collections::{BTreeMap, HashMap},
     sync::Arc,
-    time::Duration,
 };
 
 use alloy::{
@@ -9,7 +8,6 @@ use alloy::{
     rpc::types::trace::geth::{FourByteFrame, GethTrace, PreStateFrame},
     transports::TransportResult,
 };
-use backoff::ExponentialBackoffBuilder;
 use serde_json::Value;
 use thiserror::Error;
 use tracing::{debug, error, warn};
@@ -19,9 +17,7 @@ use tycho_common::{
 };
 
 use crate::{
-    rpc::{retry::RetryPolicy, BatchingConfig, EthereumRpcClient},
-    services::entrypoint_tracer::tracer::EVMEntrypointService,
-    BytesCodec,
+    rpc::EthereumRpcClient, services::entrypoint_tracer::tracer::EVMEntrypointService, BytesCodec,
 };
 
 /// Type alias for intermediate slot detection results: maps token address to (all_slots,
@@ -43,28 +39,6 @@ pub(crate) struct SlotMetadata {
     original_value: U256,
     test_value: U256,
     all_slots: SlotValues,
-}
-
-/// Configuration for slot detection.
-/// Use max_batch_size to configure the behavior according to your node capacity.
-/// Please ensure your node supports batching RPC requests and debug_traceCall
-/// Read more: https://www.quicknode.com/guides/quicknode-products/apis/guide-to-efficient-rpc-requests
-#[derive(Clone, Debug)]
-pub struct SlotDetectorConfig {
-    /// Maximum batch size to send in a single node request
-    pub max_batch_size: usize,
-    /// Maximum number of retry attempts for failed requests (default: 3)
-    pub max_retries: usize,
-    /// Initial backoff delay in milliseconds (default: 100ms)
-    pub initial_backoff_ms: u64,
-    /// Maximum backoff delay in milliseconds (default: 5000ms)
-    pub max_backoff_ms: u64,
-}
-
-impl Default for SlotDetectorConfig {
-    fn default() -> Self {
-        Self { max_batch_size: 10, max_retries: 3, initial_backoff_ms: 100, max_backoff_ms: 5000 }
-    }
 }
 
 /// Shared error type for slot detection RPC operations
@@ -123,43 +97,19 @@ pub trait SlotDetectionStrategy: Send + Sync {
 /// Generic slot detector that handles RPC communication and slot detection with a configurable
 /// strategy. This struct eliminates code duplication between balance and allowance detectors.
 pub struct SlotDetector<S: SlotDetectionStrategy> {
-    max_batch_size: usize,
     rpc: EthereumRpcClient,
     cache: ThreadSafeCache<S::CacheKey, (Address, Bytes)>,
 }
 
 impl<S: SlotDetectionStrategy> SlotDetector<S> {
     /// Create a new SlotDetector with the given configuration and strategy
-    pub fn new(config: SlotDetectorConfig, rpc: &EthereumRpcClient) -> Self {
-        // Calculate max elapsed time for retries to match the max allowed retries
-        let max_elapsed = (config.max_retries * (config.max_retries + 1) / 2) as u64 *
-            config.initial_backoff_ms +
-            1;
-
-        let retry_policy = ExponentialBackoffBuilder::default()
-            .with_initial_interval(Duration::from_millis(config.initial_backoff_ms))
-            .with_max_elapsed_time(Some(Duration::from_millis(max_elapsed)))
-            .with_max_interval(Duration::from_millis(config.max_backoff_ms))
-            .build();
-
-        let rpc_client = rpc
-            .clone()
-            .with_retry_policy(RetryPolicy::new(retry_policy))
-            .with_batching(Some(BatchingConfig {
-                max_batch_size: config.max_batch_size,
-                ..Default::default()
-            }));
-
+    pub fn new(rpc: &EthereumRpcClient) -> Self {
         // Create HTTP client with connection pooling and reasonable timeouts
-        Self {
-            max_batch_size: config.max_batch_size,
-            rpc: rpc_client,
-            cache: Arc::new(std::sync::RwLock::new(HashMap::new())),
-        }
+        Self { rpc: rpc.clone(), cache: Arc::new(std::sync::RwLock::new(HashMap::new())) }
     }
 
     /// Detect slots for tokens using batched requests (debug_traceCall + eth_call per token)
-    async fn detect_token_slots(
+    pub(super) async fn detect_token_slots(
         &self,
         tokens: &[Address],
         params: &S::Params,
@@ -237,30 +187,6 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
         }
 
         final_results
-    }
-
-    /// Detect slots for multiple tokens in chunks
-    pub async fn detect_slots_chunked(
-        &self,
-        tokens: &[Address],
-        params: &S::Params,
-        block_hash: &BlockHash,
-    ) -> HashMap<Address, Result<(Address, Bytes), SlotDetectorError>> {
-        let mut all_results = HashMap::new();
-
-        for (chunk_idx, chunk) in tokens
-            .chunks(self.max_batch_size)
-            .enumerate()
-        {
-            debug!("Processing chunk {} with {} tokens", chunk_idx, chunk.len());
-
-            let chunk_results = self
-                .detect_token_slots(chunk, params, block_hash)
-                .await;
-            all_results.extend(chunk_results);
-        }
-
-        all_results
     }
 
     /// Create batch request data for all tokens (2 requests per token).
@@ -680,10 +606,7 @@ mod tests {
         rpc::EthereumRpcClient,
         services::entrypoint_tracer::{
             balance_slot_detector::BalanceStrategy,
-            slot_detector::{
-                SlotDetectionStrategy, SlotDetector, SlotDetectorConfig, SlotDetectorError,
-                SlotMetadata,
-            },
+            slot_detector::{SlotDetectionStrategy, SlotDetector, SlotDetectorError, SlotMetadata},
         },
         test_fixtures::TestFixture,
         BytesCodec,
@@ -703,13 +626,6 @@ mod tests {
             unreachable!()
         }
     }
-
-    const LONG_BACKOFF_CONFIG: SlotDetectorConfig = SlotDetectorConfig {
-        max_batch_size: 10,
-        max_retries: 3,
-        initial_backoff_ms: 100,
-        max_backoff_ms: 5000,
-    };
 
     fn create_slot_candidates() -> Vec<SlotMetadata> {
         vec![
@@ -735,19 +651,14 @@ mod tests {
     }
 
     impl TestFixture {
-        fn create_slot_detector_without_rpc(
-            config: SlotDetectorConfig,
-        ) -> SlotDetector<TestFixtureStrategy> {
-            TestFixture::create_slot_detector(config, "http://localhost:8545")
+        fn create_slot_detector_without_rpc() -> SlotDetector<TestFixtureStrategy> {
+            TestFixture::create_slot_detector("http://localhost:8545")
         }
 
-        fn create_slot_detector(
-            config: SlotDetectorConfig,
-            rpc_url: &str,
-        ) -> SlotDetector<TestFixtureStrategy> {
+        fn create_slot_detector(rpc_url: &str) -> SlotDetector<TestFixtureStrategy> {
             let rpc = EthereumRpcClient::new(rpc_url).expect("Failed to create RPC client");
 
-            SlotDetector::<TestFixtureStrategy>::new(config, &rpc)
+            SlotDetector::<TestFixtureStrategy>::new(&rpc)
         }
     }
 
@@ -771,7 +682,7 @@ mod tests {
 
     #[test]
     fn test_extract_balance_from_call_response() {
-        let detector = TestFixture::create_slot_detector_without_rpc(LONG_BACKOFF_CONFIG);
+        let detector = TestFixture::create_slot_detector_without_rpc();
         // Test valid response
         let response = json!("0x0000000000000000000000000000000000000000000000000de0b6b3a7640000");
         let balance = detector
@@ -797,7 +708,7 @@ mod tests {
 
     #[test]
     fn test_extract_slot_values_from_trace_response() {
-        let detector = TestFixture::create_slot_detector_without_rpc(LONG_BACKOFF_CONFIG);
+        let detector = TestFixture::create_slot_detector_without_rpc();
         // Test valid trace with storage
         let response = serde_json::from_value(json!({
                 "0x1234567890123456789012345678901234567890": {
@@ -830,7 +741,7 @@ mod tests {
 
     #[test]
     fn test_process_batched_response() {
-        let detector = TestFixture::create_slot_detector_without_rpc(LONG_BACKOFF_CONFIG);
+        let detector = TestFixture::create_slot_detector_without_rpc();
         let token1 = Address::from([0x11u8; 20]);
         let token2 = Address::from([0x22u8; 20]);
 
@@ -874,7 +785,7 @@ mod tests {
 
     #[test]
     fn test_create_balance_requests() {
-        let detector = TestFixture::create_slot_detector_without_rpc(LONG_BACKOFF_CONFIG);
+        let detector = TestFixture::create_slot_detector_without_rpc();
         let token1 = Address::from([0x11u8; 20]);
         let token2 = Address::from([0x22u8; 20]);
         let owner = Address::from([0x33u8; 20]);
@@ -894,7 +805,7 @@ mod tests {
 
     #[test]
     fn test_create_validation_requests() {
-        let detector = TestFixture::create_slot_detector_without_rpc(LONG_BACKOFF_CONFIG);
+        let detector = TestFixture::create_slot_detector_without_rpc();
         let slot_candidates = create_slot_candidates();
 
         // Create responses - first one changes (valid), second doesn't (invalid)
