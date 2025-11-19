@@ -115,10 +115,6 @@ impl TestFixture {
         // Clone the static RPC client to support reuse across tests
         let inner_rpc = RPC_CLIENT.clone();
 
-        // wait for 1 second to avoid rate limiting
-        // TODO: improve rate limiting handling
-        std::thread::sleep(std::time::Duration::from_secs(5));
-
         let block_hash = B256::from_str(TEST_BLOCK_HASH).expect("expected valid block hash");
         let block = Block::new(
             TEST_BLOCK_NUMBER,

@@ -71,7 +71,7 @@ impl BalanceSlotDetector for EVMBalanceSlotDetector {
         }
 
         let results = self
-            .detect_slots_chunked(&filtered_tokens, &holder, &block_hash)
+            .detect_token_slots(&filtered_tokens, &holder, &block_hash)
             .await;
 
         info!("Balance slot detection completed. Found results for {} tokens", results.len());
@@ -88,9 +88,8 @@ mod tests {
     use serde_json::json;
 
     use super::{BalanceStrategy, SlotDetectionStrategy, *};
-    use crate::{
-        services::entrypoint_tracer::slot_detector::SlotDetectorConfig,
-        test_fixtures::{TestFixture, STETH_STR, USDC_HOLDER_ADDR, USDC_STR, USDT_STR, WETH_STR},
+    use crate::test_fixtures::{
+        TestFixture, STETH_STR, USDC_HOLDER_ADDR, USDC_STR, USDT_STR, WETH_STR,
     };
 
     const BLOCK_HASH: &str = "0x658814e4cb074359f10dd71237cc57b1ae6791fc9de59fde570e724bd884cbb0";
@@ -99,16 +98,9 @@ mod tests {
         fn create_balance_detector() -> EVMBalanceSlotDetector {
             let fixture = TestFixture::new();
 
-            let config = SlotDetectorConfig {
-                max_batch_size: 5,
-                max_retries: 3,
-                initial_backoff_ms: 100,
-                max_backoff_ms: 5000,
-            };
-
             let rpc = fixture.create_rpc_client(true);
 
-            EVMBalanceSlotDetector::new(config, &rpc)
+            EVMBalanceSlotDetector::new(&rpc)
         }
     }
 
