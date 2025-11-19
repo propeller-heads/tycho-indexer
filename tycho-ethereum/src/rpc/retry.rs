@@ -172,6 +172,7 @@ impl Default for WithMaxAttemptsBackoff<ExponentialBackoff> {
     /// - Initial interval: 100ms
     /// - Multiplier: 2.0x
     /// - Max interval: 5s
+    /// - Max attempts: 3 retries
     fn default() -> Self {
         let policy = ExponentialBackoffBuilder::new()
             .with_initial_interval(Duration::from_millis(100))
