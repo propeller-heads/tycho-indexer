@@ -56,7 +56,7 @@ use tycho_indexer::{
             ProtocolTypeConfig,
         },
         token_analysis_cron::analyze_tokens,
-        ExtractionError,
+        ExtractionError, RPCRetryConfig,
     },
     services::ServicesBuilder,
 };
@@ -324,6 +324,7 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
 async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
     create_tracing_subscriber();
 
+    // TODO: configure RPC client with the retry config from global_args
     let rpc_client = EthereumRpcClient::new(&global_args.rpc_url)
         .map_err(|e| ExtractionError::Setup(format!("Failed to create RPC client: {e}")))?;
 
@@ -359,6 +360,7 @@ async fn create_indexing_tasks(
     extractors_config: ExtractorConfigs,
     extraction_runtime: Option<&Handle>,
 ) -> Result<(ExtractionTasks, ServerTasks), ExtractionError> {
+    //  TODO: configure RPC client with the retry config from global_args
     let rpc_client = EthereumRpcClient::new(&global_args.rpc_url)
         .map_err(|e| ExtractionError::Setup(format!("Failed to create RPC client: {e}")))?;
 
@@ -388,9 +390,12 @@ async fn create_indexing_tasks(
             .expect("No chain provided"), //TODO: handle multichain?
     );
 
+    // Convert CLI args to domain config at the boundary
+    let rpc_retry_config: RPCRetryConfig = global_args.rpc_retry.clone().into();
+
     let (runners, extractor_handles): (Vec<_>, Vec<_>) =
         // TODO: accept substreams configuration from cli.
-        build_all_extractors(&extractors_config, chain_state, chains, &global_args.endpoint_url, global_args.s3_bucket.as_deref(), &substreams_args.substreams_api_token, &cached_gw, global_args.database_insert_batch_size, &token_processor, &global_args.rpc_url, &rpc_client, extraction_runtime)
+        build_all_extractors(&extractors_config, chain_state, chains, &global_args.endpoint_url, global_args.s3_bucket.as_deref(), &substreams_args.substreams_api_token, &cached_gw, global_args.database_insert_batch_size, &token_processor, &global_args.rpc_url, rpc_retry_config, &rpc_client, extraction_runtime)
             .await
             .map_err(|e| ExtractionError::Setup(format!("Failed to create extractors: {e}")))?
             .into_iter()
@@ -432,6 +437,7 @@ async fn build_all_extractors(
     database_insert_batch_size: usize,
     token_pre_processor: &EthereumTokenPreProcessor,
     rpc_url: &str,
+    rpc_retry_config: RPCRetryConfig,
     rpc: &EthereumRpcClient,
     runtime: Option<&tokio::runtime::Handle>,
 ) -> Result<Vec<(ExtractorRunner, ExtractorHandle)>, ExtractionError> {
@@ -466,6 +472,7 @@ async fn build_all_extractors(
         let (runner, handle) =
             ExtractorBuilder::new(extractor_config, endpoint_url, s3_bucket, substreams_api_token)
                 .rpc_url(rpc_url)
+                .rpc_retry_config(rpc_retry_config.clone())
                 .database_insert_batch_size(database_insert_batch_size)
                 .build(chain_state, cached_gw, token_pre_processor, &protocol_cache, rpc)
                 .await?
@@ -624,6 +631,7 @@ async fn run_analyze_tokens(
     global_args: GlobalArgs,
     analyzer_args: AnalyzeTokenArgs,
 ) -> Result<(), anyhow::Error> {
+    // TODO: configure RPC client with the retry config from global_args
     let rpc_client = EthereumRpcClient::new(&global_args.rpc_url)
         .map_err(|e| anyhow!("Failed to create RPC client: {e}"))?;
 
