@@ -19,7 +19,7 @@ use tycho_common::{
 use tycho_ethereum::rpc::EthereumRpcClient;
 
 #[cfg(test)]
-use crate::extractor::RPCRetryConfig;
+use crate::extractor::RPCConfig;
 use crate::extractor::{
     dynamic_contract_indexer::{
         cache::HooksDCICache, component_metadata::ComponentTracingMetadata,
@@ -85,8 +85,7 @@ where
     pub fn new_for_testing(
         inner_dci: DynamicContractIndexer<AE, T, G>,
         rpc: &EthereumRpcClient,
-        rpc_url: String,
-        rpc_retry_config: RPCRetryConfig,
+        rpc_config: RPCConfig,
         router_address: Address,
         pool_manager: Address,
         db_gateway: G,
@@ -99,8 +98,7 @@ where
         create_testing_hooks_dci(
             inner_dci,
             rpc,
-            rpc_url,
-            rpc_retry_config,
+            rpc_config,
             router_address,
             pool_manager,
             db_gateway,

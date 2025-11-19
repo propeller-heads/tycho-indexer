@@ -10,8 +10,8 @@ pub(crate) mod hooks_dci_setup;
 mod metadata_orchestrator;
 mod rpc_metadata_provider;
 
-// Re-export the RPCRetryConfig from the rpc_metadata_provider module
-pub use rpc_metadata_provider::RPCRetryConfig;
+// Re-export RPC configuration types from the rpc_metadata_provider module
+pub use rpc_metadata_provider::{RPCConfig, RPCRetryConfig};
 
 enum PausingReason {
     #[allow(dead_code)]

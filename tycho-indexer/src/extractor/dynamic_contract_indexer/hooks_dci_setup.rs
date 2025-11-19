@@ -33,7 +33,7 @@ pub(crate) use crate::extractor::{
         metadata_orchestrator::BlockMetadataOrchestrator,
         rpc_metadata_provider::RPCMetadataProvider,
     },
-    RPCRetryConfig,
+    RPCConfig,
 };
 
 #[derive(Deserialize)]
@@ -43,17 +43,18 @@ struct EulerHooks {
 
 /// Sets up all necessary registries for Hooks DCI testing with Euler support
 pub fn setup_metadata_registries(
-    rpc_url: String,
-    rpc_retry_config: RPCRetryConfig,
+    rpc_config: RPCConfig,
 ) -> (MetadataGeneratorRegistry, MetadataResponseParserRegistry, ProviderRegistry) {
     let mut generator_registry = MetadataGeneratorRegistry::new();
     let mut parser_registry = MetadataResponseParserRegistry::new();
     let mut provider_registry = ProviderRegistry::new();
 
+    let RPCConfig { url: rpc_url, retry: rpc_retry_config } = rpc_config;
+
     // Register Euler metadata generator for all hook addresses
     generator_registry.register_hook_identifier(
         "euler_v1".to_string(),
-        Box::new(EulerMetadataGenerator::new(rpc_url.clone())),
+        Box::new(EulerMetadataGenerator::new(rpc_url)),
     );
 
     // Register Euler response parser
@@ -128,8 +129,7 @@ pub fn setup_hook_orchestrator_registry(
 pub fn create_testing_hooks_dci<AE, T, G>(
     inner_dci: DynamicContractIndexer<AE, T, G>,
     rpc: &EthereumRpcClient,
-    rpc_url: String,
-    rpc_retry_config: RPCRetryConfig,
+    rpc_config: RPCConfig,
     router_address: Address,
     pool_manager: Address,
     db_gateway: G,
@@ -144,7 +144,7 @@ where
 {
     // Setup metadata registries
     let (generator_registry, parser_registry, provider_registry) =
-        setup_metadata_registries(rpc_url, rpc_retry_config);
+        setup_metadata_registries(rpc_config);
 
     // Setup hook orchestrator registry
     let hook_orchestrator_registry =
@@ -169,12 +169,16 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::extractor::RPCRetryConfig;
 
     #[test]
     fn test_setup_metadata_registries() {
-        let rpc_url = "https://eth-mainnet.alchemyapi.io/v2/test".to_string();
+        let rpc_config = RPCConfig {
+            url: "https://eth-mainnet.alchemyapi.io/v2/test".to_string(),
+            retry: RPCRetryConfig::default(),
+        };
         let (_generator_registry, parser_registry, provider_registry) =
-            setup_metadata_registries(rpc_url, RPCRetryConfig::default());
+            setup_metadata_registries(rpc_config);
 
         // Verify parser registry has Euler parser
         assert!(parser_registry

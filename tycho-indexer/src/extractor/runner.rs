@@ -41,7 +41,7 @@ use crate::{
         post_processors::POST_PROCESSOR_REGISTRY,
         protocol_cache::ProtocolMemoryCache,
         protocol_extractor::{ExtractorPgGateway, ProtocolExtractor},
-        ExtractionError, Extractor, ExtractorExtension, ExtractorMsg, RPCRetryConfig,
+        ExtractionError, Extractor, ExtractorExtension, ExtractorMsg, RPCConfig,
     },
     pb::sf::substreams::v1::Package,
     substreams::{
@@ -447,10 +447,8 @@ pub struct ExtractorBuilder {
     /// Handle of the tokio runtime on which the extraction tasks will be run.
     /// If 'None' the default runtime will be used.
     runtime_handle: Option<Handle>,
-    /// Global RPC URL to use for DCI plugins
-    rpc_url: Option<String>,
-    /// Global RPC retry configuration to use for DCI plugins
-    rpc_retry_config: Option<RPCRetryConfig>,
+    /// Global RPC configuration (URL and retry settings) to use for DCI plugins
+    rpc_config: Option<RPCConfig>,
 }
 
 impl ExtractorBuilder {
@@ -469,8 +467,7 @@ impl ExtractorBuilder {
             database_insert_batch_size: None,
             final_block_only: false,
             runtime_handle: None,
-            rpc_url: None,
-            rpc_retry_config: None,
+            rpc_config: None,
         }
     }
 
@@ -505,15 +502,9 @@ impl ExtractorBuilder {
         self
     }
 
-    /// Set the global RPC URL to use for DCI plugins
-    pub fn rpc_url(mut self, rpc_url: &str) -> Self {
-        self.rpc_url = Some(rpc_url.to_string());
-        self
-    }
-
-    /// Set the global RPC retry configuration to use for DCI plugins
-    pub fn rpc_retry_config(mut self, rpc_retry_config: RPCRetryConfig) -> Self {
-        self.rpc_retry_config = Some(rpc_retry_config);
+    /// Set the global RPC configuration (URL and retry settings) to use for DCI plugins
+    pub fn rpc_config(mut self, rpc_config: RPCConfig) -> Self {
+        self.rpc_config = Some(rpc_config);
         self
     }
 
@@ -664,18 +655,15 @@ impl ExtractorBuilder {
                     DCIPlugin::Standard(rpc_dci)
                 }
                 DCIType::UniswapV4Hooks { pool_manager_address } => {
-                    let rpc_url = self.rpc_url.as_ref().ok_or_else(|| {
-                        ExtractionError::Setup(
-                            "RPC URL is required for UniswapV4Hooks DCI plugin but not provided"
+                    let rpc_config = self
+                        .rpc_config
+                        .as_ref()
+                        .ok_or_else(|| {
+                            ExtractionError::Setup(
+                            "RPC config is required for UniswapV4Hooks DCI plugin but not provided"
                                 .to_string(),
                         )
-                    })?;
-                    let rpc_retry_config = self.rpc_retry_config.as_ref().ok_or_else(|| {
-                        ExtractionError::Setup(
-                            "RPC retry config is required for UniswapV4Hooks DCI plugin but not provided"
-                                .to_string(),
-                        )
-                    })?;
+                        })?;
 
                     // random address to deploy our mini router to
                     let router_address =
@@ -693,8 +681,7 @@ impl ExtractorBuilder {
                     let mut hooks_dci = create_testing_hooks_dci(
                         base_dci,
                         rpc_client,
-                        rpc_url.clone(),
-                        rpc_retry_config.clone(),
+                        rpc_config.clone(),
                         router_address,
                         pool_manager,
                         cached_gw.clone(),

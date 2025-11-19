@@ -31,6 +31,17 @@ impl Default for RPCRetryConfig {
     }
 }
 
+/// RPC configuration including connection URL and retry settings.
+/// TODO: Consolidate with the `tycho_ethereum` rpc configuration and move to a shared location.
+/// TODO: Consider extending this with the batch size limit and other relevant settings.
+#[derive(Clone, Debug)]
+pub struct RPCConfig {
+    /// The RPC endpoint URL
+    pub url: String,
+    /// Retry configuration for handling transient failures
+    pub retry: RPCRetryConfig,
+}
+
 /// Custom error type for RPC batch operations
 #[derive(Error, Debug)]
 pub enum BatchError {
