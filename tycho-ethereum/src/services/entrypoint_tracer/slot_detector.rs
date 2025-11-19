@@ -54,7 +54,7 @@ pub enum SlotDetectorError {
     TokenNotInTrace,
     #[error("Failed to parse trace: {0}")]
     ParseError(String),
-    #[error("Failed to extract traget: {0}")]
+    #[error("Failed to extract target: {0}")]
     ValueExtractionError(String),
     #[error("Unknown error: {0}")]
     UnknownError(String),
