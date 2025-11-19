@@ -856,7 +856,7 @@ mod tests {
             let batching = if batching { Some(BatchingConfig::default()) } else { None };
             // We use higher max attempts for RPC testing to ensure that we can wait long enough in
             // case we are being rate limited for the limit to be reset.
-            let retry_policy = WithMaxAttemptsBackoff::default().with_max_attempts(7);
+            let retry_policy = WithMaxAttemptsBackoff::default().with_max_retries(7);
 
             EthereumRpcClient { inner: self.inner_rpc.clone(), batching, retry_policy, url: self.url.clone() }
         }
