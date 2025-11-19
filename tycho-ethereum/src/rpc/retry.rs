@@ -10,7 +10,8 @@ use alloy::{
     rpc::json_rpc::ErrorPayload,
     transports::{RpcError, TransportErrorKind},
 };
-use backoff::{backoff::Backoff, exponential::ExponentialBackoffBuilder, ExponentialBackoff};
+use backoff::backoff::Backoff;
+pub use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use serde_json::value::RawValue;
 
 /// Extension trait to implement retry logic for [`RpcError<TransportErrorKind>`].
@@ -168,14 +169,14 @@ impl<B: Backoff + Clone> Backoff for WithMaxAttemptsBackoff<B> {
 
 impl Default for WithMaxAttemptsBackoff<ExponentialBackoff> {
     /// Creates a new retry policy with default values:
-    /// - Initial interval: 250ms
-    /// - Multiplier: 1.75x
-    /// - Max interval: 30s
+    /// - Initial interval: 100ms
+    /// - Multiplier: 2.0x
+    /// - Max interval: 5s
     fn default() -> Self {
         let policy = ExponentialBackoffBuilder::new()
-            .with_initial_interval(Duration::from_millis(250))
-            .with_multiplier(1.75)
-            .with_max_interval(Duration::from_secs(30))
+            .with_initial_interval(Duration::from_millis(100))
+            .with_multiplier(2.0)
+            .with_max_interval(Duration::from_secs(5))
             .build();
 
         // Retry attempts after the initial try
