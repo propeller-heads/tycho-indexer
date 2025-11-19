@@ -10,10 +10,8 @@ use tycho_common::{
     Bytes,
 };
 use tycho_ethereum::{
-    rpc::EthereumRpcClient,
-    services::entrypoint_tracer::{
-        balance_slot_detector::EVMBalanceSlotDetector, slot_detector::SlotDetectorConfig,
-    },
+    rpc::{BatchingConfig, EthereumRpcClient},
+    services::entrypoint_tracer::balance_slot_detector::EVMBalanceSlotDetector,
 };
 
 use crate::extractor::dynamic_contract_indexer::{
@@ -77,14 +75,13 @@ pub fn setup_hook_orchestrator_registry(
 
     // Create EVM balance slot detector
     let balance_slot_detector = {
-        let config = SlotDetectorConfig {
-            max_batch_size: 5,
-            max_retries: 3,
-            initial_backoff_ms: 100,
-            max_backoff_ms: 5000,
-        };
+        // Use a shared RPC client with a custom batching policy with the slot detector
+        let batching_config = BatchingConfig { max_batch_size: 5, ..Default::default() };
+        let rpc = rpc
+            .clone()
+            .with_batching(Some(batching_config));
 
-        EVMBalanceSlotDetector::new(config, rpc)
+        EVMBalanceSlotDetector::new(&rpc)
     };
 
     let router_code = match chain {
