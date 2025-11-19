@@ -3,7 +3,6 @@
 extern crate pretty_assertions;
 
 pub mod erc20;
-pub mod errors;
 pub mod rpc;
 pub mod services;
 
@@ -11,7 +10,7 @@ pub mod services;
 pub mod test_fixtures;
 
 use alloy::primitives::{Address, B256, U256};
-pub(crate) use errors::*;
+pub(crate) use rpc::errors::*;
 use tycho_common::Bytes;
 
 /// A trait for converting types to and from `Bytes`.
