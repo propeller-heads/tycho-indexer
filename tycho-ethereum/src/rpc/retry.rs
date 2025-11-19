@@ -142,19 +142,18 @@ impl<E: std::borrow::Borrow<RawValue>> RetryableError for RpcError<TransportErro
 pub struct WithMaxAttemptsBackoff<B: Clone> {
     inner: B,
     attempts_left: usize,
-    /// Maximum number of retry attempts after the initial try
-    max_attempts: usize,
+    max_retries: usize,
 }
 
 impl<B: Clone> WithMaxAttemptsBackoff<B> {
-    pub fn new(inner: B, max_attempts: usize) -> Self {
-        Self { inner, attempts_left: max_attempts, max_attempts }
+    pub fn new(inner: B, max_retries: usize) -> Self {
+        Self { inner, attempts_left: max_retries, max_retries }
     }
 }
 
 impl<B: Backoff + Clone> Backoff for WithMaxAttemptsBackoff<B> {
     fn reset(&mut self) {
-        self.attempts_left = self.max_attempts;
+        self.attempts_left = self.max_retries;
         self.inner.reset();
     }
 
@@ -187,8 +186,8 @@ impl Default for WithMaxAttemptsBackoff<ExponentialBackoff> {
 }
 
 impl<B: Backoff + Clone> WithMaxAttemptsBackoff<B> {
-    pub fn with_max_attempts(mut self, attempts: usize) -> Self {
-        self.max_attempts = attempts;
+    pub fn with_max_retries(mut self, attempts: usize) -> Self {
+        self.max_retries = attempts;
         self
     }
 
@@ -435,7 +434,7 @@ pub(crate) mod tests {
 
         let policy = WithMaxAttemptsBackoff::new(exp_policy.clone(), retry_count);
 
-        assert_eq!(policy.max_attempts, retry_count);
+        assert_eq!(policy.max_retries, retry_count);
         assert_eq!(policy.attempts_left, retry_count);
         assert_eq!(policy.inner.multiplier, exp_policy.multiplier);
         assert_eq!(policy.inner.max_interval, exp_policy.max_interval);
