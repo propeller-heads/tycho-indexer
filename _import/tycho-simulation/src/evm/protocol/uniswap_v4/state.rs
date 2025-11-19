@@ -574,6 +574,8 @@ impl ProtocolSim for UniswapV4State {
             }
         }
 
+        // Replicates the behaviour of the Hooks library wrapper of the afterSwap method:
+        // https://github.com/Uniswap/v4-core/blob/59d3ecf53afa9264a16bba0e38f4c5d2231f80bc/src/libraries/Hooks.sol
         if (hook_delta_specified != I128::ZERO) || (hook_delta_unspecified != I128::ZERO) {
             let hook_delta = if (amount_specified < I256::ZERO) == zero_for_one {
                 BalanceDelta::new(hook_delta_specified, hook_delta_unspecified)
