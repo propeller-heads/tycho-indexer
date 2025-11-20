@@ -68,6 +68,8 @@ where
     manual_updates: bool,
     /// The adapter contract. This is used to interact with the protocol when running simulations
     adapter_contract: TychoSimulationContract<D>,
+    /// Tokens for which balance overwrites should be disabled.
+    disable_overwrite_tokens: HashSet<Address>,
 }
 
 impl<D> Debug for EVMPoolState<D>
@@ -110,6 +112,7 @@ where
         involved_contracts: HashSet<Address>,
         manual_updates: bool,
         adapter_contract: TychoSimulationContract<D>,
+        disable_overwrite_tokens: HashSet<Address>,
     ) -> Self {
         Self {
             id,
@@ -123,6 +126,7 @@ where
             contract_balances,
             manual_updates,
             adapter_contract,
+            disable_overwrite_tokens,
         }
     }
 
@@ -502,6 +506,11 @@ where
                 overwrites.set_balance(*balance, *contract);
                 balance_overwrites.extend(overwrites.get_overwrites());
             }
+        }
+
+        // Apply disables for tokens that should not have any balance overrides
+        for token in &self.disable_overwrite_tokens {
+            balance_overwrites.remove(token);
         }
 
         Ok(balance_overwrites)
