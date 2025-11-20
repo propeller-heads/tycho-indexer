@@ -19,6 +19,7 @@ via_ir = true
 
 [rpc_endpoints]
 mainnet = "${RPC_URL}"
+base = "${BASE_RPC_URL}"
 
 [fmt]
 line_length = 80

@@ -22,7 +22,8 @@
     "pancakeswap_v3": "0x21A97f2Aa8D9AE7144BfD080266Ee87cC2369656",
     "uniswap_v4": "0x8a3520889fE0bbF9E1F4a9724C27d8D6Ed9f0e29",
     "uniswap_v4_hooks": "0x8a3520889fE0bbF9E1F4a9724C27d8D6Ed9f0e29",
-    "rfq:bebop": "0x489A3f531dA3873D6585BF3f8E0dEE48CAC6F7BC"
+    "rfq:bebop": "0x489A3f531dA3873D6585BF3f8E0dEE48CAC6F7BC",
+    "aerodrome_slipstreams": "0x772f58A21a1E64c5677cDf16630205264caD2b6A"
   },
   "unichain": {
     "uniswap_v2": "0x00C1b81e3C8f6347E69e2DDb90454798A6Be975E",

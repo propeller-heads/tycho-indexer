@@ -135,7 +135,7 @@ const executors_to_deploy = {
                 "0x000000000022D473030F116dDEE9F6B43aC78BA3"
             ]
         },
-        // Args: Pool manager, Permit2
+        // USV4 - Args: Pool manager, Permit2
         {
             exchange: "UniswapV4Executor", args: [
                 "0x498581ff718922c3f8e6a244956af099b2652b2b",
@@ -146,6 +146,14 @@ const executors_to_deploy = {
         {
             exchange: "BebopExecutor",
             args: ["0xbbbbbBB520d69a9775E85b458C58c648259FAD5F", "0x000000000022D473030F116dDEE9F6B43aC78BA3"]
+        },
+        // Aerodrome Slipstreams - Args: Old Factory, New Factory, Permit2
+        {
+            exchange: "SlipstreamsExecutor", args: [
+                "0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A",
+                "0xaDe65c38CD4849aDBA595a4323a8C7DdfE89716a",
+                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+            ]
         },
     ],
     "unichain": [

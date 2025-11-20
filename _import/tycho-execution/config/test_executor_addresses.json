@@ -15,5 +15,8 @@
     "rfq:bebop": "0xD6BbDE9174b1CdAa358d2Cf4D57D1a9F7178FBfF",
     "rfq:hashflow": "0x15cF58144EF33af1e14b5208015d11F9143E27b9",
     "fluid_v1": "0x212224D2F2d262cd093eE13240ca4873fcCBbA3C"
+  },
+  "base": {
+    "aerodrome_slipstreams": "0x2a07706473244BC757E10F2a9E86fB532828afe3"
   }
 }

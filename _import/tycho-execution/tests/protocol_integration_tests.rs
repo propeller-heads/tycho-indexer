@@ -13,8 +13,9 @@ use tycho_execution::encoding::{
 };
 
 use crate::common::{
-    alice_address, encoding::encode_tycho_router_call, eth, eth_chain, get_signer,
-    get_tycho_router_encoder, ondo, pepe, usdc, wbtc, weth,
+    alice_address, encoding::encode_tycho_router_call, eth, eth_chain,
+    get_base_tycho_router_encoder, get_signer, get_tycho_router_encoder, ondo, pepe, usdc, wbtc,
+    weth,
 };
 
 #[test]
@@ -1025,4 +1026,141 @@ fn test_sequential_encoding_strategy_fluid() {
     .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_sequential_encoding_strategy_fluid_v1", hex_calldata.as_str());
+}
+
+#[test]
+fn test_single_encoding_strategy_slipstreams() {
+    // WETH -> (Slipstreams) -> USDC
+    let static_attributes = HashMap::from([(
+        "tick_spacing".to_string(),
+        Bytes::from(BigInt::from(100).to_signed_bytes_be()),
+    )]);
+
+    let slipstreams_pool = ProtocolComponent {
+        id: String::from("0xb2cc224c1c9feE385f8ad6a55b4d94E92359DC59"),
+        protocol_system: String::from("aerodrome_slipstreams"),
+        static_attributes,
+        ..Default::default()
+    };
+    let token_in = Bytes::from("0x4200000000000000000000000000000000000006");
+    let token_out = Bytes::from("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
+    let swap = Swap {
+        component: slipstreams_pool,
+        token_in: token_in.clone(),
+        token_out: token_out.clone(),
+        split: 0f64,
+        user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
+    };
+
+    let encoder = get_base_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: token_in,
+        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+        checked_token: token_out,
+        checked_amount: BigUint::from_str("1000").unwrap(),
+        // Alice
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFrom,
+        &eth(),
+        None,
+    )
+    .unwrap()
+    .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_single_encoding_strategy_slipstreams", hex_calldata.as_str());
+}
+
+#[test]
+fn test_sequential_encoding_strategy_slipstreams() {
+    // WETH -> (Slipstreams) -> USDC -> (Slipstreams) -> cbBTC
+    let slipstreams_weth_usdc_pool = ProtocolComponent {
+        id: String::from("0xb2cc224c1c9feE385f8ad6a55b4d94E92359DC59"),
+        protocol_system: String::from("aerodrome_slipstreams"),
+        static_attributes: HashMap::from([(
+            "tick_spacing".to_string(),
+            Bytes::from(BigInt::from(100).to_signed_bytes_be()),
+        )]),
+        ..Default::default()
+    };
+    let weth = Bytes::from("0x4200000000000000000000000000000000000006");
+    let usdc = Bytes::from("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
+    let swap1 = Swap {
+        component: slipstreams_weth_usdc_pool,
+        token_in: weth.clone(),
+        token_out: usdc.clone(),
+        split: 0f64,
+        user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
+    };
+    let slipstreams_cbbtc_usdc_pool = ProtocolComponent {
+        id: String::from("0x4e962BB3889Bf030368F56810A9c96B83CB3E778"),
+        protocol_system: String::from("aerodrome_slipstreams"),
+        static_attributes: HashMap::from([(
+            "tick_spacing".to_string(),
+            Bytes::from(BigInt::from(100).to_signed_bytes_be()),
+        )]),
+        ..Default::default()
+    };
+    let btc = Bytes::from("0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf");
+    let swap2 = Swap {
+        component: slipstreams_cbbtc_usdc_pool,
+        token_in: usdc.clone(),
+        token_out: btc.clone(),
+        split: 0f64,
+        user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
+    };
+
+    let encoder = get_base_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: weth.clone(),
+        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+        checked_token: btc.clone(),
+        checked_amount: BigUint::from_str("1000").unwrap(),
+        // Alice
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap1, swap2],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFrom,
+        &eth(),
+        None,
+    )
+    .unwrap()
+    .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_sequential_encoding_strategy_slipstreams", hex_calldata.as_str());
 }
