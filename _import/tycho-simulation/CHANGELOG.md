@@ -1,3 +1,10 @@
+## [0.201.0](https://github.com/propeller-heads/tycho-simulation/compare/0.200.0...0.201.0) (2025-11-20)
+
+
+### Features
+
+* add Slipstreams in integration testing ([caf73a3](https://github.com/propeller-heads/tycho-simulation/commit/caf73a3b331bf3078fa48d7af39d9ee434fcf859))
+
 ## [0.200.0](https://github.com/propeller-heads/tycho-simulation/compare/0.199.0...0.200.0) (2025-11-20)
 
 
