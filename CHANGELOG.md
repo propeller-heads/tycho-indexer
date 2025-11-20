@@ -1,3 +1,11 @@
+## [0.114.3](https://github.com/propeller-heads/tycho-indexer/compare/0.114.2...0.114.3) (2025-11-20)
+
+
+### Bug Fixes
+
+* handle `"storage": null` in `debug_storageRangeAt` responses with a wrapper ([0152c78](https://github.com/propeller-heads/tycho-indexer/commit/0152c78c55f3508447a24ed318497d9997d7829f))
+* tmp handle `"storage": null` in `debug_storageRangeAt` responses  ([#785](https://github.com/propeller-heads/tycho-indexer/issues/785)) ([5a5fea8](https://github.com/propeller-heads/tycho-indexer/commit/5a5fea8008758b1eb3397b85b9049200c8ecdf74))
+
 ## [0.114.2](https://github.com/propeller-heads/tycho-indexer/compare/0.114.1...0.114.2) (2025-11-20)
 
 ## [0.114.1](https://github.com/propeller-heads/tycho-indexer/compare/0.114.0...0.114.1) (2025-11-18)
