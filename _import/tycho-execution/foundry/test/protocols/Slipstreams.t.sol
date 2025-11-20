@@ -9,8 +9,8 @@ import {Permit2TestHelper} from "../Permit2TestHelper.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
 
 contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
-    constructor(address _factory, address _permit2)
-        SlipstreamsExecutor(_factory, _permit2)
+    constructor(address _factory1, address _factory2, address _permit2)
+        SlipstreamsExecutor(_factory1, _factory2, _permit2)
     {}
 
     function decodeData(bytes calldata data)
@@ -56,7 +56,9 @@ contract SlipstreamsExecutorTest is
         vm.createSelectFork(vm.rpcUrl("base"), forkBlock);
 
         slipstreamsExposed = new SlipstreamsExecutorExposed(
-            SLIPSTREAMS_FACTORY_BASE, PERMIT2_ADDRESS
+            SLIPSTREAMS_FACTORY_BASE,
+            SLIPSTREAMS_NEW_FACTORY_BASE,
+            PERMIT2_ADDRESS
         );
         permit2 = IAllowanceTransfer(PERMIT2_ADDRESS);
     }

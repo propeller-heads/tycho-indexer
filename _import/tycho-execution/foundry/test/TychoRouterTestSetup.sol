@@ -150,8 +150,11 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
             new HashflowExecutor(HASHFLOW_ROUTER, PERMIT2_ADDRESS);
         fluidV1Executor =
             new FluidV1Executor(FLUIDV1_LIQUIDITY, PERMIT2_ADDRESS);
-        slipstreamsExecutor =
-            new SlipstreamsExecutor(SLIPSTREAMS_FACTORY_BASE, PERMIT2_ADDRESS);
+        slipstreamsExecutor = new SlipstreamsExecutor(
+            SLIPSTREAMS_FACTORY_BASE,
+            SLIPSTREAMS_NEW_FACTORY_BASE,
+            PERMIT2_ADDRESS
+        );
 
         address[] memory executors = new address[](13);
         executors[0] = address(usv2Executor);

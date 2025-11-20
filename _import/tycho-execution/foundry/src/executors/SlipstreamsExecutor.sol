@@ -24,7 +24,8 @@ contract SlipstreamsExecutor is IExecutor, ICallback, RestrictTransferFrom {
     uint160 private constant MAX_SQRT_RATIO =
         1461446703485210103287273052203988822378723970342;
 
-    address public immutable factory;
+    address public immutable factory1;
+    address public immutable factory2;
     address private immutable self;
 
     /// @notice The identifying key of the pool
@@ -34,13 +35,14 @@ contract SlipstreamsExecutor is IExecutor, ICallback, RestrictTransferFrom {
         int24 tickSpacing;
     }
 
-    constructor(address _factory, address _permit2)
+    constructor(address _factory1, address _factory2, address _permit2)
         RestrictTransferFrom(_permit2)
     {
-        if (_factory == address(0)) {
+        if (_factory1 == address(0) || _factory2 == address(0)) {
             revert SlipstreamsExecutor__InvalidFactory();
         }
-        factory = _factory;
+        factory1 = _factory1;
+        factory2 = _factory2;
         self = address(this);
     }
 
@@ -165,7 +167,7 @@ contract SlipstreamsExecutor is IExecutor, ICallback, RestrictTransferFrom {
             PoolKey({token0: tokenA, token1: tokenB, tickSpacing: tickSpacing});
     }
 
-    function computeAddress(PoolKey memory key)
+    function computeAddress(PoolKey memory key, address factory)
         internal
         view
         returns (address pool)
@@ -184,8 +186,10 @@ contract SlipstreamsExecutor is IExecutor, ICallback, RestrictTransferFrom {
         int24 tick_spacing,
         address target
     ) internal view {
-        address pool = computeAddress(getPoolKey(tokenA, tokenB, tick_spacing));
-        if (pool != target) {
+        PoolKey memory key = getPoolKey(tokenA, tokenB, tick_spacing);
+        address pool1 = computeAddress(key, factory1);
+        address pool2 = computeAddress(key, factory2);
+        if (pool1 != target && pool2 != target) {
             revert SlipstreamsExecutor__InvalidTarget();
         }
     }

@@ -21,6 +21,8 @@ contract BaseConstants {
     // Aerodrome Slipstreams Factory
     address SLIPSTREAMS_FACTORY_BASE =
         0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A;
+    address SLIPSTREAMS_NEW_FACTORY_BASE =
+        0xaDe65c38CD4849aDBA595a4323a8C7DdfE89716a;
     // Aerodrome Slipstreams
     address SLIPSTREAMS_WETH_USDC_POOL =
         0xb2cc224c1c9feE385f8ad6a55b4d94E92359DC59;
