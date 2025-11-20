@@ -52,7 +52,7 @@ contract SlipstreamsExecutorTest is
     IAllowanceTransfer permit2;
 
     function setUp() public {
-        uint256 forkBlock = 37987780;
+        uint256 forkBlock = 38086214;
         vm.createSelectFork(vm.rpcUrl("base"), forkBlock);
 
         slipstreamsExposed = new SlipstreamsExecutorExposed(
@@ -115,6 +115,28 @@ contract SlipstreamsExecutorTest is
 
         assertEq(IERC20(BASE_WETH).balanceOf(address(slipstreamsExposed)), 0);
         assertGe(IERC20(BASE_USDC).balanceOf(address(this)), amountOut);
+    }
+
+    function testSwapNewFactory() public {
+        uint256 amountIn = 10 ** 18;
+        deal(BASE_WETH, address(slipstreamsExposed), amountIn);
+
+        bool zeroForOne = false;
+
+        bytes memory data = abi.encodePacked(
+            BASE_WETH,
+            BASE_BMI,
+            IUniswapV3Pool(SLIPSTREAMS_WETH_BMI_POOL).tickSpacing(),
+            RestrictTransferFrom.TransferType.Transfer,
+            address(this),
+            SLIPSTREAMS_WETH_BMI_POOL,
+            zeroForOne
+        );
+
+        uint256 amountOut = slipstreamsExposed.swap(amountIn, data);
+
+        assertEq(IERC20(BASE_WETH).balanceOf(address(slipstreamsExposed)), 0);
+        assertGe(IERC20(BASE_BMI).balanceOf(address(this)), amountOut);
     }
 
     function testDecodeParamsInvalidDataLength() public {

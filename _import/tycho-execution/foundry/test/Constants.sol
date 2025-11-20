@@ -8,6 +8,7 @@ contract BaseConstants {
     address BASE_MAG7 = 0x9E6A46f294bB67c20F1D1E7AfB0bBEf614403B55;
     address BASE_WETH = 0x4200000000000000000000000000000000000006;
     address BASE_cbBTC = 0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf;
+    address BASE_BMI = 0x2F16386bB37709016023232523FF6d9DAF444BE3;
     // Uniswap v2
     address USDC_MAG7_POOL = 0x739c2431670A12E2cF8e11E3603eB96e6728a789;
 
@@ -23,6 +24,9 @@ contract BaseConstants {
     // Aerodrome Slipstreams
     address SLIPSTREAMS_WETH_USDC_POOL =
         0xb2cc224c1c9feE385f8ad6a55b4d94E92359DC59;
+    // Pool that uses the new factory
+    address SLIPSTREAMS_WETH_BMI_POOL =
+        0x1b7088833548A8C4Ab12a900a2f4bdFA49221081;
 }
 
 contract Constants is Test, BaseConstants {
