@@ -156,7 +156,8 @@ impl EthereumRpcClient {
         // Some nodes (specifically observed on Unichain) return `"storage": null` instead of
         // `"storage": {}` for empty storage. This wrapper deserializes null as an empty BTreeMap
         // and converts it to the standard alloy StorageRangeResult type.
-        // TODO: Remove this workaround once the Unichain node behavior is fixed.
+        // TODO: Remove this workaround once the Unichain node behaviour is fixed or we switch node
+        // providers.
         #[derive(Debug, Deserialize)]
         struct StorageRangeResultWrapper {
             storage: Option<BTreeMap<B256, StorageResult>>,
