@@ -62,12 +62,16 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for AerodromeSlipstreamsS
                 .ok_or_else(|| InvalidSnapshotError::MissingAttribute("sqrt_price".to_string()))?,
         );
 
-        let observation_index: u16 = snapshot
-            .state
-            .attributes
-            .get("observationIndex")
-            .map(|b| u16::from(b.clone()))
-            .unwrap_or(0);
+        let observation_index = u16::from(
+            snapshot
+                .state
+                .attributes
+                .get("observationIndex")
+                .ok_or_else(|| {
+                    InvalidSnapshotError::MissingAttribute("observationIndex".to_string())
+                })?
+                .clone(),
+        );
 
         let observation_cardinality = u16::from(
             snapshot
@@ -80,26 +84,34 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for AerodromeSlipstreamsS
                 .clone(),
         );
 
-        let dfc_base_fee: u32 = snapshot
-            .state
-            .attributes
-            .get("dfc_baseFee")
-            .map(|b| u32::from(b.clone()))
-            .unwrap_or(0);
+        let dfc_base_fee = u32::from(
+            snapshot
+                .state
+                .attributes
+                .get("dfc_baseFee")
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("dfc_baseFee".to_string()))?
+                .clone(),
+        );
 
-        let dfc_scaling_factor: u64 = snapshot
-            .state
-            .attributes
-            .get("dfc_scalingFactor")
-            .map(|b| u64::from(b.clone()))
-            .unwrap_or(0);
+        let dfc_scaling_factor = u64::from(
+            snapshot
+                .state
+                .attributes
+                .get("dfc_scalingFactor")
+                .ok_or_else(|| {
+                    InvalidSnapshotError::MissingAttribute("dfc_scalingFactor".to_string())
+                })?
+                .clone(),
+        );
 
-        let dfc_fee_cap: u32 = snapshot
-            .state
-            .attributes
-            .get("dfc_feeCap")
-            .map(|b| u32::from(b.clone()))
-            .unwrap_or(0);
+        let dfc_fee_cap = u32::from(
+            snapshot
+                .state
+                .attributes
+                .get("dfc_feeCap")
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("dfc_feeCap".to_string()))?
+                .clone(),
+        );
 
         let tick_spacing = snapshot
             .component
