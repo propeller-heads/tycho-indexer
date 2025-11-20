@@ -157,7 +157,6 @@ impl UniswapV4State {
 
         if zero_for_one {
             assert!(price_limit > MIN_SQRT_RATIO);
-            println!("price_limit {price_limit}, sqrt_price {}", self.sqrt_price);
             assert!(price_limit < self.sqrt_price);
         } else {
             assert!(price_limit < MAX_SQRT_RATIO);
@@ -452,7 +451,6 @@ impl ProtocolSim for UniswapV4State {
         token_out: &Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
         let zero_for_one = token_in < token_out;
-        println!("{zero_for_one}");
         let amount_specified = I256::checked_from_sign_and_abs(
             Sign::Negative,
             U256::from_be_slice(&amount_in.to_bytes_be()),
