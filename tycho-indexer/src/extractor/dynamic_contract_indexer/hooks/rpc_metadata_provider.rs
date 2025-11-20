@@ -10,19 +10,25 @@ use thiserror::Error;
 use tonic::async_trait;
 use tracing::{debug, error, warn};
 
-use crate::extractor::dynamic_contract_indexer::component_metadata::{
+use super::component_metadata::{
     DeduplicationId, MetadataError, RequestProvider, RequestTransport, RpcTransport,
 };
 
 /// Configuration for RPC metadata provider retry behavior
 #[derive(Clone, Debug)]
-pub struct RPCRetryConfig {
+pub(super) struct RPCRetryConfig {
     /// Maximum number of retry attempts for failed requests (default: 3)
-    pub max_retries: usize,
+    max_retries: usize,
     /// Initial backoff delay in milliseconds (default: 100ms)
-    pub initial_backoff_ms: u64,
+    initial_backoff_ms: u64,
     /// Maximum backoff delay in milliseconds (default: 5000ms)
-    pub max_backoff_ms: u64,
+    max_backoff_ms: u64,
+}
+
+impl RPCRetryConfig {
+    pub(super) fn new(max_retries: usize, initial_backoff_ms: u64, max_backoff_ms: u64) -> Self {
+        Self { max_retries, initial_backoff_ms, max_backoff_ms }
+    }
 }
 
 impl Default for RPCRetryConfig {
@@ -33,7 +39,7 @@ impl Default for RPCRetryConfig {
 
 /// Custom error type for RPC batch operations
 #[derive(Error, Debug)]
-pub enum BatchError {
+pub(super) enum BatchError {
     #[error("Network error: {0}")]
     Network(String),
     #[error("HTTP client error (status {status}): {message}")]
@@ -48,7 +54,7 @@ pub enum BatchError {
     MaxRetriesExhausted { attempts: usize },
 }
 
-pub struct RPCMetadataProvider {
+pub(super) struct RPCMetadataProvider {
     client: Arc<Client>,
     batch_size_limit: usize,
     retry_config: RPCRetryConfig,
@@ -56,11 +62,14 @@ pub struct RPCMetadataProvider {
 
 impl RPCMetadataProvider {
     #[allow(dead_code)]
-    pub fn new(batch_size_limit: usize) -> Self {
+    pub(super) fn new(batch_size_limit: usize) -> Self {
         Self::new_with_retry_config(batch_size_limit, RPCRetryConfig::default())
     }
 
-    pub fn new_with_retry_config(batch_size_limit: usize, retry_config: RPCRetryConfig) -> Self {
+    pub(super) fn new_with_retry_config(
+        batch_size_limit: usize,
+        retry_config: RPCRetryConfig,
+    ) -> Self {
         Self { client: Arc::new(Client::new()), batch_size_limit, retry_config }
     }
 }
@@ -100,10 +109,10 @@ impl RequestProvider for RPCMetadataProvider {
                 continue;
             }
 
-            let endpoint = rpc_requests[0].endpoint.clone();
+            let endpoint = rpc_requests[0].endpoint().clone();
             let all_same_endpoint = rpc_requests
                 .iter()
-                .all(|rpc| rpc.endpoint == endpoint);
+                .all(|rpc| rpc.endpoint() == &endpoint);
 
             // If the requests are not all to the same endpoint, we can't batch them
             // and we need to insert errors for each request
@@ -124,13 +133,13 @@ impl RequestProvider for RPCMetadataProvider {
             let batch_json: Vec<Value> = rpc_requests
                 .into_iter()
                 .map(|rpc| {
-                    rpc_id_to_transport.insert(rpc.id, rpc.clone());
+                    rpc_id_to_transport.insert(rpc.id(), rpc.clone());
 
                     json!({
                         "jsonrpc": "2.0",
-                        "method": rpc.method,
-                        "params": rpc.params,
-                        "id": rpc.id
+                        "method": rpc.method(),
+                        "params": rpc.params(),
+                        "id": rpc.id()
                     })
                 })
                 .collect();
@@ -600,8 +609,8 @@ mod tests {
         // Map ids from transports so we mimic real id values
         let mut responses = vec![];
         for transport in req_map.values() {
-            let method = &transport.method;
-            let id = transport.id;
+            let method = transport.method();
+            let id = transport.id();
 
             let resp = match method.as_str() {
                 "eth_blockNumber" => json!({
@@ -760,17 +769,17 @@ mod tests {
         let batch1_responses = vec![
             json!({
                 "jsonrpc": "2.0",
-                "id": req_map["eth_blockNumber"].id,
+                "id": req_map["eth_blockNumber"].id(),
                 "result": "0x15dac9b"
             }),
             json!({
                 "jsonrpc": "2.0",
-                "id": req_map["eth_call"].id,
+                "id": req_map["eth_call"].id(),
                 "result": "0x00000000000000000000000000000000000000000000000000000b63a126babc0000000000000000000000000000000000000000000000dfc818ada67f7a256b000000000000000000000000000000000000000000000000000000006874c0d3"
             }),
             json!({
                 "jsonrpc": "2.0",
-                "id": req_map["eth_gasPrice"].id,
+                "id": req_map["eth_gasPrice"].id(),
                 "result": "0x7a67f1da"
             }),
         ];
@@ -779,7 +788,7 @@ mod tests {
         let batch2_responses = vec![
             json!({
                 "jsonrpc": "2.0",
-                "id": req_map["eth_hashrate"].id,
+                "id": req_map["eth_hashrate"].id(),
                 "error": {
                     "code": -32601,
                     "message": "the method eth_hashrate does not exist/is not available"
@@ -787,7 +796,7 @@ mod tests {
             }),
             json!({
                 "jsonrpc": "2.0",
-                "id": req_map["eth_getBalance"].id,
+                "id": req_map["eth_getBalance"].id(),
                 "result": "0x2aca55e768e35fed455"
             }),
         ];
@@ -1055,7 +1064,7 @@ mod tests {
             .create_async()
             .await;
 
-        let transport_id = transport.id;
+        let transport_id = transport.id();
         let success_response =
             format!(r#"[{{"jsonrpc":"2.0","id":{},"result":"0x15dac9b"}}]"#, transport_id);
 
@@ -1103,7 +1112,7 @@ mod tests {
                 // Return "header not found" error for first attempts
                 vec![json!({
                     "jsonrpc": "2.0",
-                    "id": request.id,
+                    "id": request.id(),
                     "error": {
                         "code": -32000,
                         "message": "header not found"
@@ -1113,7 +1122,7 @@ mod tests {
                 // Return success on final attempt
                 vec![json!({
                     "jsonrpc": "2.0",
-                    "id": request.id,
+                    "id": request.id(),
                     "result": {
                         "number": "0x1234",
                         "hash": "0x1234567890123456789012345678901234567890123456789012345678901234"
@@ -1168,7 +1177,7 @@ mod tests {
         for _ in 0..expected_calls {
             let response_body = vec![json!({
                 "jsonrpc": "2.0",
-                "id": request.id,
+                "id": request.id(),
                 "error": {
                     "code": -32000,
                     "message": "header not found"
@@ -1233,12 +1242,12 @@ mod tests {
         let mixed_response = vec![
             json!({
                 "jsonrpc": "2.0",
-                "id": request1.id,
+                "id": request1.id(),
                 "result": "0x1234567"
             }),
             json!({
                 "jsonrpc": "2.0",
-                "id": request2.id,
+                "id": request2.id(),
                 "error": {
                     "code": -32000,
                     "message": "header not found"

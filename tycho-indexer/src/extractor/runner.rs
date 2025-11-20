@@ -35,8 +35,8 @@ use crate::{
     extractor::{
         chain_state::ChainState,
         dynamic_contract_indexer::{
-            dci::DynamicContractIndexer, hook_dci::UniswapV4HookDCI,
-            hooks_dci_setup::create_testing_hooks_dci,
+            dci::DynamicContractIndexer,
+            hooks::{hook_dci::UniswapV4HookDCI, hooks_dci_builder::UniswapV4HookDCIBuilder},
         },
         post_processors::POST_PROCESSOR_REGISTRY,
         protocol_cache::ProtocolMemoryCache,
@@ -655,13 +655,6 @@ impl ExtractorBuilder {
                     DCIPlugin::Standard(rpc_dci)
                 }
                 DCIType::UniswapV4Hooks { pool_manager_address } => {
-                    let rpc_url = self.rpc_url.as_ref().ok_or_else(|| {
-                        ExtractionError::Setup(
-                            "RPC URL is required for UniswapV4Hooks DCI plugin but not provided"
-                                .to_string(),
-                        )
-                    })?;
-
                     // random address to deploy our mini router to
                     let router_address =
                         Address::from("0x2e234DAe75C793f67A35089C9d99245E1C58470b");
@@ -675,17 +668,18 @@ impl ExtractorBuilder {
                     )
                     .await?;
 
-                    let mut hooks_dci = create_testing_hooks_dci(
+                    let mut hooks_dci = UniswapV4HookDCIBuilder::new(
                         base_dci,
                         rpc_client,
-                        rpc_url.clone(),
                         router_address,
                         pool_manager,
                         cached_gw.clone(),
                         self.config.chain,
-                        3, // pause_after_retries
-                        5, // max_retries
-                    );
+                    )
+                    .pause_after_retries(3)
+                    .max_retries(5)
+                    .build()?;
+
                     hooks_dci.initialize().await?;
                     DCIPlugin::UniswapV4Hooks(Box::new(hooks_dci))
                 }
