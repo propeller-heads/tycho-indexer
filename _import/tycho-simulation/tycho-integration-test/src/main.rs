@@ -508,22 +508,19 @@ async fn process_update(
                 None => "".to_string(),
             }
         };
-        (n_reverts, n_failures) = process_execution_result(
+        process_execution_result(
             simulation_id,
             result,
             execution_info,
             state_str,
             (*block).clone(),
             chain.id().to_string(),
-            n_reverts,
-            n_failures,
+            &mut n_reverts,
+            &mut n_failures,
         );
     }
     if n_reverts > 0 || n_failures > 0 {
-        warn!(
-            "Simulations reverted: {n_reverts}/{}. Simulations failed: {n_failures}/{}",
-            total_simulations, total_simulations
-        )
+        warn!("Tested {total_simulations}, {n_reverts} simulations reverted, {n_failures} executions failed")
     }
 
     Ok(())
@@ -728,9 +725,9 @@ fn process_execution_result(
 
     block: Block,
     chain_id: String,
-    mut n_reverts: i32,
-    mut n_failures: i32,
-) -> (i32, i32) {
+    n_reverts: &mut i32,
+    n_failures: &mut i32,
+) {
     match result {
         TychoExecutionResult::Success { gas_used, amount_out } => {
             info!(
@@ -772,7 +769,7 @@ fn process_execution_result(
             metrics::record_execution_slippage(&execution_info.protocol_system, slippage);
         }
         TychoExecutionResult::Revert { reason, state_overwrites, overwrite_metadata } => {
-            n_reverts += 1;
+            *n_reverts += 1;
             let error_msg = reason.to_string();
 
             // Extract revert reason from error message
@@ -821,7 +818,7 @@ fn process_execution_result(
             );
         }
         TychoExecutionResult::Failed { error_msg } => {
-            n_failures += 1;
+            *n_failures += 1;
 
             let error_category = categorize_error(error_msg);
             error!(
@@ -838,7 +835,6 @@ fn process_execution_result(
             );
         }
     }
-    (n_reverts, n_failures)
 }
 
 /// Extract the error name from a revert reason string
