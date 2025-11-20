@@ -3,7 +3,7 @@ use std::{any::Any, collections::HashMap};
 use alloy::primitives::{Sign, I256, U256};
 use num_bigint::{BigInt, BigUint};
 use num_traits::{ToPrimitive, Zero};
-use tracing::{trace, warn};
+use tracing::trace;
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
