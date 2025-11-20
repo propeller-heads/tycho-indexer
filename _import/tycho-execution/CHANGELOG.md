@@ -1,3 +1,16 @@
+## [0.136.0](https://github.com/propeller-heads/tycho-execution/compare/0.135.0...0.136.0) (2025-11-20)
+
+
+### Features
+
+* add Aerodrome Slipstreams executor and Base chain support ([553738b](https://github.com/propeller-heads/tycho-execution/commit/553738be738058ad2921c7d4b8f8ae69c06ac255))
+* update Slipstreams executor address and data encoding ([2a76ae0](https://github.com/propeller-heads/tycho-execution/commit/2a76ae06bba74c515ee2f6233a15f18a597b32cf))
+
+
+### Bug Fixes
+
+* add new factory to slipstreams executor ([df3ddc2](https://github.com/propeller-heads/tycho-execution/commit/df3ddc2ad67b22e16ab3c0ea7dfe9800281aa24c))
+
 ## [0.135.0](https://github.com/propeller-heads/tycho-execution/compare/0.134.0...0.135.0) (2025-11-17)
 
 
