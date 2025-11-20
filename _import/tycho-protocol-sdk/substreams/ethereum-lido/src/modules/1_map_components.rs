@@ -11,7 +11,10 @@ use tycho_substreams::{
     prelude::*,
 };
 
-use crate::modules::map_component_balance::{ETH_ADDRESS, ST_ETH_ADDRESS, WST_ETH_ADDRESS};
+use crate::modules::map_component_balance::{
+    ETH_ADDRESS, ST_ETH_ADDRESS, ST_ETH_ADDRESS_OUTER_COMPONENT_ID, WST_ETH_ADDRESS,
+    WST_ETH_ADDRESS_COMPONENT_ID,
+};
 
 /// Create all relevant protocol components
 ///
@@ -74,7 +77,7 @@ pub fn maybe_create_component(
 ) -> Option<ProtocolComponent> {
     if *call.address == ST_ETH_ADDRESS {
         Some(ProtocolComponent {
-            id: "stETH".to_string(),
+            id: ST_ETH_ADDRESS_OUTER_COMPONENT_ID.to_owned(),
             tokens: vec![ST_ETH_ADDRESS_OUTER.into(), ETH_ADDRESS.into()],
             contracts: vec![ST_ETH_ADDRESS_OUTER.into(), ST_ETH_ADDRESS.into()],
             static_att: vec![
@@ -111,7 +114,7 @@ pub fn maybe_create_component(
         })
     } else if *call.address == WST_ETH_ADDRESS {
         Some(ProtocolComponent {
-            id: "wstETH".to_string(),
+            id: WST_ETH_ADDRESS_COMPONENT_ID.to_owned(),
             tokens: vec![ST_ETH_ADDRESS_OUTER.into(), WST_ETH_ADDRESS.into()],
             contracts: vec![WST_ETH_ADDRESS.into()],
             static_att: vec![Attribute {

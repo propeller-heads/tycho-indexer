@@ -22,10 +22,11 @@ const STORAGE_SLOT_STAKE_LIMIT: [u8; 32] =
 pub const ST_ETH_ADDRESS: [u8; 20] = hex!("17144556fd3424EDC8Fc8A4C940B2D04936d17eb");
 const ST_ETH_ADDRESS_COMPONENT_ID: &str = "0x17144556fd3424edc8fc8a4c940b2d04936d17eb";
 pub const WST_ETH_ADDRESS: [u8; 20] = hex!("7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0");
-const WST_ETH_ADDRESS_COMPONENT_ID: &str = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
+pub const WST_ETH_ADDRESS_COMPONENT_ID: &str = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
 const ZERO_STAKING_LIMIT: &str = "000000000000000000000000";
 pub const ETH_ADDRESS: [u8; 20] = hex!("EeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE");
 const ETH_ADDRESS_COMPONENT_ID: &str = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
+pub const ST_ETH_ADDRESS_OUTER_COMPONENT_ID: &str = "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84";
 
 /// Extracts balances per component
 ///
@@ -101,7 +102,7 @@ fn st_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) {
     for storage_change in call.storage_changes.iter() {
         if storage_change.key == STORAGE_SLOT_TOTAL_SHARES {
             builder.add_entity_change(&EntityChanges {
-                component_id: ST_ETH_ADDRESS_COMPONENT_ID.to_owned(),
+                component_id: ST_ETH_ADDRESS_OUTER_COMPONENT_ID.to_owned(),
                 attributes: vec![create_entity_change(
                     "total_shares",
                     storage_change.new_value.clone(),
@@ -110,7 +111,7 @@ fn st_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) {
         } else if storage_change.key == STORAGE_SLOT_POOLED_ETH {
             let attr = create_entity_change("total_pooled_eth", storage_change.new_value.clone());
             builder.add_entity_change(&EntityChanges {
-                component_id: ST_ETH_ADDRESS_COMPONENT_ID.to_owned(),
+                component_id: ST_ETH_ADDRESS_OUTER_COMPONENT_ID.to_owned(),
                 attributes: vec![attr.clone()],
             });
 
@@ -123,7 +124,7 @@ fn st_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) {
             let (staking_status, staking_limit) = staking_status_and_limit(storage_change);
 
             builder.add_entity_change(&EntityChanges {
-                component_id: ST_ETH_ADDRESS_COMPONENT_ID.to_owned(),
+                component_id: ST_ETH_ADDRESS_OUTER_COMPONENT_ID.to_owned(),
                 attributes: vec![
                     create_entity_change("staking_status", staking_status.as_str_name().into()),
                     create_entity_change("staking_limit", staking_limit.to_signed_bytes_be()),
