@@ -1,3 +1,18 @@
+## [0.200.0](https://github.com/propeller-heads/tycho-simulation/compare/0.199.0...0.200.0) (2025-11-20)
+
+
+### Features
+
+* add slipstreams decoder ([96be1e6](https://github.com/propeller-heads/tycho-simulation/commit/96be1e67a450f1af5998b7134aaf4b425fb12da4))
+* improve observation parsing and update block_timestamp ([cf60d2b](https://github.com/propeller-heads/tycho-simulation/commit/cf60d2b40000919220bff7990d2600eec5ee2c0d))
+* init slipstreams ([dbd4d98](https://github.com/propeller-heads/tycho-simulation/commit/dbd4d9878ca7f5641464dba0b43d10954a0adfe5))
+
+
+### Bug Fixes
+
+* add default value for attr ([43eaa4f](https://github.com/propeller-heads/tycho-simulation/commit/43eaa4f973937c8859981c1bcde16415f539d71f))
+* replace default values with error for missing attributes ([89a2266](https://github.com/propeller-heads/tycho-simulation/commit/89a22661bc78264b46901a20a340a07f56f30234))
+
 ## [0.199.0](https://github.com/propeller-heads/tycho-simulation/compare/0.198.0...0.199.0) (2025-11-20)
 
 
