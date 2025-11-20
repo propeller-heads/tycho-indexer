@@ -1,17 +1,22 @@
-use std::{collections::HashMap, default::Default, time::Duration};
+use std::{
+    collections::{BTreeMap, HashMap},
+    default::Default,
+    time::Duration,
+};
 
 use alloy::{
-    primitives::{Address, B256, U256},
+    primitives::{private::serde, Address, B256, U256},
     rpc::{
         client::{ClientBuilder, ReqwestClient},
         types::{
-            debug::StorageRangeResult,
+            debug::{StorageMap, StorageRangeResult, StorageResult},
             trace::parity::{TraceResults, TraceType},
             Block, BlockId, BlockNumberOrTag, TransactionRequest,
         },
     },
     transports::http::reqwest,
 };
+use serde::Deserialize;
 use tracing::{debug, info, trace};
 use tycho_common::Bytes;
 
@@ -152,13 +157,37 @@ impl EthereumRpcClient {
         address: Address,
         start_key: B256,
     ) -> Result<StorageRangeResult, RPCError> {
+        // TEMPORARY WORKAROUND: A custom wrapper for StorageRangeResult that handles null storage.
+        // Some nodes (specifically observed on Unichain) return `"storage": null` instead of
+        // `"storage": {}` for empty storage. This wrapper deserializes null as an empty BTreeMap
+        // and converts it to the standard alloy StorageRangeResult type.
+        // TODO: Remove this workaround once the Unichain node behaviour is fixed or we switch node
+        // providers.
+        #[derive(Debug, Deserialize)]
+        struct StorageRangeResultWrapper {
+            storage: Option<BTreeMap<B256, StorageResult>>,
+            #[serde(rename = "nextKey")]
+            next_key: Option<B256>,
+        }
+
+        impl From<StorageRangeResultWrapper> for StorageRangeResult {
+            fn from(wrapper: StorageRangeResultWrapper) -> Self {
+                StorageRangeResult {
+                    storage: StorageMap(wrapper.storage.unwrap_or_default()),
+                    next_key: wrapper.next_key,
+                }
+            }
+        }
+
         let params = (
             block_hash, 0, // transaction index, 0 for the state at the end of the block
             address, start_key, // The offset (hash of storage key)
             100000,    // The number of storage entries to return
         );
 
-        self.inner
+        // Use the wrapper type to handle nodes that return null instead of {} for empty storage
+        let wrapper: StorageRangeResultWrapper = self
+            .inner
             .request("debug_storageRangeAt", params)
             .await
             .map_err(|e| {
@@ -166,7 +195,9 @@ impl EthereumRpcClient {
                 RPCError::RequestError(RequestError::Other(format!(
                     "Failed to get storage: {error_chain}, address: {address}, block: {block_hash}",
                 )))
-            })
+            })?;
+
+        Ok(wrapper.into())
     }
 
     pub(crate) async fn get_storage_range(
@@ -866,10 +897,9 @@ mod tests {
         Ok(())
     }
 
-    /// Test if rpc correctly handles RPC responses with both `"storage": null` and `"storage": {}`
-    /// TODO - verify that we want to support `"storage": null` and adjust the implementation.
+    /// Note: We support `"storage": null` as a temporary workaround for Unichain nodes that
+    /// return null instead of {} for empty storage. See StorageRangeResultWrapper for details.
     #[rstest]
-    #[ignore = "currently does not pass"]
     #[case::null_storage(r#"{"id":1,"jsonrpc":"2.0","result":{"storage":null,"nextKey":null}}"#)]
     #[case::empty_storage(r#"{"id":1,"jsonrpc":"2.0","result":{"storage":{},"nextKey":null}}"#)]
     #[tokio::test]
