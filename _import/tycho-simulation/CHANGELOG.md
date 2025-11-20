@@ -1,3 +1,17 @@
+## [0.199.0](https://github.com/propeller-heads/tycho-simulation/compare/0.198.0...0.199.0) (2025-11-20)
+
+
+### Features
+
+* disable overwrite for delta_transition ([d61c03a](https://github.com/propeller-heads/tycho-simulation/commit/d61c03ae40ba6de032a1075f6df21d31710ce9f0))
+* identify rebasing tokens by static_attr ([c563658](https://github.com/propeller-heads/tycho-simulation/commit/c563658c7c72a632723b9d6d74027b1cecce20ac))
+* support disable token overwrite ([9eb7c1a](https://github.com/propeller-heads/tycho-simulation/commit/9eb7c1a843f001df4c8931f08661da8419e6b8b7))
+
+
+### Bug Fixes
+
+* remove token overwrite skip during balance updates ([0987c76](https://github.com/propeller-heads/tycho-simulation/commit/0987c76adfffe9e540b54740d7a218b4fe5dc335))
+
 ## [0.198.0](https://github.com/propeller-heads/tycho-simulation/compare/0.197.0...0.198.0) (2025-11-18)
 
 
