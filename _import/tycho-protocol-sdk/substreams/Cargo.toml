@@ -19,6 +19,7 @@ members = [
     "ethereum-ekubo-v2",
     "ethereum-maverick-v2",
     "ethereum-balancer-v3",
+    "base-aerodrome-slipstreams",
 ]
 resolver = "2"
 
