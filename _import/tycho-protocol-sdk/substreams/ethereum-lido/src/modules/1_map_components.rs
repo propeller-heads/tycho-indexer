@@ -1,19 +1,16 @@
 use anyhow::Result;
-use substreams::{hex, scalar::BigInt};
 use substreams_ethereum::pb::{
     eth,
     eth::v2::{Call, Log, TransactionTrace},
 };
 use tycho_substreams::{
-    models::{
-        Attribute, ChangeType, FinancialType, ImplementationType, ProtocolComponent, ProtocolType,
-    },
+    models::{ChangeType, FinancialType, ImplementationType, ProtocolComponent, ProtocolType},
     prelude::*,
 };
 
-use crate::modules::map_component_balance::{
-    ETH_ADDRESS, ST_ETH_ADDRESS, ST_ETH_ADDRESS_OUTER_COMPONENT_ID, WST_ETH_ADDRESS,
-    WST_ETH_ADDRESS_COMPONENT_ID,
+use crate::{
+    ETH_ADDRESS, ST_ETH_ADDRESS, ST_ETH_ADDRESS_OUTER, ST_ETH_ADDRESS_OUTER_COMPONENT_ID,
+    WST_ETH_ADDRESS, WST_ETH_ADDRESS_COMPONENT_ID,
 };
 
 /// Create all relevant protocol components
@@ -63,8 +60,6 @@ impl StakingStatus {
         }
     }
 }
-
-pub const ST_ETH_ADDRESS_OUTER: [u8; 20] = hex!("ae7ab96520DE3A18E5e111B5EaAb095312D7fE84");
 
 /// Potentially constructs a new ProtocolComponent given a call
 ///

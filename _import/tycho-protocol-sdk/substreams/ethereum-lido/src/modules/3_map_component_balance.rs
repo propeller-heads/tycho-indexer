@@ -8,7 +8,10 @@ use substreams_ethereum::pb::eth::{
 };
 use tycho_substreams::prelude::*;
 
-use crate::modules::map_protocol_components::StakingStatus;
+use crate::{
+    modules::map_protocol_components::StakingStatus, ST_ETH_ADDRESS, ST_ETH_ADDRESS_OUTER,
+    ST_ETH_ADDRESS_OUTER_COMPONENT_ID, WST_ETH_ADDRESS, WST_ETH_ADDRESS_COMPONENT_ID,
+};
 
 const STORAGE_SLOT_TOTAL_SHARES: [u8; 32] =
     hex!("e3b4b636e601189b5f4c6742edf2538ac12bb61ed03e6da26949d69838fa447e");
@@ -19,14 +22,7 @@ const STORAGE_SLOT_WRAPPED_ETH: [u8; 32] =
 const STORAGE_SLOT_STAKE_LIMIT: [u8; 32] =
     hex!("a3678de4a579be090bed1177e0a24f77cc29d181ac22fd7688aca344d8938015");
 
-pub const ST_ETH_ADDRESS: [u8; 20] = hex!("17144556fd3424EDC8Fc8A4C940B2D04936d17eb");
-const ST_ETH_ADDRESS_COMPONENT_ID: &str = "0x17144556fd3424edc8fc8a4c940b2d04936d17eb";
-pub const WST_ETH_ADDRESS: [u8; 20] = hex!("7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0");
-pub const WST_ETH_ADDRESS_COMPONENT_ID: &str = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
 const ZERO_STAKING_LIMIT: &str = "000000000000000000000000";
-pub const ETH_ADDRESS: [u8; 20] = hex!("EeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE");
-const ETH_ADDRESS_COMPONENT_ID: &str = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
-pub const ST_ETH_ADDRESS_OUTER_COMPONENT_ID: &str = "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84";
 
 /// Extracts balances per component
 ///
