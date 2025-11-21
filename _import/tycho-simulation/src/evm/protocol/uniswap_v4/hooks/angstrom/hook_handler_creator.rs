@@ -50,7 +50,7 @@ impl HookHandlerCreator for AngstromHookCreator {
 
         let hook_address = Address::from_slice(&hook_address_bytes.0);
         let pool_manager_address = Address::from_slice(&pool_manager_address_bytes.0);
-        let pool_removed = angstrom_removed_pool.first().copied() == Some(1);
+        let pool_removed = !angstrom_removed_pool.is_zero();
 
         let hook_handler = AngstromHookHandler::new(
             hook_address,

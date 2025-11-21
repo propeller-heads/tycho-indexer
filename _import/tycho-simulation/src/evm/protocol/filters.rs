@@ -42,7 +42,7 @@ pub fn uniswap_v4_euler_hook_pool_filter(component: &ComponentWithState) -> bool
         .is_some_and(|s| s == "euler_v1")
 }
 
-/// Filters out uniswap v4 pools with non-Euler hooks
+/// Filters out uniswap v4 pools with non-Angstrom hooks
 pub fn uniswap_v4_angstrom_hook_pool_filter(component: &ComponentWithState) -> bool {
     component
         .component

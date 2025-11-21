@@ -66,10 +66,10 @@ impl HookHandler for AngstromHookHandler {
         _: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<WithGasEstimate<BeforeSwapOutput>, SimulationError> {
         if self.pool_removed {
-            return Err(SimulationError::InvalidInput(
-                format!("angstrom pool {} has been removed", self.address),
-                None,
-            ))
+            return Err(SimulationError::FatalError(format!(
+                "angstrom pool {} has been removed",
+                self.address
+            )))
         }
         // Base gas for the hook call
         let mut gas_estimate = 400;
@@ -156,6 +156,13 @@ impl HookHandler for AngstromHookHandler {
             .get("angstrom_protocol_unlocked_fee")
         {
             self.fees.protocol_unlock = U24::from_be_slice(protocol_unlocked_fee);
+        }
+
+        if let Some(angstrom_removed_pool) = delta
+            .updated_attributes
+            .get("angstrom_removed_pool")
+        {
+            self.pool_removed = !angstrom_removed_pool.is_zero();
         }
 
         Ok(())
