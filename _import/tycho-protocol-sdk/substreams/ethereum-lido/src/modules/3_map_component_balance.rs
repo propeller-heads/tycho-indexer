@@ -36,9 +36,27 @@ pub const ST_ETH_ADDRESS_OUTER_COMPONENT_ID: &str = "0xae7ab96520DE3A18E5e111B5E
 #[substreams::handlers::map]
 pub fn map_component_balance(
     block: eth::v2::Block,
+    protocol_components: BlockTransactionProtocolComponents,
     _store: StoreGetRaw,
 ) -> Result<BlockChanges, substreams::errors::Error> {
-    let mut transaction_changes: HashMap<_, TransactionChangesBuilder> = HashMap::new();
+    let mut transaction_changes: HashMap<u32, TransactionChangesBuilder> = HashMap::new();
+
+    protocol_components
+        .tx_components
+        .iter()
+        .for_each(|tx_component| {
+            let tx = tx_component.tx.as_ref().unwrap();
+            let builder = transaction_changes
+                .entry(tx.index as u32)
+                .or_insert_with(|| TransactionChangesBuilder::new(tx));
+
+            tx_component
+                .components
+                .iter()
+                .for_each(|c| {
+                    builder.add_protocol_component(c);
+                });
+        });
 
     handle_sync(&block, &mut transaction_changes);
 
