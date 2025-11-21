@@ -755,7 +755,7 @@ fn process_execution_result(
                     100.0
             };
 
-            if slippage > 1.0 {
+            if !(-1.0..=1.0).contains(&slippage) {
                 info!(
                     event_type = "execution_slippage",
                     state = ?state_str,
