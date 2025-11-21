@@ -15,11 +15,6 @@ tests:
         tokens:
           - "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"
           - "0x0000000000000000000000000000000000000000"
-        static_attributes: 
-          total_shares: "0x0000000000000000000000000000000000000000"
-          total_pooled_eth: "0x0000000000000000000000000000000000000000"
-          staking_status: "0x4c696d69746564"
-          staking_limit: "0x00000000"
         creation_tx: "0xa9c829e0540bdf7fdbf52a8c3210577b33ded712977aa30029f73acb7b20e3b4"
         skip_simulation: true # Native implementation
         skip_execution: true
@@ -27,8 +22,6 @@ tests:
         tokens:
           - "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"
           - "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"
-        static_attributes: 
-          total_wstETH: "0x00000000"
         creation_tx: "0xc8bd606ae290a5a6a8a1ba23cb6d12844517abcc315c6a84fbefe446b2c91a03"
         skip_simulation: true # Native implementation
         skip_execution: true

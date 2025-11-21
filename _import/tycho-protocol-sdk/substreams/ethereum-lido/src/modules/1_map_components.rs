@@ -79,31 +79,7 @@ pub fn maybe_create_component(
         Some(ProtocolComponent {
             id: ST_ETH_ADDRESS_OUTER_COMPONENT_ID.to_owned(),
             tokens: vec![ST_ETH_ADDRESS_OUTER.into(), ETH_ADDRESS.into()],
-            contracts: vec![ST_ETH_ADDRESS_OUTER.into(), ST_ETH_ADDRESS.into()],
-            static_att: vec![
-                Attribute {
-                    name: "total_shares".to_string(),
-                    value: BigInt::from(0).to_signed_bytes_be(),
-                    change: ChangeType::Creation.into(),
-                },
-                Attribute {
-                    name: "total_pooled_eth".to_string(),
-                    value: BigInt::from(0).to_signed_bytes_be(),
-                    change: ChangeType::Creation.into(),
-                },
-                Attribute {
-                    name: "staking_status".to_string(),
-                    value: StakingStatus::Limited
-                        .as_str_name()
-                        .into(),
-                    change: ChangeType::Creation.into(),
-                },
-                Attribute {
-                    name: "staking_limit".to_string(),
-                    value: BigInt::from(0).to_signed_bytes_be(),
-                    change: ChangeType::Creation.into(),
-                },
-            ],
+            static_att: vec![],
             change: ChangeType::Creation.into(),
             protocol_type: Some(ProtocolType {
                 name: "stETH".to_string(),
@@ -116,12 +92,7 @@ pub fn maybe_create_component(
         Some(ProtocolComponent {
             id: WST_ETH_ADDRESS_COMPONENT_ID.to_owned(),
             tokens: vec![ST_ETH_ADDRESS_OUTER.into(), WST_ETH_ADDRESS.into()],
-            contracts: vec![WST_ETH_ADDRESS.into()],
-            static_att: vec![Attribute {
-                name: "total_wstETH".to_string(),
-                value: BigInt::from(0).to_signed_bytes_be(),
-                change: ChangeType::Creation.into(),
-            }],
+            static_att: vec![],
             change: ChangeType::Creation.into(),
             protocol_type: Some(ProtocolType {
                 name: "wstETH".to_string(),
