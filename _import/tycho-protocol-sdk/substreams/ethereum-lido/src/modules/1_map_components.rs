@@ -79,6 +79,7 @@ pub fn maybe_create_component(
         Some(ProtocolComponent {
             id: ST_ETH_ADDRESS_OUTER_COMPONENT_ID.to_owned(),
             tokens: vec![ST_ETH_ADDRESS_OUTER.into(), ETH_ADDRESS.into()],
+            contracts: vec![],
             static_att: vec![],
             change: ChangeType::Creation.into(),
             protocol_type: Some(ProtocolType {
@@ -92,6 +93,7 @@ pub fn maybe_create_component(
         Some(ProtocolComponent {
             id: WST_ETH_ADDRESS_COMPONENT_ID.to_owned(),
             tokens: vec![ST_ETH_ADDRESS_OUTER.into(), WST_ETH_ADDRESS.into()],
+            contracts: vec![],
             static_att: vec![],
             change: ChangeType::Creation.into(),
             protocol_type: Some(ProtocolType {
