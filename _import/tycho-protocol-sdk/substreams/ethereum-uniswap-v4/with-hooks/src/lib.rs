@@ -1,5 +1,7 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
+pub mod abi;
+pub mod pb;
 mod variant_modules;
 
 // Re-export all modules from shared library

@@ -1,5 +1,7 @@
-use crate::pb::uniswap::v4::{Events, LiquidityChanges, TickDeltas};
-use ethereum_uniswap_v4_shared::utils::protocol_changes::collect_transaction_changes;
+use ethereum_uniswap_v4_shared::{
+    pb::uniswap::v4::{Events, LiquidityChanges, TickDeltas},
+    utils::protocol_changes::collect_transaction_changes,
+};
 use substreams::pb::substreams::StoreDeltas;
 use substreams_ethereum::pb::eth::v2::{self as eth};
 use tycho_substreams::{block_storage::get_block_storage_changes, prelude::*};

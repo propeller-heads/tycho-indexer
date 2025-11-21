@@ -1,0 +1,38 @@
+substreams_yaml_path: ./ethereum-uniswap-v4-with-hooks.yaml
+# The balance check does not support vault like contracts like uniswap v4
+skip_balance_check: true
+protocol_type_names:
+  - "uniswap_v4_pool"
+protocol_system: "uniswap_v4_hooks"
+module_name: "map_angstrom_enriched_block_changes"
+initialized_accounts:
+  - "0x000000000004444c5dc75cB358380D2e3dE08A90" # pool manager
+tests:
+  - name: test_angstrom_pool_creation
+    start_block: 22972017
+    stop_block: 22972020
+    expected_components:
+      - id: "0xe500210c7ea6bfd9f69dce044b09ef384ec2b34832f132baec3b418208e3a657"
+        tokens:
+          - "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+          - "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+        static_attributes:
+          tick_spacing: "0x0a"
+          hooks: "0x0000000aa232009084bd71a5797d089aa4edfad4"
+          key_lp_fee: "0x00800000"
+          hook_identifier: "0x616e677374726f6d5f7631" # angstrom_v1
+        creation_tx: "0xf8faae3edf4e801a91f83381de9b2f8182d07a05442d6f5ed78410bced50a534"
+        skip_simulation: true
+        skip_execution: true
+      - id: "0x90078845bceb849b171873cfbc92db8540e9c803ff57d9d21b1215ec158e79b3"
+        tokens:
+          - "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+          - "0xdac17f958d2ee523a2206206994597c13d831ec7"
+        static_attributes:
+          tick_spacing: "0x0a"
+          hooks: "0x0000000aa232009084bd71a5797d089aa4edfad4"
+          key_lp_fee: "0x00800000"
+          hook_identifier: "0x616e677374726f6d5f7631" # angstrom_v1
+        creation_tx: "0xf8faae3edf4e801a91f83381de9b2f8182d07a05442d6f5ed78410bced50a534"
+        skip_simulation: true
+        skip_execution: true

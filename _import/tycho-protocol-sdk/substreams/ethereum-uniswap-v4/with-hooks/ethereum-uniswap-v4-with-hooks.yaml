@@ -10,9 +10,11 @@ protobuf:
     - tycho/evm/v1/common.proto
     - tycho/evm/v1/utils.proto
     - uniswap.proto
+    - angstrom.proto
   importPaths:
     - ../../../proto
     - ../shared/proto
+    - ./proto
   excludePaths:
     - sf/substreams
     - google
@@ -168,7 +170,40 @@ modules:
     output:
       type: proto:tycho.evm.v1.BlockChanges
 
+  - name: store_tokens_to_pool_id_angstrom
+    kind: store
+    initialBlock: 21688329
+    updatePolicy: set
+    valueType: string
+    inputs:
+      - params: string
+      - map: map_protocol_changes
+
+  - name: store_angstrom_config
+    kind: store
+    initialBlock: 21688329
+    updatePolicy: set
+    valueType: proto:uniswap.v4.angstrom.AngstromConfig
+    inputs:
+      - params: string
+      - source: sf.ethereum.type.v2.Block
+      - store: store_tokens_to_pool_id_angstrom
+
+  - name: map_angstrom_enriched_block_changes
+    kind: map
+    initialBlock: 21688329
+    inputs:
+      - params: string
+      - store: store_angstrom_config
+      - map: map_euler_enriched_protocol_changes
+    output:
+      type: proto:tycho.evm.v1.BlockChanges
+
+
 params:
   map_pools_created: "000000000004444c5dc75cB358380D2e3dE08A90"
   store_euler_hooks: "0xb013be1D0D380C13B58e889f412895970A2Cf228"
   map_euler_enriched_protocol_changes: "0xb013be1D0D380C13B58e889f412895970A2Cf228"
+  store_tokens_to_pool_id_angstrom: "0x0000000aa232009084bd71a5797d089aa4edfad4" # angstrom hook address
+  store_angstrom_config: "0x1746484ea5e11c75e009252c102c8c33e0315fd4" # angstrom controller address
+  map_angstrom_enriched_block_changes: "0x0000000aa232009084bd71a5797d089aa4edfad4" # angstrom hook address

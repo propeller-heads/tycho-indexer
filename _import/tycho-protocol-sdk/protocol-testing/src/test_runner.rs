@@ -540,6 +540,7 @@ impl TestRunner {
             .map(|c| c.base.id.to_lowercase())
             .collect::<Vec<String>>();
 
+        // Get block header to extract the timestamp
         let block = self
             .runtime
             .block_on(

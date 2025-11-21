@@ -28,9 +28,9 @@ initialized_accounts:
 protocol_type_names:
   - "type_name_1"
   - "type_name_2"
-# A list of tests.
 # The name of the protocol system
 protocol_system: "protocol_name"
+# A list of tests.
 tests:
   # Name of the test
   - name: test_pool_creation
