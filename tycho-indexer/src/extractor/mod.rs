@@ -40,6 +40,9 @@ pub mod runner;
 pub mod token_analysis_cron;
 mod u256_num;
 
+// TODO - consider moving these to a more general location
+pub use dynamic_contract_indexer::hooks::RPCRetryConfig;
+
 #[derive(Error, Debug, PartialEq)]
 pub enum ExtractionError {
     #[error("Extractor setup failed: {0}")]

@@ -1,6 +1,8 @@
 use clap::{Args, Parser, Subcommand};
 use tycho_common::{models::Chain, Bytes};
 
+use crate::extractor::RPCRetryConfig;
+
 /// Tycho Indexer using Substreams
 ///
 /// Extracts state from the Ethereum blockchain and stores it in a Postgres database.
@@ -37,7 +39,6 @@ pub enum Command {
 }
 
 #[derive(Parser, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(test, derive(Default))]
 #[command(version, about, long_about = None)]
 pub struct GlobalArgs {
     /// PostgresDB Connection Url
@@ -58,10 +59,6 @@ pub struct GlobalArgs {
     //Default is for backward compatibility but needs to be removed later
     pub s3_bucket: Option<String>,
 
-    /// The RPC URL to connect to the Ethereum node
-    #[clap(env = "RPC_URL", long, hide_env_values = true)]
-    pub rpc_url: String,
-
     /// Substreams API endpoint
     #[clap(name = "endpoint", long, default_value = "https://mainnet.eth.streamingfast.io")]
     pub endpoint_url: String,
@@ -77,6 +74,40 @@ pub struct GlobalArgs {
     /// The server version prefix
     #[clap(long, default_value = "v1")]
     pub server_version_prefix: String,
+
+    /// RPC configuration (URL and retry settings)
+    #[command(flatten)]
+    pub rpc: RPCArgs,
+}
+
+/// RPC configuration arguments (url, retry settings, and potentially others, such as batching)
+#[derive(Args, Debug, Clone, PartialEq, Eq)]
+pub struct RPCArgs {
+    /// The RPC URL to connect to the Blockchain node
+    #[clap(long = "rpc-url", env = "RPC_URL", hide_env_values = true)]
+    pub url: String,
+
+    /// Maximum number of RPC retry attempts for failed requests
+    #[clap(long = "rpc-max-retries", env = "RPC_MAX_RETRIES", default_value = "5")]
+    pub max_retries: usize,
+
+    /// Initial backoff delay in milliseconds before the first retry
+    #[clap(long = "rpc-initial-backoff-ms", env = "RPC_INITIAL_BACKOFF_MS", default_value = "150")]
+    pub initial_backoff_ms: u64,
+
+    /// Maximum backoff delay in milliseconds (backoff is capped at this value)
+    #[clap(long = "rpc-max-backoff-ms", env = "RPC_MAX_BACKOFF_MS", default_value = "5000")]
+    pub max_backoff_ms: u64,
+}
+
+impl From<RPCArgs> for RPCRetryConfig {
+    fn from(args: RPCArgs) -> Self {
+        Self {
+            max_retries: args.max_retries,
+            initial_backoff_ms: args.initial_backoff_ms,
+            max_backoff_ms: args.max_backoff_ms,
+        }
+    }
 }
 
 #[derive(Args, Debug, Clone, PartialEq)]
@@ -232,11 +263,16 @@ mod cli_tests {
                 endpoint_url: "http://example.com".to_string(),
                 database_url: "my_db".to_string(),
                 database_insert_batch_size: 256,
-                rpc_url: "http://example.com".to_string(),
                 s3_bucket: Some("repo.propellerheads-propellerheads".to_string()),
                 server_ip: "0.0.0.0".to_string(),
                 server_port: 4242,
                 server_version_prefix: "v1".to_string(),
+                rpc: RPCArgs {
+                    url: "http://example.com".to_string(),
+                    max_retries: 5,
+                    initial_backoff_ms: 150,
+                    max_backoff_ms: 5000,
+                },
             },
             command: Command::Run(RunSpkgArgs {
                 chain: "ethereum".to_string(),
@@ -268,6 +304,12 @@ mod cli_tests {
             "my_db",
             "--rpc-url",
             "http://example.com",
+            "--rpc-max-retries",
+            "10",
+            "--rpc-initial-backoff-ms",
+            "200",
+            "--rpc-max-backoff-ms",
+            "10000",
             "index",
             "--extractors-config",
             "/opt/extractors.yaml",
@@ -281,11 +323,16 @@ mod cli_tests {
                 endpoint_url: "http://example.com".to_string(),
                 database_url: "my_db".to_string(),
                 database_insert_batch_size: 0,
-                rpc_url: "http://example.com".to_string(),
                 s3_bucket: Some("repo.propellerheads-propellerheads".to_string()),
                 server_ip: "0.0.0.0".to_string(),
                 server_port: 4242,
                 server_version_prefix: "v1".to_string(),
+                rpc: RPCArgs {
+                    url: "http://example.com".to_string(),
+                    max_retries: 10,
+                    initial_backoff_ms: 200,
+                    max_backoff_ms: 10000,
+                },
             },
             command: Command::Index(IndexArgs {
                 substreams_args: SubstreamsArgs {
@@ -311,5 +358,22 @@ mod cli_tests {
         ]);
 
         assert!(args.is_err());
+    }
+
+    #[test]
+    fn test_rpc_args_conversion_to_config() {
+        // Test conversion from RPCArgs (CLI) to RPCConfig (domain)
+        let rpc_args = RPCArgs {
+            url: "https://eth.example.com".to_string(),
+            max_retries: 7,
+            initial_backoff_ms: 250,
+            max_backoff_ms: 8000,
+        };
+
+        let rpc_config: RPCRetryConfig = rpc_args.into();
+
+        assert_eq!(rpc_config.max_retries, 7);
+        assert_eq!(rpc_config.initial_backoff_ms, 250);
+        assert_eq!(rpc_config.max_backoff_ms, 8000);
     }
 }
