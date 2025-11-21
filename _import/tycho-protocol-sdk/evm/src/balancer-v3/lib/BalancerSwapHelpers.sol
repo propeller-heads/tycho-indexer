@@ -8,10 +8,7 @@ import "./BalancerERC4626Helpers.sol";
  * @dev A wrapped library containing swap functions, helpers and storage for the
  * Balancer V3 Swap Adapter contract
  */
-abstract contract BalancerSwapHelpers is
-    BalancerERC4626Helpers,
-    ISwapAdapter
-{
+abstract contract BalancerSwapHelpers is BalancerERC4626Helpers, ISwapAdapter {
     function getAmountOutMiddleware(
         bytes32 pool,
         address sellToken,
@@ -42,8 +39,7 @@ abstract contract BalancerSwapHelpers is
 
         if (sellTokenFound && buyTokenFound) {
             // Direct Swap
-            (IBatchRouter.SwapPathExactAmountIn memory sellPath,,) =
-            createERC20Path(
+            (IBatchRouter.SwapPathExactAmountIn memory sellPath,,) = createERC20Path(
                 poolAddress,
                 IERC20(sellToken),
                 IERC20(buyToken),

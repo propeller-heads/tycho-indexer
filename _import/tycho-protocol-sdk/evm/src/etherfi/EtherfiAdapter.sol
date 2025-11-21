@@ -4,8 +4,9 @@ pragma solidity ^0.8.13;
 
 import {ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from
-    "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import {
+    SafeERC20
+} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @title Etherfi Adapter
 /// @dev This contract supports the following swaps: ETH->eETH, weETH<->eETH,
@@ -29,22 +30,16 @@ contract EtherfiAdapter is ISwapAdapter {
     /// by this adapter
     modifier checkInputTokens(address sellToken, address buyToken) {
         if (sellToken == buyToken) {
-            revert Unavailable(
-                "This pool only supports ETH->eETH, weETH<->eETH and ETH->weETH swaps"
-            );
+            revert Unavailable("This pool only supports ETH->eETH, weETH<->eETH and ETH->weETH swaps");
         }
         if (
             sellToken != address(weEth) && sellToken != address(eEth)
                 && sellToken != address(0)
         ) {
-            revert Unavailable(
-                "This pool only supports ETH->eETH, weETH<->eETH and ETH->weETH swaps"
-            );
+            revert Unavailable("This pool only supports ETH->eETH, weETH<->eETH and ETH->weETH swaps");
         }
         if (buyToken != address(weEth) && buyToken != address(eEth)) {
-            revert Unavailable(
-                "This pool only supports ETH->eETH, weETH<->eETH and ETH->weETH swaps"
-            );
+            revert Unavailable("This pool only supports ETH->eETH, weETH<->eETH and ETH->weETH swaps");
         }
         _;
     }
@@ -231,9 +226,8 @@ contract EtherfiAdapter is ISwapAdapter {
             eEth_.safeIncreaseAllowance(address(weEth), receivedAmountEeth);
             uint256 receivedAmount = weEth.wrap(receivedAmountEeth);
 
-            IERC20(address(weEth)).safeTransfer(
-                address(msg.sender), receivedAmount
-            );
+            IERC20(address(weEth))
+                .safeTransfer(address(msg.sender), receivedAmount);
 
             return amountIn;
         } else {
@@ -241,9 +235,8 @@ contract EtherfiAdapter is ISwapAdapter {
             eEth_.safeIncreaseAllowance(address(weEth), receivedAmountEeth);
             uint256 receivedAmount = weEth.wrap(receivedAmountEeth);
 
-            IERC20(address(weEth)).safeTransfer(
-                address(msg.sender), receivedAmount
-            );
+            IERC20(address(weEth))
+                .safeTransfer(address(msg.sender), receivedAmount);
 
             return receivedAmount;
         }
@@ -258,30 +251,25 @@ contract EtherfiAdapter is ISwapAdapter {
         if (side == OrderSide.Buy) {
             uint256 amountIn =
                 getAmountIn(address(eEth), address(weEth), amount);
-            IERC20(address(eEth)).safeTransferFrom(
-                msg.sender, address(this), amountIn
-            );
-            IERC20(address(eEth)).safeIncreaseAllowance(
-                address(weEth), amountIn
-            );
+            IERC20(address(eEth))
+                .safeTransferFrom(msg.sender, address(this), amountIn);
+            IERC20(address(eEth))
+                .safeIncreaseAllowance(address(weEth), amountIn);
 
             uint256 receivedAmount = weEth.wrap(amountIn);
 
-            IERC20(address(weEth)).safeTransfer(
-                address(msg.sender), receivedAmount
-            );
+            IERC20(address(weEth))
+                .safeTransfer(address(msg.sender), receivedAmount);
 
             return amountIn;
         } else {
-            IERC20(address(eEth)).safeTransferFrom(
-                msg.sender, address(this), amount
-            );
+            IERC20(address(eEth))
+                .safeTransferFrom(msg.sender, address(this), amount);
             IERC20(address(eEth)).safeIncreaseAllowance(address(weEth), amount);
             uint256 receivedAmount = weEth.wrap(amount);
 
-            IERC20(address(weEth)).safeTransfer(
-                address(msg.sender), receivedAmount
-            );
+            IERC20(address(weEth))
+                .safeTransfer(address(msg.sender), receivedAmount);
             return receivedAmount;
         }
     }
@@ -295,18 +283,15 @@ contract EtherfiAdapter is ISwapAdapter {
         if (side == OrderSide.Buy) {
             uint256 amountIn =
                 getAmountIn(address(weEth), address(eEth), amount);
-            IERC20(address(weEth)).safeTransferFrom(
-                msg.sender, address(this), amountIn
-            );
+            IERC20(address(weEth))
+                .safeTransferFrom(msg.sender, address(this), amountIn);
             uint256 receivedAmount = weEth.unwrap(amountIn);
-            IERC20(address(eEth)).safeTransfer(
-                address(msg.sender), receivedAmount
-            );
+            IERC20(address(eEth))
+                .safeTransfer(address(msg.sender), receivedAmount);
             return amountIn;
         } else {
-            IERC20(address(weEth)).safeTransferFrom(
-                msg.sender, address(this), amount
-            );
+            IERC20(address(weEth))
+                .safeTransferFrom(msg.sender, address(this), amount);
             uint256 receivedAmount = weEth.unwrap(amount);
             uint256 balBeforeUser =
                 IERC20(address(eEth)).balanceOf(address(msg.sender));
@@ -429,10 +414,7 @@ interface ILiquidityPool {
     function numPendingDeposits() external view returns (uint32);
     function totalValueOutOfLp() external view returns (uint128);
     function totalValueInLp() external view returns (uint128);
-    function getTotalEtherClaimOf(address _user)
-        external
-        view
-        returns (uint256);
+    function getTotalEtherClaimOf(address _user) external view returns (uint256);
     function getTotalPooledEther() external view returns (uint256);
     function sharesForAmount(uint256 _amount) external view returns (uint256);
     function sharesForWithdrawalAmount(uint256 _amount)
@@ -464,10 +446,7 @@ interface IeEth {
 interface IWeEth {
     function eETH() external view returns (IeEth);
 
-    function getWeETHByeETH(uint256 _eETHAmount)
-        external
-        view
-        returns (uint256);
+    function getWeETHByeETH(uint256 _eETHAmount) external view returns (uint256);
 
     function getEETHByWeETH(uint256 _weETHAmount)
         external

@@ -289,7 +289,9 @@ library EfficientERC20 {
                 // from the `transfer*` call.
                 success := iszero(iszero(mload(0)))
             }
-            default { revertWithMessage(31, "GPv2: malformed transfer result") }
+            default {
+                revertWithMessage(31, "GPv2: malformed transfer result")
+            }
         }
     }
 }

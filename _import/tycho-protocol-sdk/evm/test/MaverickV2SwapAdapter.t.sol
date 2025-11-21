@@ -96,7 +96,7 @@ contract MaverickV2SwapAdapterTest is AdapterTest {
 
         for (uint256 i = 0; i < TEST_ITERATIONS - 1; i++) {
             assertGe(prices[i].compareFractions(prices[i + 1]), 1); // same bin
-                // price are same
+            // price are same
             assertGt(prices[i].denominator, 0);
             assertGt(prices[i + 1].denominator, 0);
         }

@@ -26,7 +26,8 @@ contract BalancerV3SwapAdapterTest is AdapterTest, ERC20, BalancerV3Errors {
         IVault(payable(0xbA1333333333a1BA1108E8412f11850A5C319bA9));
     BalancerV3SwapAdapter adapter;
     IBatchRouter router =
-        IBatchRouter(0x136f1EFcC3f8f88516B9E94110D56FDBfB1778d1); // Batch router
+        IBatchRouter(0x136f1EFcC3f8f88516B9E94110D56FDBfB1778d1); // Batch
+    // router
     address constant bufferRouter_address =
         0x9179C06629ef7f17Cb5759F501D89997FE0E7b45;
     address constant permit2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
@@ -99,80 +100,89 @@ contract BalancerV3SwapAdapterTest is AdapterTest, ERC20, BalancerV3Errors {
         // Approve ETHx spending through Permit2
         IERC20(ERC20_ETHx).approve(permit2, type(uint256).max);
 
-        IPermit2(permit2).approve(
-            ERC20_GOETH,
-            address(bufferRouter_address),
-            uint160(type(uint256).max),
-            uint48(block.timestamp + 1 days)
-        );
+        IPermit2(permit2)
+            .approve(
+                ERC20_GOETH,
+                address(bufferRouter_address),
+                uint160(type(uint256).max),
+                uint48(block.timestamp + 1 days)
+            );
 
-        IPermit2(permit2).approve(
-            address(ERC4626_sGOETH),
-            address(bufferRouter_address),
-            uint160(type(uint256).max),
-            uint48(block.timestamp + 1 days)
-        );
+        IPermit2(permit2)
+            .approve(
+                address(ERC4626_sGOETH),
+                address(bufferRouter_address),
+                uint160(type(uint256).max),
+                uint48(block.timestamp + 1 days)
+            );
 
         // Approve both tokens for Buffer Router through Permit2
-        IPermit2(permit2).approve(
-            ERC20_USDC,
-            address(bufferRouter_address), // Buffer
+        IPermit2(permit2)
+            .approve(
+                ERC20_USDC,
+                address(bufferRouter_address), // Buffer
                 // Router
-            uint160(type(uint256).max),
-            uint48(block.timestamp + 1 days)
-        );
+                uint160(type(uint256).max),
+                uint48(block.timestamp + 1 days)
+            );
 
-        IPermit2(permit2).approve(
-            ERC20_ETHx,
-            address(bufferRouter_address), // Buffer
+        IPermit2(permit2)
+            .approve(
+                ERC20_ETHx,
+                address(bufferRouter_address), // Buffer
                 // Router
-            uint160(type(uint256).max),
-            uint48(block.timestamp + 1 days)
-        );
+                uint160(type(uint256).max),
+                uint48(block.timestamp + 1 days)
+            );
 
         // Also approve ERC4626_sUSDC for Buffer Router
         IERC20(address(ERC4626_sUSDC)).approve(permit2, type(uint256).max);
-        IPermit2(permit2).approve(
-            address(ERC4626_sUSDC),
-            address(bufferRouter_address), // Buffer
+        IPermit2(permit2)
+            .approve(
+                address(ERC4626_sUSDC),
+                address(bufferRouter_address), // Buffer
                 // Router
-            uint160(type(uint256).max),
-            uint48(block.timestamp + 1 days)
-        );
+                uint160(type(uint256).max),
+                uint48(block.timestamp + 1 days)
+            );
 
         // Also approve sETHx for Buffer Router
         IERC20(address(ERC4626_sETHx)).approve(permit2, type(uint256).max);
-        IPermit2(permit2).approve(
-            address(ERC4626_sETHx),
-            address(bufferRouter_address), // Buffer
+        IPermit2(permit2)
+            .approve(
+                address(ERC4626_sETHx),
+                address(bufferRouter_address), // Buffer
                 // Router
-            uint160(type(uint256).max),
-            uint48(block.timestamp + 1 days)
-        );
+                uint160(type(uint256).max),
+                uint48(block.timestamp + 1 days)
+            );
 
         // Approve Permit2 to spend sUSDC for the Balancer vault
-        IPermit2(permit2).approve(
-            address(ERC4626_sUSDC),
-            address(balancerV3Vault),
-            uint160(type(uint256).max),
-            uint48(block.timestamp + 1 days)
-        );
+        IPermit2(permit2)
+            .approve(
+                address(ERC4626_sUSDC),
+                address(balancerV3Vault),
+                uint160(type(uint256).max),
+                uint48(block.timestamp + 1 days)
+            );
 
         // Approve Permit2 to spend sETHx for the Balancer vault
-        IPermit2(permit2).approve(
-            address(ERC4626_sETHx),
-            address(balancerV3Vault),
-            uint160(type(uint256).max),
-            uint48(block.timestamp + 1 days)
-        );
+        IPermit2(permit2)
+            .approve(
+                address(ERC4626_sETHx),
+                address(balancerV3Vault),
+                uint160(type(uint256).max),
+                uint48(block.timestamp + 1 days)
+            );
 
         // Approve Permit2 to spend sETHx for the Balancer vault
-        IPermit2(permit2).approve(
-            address(ERC4626_sGOETH),
-            address(balancerV3Vault),
-            uint160(type(uint256).max),
-            uint48(block.timestamp + 1 days)
-        );
+        IPermit2(permit2)
+            .approve(
+                address(ERC4626_sGOETH),
+                address(balancerV3Vault),
+                uint160(type(uint256).max),
+                uint48(block.timestamp + 1 days)
+            );
 
         // Initialize Balancer's internal ERC4626 buffer through the Buffer
         // Router
@@ -427,9 +437,9 @@ contract BalancerV3SwapAdapterTest is AdapterTest, ERC20, BalancerV3Errors {
     ///////////////////////////////////////// ERC20-->ERC20-->ERC4626 SWAP_WRAP
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    function testPriceFuzzBalancerV3_ERC20_ERC20_ERC4626_SWAP_WRAP(
-        uint256 amount0
-    ) public {
+    function testPriceFuzzBalancerV3_ERC20_ERC20_ERC4626_SWAP_WRAP(uint256 amount0)
+        public
+    {
         address token0 = ERC20_GOETH;
         address token1 = address(ERC4626_sUSDC);
 
@@ -512,9 +522,9 @@ contract BalancerV3SwapAdapterTest is AdapterTest, ERC20, BalancerV3Errors {
     // UNWRAP_SWAP
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    function testPriceFuzzBalancerV3_ERC4626_ERC20_ERC20_UNWRAP_SWAP(
-        uint256 amount0
-    ) public {
+    function testPriceFuzzBalancerV3_ERC4626_ERC20_ERC20_UNWRAP_SWAP(uint256 amount0)
+        public
+    {
         address token0 = address(ERC4626_sUSDC);
         address token1 = ERC20_GOETH;
 
@@ -549,7 +559,7 @@ contract BalancerV3SwapAdapterTest is AdapterTest, ERC20, BalancerV3Errors {
         if (isBuy) {
             vm.assume(
                 specifiedAmount < limits[1] && specifiedAmount > 10 ** 18 // as
-                    // using a mock USDC, we set a custom limit here.
+                // using a mock USDC, we set a custom limit here.
             );
         } else {
             vm.assume(
@@ -682,9 +692,9 @@ contract BalancerV3SwapAdapterTest is AdapterTest, ERC20, BalancerV3Errors {
     // WRAP_SWAP
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    function testPriceFuzzBalancerV3_ERC20_ERC4626_ERC4626_WRAP_SWAP(
-        uint256 amount0
-    ) public {
+    function testPriceFuzzBalancerV3_ERC20_ERC4626_ERC4626_WRAP_SWAP(uint256 amount0)
+        public
+    {
         address token0 = ERC20_WETH;
         address token1 = ERC4626_waEthLidowstETH;
 
@@ -767,9 +777,9 @@ contract BalancerV3SwapAdapterTest is AdapterTest, ERC20, BalancerV3Errors {
     // SWAP_UNWRAP
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    function testPriceFuzzBalancerV3_ERC4626_ERC4626_ERC20_SWAP_UNWRAP(
-        uint256 amount0
-    ) public {
+    function testPriceFuzzBalancerV3_ERC4626_ERC4626_ERC20_SWAP_UNWRAP(uint256 amount0)
+        public
+    {
         address token0 = ERC4626_waEthLidowstETH;
         address token1 = ERC20_WETH;
 
@@ -851,9 +861,9 @@ contract BalancerV3SwapAdapterTest is AdapterTest, ERC20, BalancerV3Errors {
     // SWAP_UNWRAP
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    function testPriceFuzzBalancerV3_ERC20_ERC4626_ERC20_SWAP_UNWRAP(
-        uint256 amount0
-    ) public {
+    function testPriceFuzzBalancerV3_ERC20_ERC4626_ERC20_SWAP_UNWRAP(uint256 amount0)
+        public
+    {
         address token0 = ERC20_ETHx;
         address token1 = ERC20_WETH;
 
@@ -935,9 +945,9 @@ contract BalancerV3SwapAdapterTest is AdapterTest, ERC20, BalancerV3Errors {
     // SWAP_UNWRAP
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    function testPriceFuzzBalancerV3_ERC20_ERC4626_ERC20_ALTERNATIVE_SWAP_UNWRAP(
-        uint256 amount0
-    ) public {
+    function testPriceFuzzBalancerV3_ERC20_ERC4626_ERC20_ALTERNATIVE_SWAP_UNWRAP(uint256 amount0)
+        public
+    {
         address token0 = ERC20_WETH;
         address token1 = ERC20_ETHx;
 
@@ -1018,9 +1028,9 @@ contract BalancerV3SwapAdapterTest is AdapterTest, ERC20, BalancerV3Errors {
     ///////////////////////////////////////// ERC20-->ERC20 UNDERLYING DIRECT
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    function testPriceFuzzBalancerV3_ERC20_ERC20_UNDERLYING_DIRECT(
-        uint256 amount0
-    ) public {
+    function testPriceFuzzBalancerV3_ERC20_ERC20_UNDERLYING_DIRECT(uint256 amount0)
+        public
+    {
         address token0 = ERC20_WETH;
         address token1 = ERC20_wstETH;
 
@@ -1102,9 +1112,9 @@ contract BalancerV3SwapAdapterTest is AdapterTest, ERC20, BalancerV3Errors {
     // UNWRAP_SWAP
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    function testPriceFuzzBalancerV3_ERC4626_ERC20_ERC4626_UNWRAP_SWAP(
-        uint256 amount0
-    ) public {
+    function testPriceFuzzBalancerV3_ERC4626_ERC20_ERC4626_UNWRAP_SWAP(uint256 amount0)
+        public
+    {
         address token0 = address(ERC4626_sETHx);
         address token1 = ERC4626_waEthWETH;
 
@@ -1187,9 +1197,9 @@ contract BalancerV3SwapAdapterTest is AdapterTest, ERC20, BalancerV3Errors {
     // UNWRAP_SWAP_WRAP
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    function testPriceFuzzBalancerV3_ERC4626_ERC20_ERC20_ERC4626_UNWRAP_SWAP_WRAP(
-        uint256 amount0
-    ) public {
+    function testPriceFuzzBalancerV3_ERC4626_ERC20_ERC20_ERC4626_UNWRAP_SWAP_WRAP(uint256 amount0)
+        public
+    {
         address token0 = address(ERC4626_sGOETH);
         address token1 = address(ERC4626_sUSDC);
 
@@ -1264,9 +1274,9 @@ contract BalancerV3SwapAdapterTest is AdapterTest, ERC20, BalancerV3Errors {
     ///////////////////////////////////////// ERC20-->ERC4626-->ERC4626-->ERC20
     // UNWRAP_SWAP_WRAP
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    function testPriceFuzzBalancerV3_ERC20_ERC4626_ERC4626_ERC20_WRAP_SWAP_UNWRAP(
-        uint256 amount0
-    ) public {
+    function testPriceFuzzBalancerV3_ERC20_ERC4626_ERC4626_ERC20_WRAP_SWAP_UNWRAP(uint256 amount0)
+        public
+    {
         address token0 = address(ERC20_GOETH);
         address token1 = address(ERC20_USDC);
 

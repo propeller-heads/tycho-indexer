@@ -21,7 +21,8 @@
       "ae7ab96520de3a18e5e111b5eaab095312d7fe84"
     ],
     "static_attributes": {
-      "coins": "[\"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"0xae7ab96520de3a18e5e111b5eaab095312d7fe84\"]"
+      "coins": "[\"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"0xae7ab96520de3a18e5e111b5eaab095312d7fe84\"]",
+      "rebase_tokens": "[\"ae7ab96520de3a18e5e111b5eaab095312d7fe84\"]"
     }
   },
   {

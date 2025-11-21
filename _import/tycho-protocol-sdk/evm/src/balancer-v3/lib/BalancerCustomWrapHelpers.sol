@@ -106,8 +106,8 @@ abstract contract BalancerCustomWrapHelpers is BalancerERC20Helpers {
         view
         returns (IBatchRouter.SwapPathExactAmountIn[] memory paths)
     {
-        IBatchRouter.SwapPathStep[] memory steps =
-            new IBatchRouter.SwapPathStep[](3);
+        IBatchRouter.SwapPathStep[] memory
+            steps = new IBatchRouter.SwapPathStep[](3);
 
         if (kind == CUSTOM_WRAP_KIND.ERC20_TO_ERC20) {
             // Step 1: sellToken.asset() -> sellToken.shares()
@@ -196,16 +196,17 @@ abstract contract BalancerCustomWrapHelpers is BalancerERC20Helpers {
         address sellTokenOutput,
         address buyTokenOutput
     ) internal returns (uint256 calculatedAmount) {
-        IBatchRouter.SwapPathExactAmountIn[] memory paths =
-        prepareSellCustomWrap(
-            pool,
-            _sellToken,
-            buyToken,
-            specifiedAmount,
-            kind,
-            sellTokenOutput,
-            buyTokenOutput
-        );
+        IBatchRouter.SwapPathExactAmountIn[] memory
+            paths =
+            prepareSellCustomWrap(
+                pool,
+                _sellToken,
+                buyToken,
+                specifiedAmount,
+                kind,
+                sellTokenOutput,
+                buyTokenOutput
+            );
 
         (,, uint256[] memory amountsOut) =
             router.querySwapExactIn(paths, address(0), bytes(""));
@@ -243,19 +244,18 @@ abstract contract BalancerCustomWrapHelpers is BalancerERC20Helpers {
         IERC20 sellToken = IERC20(_sellToken);
 
         // approve and transfer
-        IERC20(sellToken).safeTransferFrom(
-            msg.sender, address(this), specifiedAmount
-        );
+        IERC20(sellToken)
+            .safeTransferFrom(msg.sender, address(this), specifiedAmount);
         sellToken.safeIncreaseAllowance(permit2, specifiedAmount);
-        IPermit2(permit2).approve(
-            address(sellToken),
-            address(router),
-            type(uint160).max,
-            type(uint48).max
-        );
+        IPermit2(permit2)
+            .approve(
+                address(sellToken),
+                address(router),
+                type(uint160).max,
+                type(uint48).max
+            );
 
-        IBatchRouter.SwapPathExactAmountIn[] memory paths =
-        prepareSellCustomWrap(
+        IBatchRouter.SwapPathExactAmountIn[] memory paths = prepareSellCustomWrap(
             pool,
             _sellToken,
             _buyToken,
@@ -295,16 +295,16 @@ abstract contract BalancerCustomWrapHelpers is BalancerERC20Helpers {
         uint256 initialSenderBalance = IERC20(sellToken).balanceOf(msg.sender);
 
         // approve and transfer
-        IERC20(sellToken).safeTransferFrom(
-            msg.sender, address(this), initialSenderBalance
-        );
+        IERC20(sellToken)
+            .safeTransferFrom(msg.sender, address(this), initialSenderBalance);
         sellToken.safeIncreaseAllowance(permit2, type(uint256).max);
-        IPermit2(permit2).approve(
-            address(sellToken),
-            address(router),
-            type(uint160).max,
-            type(uint48).max
-        );
+        IPermit2(permit2)
+            .approve(
+                address(sellToken),
+                address(router),
+                type(uint160).max,
+                type(uint48).max
+            );
 
         if (kind == CUSTOM_WRAP_KIND.ERC20_TO_ERC20) {
             // Step 1: sellToken.asset() -> sellToken.shares()
@@ -397,9 +397,12 @@ abstract contract BalancerCustomWrapHelpers is BalancerERC20Helpers {
         }
 
         // transfer back sellToken to sender
-        IERC20(sellToken).safeTransferFrom(
-            address(this), msg.sender, initialSenderBalance - calculatedAmount
-        );
+        IERC20(sellToken)
+            .safeTransferFrom(
+                address(this),
+                msg.sender,
+                initialSenderBalance - calculatedAmount
+            );
     }
 
     /**
@@ -478,13 +481,15 @@ abstract contract BalancerCustomWrapHelpers is BalancerERC20Helpers {
                 address token = address(tokens[i]);
 
                 if (token == sellTokenOutput) {
-                    limits[0] = IERC4626(sellTokenOutput).previewRedeem(
-                        (balancesRaw[i] * RESERVE_LIMIT_FACTOR) / 10
-                    );
+                    limits[0] = IERC4626(sellTokenOutput)
+                        .previewRedeem(
+                            (balancesRaw[i] * RESERVE_LIMIT_FACTOR) / 10
+                        );
                 } else if (token == buyTokenOutput) {
-                    limits[1] = IERC4626(buyTokenOutput).previewRedeem(
-                        (balancesRaw[i] * RESERVE_LIMIT_FACTOR) / 10
-                    );
+                    limits[1] = IERC4626(buyTokenOutput)
+                        .previewRedeem(
+                            (balancesRaw[i] * RESERVE_LIMIT_FACTOR) / 10
+                        );
                 }
             }
 
@@ -496,14 +501,16 @@ abstract contract BalancerCustomWrapHelpers is BalancerERC20Helpers {
         IERC20 underlyingBuyToken = IERC20(IERC4626(buyToken).asset());
         for (uint256 i = 0; i < tokens.length; i++) {
             if (tokens[i] == underlyingSellToken) {
-                limits[0] = IERC4626(sellToken).previewDeposit(
-                    (balancesRaw[i] * RESERVE_LIMIT_FACTOR) / 10
-                );
+                limits[0] = IERC4626(sellToken)
+                    .previewDeposit(
+                        (balancesRaw[i] * RESERVE_LIMIT_FACTOR) / 10
+                    );
             }
             if (tokens[i] == underlyingBuyToken) {
-                limits[1] = IERC4626(buyToken).previewDeposit(
-                    (balancesRaw[i] * RESERVE_LIMIT_FACTOR) / 10
-                );
+                limits[1] = IERC4626(buyToken)
+                    .previewDeposit(
+                        (balancesRaw[i] * RESERVE_LIMIT_FACTOR) / 10
+                    );
             }
         }
         return limits;

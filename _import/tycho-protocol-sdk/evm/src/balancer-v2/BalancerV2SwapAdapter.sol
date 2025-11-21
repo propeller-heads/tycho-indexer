@@ -134,9 +134,8 @@ contract BalancerV2SwapAdapter is ISwapAdapter {
             limit = type(uint256).max;
         }
 
-        IERC20(sellToken).safeTransferFrom(
-            msg.sender, address(this), sellAmount
-        );
+        IERC20(sellToken)
+            .safeTransferFrom(msg.sender, address(this), sellAmount);
         IERC20(sellToken).safeIncreaseAllowance(address(vault), sellAmount);
 
         uint256 gasBefore = gasleft();
@@ -375,8 +374,7 @@ interface IVault {
         uint256 deadline
     ) external payable returns (int256[] memory assetDeltas);
 
-    function deregisterTokens(bytes32 poolId, address[] memory tokens)
-        external;
+    function deregisterTokens(bytes32 poolId, address[] memory tokens) external;
 
     function exitPool(
         bytes32 poolId,

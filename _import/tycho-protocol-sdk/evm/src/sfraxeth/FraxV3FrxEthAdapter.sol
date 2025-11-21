@@ -7,8 +7,9 @@ import {
     IERC20,
     ERC20
 } from "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
-import {SafeERC20} from
-    "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import {
+    SafeERC20
+} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 
 library FixedPointMathLib {
     uint256 internal constant MAX_UINT256 = 2 ** 256 - 1;
@@ -59,10 +60,10 @@ contract FraxV3FrxEthAdapter is ISwapAdapter {
         returns (bool)
     {
         if (
-            (
-                sellToken != address(frxEth) && sellToken != address(sfrxEth)
-                    && sellToken != address(0)
-            ) || (buyToken != address(frxEth) && buyToken != address(sfrxEth))
+            (sellToken != address(frxEth)
+                    && sellToken != address(sfrxEth)
+                    && sellToken != address(0))
+                || (buyToken != address(frxEth) && buyToken != address(sfrxEth))
                 || (sellToken == address(0) && buyToken != address(sfrxEth))
                 || buyToken == sellToken
         ) {
@@ -119,12 +120,16 @@ contract FraxV3FrxEthAdapter is ISwapAdapter {
         if (side == OrderSide.Sell) {
             trade.calculatedAmount = sell(sellToken, specifiedAmount);
             trade.calculatedAmount != 0
-                ? trade.price = Fraction(trade.calculatedAmount, specifiedAmount)
+                ? trade.price = Fraction(
+                    trade.calculatedAmount, specifiedAmount
+                )
                 : trade.price;
         } else {
             trade.calculatedAmount = buy(sellToken, specifiedAmount);
             trade.calculatedAmount != 0
-                ? trade.price = Fraction(specifiedAmount, trade.calculatedAmount)
+                ? trade.price = Fraction(
+                    specifiedAmount, trade.calculatedAmount
+                )
                 : trade.price;
         }
 
@@ -241,23 +246,20 @@ contract FraxV3FrxEthAdapter is ISwapAdapter {
         if (sellToken == address(0)) {
             uint256 amountIn = sfrxEth.previewMint(amount);
             frxEthMinter.submit{value: amountIn}();
-            IERC20(address(frxEth)).safeIncreaseAllowance(
-                address(sfrxEth), amountIn
-            );
+            IERC20(address(frxEth))
+                .safeIncreaseAllowance(address(sfrxEth), amountIn);
             return sfrxEth.mint(amount, msg.sender);
         }
 
         if (sellToken == address(sfrxEth)) {
             uint256 amountIn = sfrxEth.previewWithdraw(amount);
-            IERC20(sellToken).safeTransferFrom(
-                msg.sender, address(this), amountIn
-            );
+            IERC20(sellToken)
+                .safeTransferFrom(msg.sender, address(this), amountIn);
             return sfrxEth.withdraw(amount, msg.sender, address(this));
         } else {
             uint256 amountIn = sfrxEth.previewMint(amount);
-            IERC20(sellToken).safeTransferFrom(
-                msg.sender, address(this), amountIn
-            );
+            IERC20(sellToken)
+                .safeTransferFrom(msg.sender, address(this), amountIn);
             IERC20(sellToken).safeIncreaseAllowance(address(sfrxEth), amountIn);
             return sfrxEth.mint(amount, msg.sender);
         }

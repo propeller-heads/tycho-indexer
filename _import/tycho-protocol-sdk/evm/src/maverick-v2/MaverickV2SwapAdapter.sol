@@ -109,13 +109,13 @@ contract MaverickV2SwapAdapter is ISwapAdapter {
         int32 tickLimit,
         uint256 specifiedAmount
     ) internal returns (uint256 calculatedAmount) {
-        IMaverickV2Pool.SwapParams memory swapParams = IMaverickV2Pool
-            .SwapParams({
-            amount: specifiedAmount,
-            tokenAIn: isTokenAIn,
-            exactOutput: true,
-            tickLimit: tickLimit
-        });
+        IMaverickV2Pool.SwapParams memory swapParams =
+            IMaverickV2Pool.SwapParams({
+                amount: specifiedAmount,
+                tokenAIn: isTokenAIn,
+                exactOutput: true,
+                tickLimit: tickLimit
+            });
         // callback data is the sender address
         bytes memory data = abi.encode(msg.sender);
         (uint256 amountIn,) = pool.swap(msg.sender, swapParams, data);
@@ -134,13 +134,13 @@ contract MaverickV2SwapAdapter is ISwapAdapter {
         int32 tickLimit,
         uint256 specifiedAmount
     ) internal returns (uint256 calculatedAmount) {
-        IMaverickV2Pool.SwapParams memory swapParams = IMaverickV2Pool
-            .SwapParams({
-            amount: specifiedAmount,
-            tokenAIn: isTokenAIn,
-            exactOutput: false,
-            tickLimit: tickLimit
-        });
+        IMaverickV2Pool.SwapParams memory swapParams =
+            IMaverickV2Pool.SwapParams({
+                amount: specifiedAmount,
+                tokenAIn: isTokenAIn,
+                exactOutput: false,
+                tickLimit: tickLimit
+            });
         // callback data is the sender address
         bytes memory data = abi.encode(msg.sender);
         (, uint256 amountOut) = pool.swap(msg.sender, swapParams, data);

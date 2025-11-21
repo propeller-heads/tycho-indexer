@@ -18,7 +18,8 @@ contract BalancerV2SwapAdapterTest is AdapterTest {
 
     address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address constant BAL = 0xba100000625a3754423978a60c9317c58a424e3D;
-    address constant B_80BAL_20WETH = 0x5c6Ee304399DBdB9C8Ef030aB642B10820DB8F56;
+    address constant B_80BAL_20WETH =
+        0x5c6Ee304399DBdB9C8Ef030aB642B10820DB8F56;
     bytes32 constant B_80BAL_20WETH_POOL_ID =
         0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014;
 

@@ -47,7 +47,7 @@ fn create_component(
     if let Some(pool) = pools.get(&encoded_hash) {
         Ok(Some((
             ProtocolComponent {
-                id: pool.address.clone(),
+                id: format!("0x{}", pool.address.clone()),
                 tokens: pool
                     .tokens
                     .clone()

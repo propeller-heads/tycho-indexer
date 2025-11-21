@@ -7,8 +7,9 @@ import {
     IERC20,
     ERC20
 } from "../../lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
-import {SafeERC20} from
-    "../../lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import {
+    SafeERC20
+} from "../../lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 
 library FixedPointMathLib {
     uint256 internal constant MAX_UINT256 = 2 ** 256 - 1;
@@ -217,15 +218,13 @@ contract FraxV3SFraxAdapter is ISwapAdapter {
     {
         if (sellToken == address(sFrax)) {
             uint256 amountIn = sFrax.previewWithdraw(amount);
-            IERC20(sellToken).safeTransferFrom(
-                msg.sender, address(this), amountIn
-            );
+            IERC20(sellToken)
+                .safeTransferFrom(msg.sender, address(this), amountIn);
             return sFrax.withdraw(amount, msg.sender, address(this));
         } else {
             uint256 amountIn = sFrax.previewMint(amount);
-            IERC20(sellToken).safeTransferFrom(
-                msg.sender, address(this), amountIn
-            );
+            IERC20(sellToken)
+                .safeTransferFrom(msg.sender, address(this), amountIn);
             IERC20(sellToken).safeIncreaseAllowance(address(sFrax), amountIn);
             return sFrax.mint(amount, msg.sender);
         }

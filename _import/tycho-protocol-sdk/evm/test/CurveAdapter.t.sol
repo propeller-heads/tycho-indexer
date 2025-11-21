@@ -20,7 +20,7 @@ contract CurveAdapterTest is Test, ISwapAdapterTypes, AdapterTest {
         0x6c3F90f043a72FA612cbac8115EE7e52BDe6E490;
     address constant DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
     address constant stETH = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
-
+    address constant cUSDO = 0xaD55aebc9b8c03FC43cd9f62260391c13c23e7c0;
     // pools
     address constant STABLE_POOL = 0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7;
     address constant CRYPTO_POOL = 0x80466c64868E1ab14a1Ddf27A676C3fcBE638Fe5;
@@ -29,13 +29,14 @@ contract CurveAdapterTest is Test, ISwapAdapterTypes, AdapterTest {
     address constant ETH_POOL = 0xBfAb6FA95E0091ed66058ad493189D2cB29385E6;
     address constant STETH_POOL = 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022;
     address[] ADDITIONAL_POOLS_FOR_TESTING;
-
+    address constant ORACLE_STABLE_POOL =
+        0x90455bd11Ce8a67C57d467e634Dc142b8e4105Aa;
     uint256 constant TEST_ITERATIONS = 100;
     IwstETH constant wstETH =
         IwstETH(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
 
     function setUp() public {
-        uint256 forkBlock = 20234346;
+        uint256 forkBlock = 23431163;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
         adapter = new CurveAdapter();
 
@@ -84,14 +85,15 @@ contract CurveAdapterTest is Test, ISwapAdapterTypes, AdapterTest {
             address[] memory tokens = adapter.getTokens(pair);
             uint256[] memory amounts = new uint256[](1);
 
-            try ICurveStableSwapPool(ADDITIONAL_POOLS_FOR_TESTING[i]).balances(
-                0
-            ) returns (uint256 bal) {
+            try ICurveStableSwapPool(ADDITIONAL_POOLS_FOR_TESTING[i])
+                .balances(0) returns (
+                uint256 bal
+            ) {
                 amounts[0] = bal / 10;
             } catch {
                 amounts[0] = ICurveCustomInt128Pool(
-                    ADDITIONAL_POOLS_FOR_TESTING[i]
-                ).balances(int128(0)) / 10;
+                        ADDITIONAL_POOLS_FOR_TESTING[i]
+                    ).balances(int128(0)) / 10;
             }
 
             deal(tokens[0], address(this), amounts[0]);
@@ -198,6 +200,33 @@ contract CurveAdapterTest is Test, ISwapAdapterTypes, AdapterTest {
         assertEq(
             trade.calculatedAmount,
             IERC20(USDT).balanceOf(address(this)) - USDT_balance
+        );
+    }
+
+    function testSwapFuzzCurveStableOracleSwap(uint256 specifiedAmount) public {
+        OrderSide side = OrderSide.Sell;
+
+        bytes32 pair = bytes32(bytes20(ORACLE_STABLE_POOL));
+        uint256[] memory limits = adapter.getLimits(pair, cUSDO, USDC);
+
+        specifiedAmount = bound(specifiedAmount, 1e18 + 1, limits[0] - 1);
+
+        deal(cUSDO, address(this), specifiedAmount);
+        IERC20(cUSDO).approve(address(adapter), specifiedAmount);
+
+        uint256 usdc_balance = IERC20(USDC).balanceOf(address(this));
+        uint256 cusdo_balance = IERC20(cUSDO).balanceOf(address(this));
+
+        Trade memory trade =
+            adapter.swap(pair, cUSDO, USDC, side, specifiedAmount);
+
+        assertEq(
+            specifiedAmount,
+            cusdo_balance - IERC20(cUSDO).balanceOf(address(this))
+        );
+        assertEq(
+            trade.calculatedAmount,
+            IERC20(USDC).balanceOf(address(this)) - usdc_balance
         );
     }
 
@@ -366,7 +395,7 @@ contract CurveAdapterTest is Test, ISwapAdapterTypes, AdapterTest {
     {
         Capability[] memory res = adapter.getCapabilities(pair, t0, t1);
 
-        assertEq(res.length, 2);
+        assertEq(res.length, 1);
     }
 
     function testGetTokensCurveStableSwap() public {

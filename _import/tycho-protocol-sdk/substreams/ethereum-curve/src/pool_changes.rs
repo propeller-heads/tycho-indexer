@@ -8,7 +8,7 @@ use tycho_substreams::prelude::*;
 use crate::consts::ETH_ADDRESS;
 
 fn get_pool_tokens(pool_address: &Vec<u8>, tokens_store: &StoreGetString) -> Option<Vec<String>> {
-    let pool_key = format!("pool:{}", hex::encode(pool_address));
+    let pool_key = format!("pool:0x{}", hex::encode(pool_address));
     Some(
         tokens_store
             .get_last(pool_key)?

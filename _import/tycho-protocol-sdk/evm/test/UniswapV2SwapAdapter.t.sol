@@ -13,15 +13,17 @@ contract UniswapV2PairFunctionTest is AdapterTest {
     UniswapV2SwapAdapter adapter;
     address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
-    address constant USDC_WETH_PAIR = 0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc;
+    address constant USDC_WETH_PAIR =
+        0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc;
 
     uint256 constant TEST_ITERATIONS = 100;
 
     function setUp() public {
         uint256 forkBlock = 17000000;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        adapter =
-            new UniswapV2SwapAdapter(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
+        adapter = new UniswapV2SwapAdapter(
+            0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f
+        );
 
         vm.label(address(adapter), "UniswapV2SwapAdapter");
         vm.label(WETH, "WETH");

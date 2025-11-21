@@ -55,8 +55,9 @@ contract BalancerV3SwapAdapter is BalancerSwapHelpers {
         _prices = new Fraction[](_specifiedAmounts.length);
 
         for (uint256 i = 0; i < _specifiedAmounts.length; i++) {
-            _prices[i] =
-                getPriceAt(_poolId, _sellToken, _buyToken, _specifiedAmounts[i]);
+            _prices[i] = getPriceAt(
+                _poolId, _sellToken, _buyToken, _specifiedAmounts[i]
+            );
         }
     }
 

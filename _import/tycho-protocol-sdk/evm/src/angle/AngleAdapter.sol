@@ -4,10 +4,12 @@ pragma solidity ^0.8.13;
 
 import {ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
-import {IERC20Metadata} from
-    "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import {SafeERC20} from
-    "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import {
+    IERC20Metadata
+} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {
+    SafeERC20
+} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @dev custom reserve limit factor to prevent revert errors in OrderSide.Buy
 uint256 constant RESERVE_LIMIT_FACTOR = 10;
@@ -211,9 +213,8 @@ contract AngleAdapter is ISwapAdapter {
     {
         calculatedAmount = transmuter.quoteOut(amountOut, sellToken, buyToken);
 
-        IERC20(sellToken).safeTransferFrom(
-            msg.sender, address(this), calculatedAmount
-        );
+        IERC20(sellToken)
+            .safeTransferFrom(msg.sender, address(this), calculatedAmount);
         IERC20(sellToken).approve(address(transmuter), calculatedAmount);
         transmuter.swapExactOutput(
             amountOut, type(uint256).max, sellToken, buyToken, msg.sender, 0
@@ -223,7 +224,7 @@ contract AngleAdapter is ISwapAdapter {
 
 interface IAgToken is IERC20 {
     /*//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    MINTER ROLE ONLY FUNCTIONS                                            
+    MINTER ROLE ONLY FUNCTIONS
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
 
     /// @notice Lets a whitelisted contract mint agTokens
@@ -242,8 +243,7 @@ interface IAgToken is IERC20 {
     /// `burner` address
     /// @dev The method checks the allowance between the `sender` and the
     /// `burner`
-    function burnFrom(uint256 amount, address burner, address sender)
-        external;
+    function burnFrom(uint256 amount, address burner, address sender) external;
 
     /// @notice Burns `amount` tokens from a `burner` address
     /// @param amount Amount of tokens to burn
@@ -254,7 +254,7 @@ interface IAgToken is IERC20 {
     function burnSelf(uint256 amount, address burner) external;
 
     /*//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    TREASURY ONLY FUNCTIONS                                             
+    TREASURY ONLY FUNCTIONS
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
 
     /// @notice Adds a minter in the contract
@@ -274,7 +274,7 @@ interface IAgToken is IERC20 {
     function setTreasury(address _treasury) external;
 
     /*//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    EXTERNAL FUNCTIONS                                                
+    EXTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
 
     /// @notice Checks whether an address has the right to mint agTokens
@@ -305,18 +305,18 @@ struct Collateral {
     uint8 isBurnLive; // If burning to this asset is unpaused
     uint8 decimals; // IERC20Metadata(collateral).decimals()
     uint8 onlyWhitelisted; // If only whitelisted addresses can burn or redeem
-        // for this token
+    // for this token
     uint216 normalizedStables; // Normalized amount of stablecoins issued from
-        // this collateral
+    // this collateral
     uint64[] xFeeMint; // Increasing exposures in [0,BASE_9[
     int64[] yFeeMint; // Mint fees at the exposures specified in `xFeeMint`
     uint64[] xFeeBurn; // Decreasing exposures in ]0,BASE_9]
     int64[] yFeeBurn; // Burn fees at the exposures specified in `xFeeBurn`
     bytes oracleConfig; // Data about the oracle used for the collateral
     bytes whitelistData; // For whitelisted collateral, data used to verify
-        // whitelists
+    // whitelists
     ManagerStorage managerData; // For managed collateral, data used to handle
-        // the strategies
+    // the strategies
 }
 
 struct TransmuterStorage {
@@ -324,20 +324,20 @@ struct TransmuterStorage {
     uint8 isRedemptionLive; // If redemption is unpaused
     uint8 statusReentrant; // If call is reentrant or not
     uint128 normalizedStables; // Normalized amount of stablecoins issued by the
-        // system
+    // system
     uint128 normalizer; // To reconcile `normalizedStables` values with the
-        // actual amount
+    // actual amount
     address[] collateralList; // List of collateral assets supported by the
-        // system
+    // system
     uint64[] xRedemptionCurve; // Increasing collateral ratios > 0
     int64[] yRedemptionCurve; // Value of the redemption fees at
-        // `xRedemptionCurve`
+    // `xRedemptionCurve`
     mapping(address => Collateral) collaterals; // Maps a collateral asset to
-        // its parameters
+    // its parameters
     mapping(address => uint256) isTrusted; // If an address is trusted to update
-        // the normalizer value
+    // the normalizer value
     mapping(address => uint256) isSellerTrusted; // If an address is trusted to
-        // sell accruing reward tokens
+    // sell accruing reward tokens
     mapping(WhitelistType => mapping(address => uint256)) isWhitelistedForType;
 }
 
@@ -610,11 +610,9 @@ interface ITransmuter {
 
     function revokeCollateral(address collateral) external;
 
-    function setAccessControlManager(address _newAccessControlManager)
-        external;
+    function setAccessControlManager(address _newAccessControlManager) external;
 
-    function setOracle(address collateral, bytes memory oracleConfig)
-        external;
+    function setOracle(address collateral, bytes memory oracleConfig) external;
 
     function setWhitelistStatus(
         address collateral,

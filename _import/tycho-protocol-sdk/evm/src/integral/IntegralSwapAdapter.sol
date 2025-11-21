@@ -2,8 +2,9 @@
 pragma solidity ^0.8.13;
 
 import {ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
-import {IERC20Metadata} from
-    "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {
+    IERC20Metadata
+} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {
     IERC20,
     SafeERC20
@@ -473,11 +474,9 @@ interface ITwapFactory {
 
     function setSwapFee(address tokenA, address tokenB, uint256 fee) external;
 
-    function setOracle(address tokenA, address tokenB, address oracle)
-        external;
+    function setOracle(address tokenA, address tokenB, address oracle) external;
 
-    function setTrader(address tokenA, address tokenB, address trader)
-        external;
+    function setTrader(address tokenA, address tokenB, address trader) external;
 
     function collect(address tokenA, address tokenB, address to) external;
 

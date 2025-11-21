@@ -58,8 +58,8 @@ library CustomBytesAppend {
         // for hashing
         return keccak256(
             slice(
-                data, data.length - bytes(CUSTOM).length, bytes(CUSTOM).length
-            )
+            data, data.length - bytes(CUSTOM).length, bytes(CUSTOM).length
+        )
         ) == keccak256(bytes(CUSTOM));
     }
 

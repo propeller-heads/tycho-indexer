@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.26;
 
-import {IERC4626} from
-    "openzeppelin-contracts/contracts/interfaces/IERC4626.sol";
+import {
+    IERC4626
+} from "openzeppelin-contracts/contracts/interfaces/IERC4626.sol";
 
 interface IBufferRouter {
     function initializeBuffer(

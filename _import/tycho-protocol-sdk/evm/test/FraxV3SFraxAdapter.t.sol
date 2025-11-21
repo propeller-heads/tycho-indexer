@@ -37,9 +37,7 @@ contract FraxV3SFraxAdapterTest is Test, ISwapAdapterTypes, AdapterTest {
 
     /// @dev set lower limit to greater than 1, because previewDeposit returns 0
     /// with an amountIn == 1
-    function testPriceFuzzFraxV3SFrax(uint256 amount0, uint256 amount1)
-        public
-    {
+    function testPriceFuzzFraxV3SFrax(uint256 amount0, uint256 amount1) public {
         uint256[] memory limits =
             adapter.getLimits(bytes32(0), FRAX_ADDRESS, SFRAX_ADDRESS);
         vm.assume(amount0 < limits[0]);

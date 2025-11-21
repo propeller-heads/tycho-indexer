@@ -51,7 +51,8 @@ interface ISwapAdapterV2 is ISwapAdapterTypes {
      * @notice Simulates swapping tokens on a given pool.
      * @dev This function should be state modifying, meaning it should actually
      * execute the swap and change the state of the EVM accordingly. Please
-     * include a gas usage estimate for each amount. This can be achieved e.g. by
+     * include a gas usage estimate for each amount. This can be achieved e.g.
+     * by
      * using the `gasleft()` function. The return type `Trade` has an attribute
      * called price which should contain the value of `price(specifiedAmount)`.
      * As this is optional, defined via `Capability.PriceFunction`, it is valid

@@ -30,9 +30,7 @@ contract AngleAdapterTest is Test, ISwapAdapterTypes {
         vm.label(address(EURC), "EURC");
     }
 
-    function testSwapFuzzAngleMint(uint256 specifiedAmount, bool isBuy)
-        public
-    {
+    function testSwapFuzzAngleMint(uint256 specifiedAmount, bool isBuy) public {
         OrderSide side = isBuy ? OrderSide.Buy : OrderSide.Sell;
 
         bytes32 pair = bytes32(0);

@@ -25,11 +25,10 @@ abstract contract BalancerStorage {
     enum CUSTOM_WRAP_KIND {
         NONE,
         ERC20_TO_ERC20, // swap ERC20 to ERC20, passing through a ERC4626_4626
-            // pool
-            // pool
+        // pool
+        // pool
         ERC4626_TO_ERC4626 // swap ERC4626 to ERC4626, passing through a
-            // ERC20_20_20 pool
-
+        // ERC20_20_20 pool
     }
 
     enum ERC4626_SWAP_TYPE {
