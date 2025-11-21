@@ -17,7 +17,8 @@ use tycho_simulation::{
             aerodrome_slipstreams::state::AerodromeSlipstreamsState,
             ekubo::state::EkuboState,
             filters::{
-                balancer_v2_pool_filter, curve_pool_filter, uniswap_v4_euler_hook_pool_filter,
+                balancer_v2_pool_filter, curve_pool_filter, fluid_v1_paused_pools_filter,
+                uniswap_v4_euler_hook_pool_filter,
             },
             fluid::FluidV1,
             pancakeswap_v2::state::PancakeswapV2State,
@@ -146,7 +147,11 @@ impl ProtocolStreamProcessor {
                         tvl_filter.clone(),
                         None,
                     )
-                    .exchange::<FluidV1>("fluid_v1", tvl_filter.clone(), None);
+                    .exchange::<FluidV1>(
+                        "fluid_v1",
+                        tvl_filter.clone(),
+                        Some(fluid_v1_paused_pools_filter),
+                    );
             }
             Chain::Base => {
                 protocol_stream = protocol_stream
