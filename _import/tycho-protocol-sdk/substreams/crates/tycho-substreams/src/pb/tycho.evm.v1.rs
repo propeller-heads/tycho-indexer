@@ -204,16 +204,16 @@ pub struct EntryPointParams {
     /// The entrypoint id.
     #[prost(string, tag="1")]
     pub entrypoint_id: ::prost::alloc::string::String,
-    /// \[optional\] The component that uses these entrypoint parameters. Currently used for debugging purposes only.
+    /// The component that uses these entrypoint parameters. This field is now required (optional support is deprecated).
     #[prost(string, optional, tag="2")]
     pub component_id: ::core::option::Option<::prost::alloc::string::String>,
-    /// The strategy and its corresponding data
+    /// The strategy and its corresponding data.
     #[prost(oneof="entry_point_params::TraceData", tags="3")]
     pub trace_data: ::core::option::Option<entry_point_params::TraceData>,
 }
 /// Nested message and enum types in `EntryPointParams`.
 pub mod entry_point_params {
-    /// The strategy and its corresponding data
+    /// The strategy and its corresponding data.
     #[derive(Eq, Hash)]
     #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Oneof)]
@@ -231,7 +231,7 @@ pub struct RpcTraceData {
     /// \[optional\] The caller to be used for the trace. If none is provided a chain default will be used.
     #[prost(bytes="vec", optional, tag="1")]
     pub caller: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
-    /// The calldata to be used for the trace
+    /// The calldata to be used for the trace.
     #[prost(bytes="vec", tag="2")]
     pub calldata: ::prost::alloc::vec::Vec<u8>,
 }
@@ -239,13 +239,13 @@ pub struct RpcTraceData {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StorageChanges {
-    /// The contract's address
+    /// The contract's address.
     #[prost(bytes="vec", tag="1")]
     pub address: ::prost::alloc::vec::Vec<u8>,
-    /// The contract's storage changes
+    /// The contract's storage changes.
     #[prost(message, repeated, tag="2")]
     pub slots: ::prost::alloc::vec::Vec<ContractSlot>,
-    /// \[optional\] The contract's balance change
+    /// \[optional\] The contract's balance change.
     #[prost(bytes="vec", optional, tag="3")]
     pub native_balance: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
