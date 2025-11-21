@@ -42,6 +42,16 @@ pub fn uniswap_v4_euler_hook_pool_filter(component: &ComponentWithState) -> bool
         .is_some_and(|s| s == "euler_v1")
 }
 
+/// Filters out uniswap v4 pools with non-Angstrom hooks
+pub fn uniswap_v4_angstrom_hook_pool_filter(component: &ComponentWithState) -> bool {
+    component
+        .component
+        .static_attributes
+        .get("hook_identifier")
+        .and_then(|bytes| std::str::from_utf8(bytes).ok())
+        .is_some_and(|s| s == "angstrom_v1")
+}
+
 /// Filters out pools that have unsupported token types in Curve
 pub fn curve_pool_filter(component: &ComponentWithState) -> bool {
     if let Some(asset_types) = component
