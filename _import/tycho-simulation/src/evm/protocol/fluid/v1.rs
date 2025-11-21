@@ -18,7 +18,7 @@ use alloy::primitives::U256;
 use num_bigint::{BigUint, ToBigUint};
 use num_traits::Euclid;
 use thiserror::Error;
-use tracing::warn;
+use tracing::trace;
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -190,16 +190,29 @@ impl ProtocolSim for FluidV1 {
     }
 
     fn spot_price(&self, base: &Token, _quote: &Token) -> Result<f64, SimulationError> {
-        let price_f64 = u256_to_f64(
-            self.collateral_reserves
-                .token1_imaginary_reserves,
-        )? / u256_to_f64(
-            self.collateral_reserves
-                .token0_imaginary_reserves,
-        )?;
+        let price_f64 = if !self
+            .collateral_reserves
+            .token0_imaginary_reserves
+            .is_zero()
+        {
+            u256_to_f64(
+                self.collateral_reserves
+                    .token1_imaginary_reserves,
+            )? / u256_to_f64(
+                self.collateral_reserves
+                    .token0_imaginary_reserves,
+            )?
+        } else {
+            u256_to_f64(
+                self.debt_reserves
+                    .token1_imaginary_reserves,
+            )? / u256_to_f64(
+                self.debt_reserves
+                    .token0_imaginary_reserves,
+            )?
+        };
         let fee_factor =
             1.0 - u256_to_f64(self.fee)? / u256_to_f64(constant::FEE_PERCENT_PRECISION)? / 100.0;
-
         if base.address == self.token0.address {
             Ok(price_f64 * fee_factor)
         } else {
@@ -312,6 +325,7 @@ impl ProtocolSim for FluidV1 {
             )
         };
         if upper_bound_out == U256::ZERO {
+            trace!("Upper bound is zero for {}", self.pool_address);
             return Ok((BigUint::ZERO, BigUint::ZERO));
         }
         let delta = U256::from(10).pow(U256::from(2));
@@ -333,9 +347,10 @@ impl ProtocolSim for FluidV1 {
         Ok((
             u256_to_biguint(from_adjusted_amount(max_valid, in_decimals as i64)),
             u256_to_biguint(res.unwrap_or_else(|| {
-                warn!(
+                trace!(
                     "All evaluations errored during limit search for {} -> {}",
-                    sell_token, buy_token
+                    sell_token,
+                    buy_token
                 );
                 U256::ZERO
             })),
@@ -357,6 +372,8 @@ impl ProtocolSim for FluidV1 {
             RESERVES_RESOLVER,
             engine,
         )?;
+
+        trace!(?state, "Calling delta transition for {}", &self.pool_address);
 
         self.collateral_reserves = state.collateral_reserves;
         self.debt_reserves = state.debt_reserves;
@@ -383,7 +400,6 @@ impl ProtocolSim for FluidV1 {
                 .token1_real_reserves,
             &self.debt_reserves.token1_real_reserves,
         );
-
         Ok(())
     }
 
