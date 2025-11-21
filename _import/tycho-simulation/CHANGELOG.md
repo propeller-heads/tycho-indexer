@@ -1,3 +1,10 @@
+## [0.201.1](https://github.com/propeller-heads/tycho-simulation/compare/0.201.0...0.201.1) (2025-11-21)
+
+
+### Bug Fixes
+
+* fixes to fluid implementation ([33170f9](https://github.com/propeller-heads/tycho-simulation/commit/33170f9b3c4fe95760bf6143e56e91f144d2091a))
+
 ## [0.201.0](https://github.com/propeller-heads/tycho-simulation/compare/0.200.0...0.201.0) (2025-11-20)
 
 
