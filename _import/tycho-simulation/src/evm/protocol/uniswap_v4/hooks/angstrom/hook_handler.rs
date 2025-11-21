@@ -30,11 +30,17 @@ pub(crate) struct AngstromHookHandler {
     address: Address,
     pool_manager: Address,
     fees: AngstromFees,
+    pool_removed: bool,
 }
 
 impl AngstromHookHandler {
-    pub fn new(address: Address, pool_manager: Address, fees: AngstromFees) -> Self {
-        Self { address, pool_manager, fees }
+    pub fn new(
+        address: Address,
+        pool_manager: Address,
+        fees: AngstromFees,
+        pool_removed: bool,
+    ) -> Self {
+        Self { address, pool_manager, fees, pool_removed }
     }
 }
 impl HookHandler for AngstromHookHandler {
@@ -59,6 +65,12 @@ impl HookHandler for AngstromHookHandler {
         _: Option<HashMap<Address, HashMap<U256, U256>>>,
         _: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<WithGasEstimate<BeforeSwapOutput>, SimulationError> {
+        if self.pool_removed {
+            return Err(SimulationError::FatalError(format!(
+                "angstrom pool {} has been removed",
+                self.address
+            )))
+        }
         // Base gas for the hook call
         let mut gas_estimate = 400;
         if !params.hook_data.is_empty() {
@@ -146,6 +158,13 @@ impl HookHandler for AngstromHookHandler {
             self.fees.protocol_unlock = U24::from_be_slice(protocol_unlocked_fee);
         }
 
+        if let Some(angstrom_removed_pool) = delta
+            .updated_attributes
+            .get("angstrom_removed_pool")
+        {
+            self.pool_removed = !angstrom_removed_pool.is_zero();
+        }
+
         Ok(())
     }
 
@@ -210,6 +229,7 @@ mod tests {
             Address::from_str("0x0000000aa232009084bd71a5797d089aa4edfad4").unwrap(),
             Address::from_str("0x000000000004444c5dc75cb358380d2e3de08a90").unwrap(),
             fees,
+            false,
         );
 
         let params = BeforeSwapParameters {
@@ -268,6 +288,7 @@ mod tests {
             Address::from_str("0x0000000aa232009084bd71a5797d089aa4edfad4").unwrap(),
             Address::from_str("0x000000000004444c5dc75cb358380d2e3de08a90").unwrap(),
             fees,
+            false,
         );
 
         let params = AfterSwapParameters {
@@ -321,6 +342,7 @@ mod tests {
             Address::from_str("0x0000000aa232009084bd71a5797d089aa4edfad4").unwrap(),
             Address::from_str("0x000000000004444c5dc75cb358380d2e3de08a90").unwrap(),
             fees,
+            false,
         );
 
         // Change fees

@@ -42,7 +42,7 @@ pub fn uniswap_v4_euler_hook_pool_filter(component: &ComponentWithState) -> bool
         .is_some_and(|s| s == "euler_v1")
 }
 
-/// Filters out uniswap v4 pools with non-Euler hooks
+/// Filters out uniswap v4 pools with non-Angstrom hooks
 pub fn uniswap_v4_angstrom_hook_pool_filter(component: &ComponentWithState) -> bool {
     component
         .component
@@ -153,6 +153,31 @@ pub fn balancer_v3_pool_filter(component: &ComponentWithState) -> bool {
             );
             return false;
         }
+    }
+    true
+}
+
+pub fn fluid_v1_paused_pools_filter(component: &ComponentWithState) -> bool {
+    const PAUSED_POOLS: [&str; 4] = [
+        // The components below are properly paused by substreams but the way indexer
+        // handles tracing atm wrongly paused all components due to tracing failure. The
+        // failure is unrelated to any issues with the protocol itself.
+        "0x97479d9c09c7fd333bbfd07e93d4c8a669698ebc",
+        "0xd0810e5cf08dcde266ecebef40cad806c7768d72",
+        "0xf507a38aaf37339cc3beac4c7a58b17401bdf6bc",
+        // The substreams did not detect this component as paused. It still reports
+        // a high tvl value.
+        "0x2886a01a0645390872a9eb99dae1283664b0c524",
+    ];
+
+    if PAUSED_POOLS.contains(
+        &component
+            .component
+            .id
+            .to_lowercase()
+            .as_str(),
+    ) {
+        return false;
     }
     true
 }

@@ -16,6 +16,8 @@ pub struct TychoExecutionInput {
     pub expected_amount_out: BigUint,
     pub protocol_system: String,
     pub component_id: String,
+    pub token_in: String,
+    pub token_out: String,
 }
 
 /// Result of executing a Tycho transaction simulation.
@@ -52,4 +54,19 @@ pub(super) enum SimulationResult {
     Success { return_data: Vec<u8>, gas_used: u64 },
     /// Simulation reverted with reason
     Revert { reason: String },
+}
+
+/// Contains the bytecode required to set up router and executor overwrites for swap simulation.
+///
+/// This struct packages the bytecode for both the Tycho router contract and the protocol-specific
+/// executor contract that will be used during execution simulation. The bytecode is loaded from
+/// embedded JSON files and used to override contract code at specific addresses during simulation.
+///
+/// # Fields
+/// * `router_bytecode` - The runtime bytecode for the Tycho router contract
+/// * `executor_bytecode` - The runtime bytecode for the protocol-specific executor contract
+#[derive(Clone)]
+pub struct RouterOverwritesData {
+    pub router_bytecode: Vec<u8>,
+    pub executor_bytecode: Vec<u8>,
 }

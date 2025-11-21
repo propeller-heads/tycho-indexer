@@ -29,16 +29,20 @@ This test runs continuously in the cluster but it can also be run locally for de
 
 ### Command Line Arguments
 
-| Argument                 | Default    | Description                                  |
-|--------------------------|------------|----------------------------------------------|
-| `--chain`                | `ethereum` | Blockchain to test against                   |
-| `--max-simulations`      | `10`       | Maximum simulations per protocol update      |
-| `--parallel-simulations` | `5`        | Number of concurrent simulations             |
-| `--parallel-updates`     | `5`        | Number of concurrent update processors       |
-| `--tvl-threshold`        | `100.0`    | TVL threshold in native tokens for filtering |
-| `--metrics-port`         | `9898`     | Port for Prometheus metrics server           |
-| `--disable-onchain`      | `false`    | Skip on-chain protocol testing               |
-| `--disable-rfq`          | `false`    | Skip RFQ protocol testing                    |
+| Argument                     | Default    | Description                                                          |
+|------------------------------|------------|----------------------------------------------------------------------|
+| `--chain`                    | `ethereum` | Blockchain to test against                                           |
+| `--max-simulations`          | `10`       | Maximum simulations (of updated states) per update                   |
+| `--max-simulations-stale`    | `10`       | Maximum simulations (of stale states) per update per protocol        |
+| `--parallel-simulations`     | `5`        | Number of concurrent simulations                                     |
+| `--parallel-updates`         | `5`        | Number of concurrent update processors                               |
+| `--tvl-threshold`            | `100.0`    | TVL threshold in native tokens for filtering                         |
+| `--metrics-port`             | `9898`     | Port for Prometheus metrics server                                   |
+| `--disable-onchain`          | `false`    | Skip on-chain protocol testing                                       |
+| `--disable-rfq`              | `false`    | Skip RFQ protocol testing                                            |
+| `--skip-messages-duration`   | `600`      | RFQ stream skip duration (seconds) after processing a message        |
+| `--block-wait-time`          | `12`       | Time to wait (seconds) for block N+1 before executing debug_traceCall |
+| `--always-test-components`   | -          | Comma-separated list of component IDs to test every block            |
 
 ## Running Locally
 
@@ -56,4 +60,8 @@ cargo run --package tycho-integration-test -- \
   --chain ethereum \
   --max-simulations 20 \
   --parallel-simulations 10
+
+# Run with specific components to always test
+cargo run --package tycho-integration-test -- \
+  --always-test-components component_id_1,component_id_2,component_id_3
 ```

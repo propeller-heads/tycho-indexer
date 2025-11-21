@@ -147,7 +147,14 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
         ticks.sort_by_key(|tick| tick.index);
 
         let mut state = UniswapV4State::new(liquidity, sqrt_price, fees, tick, tick_spacing, ticks)
-            .map_err(|err| InvalidSnapshotError::ValueError(err.to_string()))?;
+            .map_err(|err| {
+                tracing::error!(
+                    pool_id = %snapshot.component.id,
+                    error = %err,
+                    "Failed to create UniswapV4State"
+                );
+                InvalidSnapshotError::ValueError(err.to_string())
+            })?;
 
         if let Some(hook_address) = hook_address {
             let hook_address = Address::from_slice(&hook_address.0);

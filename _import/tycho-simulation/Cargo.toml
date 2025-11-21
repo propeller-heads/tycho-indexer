@@ -1,6 +1,9 @@
+[workspace.package]
+version = "0.201.3"
+
 [package]
 name = "tycho-simulation"
-version = "0.189.4"
+version.workspace = true
 edition = "2021"
 description = "Provides tools for interacting with protocol states, calculating spot prices, and quoting token swaps."
 repository = "https://github.com/propeller-heads/tycho-simulation"
@@ -12,7 +15,7 @@ categories = ["finance", "cryptography::cryptocurrencies"]
 readme = "README.md"
 
 [workspace]
-members = ["tycho-integration-test", "tycho_simulation_py"]
+members = ["tycho-integration-test", "tycho-test", "tycho_simulation_py"]
 
 [workspace.dependencies]
 # Serialization/Deserialization
@@ -32,11 +35,12 @@ num-traits = "0.2.17"
 num-bigint = { version = "0.4.6", features = ["serde"] }
 dotenv = "0.15.0"
 itertools = "0.10.5"
+hex-literal = "0.4.1"
 
 # Tycho dependencies
-tycho-client = ">=0.91.0"
-tycho-common = ">=0.91.0"
-tycho-ethereum = { version = ">=0.91.0", features = ["onchain_data"] }
+tycho-client = ">=0.113.0"
+tycho-common = ">=0.113.0"
+tycho-ethereum = ">=0.113.0"
 tycho-execution = ">=0.129.1"
 
 # EVM dependencies
@@ -103,6 +107,7 @@ tokio-tungstenite = { version = "0.28.0", features = ["native-tls"], optional = 
 async-stream = { version = "0.3.6", optional = true }
 http = { version = "1.0", optional = true }
 prost = { version = "0.13", optional = true }
+hex-literal.workspace = true
 
 [dev-dependencies]
 # tycho execution for quickstart

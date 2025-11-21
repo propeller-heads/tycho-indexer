@@ -120,10 +120,17 @@ async fn main() {
     let swapper_pk = env::var("PRIVATE_KEY").ok();
 
     println!("Loading tokens from Tycho... {url}", url = tycho_url.as_str());
-    let all_tokens =
-        load_all_tokens(tycho_url.as_str(), false, Some(tycho_api_key.as_str()), chain, None, None)
-            .await
-            .expect("Failed to load tokens");
+    let all_tokens = load_all_tokens(
+        tycho_url.as_str(),
+        false,
+        Some(tycho_api_key.as_str()),
+        true,
+        chain,
+        None,
+        None,
+    )
+    .await
+    .expect("Failed to load tokens");
     println!("Tokens loaded: {num}", num = all_tokens.len());
 
     let sell_token_address = Bytes::from_str(

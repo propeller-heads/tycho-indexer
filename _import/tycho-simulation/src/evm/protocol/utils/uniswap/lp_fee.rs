@@ -8,6 +8,10 @@
 /// Maximum LP fee in pips (1,000,000 = 100%)
 pub const MAX_LP_FEE: u32 = 1_000_000;
 
+/// Dynamic fee flag (bit 23: 0x800000)
+/// When set in pool key, indicates the pool uses dynamic fees via hooks
+pub const DYNAMIC_FEE_FLAG: u32 = 0x800000;
+
 /// Mask to remove the override flag (bit 22: 0x400000)
 const REMOVE_OVERRIDE_MASK: u32 = 0xBFFFFF;
 
@@ -19,6 +23,14 @@ const REMOVE_OVERRIDE_MASK: u32 = 0xBFFFFF;
 #[inline]
 pub fn remove_override_flag(fee: u32) -> u32 {
     fee & REMOVE_OVERRIDE_MASK
+}
+
+/// Checks if a fee value represents a dynamic fee pool
+///
+/// Returns `true` if the fee equals DYNAMIC_FEE_FLAG (0x800000)
+#[inline]
+pub fn is_dynamic(fee: u32) -> bool {
+    fee == DYNAMIC_FEE_FLAG
 }
 
 /// Validates that a fee doesn't exceed MAX_LP_FEE

@@ -38,17 +38,25 @@ impl HookHandlerCreator for AngstromHookCreator {
             .ok_or_else(|| {
                 InvalidSnapshotError::MissingAttribute("angstrom_protocol_unlocked_fee".to_string())
             })?;
+        let angstrom_removed_pool = params
+            .attributes
+            .get("angstrom_removed_pool")
+            .ok_or_else(|| {
+                InvalidSnapshotError::MissingAttribute("angstrom_removed_pool".to_string())
+            })?;
 
         let unlock = U24::from_be_slice(angstrom_unlocked_fee);
         let protocol_unlock = U24::from_be_slice(angstrom_protocol_unlocked_fee);
 
         let hook_address = Address::from_slice(&hook_address_bytes.0);
         let pool_manager_address = Address::from_slice(&pool_manager_address_bytes.0);
+        let pool_removed = !angstrom_removed_pool.is_zero();
 
         let hook_handler = AngstromHookHandler::new(
             hook_address,
             pool_manager_address,
             AngstromFees { unlock, protocol_unlock },
+            pool_removed,
         );
 
         Ok(Box::new(hook_handler))
