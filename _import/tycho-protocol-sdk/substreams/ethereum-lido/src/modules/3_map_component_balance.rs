@@ -9,7 +9,7 @@ use substreams_ethereum::pb::eth::{
 use tycho_substreams::prelude::*;
 
 use crate::{
-    modules::map_protocol_components::StakingStatus, ST_ETH_ADDRESS, ST_ETH_ADDRESS_OUTER,
+    modules::map_protocol_components::StakingStatus, ETH_ADDRESS, ST_ETH_ADDRESS,
     ST_ETH_ADDRESS_OUTER_COMPONENT_ID, WST_ETH_ADDRESS, WST_ETH_ADDRESS_COMPONENT_ID,
 };
 
@@ -129,10 +129,21 @@ fn st_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) {
                 attributes: vec![attr.clone()],
             });
 
+            let balance = BigInt::from_unsigned_bytes_be(&storage_change.new_value);
+
+            // If the absolute balance is negative, we set it to zero.
+            let big_endian_bytes_balance = if balance < BigInt::zero() {
+                BigInt::zero().to_bytes_be().1
+            } else {
+                balance.to_bytes_be().1
+            };
+
             builder.add_balance_change(&BalanceChange {
-                    token: ETH_ADDRESS.into(),
-                    balance: attr.value,
-                    component_id: ETH_ADDRESS.to_vec(),
+                token: ETH_ADDRESS.to_vec(),
+                balance: big_endian_bytes_balance,
+                component_id: ST_ETH_ADDRESS_OUTER_COMPONENT_ID
+                    .as_bytes()
+                    .to_vec(),
             });
         } else if storage_change.key == STORAGE_SLOT_STAKE_LIMIT {
             let (staking_status, staking_limit) = staking_status_and_limit(storage_change);
