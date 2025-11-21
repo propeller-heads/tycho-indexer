@@ -1,7 +1,7 @@
 use clap::{Args, Parser, Subcommand};
 use tycho_common::{models::Chain, Bytes};
 
-use crate::extractor::{RPCConfig, RPCRetryConfig};
+use crate::extractor::RPCRetryConfig;
 
 /// Tycho Indexer using Substreams
 ///
@@ -100,15 +100,12 @@ pub struct RPCArgs {
     pub max_backoff_ms: u64,
 }
 
-impl From<RPCArgs> for RPCConfig {
+impl From<RPCArgs> for RPCRetryConfig {
     fn from(args: RPCArgs) -> Self {
         Self {
-            url: args.url,
-            retry: RPCRetryConfig {
-                max_retries: args.max_retries,
-                initial_backoff_ms: args.initial_backoff_ms,
-                max_backoff_ms: args.max_backoff_ms,
-            },
+            max_retries: args.max_retries,
+            initial_backoff_ms: args.initial_backoff_ms,
+            max_backoff_ms: args.max_backoff_ms,
         }
     }
 }
@@ -373,11 +370,10 @@ mod cli_tests {
             max_backoff_ms: 8000,
         };
 
-        let rpc_config: RPCConfig = rpc_args.into();
+        let rpc_config: RPCRetryConfig = rpc_args.into();
 
-        assert_eq!(rpc_config.url, "https://eth.example.com");
-        assert_eq!(rpc_config.retry.max_retries, 7);
-        assert_eq!(rpc_config.retry.initial_backoff_ms, 250);
-        assert_eq!(rpc_config.retry.max_backoff_ms, 8000);
+        assert_eq!(rpc_config.max_retries, 7);
+        assert_eq!(rpc_config.initial_backoff_ms, 250);
+        assert_eq!(rpc_config.max_backoff_ms, 8000);
     }
 }

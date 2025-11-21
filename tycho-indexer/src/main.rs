@@ -56,7 +56,7 @@ use tycho_indexer::{
             ProtocolTypeConfig,
         },
         token_analysis_cron::analyze_tokens,
-        ExtractionError, RPCConfig,
+        ExtractionError, RPCRetryConfig,
     },
     services::ServicesBuilder,
 };
@@ -390,8 +390,7 @@ async fn create_indexing_tasks(
             .expect("No chain provided"), //TODO: handle multichain?
     );
 
-    // Convert CLI args to domain config at the boundary
-    let rpc_config: RPCConfig = global_args.rpc.clone().into();
+    let rpc_config: RPCRetryConfig = global_args.rpc.clone().into();
 
     let (runners, extractor_handles): (Vec<_>, Vec<_>) =
         // TODO: accept substreams configuration from cli.
@@ -436,7 +435,7 @@ async fn build_all_extractors(
     cached_gw: &CachedGateway,
     database_insert_batch_size: usize,
     token_pre_processor: &EthereumTokenPreProcessor,
-    rpc_config: &RPCConfig,
+    rpc_config: &RPCRetryConfig,
     rpc_client: &EthereumRpcClient,
     runtime: Option<&tokio::runtime::Handle>,
 ) -> Result<Vec<(ExtractorRunner, ExtractorHandle)>, ExtractionError> {
@@ -470,7 +469,7 @@ async fn build_all_extractors(
 
         let (runner, handle) =
             ExtractorBuilder::new(extractor_config, endpoint_url, s3_bucket, substreams_api_token)
-                .rpc_config(rpc_config.clone())
+                .rpc_retry_config(rpc_config.clone())
                 .database_insert_batch_size(database_insert_batch_size)
                 .build(chain_state, cached_gw, token_pre_processor, &protocol_cache, rpc_client)
                 .await?

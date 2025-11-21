@@ -15,14 +15,15 @@ use super::component_metadata::{
 };
 
 /// Configuration for RPC metadata provider retry behavior
+/// TODO: Consolidate with the `tycho_ethereum` retry configuration and move to a shared location.
 #[derive(Clone, Debug)]
-pub(super) struct RPCRetryConfig {
+pub struct RPCRetryConfig {
     /// Maximum number of retry attempts for failed requests (default: 3)
-    max_retries: usize,
+    pub(crate) max_retries: usize,
     /// Initial backoff delay in milliseconds (default: 100ms)
-    initial_backoff_ms: u64,
+    pub(crate) initial_backoff_ms: u64,
     /// Maximum backoff delay in milliseconds (default: 5000ms)
-    max_backoff_ms: u64,
+    pub(crate) max_backoff_ms: u64,
 }
 
 impl RPCRetryConfig {
@@ -35,17 +36,6 @@ impl Default for RPCRetryConfig {
     fn default() -> Self {
         Self { max_retries: 3, initial_backoff_ms: 100, max_backoff_ms: 5000 }
     }
-}
-
-/// RPC configuration including connection URL and retry settings.
-/// TODO: Consolidate with the `tycho_ethereum` rpc configuration and move to a shared location.
-/// TODO: Consider extending this with the batch size limit and other relevant settings.
-#[derive(Clone, Debug)]
-pub struct RPCConfig {
-    /// The RPC endpoint URL
-    pub url: String,
-    /// Retry configuration for handling transient failures
-    pub retry: RPCRetryConfig,
 }
 
 /// Custom error type for RPC batch operations

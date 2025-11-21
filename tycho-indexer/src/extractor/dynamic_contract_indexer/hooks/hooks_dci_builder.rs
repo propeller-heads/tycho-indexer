@@ -106,7 +106,7 @@ where
     }
 
     /// Sets the RPC retry configuration
-    pub(super) fn rpc_retry_config(mut self, config: RPCRetryConfig) -> Self {
+    pub(crate) fn rpc_retry_config(mut self, config: RPCRetryConfig) -> Self {
         self.rpc_retry_config = config;
         self
     }

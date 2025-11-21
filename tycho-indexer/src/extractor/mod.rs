@@ -40,8 +40,8 @@ pub mod runner;
 pub mod token_analysis_cron;
 mod u256_num;
 
-// Re-export RPC configuration types for CLI and other modules
-pub use dynamic_contract_indexer::{RPCConfig, RPCRetryConfig};
+// TODO - consider moving these to a more general location
+pub use dynamic_contract_indexer::hooks::RPCRetryConfig;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum ExtractionError {

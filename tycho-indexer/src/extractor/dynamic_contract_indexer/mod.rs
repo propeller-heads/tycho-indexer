@@ -2,9 +2,6 @@ pub(super) mod cache;
 pub(super) mod dci;
 pub(super) mod hooks;
 
-// Re-export RPC configuration types from the rpc_metadata_provider module
-pub use rpc_metadata_provider::{RPCConfig, RPCRetryConfig};
-
 enum PausingReason {
     #[allow(dead_code)]
     Substreams,
