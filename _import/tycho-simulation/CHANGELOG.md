@@ -1,3 +1,19 @@
+## [0.202.0](https://github.com/propeller-heads/tycho-simulation/compare/0.201.3...0.202.0) (2025-11-21)
+
+
+### Features
+
+* Angstrom Hook Support ([1dbe025](https://github.com/propeller-heads/tycho-simulation/commit/1dbe0251a6d202462146a0034f3d884438d5c5d0))
+* AngstromHookHandler takes fees directly, not token map ([3ce1b9b](https://github.com/propeller-heads/tycho-simulation/commit/3ce1b9b7ba71d1cbfda64b505594b97c65dd7038))
+* Draft for angstrom implementation ([aa1ce31](https://github.com/propeller-heads/tycho-simulation/commit/aa1ce31c1406cd97c83849b874ae24c42e019557))
+
+
+### Bug Fixes
+
+* Add removed pool to delta transition ([b00651f](https://github.com/propeller-heads/tycho-simulation/commit/b00651fe76e8361936d2cdf87d8f6d52a8535182))
+* kill unwraps ([3c6f176](https://github.com/propeller-heads/tycho-simulation/commit/3c6f1760254dabe2d7b7515d796fbb6ad9aca3db))
+* Return err if angstrom pool removed ([92ce3f2](https://github.com/propeller-heads/tycho-simulation/commit/92ce3f2a732b7f5bf4f24841c9cd9aa04fe1194c))
+
 ## [0.201.3](https://github.com/propeller-heads/tycho-simulation/compare/0.201.2...0.201.3) (2025-11-21)
 
 
