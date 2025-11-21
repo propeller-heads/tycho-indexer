@@ -1,3 +1,10 @@
+## [0.202.2](https://github.com/propeller-heads/tycho-simulation/compare/0.202.1...0.202.2) (2025-11-21)
+
+
+### Bug Fixes
+
+* **cluster-test:** Demote most info! to debug! ([3624ee5](https://github.com/propeller-heads/tycho-simulation/commit/3624ee537a5d925cc8c0e2ace84250feb5c78427))
+
 ## [0.202.1](https://github.com/propeller-heads/tycho-simulation/compare/0.202.0...0.202.1) (2025-11-21)
 
 
