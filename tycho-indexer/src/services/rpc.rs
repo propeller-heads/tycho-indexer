@@ -980,10 +980,8 @@ where
     ) -> Result<dto::AddEntryPointRequestResponse, RpcError> {
         let tracing_result = self.trace_entry_points(request).await?;
         let mut entry_points: HashMap<ComponentId, HashSet<EntryPoint>> = HashMap::new();
-        let mut entry_points_params: HashMap<
-            EntryPointId,
-            HashSet<(TracingParams, Option<ComponentId>)>,
-        > = HashMap::new();
+        let mut entry_points_params: HashMap<EntryPointId, HashSet<(TracingParams, ComponentId)>> =
+            HashMap::new();
         for (component_id, components_and_params) in &request.entry_points_with_tracing_data {
             for params in components_and_params {
                 entry_points
@@ -993,7 +991,7 @@ where
                 entry_points_params
                     .entry(params.entry_point.external_id.clone())
                     .or_default()
-                    .insert((params.params.clone().into(), Some(component_id.into())));
+                    .insert((params.params.clone().into(), component_id.into()));
             }
         }
         self.db_gateway
@@ -1719,7 +1717,7 @@ mod tests {
         Vec<dto::EntryPointWithTracingParams>,
         Vec<TracedEntryPoint>,
         HashMap<ComponentId, HashSet<EntryPoint>>,
-        HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+        HashMap<EntryPointId, HashSet<(TracingParams, ComponentId)>>,
         Vec<(dto::EntryPointWithTracingParams, dto::TracingResult)>,
     ) {
         let entry_points = [
@@ -1828,15 +1826,15 @@ mod tests {
 
         let expected_inserted_tracing_params: HashMap<
             EntryPointId,
-            HashSet<(TracingParams, Option<ComponentId>)>,
+            HashSet<(TracingParams, ComponentId)>,
         > = HashMap::from([
             (
                 entry_point_ids[0].clone(),
-                HashSet::from([(tracing_params[0].clone().into(), Some(component_id.clone()))]),
+                HashSet::from([(tracing_params[0].clone().into(), component_id.clone())]),
             ),
             (
                 entry_point_ids[1].clone(),
-                HashSet::from([(tracing_params[1].clone().into(), Some(component_id.clone()))]),
+                HashSet::from([(tracing_params[1].clone().into(), component_id.clone())]),
             ),
         ]);
 
@@ -1869,7 +1867,7 @@ mod tests {
         expected_inserted_entry_points: HashMap<ComponentId, HashSet<EntryPoint>>,
         expected_inserted_tracing_params: HashMap<
             EntryPointId,
-            HashSet<(TracingParams, Option<ComponentId>)>,
+            HashSet<(TracingParams, ComponentId)>,
         >,
         expected_upserted_tracing_results: Vec<TracedEntryPoint>,
     ) -> MockGateway {

@@ -1335,7 +1335,7 @@ mod tests {
                         )]),
                         entrypoint_params: HashMap::from([(
                             "entrypoint_9".to_string(),
-                            HashSet::from([(get_tracing_params(9), None)]),
+                            HashSet::from([(get_tracing_params(9), "component_1".to_string())]),
                         )]),
                         ..Default::default()
                     }],
@@ -2492,7 +2492,7 @@ mod tests {
                 )]),
                 entrypoint_params: HashMap::from([(
                     "entrypoint_9".to_string(),
-                    HashSet::from([(get_tracing_params(9), None)]),
+                    HashSet::from([(get_tracing_params(9), "component_1".to_string())]),
                 )]),
                 ..Default::default()
             }],
@@ -3164,8 +3164,14 @@ mod tests {
                     ("component_2".to_string(), HashSet::from([get_entrypoint(10)])),
                 ]),
                 entrypoint_params: HashMap::from([
-                    ("entrypoint_9".to_string(), HashSet::from([(get_tracing_params(9), None)])),
-                    ("entrypoint_10".to_string(), HashSet::from([(get_tracing_params(10), None)])),
+                    (
+                        "entrypoint_9".to_string(),
+                        HashSet::from([(get_tracing_params(9), "component_1".to_string())]),
+                    ),
+                    (
+                        "entrypoint_10".to_string(),
+                        HashSet::from([(get_tracing_params(10), "component_2".to_string())]),
+                    ),
                 ]),
                 ..Default::default()
             }],
@@ -3410,7 +3416,7 @@ mod tests {
             tx: get_transaction(1),
             entrypoint_params: HashMap::from([(
                 entrypoint_id.clone(),
-                HashSet::from([(tracing_params.clone(), None)]),
+                HashSet::from([(tracing_params.clone(), component_id.clone())]),
             )]),
             ..Default::default()
         }];
@@ -3558,7 +3564,7 @@ mod tests {
             tx: get_transaction(1),
             entrypoint_params: HashMap::from([(
                 entrypoint_id.clone(),
-                HashSet::from([(tracing_params.clone(), None)]),
+                HashSet::from([(tracing_params.clone(), component_id.clone())]),
             )]),
             ..Default::default()
         }];
@@ -3764,7 +3770,7 @@ mod tests {
             tx: get_transaction(1),
             entrypoint_params: HashMap::from([(
                 entrypoint_id.clone(),
-                HashSet::from([(tracing_params.clone(), None)]),
+                HashSet::from([(tracing_params.clone(), component_id.clone())]),
             )]),
             ..Default::default()
         }];

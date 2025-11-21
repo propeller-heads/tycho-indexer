@@ -72,7 +72,7 @@ pub(crate) enum WriteOp {
     InsertEntryPoints(HashMap<models::ComponentId, HashSet<models::blockchain::EntryPoint>>),
     // Simply merge
     InsertEntryPointTracingParams(
-        HashMap<models::EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+        HashMap<models::EntryPointId, HashSet<(TracingParams, ComponentId)>>,
     ),
     // Simply merge
     UpsertTracedEntryPoints(Vec<models::blockchain::TracedEntryPoint>),
@@ -1203,7 +1203,7 @@ impl EntryPointGateway for CachedGateway {
     #[instrument(skip_all)]
     async fn insert_entry_point_tracing_params(
         &self,
-        entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+        entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, ComponentId)>>,
     ) -> Result<(), StorageError> {
         self.add_op(WriteOp::InsertEntryPointTracingParams(entry_points_params.clone()))
             .await?;

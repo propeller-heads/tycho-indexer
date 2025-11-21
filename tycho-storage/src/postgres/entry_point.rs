@@ -145,12 +145,12 @@ impl PostgresGateway {
     ///
     /// # Arguments
     ///
-    /// * `new_data` - A map of entry point ids to a list of tracing params and optional component
-    ///   id related to the tracing params.
+    /// * `new_data` - A map of entry point ids to a list of tracing params and component id related
+    ///   to the tracing params.
     /// * `conn` - The database connection to use.
     pub(crate) async fn insert_entry_point_tracing_params(
         &self,
-        new_data: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+        new_data: &HashMap<EntryPointId, HashSet<(TracingParams, ComponentId)>>,
         chain: &Chain,
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
@@ -196,53 +196,42 @@ impl PostgresGateway {
                 storage_error_from_diesel(e, "EntryPointTracingParams", "Batch upsert", None)
             })?;
 
-        let new_links: Vec<((&EntryPointId, &TracingParams), &String)> = new_data
-            .iter()
-            .flat_map(|(ep_id, ep)| {
-                ep.iter()
-                    .filter_map(move |(params, pc_ext_id)| {
-                        pc_ext_id
-                            .as_ref()
-                            .map(|pc_ext_id| ((ep_id, params), pc_ext_id))
-                    })
-            })
-            .collect();
-
         // Insert links between protocol components and tracing params
-        if !new_links.is_empty() {
-            let chain_id = self.get_chain_id(chain)?;
+        let chain_id = self.get_chain_id(chain)?;
 
-            // Fetch entry points tracing params, we can't use .returning() on the insert above
-            // because it doesn't return the ids on conflicts.
-            let params_ids = orm::EntryPointTracingParams::ids_by_entry_point_with_tracing_params(
-                &new_data
-                    .iter()
-                    .flat_map(|(ep_id, ep)| {
-                        ep.iter()
-                            .map(|params| (ep_id.clone(), params.0.clone()))
-                    })
-                    .collect::<Vec<_>>(),
-                conn,
-            )
-            .await?;
+        // Fetch entry points tracing params, we can't use .returning() on the insert above
+        // because it doesn't return the ids on conflicts.
+        let params_ids = orm::EntryPointTracingParams::ids_by_entry_point_with_tracing_params(
+            &new_data
+                .iter()
+                .flat_map(|(ep_id, ep)| {
+                    ep.iter()
+                        .map(|params| (ep_id.clone(), params.0.clone()))
+                })
+                .collect::<Vec<_>>(),
+            conn,
+        )
+        .await?;
 
-            let pc_ids = orm::ProtocolComponent::ids_by_external_ids(
-                &new_links
-                    .iter()
-                    .map(|(_, pc_ext_id)| pc_ext_id.as_str())
-                    .collect::<Vec<_>>(),
-                chain_id,
-                conn,
-            )
-            .await
-            .map_err(PostgresError::from)?
-            .into_iter()
-            .map(|(id_, ext_id)| (ext_id, id_))
-            .collect::<HashMap<_, _>>();
+        let pc_ids = orm::ProtocolComponent::ids_by_external_ids(
+            &new_data
+                .values()
+                .flat_map(|set| set.iter())
+                .map(|(_, pc_ext_id)| pc_ext_id.as_str())
+                .collect::<Vec<_>>(),
+            chain_id,
+            conn,
+        )
+        .await
+        .map_err(PostgresError::from)?
+        .into_iter()
+        .map(|(id_, ext_id)| (ext_id, id_))
+        .collect::<HashMap<_, _>>();
 
-            let mut pc_tracing_params_links = Vec::new();
-            for ((ep_id, params), pc_ext_id) in new_links.into_iter() {
-                let pc_id = match pc_ids.get(pc_ext_id) {
+        let mut pc_tracing_params_links = Vec::new();
+        for (ep_id, set) in new_data.iter() {
+            for (params, pc_ext_id) in set.iter() {
+                let pc_id = match pc_ids.get(pc_ext_id.as_str()) {
                     Some(_id) => _id,
                     None => {
                         return Err(StorageError::NotFound(
@@ -267,21 +256,21 @@ impl PostgresGateway {
                     entry_point_tracing_params_id: *params_id,
                 });
             }
-
-            diesel::insert_into(protocol_component_has_entry_point_tracing_params)
-                .values(&pc_tracing_params_links)
-                .on_conflict_do_nothing()
-                .execute(conn)
-                .await
-                .map_err(|e| {
-                    storage_error_from_diesel(
-                        e,
-                        "ProtocolComponentHasEntryPointTracingParams",
-                        "Batch upsert",
-                        None,
-                    )
-                })?;
         }
+
+        diesel::insert_into(protocol_component_has_entry_point_tracing_params)
+            .values(&pc_tracing_params_links)
+            .on_conflict_do_nothing()
+            .execute(conn)
+            .await
+            .map_err(|e| {
+                storage_error_from_diesel(
+                    e,
+                    "ProtocolComponentHasEntryPointTracingParams",
+                    "Batch upsert",
+                    None,
+                )
+            })?;
 
         Ok(())
     }
@@ -990,9 +979,9 @@ mod test {
                     .external_id
                     .clone(),
                 HashSet::from([
-                    (tracing_params(0), Some("pc_0".to_string())),
-                    (tracing_params(0), Some("unknown_pc".to_string())),
-                    (tracing_params(1), Some("pc_1".to_string())),
+                    (tracing_params(0), "pc_0".to_string()),
+                    (tracing_params(0), "unknown_pc".to_string()),
+                    (tracing_params(1), "pc_1".to_string()),
                 ]),
             ),
             (
@@ -1000,8 +989,8 @@ mod test {
                     .external_id
                     .clone(),
                 HashSet::from([
-                    (tracing_params(0), Some("pc_1".to_string())),
-                    (tracing_params(1), Some("pc_2".to_string())),
+                    (tracing_params(0), "pc_1".to_string()),
+                    (tracing_params(1), "pc_2".to_string()),
                 ]),
             ),
         ]);
@@ -1106,7 +1095,7 @@ mod test {
         gw.insert_entry_point_tracing_params(
             &HashMap::from([(
                 entry_point.external_id.clone(),
-                HashSet::from([(tracing_params(0), Some("pc_0".to_string()))]),
+                HashSet::from([(tracing_params(0), "pc_0".to_string())]),
             )]),
             &Chain::Ethereum,
             &mut conn,
@@ -1151,7 +1140,7 @@ mod test {
         gw.insert_entry_point_tracing_params(
             &HashMap::from([(
                 entry_point.external_id.clone(),
-                HashSet::from([(tracing_params(0), Some("pc_0".to_string()))]),
+                HashSet::from([(tracing_params(0), "pc_0".to_string())]),
             )]),
             &Chain::Ethereum,
             &mut conn,

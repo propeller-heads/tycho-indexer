@@ -68,7 +68,7 @@ mock! {
             &'life0 self,
             entry_points_params: &'life1 HashMap<
                 EntryPointId,
-                HashSet<(TracingParams, Option<ComponentId>)>,
+                HashSet<(TracingParams, ComponentId)>,
             >,
         ) -> ::core::pin::Pin<
             Box<

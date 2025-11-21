@@ -1544,7 +1544,7 @@ impl ExtractorGateway for ExtractorPgGateway {
         let mut new_entrypoints: HashMap<ComponentId, HashSet<EntryPoint>> = HashMap::new();
         let mut new_entrypoint_params: HashMap<
             EntryPointId,
-            HashSet<(TracingParams, Option<ComponentId>)>,
+            HashSet<(TracingParams, ComponentId)>,
         > = HashMap::new();
 
         for tx_update in changes.txs_with_update.iter() {

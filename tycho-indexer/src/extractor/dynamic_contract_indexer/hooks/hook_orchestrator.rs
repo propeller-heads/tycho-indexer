@@ -243,7 +243,7 @@ where
                                     .clone(),
                             )
                             .or_default()
-                            .insert((limit_entrypoint.params.clone(), Some(component_id.clone())));
+                            .insert((limit_entrypoint.params.clone(), component_id.clone()));
                     }
                 }
             }
@@ -335,7 +335,7 @@ where
                             .clone(),
                     )
                     .or_default()
-                    .insert((entrypoint_with_params.params, Some(component_id.clone())));
+                    .insert((entrypoint_with_params.params, component_id.clone()));
             }
         }
 
