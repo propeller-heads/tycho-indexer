@@ -1,3 +1,10 @@
+## [0.201.2](https://github.com/propeller-heads/tycho-simulation/compare/0.201.1...0.201.2) (2025-11-21)
+
+
+### Bug Fixes
+
+* Show state when slippage <-1.0 ([76c1e32](https://github.com/propeller-heads/tycho-simulation/commit/76c1e329258c27e8e36bc70e5ac36ed50b6c79db))
+
 ## [0.201.1](https://github.com/propeller-heads/tycho-simulation/compare/0.201.0...0.201.1) (2025-11-21)
 
 
