@@ -29,7 +29,10 @@ use tycho_execution::encoding::evm::utils::bytes_to_address;
 use tycho_simulation::{
     evm::{protocol::u256_num::bytes_to_u256, stream::ProtocolStreamBuilder},
     protocol::models::{DecoderContext, ProtocolComponent as ProtocolComponentModel, Update},
-    tycho_client::feed::{synchronizer::StateSyncMessage, BlockHeader, FeedMessage},
+    tycho_client::feed::{
+        synchronizer::{Snapshot, StateSyncMessage},
+        BlockHeader, FeedMessage,
+    },
     tycho_common::{
         dto::{Chain, ProtocolComponent, ResponseProtocolState},
         models::{token::Token, Chain as ChainModel},
@@ -160,7 +163,7 @@ impl TestRunner {
         let config = match Self::parse_config(&self.config_file_path) {
             Ok(cfg) => cfg,
             Err(e) => {
-                warn!("Failed to parse config: {:?}", e);
+                warn!("Failed to parse config: {:#}", e);
                 return Ok(());
             }
         };
@@ -243,7 +246,7 @@ impl TestRunner {
                 &protocol_system,
                 module_name,
             ) {
-                error!("Tycho Index command failed: {}", e);
+                error!("Tycho Index command failed: {:#}", e);
             }
         });
 
@@ -334,7 +337,7 @@ impl TestRunner {
                             }
                         }
                         Err(e) => {
-                            error!("Failed to acquire write lock on protocol components: {}. Skipping component update.", e);
+                            error!("Failed to acquire write lock on protocol components: {:#}. Skipping component update.", e);
                         }
                     }
 
@@ -352,7 +355,7 @@ impl TestRunner {
                             })
                             .collect(),
                         Err(e) => {
-                            error!("Failed to acquire read lock on protocol components: {}. Using fallback to new_pairs only.", e);
+                            error!("Failed to acquire read lock on protocol components: {:#}. Using fallback to new_pairs only.", e);
                             // Fallback to the old behavior if we can't read the persistent state
                             update
                                 .new_pairs
@@ -371,7 +374,7 @@ impl TestRunner {
                     ) {
                         Ok(data) => data,
                         Err(e) => {
-                            error!("Failed to run simulation: {}", e);
+                            error!("Failed to run simulation: {:#}", e);
                             continue;
                         }
                     };
@@ -433,7 +436,7 @@ impl TestRunner {
                     }
                 }
                 Err(e) => {
-                    error!("Stream error: {:?}", e);
+                    error!("Stream error: {:#}", e);
                     // Continue processing instead of breaking - streams can have temporary errors
                     continue;
                 }
@@ -486,6 +489,7 @@ impl TestRunner {
             if self.clear_db {
                 let spkg_path = build_spkg(substreams_yaml_path, test.start_block)
                     .wrap_err("Failed to build spkg")?;
+
                 tycho_runner
                     .run_tycho(
                         &spkg_path,
@@ -506,7 +510,7 @@ impl TestRunner {
                 }
                 Err(e) => {
                     failed_tests.push(test.name.clone());
-                    error!("❗️{} failed: {e}\n", test.name);
+                    error!("❗️{} failed: {:#}\n", test.name, e);
                 }
             }
             tycho_runner.stop_rpc_server(rpc_server)?;
@@ -535,41 +539,47 @@ impl TestRunner {
             .iter()
             .map(|c| c.base.id.to_lowercase())
             .collect::<Vec<String>>();
-        let (update, response_protocol_states_by_id, block) = self.fetch_from_tycho_rpc(
-            &config.protocol_system,
-            expected_ids,
-            &config.adapter_contract,
-            &config.adapter_build_signature,
-            &config.adapter_build_args,
-            self.vm_simulation_traces,
-            stop_block,
-        )?;
-        if update.states.is_empty() {
-            return Err(miette!("No protocol states were found on Tycho"));
-        }
 
-        let protocol_components: HashMap<String, ProtocolComponentModel> = update.new_pairs.clone();
+        let block = self
+            .runtime
+            .block_on(
+                self.rpc_provider
+                    .get_block_header(stop_block),
+            )
+            .wrap_err("Failed to get block header")?;
+
+        let (protocol_components, snapshot, all_tokens) =
+            self.fetch_from_tycho_rpc(&config.protocol_system, expected_ids, stop_block)?;
+
+        dbg!(&snapshot);
+        let response_protocol_states_by_id: HashMap<String, ResponseProtocolState> = snapshot
+            .states
+            .clone()
+            .into_iter()
+            .map(|(id, component_with_state)| (id.to_lowercase(), component_with_state.state))
+            .collect();
+
+        let tokens_by_component: HashMap<String, Vec<Token>> = protocol_components
+            .iter()
+            .map(|component| {
+                let tokens = component
+                    .tokens
+                    .iter()
+                    .filter_map(|token| all_tokens.get(token).cloned())
+                    .collect();
+                (component.id.clone(), tokens)
+            })
+            .collect();
 
         // Step 1: Validate that all expected components are present on Tycho after indexing
-        self.validate_state(&test.expected_components, &update)?;
+        self.validate_state(&test.expected_components, protocol_components)?;
 
         // Step 2: Validate Token Balances
         match config.skip_balance_check {
             true => info!("Skipping balance check"),
             false => {
-                let component_tokens: HashMap<String, Vec<Token>> = protocol_components
-                    .iter()
-                    .filter_map(|(id, comp)| {
-                        if comp.tokens.is_empty() {
-                            None
-                        } else {
-                            Some((id.clone(), comp.tokens.clone()))
-                        }
-                    })
-                    .collect();
-
                 self.validate_token_balances(
-                    &component_tokens,
+                    &tokens_by_component,
                     &response_protocol_states_by_id,
                     stop_block,
                 )?;
@@ -577,15 +587,35 @@ impl TestRunner {
             }
         }
 
-        // Step 3: Run Tycho Simulation
+        // Step 3: Decode Snapshot with Decoder from tycho simulation
+        let adapter_contract_path_str = self.get_adapter_contract_path(
+            &config.adapter_contract,
+            &config.adapter_build_signature,
+            &config.adapter_build_args,
+        )?;
+
+        let update = self.decode_snapshot(
+            &config.protocol_system,
+            &block,
+            snapshot,
+            all_tokens,
+            adapter_contract_path_str,
+            self.vm_simulation_traces,
+        )?;
+        dbg!(&update);
+
+        let protocol_components_simulation: HashMap<String, ProtocolComponentModel> =
+            update.new_pairs.clone();
+
+        // Step 4: Run Tycho Simulation
         let execution_data = self.run_simulation(
             &update,
-            &protocol_components,
+            &protocol_components_simulation,
             &test.expected_components,
             &config.protocol_system,
         )?;
 
-        // Step 4: Run Tycho Execution
+        // Step 5: Run Tycho Execution
         self.runtime
             .block_on(self.run_execution(
                 execution_data,
@@ -609,7 +639,7 @@ impl TestRunner {
         // Spawn the connection handler
         tokio::spawn(async move {
             if let Err(e) = connection.await {
-                eprintln!("Database connection error: {}", e);
+                eprintln!("Database connection error: {:#}", e);
             }
         });
 
@@ -660,12 +690,8 @@ impl TestRunner {
         &self,
         protocol_system: &str,
         expected_component_ids: Vec<String>,
-        adapter_contract: &Option<String>,
-        adapter_build_signature: &Option<String>,
-        adapter_build_args: &Option<String>,
-        vm_simulation_traces: bool,
         stop_block: u64,
-    ) -> miette::Result<(Update, HashMap<String, ResponseProtocolState>, Block)> {
+    ) -> miette::Result<(Vec<ProtocolComponent>, Snapshot, HashMap<Bytes, Token>)> {
         info!("Fetching protocol data from Tycho with stop block {}...", stop_block);
 
         // Create Tycho client for the RPC server
@@ -714,6 +740,7 @@ impl TestRunner {
         };
 
         let contract_ids: Vec<Bytes> = protocol_components
+            .clone()
             .into_iter()
             .flat_map(|component| component.contract_ids)
             .chain(
@@ -728,7 +755,7 @@ impl TestRunner {
             .runtime
             .block_on(tycho_client.get_snapshots(
                 chain,
-                stop_block - 1,
+                stop_block,
                 protocol_system,
                 &components_by_id,
                 &contract_ids,
@@ -737,88 +764,9 @@ impl TestRunner {
             .into_diagnostic()
             .wrap_err("Failed to get snapshot")?;
 
-        let protocol_states_by_id: HashMap<String, ResponseProtocolState> = snapshot
-            .states
-            .clone()
-            .into_iter()
-            .map(|(id, component_with_state)| (id.to_lowercase(), component_with_state.state))
-            .collect();
-
         debug!("Found {} protocol components", components_by_id.len());
-        debug!("Found {} protocol states", protocol_states_by_id.len());
+        debug!("Found {} protocol states", snapshot.states.len());
         debug!("Found {} traced entry points", traced_entry_points.len());
-
-        let adapter_contract_path;
-        let mut adapter_contract_path_str: Option<&str> = None;
-
-        // Adapter contract will only be configured for VM protocols, not natively implemented
-        // protocols.
-        if let Some(adapter_contract_name) = &adapter_contract {
-            // Build/find the adapter contract
-            adapter_contract_path = match self
-                .adapter_contract_builder
-                .find_contract(adapter_contract_name)
-            {
-                Ok(path) => {
-                    debug!("Found adapter contract at: {}", path.display());
-                    path
-                }
-                Err(_) => {
-                    info!("Adapter contract not found, building it...");
-                    self.adapter_contract_builder
-                        .build_target(
-                            adapter_contract_name,
-                            adapter_build_signature.as_deref(),
-                            adapter_build_args.as_deref(),
-                        )
-                        .wrap_err("Failed to build adapter contract")?
-                }
-            };
-
-            debug!("Using adapter contract: {}", adapter_contract_path.display());
-            adapter_contract_path_str = Some(adapter_contract_path.to_str().unwrap());
-        }
-
-        // Clear the shared database state to ensure test isolation
-        // This prevents state from previous tests from affecting the current test
-        let _ = tycho_simulation::evm::engine_db::SHARED_TYCHO_DB.clear();
-
-        let protocol_stream_builder =
-            ProtocolStreamBuilder::new("", chain.into()).skip_state_decode_failures(true);
-
-        let mut decoder_context = DecoderContext::new().vm_traces(vm_simulation_traces);
-        if let Some(vm_adapter_path) = adapter_contract_path_str {
-            decoder_context = decoder_context.vm_adapter_path(vm_adapter_path);
-        }
-        let protocol_stream_builder =
-            register_protocol(protocol_stream_builder, protocol_system, decoder_context)?;
-
-        let decoder = protocol_stream_builder.get_decoder();
-
-        // Get block header to extract the timestamp
-        let block_header = self
-            .runtime
-            .block_on(
-                self.rpc_provider
-                    .get_block_header(stop_block),
-            )
-            .wrap_err("Failed to get block header")?;
-
-        let state_msgs: HashMap<String, StateSyncMessage<BlockHeader>> = HashMap::from([(
-            String::from(protocol_system),
-            StateSyncMessage {
-                header: BlockHeader {
-                    hash: (*block_header.hash()).into(),
-                    number: stop_block,
-                    parent_hash: Bytes::default(),
-                    revert: false,
-                    timestamp: block_header.header.timestamp,
-                },
-                snapshots: snapshot,
-                deltas: None,
-                removed_components: HashMap::new(),
-            },
-        )]);
 
         let all_tokens = self
             .runtime
@@ -826,6 +774,52 @@ impl TestRunner {
             .into_diagnostic()
             .wrap_err("Failed to get tokens")?;
         debug!("Loaded {} tokens", all_tokens.len());
+
+        Ok((protocol_components, snapshot, all_tokens))
+    }
+
+    fn decode_snapshot(
+        &self,
+        protocol_system: &str,
+        block: &Block,
+        snapshot: Snapshot,
+        all_tokens: HashMap<Bytes, Token>,
+        adapter_contract_path: Option<PathBuf>,
+        vm_simulation_traces: bool,
+    ) -> miette::Result<Update> {
+        // Clear the shared database state to ensure test isolation
+        // This prevents state from previous tests from affecting the current test
+        let _ = tycho_simulation::evm::engine_db::SHARED_TYCHO_DB.clear();
+
+        let protocol_stream_builder =
+            ProtocolStreamBuilder::new("", self.chain.into()).skip_state_decode_failures(true);
+
+        let mut decoder_context = DecoderContext::new().vm_traces(vm_simulation_traces);
+        if let Some(vm_adapter_path) = adapter_contract_path.as_ref() {
+            if let Some(path_str) = vm_adapter_path.to_str() {
+                decoder_context = decoder_context.vm_adapter_path(path_str);
+            }
+        }
+        let protocol_stream_builder =
+            register_protocol(protocol_stream_builder, protocol_system, decoder_context)?;
+
+        let decoder = protocol_stream_builder.get_decoder();
+
+        let state_msgs: HashMap<String, StateSyncMessage<BlockHeader>> = HashMap::from([(
+            String::from(protocol_system),
+            StateSyncMessage {
+                header: BlockHeader {
+                    hash: (*block.hash()).into(),
+                    number: block.number(),
+                    parent_hash: Bytes::default(),
+                    revert: false,
+                    timestamp: block.header.timestamp,
+                },
+                snapshots: snapshot,
+                deltas: None,
+                removed_components: HashMap::new(),
+            },
+        )]);
 
         self.runtime
             .block_on(decoder.set_tokens(all_tokens));
@@ -840,7 +834,7 @@ impl TestRunner {
         debug!("Decoded message for block {}", block_msg.block_number_or_timestamp);
         debug!("Update contains {} component states", block_msg.states.len());
 
-        Ok((block_msg, protocol_states_by_id, block_header))
+        Ok(block_msg)
     }
 
     /// Validates that the protocol components retrieved from Tycho match the expected
@@ -854,7 +848,8 @@ impl TestRunner {
     /// # Arguments
     /// * `expected_components` - Vector of expected protocol components with their test
     ///   configuration
-    /// * `block_msg` - The decoded protocol state update containing the actual component data
+    /// * `protocol_components` - HashMap of component ID to component. These components are the raw
+    ///   Tycho RPC response ones. Not the ones from tycho simulation
     ///
     /// # Returns
     /// Returns `Ok(())` if all expected components are found and match their expected state.
@@ -866,13 +861,17 @@ impl TestRunner {
     fn validate_state(
         &self,
         expected_components: &Vec<ProtocolComponentWithTestConfig>,
-        block_msg: &Update,
+        protocol_components: Vec<ProtocolComponent>,
     ) -> miette::Result<()> {
         if expected_components.is_empty() {
             debug!("No expected components defined for this test. Skipping state validation.");
             return Ok(());
         }
 
+        let protocol_components_by_id: HashMap<String, ProtocolComponent> = protocol_components
+            .iter()
+            .map(|component| (component.id.clone().to_lowercase(), component.clone()))
+            .collect();
         debug!("Validating {:?} expected components", expected_components.len());
         for expected_component in expected_components {
             let component_id = expected_component
@@ -880,8 +879,7 @@ impl TestRunner {
                 .id
                 .to_lowercase();
 
-            let component = block_msg
-                .new_pairs
+            let component = protocol_components_by_id
                 .get(&component_id)
                 .ok_or_else(|| miette!("Component {:?} was not found on Tycho", component_id))?;
 
@@ -1164,7 +1162,7 @@ impl TestRunner {
             let batch_results = match batch_results {
                 Ok(results) => results,
                 Err((error, _, _)) => {
-                    error!("Batch {} failed: {}", batch_index + 1, error);
+                    error!("Batch {} failed: {:#}", batch_index + 1, error);
                     return Err(error);
                 }
             };
@@ -1295,6 +1293,8 @@ impl TestRunner {
         adapter_build_signature: &Option<String>,
         adapter_build_args: &Option<String>,
     ) -> miette::Result<Option<PathBuf>> {
+        // Adapter contract will only be configured for VM protocols, not natively implemented
+        // protocols.
         if let Some(adapter_contract_name) = adapter_contract {
             let adapter_contract_path = match self
                 .adapter_contract_builder
@@ -1312,6 +1312,7 @@ impl TestRunner {
                         .wrap_err("Failed to build adapter contract")?
                 }
             };
+            debug!("Using adapter contract: {}", adapter_contract_path.display());
             Ok(Some(adapter_contract_path))
         } else {
             Ok(None)
@@ -1369,7 +1370,7 @@ mod tests {
             .collect();
         if !errors.is_empty() {
             for error in errors {
-                println!("{error}");
+                println!("{error:#}");
             }
             panic!("One or more config files failed to parse.");
         }

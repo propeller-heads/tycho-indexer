@@ -66,7 +66,9 @@ impl TychoRunner {
             "--start-block",
             &start_block.to_string(),
             "--stop-block",
-            &(end_block + 2).to_string(), // +2 is to make up for the cache in the index side
+            &(end_block + 3).to_string(), /* +3 is to force our the stop block to be indexed and
+                                           * saved into the db. stop block +1 and +2 will not be
+                                           * included in the db */
             "--dci-plugin",
             "rpc",
         ]);
@@ -248,12 +250,7 @@ impl TychoRunner {
     ) -> miette::Result<String> {
         let protocol_types = protocol_type_names
             .iter()
-            .map(|name| {
-                format!(
-                    "    - name: \"{}\"\n      financial_type: Swap",
-                    name
-                )
-            })
+            .map(|name| format!("    - name: \"{}\"\n      financial_type: Swap", name))
             .collect::<Vec<_>>()
             .join("\n");
 

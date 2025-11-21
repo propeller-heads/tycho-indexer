@@ -78,7 +78,7 @@ pub fn build_spkg(yaml_file_path: &PathBuf, initial_block: u64) -> miette::Resul
         }
         Err(e) => {
             error!(
-                "Error running substreams pack command. Ensure that the wasm target was built. {e}",
+                "Error running substreams pack command. Ensure that the wasm target was built. {e:#}",
             );
         }
     }

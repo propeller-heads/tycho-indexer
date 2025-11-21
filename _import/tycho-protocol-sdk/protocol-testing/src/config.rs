@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use similar::{ChangeTag, TextDiff};
-use tycho_simulation::{protocol::models::ProtocolComponent, tycho_common::Bytes};
+use tycho_simulation::tycho_common::{dto::ProtocolComponent, Bytes};
 
 /// Represents a ProtocolComponent with its main attributes
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -38,11 +38,7 @@ impl ProtocolComponentExpectation {
 
         // Compare tokens (order-independent)
         let self_tokens_set: HashSet<_> = self.tokens.iter().collect();
-        let other_tokens_set: HashSet<_> = other
-            .tokens
-            .iter()
-            .map(|token| &token.address)
-            .collect();
+        let other_tokens_set: HashSet<_> = other.tokens.iter().collect();
         if self_tokens_set != other_tokens_set {
             let self_tokens = format!("{:?}", self.tokens);
             let other_tokens = format!("{:?}", other.tokens);
