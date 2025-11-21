@@ -1,3 +1,10 @@
+## [0.202.1](https://github.com/propeller-heads/tycho-simulation/compare/0.202.0...0.202.1) (2025-11-21)
+
+
+### Bug Fixes
+
+* add pool_removed to AngstromHookHandler init ([3d43ba6](https://github.com/propeller-heads/tycho-simulation/commit/3d43ba65336edf2b1a9ee22693fddcac7d9f27db))
+
 ## [0.202.0](https://github.com/propeller-heads/tycho-simulation/compare/0.201.3...0.202.0) (2025-11-21)
 
 
