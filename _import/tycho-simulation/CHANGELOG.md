@@ -1,3 +1,10 @@
+## [0.201.3](https://github.com/propeller-heads/tycho-simulation/compare/0.201.2...0.201.3) (2025-11-21)
+
+
+### Bug Fixes
+
+* revert locked cargo dependencies ([0c97f91](https://github.com/propeller-heads/tycho-simulation/commit/0c97f91bfccf4723754b1145753f4f8fde077991))
+
 ## [0.201.2](https://github.com/propeller-heads/tycho-simulation/compare/0.201.1...0.201.2) (2025-11-21)
 
 
