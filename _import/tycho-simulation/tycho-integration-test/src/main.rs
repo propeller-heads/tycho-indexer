@@ -755,17 +755,32 @@ fn process_execution_result(
                     100.0
             };
 
-            info!(
-                event_type = "execution_slippage",
-                state = ?state_str,
-                token_in = %execution_info.token_in,
-                token_out = %execution_info.token_out,
-                simulated_amount  = %amount_out,
-                executed_amount = %execution_info.expected_amount_out,
-                slippage_ratio = slippage,
-                "Execution slippage: {:.2}%",
-                slippage
-            );
+            if slippage > 1.0 {
+                info!(
+                    event_type = "execution_slippage",
+                    state = ?state_str,
+                    token_in = %execution_info.token_in,
+                    token_out = %execution_info.token_out,
+                    simulated_amount  = %amount_out,
+                    executed_amount = %execution_info.expected_amount_out,
+                    slippage_ratio = slippage,
+                    "Execution slippage: {:.2}%",
+                    slippage
+                );
+            } else {
+                // don't show the state in this case to not overwhelm the logs
+                info!(
+                    event_type = "execution_slippage",
+                    token_in = %execution_info.token_in,
+                    token_out = %execution_info.token_out,
+                    simulated_amount  = %amount_out,
+                    executed_amount = %execution_info.expected_amount_out,
+                    slippage_ratio = slippage,
+                    "Execution slippage: {:.2}%",
+                    slippage
+                );
+            }
+
             metrics::record_execution_slippage(&execution_info.protocol_system, slippage);
         }
         TychoExecutionResult::Revert { reason, state_overwrites, overwrite_metadata } => {
