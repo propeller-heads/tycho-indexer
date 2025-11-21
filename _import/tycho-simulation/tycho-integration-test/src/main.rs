@@ -1,4 +1,3 @@
-mod execution;
 mod metrics;
 mod stream_processor;
 
@@ -9,14 +8,7 @@ use std::{
     time::Duration,
 };
 
-use alloy::{
-    eips::BlockNumberOrTag,
-    network::Ethereum,
-    primitives::Address,
-    providers::{Provider, ProviderBuilder, RootProvider},
-    rpc::types::Block,
-};
-use alloy_chains::NamedChain;
+use alloy::{eips::BlockNumberOrTag, primitives::Address, providers::Provider, rpc::types::Block};
 use clap::Parser;
 use dotenv::dotenv;
 use itertools::Itertools;
@@ -28,27 +20,21 @@ use tokio::sync::Semaphore;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 use tycho_common::simulation::protocol_sim::ProtocolSim;
-use tycho_ethereum::entrypoint_tracer::{
-    allowance_slot_detector::{AllowanceSlotDetectorConfig, EVMAllowanceSlotDetector},
-    balance_slot_detector::{BalanceSlotDetectorConfig, EVMBalanceSlotDetector},
-};
 use tycho_simulation::{
     protocol::models::ProtocolComponent,
     rfq::protocols::hashflow::{client::HashflowClient, state::HashflowState},
     tycho_common::models::Chain,
     utils::load_all_tokens,
 };
+use tycho_test::execution::{
+    encoding::encode_swap,
+    models::{TychoExecutionInput, TychoExecutionResult},
+    simulate_swap_transaction, tenderly,
+};
 
-use crate::{
-    execution::{
-        encoding::encode_swap,
-        models::{TychoExecutionInput, TychoExecutionResult},
-        simulate_swap_transaction, tenderly,
-    },
-    stream_processor::{
-        protocol_stream_processor::ProtocolStreamProcessor,
-        rfq_stream_processor::RFQStreamProcessor, StreamUpdate, UpdateType,
-    },
+use crate::stream_processor::{
+    protocol_stream_processor::ProtocolStreamProcessor, rfq_stream_processor::RFQStreamProcessor,
+    StreamUpdate, UpdateType,
 };
 
 #[derive(Parser, Clone)]
@@ -109,9 +95,9 @@ struct Cli {
     #[arg(long, default_value_t = 600)]
     skip_messages_duration: u64,
 
-    /// Time to wait (in seconds) for block N+1 to exist before executing debug_traceCall
-    #[arg(long, default_value_t = 12)]
-    block_wait_time: u64,
+    /// List of component IDs to always include in tests every block if not already selected
+    #[arg(long, value_delimiter = ',')]
+    always_test_components: Vec<String>,
 }
 
 impl Debug for Cli {
@@ -169,14 +155,21 @@ async fn run(cli: Cli) -> miette::Result<()> {
     let cli = Arc::new(cli);
     let chain = cli.chain;
 
-    let rpc_tools = RPCTools::new(&cli.rpc_url, &chain).await?;
+    let rpc_tools = tycho_test::RPCTools::new(&cli.rpc_url, &chain).await?;
 
     // Load tokens from Tycho
     info!(%cli.tycho_url, "Loading tokens...");
-    let all_tokens =
-        load_all_tokens(&cli.tycho_url, false, Some(cli.tycho_api_key.as_str()), chain, None, None)
-            .await
-            .map_err(|e| miette!("Failed to load tokens: {e:?}"))?;
+    let all_tokens = load_all_tokens(
+        &cli.tycho_url,
+        false,
+        Some(cli.tycho_api_key.as_str()),
+        true,
+        chain,
+        None,
+        None,
+    )
+    .await
+    .map_err(|e| miette!("Failed to load tokens: {e:?}"))?;
     info!(%cli.tycho_url, "Loaded tokens");
 
     // Run streams in background tasks
@@ -243,7 +236,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
 async fn process_update(
     cli: Arc<Cli>,
     chain: Chain,
-    rpc_tools: RPCTools,
+    rpc_tools: tycho_test::RPCTools,
     tycho_state: Arc<RwLock<TychoState>>,
     update: &StreamUpdate,
 ) -> miette::Result<()> {
@@ -385,14 +378,27 @@ async fn process_update(
             .map_err(|e| miette!("Failed to acquire write lock on Tycho state: {e}"))?;
 
         let mut all_selected_ids = Vec::new();
+
+        // Add component IDs from always_test_components that are not in the current update
+        for component_id in &cli.always_test_components {
+            if !update.update.states.keys().contains(component_id)
+                // Ensure that the component exists in the Tycho DB
+                && current_state.components.contains_key(component_id)
+            {
+                all_selected_ids.push(component_id.clone());
+            }
+        }
+
         for component_ids in current_state
             .component_ids_by_protocol
             .values()
         {
-            // Filter out IDs that are in the current update
+            // Filter out IDs that are in the current update or already in all_selected_ids
             let available_ids: Vec<_> = component_ids
                 .iter()
-                .filter(|id| !update.update.states.keys().contains(id))
+                .filter(|id| {
+                    !update.update.states.keys().contains(id) && !all_selected_ids.contains(id)
+                })
                 .cloned()
                 .collect();
 
@@ -468,17 +474,13 @@ async fn process_update(
         return Ok(())
     }
 
-    let results = match simulate_swap_transaction(
-        &rpc_tools,
-        block_execution_info.clone(),
-        &block,
-        cli.block_wait_time,
-    )
-    .await
-    {
-        Ok(results) => results,
-        Err((e, _, _)) => return Err(e),
-    };
+    let results =
+        match simulate_swap_transaction(&rpc_tools, block_execution_info.clone(), &block, None)
+            .await
+        {
+            Ok(results) => results,
+            Err((e, _, _)) => return Err(e),
+        };
 
     let mut n_reverts = 0;
     let mut n_failures = 0;
@@ -492,21 +494,33 @@ async fn process_update(
             }
         }
         .clone();
-        (n_reverts, n_failures) = process_execution_result(
+
+        let state_str = {
+            let current_state = tycho_state
+                .read()
+                .map_err(|e| miette!("Failed to acquire read lock on Tycho state: {e}"))?;
+
+            match current_state
+                .states
+                .get(&execution_info.component_id)
+            {
+                Some(state) => format!("{:?}", state),
+                None => "".to_string(),
+            }
+        };
+        process_execution_result(
             simulation_id,
             result,
             execution_info,
+            state_str,
             (*block).clone(),
             chain.id().to_string(),
-            n_reverts,
-            n_failures,
+            &mut n_reverts,
+            &mut n_failures,
         );
     }
     if n_reverts > 0 || n_failures > 0 {
-        warn!(
-            "Simulations reverted: {n_reverts}/{}. Simulations failed: {n_failures}/{}",
-            total_simulations, total_simulations
-        )
+        warn!("Tested {total_simulations}, {n_reverts} simulations reverted, {n_failures} executions failed")
     }
 
     Ok(())
@@ -648,15 +662,21 @@ async fn process_state(
         );
         metrics::record_get_amount_out_duration(&component.protocol_system, duration_seconds);
 
+        // Sometimes the expected amount out might be zero (e.g. pool is depleted in one direction)
+        // Then execution will fail with TychoRouter__UndefinedMinAmountOut
+        if expected_amount_out == BigUint::ZERO {
+            continue
+        }
         // Simulate execution amount out against the RPC
         let (solution, transaction) = match encode_swap(
             &component,
-            Arc::from(state.clone_box()),
+            Some(Arc::from(state.clone_box())),
             token_in,
             token_out,
             amount_in.clone(),
-            expected_amount_out.clone(),
             chain,
+            None,
+            false,
         ) {
             Ok(res) => res,
             Err(e) => {
@@ -672,6 +692,8 @@ async fn process_state(
                 expected_amount_out,
                 protocol_system: component.protocol_system.clone(),
                 component_id: component.id.to_string(),
+                token_in: token_in.address.to_string(),
+                token_out: token_out.address.to_string(),
             },
         );
     }
@@ -694,15 +716,18 @@ async fn process_state(
         component_id = %execution_info.component_id,
     )
 )]
+#[allow(clippy::too_many_arguments)]
 fn process_execution_result(
     simulation_id: &String,
     result: &TychoExecutionResult,
     execution_info: TychoExecutionInput,
+    state_str: String,
+
     block: Block,
     chain_id: String,
-    mut n_reverts: i32,
-    mut n_failures: i32,
-) -> (i32, i32) {
+    n_reverts: &mut i32,
+    n_failures: &mut i32,
+) {
     match result {
         TychoExecutionResult::Success { gas_used, amount_out } => {
             info!(
@@ -730,16 +755,36 @@ fn process_execution_result(
                     100.0
             };
 
-            info!(
-                event_type = "execution_slippage",
-                slippage_ratio = slippage,
-                "Execution slippage: {:.2}%",
-                slippage
-            );
+            if slippage > 1.0 {
+                info!(
+                    event_type = "execution_slippage",
+                    state = ?state_str,
+                    token_in = %execution_info.token_in,
+                    token_out = %execution_info.token_out,
+                    simulated_amount  = %amount_out,
+                    executed_amount = %execution_info.expected_amount_out,
+                    slippage_ratio = slippage,
+                    "Execution slippage: {:.2}%",
+                    slippage
+                );
+            } else {
+                // don't show the state in this case to not overwhelm the logs
+                info!(
+                    event_type = "execution_slippage",
+                    token_in = %execution_info.token_in,
+                    token_out = %execution_info.token_out,
+                    simulated_amount  = %amount_out,
+                    executed_amount = %execution_info.expected_amount_out,
+                    slippage_ratio = slippage,
+                    "Execution slippage: {:.2}%",
+                    slippage
+                );
+            }
+
             metrics::record_execution_slippage(&execution_info.protocol_system, slippage);
         }
         TychoExecutionResult::Revert { reason, state_overwrites, overwrite_metadata } => {
-            n_reverts += 1;
+            *n_reverts += 1;
             let error_msg = reason.to_string();
 
             // Extract revert reason from error message
@@ -769,34 +814,42 @@ fn process_execution_result(
             } else {
                 String::new()
             };
+            let error_category = categorize_error(&error_name);
             error!(
                 event_type = "simulation_execution_failure",
                 error_message = %revert_reason,
                 error_name = %error_name,
+                error_category = %error_category,
+                state = ?state_str,
+                token_in = %execution_info.token_in,
+                token_out = %execution_info.token_out,
                 tenderly_url = %tenderly_url,
                 overwrites = %overwrites_string,
                 "Failed to simulate swap: {error_msg}"
             );
             metrics::record_simulation_execution_failure(
                 &execution_info.protocol_system,
-                &error_name,
+                error_category,
             );
         }
         TychoExecutionResult::Failed { error_msg } => {
-            n_failures += 1;
+            *n_failures += 1;
 
+            let error_category = categorize_error(error_msg);
             error!(
                 event_type = "simulation_execution_failure",
                 error_message = %error_msg,
+                error_category = %error_category,
+                token_in = %execution_info.token_in,
+                token_out = %execution_info.token_out,
                 "Failed to simulate swap: {error_msg}"
             );
             metrics::record_simulation_execution_failure(
                 &execution_info.protocol_system,
-                error_msg,
+                error_category,
             );
         }
     }
-    (n_reverts, n_failures)
 }
 
 /// Extract the error name from a revert reason string
@@ -821,46 +874,14 @@ fn extract_error_name(revert_reason: &str) -> String {
     }
 }
 
-#[derive(Clone)]
-struct RPCTools {
-    rpc_url: String,
-    provider: RootProvider<Ethereum>,
-    evm_balance_slot_detector: Arc<EVMBalanceSlotDetector>,
-    evm_allowance_slot_detector: Arc<EVMAllowanceSlotDetector>,
-}
-
-impl RPCTools {
-    pub async fn new(rpc_url: &str, chain: &Chain) -> miette::Result<Self> {
-        let provider: RootProvider<Ethereum> = ProviderBuilder::default()
-            .with_chain(
-                NamedChain::try_from(chain.id())
-                    .into_diagnostic()
-                    .wrap_err("Invalid chain")?,
-            )
-            .connect(rpc_url)
-            .await
-            .into_diagnostic()
-            .wrap_err("Failed to connect to provider")?;
-        let evm_balance_slot_detector = Arc::new(
-            EVMBalanceSlotDetector::new(BalanceSlotDetectorConfig {
-                rpc_url: rpc_url.to_string(),
-                ..Default::default()
-            })
-            .into_diagnostic()?,
-        );
-        let evm_allowance_slot_detector = Arc::new(
-            EVMAllowanceSlotDetector::new(AllowanceSlotDetectorConfig {
-                rpc_url: rpc_url.to_string(),
-                ..Default::default()
-            })
-            .into_diagnostic()?,
-        );
-        Ok(Self {
-            rpc_url: rpc_url.to_string(),
-            provider,
-            evm_balance_slot_detector,
-            evm_allowance_slot_detector,
-        })
+fn categorize_error(error_name: &str) -> &'static str {
+    // We can add more categories here when we find new meaningful ones
+    match error_name {
+        e if e.contains("Couldn't find storage slot") => "Storage slot not found",
+        e if e.contains("TychoRouter__NegativeSlippage") => "TychoRouter__NegativeSlippage",
+        e if e.contains("0xf7bf5832") => "Fee token", /* Decodes to TychoRouter__AmountOutNotFullyReceived */
+        e if e.contains("UniswapV2: K") => "Fee token",
+        _ => "other",
     }
 }
 

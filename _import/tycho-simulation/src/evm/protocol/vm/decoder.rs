@@ -12,7 +12,7 @@ use super::{state::EVMPoolState, state_builder::EVMPoolStateBuilder};
 use crate::{
     evm::{
         engine_db::{tycho_db::PreCachedDB, SHARED_TYCHO_DB},
-        protocol::vm::constants::get_adapter_file,
+        protocol::vm::{constants::get_adapter_file, utils::json_deserialize_address_list},
     },
     protocol::{
         errors::InvalidSnapshotError,
@@ -83,6 +83,22 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
             .map(|bytes: &Bytes| Address::from_slice(bytes.as_ref()))
             .collect::<HashSet<Address>>();
 
+        let potential_rebase_tokens: HashSet<Address> = if let Some(bytes) = snapshot
+            .component
+            .static_attributes
+            .get("rebase_tokens")
+        {
+            if let Ok(vecs) = json_deserialize_address_list(bytes) {
+                vecs.into_iter()
+                    .map(|addr| Address::from_slice(&addr))
+                    .collect()
+            } else {
+                HashSet::new()
+            }
+        } else {
+            HashSet::new()
+        };
+
         // Decode balances
         let balance_owner = snapshot
             .state
@@ -150,6 +166,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
         let mut pool_state_builder =
             EVMPoolStateBuilder::new(id.clone(), tokens.clone(), adapter_contract_address)
                 .balances(component_balances)
+                .disable_overwrite_tokens(potential_rebase_tokens)
                 .account_balances(account_balances)
                 .adapter_contract_bytecode(adapter_bytecode)
                 .involved_contracts(involved_contracts)

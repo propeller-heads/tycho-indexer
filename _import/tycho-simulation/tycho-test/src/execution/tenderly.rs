@@ -6,7 +6,7 @@ use alloy::{
 use tycho_execution::encoding::models::Transaction;
 
 /// Metadata about storage slot overwrites to enable human-readable logging
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct OverwriteMetadata {
     /// Mapping of storage addresses to their slot metadata
     pub slots: AddressHashMap<Vec<SlotMetadata>>,
@@ -96,7 +96,7 @@ pub fn build_tenderly_url(
     };
 
     // Extract block number
-    let block_number = block.map(|b| b.header.number.to_string());
+    let block_number = block.map(|b| (b.header.number + 1).to_string());
 
     // Build parameters with overrides taking priority
     let from = overrides

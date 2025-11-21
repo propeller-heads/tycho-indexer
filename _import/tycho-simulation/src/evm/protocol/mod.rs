@@ -1,5 +1,7 @@
+pub mod aerodrome_slipstreams;
 pub mod ekubo;
 pub mod filters;
+pub mod fluid;
 pub mod pancakeswap_v2;
 pub mod safe_math;
 pub mod u256_num;
