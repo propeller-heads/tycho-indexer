@@ -895,7 +895,7 @@ where
 
     /// Returns the approximate size of the internal cache used by this extension, in bytes.
     fn cache_size(&self) -> usize {
-        self.cache.deep_size_of()
+        self.cache.deep_size_of() + self.inner_dci.cache_size()
     }
 }
 

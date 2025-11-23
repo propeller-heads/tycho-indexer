@@ -31,6 +31,9 @@ impl DeepSizeOf for Bytes {
     fn deep_size_of_children(&self, _ctx: &mut Context) -> usize {
         // Note: This may overcount memory if the underlying bytes are shared (e.g. via Arc).
         // We cannot detect shared ownership here because Context’s internal tracking is private
+        // At the same time, this might also underreport memory if:
+        // - the bytes::Bytes are instantiated as Shared internally, which adds 24 bytes of overhead
+        // - the bytes::Bytes has capacity greater than its length, as we only count the length here
         self.0.len()
     }
 }
