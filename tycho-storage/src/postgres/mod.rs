@@ -131,6 +131,7 @@
 use std::{collections::HashMap, hash::Hash, ops::Deref, str::FromStr, sync::Arc, time::Duration};
 
 use chrono::NaiveDateTime;
+use deepsize::{Context, DeepSizeOf};
 use diesel::prelude::*;
 use diesel_async::{
     pooled_connection::{deadpool::Pool, AsyncDieselConnectionManager},
@@ -175,7 +176,8 @@ lazy_static! {
     static ref MAX_VERSION_TS: NaiveDateTime = NaiveDateTime::MAX - Duration::from_secs(1);
 }
 
-pub(crate) struct ValueIdTableCache<E> {
+#[derive(DeepSizeOf)]
+pub(crate) struct ValueIdTableCache<E: DeepSizeOf + Eq + Hash> {
     map_id: HashMap<E, i64>,
     map_enum: HashMap<i64, E>,
 }
@@ -183,7 +185,7 @@ pub(crate) struct ValueIdTableCache<E> {
 /// Provides caching for enum and its database ID relationships.
 ///
 /// Uses a double sided hash map to provide quick lookups in both directions.
-impl<E> ValueIdTableCache<E>
+impl<E: DeepSizeOf> ValueIdTableCache<E>
 where
     E: Eq + Hash + Clone + FromStr + std::fmt::Debug + std::fmt::Display,
     <E as FromStr>::Err: std::fmt::Debug,
@@ -454,6 +456,17 @@ pub(crate) struct PostgresGateway {
     /// be updated once an extractor has crossed it, but has not yet crossed the new
     /// horizon (aka it should never move faster than an extractor).
     retention_horizon: NaiveDateTime,
+}
+
+impl DeepSizeOf for PostgresGateway {
+    fn deep_size_of_children(&self, context: &mut Context) -> usize {
+        self.protocol_system_id_cache
+            .deep_size_of_children(context) +
+            self.chain_id_cache
+                .deep_size_of_children(context) +
+            self.native_token_id_cache
+                .deep_size_of_children(context)
+    }
 }
 
 impl PostgresGateway {

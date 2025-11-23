@@ -9,6 +9,7 @@ use std::{
     collections::HashMap,
     env,
     fs::File,
+    hint::black_box,
     io::Read,
     process, slice,
     str::FromStr,
@@ -31,6 +32,10 @@ use tokio::{
 use tracing::{debug, error, info, instrument, warn};
 use tracing_subscriber::EnvFilter;
 use tycho_common::{
+    memory::{
+        measure_allocation, measure_allocation_async, report_tracked_memory_metrics,
+        report_used_memory_metrics,
+    },
     models::{
         blockchain::{Block, Transaction},
         contract::AccountDelta,
@@ -274,6 +279,9 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
         .clone()
         .map_or(Ok(None), |s| match s.as_str() {
             "rpc" => Ok(Some(DCIType::RPC)),
+            "uni" => Ok(Some(DCIType::UniswapV4Hooks {
+                pool_manager_address: "0x000000000004444c5dc75cB358380D2e3dE08A90".to_string(),
+            })),
             _ => Err(ExtractionError::Setup(format!("Unknown DCI plugin: {s}"))),
         })?;
 
@@ -445,7 +453,12 @@ async fn build_all_extractors(
         chrono::Duration::seconds(900),
         Arc::new(cached_gw.clone()),
     );
-    protocol_cache.populate().await?;
+
+    measure_allocation_async("protocol_cache_populate", async || {
+        let res = protocol_cache.populate().await;
+        res
+    })
+    .await?;
 
     for extractor_config in config.extractors.values() {
         initialize_accounts(

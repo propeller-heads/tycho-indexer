@@ -14,6 +14,7 @@ use prost::Message;
 use tokio::{sync::Mutex, task::JoinHandle};
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 use tycho_common::{
+    memory::report_extractor_memory_metrics,
     models::{
         blockchain::{
             Block, BlockAggregatedChanges, BlockTag, DCIUpdate, EntryPoint, TracingParams,
@@ -272,7 +273,7 @@ where
             .signed_duration_since(state.last_report_ts)
             .num_seconds();
 
-        if time_passed >= 60 {
+        if time_passed >= 0 {
             if is_syncing {
                 self.report_sync_progress(&msg.block, state.last_report_block_number, time_passed)
                     .await;
@@ -295,21 +296,36 @@ where
                     .deep_size_of() as f64,
             );
 
-            // As the protocol cache is shared with other extractors, we only index it by chain
+            // Collect all cache sizes
+            let reorg_buffer_size = self
+                .reorg_buffer
+                .lock()
+                .await
+                .deep_size_of();
+            let protocol_cache_size = self.protocol_cache.size_of().await;
+            let dci_cache_size = if let Some(dci_plugin) = &self.dci_plugin {
+                Some(dci_plugin.lock().await.cache_size())
+            } else {
+                None
+            };
+
+            // Update metrics gauges
             gauge!(
                 "protocol_cache_size",
                 "chain" => self.chain.to_string(),
             )
-            .set(self.protocol_cache.size_of().await as f64);
+            .set(protocol_cache_size as f64);
 
-            if let Some(dci_plugin) = &self.dci_plugin {
+            if let Some(size) = dci_cache_size {
                 gauge!(
                     "dci_cache_size",
                     "chain" => self.chain.to_string(),
                     "extractor" => self.name.clone(),
                 )
-                .set(dci_plugin.lock().await.cache_size() as f64);
+                .set(size as f64);
             }
+            // Comprehensive memory report with system totals and percentages
+            report_extractor_memory_metrics(reorg_buffer_size, protocol_cache_size, dci_cache_size);
         }
     }
 

@@ -1,11 +1,16 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, hint::black_box, sync::Arc};
 
 use async_trait::async_trait;
 use chrono::{Duration, Local, NaiveDateTime};
 use deepsize::DeepSizeOf;
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{debug, info, instrument};
 use tycho_common::{
+    memory::{
+        measure_allocation, measure_allocation_async, report_deepsize_of_memory_metrics,
+        report_memory_metrics,
+    },
     models::{
         protocol::{ProtocolComponent, QualityRange},
         token::Token,
@@ -46,20 +51,20 @@ pub trait ProtocolDataCache: Send + Sync {
     ) -> Result<(), StorageError>;
 }
 
-type ProtocolComponentStore = HashMap<String, HashMap<ComponentId, ProtocolComponent>>;
+pub type ProtocolComponentStore = HashMap<String, HashMap<ComponentId, ProtocolComponent>>;
 
 #[derive(Clone)]
 pub struct ProtocolMemoryCache {
-    chain: Chain,
-    tokens: Arc<RwLock<HashMap<Bytes, Token>>>,
-    token_prices: Arc<RwLock<TokenPrices>>,
-    components: Arc<RwLock<ProtocolComponentStore>>,
-    max_price_age: chrono::Duration,
-    gateway: Arc<dyn ProtocolGateway + Send + Sync>,
+    pub chain: Chain,
+    pub tokens: Arc<RwLock<HashMap<Bytes, Token>>>,
+    pub token_prices: Arc<RwLock<TokenPrices>>,
+    pub components: Arc<RwLock<ProtocolComponentStore>>,
+    pub max_price_age: chrono::Duration,
+    pub gateway: Arc<dyn ProtocolGateway + Send + Sync>,
 }
 
-#[derive(Default)]
-struct TokenPrices {
+#[derive(Default, Serialize, Deserialize)]
+pub struct TokenPrices {
     prices: HashMap<Bytes, f64>,
     last_price_update: NaiveDateTime,
 }
@@ -86,32 +91,81 @@ impl ProtocolMemoryCache {
         let mut n_components = 0;
         {
             let mut cached_tokens = self.tokens.write().await;
-            self.gateway
-                .get_tokens(self.chain, None, QualityRange::None(), None, None)
-                .await?
-                .entity
-                .into_iter()
-                .for_each(|t| {
+
+            // Measure the fetch and insert phase
+            let tokens_vec = measure_allocation_async("Fetching tokens from gateway", async || {
+                self.gateway
+                    .get_tokens(self.chain, None, QualityRange::None(), None, None)
+                    .await
+                    .map(|result| result.entity)
+            })
+            .await?;
+
+            measure_allocation("Inserting tokens into cache", || {
+                tokens_vec.into_iter().for_each(|t| {
                     n_tokens += 1;
-                    cached_tokens.insert(t.address.clone(), t);
+                    cached_tokens.insert(t.address.clone(), t.clone());
                 });
+            });
+
+            let a = measure_allocation("Cloning ProtocolMemoryCache tokens", || {
+                let mut cloned = HashMap::new();
+                for (key, value) in cached_tokens.iter() {
+                    cloned.insert(key.clone(), value.clone());
+                }
+                report_deepsize_of_memory_metrics("  token_clone", &cloned);
+                cloned
+            });
+            black_box(a);
         }
         {
             let mut cached_components = self.components.write().await;
-            self.gateway
-                .get_protocol_components(&self.chain, None, None, None, None)
-                .await?
-                .entity
-                .into_iter()
-                .for_each(|pc| {
-                    n_components += 1;
-                    cached_components
-                        .entry(pc.protocol_system.clone())
-                        .or_default()
-                        .insert(pc.id.clone(), pc);
-                });
+
+            // Measure the fetch and insert phase
+            let components_vec =
+                measure_allocation_async("Fetching components from gateway", async || {
+                    self.gateway
+                        .get_protocol_components(&self.chain, None, None, None, None)
+                        .await
+                        .map(|result| result.entity)
+                })
+                .await?;
+
+            report_memory_metrics("  components_vec length", components_vec.len());
+
+            measure_allocation("Inserting components into cache", || {
+                components_vec
+                    .into_iter()
+                    .for_each(|pc| {
+                        n_components += 1;
+                        cached_components
+                            .entry(pc.protocol_system.clone())
+                            .or_default()
+                            .insert(pc.id.clone(), pc.clone());
+                    });
+            });
+
+            let a = measure_allocation("Cloning ProtocolMemoryCache components", || {
+                let mut cloned = ProtocolComponentStore::new();
+                for (system, components) in cached_components.iter() {
+                    for (id, component) in components.iter() {
+                        cloned
+                            .entry(system.clone())
+                            .or_default()
+                            .insert(id.clone(), component.clone());
+                    }
+                }
+                report_deepsize_of_memory_metrics("  component_clone", &cloned);
+                cloned
+            });
+            black_box(a);
         }
-        let n_prices = self.update_prices_cache().await?;
+
+        let n_prices =
+            measure_allocation_async("Populating ProtocolMemoryCache prices", async || {
+                self.update_prices_cache().await
+            })
+            .await?;
         info!(?n_tokens, ?n_components, ?n_prices, "ProtocolCachePopulated");
         Ok(())
     }
@@ -130,21 +184,34 @@ impl ProtocolMemoryCache {
     }
 
     /// Returns the approximate size of the cache in bytes.
+    /// Reports individual component sizes for debugging.
     pub async fn size_of(&self) -> usize {
-        self.chain.deep_size_of() +
-            self.tokens.read().await.deep_size_of() +
-            self.token_prices
-                .read()
-                .await
-                .prices
-                .deep_size_of() +
-            size_of::<NaiveDateTime>() +
-            self.components
-                .read()
-                .await
-                .deep_size_of() +
-            size_of::<Duration>() +
-            size_of_val(&self.gateway)
+        let chain_size = self.chain.deep_size_of();
+        report_memory_metrics("  chain", chain_size);
+
+        let tokens_size = self.tokens.read().await.deep_size_of();
+        report_memory_metrics("  tokens", tokens_size);
+
+        let token_prices_size = self
+            .token_prices
+            .read()
+            .await
+            .prices
+            .deep_size_of();
+        report_memory_metrics("  token_prices", token_prices_size);
+
+        let components_size = self
+            .components
+            .read()
+            .await
+            .deep_size_of();
+        report_memory_metrics("  components", components_size);
+
+        let total = chain_size + tokens_size + token_prices_size + components_size;
+
+        report_memory_metrics("  TOTAL", total);
+
+        total
     }
 }
 

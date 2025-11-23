@@ -4,6 +4,7 @@ use anyhow::{format_err, Context, Result};
 use async_trait::async_trait;
 use aws_config::meta::region::RegionProviderChain;
 use aws_sdk_s3::Client;
+use deepsize::DeepSizeOf;
 use metrics::gauge;
 use prost::Message;
 use serde::Deserialize;
@@ -18,6 +19,7 @@ use tokio::{
 use tokio_stream::StreamExt;
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 use tycho_common::{
+    memory::{measure_allocation_async, report_deepsize_of_memory_metrics},
     models::{Address, Chain, ExtractorIdentity, FinancialType, ImplementationType, ProtocolType},
     traits::AccountExtractor,
     Bytes,
@@ -660,13 +662,18 @@ impl ExtractorBuilder {
                         Address::from("0x2e234DAe75C793f67A35089C9d99245E1C58470b");
                     let pool_manager = Address::from(pool_manager_address.as_str());
 
-                    let base_dci = Self::create_rpc_dci(
-                        rpc_client,
-                        self.config.chain,
-                        self.config.name.clone(),
-                        cached_gw,
-                    )
-                    .await?;
+                    let base_dci =
+                        measure_allocation_async("UniswapV4Hooks Base DCI Creation", || {
+                            Self::create_rpc_dci(
+                                rpc_client,
+                                self.config.chain,
+                                self.config.name.clone(),
+                                cached_gw,
+                            )
+                        })
+                        .await?;
+
+                    report_deepsize_of_memory_metrics("UniswapV4Hooks Base DCI", &base_dci);
 
                     let mut hooks_dci = UniswapV4HookDCIBuilder::new(
                         base_dci,
@@ -680,13 +687,19 @@ impl ExtractorBuilder {
                     .max_retries(5)
                     .build()?;
 
-                    hooks_dci.initialize().await?;
+                    measure_allocation_async("UniswapV4Hooks Main Initialization", async || {
+                        hooks_dci.initialize().await
+                    })
+                    .await?;
+                    report_deepsize_of_memory_metrics("UniswapV4Hooks DCI", &hooks_dci);
                     DCIPlugin::UniswapV4Hooks(Box::new(hooks_dci))
                 }
             })
         } else {
             None
         };
+
+        // panic!("Debugging panic - remove this line after debugging");
 
         let database_insert_batch_size = self
             .database_insert_batch_size

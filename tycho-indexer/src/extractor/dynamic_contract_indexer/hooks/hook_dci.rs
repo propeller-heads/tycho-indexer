@@ -49,6 +49,26 @@ where
     pause_after_retries: u32,
 }
 
+impl<AE, T, G> DeepSizeOf for UniswapV4HookDCI<AE, T, G>
+where
+    AE: AccountExtractor + Send + Sync,
+    T: EntryPointTracer + Send + Sync,
+    G: EntryPointGateway + ProtocolGateway + Send + Sync,
+{
+    fn deep_size_of_children(&self, context: &mut deepsize::Context) -> usize {
+        self.inner_dci
+            .deep_size_of_children(context) +
+            self.chain
+                .deep_size_of_children(context) +
+            self.pause_after_retries
+                .deep_size_of_children(context) +
+            self.max_retries
+                .deep_size_of_children(context) +
+            self.cache
+                .deep_size_of_children(context)
+    }
+}
+
 type ComponentWithTxHash = (TxHash, ProtocolComponent); // TODO: See if it makes sens to make this a struct
 
 impl<AE, T, G> UniswapV4HookDCI<AE, T, G>
@@ -895,7 +915,7 @@ where
 
     /// Returns the approximate size of the internal cache used by this extension, in bytes.
     fn cache_size(&self) -> usize {
-        self.cache.deep_size_of()
+        self.cache.deep_size_of() + self.inner_dci.cache_size()
     }
 }
 

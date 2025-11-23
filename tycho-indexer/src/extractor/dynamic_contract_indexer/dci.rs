@@ -5,7 +5,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use deepsize::DeepSizeOf;
+use deepsize::{Context, DeepSizeOf};
 use tracing::{debug, info, instrument, span, trace, warn, Instrument, Level};
 use tycho_common::{
     models::{
@@ -43,6 +43,18 @@ where
     cache: DCICache,
     address_byte_len: usize,
     max_retry_count: u32,
+}
+
+impl<AE, T, G> DeepSizeOf for DynamicContractIndexer<AE, T, G>
+where
+    AE: AccountExtractor + Send + Sync,
+    T: EntryPointTracer + Send + Sync,
+    G: EntryPointGateway + ProtocolGateway + Send + Sync,
+{
+    fn deep_size_of_children(&self, context: &mut Context) -> usize {
+        self.cache
+            .deep_size_of_children(context)
+    }
 }
 
 static DCI_BLACKLIST: LazyLock<Vec<Address>> = LazyLock::new(|| {

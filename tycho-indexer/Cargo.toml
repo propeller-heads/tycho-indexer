@@ -83,6 +83,9 @@ alloy-sol-types = "1.2.1"
 alloy = { workspace = true, default-features = false, features = ["sol-types", "reqwest"] }
 zstd = "0.13"
 
+bincode = { version = "2.0.1", features = ["serde"] }
+bytes = "1.11.0"
+
 [dev-dependencies]
 pretty_assertions.workspace = true
 tokio-tungstenite.workspace = true

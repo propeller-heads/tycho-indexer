@@ -1,16 +1,26 @@
 use hex::FromHexError;
 
 fn decode_hex_with_prefix(val: &str) -> Result<Vec<u8>, FromHexError> {
-    let mut stripped: String =
-        if let Some(stripped) = val.strip_prefix("0x") { stripped } else { val }.into();
+    // Don't allocate String unless needed
+    let hex_str = val.strip_prefix("0x").unwrap_or(val);
 
-    // Check if the length of the string is odd
-    if !stripped.len().is_multiple_of(2) {
-        // If it's odd, prepend a zero
-        stripped.insert(0, '0');
+    // Handle odd length by prepending '0'
+    if hex_str.len() % 2 != 0 {
+        let mut padded = String::with_capacity(hex_str.len() + 1);
+        padded.push('0');
+        padded.push_str(hex_str);
+        let encoded = hex::decode(&padded)?;
+        // Force exact capacity to avoid Shared path in bytes::Bytes
+        let mut exact = Vec::with_capacity(encoded.len());
+        exact.extend_from_slice(&encoded);
+        Ok(exact)
+    } else {
+        let encoded = hex::decode(hex_str)?;
+        // Force exact capacity to avoid Shared path in bytes::Bytes
+        let mut exact = Vec::with_capacity(encoded.len());
+        exact.extend_from_slice(&encoded);
+        Ok(exact)
     }
-
-    hex::decode(&stripped)
 }
 
 /// serde functions for handling bytes as hex strings, such as [bytes::Bytes]
@@ -142,11 +152,18 @@ pub mod hex_bytes_vec {
     where
         D: Deserializer<'de>,
     {
-        let hex_strings = Vec::<String>::deserialize(d)?;
+        let mut hex_strings = Vec::<String>::deserialize(d)?;
+        hex_strings.shrink_to_fit();
         hex_strings
             .into_iter()
             .map(|s| {
-                decode_hex_with_prefix(&s).map_err(|e| serde::de::Error::custom(e.to_string()))
+                decode_hex_with_prefix(&s)
+                    .map_err(|e| serde::de::Error::custom(e.to_string()))
+                    .map(|v| {
+                        let mut v = v;
+                        v.shrink_to_fit();
+                        v
+                    })
             })
             .collect()
     }

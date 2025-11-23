@@ -1,15 +1,17 @@
+extern crate alloc;
+#[cfg(test)]
+#[macro_use]
+extern crate pretty_assertions;
+
 pub mod display;
 pub mod dto;
 pub mod hex_bytes;
+pub mod memory;
 pub mod models;
 pub mod serde_primitives;
 pub mod simulation;
 pub mod storage;
 pub mod traits;
-
-#[cfg(test)]
-#[macro_use]
-extern crate pretty_assertions;
 
 pub use hex_bytes::Bytes;
 use tiny_keccak::{Hasher, Keccak};

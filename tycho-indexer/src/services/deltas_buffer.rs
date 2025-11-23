@@ -268,7 +268,9 @@ impl PendingDeltas {
             let mut tick = tokio::time::interval(Duration::from_secs(60));
             loop {
                 tick.tick().await;
-                gauge!("pending_deltas_buffer_size").set(self_clone.deep_size_of() as f64);
+                let buffer_size = self_clone.deep_size_of();
+                gauge!("pending_deltas_buffer_size").set(buffer_size as f64);
+                tycho_common::memory::report_deltas_buffer_memory(buffer_size);
             }
         });
 
