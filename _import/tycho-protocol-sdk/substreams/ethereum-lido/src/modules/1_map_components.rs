@@ -58,7 +58,7 @@ pub fn maybe_create_component(call: &Call) -> Option<ProtocolComponent> {
                 name: "stETH".to_string(),
                 financial_type: FinancialType::Swap.into(),
                 attribute_schema: vec![],
-                implementation_type: ImplementationType::Vm.into(),
+                implementation_type: ImplementationType::Custom.into(),
             }),
         })
     } else if *call.address == WST_ETH_ADDRESS {
@@ -72,7 +72,7 @@ pub fn maybe_create_component(call: &Call) -> Option<ProtocolComponent> {
                 name: "wstETH".to_string(),
                 financial_type: FinancialType::Swap.into(),
                 attribute_schema: vec![],
-                implementation_type: ImplementationType::Vm.into(),
+                implementation_type: ImplementationType::Custom.into(),
             }),
         })
     } else {
