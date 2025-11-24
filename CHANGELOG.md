@@ -1,3 +1,12 @@
+## [0.115.0](https://github.com/propeller-heads/tycho-indexer/compare/0.114.3...0.115.0) (2025-11-24)
+
+
+### Features
+
+* error on missing component id:params link ([cb47866](https://github.com/propeller-heads/tycho-indexer/commit/cb4786695500a588e9270dcb39ca10a5ee67c435))
+* make component to params link required ([9064cf4](https://github.com/propeller-heads/tycho-indexer/commit/9064cf4740ae1d0b275dc4737cdf8a6c7f3bf00b))
+* Make component to tracing params link required ([#779](https://github.com/propeller-heads/tycho-indexer/issues/779)) ([3e26adf](https://github.com/propeller-heads/tycho-indexer/commit/3e26adf20b8f034a034d56451e42aadef45cd5bb))
+
 ## [0.114.3](https://github.com/propeller-heads/tycho-indexer/compare/0.114.2...0.114.3) (2025-11-20)
 
 
