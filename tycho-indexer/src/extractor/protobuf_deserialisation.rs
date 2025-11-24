@@ -359,10 +359,8 @@ impl TryFromMessage for TxWithChanges {
         let mut account_balance_changes: HashMap<Address, HashMap<Address, AccountBalance>> =
             HashMap::new();
         let mut entrypoints: HashMap<ComponentId, HashSet<EntryPoint>> = HashMap::new();
-        let mut entrypoint_params: HashMap<
-            EntryPointId,
-            HashSet<(TracingParams, Option<ComponentId>)>,
-        > = HashMap::new();
+        let mut entrypoint_params: HashMap<EntryPointId, HashSet<(TracingParams, ComponentId)>> =
+            HashMap::new();
 
         // Parse the new protocol components
         for change in msg.component_changes.into_iter() {
@@ -447,7 +445,10 @@ impl TryFromMessage for TxWithChanges {
                 .clone();
             let component_id = msg_entrypoint_params
                 .component_id
-                .clone();
+                .clone()
+                .ok_or(ExtractionError::DecodeError(
+                    "Entrypoint params should have a component id".to_owned(),
+                ))?;
             let tracing_data = TracingParams::try_from_message(msg_entrypoint_params)?;
             entrypoint_params
                 .entry(entrypoint_id)

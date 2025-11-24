@@ -619,7 +619,7 @@ impl EntryPointGateway for DirectGateway {
     #[instrument(skip_all)]
     async fn insert_entry_point_tracing_params(
         &self,
-        entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+        entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, ComponentId)>>,
     ) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
