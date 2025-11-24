@@ -1,8 +1,5 @@
 use anyhow::Result;
-use substreams_ethereum::pb::{
-    eth,
-    eth::v2::{Call, Log, TransactionTrace},
-};
+use substreams_ethereum::pb::{eth, eth::v2::Call};
 use tycho_substreams::{
     models::{ChangeType, FinancialType, ImplementationType, ProtocolComponent, ProtocolType},
     prelude::*,
@@ -22,16 +19,17 @@ fn map_protocol_components(
     params: String,
     block: eth::v2::Block,
 ) -> Result<BlockTransactionProtocolComponents> {
-    if block.number != params.parse::<u64>().unwrap() {
+    if block.number != params.parse::<u64>()? {
         return Ok(BlockTransactionProtocolComponents { tx_components: vec![] })
     }
+
     Ok(BlockTransactionProtocolComponents {
         tx_components: block
             .transactions()
             .filter_map(|tx| {
                 let components = tx
                     .logs_with_calls()
-                    .filter_map(|(log, call)| maybe_create_component(call.call, log, tx))
+                    .filter_map(|(_, call)| maybe_create_component(call.call))
                     .collect::<Vec<_>>();
 
                 if !components.is_empty() {
@@ -65,11 +63,7 @@ impl StakingStatus {
 ///
 /// This method is given each individual call within a transaction, the corresponding
 /// logs emitted during that call as well as the full transaction trace.
-pub fn maybe_create_component(
-    call: &Call,
-    _log: &Log,
-    _tx: &TransactionTrace,
-) -> Option<ProtocolComponent> {
+pub fn maybe_create_component(call: &Call) -> Option<ProtocolComponent> {
     if *call.address == ST_ETH_ADDRESS {
         Some(ProtocolComponent {
             id: ST_ETH_ADDRESS_OUTER_COMPONENT_ID.to_owned(),
