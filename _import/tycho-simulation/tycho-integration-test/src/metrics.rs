@@ -55,6 +55,10 @@ pub fn initialize_metrics() {
         "tycho_integration_protocol_update_block_delay_blocks",
         "Number of blocks behind current that protocol updates are received"
     );
+    describe_gauge!(
+        "tycho_integration_simulation_execution_abs_slippage_ratio",
+        "Current absolute slippage ratio between simulated and actual execution amounts"
+    );
 }
 
 /// Record the duration between block timestamp and component receipt
@@ -133,6 +137,13 @@ pub fn record_execution_slippage(protocol: &str, slippage_ratio: f64) {
         "protocol" => protocol.to_string(),
     )
     .record(slippage_ratio);
+
+    // Track current absolute slippage as gauge
+    gauge!(
+        "tycho_integration_simulation_execution_abs_slippage_ratio",
+        "protocol" => protocol.to_string(),
+    )
+    .set(slippage_ratio.abs());
 }
 
 /// Record the current synchronization state of a protocol
