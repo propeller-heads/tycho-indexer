@@ -33,7 +33,6 @@ const ZERO_STAKING_LIMIT: &str = "000000000000000000000000";
 pub fn map_component_balance(
     block: eth::v2::Block,
     protocol_components: BlockTransactionProtocolComponents,
-    _store: StoreGetRaw,
 ) -> Result<BlockChanges, substreams::errors::Error> {
     let mut transaction_changes: HashMap<u32, TransactionChangesBuilder> = HashMap::new();
 

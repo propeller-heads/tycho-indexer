@@ -29,14 +29,6 @@ modules:
       - source: sf.ethereum.type.v2.Block
     output:
       type: proto:tycho.evm.v1.BlockTransactionProtocolComponents
-
-  - name: store_protocol_components
-    kind: store
-    initialBlock: *start_block
-    updatePolicy: set
-    valueType: string
-    inputs:
-      - map: map_protocol_components
     
   - name: map_component_balance
     kind: map
@@ -44,7 +36,6 @@ modules:
     inputs:
       - source: sf.ethereum.type.v2.Block
       - map: map_protocol_components
-      - store: store_protocol_components
     output:
       type: proto:tycho.evm.v1.BlockChanges
 
