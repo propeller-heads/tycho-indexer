@@ -6,6 +6,7 @@ use std::{
 
 use async_trait::async_trait;
 use deepsize::DeepSizeOf;
+use sha2::{Digest, Sha256};
 use tracing::{debug, info, instrument, span, trace, warn, Instrument, Level};
 use tycho_common::{
     models::{
@@ -316,7 +317,26 @@ where
                         );
                     }
                     Err(e) => {
-                        tracing::warn!("DCI: Failed to trace entrypoint {:?}: {:?}", ep, e);
+                        // Serialize tracing params to JSON and compute hash (matching database approach)
+                        let params_hash = match &ep.params {
+                            TracingParams::RPCTracer(rpc_tracer) => {
+                                match serde_json::to_value(rpc_tracer) {
+                                    Ok(json_value) => {
+                                        let json_text = json_value.to_string();
+                                        let mut hasher = Sha256::new();
+                                        hasher.update(json_text.as_bytes());
+                                        hex::encode(hasher.finalize())
+                                    }
+                                    Err(_) => "serialization_error".to_string(),
+                                }
+                            }
+                        };
+                        tracing::warn!(
+                            "DCI: Failed to trace entrypoint {}: params_hash={}, error={:?}",
+                            ep.entry_point.external_id,
+                            params_hash,
+                            e
+                        );
                         failed_entrypoints.push((ep.clone(), *tx));
                     }
                 }

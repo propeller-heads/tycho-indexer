@@ -83,6 +83,7 @@ rand.workspace = true
 alloy-sol-types = "1.2.1"
 alloy-primitives.workspace = true
 zstd = "0.13"
+sha2 = "0.10"
 
 [dev-dependencies]
 pretty_assertions.workspace = true
