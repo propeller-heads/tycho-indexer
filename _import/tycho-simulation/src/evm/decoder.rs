@@ -520,6 +520,16 @@ where
                                 .or_insert_with(HashSet::new)
                                 .insert(id.clone());
                         }
+                        // Add DCI contracts so changes to these contracts trigger
+                        // an update
+                        for (_, tracing) in snapshot.entrypoints.iter() {
+                            for contract in tracing.accessed_slots.keys().cloned() {
+                                contracts_map
+                                    .entry(contract)
+                                    .or_insert_with(HashSet::new)
+                                    .insert(id.clone());
+                            }
+                        }
                     }
 
                     // Collect new pairs (components)

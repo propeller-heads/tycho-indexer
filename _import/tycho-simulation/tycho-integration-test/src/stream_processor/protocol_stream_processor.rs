@@ -14,10 +14,13 @@ use tycho_simulation::{
         decoder::StreamDecodeError,
         engine_db::tycho_db::PreCachedDB,
         protocol::{
+            aerodrome_slipstreams::state::AerodromeSlipstreamsState,
             ekubo::state::EkuboState,
             filters::{
-                balancer_v2_pool_filter, curve_pool_filter, uniswap_v4_euler_hook_pool_filter,
+                balancer_v2_pool_filter, curve_pool_filter, fluid_v1_paused_pools_filter,
+                uniswap_v4_euler_hook_pool_filter,
             },
+            fluid::FluidV1,
             pancakeswap_v2::state::PancakeswapV2State,
             uniswap_v2::state::UniswapV2State,
             uniswap_v3::state::UniswapV3State,
@@ -143,6 +146,11 @@ impl ProtocolStreamProcessor {
                         "vm:maverick_v2",
                         tvl_filter.clone(),
                         None,
+                    )
+                    .exchange::<FluidV1>(
+                        "fluid_v1",
+                        tvl_filter.clone(),
+                        Some(fluid_v1_paused_pools_filter),
                     );
             }
             Chain::Base => {
@@ -151,6 +159,11 @@ impl ProtocolStreamProcessor {
                     .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
                     .exchange::<UniswapV4State>("uniswap_v4", tvl_filter.clone(), None)
                     .exchange::<UniswapV3State>("pancakeswap_v3", tvl_filter.clone(), None)
+                    .exchange::<AerodromeSlipstreamsState>(
+                        "aerodrome_slipstreams",
+                        tvl_filter.clone(),
+                        None,
+                    )
             }
             Chain::Unichain => {
                 protocol_stream = protocol_stream

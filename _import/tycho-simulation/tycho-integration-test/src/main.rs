@@ -1,4 +1,5 @@
 mod metrics;
+mod stream_processor;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -17,7 +18,7 @@ use num_bigint::BigUint;
 use num_traits::{ToPrimitive, Zero};
 use rand::prelude::IndexedRandom;
 use tokio::sync::Semaphore;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use tracing_subscriber::EnvFilter;
 use tycho_common::simulation::protocol_sim::ProtocolSim;
 use tycho_simulation::{
@@ -26,17 +27,16 @@ use tycho_simulation::{
     tycho_common::models::Chain,
     utils::load_all_tokens,
 };
-use tycho_test::{
-    execution::{
-        encoding::encode_swap,
-        models::{TychoExecutionInput, TychoExecutionResult},
-        simulate_swap_transaction, tenderly,
-    },
-    stream_processor::{
-        protocol_stream_processor::ProtocolStreamProcessor,
-        rfq_stream_processor::RFQStreamProcessor, StreamUpdate, UpdateType,
-    },
-    validation::{batch_validate_components, get_validator, Validator},
+use tycho_test::validation::{batch_validate_components, get_validator, Validator};
+use tycho_test::execution::{
+    encoding::encode_swap,
+    models::{TychoExecutionInput, TychoExecutionResult},
+    simulate_swap_transaction, tenderly,
+};
+
+use crate::stream_processor::{
+    protocol_stream_processor::ProtocolStreamProcessor, rfq_stream_processor::RFQStreamProcessor,
+    StreamUpdate, UpdateType,
 };
 
 #[derive(Parser, Clone)]
@@ -96,10 +96,6 @@ struct Cli {
     /// The RFQ stream will skip messages for this duration (in seconds) after processing a message
     #[arg(long, default_value_t = 600)]
     skip_messages_duration: u64,
-
-    /// Time to wait (in seconds) for block N+1 to exist before executing debug_traceCall
-    #[arg(long, default_value_t = 12)]
-    block_wait_time: u64,
 
     /// List of component IDs to always include in tests every block if not already selected
     #[arg(long, value_delimiter = ',')]
@@ -521,25 +517,18 @@ async fn process_update(
         }
     }
 
-    info!("Collected {} execution data for block {}", block_execution_info.len(), block.number());
-
     if block_execution_info.is_empty() {
         warn!("No simulations were gathered for block {}", block.number());
         return Ok(())
     }
 
-    let results = match simulate_swap_transaction(
-        &rpc_tools,
-        block_execution_info.clone(),
-        &block,
-        cli.block_wait_time,
-        None,
-    )
-    .await
-    {
-        Ok(results) => results,
-        Err((e, _, _)) => return Err(e),
-    };
+    let results =
+        match simulate_swap_transaction(&rpc_tools, block_execution_info.clone(), &block, None)
+            .await
+        {
+            Ok(results) => results,
+            Err((e, _, _)) => return Err(e),
+        };
 
     let mut n_reverts = 0;
     let mut n_failures = 0;
@@ -567,22 +556,19 @@ async fn process_update(
                 None => "".to_string(),
             }
         };
-        (n_reverts, n_failures) = process_execution_result(
+        process_execution_result(
             simulation_id,
             result,
             execution_info,
             state_str,
             (*block).clone(),
             chain.id().to_string(),
-            n_reverts,
-            n_failures,
+            &mut n_reverts,
+            &mut n_failures,
         );
     }
     if n_reverts > 0 || n_failures > 0 {
-        warn!(
-            "Simulations reverted: {n_reverts}/{}. Simulations failed: {n_failures}/{}",
-            total_simulations, total_simulations
-        )
+        warn!("For block {}, simulated {total_simulations} executions, {n_reverts} simulations reverted, {n_failures} executions setup failed", block.number())
     }
 
     Ok(())
@@ -637,7 +623,7 @@ async fn process_state(
     };
     let mut execution_infos = HashMap::new();
     for (i, (token_in, token_out)) in swap_directions.iter().enumerate() {
-        info!(
+        debug!(
             "Processing {} pool {state_id}, from {} to {}",
             component.protocol_system, token_in.symbol, token_out.symbol
         );
@@ -660,6 +646,10 @@ async fn process_state(
                     token_in = %token_in.address,
                     token_out = %token_out.address,
                     error = %format_error_chain(&e),
+                    "Get limits operation failed: {}", format_error_chain(&e)
+                );
+                debug!(
+                    event_type = "get_limits_failure",
                     state = ?state,
                     "Get limits operation failed: {}", format_error_chain(&e)
                 );
@@ -667,7 +657,7 @@ async fn process_state(
                 continue;
             }
         };
-        info!(
+        debug!(
             "Retrieved limits: max input {max_input} {}; max output {max_output} {}",
             token_in.symbol, token_out.symbol
         );
@@ -679,7 +669,7 @@ async fn process_state(
         let thousand = BigUint::from(1000u32);
         let amount_in = (&max_input * &percentage_biguint) / &thousand;
         if amount_in.is_zero() {
-            warn!("Calculated amount_in is zero, skipping...");
+            debug!("Calculated amount_in is zero, skipping...");
             continue;
         }
 
@@ -704,6 +694,10 @@ async fn process_state(
                     token_out = %token_out.address,
                     amount_in = %amount_in,
                     error = %format_error_chain(&e),
+                    "Get amount out operation failed: {}", format_error_chain(&e)
+                );
+                debug!(
+                    event_type = "get_amount_out_failure",
                     state = ?state,
                     "Get amount out operation failed: {}", format_error_chain(&e)
                 );
@@ -713,7 +707,7 @@ async fn process_state(
         };
         let duration_seconds = start_time.elapsed().as_secs_f64();
         let expected_amount_out = amount_out_result.amount;
-        info!(
+        debug!(
             event_type = "get_amount_out_duration",
             token_in = %token_in.address,
             token_out = %token_out.address,
@@ -784,15 +778,14 @@ fn process_execution_result(
     result: &TychoExecutionResult,
     execution_info: TychoExecutionInput,
     state_str: String,
-
     block: Block,
     chain_id: String,
-    mut n_reverts: i32,
-    mut n_failures: i32,
-) -> (i32, i32) {
+    n_reverts: &mut i32,
+    n_failures: &mut i32,
+) {
     match result {
         TychoExecutionResult::Success { gas_used, amount_out } => {
-            info!(
+            debug!(
                 event_type = "simulation_execution_success",
                 amount_out = amount_out.to_string(),
                 gas_used = gas_used,
@@ -817,21 +810,41 @@ fn process_execution_result(
                     100.0
             };
 
-            info!(
-                event_type = "execution_slippage",
-                state = ?state_str,
-                token_in = %execution_info.token_in,
-                token_out = %execution_info.token_out,
-                simulated_amount  = %amount_out,
-                executed_amount = %execution_info.expected_amount_out,
-                slippage_ratio = slippage,
-                "Execution slippage: {:.2}%",
-                slippage
-            );
+            if !(-1.0..=1.0).contains(&slippage) {
+                info!(
+                    event_type = "execution_slippage",
+                    token_in = %execution_info.token_in,
+                    token_out = %execution_info.token_out,
+                    simulated_amount  = %amount_out,
+                    executed_amount = %execution_info.expected_amount_out,
+                    slippage_ratio = slippage,
+                    "Execution slippage: {:.2}%",
+                    slippage
+                );
+                debug!(
+                    event_type = "execution_slippage",
+                    state = ?state_str,
+                    "Execution slippage: {:.2}%",
+                    slippage
+                )
+            } else {
+                // don't show the state in this case to not overwhelm the logs
+                debug!(
+                    event_type = "execution_slippage",
+                    token_in = %execution_info.token_in,
+                    token_out = %execution_info.token_out,
+                    simulated_amount  = %amount_out,
+                    executed_amount = %execution_info.expected_amount_out,
+                    slippage_ratio = slippage,
+                    "Execution slippage: {:.2}%",
+                    slippage
+                );
+            }
+
             metrics::record_execution_slippage(&execution_info.protocol_system, slippage);
         }
         TychoExecutionResult::Revert { reason, state_overwrites, overwrite_metadata } => {
-            n_reverts += 1;
+            *n_reverts += 1;
             let error_msg = reason.to_string();
 
             // Extract revert reason from error message
@@ -867,26 +880,30 @@ fn process_execution_result(
                 error_message = %revert_reason,
                 error_name = %error_name,
                 error_category = %error_category,
-                state = ?state_str,
+                amount_in =%execution_info.solution.given_amount,
                 token_in = %execution_info.token_in,
                 token_out = %execution_info.token_out,
                 tenderly_url = %tenderly_url,
                 overwrites = %overwrites_string,
                 "Failed to simulate swap: {error_msg}"
             );
+            debug!(event_type = "simulation_execution_failure",
+                state = ?state_str,
+                "State of failed swap: {error_msg}");
             metrics::record_simulation_execution_failure(
                 &execution_info.protocol_system,
                 error_category,
             );
         }
         TychoExecutionResult::Failed { error_msg } => {
-            n_failures += 1;
+            *n_failures += 1;
 
             let error_category = categorize_error(error_msg);
             error!(
                 event_type = "simulation_execution_failure",
                 error_message = %error_msg,
                 error_category = %error_category,
+                amount_in =%execution_info.solution.given_amount,
                 token_in = %execution_info.token_in,
                 token_out = %execution_info.token_out,
                 "Failed to simulate swap: {error_msg}"
@@ -897,7 +914,6 @@ fn process_execution_result(
             );
         }
     }
-    (n_reverts, n_failures)
 }
 
 /// Extract the error name from a revert reason string

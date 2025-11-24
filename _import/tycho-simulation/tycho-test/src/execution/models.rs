@@ -65,6 +65,7 @@ pub(super) enum SimulationResult {
 /// # Fields
 /// * `router_bytecode` - The runtime bytecode for the Tycho router contract
 /// * `executor_bytecode` - The runtime bytecode for the protocol-specific executor contract
+#[derive(Clone)]
 pub struct RouterOverwritesData {
     pub router_bytecode: Vec<u8>,
     pub executor_bytecode: Vec<u8>,

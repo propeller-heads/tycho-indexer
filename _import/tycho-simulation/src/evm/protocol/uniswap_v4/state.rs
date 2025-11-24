@@ -591,6 +591,8 @@ impl ProtocolSim for UniswapV4State {
             }
         }
 
+        // Replicates the behaviour of the Hooks library wrapper of the afterSwap method:
+        // https://github.com/Uniswap/v4-core/blob/59d3ecf53afa9264a16bba0e38f4c5d2231f80bc/src/libraries/Hooks.sol
         if (hook_delta_specified != I128::ZERO) || (hook_delta_unspecified != I128::ZERO) {
             let hook_delta = if (amount_specified < I256::ZERO) == zero_for_one {
                 BalanceDelta::new(hook_delta_specified, hook_delta_unspecified)
@@ -868,6 +870,7 @@ impl ProtocolSim for UniswapV4State {
 mod tests {
     use std::{collections::HashSet, fs, path::Path, str::FromStr};
 
+    use alloy::primitives::aliases::U24;
     use num_traits::FromPrimitive;
     use rstest::rstest;
     use serde_json::Value;
@@ -883,7 +886,10 @@ mod tests {
                 utils::{get_client, get_runtime},
             },
             protocol::{
-                uniswap_v4::hooks::generic_vm_hook_handler::GenericVMHookHandler,
+                uniswap_v4::hooks::{
+                    angstrom::hook_handler::{AngstromFees, AngstromHookHandler},
+                    generic_vm_hook_handler::GenericVMHookHandler,
+                },
                 utils::uniswap::lp_fee,
             },
         },
@@ -1474,6 +1480,69 @@ mod tests {
             .unwrap();
 
         assert_eq!(out.amount, BigUint::from_str("2681115183499232721").unwrap())
+    }
+
+    #[test]
+    fn test_get_amount_out_angstrom_hook() {
+        // Test using transaction 0x671b8e1d0966cee520dc2bb9628de8e22a17b036e70077504796d0a476932d21
+        let mut usv4_state = UniswapV4State::new(
+            // Liquidity and tick taken from tycho indexer for same block as transaction
+            66319800403673162,
+            U256::from_str("1314588940601923011323000261788004").unwrap(),
+            // 8388608 (i.e. 0x800000) signifies a dynamic fee.
+            UniswapV4Fees { zero_for_one: 0, one_for_zero: 0, lp_fee: 8388608 },
+            194343,
+            10,
+            vec![
+                TickInfo::new(-887270, 198117767801).unwrap(),
+                TickInfo::new(191990, 24561988698695).unwrap(),
+                TickInfo::new(192280, 2839631428751224).unwrap(),
+                TickInfo::new(193130, 318786492813931).unwrap(),
+                TickInfo::new(194010, 26209207141081).unwrap(),
+                TickInfo::new(194210, -26209207141081).unwrap(),
+                TickInfo::new(194220, 63136622375641511).unwrap(),
+                TickInfo::new(194420, -63136622375641511).unwrap(),
+                TickInfo::new(195130, -318786492813931).unwrap(),
+                TickInfo::new(196330, -2839631428751224).unwrap(),
+                TickInfo::new(197100, -24561988698695).unwrap(),
+                TickInfo::new(887270, -198117767801).unwrap(),
+            ],
+        )
+        .unwrap();
+
+        let fees = AngstromFees {
+            // To get these values, enable storage access logs on tenderly,
+            // and look at the hex value retrieved right after calling afterSwap
+            //
+            // The value (hex: 0x70000152) contains two packed uint24 values:
+            // Lower 24 bits (unlockedFee):         0x152   = 338
+            // Upper 24 bits (protocolUnlockedFee): 0x70    = 112
+            unlock: U24::from(338),
+            protocol_unlock: U24::from(112),
+        };
+        let hook_handler = AngstromHookHandler::new(
+            Address::from_str("0x0000000aa232009084bd71a5797d089aa4edfad4").unwrap(),
+            Address::from_str("0x000000000004444c5dc75cb358380d2e3de08a90").unwrap(),
+            fees,
+            false,
+        );
+
+        let t0 = usdc();
+        let t1 = weth();
+
+        usv4_state.set_hook_handler(Box::new(hook_handler));
+        let out = usv4_state
+            .get_amount_out(
+                BigUint::from_u64(
+                    6645198144, // usdc
+                )
+                .unwrap(),
+                &t0, // usdc IN
+                &t1, // weth OUT
+            )
+            .unwrap();
+
+        assert_eq!(out.amount, BigUint::from_str("1825627051870330472").unwrap())
     }
 
     #[test]

@@ -6,9 +6,12 @@ use alloy::{
 };
 use alloy_chains::NamedChain;
 use miette::{IntoDiagnostic, WrapErr};
-use tycho_ethereum::entrypoint_tracer::{
-    allowance_slot_detector::{AllowanceSlotDetectorConfig, EVMAllowanceSlotDetector},
-    balance_slot_detector::{BalanceSlotDetectorConfig, EVMBalanceSlotDetector},
+use tycho_ethereum::{
+    rpc::EthereumRpcClient,
+    services::entrypoint_tracer::{
+        allowance_slot_detector::EVMAllowanceSlotDetector,
+        balance_slot_detector::EVMBalanceSlotDetector, slot_detector::SlotDetectorConfig,
+    },
 };
 use tycho_simulation::tycho_common::models::Chain;
 
@@ -32,20 +35,15 @@ impl RPCTools {
             .await
             .into_diagnostic()
             .wrap_err("Failed to connect to provider")?;
-        let evm_balance_slot_detector = Arc::new(
-            EVMBalanceSlotDetector::new(BalanceSlotDetectorConfig {
-                rpc_url: rpc_url.to_string(),
-                ..Default::default()
-            })
-            .into_diagnostic()?,
-        );
-        let evm_allowance_slot_detector = Arc::new(
-            EVMAllowanceSlotDetector::new(AllowanceSlotDetectorConfig {
-                rpc_url: rpc_url.to_string(),
-                ..Default::default()
-            })
-            .into_diagnostic()?,
-        );
+
+        let rpc = EthereumRpcClient::new(rpc_url)
+            .into_diagnostic()
+            .wrap_err("Failed to create Ethereum RPC client")?;
+        let config = SlotDetectorConfig { ..Default::default() };
+
+        let evm_balance_slot_detector = Arc::new(EVMBalanceSlotDetector::new(config.clone(), &rpc));
+        let evm_allowance_slot_detector = Arc::new(EVMAllowanceSlotDetector::new(config, &rpc));
+
         Ok(Self {
             rpc_url: rpc_url.to_string(),
             provider,

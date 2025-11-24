@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::RwLock};
+use std::{collections::HashMap, str::FromStr, sync::RwLock};
 
 use alloy::primitives::{Address, U256};
 use lazy_static::lazy_static;
@@ -10,7 +10,10 @@ use crate::{
         engine_db::{create_engine, engine_db_interface::EngineDatabaseInterface, SHARED_TYCHO_DB},
         protocol::{
             uniswap_v4::{
-                hooks::{generic_vm_hook_handler::GenericVMHookHandler, hook_handler::HookHandler},
+                hooks::{
+                    angstrom::hook_handler_creator::AngstromHookCreator,
+                    generic_vm_hook_handler::GenericVMHookHandler, hook_handler::HookHandler,
+                },
                 state::UniswapV4State,
             },
             vm::constants::EXTERNAL_ACCOUNT,
@@ -69,9 +72,7 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
         let pool_manager_address_bytes = params
             .attributes
             .get("balance_owner")
-            .ok_or_else(|| {
-                InvalidSnapshotError::MissingAttribute("pool_manager_address".to_string())
-            })?;
+            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("balance_owner".to_string()))?;
 
         let pool_manager_address = Address::from_slice(&pool_manager_address_bytes.0);
 
@@ -139,6 +140,16 @@ lazy_static! {
 lazy_static! {
     static ref DEFAULT_HANDLER: Box<dyn HookHandlerCreator> =
         Box::new(GenericVMHookHandlerCreator {});
+}
+
+pub fn initialize_hook_handlers() -> Result<(), SimulationError> {
+    let angstrom_hook_address = Address::from_str("0x0000000aa232009084Bd71A5797d089AA4Edfad4")
+        .map_err(|_| {
+            SimulationError::FatalError("Failed to parse Angstrom hook address".to_string())
+        })?;
+    register_hook_handler(angstrom_hook_address, Box::new(AngstromHookCreator))?;
+
+    Ok(())
 }
 
 pub fn register_hook_handler(

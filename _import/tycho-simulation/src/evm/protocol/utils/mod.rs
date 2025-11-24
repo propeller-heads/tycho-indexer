@@ -1,3 +1,4 @@
+pub mod slipstreams;
 pub mod uniswap;
 
 use alloy::primitives::Address;

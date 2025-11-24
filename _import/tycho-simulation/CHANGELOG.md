@@ -1,3 +1,128 @@
+## [0.202.2](https://github.com/propeller-heads/tycho-simulation/compare/0.202.1...0.202.2) (2025-11-21)
+
+
+### Bug Fixes
+
+* **cluster-test:** Demote most info! to debug! ([3624ee5](https://github.com/propeller-heads/tycho-simulation/commit/3624ee537a5d925cc8c0e2ace84250feb5c78427))
+
+## [0.202.1](https://github.com/propeller-heads/tycho-simulation/compare/0.202.0...0.202.1) (2025-11-21)
+
+
+### Bug Fixes
+
+* add pool_removed to AngstromHookHandler init ([3d43ba6](https://github.com/propeller-heads/tycho-simulation/commit/3d43ba65336edf2b1a9ee22693fddcac7d9f27db))
+
+## [0.202.0](https://github.com/propeller-heads/tycho-simulation/compare/0.201.3...0.202.0) (2025-11-21)
+
+
+### Features
+
+* Angstrom Hook Support ([1dbe025](https://github.com/propeller-heads/tycho-simulation/commit/1dbe0251a6d202462146a0034f3d884438d5c5d0))
+* AngstromHookHandler takes fees directly, not token map ([3ce1b9b](https://github.com/propeller-heads/tycho-simulation/commit/3ce1b9b7ba71d1cbfda64b505594b97c65dd7038))
+* Draft for angstrom implementation ([aa1ce31](https://github.com/propeller-heads/tycho-simulation/commit/aa1ce31c1406cd97c83849b874ae24c42e019557))
+
+
+### Bug Fixes
+
+* Add removed pool to delta transition ([b00651f](https://github.com/propeller-heads/tycho-simulation/commit/b00651fe76e8361936d2cdf87d8f6d52a8535182))
+* kill unwraps ([3c6f176](https://github.com/propeller-heads/tycho-simulation/commit/3c6f1760254dabe2d7b7515d796fbb6ad9aca3db))
+* Return err if angstrom pool removed ([92ce3f2](https://github.com/propeller-heads/tycho-simulation/commit/92ce3f2a732b7f5bf4f24841c9cd9aa04fe1194c))
+
+## [0.201.3](https://github.com/propeller-heads/tycho-simulation/compare/0.201.2...0.201.3) (2025-11-21)
+
+
+### Bug Fixes
+
+* revert locked cargo dependencies ([0c97f91](https://github.com/propeller-heads/tycho-simulation/commit/0c97f91bfccf4723754b1145753f4f8fde077991))
+
+## [0.201.2](https://github.com/propeller-heads/tycho-simulation/compare/0.201.1...0.201.2) (2025-11-21)
+
+
+### Bug Fixes
+
+* Show state when slippage <-1.0 ([76c1e32](https://github.com/propeller-heads/tycho-simulation/commit/76c1e329258c27e8e36bc70e5ac36ed50b6c79db))
+
+## [0.201.1](https://github.com/propeller-heads/tycho-simulation/compare/0.201.0...0.201.1) (2025-11-21)
+
+
+### Bug Fixes
+
+* fixes to fluid implementation ([33170f9](https://github.com/propeller-heads/tycho-simulation/commit/33170f9b3c4fe95760bf6143e56e91f144d2091a))
+
+## [0.201.0](https://github.com/propeller-heads/tycho-simulation/compare/0.200.0...0.201.0) (2025-11-20)
+
+
+### Features
+
+* add Slipstreams in integration testing ([caf73a3](https://github.com/propeller-heads/tycho-simulation/commit/caf73a3b331bf3078fa48d7af39d9ee434fcf859))
+
+## [0.200.0](https://github.com/propeller-heads/tycho-simulation/compare/0.199.0...0.200.0) (2025-11-20)
+
+
+### Features
+
+* add slipstreams decoder ([96be1e6](https://github.com/propeller-heads/tycho-simulation/commit/96be1e67a450f1af5998b7134aaf4b425fb12da4))
+* improve observation parsing and update block_timestamp ([cf60d2b](https://github.com/propeller-heads/tycho-simulation/commit/cf60d2b40000919220bff7990d2600eec5ee2c0d))
+* init slipstreams ([dbd4d98](https://github.com/propeller-heads/tycho-simulation/commit/dbd4d9878ca7f5641464dba0b43d10954a0adfe5))
+
+
+### Bug Fixes
+
+* add default value for attr ([43eaa4f](https://github.com/propeller-heads/tycho-simulation/commit/43eaa4f973937c8859981c1bcde16415f539d71f))
+* replace default values with error for missing attributes ([89a2266](https://github.com/propeller-heads/tycho-simulation/commit/89a22661bc78264b46901a20a340a07f56f30234))
+
+## [0.199.0](https://github.com/propeller-heads/tycho-simulation/compare/0.198.0...0.199.0) (2025-11-20)
+
+
+### Features
+
+* disable overwrite for delta_transition ([d61c03a](https://github.com/propeller-heads/tycho-simulation/commit/d61c03ae40ba6de032a1075f6df21d31710ce9f0))
+* identify rebasing tokens by static_attr ([c563658](https://github.com/propeller-heads/tycho-simulation/commit/c563658c7c72a632723b9d6d74027b1cecce20ac))
+* support disable token overwrite ([9eb7c1a](https://github.com/propeller-heads/tycho-simulation/commit/9eb7c1a843f001df4c8931f08661da8419e6b8b7))
+
+
+### Bug Fixes
+
+* remove token overwrite skip during balance updates ([0987c76](https://github.com/propeller-heads/tycho-simulation/commit/0987c76adfffe9e540b54740d7a218b4fe5dc335))
+
+## [0.198.0](https://github.com/propeller-heads/tycho-simulation/compare/0.197.0...0.198.0) (2025-11-18)
+
+
+### Features
+
+* Add fluid_v1 to the integration test ([3958b20](https://github.com/propeller-heads/tycho-simulation/commit/3958b204fb2c2e0307e51212883d609374efba7b))
+* Implement fluid delta_transition ([4cd7094](https://github.com/propeller-heads/tycho-simulation/commit/4cd7094a3731f3409bb14e71d4b8e4d22b259fe9))
+* Integrate FluidV1 natively ([4116e39](https://github.com/propeller-heads/tycho-simulation/commit/4116e39d8c5d61b15db2ae641b0221cdfc2d54e4))
+* update tycho-client ([d68858c](https://github.com/propeller-heads/tycho-simulation/commit/d68858cd75d101201f1e1abea4d6a4d676a608e5))
+
+## [0.197.0](https://github.com/propeller-heads/tycho-simulation/compare/0.196.6...0.197.0) (2025-11-18)
+
+
+### Features
+
+* Add exchange_with_decoder_context to ProtocolStreamBuilder ([b071121](https://github.com/propeller-heads/tycho-simulation/commit/b071121a4ff71454cddb617a627db41b4dac597a))
+
+## [0.196.6](https://github.com/propeller-heads/tycho-simulation/compare/0.196.5...0.196.6) (2025-11-17)
+
+
+### Bug Fixes
+
+* **cluster-test:** Remove block_wait_time logic ([2c7da4e](https://github.com/propeller-heads/tycho-simulation/commit/2c7da4e58f5e8cd597e6ee82b1e5ead7aa99dbfc))
+
+## [0.196.5](https://github.com/propeller-heads/tycho-simulation/compare/0.196.4...0.196.5) (2025-11-14)
+
+
+### Bug Fixes
+
+* Don't increase the block number +1 to simulate execution ([bc2c28e](https://github.com/propeller-heads/tycho-simulation/commit/bc2c28e5006aa4872c86c38eef3c0cdcd9b876b5))
+
+## [0.196.4](https://github.com/propeller-heads/tycho-simulation/compare/0.196.3...0.196.4) (2025-11-14)
+
+
+### Bug Fixes
+
+* update Tycho dependencies to v0.113.0 and resolve breaking changes ([918a87d](https://github.com/propeller-heads/tycho-simulation/commit/918a87dfc22c7755170ad56ef59c6a6afab286b4))
+
 ## [0.196.3](https://github.com/propeller-heads/tycho-simulation/compare/0.196.2...0.196.3) (2025-11-13)
 
 
