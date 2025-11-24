@@ -149,18 +149,11 @@ pub mod hex_bytes_vec {
     where
         D: Deserializer<'de>,
     {
-        let mut hex_strings = Vec::<String>::deserialize(d)?;
-        hex_strings.shrink_to_fit();
+        let hex_strings = Vec::<String>::deserialize(d)?;
         hex_strings
             .into_iter()
             .map(|s| {
-                decode_hex_with_prefix(&s)
-                    .map_err(|e| serde::de::Error::custom(e.to_string()))
-                    .map(|v| {
-                        let mut v = v;
-                        v.shrink_to_fit();
-                        v
-                    })
+                decode_hex_with_prefix(&s).map_err(|e| serde::de::Error::custom(e.to_string()))
             })
             .collect()
     }
