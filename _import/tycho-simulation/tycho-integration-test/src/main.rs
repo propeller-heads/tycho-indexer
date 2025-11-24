@@ -596,6 +596,10 @@ async fn process_state(
                     token_in = %token_in.address,
                     token_out = %token_out.address,
                     error = %format_error_chain(&e),
+                    "Get limits operation failed: {}", format_error_chain(&e)
+                );
+                debug!(
+                    event_type = "get_limits_failure",
                     state = ?state,
                     "Get limits operation failed: {}", format_error_chain(&e)
                 );
@@ -640,6 +644,10 @@ async fn process_state(
                     token_out = %token_out.address,
                     amount_in = %amount_in,
                     error = %format_error_chain(&e),
+                    "Get amount out operation failed: {}", format_error_chain(&e)
+                );
+                debug!(
+                    event_type = "get_amount_out_failure",
                     state = ?state,
                     "Get amount out operation failed: {}", format_error_chain(&e)
                 );
@@ -755,7 +763,6 @@ fn process_execution_result(
             if !(-1.0..=1.0).contains(&slippage) {
                 info!(
                     event_type = "execution_slippage",
-                    state = ?state_str,
                     token_in = %execution_info.token_in,
                     token_out = %execution_info.token_out,
                     simulated_amount  = %amount_out,
@@ -764,6 +771,12 @@ fn process_execution_result(
                     "Execution slippage: {:.2}%",
                     slippage
                 );
+                debug!(
+                    event_type = "execution_slippage",
+                    state = ?state_str,
+                    "Execution slippage: {:.2}%",
+                    slippage
+                )
             } else {
                 // don't show the state in this case to not overwhelm the logs
                 debug!(
@@ -817,7 +830,6 @@ fn process_execution_result(
                 error_message = %revert_reason,
                 error_name = %error_name,
                 error_category = %error_category,
-                state = ?state_str,
                 amount_in =%execution_info.solution.given_amount,
                 token_in = %execution_info.token_in,
                 token_out = %execution_info.token_out,
@@ -825,6 +837,9 @@ fn process_execution_result(
                 overwrites = %overwrites_string,
                 "Failed to simulate swap: {error_msg}"
             );
+            debug!(event_type = "simulation_execution_failure",
+                state = ?state_str,
+                "State of failed swap: {error_msg}");
             metrics::record_simulation_execution_failure(
                 &execution_info.protocol_system,
                 error_category,
