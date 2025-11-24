@@ -1,12 +1,12 @@
-pub use map_component_balance::map_component_balance;
+pub use map_protocol_changes::map_component_balance;
 pub use map_protocol_components::map_protocol_components;
 use substreams::hex;
 
 #[path = "1_map_components.rs"]
 mod map_protocol_components;
 
-#[path = "2_map_component_balance.rs"]
-mod map_component_balance;
+#[path = "2_map_protocol_changes.rs"]
+mod map_protocol_changes;
 
 pub const ST_ETH_ADDRESS_OUTER: [u8; 20] = hex!("ae7ab96520de3a18e5e111b5eaab095312d7fe84");
 pub const ST_ETH_ADDRESS_OUTER_COMPONENT_ID: &str = "0xae7ab96520de3a18e5e111b5eaab095312d7fe84";

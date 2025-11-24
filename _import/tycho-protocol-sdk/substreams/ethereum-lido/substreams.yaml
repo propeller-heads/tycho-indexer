@@ -30,7 +30,7 @@ modules:
     output:
       type: proto:tycho.evm.v1.BlockTransactionProtocolComponents
     
-  - name: map_component_balance
+  - name: map_protocol_changes
     kind: map
     initialBlock: *start_block
     inputs:
