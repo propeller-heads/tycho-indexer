@@ -52,6 +52,17 @@ impl fmt::Display for GetAmountOutResult {
     }
 }
 
+pub struct Price {
+    pub numerator: BigUint,
+    pub denominator: BigUint,
+}
+
+impl Price {
+    pub fn new(numerator: BigUint, denominator: BigUint) -> Self {
+        Self { numerator, denominator }
+    }
+}
+
 /// ProtocolSim trait
 /// This trait defines the methods that a protocol state must implement in order to be used
 /// in the trade simulation.
@@ -149,6 +160,117 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
         tokens: &HashMap<Bytes, Token>,
         balances: &Balances,
     ) -> Result<(), TransitionError<String>>;
+
+    /// Calculates the exact amount of token_in required to move the pool's marginal price to a
+    /// target price.
+    ///
+    /// This method computes how much token_in must be swapped to adjust the pool's state such that
+    /// its marginal price (the rate at which the next infinitesimal trade would execute) equals
+    /// exactly the specified `pool_price`. This is a calculation based on the pool's
+    /// curve and current reserves, used to determine liquidity availability at specific price
+    /// points.
+    ///
+    /// # Arguments
+    ///
+    /// * `token_in` - The address of the token being sold (swapped into the pool)
+    /// * `token_out` - The address of the token being bought (swapped out of the pool)
+    /// * `pool_price` - The target marginal price as a `Price` struct where:
+    ///   - `numerator`: Amount of token_in
+    ///   - `denominator`: Amount of token_out
+    ///   - Represents the price as token_in per token_out (e.g., Price{numerator: 1000,
+    ///     denominator: 1} means 1000 token_in buys 1 token_out)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(BigUint)` - The exact amount of token_in required to reach the target price
+    /// * `Err(SimulationError)` - If:
+    ///   - The target price is unreachable given the pool's reserves (e.g., would require draining
+    ///     the pool beyond available liquidity)
+    ///   - The target price represents a worse price than the current pool state (moving in the
+    ///     wrong direction)
+    ///   - The calculation encounters numerical issues (overflow, division by zero, etc.)
+    ///   - The method is not implemented for this protocol
+    ///
+    /// # Notes
+    ///
+    /// - The returned amount is the gross input including fees. For a 0.3% fee pool, swapping this
+    ///   amount will deduct the fee before applying to reserves.
+    /// - This method does not mutate pool state; it only performs calculations
+    /// - For most AMMs without discontinuities, this is equivalent to `query_demand` with the same
+    ///   parameters
+    /// - The price direction matters: swapping token_in→token_out typically increases the price of
+    ///   token_in relative to token_out
+    #[allow(unused)]
+    fn swap_to_price(
+        &self,
+        token_in: &Bytes,
+        token_out: &Bytes,
+        pool_price: Price,
+    ) -> Result<BigUint, SimulationError> {
+        Err(SimulationError::FatalError("swap_to_price not implemented".into()))
+    }
+
+    /// Calculates how much token_in a pool can accept when trading at an effective price at or
+    /// better than the target.
+    ///
+    /// This method determines the maximum amount of token_in that can be swapped into the pool
+    /// while ensuring the effective (average) execution price remains at or better than the
+    /// specified `target_price`. This is used by batch auction solvers to understand the "demand"
+    /// a pool has for token_in at a given price level when constructing optimal execution paths.
+    ///
+    /// The method accounts for the pool's fee structure. The term "demand" reflects the market
+    /// microstructure perspective: from the solver's viewpoint, the pool is expressing demand for
+    /// token_in at this price point.
+    ///
+    /// # Arguments
+    ///
+    /// * `token_in` - The address of the token being sold (swapped into the pool)
+    /// * `token_out` - The address of the token being bought (swapped out of the pool)
+    /// * `target_price` - The maximum acceptable price as a `Price` struct where:
+    ///   - `numerator`: Amount of token_in
+    ///   - `denominator`: Amount of token_out
+    ///   - Represents the price as token_in per token_out (e.g., Price{numerator: 2000,
+    ///     denominator: 1} means willing to pay up to 2000 token_in for 1 token_out)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(BigUint)` - The maximum amount of token_in that can be traded at or better than the
+    ///   target price. Swapping this amount will result in an average execution price ≤
+    ///   target_price (better or equal from the buyer's perspective).
+    /// * `Err(SimulationError)` - If:
+    ///   - The current pool price is already worse than the target price (no liquidity available at
+    ///     this price point)
+    ///   - The pool has insufficient liquidity to provide meaningful quotes
+    ///   - The calculation encounters numerical issues
+    ///   - The method is not implemented for this protocol
+    ///
+    /// # Notes
+    ///
+    /// - The returned amount includes fees. The actual amount applied to pool reserves will be the
+    ///   gross amount minus protocol fees.
+    /// - This method does not mutate pool state; calculations are read-only
+    /// - The interpretation of "better than target price" depends on trade direction: lower prices
+    ///   favor the buyer of token_out
+    /// - Batch auction solvers use this to aggregate liquidity across multiple pools at specific
+    ///   price levels
+    ///
+    /// # Relationship to swap_to_price
+    ///
+    /// While these methods often return the same value for continuous AMMs, the semantic difference
+    /// is important:
+    /// - `swap_to_price`: "What input moves the marginal price to exactly X?"
+    /// - `query_demand`: "What's the maximum input tradeable at price X or better?"
+    ///
+    /// For protocols with discrete price levels or custom mechanics, these may diverge.
+    #[allow(unused)]
+    fn query_demand(
+        &self,
+        token_in: &Bytes,
+        token_out: &Bytes,
+        target_price: Price,
+    ) -> Result<BigUint, SimulationError> {
+        Err(SimulationError::FatalError("query_demand not implemented".into()))
+    }
 
     /// Clones the protocol state as a trait object.
     /// This allows the state to be cloned when it is being used as a `Box<dyn ProtocolSim>`.
