@@ -131,18 +131,17 @@ where
             "rpc_default".to_string(),
             Arc::new(RPCMetadataProvider::new_with_retry_config(
                 self.rpc_batch_size,
-                self.rpc_retry_config,
+                self.rpc_retry_config.clone(),
             )),
         );
 
         // Create EVM balance slot detector
         let balance_slot_detector = {
-            // TODO: Make this configurable
             let config = SlotDetectorConfig {
                 max_batch_size: 5,
-                max_retries: 3,
-                initial_backoff_ms: 100,
-                max_backoff_ms: 5000,
+                max_retries: self.rpc_retry_config.max_retries,
+                initial_backoff_ms: self.rpc_retry_config.initial_backoff_ms,
+                max_backoff_ms: self.rpc_retry_config.max_backoff_ms,
             };
 
             EVMBalanceSlotDetector::new(config, &self.rpc)
