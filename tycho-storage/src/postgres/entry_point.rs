@@ -482,6 +482,9 @@ impl PostgresGateway {
             entry_point_tracing_result::dsl::*,
         };
 
+        // Batch size for database inserts to avoid "value too large to transmit" errors
+        const BATCH_SIZE: usize = 500;
+
         let block_hashes: HashSet<_> = traced_entry_points
             .iter()
             .map(|tep| tep.detection_block_hash.clone())
@@ -597,20 +600,28 @@ impl PostgresGateway {
             });
         }
 
-        diesel::insert_into(entry_point_tracing_result)
-            .values(&final_values)
-            .on_conflict(schema::entry_point_tracing_result::entry_point_tracing_params_id)
-            .do_update()
-            .set((
-                detection_block.eq(excluded(detection_block)),
-                detection_data.eq(excluded(detection_data)),
-                modified_ts.eq(excluded(modified_ts)),
-            ))
-            .execute(conn)
-            .await
-            .map_err(|err| {
-                storage_error_from_diesel(err, "NewEntryPointTracingResult", "Batch upsert", None)
-            })?;
+        // Batch insert to avoid "value too large to transmit" errors
+        for chunk in final_values.chunks(BATCH_SIZE) {
+            diesel::insert_into(entry_point_tracing_result)
+                .values(chunk)
+                .on_conflict(schema::entry_point_tracing_result::entry_point_tracing_params_id)
+                .do_update()
+                .set((
+                    detection_block.eq(excluded(detection_block)),
+                    detection_data.eq(excluded(detection_data)),
+                    modified_ts.eq(excluded(modified_ts)),
+                ))
+                .execute(conn)
+                .await
+                .map_err(|err| {
+                    storage_error_from_diesel(
+                        err,
+                        "NewEntryPointTracingResult",
+                        "Batch upsert",
+                        None,
+                    )
+                })?;
+        }
 
         let all_called_addresses: HashSet<_> = traced_entry_points
             .iter()
@@ -662,15 +673,23 @@ impl PostgresGateway {
             }
         }
 
-        diesel::insert_into(entry_point_tracing_params_calls_account)
-            .values(&new_entry_point_calls_account)
-            .on_conflict_do_nothing() // Design choice: we don't want to delete previously inserted links here, they are
-            // cumulative
-            .execute(conn)
-            .await
-            .map_err(|err| {
-                storage_error_from_diesel(err, "EntryPointPointsToAccount", "Batch upsert", None)
-            })?;
+        // Batch insert to avoid "value too large to transmit" errors
+        for chunk in new_entry_point_calls_account.chunks(BATCH_SIZE) {
+            diesel::insert_into(entry_point_tracing_params_calls_account)
+                .values(chunk)
+                .on_conflict_do_nothing() // Design choice: we don't want to delete previously inserted links here, they are
+                // cumulative
+                .execute(conn)
+                .await
+                .map_err(|err| {
+                    storage_error_from_diesel(
+                        err,
+                        "EntryPointPointsToAccount",
+                        "Batch upsert",
+                        None,
+                    )
+                })?;
+        }
 
         Ok(())
     }
