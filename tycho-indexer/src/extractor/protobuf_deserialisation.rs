@@ -445,14 +445,10 @@ impl TryFromMessage for TxWithChanges {
                 .clone();
             let component_id = msg_entrypoint_params
                 .component_id
-                // component id is now required, however for backwards compatibility with older
-                // substream packages we will not change the protobuf message struct to remove the
-                // 'optional' condition of the field. Instead we make the indexer panic if this ever
-                // happens. This should cause new integrations to find any errors with this during
-                // testing. We do not expect this to panic during normal operation for protocols
-                // that have passed our tests.
                 .clone()
-                .expect("Entrypoint params should have a component id");
+                .ok_or(ExtractionError::DecodeError(
+                    "Entrypoint params should have a component id".to_owned(),
+                ))?;
             let tracing_data = TracingParams::try_from_message(msg_entrypoint_params)?;
             entrypoint_params
                 .entry(entrypoint_id)
