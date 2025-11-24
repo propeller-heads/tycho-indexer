@@ -5,22 +5,19 @@ fn decode_hex_with_prefix(val: &str) -> Result<Vec<u8>, FromHexError> {
     let hex_str = val.strip_prefix("0x").unwrap_or(val);
 
     // Handle odd length by prepending '0'
-    if hex_str.len() % 2 != 0 {
+    let mut encoded = if !hex_str.len().is_multiple_of(2) {
         let mut padded = String::with_capacity(hex_str.len() + 1);
         padded.push('0');
         padded.push_str(hex_str);
-        let encoded = hex::decode(&padded)?;
-        // Force exact capacity to avoid Shared path in bytes::Bytes
-        let mut exact = Vec::with_capacity(encoded.len());
-        exact.extend_from_slice(&encoded);
-        Ok(exact)
+        hex::decode(&padded)
     } else {
-        let encoded = hex::decode(hex_str)?;
-        // Force exact capacity to avoid Shared path in bytes::Bytes
-        let mut exact = Vec::with_capacity(encoded.len());
-        exact.extend_from_slice(&encoded);
-        Ok(exact)
-    }
+        hex::decode(hex_str)
+    }?;
+
+    // Shrink to fit to avoid overallocation and Shared path in bytes::Bytes
+    encoded.shrink_to_fit();
+
+    Ok(encoded)
 }
 
 /// serde functions for handling bytes as hex strings, such as [bytes::Bytes]
