@@ -27,11 +27,13 @@ use tycho_simulation::{
     tycho_common::models::Chain,
     utils::load_all_tokens,
 };
-use tycho_test::validation::{batch_validate_components, get_validator, Validator};
-use tycho_test::execution::{
-    encoding::encode_swap,
-    models::{TychoExecutionInput, TychoExecutionResult},
-    simulate_swap_transaction, tenderly,
+use tycho_test::{
+    execution::{
+        encoding::encode_swap,
+        models::{TychoExecutionInput, TychoExecutionResult},
+        simulate_swap_transaction, tenderly,
+    },
+    validation::{batch_validate_components, get_validator, Validator},
 };
 
 use crate::stream_processor::{
