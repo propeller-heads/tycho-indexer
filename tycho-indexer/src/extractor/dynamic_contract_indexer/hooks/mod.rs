@@ -7,6 +7,3 @@ pub(crate) mod hooks_dci_builder;
 pub(super) mod integrations;
 mod metadata_orchestrator;
 mod rpc_metadata_provider;
-
-// TODO - consider moving these to a more general location
-pub use rpc_metadata_provider::RPCRetryConfig;

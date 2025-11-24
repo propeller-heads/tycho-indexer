@@ -40,9 +40,6 @@ pub mod runner;
 pub mod token_analysis_cron;
 mod u256_num;
 
-// TODO - consider moving these to a more general location
-pub use dynamic_contract_indexer::hooks::RPCRetryConfig;
-
 #[derive(Error, Debug, PartialEq)]
 pub enum ExtractionError {
     #[error("Extractor setup failed: {0}")]
@@ -187,5 +184,29 @@ where
     ) -> HashMap<(AccountStateIdType, AccountStateKeyType), AccountStateValueType> {
         self.block_update
             .get_filtered_account_state_update(keys)
+    }
+}
+
+/// Configuration for RPC metadata provider retry behavior
+/// TODO: Consolidate with the `tycho_ethereum` retry configuration and move to a shared location.
+#[derive(Clone, Debug)]
+pub struct RPCRetryConfig {
+    /// Maximum number of retry attempts for failed requests (default: 3)
+    pub(crate) max_retries: usize,
+    /// Initial backoff delay in milliseconds (default: 100ms)
+    pub(crate) initial_backoff_ms: u64,
+    /// Maximum backoff delay in milliseconds (default: 5000ms)
+    pub(crate) max_backoff_ms: u64,
+}
+
+impl RPCRetryConfig {
+    pub(super) fn new(max_retries: usize, initial_backoff_ms: u64, max_backoff_ms: u64) -> Self {
+        Self { max_retries, initial_backoff_ms, max_backoff_ms }
+    }
+}
+
+impl Default for RPCRetryConfig {
+    fn default() -> Self {
+        Self { max_retries: 3, initial_backoff_ms: 100, max_backoff_ms: 5000 }
     }
 }

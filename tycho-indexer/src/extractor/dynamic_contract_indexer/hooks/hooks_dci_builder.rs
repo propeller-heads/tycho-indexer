@@ -31,10 +31,10 @@ use crate::extractor::{
             hook_orchestrator::{DefaultUniswapV4HookOrchestrator, HookOrchestratorRegistry},
             integrations::register_integrations,
             metadata_orchestrator::BlockMetadataOrchestrator,
-            rpc_metadata_provider::{RPCMetadataProvider, RPCRetryConfig},
+            rpc_metadata_provider::RPCMetadataProvider,
         },
     },
-    ExtractionError,
+    ExtractionError, RPCRetryConfig,
 };
 
 /// Builder for creating a fully configured UniswapV4HookDCI
