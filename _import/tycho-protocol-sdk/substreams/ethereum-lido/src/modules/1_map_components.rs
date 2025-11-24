@@ -42,23 +42,6 @@ fn map_protocol_components(
     })
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum StakingStatus {
-    Limited = 0,
-    Paused = 1,
-    Unlimited = 2,
-}
-
-impl StakingStatus {
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            StakingStatus::Limited => "Limited",
-            StakingStatus::Paused => "Paused",
-            StakingStatus::Unlimited => "Unlimited",
-        }
-    }
-}
-
 /// Potentially constructs a new ProtocolComponent given a call
 ///
 /// This method is given each individual call within a transaction, the corresponding

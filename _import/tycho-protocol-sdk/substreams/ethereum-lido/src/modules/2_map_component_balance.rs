@@ -9,8 +9,8 @@ use substreams_ethereum::pb::eth::{
 use tycho_substreams::prelude::*;
 
 use crate::{
-    modules::map_protocol_components::StakingStatus, ETH_ADDRESS, ST_ETH_ADDRESS,
-    ST_ETH_ADDRESS_OUTER_COMPONENT_ID, WST_ETH_ADDRESS, WST_ETH_ADDRESS_COMPONENT_ID,
+    ETH_ADDRESS, ST_ETH_ADDRESS, ST_ETH_ADDRESS_OUTER_COMPONENT_ID, WST_ETH_ADDRESS,
+    WST_ETH_ADDRESS_COMPONENT_ID,
 };
 
 const STORAGE_SLOT_TOTAL_SHARES: [u8; 32] =
@@ -26,7 +26,7 @@ const ZERO_STAKING_LIMIT: &str = "000000000000000000000000";
 
 /// Extracts balances per component
 ///
-/// This template function uses ERC20 transfer events to extract balances. It
+/// This function uses ERC20 transfer events to extract balances. It
 /// assumes that each component is deployed at a dedicated contract address. If a
 /// transaction involving the component is detected, its balance is updated accordingly.
 #[substreams::handlers::map]
@@ -174,4 +174,21 @@ fn wst_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) 
 
 fn create_entity_change(name: &str, value: Vec<u8>) -> Attribute {
     Attribute { name: name.to_owned(), value, change: ChangeType::Update.into() }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum StakingStatus {
+    Limited = 0,
+    Paused = 1,
+    Unlimited = 2,
+}
+
+impl StakingStatus {
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            StakingStatus::Limited => "Limited",
+            StakingStatus::Paused => "Paused",
+            StakingStatus::Unlimited => "Unlimited",
+        }
+    }
 }
