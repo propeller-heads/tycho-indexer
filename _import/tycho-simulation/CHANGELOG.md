@@ -1,3 +1,17 @@
+## [0.203.1](https://github.com/propeller-heads/tycho-simulation/compare/0.203.0...0.203.1) (2025-11-25)
+
+
+### Bug Fixes
+
+* Remove removed ids from the TychoState ([b8c7610](https://github.com/propeller-heads/tycho-simulation/commit/b8c76106ece6e455c165e9c72c533daae13da93c))
+
+## [0.203.0](https://github.com/propeller-heads/tycho-simulation/compare/0.202.2...0.203.0) (2025-11-24)
+
+
+### Features
+
+* **cluster-test:** Track current absolute slippage as gauge ([98c7145](https://github.com/propeller-heads/tycho-simulation/commit/98c714560495bb6129b9bb5d362ed7a9359fd7ab))
+
 ## [0.202.2](https://github.com/propeller-heads/tycho-simulation/compare/0.202.1...0.202.2) (2025-11-21)
 
 
