@@ -17,7 +17,7 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
 
     function decodeData(bytes calldata data)
         external
-        pure
+        view
         returns (
             address tokenIn,
             address tokenOut,

@@ -87,6 +87,7 @@ contract UniswapV4Executor is
     function swap(uint256 amountIn, bytes calldata data)
         external
         payable
+        virtual
         returns (uint256 calculatedAmount)
     {
         (
@@ -148,7 +149,8 @@ contract UniswapV4Executor is
 
     function _decodeData(bytes calldata data)
         internal
-        pure
+        view
+        virtual
         returns (
             address tokenIn,
             address tokenOut,
