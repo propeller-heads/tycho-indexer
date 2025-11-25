@@ -1,4 +1,4 @@
-pub use map_protocol_changes::map_component_balance;
+pub use map_protocol_changes::map_protocol_changes;
 pub use map_protocol_components::map_protocol_components;
 use substreams::hex;
 

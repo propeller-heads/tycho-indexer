@@ -30,7 +30,7 @@ const ZERO_STAKING_LIMIT: &str = "000000000000000000000000";
 /// assumes that each component is deployed at a dedicated contract address. If a
 /// transaction involving the component is detected, its balance is updated accordingly.
 #[substreams::handlers::map]
-pub fn map_component_balance(
+pub fn map_protocol_changes(
     block: eth::v2::Block,
     protocol_components: BlockTransactionProtocolComponents,
 ) -> Result<BlockChanges, substreams::errors::Error> {
