@@ -133,18 +133,13 @@ fn st_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) -
                 attributes: vec![attr.clone()],
             });
 
-            let balance = BigInt::from_unsigned_bytes_be(&storage_change.new_value);
-
-            // If the absolute balance is negative, we set it to zero.
-            let big_endian_bytes_balance = if balance < BigInt::zero() {
-                BigInt::zero().to_bytes_be().1
-            } else {
-                balance.to_bytes_be().1
-            };
+            let balance = BigInt::from_unsigned_bytes_be(&storage_change.new_value)
+                .to_bytes_be()
+                .1;
 
             builder.add_balance_change(&BalanceChange {
                 token: ETH_ADDRESS.to_vec(),
-                balance: big_endian_bytes_balance,
+                balance,
                 component_id: ST_ETH_ADDRESS_PROXY_COMPONENT_ID
                     .as_bytes()
                     .to_vec(),
