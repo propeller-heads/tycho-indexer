@@ -9,7 +9,7 @@ use substreams_ethereum::pb::eth::{
 use tycho_substreams::prelude::*;
 
 use crate::{
-    ETH_ADDRESS, ST_ETH_ADDRESS, ST_ETH_ADDRESS_OUTER_COMPONENT_ID, WST_ETH_ADDRESS,
+    ETH_ADDRESS, ST_ETH_ADDRESS_IMPL, ST_ETH_ADDRESS_PROXY_COMPONENT_ID, WST_ETH_ADDRESS,
     WST_ETH_ADDRESS_COMPONENT_ID,
 };
 
@@ -75,7 +75,7 @@ fn handle_sync(
                 .entry(tx.index)
                 .or_insert_with(|| TransactionChangesBuilder::new(&(tx.into())));
 
-            if call.address == ST_ETH_ADDRESS {
+            if call.address == ST_ETH_ADDRESS_IMPL {
                 st_eth_entity_changes(call, builder)
             } else if call.address == WST_ETH_ADDRESS {
                 wst_eth_entity_changes(call, builder)
@@ -115,7 +115,7 @@ fn st_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) {
     for storage_change in call.storage_changes.iter() {
         if storage_change.key == STORAGE_SLOT_TOTAL_SHARES {
             builder.add_entity_change(&EntityChanges {
-                component_id: ST_ETH_ADDRESS_OUTER_COMPONENT_ID.to_owned(),
+                component_id: ST_ETH_ADDRESS_PROXY_COMPONENT_ID.to_owned(),
                 attributes: vec![create_entity_change(
                     "total_shares",
                     storage_change.new_value.clone(),
@@ -124,7 +124,7 @@ fn st_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) {
         } else if storage_change.key == STORAGE_SLOT_POOLED_ETH {
             let attr = create_entity_change("total_pooled_eth", storage_change.new_value.clone());
             builder.add_entity_change(&EntityChanges {
-                component_id: ST_ETH_ADDRESS_OUTER_COMPONENT_ID.to_owned(),
+                component_id: ST_ETH_ADDRESS_PROXY_COMPONENT_ID.to_owned(),
                 attributes: vec![attr.clone()],
             });
 
@@ -140,7 +140,7 @@ fn st_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) {
             builder.add_balance_change(&BalanceChange {
                 token: ETH_ADDRESS.to_vec(),
                 balance: big_endian_bytes_balance,
-                component_id: ST_ETH_ADDRESS_OUTER_COMPONENT_ID
+                component_id: ST_ETH_ADDRESS_PROXY_COMPONENT_ID
                     .as_bytes()
                     .to_vec(),
             });
@@ -148,7 +148,7 @@ fn st_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) {
             let (staking_status, staking_limit) = staking_status_and_limit(storage_change);
 
             builder.add_entity_change(&EntityChanges {
-                component_id: ST_ETH_ADDRESS_OUTER_COMPONENT_ID.to_owned(),
+                component_id: ST_ETH_ADDRESS_PROXY_COMPONENT_ID.to_owned(),
                 attributes: vec![
                     create_entity_change("staking_status", staking_status.as_str_name().into()),
                     create_entity_change("staking_limit", staking_limit.to_signed_bytes_be()),

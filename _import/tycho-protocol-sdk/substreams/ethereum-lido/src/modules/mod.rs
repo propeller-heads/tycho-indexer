@@ -8,10 +8,9 @@ mod map_protocol_components;
 #[path = "2_map_protocol_changes.rs"]
 mod map_protocol_changes;
 
-pub const ST_ETH_ADDRESS_OUTER: [u8; 20] = hex!("ae7ab96520de3a18e5e111b5eaab095312d7fe84");
-pub const ST_ETH_ADDRESS_OUTER_COMPONENT_ID: &str = "0xae7ab96520de3a18e5e111b5eaab095312d7fe84";
-pub const ST_ETH_ADDRESS: [u8; 20] = hex!("17144556fd3424edc8fc8a4c940b2d04936d17eb");
-pub const ST_ETH_ADDRESS_COMPONENT_ID: &str = "0x17144556fd3424edc8fc8a4c940b2d04936d17eb";
+pub const ST_ETH_ADDRESS_PROXY: [u8; 20] = hex!("ae7ab96520de3a18e5e111b5eaab095312d7fe84");
+pub const ST_ETH_ADDRESS_PROXY_COMPONENT_ID: &str = "0xae7ab96520de3a18e5e111b5eaab095312d7fe84";
+pub const ST_ETH_ADDRESS_IMPL: [u8; 20] = hex!("17144556fd3424edc8fc8a4c940b2d04936d17eb");
 pub const WST_ETH_ADDRESS: [u8; 20] = hex!("7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0");
 pub const WST_ETH_ADDRESS_COMPONENT_ID: &str = "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0";
 pub const ETH_ADDRESS: [u8; 20] = hex!("0000000000000000000000000000000000000000");

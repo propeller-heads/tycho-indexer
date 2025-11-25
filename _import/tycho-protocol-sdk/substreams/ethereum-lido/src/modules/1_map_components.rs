@@ -6,7 +6,7 @@ use tycho_substreams::{
 };
 
 use crate::{
-    ETH_ADDRESS, ST_ETH_ADDRESS, ST_ETH_ADDRESS_OUTER, ST_ETH_ADDRESS_OUTER_COMPONENT_ID,
+    ETH_ADDRESS, ST_ETH_ADDRESS_IMPL, ST_ETH_ADDRESS_PROXY, ST_ETH_ADDRESS_PROXY_COMPONENT_ID,
     WST_ETH_ADDRESS, WST_ETH_ADDRESS_COMPONENT_ID,
 };
 
@@ -47,10 +47,10 @@ fn map_protocol_components(
 /// This method is given each individual call within a transaction, the corresponding
 /// logs emitted during that call as well as the full transaction trace.
 pub fn maybe_create_component(call: &Call) -> Option<ProtocolComponent> {
-    if *call.address == ST_ETH_ADDRESS {
+    if *call.address == ST_ETH_ADDRESS_IMPL {
         Some(ProtocolComponent {
-            id: ST_ETH_ADDRESS_OUTER_COMPONENT_ID.to_owned(),
-            tokens: vec![ST_ETH_ADDRESS_OUTER.into(), ETH_ADDRESS.into()],
+            id: ST_ETH_ADDRESS_PROXY_COMPONENT_ID.to_owned(),
+            tokens: vec![ST_ETH_ADDRESS_PROXY.into(), ETH_ADDRESS.into()],
             contracts: vec![],
             static_att: vec![],
             change: ChangeType::Creation.into(),
@@ -64,7 +64,7 @@ pub fn maybe_create_component(call: &Call) -> Option<ProtocolComponent> {
     } else if *call.address == WST_ETH_ADDRESS {
         Some(ProtocolComponent {
             id: WST_ETH_ADDRESS_COMPONENT_ID.to_owned(),
-            tokens: vec![ST_ETH_ADDRESS_OUTER.into(), WST_ETH_ADDRESS.into()],
+            tokens: vec![ST_ETH_ADDRESS_PROXY.into(), WST_ETH_ADDRESS.into()],
             contracts: vec![],
             static_att: vec![],
             change: ChangeType::Creation.into(),
