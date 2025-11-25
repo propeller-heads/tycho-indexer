@@ -288,6 +288,16 @@ async fn process_update(
                     .states
                     .insert(id.clone(), state.clone());
             }
+            for (removed_id, removed_component) in update.update.removed_pairs.iter() {
+                current_state
+                    .components
+                    .remove(removed_id);
+                current_state.states.remove(removed_id);
+                current_state
+                    .component_ids_by_protocol
+                    .get_mut(&removed_component.protocol_system)
+                    .map(|id_set| id_set.remove(removed_id));
+            }
         }
         // Record block processing latency
         let latency_seconds =
