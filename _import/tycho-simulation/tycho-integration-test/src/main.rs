@@ -329,114 +329,7 @@ async fn process_update(
     for (protocol, sync_state) in update.update.sync_states.iter() {
         metrics::record_protocol_sync_state(protocol, sync_state);
     }
-
-    // Collect all components to process (both updated and stale) for batch validation
-    let mut components_to_process: Vec<(String, ProtocolComponent, Box<dyn ProtocolSim>)> =
-        Vec::new();
-
-    // Collect updated components
-    for (id, state) in update
-        .update
-        .states
-        .iter()
-        .take(cli.max_simulations as usize)
-    {
-        let component = match update.update_type {
-            UpdateType::Protocol => {
-                let states = &tycho_state
-                    .read()
-                    .map_err(|e| miette!("Failed to acquire read lock on Tycho state: {e}"))?
-                    .components;
-                match states.get(id) {
-                    Some(comp) => comp.clone(),
-                    None => {
-                        warn!(id=%id, "Component not found in cached protocol pairs. Potential causes: \
-                        there was an error decoding the component, the component was evicted from the cache, \
-                        or the component was never added to the cache. Skipping...");
-                        continue;
-                    }
-                }
-            }
-            UpdateType::Rfq => match update.update.new_pairs.get(id) {
-                Some(comp) => comp.clone(),
-                None => {
-                    warn!(id=%id, "Component not found in update's new pairs. Potential cause: \
-                    the `states` and `new_pairs` lists don't contain the same items. Skipping...");
-                    continue;
-                }
-            },
-        };
-        components_to_process.push((id.clone(), component, state.clone_box()));
-    }
-
-    // Collect stale components (not updated in this block)
-    let selected_ids = {
-        let current_state = tycho_state
-            .read()
-            .map_err(|e| miette!("Failed to acquire write lock on Tycho state: {e}"))?;
-
-        let mut all_selected_ids = Vec::new();
-
-        for component_id in &cli.always_test_components {
-            if !update
-                .update
-                .states
-                .keys()
-                .contains(component_id) &&
-                current_state
-                    .components
-                    .contains_key(component_id)
-            {
-                all_selected_ids.push(component_id.clone());
-            }
-        }
-
-        for component_ids in current_state
-            .component_ids_by_protocol
-            .values()
-        {
-            let available_ids: Vec<_> = component_ids
-                .iter()
-                .filter(|id| {
-                    !update.update.states.keys().contains(id) && !all_selected_ids.contains(id)
-                })
-                .cloned()
-                .collect();
-
-            let protocol_selected_ids: Vec<_> = available_ids
-                .choose_multiple(
-                    &mut rand::rng(),
-                    (cli.max_simulations_stale as usize).min(available_ids.len()),
-                )
-                .cloned()
-                .collect();
-
-            all_selected_ids.extend(protocol_selected_ids);
-        }
-        all_selected_ids
-    };
-
-    for id in &selected_ids {
-        let (component, state) = {
-            let current_state = tycho_state
-                .read()
-                .map_err(|e| miette!("Failed to acquire read lock on Tycho state: {e}"))?;
-
-            match (current_state.components.get(id), current_state.states.get(id)) {
-                (Some(comp), Some(state)) => (comp.clone(), state.clone()),
-                (None, _) => {
-                    error!(id=%id, "Component not found in saved protocol components.");
-                    continue;
-                }
-                (_, None) => {
-                    error!(id=%id, "State not found in saved protocol states");
-                    continue;
-                }
-            }
-        };
-        components_to_process.push((id.clone(), component, state.clone_box()));
-    }
-
+    let components_to_process = select_components_to_process(update, &tycho_state, &cli)?;
     // Collect components that implement Validator for batch validation
     let mut validator_components: Vec<(
         &dyn Validator,
@@ -584,6 +477,121 @@ async fn process_update(
     }
 
     Ok(())
+}
+
+#[allow(clippy::type_complexity)]
+fn select_components_to_process(
+    update: &StreamUpdate,
+    tycho_state: &Arc<RwLock<TychoState>>,
+    cli: &Arc<Cli>,
+) -> miette::Result<Vec<(String, ProtocolComponent, Box<dyn ProtocolSim>)>> {
+    // Collect all components to process (both updated and stale) for batch validation
+    let mut components_to_process: Vec<(String, ProtocolComponent, Box<dyn ProtocolSim>)> =
+        Vec::new();
+
+    // Collect updated components
+    for (id, state) in update
+        .update
+        .states
+        .iter()
+        .take(cli.max_simulations as usize)
+    {
+        let component = match update.update_type {
+            UpdateType::Protocol => {
+                let states = &tycho_state
+                    .read()
+                    .map_err(|e| miette!("Failed to acquire read lock on Tycho state: {e}"))?
+                    .components;
+                match states.get(id) {
+                    Some(comp) => comp.clone(),
+                    None => {
+                        warn!(id=%id, "Component not found in cached protocol pairs. Potential causes: \
+                        there was an error decoding the component, the component was evicted from the cache, \
+                        or the component was never added to the cache. Skipping...");
+                        continue;
+                    }
+                }
+            }
+            UpdateType::Rfq => match update.update.new_pairs.get(id) {
+                Some(comp) => comp.clone(),
+                None => {
+                    warn!(id=%id, "Component not found in update's new pairs. Potential cause: \
+                    the `states` and `new_pairs` lists don't contain the same items. Skipping...");
+                    continue;
+                }
+            },
+        };
+        components_to_process.push((id.clone(), component, state.clone_box()));
+    }
+
+    // Collect stale components (not updated in this block)
+    let selected_ids = {
+        let current_state = tycho_state
+            .read()
+            .map_err(|e| miette!("Failed to acquire write lock on Tycho state: {e}"))?;
+
+        let mut all_selected_ids = Vec::new();
+
+        for component_id in &cli.always_test_components {
+            if !update
+                .update
+                .states
+                .keys()
+                .contains(component_id) &&
+                current_state
+                    .components
+                    .contains_key(component_id)
+            {
+                all_selected_ids.push(component_id.clone());
+            }
+        }
+
+        for component_ids in current_state
+            .component_ids_by_protocol
+            .values()
+        {
+            let available_ids: Vec<_> = component_ids
+                .iter()
+                .filter(|id| {
+                    !update.update.states.keys().contains(id) && !all_selected_ids.contains(id)
+                })
+                .cloned()
+                .collect();
+
+            let protocol_selected_ids: Vec<_> = available_ids
+                .choose_multiple(
+                    &mut rand::rng(),
+                    (cli.max_simulations_stale as usize).min(available_ids.len()),
+                )
+                .cloned()
+                .collect();
+
+            all_selected_ids.extend(protocol_selected_ids);
+        }
+        all_selected_ids
+    };
+
+    for id in &selected_ids {
+        let (component, state) = {
+            let current_state = tycho_state
+                .read()
+                .map_err(|e| miette!("Failed to acquire read lock on Tycho state: {e}"))?;
+
+            match (current_state.components.get(id), current_state.states.get(id)) {
+                (Some(comp), Some(state)) => (comp.clone(), state.clone()),
+                (None, _) => {
+                    error!(id=%id, "Component not found in saved protocol components.");
+                    continue;
+                }
+                (_, None) => {
+                    error!(id=%id, "State not found in saved protocol states");
+                    continue;
+                }
+            }
+        };
+        components_to_process.push((id.clone(), component, state.clone_box()));
+    }
+    Ok(components_to_process)
 }
 
 #[tracing::instrument(
@@ -830,15 +838,10 @@ fn process_execution_result(
                     simulated_amount  = %amount_out,
                     executed_amount = %execution_info.expected_amount_out,
                     slippage_ratio = slippage,
-                    "Execution slippage: {:.2}%",
-                    slippage
-                );
-                debug!(
-                    event_type = "execution_slippage",
                     state = ?state_str,
                     "Execution slippage: {:.2}%",
                     slippage
-                )
+                );
             } else {
                 // don't show the state in this case to not overwhelm the logs
                 debug!(
