@@ -137,20 +137,26 @@ async fn main() -> miette::Result<()> {
     metrics::initialize_metrics();
     let metrics_task = metrics::create_metrics_exporter(cli.metrics_port).await?;
 
-    // Run the main application logic and metrics server in parallel
-    // If either fails, the other will be cancelled
-    tokio::select! {
-        result = run(cli) => {
-            result?;
+    // Run the main application logic
+    // Start metrics server in background but don't wait for it
+    let _metrics_handle = tokio::spawn(async move {
+        if let Err(e) = metrics_task.await.into_diagnostic().wrap_err("Metrics server task failed") {
+            warn!("Metrics server error: {}", e);
         }
-        result = metrics_task => {
-            result
-                .into_diagnostic()
-                .wrap_err("Metrics server task panicked")??;
+    });
+    
+    // Run main application and exit the process immediately on completion/error
+    let result = run(cli).await;
+    
+    // Exit the entire process when main application completes
+    // This ensures the metrics server thread doesn't keep the process alive
+    match result {
+        Ok(_) => std::process::exit(0),
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
         }
     }
-
-    Ok(())
 }
 
 async fn run(cli: Cli) -> miette::Result<()> {

@@ -1,6 +1,6 @@
 use tycho_client::feed::{BlockHeader, HeaderLike};
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct TimestampHeader {
     pub timestamp: u64,
 }

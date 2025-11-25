@@ -548,6 +548,12 @@ where
     pub fn get_balance_owner(&self) -> Option<Address> {
         self.balance_owner
     }
+
+    /// Get the component balances for validation purposes
+    pub fn get_balances(&self) -> &HashMap<Address, U256> {
+        &self.balances
+    }
+
 }
 
 impl<D> ProtocolSim for EVMPoolState<D>
