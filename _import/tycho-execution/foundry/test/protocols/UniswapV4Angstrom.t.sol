@@ -19,14 +19,6 @@ contract UniswapV4AngstromExecutorExposed is UniswapV4AngstromExecutor {
     {
         return _selectAttestation(attestationData);
     }
-
-    function decodeAttestations(bytes memory attestationData)
-        external
-        pure
-        returns (AttestationData[] memory)
-    {
-        return _decodeAttestations(attestationData);
-    }
 }
 
 contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
@@ -42,26 +34,6 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
         angstromExecutor = new UniswapV4AngstromExecutorExposed(
             IPoolManager(POOL_MANAGER), PERMIT2_ADDRESS
         );
-    }
-
-    function testDecodeAttestations() public view {
-        uint64 block1 = 12345678;
-        bytes memory attestation1 =
-            hex"d437f3372f3add2c2bc3245e6bd6f9c202e61bb367c79a6f740c7c12ca9c54a760bead943516fafaf8a4fe65a907b31d45c2ab4b525f9f32ec2771033e0832359ceb2e38d9288a755c7c366ce889b0df24b5821b1c";
-        uint64 block2 = 12345679;
-        bytes memory attestation2 =
-            hex"d437f3372f3add2c2bc3245e6bd6f9c202e61bb30c337ddae661e68cc6986c7784cd0aaec455b1f7514b6cd91bff26f002ce7cb42b3b1e2092ea4d1c1fb1e0641cbccfb021b31de25462f25b355cc99c7d509cdc1b";
-        bytes memory encoded =
-            abi.encodePacked(block1, attestation1, block2, attestation2);
-
-        UniswapV4AngstromExecutor.AttestationData[] memory decoded =
-            angstromExecutor.decodeAttestations(encoded);
-
-        assertEq(decoded.length, 2);
-        assertEq(decoded[0].blockNumber, 12345678);
-        assertEq(decoded[0].attestation, attestation1);
-        assertEq(decoded[1].blockNumber, 12345679);
-        assertEq(decoded[1].attestation, attestation2);
     }
 
     /// @notice Test selecting the correct attestation based on block number
@@ -95,13 +67,25 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
         vm.roll(250);
         selected = angstromExecutor.selectAttestation(encodedAttestations);
         assertEq(selected, attestation3);
+
+        // Test selecting for block 350 (should revert)
+        vm.roll(350);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniswapV4AngstromExecutor__NoAttestationForBlock.selector, 350
+            )
+        );
+        selected = angstromExecutor.selectAttestation(encodedAttestations);
     }
 
-    function testSelectAttestationNoAttestations() public {
+    function testSelectAttestationEmptyAttestations() public {
         // Encode empty attestations
         bytes memory encodedAttestations;
         vm.expectRevert(
-            UniswapV4AngstromExecutor__NoAttestationsProvided.selector
+            abi.encodeWithSelector(
+                UniswapV4AngstromExecutor__NoAttestationForBlock.selector,
+                block.number
+            )
         );
         angstromExecutor.selectAttestation(encodedAttestations);
     }

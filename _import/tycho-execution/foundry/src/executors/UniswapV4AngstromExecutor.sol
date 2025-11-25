@@ -3,7 +3,6 @@ pragma solidity ^0.8.26;
 
 import "./UniswapV4Executor.sol";
 
-error UniswapV4AngstromExecutor__NoAttestationsProvided();
 error UniswapV4AngstromExecutor__NoAttestationForBlock(uint256 blockNumber);
 error UniswapV4AngstromExecutor__InvalidAttestationDataLength(uint256 length);
 
@@ -13,51 +12,21 @@ error UniswapV4AngstromExecutor__InvalidAttestationDataLength(uint256 length);
 ///      based on the current block number and injects the appropriate attestation
 ///      data into the hook data for Angstrom pools
 contract UniswapV4AngstromExecutor is UniswapV4Executor {
-    /// @notice Struct representing attestation data for a specific block
-    struct AttestationData {
-        uint64 blockNumber;
-        bytes attestation;
-    }
-
     constructor(IPoolManager _poolManager, address _permit2)
         UniswapV4Executor(_poolManager, _permit2)
     {}
 
     /// @notice Selects the appropriate attestation for the current block number
-    /// @param attestationData Encoded attestation data for several blocks
+    /// @dev Each attestation is exactly 93 bytes: 8 bytes blockNumber + 85 bytes attestation
+    /// @param attestationData Raw bytes of encoded attestations for several blocks
     /// @return The attestation bytes for the current or next valid block
     function _selectAttestation(bytes memory attestationData)
         internal
         view
         returns (bytes memory)
     {
-        AttestationData[] memory attestations =
-            _decodeAttestations(attestationData);
-
-        if (attestations.length == 0) {
-            revert UniswapV4AngstromExecutor__NoAttestationsProvided();
-        }
-
-        for (uint256 i = 0; i < attestations.length; i++) {
-            // slither-disable-next-line incorrect-equality
-            if (attestations[i].blockNumber == block.number) {
-                return attestations[i].attestation;
-            }
-        }
-
-        revert UniswapV4AngstromExecutor__NoAttestationForBlock(block.number);
-    }
-
-    /// @notice Decodes attestation data
-    /// @dev Each attestation is exactly 93 bytes: 8 bytes blockNumber + 85 bytes attestation
-    /// @param attestationData Raw bytes containing attestations
-    /// @return attestations Array of AttestationData structs
-    function _decodeAttestations(bytes memory attestationData)
-        internal
-        pure
-        returns (AttestationData[] memory attestations)
-    {
         uint256 TOTAL_LENGTH = 93;
+        bytes memory attestation = new bytes(85);
 
         // Calculate number of attestations from data length
         if (attestationData.length % TOTAL_LENGTH != 0) {
@@ -65,14 +34,12 @@ contract UniswapV4AngstromExecutor is UniswapV4Executor {
         }
 
         uint256 attestationCount = attestationData.length / TOTAL_LENGTH;
-        attestations = new AttestationData[](attestationCount);
 
         for (uint256 i = 0; i < attestationCount; i++) {
             uint256 offset = i * TOTAL_LENGTH;
 
             // Assembly is used because attestationData is bytes memory
             uint64 blockNumber;
-            bytes memory attestation = new bytes(85);
             // slither-disable-next-line assembly
             assembly {
                 // Load block number (8 bytes) - shift right to get the first 8 bytes
@@ -91,10 +58,16 @@ contract UniswapV4AngstromExecutor is UniswapV4Executor {
                 mstore(add(dst, 0x40), mload(add(src, 0x40))) // Copy remaining 21 bytes (loads 32, but we only need 21)
             }
 
-            attestations[i] = AttestationData({
-                blockNumber: blockNumber, attestation: attestation
-            });
+            // If we find the attestation for the current block, stop decoding early
+            // and return the attestation.
+            // slither-disable-next-line incorrect-equality
+            if (blockNumber == block.number) {
+                return attestation;
+            }
         }
+
+        // All attestations decoded and no attestation found for the current block.
+        revert UniswapV4AngstromExecutor__NoAttestationForBlock(block.number);
     }
 
     /// @notice Override of parent's _decodeData to inject attestation selection
