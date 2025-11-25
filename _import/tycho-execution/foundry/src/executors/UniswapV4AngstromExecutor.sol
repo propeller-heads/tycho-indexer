@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import "./UniswapV4Executor.sol";
 
 error UniswapV4AngstromExecutor__NoAttestationsProvided();
-error UniswapV4AngstromExecutor__NoValidAttestation(uint256 blockNumber);
+error UniswapV4AngstromExecutor__NoAttestationForBlock(uint256 blockNumber);
 error UniswapV4AngstromExecutor__InvalidAttestationDataLength(uint256 length);
 
 /// @title UniswapV4AngstromExecutor
@@ -45,7 +45,7 @@ contract UniswapV4AngstromExecutor is UniswapV4Executor {
             }
         }
 
-        revert UniswapV4AngstromExecutor__NoValidAttestation(block.number);
+        revert UniswapV4AngstromExecutor__NoAttestationForBlock(block.number);
     }
 
     /// @notice Decodes attestation data
