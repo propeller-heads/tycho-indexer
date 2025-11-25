@@ -5,6 +5,13 @@ pub const DEFAULT_ROUTERS_JSON: &str = include_str!("../../../config/router_addr
 pub const PROTOCOL_SPECIFIC_CONFIG: &str =
     include_str!("../../../config/protocol_specific_addresses.json");
 
+/// The number of blocks in the future for which to fetch Angstrom Attestations
+///
+/// It is important to note that fetching more blocks will send more attestations to the
+/// Tycho Router, resulting in a higher gas usage. Fetching fewer blocks may result in attestations
+/// expiring if the transaction is not sent fast enough.
+pub const ANGSTROM_DEFAULT_BLOCKS_IN_FUTURE: u64 = 5;
+
 /// These protocols support the optimization of grouping swaps.
 ///
 /// This requires special encoding to send call data of multiple swaps to a single executor,
