@@ -318,11 +318,11 @@ where
                     }
                     Err(e) => {
                         // Serialize tracing params to JSON and compute hash (matching database approach)
+                        // Note: We use serde_json::to_string() to match PostgreSQL's JSONB::text format
                         let params_hash = match &ep.params {
                             TracingParams::RPCTracer(rpc_tracer) => {
-                                match serde_json::to_value(rpc_tracer) {
-                                    Ok(json_value) => {
-                                        let json_text = json_value.to_string();
+                                match serde_json::to_string(rpc_tracer) {
+                                    Ok(json_text) => {
                                         let mut hasher = Sha256::new();
                                         hasher.update(json_text.as_bytes());
                                         hex::encode(hasher.finalize())
