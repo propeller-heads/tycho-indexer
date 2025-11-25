@@ -19,7 +19,11 @@ fn map_protocol_components(
     params: String,
     block: eth::v2::Block,
 ) -> Result<BlockTransactionProtocolComponents> {
-    if block.number != params.parse::<u64>()? {
+    if block.number !=
+        params
+            .parse::<u64>()
+            .map_err(|e| anyhow::anyhow!("Failed to parse block number from params: {}", e))?
+    {
         return Ok(BlockTransactionProtocolComponents { tx_components: vec![] })
     }
 

@@ -36,24 +36,25 @@ pub fn map_protocol_changes(
 ) -> Result<BlockChanges, substreams::errors::Error> {
     let mut transaction_changes: HashMap<u32, TransactionChangesBuilder> = HashMap::new();
 
-    protocol_components
-        .tx_components
-        .iter()
-        .for_each(|tx_component| {
-            let tx = tx_component.tx.as_ref().unwrap();
-            let builder = transaction_changes
-                .entry(tx.index as u32)
-                .or_insert_with(|| TransactionChangesBuilder::new(tx));
+    for tx_component in protocol_components.tx_components.iter() {
+        let tx = tx_component
+            .tx
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Cannot get staking limit from the storage slot"))?;
 
-            tx_component
-                .components
-                .iter()
-                .for_each(|c| {
-                    builder.add_protocol_component(c);
-                });
-        });
+        let builder = transaction_changes
+            .entry(tx.index as u32)
+            .or_insert_with(|| TransactionChangesBuilder::new(tx));
 
-    handle_sync(&block, &mut transaction_changes);
+        tx_component
+            .components
+            .iter()
+            .for_each(|c| {
+                builder.add_protocol_component(c);
+            });
+    }
+
+    handle_sync(&block, &mut transaction_changes)?;
 
     Ok(BlockChanges {
         block: Some((&block).into()),
@@ -69,7 +70,7 @@ pub fn map_protocol_changes(
 fn handle_sync(
     block: &eth::v2::Block,
     transaction_changes: &mut HashMap<u32, TransactionChangesBuilder>,
-) {
+) -> Result<()> {
     for tx in block.transactions() {
         for call in tx.calls.iter() {
             let builder = transaction_changes
@@ -77,42 +78,45 @@ fn handle_sync(
                 .or_insert_with(|| TransactionChangesBuilder::new(&(tx.into())));
 
             if call.address == ST_ETH_ADDRESS_IMPL {
-                st_eth_entity_changes(call, builder)
+                st_eth_entity_changes(call, builder)?
             } else if call.address == WST_ETH_ADDRESS {
-                wst_eth_entity_changes(call, builder)
+                wst_eth_entity_changes(call, builder)?
             } else {
                 continue
             };
         }
     }
+    Ok(())
 }
 
-fn staking_status_and_limit(storage_change: &StorageChange) -> (StakingStatus, BigInt) {
+fn staking_status_and_limit(storage_change: &StorageChange) -> Result<(StakingStatus, BigInt)> {
     let stake_limit_new_hex = hex::encode(storage_change.new_value.clone());
     if stake_limit_new_hex.get(0..24) == Some(ZERO_STAKING_LIMIT) &&
         stake_limit_new_hex.get(32..56) != Some(ZERO_STAKING_LIMIT)
     {
-        (StakingStatus::Unlimited, BigInt::zero())
+        Ok((StakingStatus::Unlimited, BigInt::zero()))
     } else if stake_limit_new_hex.get(32..56) == Some(ZERO_STAKING_LIMIT) {
-        (StakingStatus::Paused, BigInt::zero())
+        Ok((StakingStatus::Paused, BigInt::zero()))
     } else {
-        (
+        Ok((
             StakingStatus::Limited,
             BigInt::from(
                 num_bigint::BigInt::parse_bytes(
                     stake_limit_new_hex
                         .get(0..24)
-                        .unwrap()
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("Cannot get staking limit from the storage slot")
+                        })?
                         .as_bytes(),
                     16,
                 )
-                .unwrap(),
+                .ok_or_else(|| anyhow::anyhow!("Cannot parse BigInt from staking limit"))?,
             ),
-        )
+        ))
     }
 }
 
-fn st_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) {
+fn st_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) -> Result<()> {
     for storage_change in call.storage_changes.iter() {
         if storage_change.key == STORAGE_SLOT_TOTAL_SHARES {
             builder.add_entity_change(&EntityChanges {
@@ -146,7 +150,7 @@ fn st_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) {
                     .to_vec(),
             });
         } else if storage_change.key == STORAGE_SLOT_STAKE_LIMIT {
-            let (staking_status, staking_limit) = staking_status_and_limit(storage_change);
+            let (staking_status, staking_limit) = staking_status_and_limit(storage_change)?;
 
             builder.add_entity_change(&EntityChanges {
                 component_id: ST_ETH_ADDRESS_PROXY_COMPONENT_ID.to_owned(),
@@ -157,9 +161,10 @@ fn st_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) {
             });
         };
     }
+    Ok(())
 }
 
-fn wst_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) {
+fn wst_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) -> Result<()> {
     for storage_change in call.storage_changes.iter() {
         if storage_change.key == STORAGE_SLOT_WRAPPED_ETH {
             builder.add_entity_change(&EntityChanges {
@@ -171,6 +176,7 @@ fn wst_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) 
             });
         }
     }
+    Ok(())
 }
 
 fn create_entity_change(name: &str, value: Vec<u8>) -> Attribute {
