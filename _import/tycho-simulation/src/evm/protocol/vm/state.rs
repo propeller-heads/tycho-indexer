@@ -553,7 +553,6 @@ where
     pub fn get_balances(&self) -> &HashMap<Address, U256> {
         &self.balances
     }
-
 }
 
 impl<D> ProtocolSim for EVMPoolState<D>

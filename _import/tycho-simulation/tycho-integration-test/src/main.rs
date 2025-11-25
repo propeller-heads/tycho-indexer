@@ -140,14 +140,18 @@ async fn main() -> miette::Result<()> {
     // Run the main application logic
     // Start metrics server in background but don't wait for it
     let _metrics_handle = tokio::spawn(async move {
-        if let Err(e) = metrics_task.await.into_diagnostic().wrap_err("Metrics server task failed") {
+        if let Err(e) = metrics_task
+            .await
+            .into_diagnostic()
+            .wrap_err("Metrics server task failed")
+        {
             warn!("Metrics server error: {}", e);
         }
     });
-    
+
     // Run main application and exit the process immediately on completion/error
     let result = run(cli).await;
-    
+
     // Exit the entire process when main application completes
     // This ensures the metrics server thread doesn't keep the process alive
     match result {

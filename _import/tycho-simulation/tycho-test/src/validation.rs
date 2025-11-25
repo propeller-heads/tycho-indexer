@@ -10,8 +10,12 @@ use alloy::{
     sol_types::SolCall,
 };
 use async_trait::async_trait;
+use tracing::info;
 use tycho_common::{simulation::protocol_sim::ProtocolSim, Bytes};
-use tycho_simulation::evm::protocol::uniswap_v2::state::UniswapV2State;
+use tycho_simulation::evm::{
+    engine_db::tycho_db::PreCachedDB,
+    protocol::{uniswap_v2::state::UniswapV2State, vm::state::EVMPoolState},
+};
 
 type ComponentId = Bytes;
 type CallTarget = Address;
@@ -39,6 +43,10 @@ pub fn get_validator<'a>(
             .as_any()
             .downcast_ref::<UniswapV2State>()
             .map(|s| s as &dyn Validator),
+        "vm:curve" => state
+            .as_any()
+            .downcast_ref::<EVMPoolState<PreCachedDB>>()
+            .map(|s| s as &dyn Validator),
         // Add more protocols here as they implement Validator
         _ => None,
     }
@@ -48,6 +56,11 @@ sol! {
     #[sol(rpc)]
     interface IUniswapV2Pair {
         function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
+    }
+
+    #[sol(rpc)]
+    interface IERC20 {
+        function balanceOf(address account) external view returns (uint256);
     }
 }
 
@@ -273,6 +286,74 @@ impl Validator for UniswapV2State {
         }
 
         Ok(reserves_match)
+    }
+}
+
+#[async_trait]
+impl Validator for EVMPoolState<PreCachedDB> {
+    fn prepare_validation_calls(
+        &self,
+        component_id: &ComponentId,
+    ) -> Result<Vec<(CallTarget, CallData)>, Box<dyn std::error::Error + Send + Sync>> {
+        let pool_address = CallTarget::from_slice(&component_id[..20]);
+        let mut calls = Vec::new();
+
+        // Call balanceOf for each token in the pool, querying the pool's balance
+        for token_bytes in &self.tokens {
+            let token_address = CallTarget::from_slice(&token_bytes[..20]);
+            let balance_of_call = IERC20::balanceOfCall { account: pool_address }.abi_encode();
+            calls.push((token_address, balance_of_call.into()));
+        }
+
+        Ok(calls)
+    }
+
+    fn validate_with_results(
+        &self,
+        component_id: &ComponentId,
+        results: &[CallData],
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        if results.len() != self.tokens.len() {
+            return Err(format!(
+                "Expected {} results for EVM pool validation, got {}",
+                self.tokens.len(),
+                results.len()
+            )
+            .into());
+        }
+
+        let pool_address = Address::from_slice(&component_id[..20]);
+        let mut all_balances_match = true;
+
+        for (i, token_bytes) in self.tokens.iter().enumerate() {
+            let token_address = Address::from_slice(&token_bytes[..20]);
+
+            // Decode balanceOf return value
+            let onchain_balance = IERC20::balanceOfCall::abi_decode_returns(&results[i])?;
+
+            // Get the expected balance from our state (component balances)
+            let state_balance = self
+                .get_balances()
+                .get(&token_address)
+                .copied()
+                .unwrap_or_default();
+
+            let balance_matches = state_balance == onchain_balance;
+
+            if !balance_matches {
+                tracing::warn!(
+                    component_id = %hex::encode(component_id),
+                    token_address = %token_address,
+                    pool_address = %pool_address,
+                    state_balance = %state_balance,
+                    onchain_balance = %onchain_balance,
+                    "EVM pool balance validation failed: state balance does not match on-chain balance"
+                );
+                all_balances_match = false;
+            }
+        }
+
+        Ok(all_balances_match)
     }
 }
 
