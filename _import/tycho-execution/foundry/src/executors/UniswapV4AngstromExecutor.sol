@@ -39,6 +39,7 @@ contract UniswapV4AngstromExecutor is UniswapV4Executor {
         }
 
         for (uint256 i = 0; i < attestations.length; i++) {
+            // slither-disable-next-line incorrect-equality
             if (attestations[i].blockNumber == block.number) {
                 return attestations[i].attestation;
             }

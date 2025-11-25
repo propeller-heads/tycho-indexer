@@ -147,6 +147,7 @@ contract UniswapV4Executor is
         return amountOut;
     }
 
+    // slither-disable-next-line dead-code
     function _decodeData(bytes calldata data)
         internal
         view
