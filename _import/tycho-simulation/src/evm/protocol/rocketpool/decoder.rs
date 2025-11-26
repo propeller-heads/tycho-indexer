@@ -80,7 +80,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketPoolState {
                 InvalidSnapshotError::MissingAttribute("maximum_deposit_pool_size".to_string())
             })?;
 
-        RocketPoolState::new(
+        Ok(RocketPoolState::new(
             reth_supply,
             total_eth,
             liquidity,
@@ -88,8 +88,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketPoolState {
             deposits_enabled,
             minimum_deposit,
             maximum_deposit_pool_size,
-        )
-        .map_err(|e| InvalidSnapshotError::ValueError(e.to_string()))
+        ))
     }
 }
 

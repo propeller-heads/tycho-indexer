@@ -2,7 +2,6 @@ use std::{any::Any, collections::HashMap};
 
 use alloy::primitives::U256;
 use num_bigint::BigUint;
-use num_traits::FromPrimitive;
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -16,16 +15,19 @@ use tycho_ethereum::BytesCodec;
 
 use crate::evm::protocol::{
     rocketpool::{ETH_ADDRESS, ROCKET_POOL_COMPONENT_ID},
-    safe_math::{safe_add_u256, safe_sub_u256},
+    safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
     u256_num::{biguint_to_u256, u256_to_biguint, u256_to_f64},
 };
+
+const DEPOSIT_FEE_BASE: f64 = 1e18;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RocketPoolState {
     pub reth_supply: U256,
     pub total_eth: U256,
     pub liquidity: U256,
-    pub deposit_fee: f64,
+    /// Deposit fee as %, scaled by DEPOSIT_FEE_BASE, such as 5000000000000000 represents 0.5% fee.
+    pub deposit_fee: U256,
     pub deposits_enabled: bool,
     pub minimum_deposit: U256,
     pub maximum_deposit_pool_size: U256,
@@ -40,40 +42,44 @@ impl RocketPoolState {
         deposit_enabled: bool,
         minimum_deposit: U256,
         maximum_deposit_pool_size: U256,
-    ) -> Result<Self, SimulationError> {
-        Ok(Self {
+    ) -> Self {
+        Self {
             reth_supply,
             total_eth,
             liquidity,
-            deposit_fee: Self::convert_deposit_fee(deposit_fee)?,
+            deposit_fee,
             deposits_enabled: deposit_enabled,
             minimum_deposit,
             maximum_deposit_pool_size,
-        })
+        }
     }
 
-    /// Converts a U256 deposit fee to f64 by dividing by 10^18
-    fn convert_deposit_fee(deposit_fee: U256) -> Result<f64, SimulationError> {
-        let fee_f64 = u256_to_f64(deposit_fee)?;
-        Ok(fee_f64 / 1e18)
+    /// Calculates rETH amount out for a given ETH deposit amount.
+    fn get_reth_value(&self, eth_amount: U256) -> Result<U256, SimulationError> {
+        // fee = ethIn * deposit_fee / DEPOSIT_FEE_BASE
+        let fee = safe_div_u256(
+            safe_mul_u256(eth_amount, self.deposit_fee)?,
+            U256::from(DEPOSIT_FEE_BASE),
+        )?;
+        let net_eth = safe_sub_u256(eth_amount, fee)?;
+
+        // rethOut = netEth * rethSupply / totalEth
+        safe_div_u256(safe_mul_u256(net_eth, self.reth_supply)?, self.total_eth)
+    }
+
+    /// Calculates ETH amount out for a given rETH burn amount.
+    /// Matches Solidity: `ethOut = rethIn * totalEth / rethSupply`
+    fn get_eth_value(&self, reth_amount: U256) -> Result<U256, SimulationError> {
+        safe_div_u256(safe_mul_u256(reth_amount, self.total_eth)?, self.reth_supply)
     }
 
     fn depositing_eth(token_in: &Bytes) -> bool {
         token_in.as_ref() == ETH_ADDRESS
     }
 
-    fn spot_price_for_direction(&self, sell_token: &Bytes) -> Result<f64, SimulationError> {
-        let is_depositing_eth = RocketPoolState::depositing_eth(sell_token);
-
-        let res = if is_depositing_eth {
-            self.assert_deposits_enabled()?;
-
-            u256_to_f64(self.reth_supply)? / u256_to_f64(self.total_eth)? * (1.0 - self.deposit_fee)
-        } else {
-            u256_to_f64(self.total_eth)? / u256_to_f64(self.reth_supply)?
-        };
-
-        Ok(res)
+    /// Returns the deposit fee adjusted by the base (e.g., 0.005 for 0.5%)
+    fn deposit_fee_as_f64(&self) -> Result<f64, SimulationError> {
+        Ok(u256_to_f64(self.deposit_fee)? / DEPOSIT_FEE_BASE)
     }
 
     fn assert_deposits_enabled(&self) -> Result<(), SimulationError> {
@@ -89,26 +95,38 @@ impl RocketPoolState {
 }
 
 impl ProtocolSim for RocketPoolState {
-    /// Returns the fee applied on deposits (ETH -> rETH)
+    /// Returns the fee applied on deposits (ETH -> rETH) as a decimal.
     /// The withdrawals (rETH -> ETH) have no fee.
     fn fee(&self) -> f64 {
-        self.deposit_fee
+        // TODO: This needs to be handled gracefully - the trait should return Result
+        self.deposit_fee_as_f64()
+            .expect("deposit_fee conversion to f64 failed")
     }
 
     fn spot_price(&self, base: &Token, _quote: &Token) -> Result<f64, SimulationError> {
-        self.spot_price_for_direction(&base.address)
+        let is_depositing_eth = RocketPoolState::depositing_eth(&base.address);
+
+        let res = if is_depositing_eth {
+            self.assert_deposits_enabled()?;
+            let fee = self.deposit_fee_as_f64()?;
+            u256_to_f64(self.reth_supply)? / u256_to_f64(self.total_eth)? * (1.0 - fee)
+        } else {
+            u256_to_f64(self.total_eth)? / u256_to_f64(self.reth_supply)?
+        };
+
+        Ok(res)
     }
 
     fn get_amount_out(
         &self,
         amount_in: BigUint,
         token_in: &Token,
-        token_out: &Token,
+        _token_out: &Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
         let amount_in = biguint_to_u256(&amount_in);
         let is_depositing_eth = RocketPoolState::depositing_eth(&token_in.address);
 
-        if is_depositing_eth {
+        let amount_out = if is_depositing_eth {
             self.assert_deposits_enabled()?;
 
             if amount_in < self.minimum_deposit {
@@ -131,19 +149,19 @@ impl ProtocolSim for RocketPoolState {
                     None,
                 ));
             }
-        }
 
-        // TODO - think if we should use the floats or do all calculations in U256
-        let amount_out = self.spot_price(token_in, token_out)? * u256_to_f64(amount_in)?;
-        let amount_out = U256::from_f64(amount_out).ok_or_else(|| {
-            SimulationError::FatalError("Amount out conversion to U256 failed".to_string())
-        })?;
+            self.get_reth_value(amount_in)?
+        } else {
+            let eth_out = self.get_eth_value(amount_in)?;
 
-        if !is_depositing_eth && amount_out >= self.liquidity {
-            return Err(SimulationError::RecoverableError(
-                "Not enough ETH in the pool to support this withdrawal".to_string(),
-            ));
-        }
+            if eth_out >= self.liquidity {
+                return Err(SimulationError::RecoverableError(
+                    "Not enough ETH in the pool to support this withdrawal".to_string(),
+                ));
+            }
+
+            eth_out
+        };
 
         let mut new_state = self.clone();
         if is_depositing_eth {
@@ -156,7 +174,7 @@ impl ProtocolSim for RocketPoolState {
             new_state.liquidity = safe_sub_u256(new_state.liquidity, amount_out)?;
         };
 
-        let gas_used = if is_depositing_eth { 260_000u32 } else { 100_000u32 };
+        let gas_used = if is_depositing_eth { 209_000u32 } else { 134_000u32 };
 
         Ok(GetAmountOutResult::new(
             u256_to_biguint(amount_out),
@@ -172,22 +190,18 @@ impl ProtocolSim for RocketPoolState {
     ) -> Result<(BigUint, BigUint), SimulationError> {
         let is_depositing_eth = Self::depositing_eth(&sell_token);
 
-        let max_eth = if is_depositing_eth {
-            safe_sub_u256(self.maximum_deposit_pool_size, self.total_eth)?
-        } else {
-            self.liquidity
-        };
-
-        let max_reth =
-            U256::from_f64(u256_to_f64(max_eth)? * self.spot_price_for_direction(&sell_token)?)
-                .ok_or_else(|| {
-                    SimulationError::FatalError("Max rETH conversion to U256 failed".to_string())
-                })?;
-
         if is_depositing_eth {
-            Ok((u256_to_biguint(max_eth), u256_to_biguint(max_reth)))
+            // ETH -> rETH: max sell = remaining capacity, max buy = rETH value of that
+            let max_eth_sell = safe_sub_u256(self.maximum_deposit_pool_size, self.total_eth)?;
+            let max_reth_buy = self.get_reth_value(max_eth_sell)?;
+            Ok((u256_to_biguint(max_eth_sell), u256_to_biguint(max_reth_buy)))
         } else {
-            Ok((u256_to_biguint(max_reth), u256_to_biguint(max_eth)))
+            // rETH -> ETH: max buy = liquidity, max sell = rETH needed to get that ETH
+            // Inverse of get_eth_value: rethIn = ethOut * rethSupply / totalEth
+            let max_eth_buy = self.liquidity;
+            let max_reth_sell =
+                safe_div_u256(safe_mul_u256(max_eth_buy, self.reth_supply)?, self.total_eth)?;
+            Ok((u256_to_biguint(max_reth_sell), u256_to_biguint(max_eth_buy)))
         }
     }
 
@@ -207,8 +221,7 @@ impl ProtocolSim for RocketPoolState {
             .get("reth_supply")
             .map_or(self.reth_supply, |val| U256::from_bytes(val));
 
-        // TODO - consider how we can make the component ID less hardcoded and check if we are
-        // correctly fetching the liquidity from the right component
+        // TODO - check if we are correctly fetching the liquidity from the right component
         self.liquidity = balances
             .component_balances
             .get(ROCKET_POOL_COMPONENT_ID)
@@ -227,10 +240,7 @@ impl ProtocolSim for RocketPoolState {
         self.deposit_fee = delta
             .updated_attributes
             .get("deposit_fee")
-            .map_or(self.deposit_fee, |val| {
-                let fee_u256 = U256::from_bytes(val);
-                Self::convert_deposit_fee(fee_u256).unwrap_or(self.deposit_fee)
-            });
+            .map_or(self.deposit_fee, |val| U256::from_bytes(val));
         self.minimum_deposit = delta
             .updated_attributes
             .get("minimum_deposit")
@@ -272,6 +282,7 @@ mod tests {
         str::FromStr,
     };
 
+    use alloy::hex;
     use approx::assert_ulps_eq;
     use num_bigint::BigUint;
     use rstest::rstest;
@@ -295,12 +306,11 @@ mod tests {
                                                                * than rETH for exchange rate >
                                                                * 1) */
             U256::from_str("50000000000000000000").unwrap(), // 50 ETH liquidity
-            U256::from_str("5000000000000000").unwrap(),     // 0.005 deposit fee (0.5%)
+            U256::from_str("5000000000000000").unwrap(),     // 0.5% deposit fee (5e15 / 1e18)
             true,                                            // deposits enabled
             U256::from_str("10000000000000000").unwrap(),    // 0.01 ETH minimum deposit
             U256::from_str("5000000000000000000000").unwrap(), // 5000 ETH maximum pool size
         )
-        .unwrap()
     }
 
     fn eth_token() -> Token {
@@ -395,8 +405,7 @@ mod tests {
             false, // deposits disabled
             U256::from(0u64),
             U256::from(1000u64),
-        )
-        .unwrap();
+        );
 
         let eth = eth_token();
         let reth = reth_token();
@@ -433,8 +442,7 @@ mod tests {
             true,
             U256::from(0u64),
             U256::from(110u64), // Max pool size only 110
-        )
-        .unwrap();
+        );
 
         let eth = eth_token();
         let reth = reth_token();
@@ -456,8 +464,7 @@ mod tests {
             true,
             U256::from(0u64),
             U256::from(1000u64),
-        )
-        .unwrap();
+        );
 
         let eth = eth_token();
         let reth = reth_token();
@@ -569,8 +576,9 @@ mod tests {
         // These should remain unchanged
         assert_eq!(state.total_eth, original_total_eth);
         assert_eq!(state.reth_supply, original_reth_supply);
-        // Fee should be updated to 1%
-        assert_ulps_eq!(state.deposit_fee, 0.01);
+        // Fee should be updated to 1% (10000000000000000 / 1e18 = 0.01)
+        assert_eq!(state.deposit_fee, U256::from_str("10000000000000000").unwrap());
+        assert_ulps_eq!(state.fee(), 0.01);
     }
 
     #[test]
@@ -584,8 +592,7 @@ mod tests {
             true,
             U256::from(0u64),
             U256::from(10000u64), // max pool size
-        )
-        .unwrap();
+        );
 
         let eth_address = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
         let reth_address = Bytes::from_str("0xae78736Cd615f374D3085123A210448E74Fc6393").unwrap();
@@ -611,8 +618,7 @@ mod tests {
             true,
             U256::from(0u64),
             U256::from(10000u64),
-        )
-        .unwrap();
+        );
 
         let eth_address = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
         let reth_address = Bytes::from_str("0xae78736Cd615f374D3085123A210448E74Fc6393").unwrap();
