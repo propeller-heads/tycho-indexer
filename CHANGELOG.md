@@ -1,3 +1,19 @@
+## [0.117.0](https://github.com/propeller-heads/tycho-indexer/compare/0.116.0...0.117.0) (2025-11-26)
+
+
+### Features
+
+* add a configurable RPC retry mechanism to CLI ([9397b32](https://github.com/propeller-heads/tycho-indexer/commit/9397b3206623abe60eb58b2e6a6d616e570d6f8d))
+* get `RPCRetryConfig` from the CLI and pass it to the DCI plugin ([8db0cb4](https://github.com/propeller-heads/tycho-indexer/commit/8db0cb4c1a425f50a9ff3986b827fca06bccee31))
+* make EVM balance slot detector configuration dependent on RPC retry settings ([6d077d2](https://github.com/propeller-heads/tycho-indexer/commit/6d077d2c0d386dcafece28059a70020c5e936727))
+* RPC retries configurable from the CLI  ([#787](https://github.com/propeller-heads/tycho-indexer/issues/787)) ([e7df6d9](https://github.com/propeller-heads/tycho-indexer/commit/e7df6d9fe601ef8797a44f2ac8a83f8e6e00bc4b))
+* unify RPC configuration into single RPCArgs and RPCConfig structs ([d83f976](https://github.com/propeller-heads/tycho-indexer/commit/d83f97626648e1db4ab37aa0b838c0e5bb4a64da))
+
+
+### Bug Fixes
+
+* resolve rebase conflicts by reverting to RPCRetryConfig-only approach ([027079a](https://github.com/propeller-heads/tycho-indexer/commit/027079a3766782a6ba703c1333c0cde8e5a12731))
+
 ## [0.116.0](https://github.com/propeller-heads/tycho-indexer/compare/0.115.0...0.116.0) (2025-11-26)
 
 
