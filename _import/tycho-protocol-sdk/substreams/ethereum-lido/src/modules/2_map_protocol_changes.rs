@@ -73,6 +73,9 @@ fn handle_sync(
 ) -> Result<()> {
     for tx in block.transactions() {
         for call in tx.calls.iter() {
+            if call.state_reverted {
+                continue
+            }
             let builder = transaction_changes
                 .entry(tx.index)
                 .or_insert_with(|| TransactionChangesBuilder::new(&(tx.into())));
