@@ -77,6 +77,9 @@ fn handle_sync(
                 .entry(tx.index)
                 .or_insert_with(|| TransactionChangesBuilder::new(&(tx.into())));
 
+            // Only these cases need handling: transactions to stETH for deposit/withdraw, to wstETH
+            // for wrap/unwrap, and delegate actions for the governance DAO that modify the staking
+            // limit.
             if call.address == ST_ETH_ADDRESS_IMPL {
                 st_eth_entity_changes(call, builder)?
             } else if call.address == WST_ETH_ADDRESS {
@@ -118,6 +121,7 @@ fn staking_status_and_limit(storage_change: &StorageChange) -> Result<(StakingSt
     }
 }
 
+// This function assumes that all storage slot values are updated
 fn st_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) -> Result<()> {
     for storage_change in call.storage_changes.iter() {
         if storage_change.key == STORAGE_SLOT_TOTAL_SHARES {
