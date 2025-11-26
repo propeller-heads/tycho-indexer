@@ -6511,7 +6511,7 @@ dependencies = [
  "tokio-retry2",
  "tracing",
  "tracing-subscriber 0.3.20",
- "tycho-execution",
+ "tycho-execution 0.136.0",
  "tycho-simulation",
  "tycho-test",
 ]
@@ -9136,6 +9136,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "tycho-execution"
+version = "0.136.0"
+dependencies = [
+ "alloy",
+ "chrono",
+ "clap",
+ "dotenv",
+ "hex",
+ "lazy_static",
+ "num-bigint",
+ "num-traits",
+ "once_cell",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tycho-common",
+]
+
+[[package]]
 name = "tycho-simulation"
 version = "0.202.2"
 source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.202.2#e16d2609055353c77cc9019e756e08bdeeaef3d2"
@@ -9210,7 +9231,7 @@ dependencies = [
  "tycho-client",
  "tycho-common",
  "tycho-ethereum",
- "tycho-execution",
+ "tycho-execution 0.135.0",
  "tycho-simulation",
  "urlencoding",
 ]

@@ -10,7 +10,7 @@ miette = { version = "7.6.0", features = ["fancy"] }
 tracing = "0.1.37"
 tycho-simulation = { git = "https://github.com/propeller-heads/tycho-simulation.git", tag = "0.202.2", features = ["evm"] }
 tycho-test = { git = "https://github.com/propeller-heads/tycho-simulation.git", tag = "0.202.2" }
-tycho-execution = ">=0.134.0"
+tycho-execution = { path = "../../tycho-execution" }
 num-bigint = "0.4"
 num-traits = "0.2"
 num-rational = "0.4.2"

@@ -23,7 +23,7 @@ tests:
           hook_identifier: "0x616e677374726f6d5f7631" # angstrom_v1
         creation_tx: "0xf8faae3edf4e801a91f83381de9b2f8182d07a05442d6f5ed78410bced50a534"
         skip_simulation: false
-        skip_execution: true
+        skip_execution: false
       - id: "0x90078845bceb849b171873cfbc92db8540e9c803ff57d9d21b1215ec158e79b3"
         tokens:
           - "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
@@ -35,4 +35,4 @@ tests:
           hook_identifier: "0x616e677374726f6d5f7631" # angstrom_v1
         creation_tx: "0xf8faae3edf4e801a91f83381de9b2f8182d07a05442d6f5ed78410bced50a534"
         skip_simulation: false
-        skip_execution: true
+        skip_execution: false

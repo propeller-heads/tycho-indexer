@@ -18,6 +18,8 @@ const UNISWAP_V3_BYTECODE_JSON: &str =
     include_str!("../../evm/test/executors/UniswapV3.runtime.json");
 const UNISWAP_V4_BYTECODE_JSON: &str =
     include_str!("../../evm/test/executors/UniswapV4.runtime.json");
+const UNISWAP_V4_ANGSTROM_BYTECODE_JSON: &str =
+    include_str!("../../evm/test/executors/UniswapV4Angstrom.runtime.json");
 const BALANCER_V2_BYTECODE_JSON: &str =
     include_str!("../../evm/test/executors/BalancerV2.runtime.json");
 const BALANCER_V3_BYTECODE_JSON: &str =
@@ -36,6 +38,7 @@ static EXECUTOR_MAPPING: LazyLock<HashMap<&'static str, &'static str>> = LazyLoc
     map.insert("uniswap_v3", UNISWAP_V3_BYTECODE_JSON);
     map.insert("pancakeswap_v3", UNISWAP_V3_BYTECODE_JSON);
     map.insert("uniswap_v4", UNISWAP_V4_BYTECODE_JSON);
+    map.insert("uniswap_v4_hooks", UNISWAP_V4_ANGSTROM_BYTECODE_JSON);
     map.insert("balancer_v2", BALANCER_V2_BYTECODE_JSON);
     map.insert("balancer_v3", BALANCER_V3_BYTECODE_JSON);
     map.insert("curve", CURVE_BYTECODE_JSON);
