@@ -96,7 +96,7 @@ where
 
 impl<H> Default for TychoStreamDecoder<H>
 where
-    H: HeaderLike + Clone + Sync + Send + 'static,
+    H: HeaderLike + Clone + Sync + Send + 'static + std::fmt::Debug,
 {
     fn default() -> Self {
         Self::new()
@@ -105,7 +105,7 @@ where
 
 impl<H> TychoStreamDecoder<H>
 where
-    H: HeaderLike + Clone + Sync + Send + 'static,
+    H: HeaderLike + Clone + Sync + Send + 'static + std::fmt::Debug,
 {
     pub fn new() -> Self {
         Self {

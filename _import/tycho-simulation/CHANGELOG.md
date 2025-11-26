@@ -1,3 +1,35 @@
+## [0.206.0](https://github.com/propeller-heads/tycho-simulation/compare/0.205.0...0.206.0) (2025-11-26)
+
+
+### Features
+
+* Add validation for curve ([e87a96a](https://github.com/propeller-heads/tycho-simulation/commit/e87a96a8247752785a082b7c0d3f199fb264ff55))
+* Metric for failed validations ([6ab9e6e](https://github.com/propeller-heads/tycho-simulation/commit/6ab9e6e168d7cc7fa366b16dd62687a85455b584))
+* Split validation in two steps for batching ([39a0e78](https://github.com/propeller-heads/tycho-simulation/commit/39a0e7844f70a78b0536551aad25cbe86c4967d3))
+* Validator trait + implementation for USV2 ([e8614ac](https://github.com/propeller-heads/tycho-simulation/commit/e8614ac971c13d42075400d927d3b6e732c705fb))
+
+
+### Bug Fixes
+
+* **cluster-test:** Handle failures in the run() method nicely ([28b2f9c](https://github.com/propeller-heads/tycho-simulation/commit/28b2f9c583445fb13bad4203e2d1a4599622a96e))
+* gate the validation module behind the evm feature ([8978571](https://github.com/propeller-heads/tycho-simulation/commit/8978571251a223efac61c8ef06ff739ac18388fb))
+* In validations RPC calls, handle each result individually ([a2baaf6](https://github.com/propeller-heads/tycho-simulation/commit/a2baaf62c5e2900ca950e2c16aea9c599a970b88))
+* Remove removed ids from the TychoState ([3345b14](https://github.com/propeller-heads/tycho-simulation/commit/3345b141ac5a6e4b5eba095430985f9baa089dae))
+
+## [0.205.0](https://github.com/propeller-heads/tycho-simulation/compare/0.204.0...0.205.0) (2025-11-26)
+
+
+### Features
+
+* remove uniswap_v4 from exchanges requiring filters ([db4154f](https://github.com/propeller-heads/tycho-simulation/commit/db4154fc7147f1bab48082e9afc7376a20cd9687))
+
+## [0.204.0](https://github.com/propeller-heads/tycho-simulation/compare/0.203.1...0.204.0) (2025-11-26)
+
+
+### Features
+
+* remove filters for integration testing for Curve ([f4cdf2b](https://github.com/propeller-heads/tycho-simulation/commit/f4cdf2b09b22d519932305a6f17054e6e4993853))
+
 ## [0.203.1](https://github.com/propeller-heads/tycho-simulation/compare/0.203.0...0.203.1) (2025-11-25)
 
 
