@@ -1,3 +1,11 @@
+## [0.116.0](https://github.com/propeller-heads/tycho-indexer/compare/0.115.0...0.116.0) (2025-11-26)
+
+
+### Features
+
+* add Price struct and swap_to_price/query_demand methods to ProtocolSim trait ([308ce9f](https://github.com/propeller-heads/tycho-indexer/commit/308ce9f0738c83a4e64e1c68e3e35151e0cfef02))
+* Add swap_to_price and query_demand methods to ProtocolSim trait ([#789](https://github.com/propeller-heads/tycho-indexer/issues/789)) ([44e6a69](https://github.com/propeller-heads/tycho-indexer/commit/44e6a69ebf745b2fe6258c7ee27f7a372154f49d))
+
 ## [0.115.0](https://github.com/propeller-heads/tycho-indexer/compare/0.114.3...0.115.0) (2025-11-24)
 
 
