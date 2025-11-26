@@ -13,29 +13,7 @@ use tracing::{debug, error, warn};
 use super::component_metadata::{
     DeduplicationId, MetadataError, RequestProvider, RequestTransport, RpcTransport,
 };
-
-/// Configuration for RPC metadata provider retry behavior
-#[derive(Clone, Debug)]
-pub(super) struct RPCRetryConfig {
-    /// Maximum number of retry attempts for failed requests (default: 3)
-    max_retries: usize,
-    /// Initial backoff delay in milliseconds (default: 100ms)
-    initial_backoff_ms: u64,
-    /// Maximum backoff delay in milliseconds (default: 5000ms)
-    max_backoff_ms: u64,
-}
-
-impl RPCRetryConfig {
-    pub(super) fn new(max_retries: usize, initial_backoff_ms: u64, max_backoff_ms: u64) -> Self {
-        Self { max_retries, initial_backoff_ms, max_backoff_ms }
-    }
-}
-
-impl Default for RPCRetryConfig {
-    fn default() -> Self {
-        Self { max_retries: 3, initial_backoff_ms: 100, max_backoff_ms: 5000 }
-    }
-}
+use crate::extractor::RPCRetryConfig;
 
 /// Custom error type for RPC batch operations
 #[derive(Error, Debug)]
@@ -465,6 +443,7 @@ mod tests {
     use mockito::{Matcher, Server};
 
     use super::*;
+    use crate::extractor::RPCRetryConfig;
 
     #[tokio::test]
     #[ignore = "Requires a real RPC endpoint"]
