@@ -17,7 +17,7 @@ use miette::{miette, IntoDiagnostic, NarratableReportHandler, WrapErr};
 use num_bigint::BigUint;
 use num_traits::{ToPrimitive, Zero};
 use rand::prelude::IndexedRandom;
-use tokio::sync::Semaphore;
+use tokio::{signal, sync::Semaphore};
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::EnvFilter;
 use tycho_common::simulation::protocol_sim::ProtocolSim;
@@ -137,8 +137,7 @@ async fn main() -> miette::Result<()> {
     metrics::initialize_metrics();
     let metrics_task = metrics::create_metrics_exporter(cli.metrics_port).await?;
 
-    // Run the main application logic
-    // Start metrics server in background but don't wait for it
+    // Start metrics server in background
     let _metrics_handle = tokio::spawn(async move {
         if let Err(e) = metrics_task
             .await
@@ -149,11 +148,39 @@ async fn main() -> miette::Result<()> {
         }
     });
 
-    // Run main application and exit the process immediately on completion/error
-    let result = run(cli).await;
+    // Set up signal handling for graceful shutdown
+    let shutdown_requested = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let shutdown_flag = shutdown_requested.clone();
 
-    // Exit the entire process when main application completes
-    // This ensures the metrics server thread doesn't keep the process alive
+    tokio::spawn(async move {
+        match signal::ctrl_c().await {
+            Ok(()) => {
+                info!("Received Ctrl+C, initiating graceful shutdown");
+                shutdown_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            Err(err) => {
+                error!("Unable to listen for shutdown signal: {}", err);
+            }
+        }
+    });
+
+    // Run main application with signal support
+    let result = tokio::select! {
+        result = run(cli) => result,
+        _ = async {
+            loop {
+                if shutdown_requested.load(std::sync::atomic::Ordering::SeqCst) {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        } => {
+            info!("Application interrupted by signal");
+            Ok(())
+        }
+    };
+
+    // Force exit to prevent hanging on metrics server thread
     match result {
         Ok(_) => std::process::exit(0),
         Err(e) => {

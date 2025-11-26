@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use alloy::{
+    hex,
     primitives::{Address, Bytes as AlloyBytes},
     rpc::{
         client::ClientBuilder,
@@ -10,16 +11,19 @@ use alloy::{
     sol_types::SolCall,
 };
 use async_trait::async_trait;
-use tracing::info;
 use tycho_common::{simulation::protocol_sim::ProtocolSim, Bytes};
-use tycho_simulation::evm::{
-    engine_db::tycho_db::PreCachedDB,
-    protocol::{uniswap_v2::state::UniswapV2State, vm::state::EVMPoolState},
-};
+use tycho_simulation::evm::protocol::uniswap_v2::state::UniswapV2State;
 
 type ComponentId = Bytes;
 type CallTarget = Address;
 type CallData = AlloyBytes;
+
+/// Result of a contract call - either successful data or revert information
+#[derive(Debug)]
+pub enum CallResult {
+    Success(AlloyBytes),
+    Revert(String),
+}
 
 /// Helper function to get a Validator reference from a ProtocolSim trait object
 ///
@@ -42,10 +46,6 @@ pub fn get_validator<'a>(
         "uniswap_v2" => state
             .as_any()
             .downcast_ref::<UniswapV2State>()
-            .map(|s| s as &dyn Validator),
-        "vm:curve" => state
-            .as_any()
-            .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .map(|s| s as &dyn Validator),
         // Add more protocols here as they implement Validator
         _ => None,
@@ -79,7 +79,7 @@ async fn execute_batched_calls(
     rpc_url: &str,
     component_calls: &[(ComponentId, Vec<(CallTarget, CallData)>)],
     block_id: u64,
-) -> Result<HashMap<ComponentId, Vec<CallData>>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<HashMap<ComponentId, Vec<CallResult>>, Box<dyn std::error::Error + Send + Sync>> {
     if component_calls.is_empty() {
         return Ok(HashMap::new());
     }
@@ -108,8 +108,15 @@ async fn execute_batched_calls(
     for (component_id, futures) in component_futures {
         let mut component_results = Vec::new();
         for fut in futures {
-            let bytes: AlloyBytes = fut.await?;
-            component_results.push(bytes);
+            match fut.await {
+                Ok(bytes) => {
+                    component_results.push(CallResult::Success(bytes));
+                }
+                Err(err) => {
+                    let error_msg = format!("Call reverted: {}", err);
+                    component_results.push(CallResult::Revert(error_msg));
+                }
+            }
         }
         results.insert(component_id, component_results);
     }
@@ -151,7 +158,7 @@ pub trait Validator: ProtocolSim {
     /// # Arguments
     ///
     /// * `component_id` - The component/pool address
-    /// * `results` - The raw bytes from the batched RPC calls
+    /// * `results` - The results from the batched RPC calls (successful or reverted)
     ///
     /// # Returns
     ///
@@ -160,7 +167,7 @@ pub trait Validator: ProtocolSim {
     fn validate_with_results(
         &self,
         component_id: &ComponentId,
-        results: &[CallData],
+        results: &[CallResult],
     ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>>;
 }
 
@@ -256,7 +263,7 @@ impl Validator for UniswapV2State {
     fn validate_with_results(
         &self,
         component_id: &ComponentId,
-        results: &[CallData],
+        results: &[CallResult],
     ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         if results.len() != 1 {
             return Err(format!(
@@ -266,8 +273,16 @@ impl Validator for UniswapV2State {
             .into());
         }
 
+        // Check if the call was successful
+        let result_data = match &results[0] {
+            CallResult::Success(data) => data,
+            CallResult::Revert(error) => {
+                return Err(format!("getReserves call reverted: {}", error).into());
+            }
+        };
+
         // Decode getReserves return value
-        let reserves = IUniswapV2Pair::getReservesCall::abi_decode_returns(&results[0])?;
+        let reserves = IUniswapV2Pair::getReservesCall::abi_decode_returns(result_data)?;
 
         let onchain_reserve0 = alloy::primitives::U256::from(reserves.reserve0);
         let onchain_reserve1 = alloy::primitives::U256::from(reserves.reserve1);
@@ -286,74 +301,6 @@ impl Validator for UniswapV2State {
         }
 
         Ok(reserves_match)
-    }
-}
-
-#[async_trait]
-impl Validator for EVMPoolState<PreCachedDB> {
-    fn prepare_validation_calls(
-        &self,
-        component_id: &ComponentId,
-    ) -> Result<Vec<(CallTarget, CallData)>, Box<dyn std::error::Error + Send + Sync>> {
-        let pool_address = CallTarget::from_slice(&component_id[..20]);
-        let mut calls = Vec::new();
-
-        // Call balanceOf for each token in the pool, querying the pool's balance
-        for token_bytes in &self.tokens {
-            let token_address = CallTarget::from_slice(&token_bytes[..20]);
-            let balance_of_call = IERC20::balanceOfCall { account: pool_address }.abi_encode();
-            calls.push((token_address, balance_of_call.into()));
-        }
-
-        Ok(calls)
-    }
-
-    fn validate_with_results(
-        &self,
-        component_id: &ComponentId,
-        results: &[CallData],
-    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-        if results.len() != self.tokens.len() {
-            return Err(format!(
-                "Expected {} results for EVM pool validation, got {}",
-                self.tokens.len(),
-                results.len()
-            )
-            .into());
-        }
-
-        let pool_address = Address::from_slice(&component_id[..20]);
-        let mut all_balances_match = true;
-
-        for (i, token_bytes) in self.tokens.iter().enumerate() {
-            let token_address = Address::from_slice(&token_bytes[..20]);
-
-            // Decode balanceOf return value
-            let onchain_balance = IERC20::balanceOfCall::abi_decode_returns(&results[i])?;
-
-            // Get the expected balance from our state (component balances)
-            let state_balance = self
-                .get_balances()
-                .get(&token_address)
-                .copied()
-                .unwrap_or_default();
-
-            let balance_matches = state_balance == onchain_balance;
-
-            if !balance_matches {
-                tracing::warn!(
-                    component_id = %hex::encode(component_id),
-                    token_address = %token_address,
-                    pool_address = %pool_address,
-                    state_balance = %state_balance,
-                    onchain_balance = %onchain_balance,
-                    "EVM pool balance validation failed: state balance does not match on-chain balance"
-                );
-                all_balances_match = false;
-            }
-        }
-
-        Ok(all_balances_match)
     }
 }
 
