@@ -1,13 +1,13 @@
 use anyhow::Result;
-use substreams_ethereum::pb::{eth, eth::v2::Call};
+use substreams_ethereum::pb::eth;
 use tycho_substreams::{
     models::{ChangeType, FinancialType, ImplementationType, ProtocolComponent, ProtocolType},
     prelude::*,
 };
 
 use crate::{
-    ETH_ADDRESS, ST_ETH_ADDRESS_IMPL, ST_ETH_ADDRESS_PROXY, ST_ETH_ADDRESS_PROXY_COMPONENT_ID,
-    WST_ETH_ADDRESS, WST_ETH_ADDRESS_COMPONENT_ID,
+    ETH_ADDRESS, ST_ETH_ADDRESS_PROXY, ST_ETH_ADDRESS_PROXY_COMPONENT_ID, WST_ETH_ADDRESS,
+    WST_ETH_ADDRESS_COMPONENT_ID,
 };
 
 /// Create all relevant protocol components
@@ -27,32 +27,21 @@ fn map_protocol_components(
         return Ok(BlockTransactionProtocolComponents { tx_components: vec![] })
     }
 
-    Ok(BlockTransactionProtocolComponents {
-        tx_components: block
-            .transactions()
-            .filter_map(|tx| {
-                let components = tx
-                    .logs_with_calls()
-                    .filter_map(|(_, call)| maybe_create_component(call.call))
-                    .collect::<Vec<_>>();
+    let tx: &eth::v2::TransactionTrace = block.transactions().next().unwrap();
+    let components = create_components();
 
-                if !components.is_empty() {
-                    Some(TransactionProtocolComponents { tx: Some(tx.into()), components })
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>(),
+    Ok(BlockTransactionProtocolComponents {
+        tx_components: vec![TransactionProtocolComponents { tx: Some(tx.into()), components }],
     })
 }
 
-/// Potentially constructs a new ProtocolComponent given a call
+/// Constructs ProtocolComponents
 ///
-/// This method is given each individual call within a transaction, the corresponding
-/// logs emitted during that call as well as the full transaction trace.
-pub fn maybe_create_component(call: &Call) -> Option<ProtocolComponent> {
-    if *call.address == ST_ETH_ADDRESS_IMPL {
-        Some(ProtocolComponent {
+/// This method is used only for the first block and first transaction in that block, the
+/// corresponding logs emitted during that call as well as the full transaction trace.
+pub fn create_components() -> Vec<ProtocolComponent> {
+    vec![
+        ProtocolComponent {
             id: ST_ETH_ADDRESS_PROXY_COMPONENT_ID.to_owned(),
             tokens: vec![ST_ETH_ADDRESS_PROXY.into(), ETH_ADDRESS.into()],
             contracts: vec![],
@@ -64,9 +53,8 @@ pub fn maybe_create_component(call: &Call) -> Option<ProtocolComponent> {
                 attribute_schema: vec![],
                 implementation_type: ImplementationType::Custom.into(),
             }),
-        })
-    } else if *call.address == WST_ETH_ADDRESS {
-        Some(ProtocolComponent {
+        },
+        ProtocolComponent {
             id: WST_ETH_ADDRESS_COMPONENT_ID.to_owned(),
             tokens: vec![ST_ETH_ADDRESS_PROXY.into(), WST_ETH_ADDRESS.into()],
             contracts: vec![],
@@ -78,8 +66,6 @@ pub fn maybe_create_component(call: &Call) -> Option<ProtocolComponent> {
                 attribute_schema: vec![],
                 implementation_type: ImplementationType::Custom.into(),
             }),
-        })
-    } else {
-        None
-    }
+        },
+    ]
 }
