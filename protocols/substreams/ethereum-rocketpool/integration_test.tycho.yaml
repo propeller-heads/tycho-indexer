@@ -2,7 +2,7 @@ substreams_yaml_path: ./substreams.yaml
 protocol_system: "rocketpool"
 protocol_type_names:
   - "rocketpool"
-skip_balance_check: true
+skip_balance_check: true # Rocket Deposit Pool components do not hold user funds directly
 tests:
   - name: test_pool_creation
     start_block: 13325238 # RocketDepositPool_V1_0 deployed
