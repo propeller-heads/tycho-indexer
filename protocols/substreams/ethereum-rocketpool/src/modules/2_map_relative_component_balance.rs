@@ -1,6 +1,6 @@
 use crate::{
     abi::rocket_deposit_pool,
-    constants::{ETH_ADDRESS, ROCKET_POOL_COMPONENT_ID},
+    constants::{ETH_ADDRESS, ROCKET_DEPOSIT_POOL_ADDRESSES, ROCKET_POOL_COMPONENT_ID},
 };
 use anyhow::Result;
 use substreams_ethereum::{pb::eth, Event};
@@ -16,6 +16,11 @@ fn map_relative_component_balance(block: eth::v2::Block) -> Result<BlockBalanceD
     let res = block
         .logs()
         .filter_map(|log| {
+            // Filter only Rocket Deposit Pool events
+            if !ROCKET_DEPOSIT_POOL_ADDRESSES.contains(&log.log.address.as_slice()) {
+                return None;
+            }
+
             let amount = if let Some(deposit) =
                 rocket_deposit_pool::events::DepositReceived::match_and_decode(log)
             {

@@ -88,7 +88,7 @@ fn update_protocol_components(
 
             let builder = transaction_changes
                 .entry(tx.index)
-                .or_insert_with(|| TransactionChangesBuilder::new(&tx));
+                .or_insert_with(|| TransactionChangesBuilder::new(tx));
 
             for c in &tx_component.components {
                 builder.add_protocol_component(c);
@@ -154,8 +154,8 @@ fn update_protocol_settings(
     for log in block.logs() {
         // If the log is not a ProposalExecuted event from the DAO Proposal contract, skip it as no
         // protocol settings could have changed.
-        if !rocket_dao_protocol_proposal::events::ProposalExecuted::match_log(log.log) ||
-            log.log.address != ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS
+        if !(log.log.address != ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS &&
+            rocket_dao_protocol_proposal::events::ProposalExecuted::match_log(log.log))
         {
             continue;
         }
