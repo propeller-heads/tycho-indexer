@@ -59,7 +59,7 @@ impl RocketPoolState {
     }
 
     fn depositing_eth(token_in: &Bytes) -> bool {
-        token_in.to_vec() == hex!("0000000000000000000000000000000000000000")
+        token_in.as_ref() == ETH_ADDRESS
     }
 
     fn address_spot_price(&self, base: &Bytes) -> Result<f64, SimulationError> {
