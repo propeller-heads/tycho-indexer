@@ -1,3 +1,10 @@
+## [0.204.0](https://github.com/propeller-heads/tycho-simulation/compare/0.203.1...0.204.0) (2025-11-26)
+
+
+### Features
+
+* remove filters for integration testing for Curve ([f4cdf2b](https://github.com/propeller-heads/tycho-simulation/commit/f4cdf2b09b22d519932305a6f17054e6e4993853))
+
 ## [0.203.1](https://github.com/propeller-heads/tycho-simulation/compare/0.203.0...0.203.1) (2025-11-25)
 
 
