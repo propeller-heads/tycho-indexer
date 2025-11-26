@@ -1,3 +1,10 @@
+## [0.205.0](https://github.com/propeller-heads/tycho-simulation/compare/0.204.0...0.205.0) (2025-11-26)
+
+
+### Features
+
+* remove uniswap_v4 from exchanges requiring filters ([db4154f](https://github.com/propeller-heads/tycho-simulation/commit/db4154fc7147f1bab48082e9afc7376a20cd9687))
+
 ## [0.204.0](https://github.com/propeller-heads/tycho-simulation/compare/0.203.1...0.204.0) (2025-11-26)
 
 
