@@ -8,7 +8,7 @@ skip_balance_check: true
 tests:
   - name: test_pool_creation
     start_block: 23740315
-    stop_block: 23740316
+    stop_block: 23740321
     # A list of expected component indexed in the block range. Each component must match perfectly the `ProtocolComponent` indexed by your subtreams module.
     expected_components:
       - id: "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"
@@ -25,4 +25,3 @@ tests:
         creation_tx: "0x777926fa97f29d8dc1e3bdc2d9a19beffa9ef011206bc2f8ca453d699bad0e5e"
         skip_simulation: true # Temporary until there is simulation
         skip_execution: true
-
