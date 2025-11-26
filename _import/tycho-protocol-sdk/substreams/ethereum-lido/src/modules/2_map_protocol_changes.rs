@@ -4,13 +4,13 @@ use std::collections::HashMap;
 use substreams::{hex, prelude::*};
 use substreams_ethereum::pb::eth::{
     self,
-    v2::{Call, StorageChange},
+    v2::{Call, CallType, StorageChange},
 };
 use tycho_substreams::prelude::*;
 
 use crate::{
-    ETH_ADDRESS, ST_ETH_ADDRESS_IMPL, ST_ETH_ADDRESS_PROXY_COMPONENT_ID, WST_ETH_ADDRESS,
-    WST_ETH_ADDRESS_COMPONENT_ID,
+    ETH_ADDRESS, ST_ETH_ADDRESS_IMPL, ST_ETH_ADDRESS_PROXY, ST_ETH_ADDRESS_PROXY_COMPONENT_ID,
+    WST_ETH_ADDRESS, WST_ETH_ADDRESS_COMPONENT_ID,
 };
 
 const STORAGE_SLOT_TOTAL_SHARES: [u8; 32] =
@@ -81,6 +81,8 @@ fn handle_sync(
                 st_eth_entity_changes(call, builder)?
             } else if call.address == WST_ETH_ADDRESS {
                 wst_eth_entity_changes(call, builder)?
+            } else if call.call_type == CallType::Delegate as i32 {
+                staking_entity_changes(call, builder)?;
             } else {
                 continue
             };
@@ -147,6 +149,24 @@ fn st_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) -
         } else if storage_change.key == STORAGE_SLOT_STAKE_LIMIT {
             let (staking_status, staking_limit) = staking_status_and_limit(storage_change)?;
 
+            builder.add_entity_change(&EntityChanges {
+                component_id: ST_ETH_ADDRESS_PROXY_COMPONENT_ID.to_owned(),
+                attributes: vec![
+                    create_entity_change("staking_status", staking_status.as_str_name().into()),
+                    create_entity_change("staking_limit", staking_limit.to_signed_bytes_be()),
+                ],
+            });
+        };
+    }
+    Ok(())
+}
+
+fn staking_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) -> Result<()> {
+    for storage_change in call.storage_changes.iter() {
+        if storage_change.address == ST_ETH_ADDRESS_PROXY &&
+            storage_change.key == STORAGE_SLOT_STAKE_LIMIT
+        {
+            let (staking_status, staking_limit) = staking_status_and_limit(storage_change)?;
             builder.add_entity_change(&EntityChanges {
                 component_id: ST_ETH_ADDRESS_PROXY_COMPONENT_ID.to_owned(),
                 attributes: vec![
