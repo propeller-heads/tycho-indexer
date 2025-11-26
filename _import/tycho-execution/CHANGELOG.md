@@ -1,3 +1,11 @@
+## [0.137.0](https://github.com/propeller-heads/tycho-execution/compare/0.136.0...0.137.0) (2025-11-26)
+
+
+### Features
+
+* Angstrom encoding + execution ([55816f8](https://github.com/propeller-heads/tycho-execution/commit/55816f8e9ea311bd00b8c01be080dc166c10a24b))
+* Smart early stopping if attestation found ([09f2a47](https://github.com/propeller-heads/tycho-execution/commit/09f2a473a604504285e3ea22be32f9d1991c2666))
+
 ## [0.136.0](https://github.com/propeller-heads/tycho-execution/compare/0.135.0...0.136.0) (2025-11-20)
 
 
