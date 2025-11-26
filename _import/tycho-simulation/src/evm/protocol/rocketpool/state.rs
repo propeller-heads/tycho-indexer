@@ -66,12 +66,7 @@ impl RocketPoolState {
         let is_depositing_eth = RocketPoolState::depositing_eth(base);
 
         let res = if is_depositing_eth {
-            if !self.deposits_enabled {
-                return Err(SimulationError::InvalidInput(
-                    "Deposits are currently disabled in RocketPool".to_string(),
-                    None,
-                ));
-            }
+            self.assert_deposits_enabled()?;
 
             u256_to_f64(self.reth_supply)? / u256_to_f64(self.total_eth)? * (1.0 - self.deposit_fee)
         } else {
@@ -79,6 +74,17 @@ impl RocketPoolState {
         };
 
         Ok(res)
+    }
+
+    fn assert_deposits_enabled(&self) -> Result<(), SimulationError> {
+        if !self.deposits_enabled {
+            Err(SimulationError::InvalidInput(
+                "Deposits are currently disabled in RocketPool".to_string(),
+                None,
+            ))
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -101,12 +107,7 @@ impl ProtocolSim for RocketPoolState {
         let is_depositing_eth = RocketPoolState::depositing_eth(&token_in.address);
 
         if is_depositing_eth {
-            if !self.deposits_enabled {
-                return Err(SimulationError::InvalidInput(
-                    "Deposits are currently disabled in RocketPool".to_string(),
-                    None,
-                ));
-            }
+            self.assert_deposits_enabled()?;
 
             if amount_in < self.minimum_deposit {
                 return Err(SimulationError::InvalidInput(
@@ -587,7 +588,9 @@ mod tests {
         let eth_address = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
         let reth_address = Bytes::from_str("0xae78736Cd615f374D3085123A210448E74Fc6393").unwrap();
 
-        let (max_sell, max_buy) = state.get_limits(eth_address, reth_address).unwrap();
+        let (max_sell, max_buy) = state
+            .get_limits(eth_address, reth_address)
+            .unwrap();
 
         // Max sell = max_pool_size - total_eth = 10000 - 950 = 9050
         assert_eq!(max_sell, BigUint::from(9050u64));
@@ -612,7 +615,9 @@ mod tests {
         let eth_address = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
         let reth_address = Bytes::from_str("0xae78736Cd615f374D3085123A210448E74Fc6393").unwrap();
 
-        let (max_sell, max_buy) = state.get_limits(reth_address, eth_address).unwrap();
+        let (max_sell, max_buy) = state
+            .get_limits(reth_address, eth_address)
+            .unwrap();
 
         // Max buy (ETH) should be limited by liquidity = 500
         assert_eq!(max_buy, BigUint::from(500u64));
