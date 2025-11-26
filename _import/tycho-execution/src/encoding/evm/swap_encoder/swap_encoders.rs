@@ -4,6 +4,7 @@ use alloy::{
     primitives::{Address, Bytes as AlloyBytes, U8},
     sol_types::SolValue,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::from_str;
 use tokio::{
     runtime::{Handle, Runtime},
@@ -18,6 +19,7 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,
+        constants::ANGSTROM_DEFAULT_BLOCKS_IN_FUTURE,
         utils::{
             biguint_to_u256, bytes_to_address, get_runtime, get_static_attribute, pad_to_fixed_size,
         },
@@ -152,11 +154,96 @@ impl SwapEncoder for UniswapV3SwapEncoder {
 #[derive(Clone)]
 pub struct UniswapV4SwapEncoder {
     executor_address: Bytes,
+    angstrom_hook_address: Bytes,
 }
 
 impl UniswapV4SwapEncoder {
     fn get_zero_to_one(sell_token_address: Address, buy_token_address: Address) -> bool {
         sell_token_address < buy_token_address
+    }
+
+    /// Fetches attestations from the Angstrom API (blocking)
+    fn fetch_angstrom_attestations() -> Result<AttestationResponse, EncodingError> {
+        let client = reqwest::blocking::Client::new();
+
+        let api_url = std::env::var("ANGSTROM_API_URL")
+            .unwrap_or("https://attestations.angstrom.xyz/getAttestations".to_string());
+
+        let api_key = std::env::var("ANGSTROM_API_KEY").map_err(|_| {
+            EncodingError::FatalError(
+                "ANGSTROM_API_KEY environment variable is required for Angstrom swaps".to_string(),
+            )
+        })?;
+        let blocks_in_future = std::env::var("ANGSTROM_BLOCKS_IN_FUTURE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(ANGSTROM_DEFAULT_BLOCKS_IN_FUTURE);
+
+        let request_body = serde_json::json!({
+            "blocks_in_future": blocks_in_future
+        });
+
+        let response = client
+            .post(&api_url)
+            .header("accept", "application/json")
+            .header("X-Api-Key", api_key)
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .map_err(|e| {
+                EncodingError::FatalError(format!("Failed to fetch attestations: {}", e))
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response
+                .text()
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(EncodingError::FatalError(format!(
+                "Angstrom API request failed with status {}: {}",
+                status, error_text
+            )));
+        }
+
+        let attestation_response: AttestationResponse = response.json().map_err(|e| {
+            EncodingError::FatalError(format!("Failed to parse attestation response: {}", e))
+        })?;
+
+        if !attestation_response.success {
+            return Err(EncodingError::FatalError(
+                "Angstrom API returned success=false".to_string(),
+            ));
+        }
+
+        Ok(attestation_response)
+    }
+
+    /// Encodes attestations into bytes
+    ///
+    /// Uses fixed-length format: each attestation is exactly 93 bytes
+    /// (8 bytes block number + 85 bytes attestation)
+    fn encode_angstrom_attestations(
+        attestations: &AttestationResponse,
+    ) -> Result<Vec<u8>, EncodingError> {
+        let mut encoded = Vec::new();
+        for att_data in &attestations.attestations {
+            // Encode block number (first 8 bytes)
+            encoded.extend_from_slice(&att_data.block_number.to_be_bytes());
+
+            let attestation_hex = att_data
+                .attestation
+                .strip_prefix("0x")
+                .unwrap_or(&att_data.attestation);
+
+            let attestation_bytes = hex::decode(attestation_hex).map_err(|e| {
+                EncodingError::FatalError(format!("Failed to decode attestation hex: {}", e))
+            })?;
+
+            // Encode attestation data for block (next 85 bytes)
+            encoded.extend_from_slice(&attestation_bytes);
+        }
+
+        Ok(encoded)
     }
 }
 
@@ -164,9 +251,20 @@ impl SwapEncoder for UniswapV4SwapEncoder {
     fn new(
         executor_address: Bytes,
         _chain: Chain,
-        _config: Option<HashMap<String, String>>,
+        config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
-        Ok(Self { executor_address })
+        let angstrom_hook_address = match config {
+            // Allow for no config, since Angstrom is not on every chain
+            None => Bytes::new(),
+            Some(cfg) => cfg
+                .get("angstrom_hook_address")
+                .map_or(Ok(Bytes::new()), |s| {
+                    Bytes::from_str(s).map_err(|_| {
+                        EncodingError::FatalError("Invalid Angstrom hook address".to_string())
+                    })
+                })?,
+        };
+        Ok(Self { executor_address, angstrom_hook_address })
     }
 
     fn encode_swap(
@@ -190,11 +288,18 @@ impl SwapEncoder for UniswapV4SwapEncoder {
             Err(_) => Address::ZERO,
         };
 
-        let hook_data = swap
-            .user_data
-            .clone()
-            .unwrap_or_default()
-            .to_vec();
+        let is_angstrom_hook = **hook_address == *self.angstrom_hook_address;
+        let hook_data = if is_angstrom_hook {
+            // Angstrom hook - obtain hook data from API
+            let attestations = Self::fetch_angstrom_attestations()?;
+            Self::encode_angstrom_attestations(&attestations)?
+        } else {
+            // Regular hook - use user_data as normal
+            swap.user_data
+                .clone()
+                .unwrap_or_default()
+                .to_vec()
+        };
 
         let hook_data_length = (hook_data.len() as u16).to_be_bytes();
 
@@ -248,6 +353,22 @@ impl SwapEncoder for UniswapV4SwapEncoder {
     fn clone_box(&self) -> Box<dyn SwapEncoder> {
         Box::new(self.clone())
     }
+}
+
+/// Attestation data for Angstrom swaps
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AttestationData {
+    #[serde(rename = "blockNumber")]
+    pub block_number: u64,
+    #[serde(rename = "unlockData")]
+    pub attestation: String,
+}
+
+/// Response from Angstrom attestation API
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AttestationResponse {
+    pub success: bool,
+    pub attestations: Vec<AttestationData>,
 }
 
 /// Encodes a swap on a Balancer V2 pool through the given executor address.
@@ -1046,7 +1167,7 @@ impl SwapEncoder for FluidV1SwapEncoder {
                 self.coerce_native_address(&swap.token_out),
             bytes_to_address(&encoding_context.receiver)?,
             (encoding_context.transfer_type as u8).to_be_bytes(),
-            if &swap.token_in == &self.chain.native_token().address { true } else { false },
+            swap.token_in == self.chain.native_token().address,
         );
         Ok(args.abi_encode_packed())
     }
@@ -1580,6 +1701,138 @@ mod tests {
             write_calldata_to_file("test_encode_uniswap_v4_sequential_swap", combined_hex.as_str());
         }
     }
+
+    mod uniswap_v4_angstrom {
+        use super::*;
+        use crate::encoding::evm::utils::ple_encode;
+
+        #[test]
+        fn test_encode_attestations_format() {
+            // Create mock attestation data with real attestations retrieved in the past
+            let attestations = AttestationResponse {
+                success: true,
+                attestations: vec![
+                    AttestationData {
+                        block_number: 12345678,
+                        attestation: "0xd437f3372f3add2c2bc3245e6bd6f9c202e61bb367c79a6f740c7c12ca9c54a760bead943516fafaf8a4fe65a907b31d45c2ab4b525f9f32ec2771033e0832359ceb2e38d9288a755c7c366ce889b0df24b5821b1c".to_string(),
+                    },
+                    AttestationData {
+                        block_number: 12345679,
+                        attestation: "0xd437f3372f3add2c2bc3245e6bd6f9c202e61bb30c337ddae661e68cc6986c7784cd0aaec455b1f7514b6cd91bff26f002ce7cb42b3b1e2092ea4d1c1fb1e0641cbccfb021b31de25462f25b355cc99c7d509cdc1b".to_string(),
+                    },
+                ],
+            };
+
+            let encoded =
+                UniswapV4SwapEncoder::encode_angstrom_attestations(&attestations).unwrap();
+
+            // Verify the structure with fixed-length format:
+            // - For each attestation:
+            //   - 8 bytes: block number
+            //   - 85 bytes: attestation data
+            // Total: 93 bytes per attestation, 186 bytes for 2 attestations
+
+            assert_eq!(encoded.len(), 186);
+            let encoded_hex = hex::encode(&encoded);
+
+            assert_eq!(
+                encoded_hex,
+                String::from(concat!(
+                    // First attestation block number (12345678)
+                    "0000000000bc614e",
+                    // First attestation data
+                    "d437f3372f3add2c2bc3245e6bd6f9c202e61bb367c79a6f740c7c12ca9c54a760bead943516fafaf8a4fe65a907b31d45c2ab4b525f9f32ec2771033e0832359ceb2e38d9288a755c7c366ce889b0df24b5821b1c",
+                    // Second attestation block number (12345679)
+                    "0000000000bc614f",
+                    // Second attestation data
+                    "d437f3372f3add2c2bc3245e6bd6f9c202e61bb30c337ddae661e68cc6986c7784cd0aaec455b1f7514b6cd91bff26f002ce7cb42b3b1e2092ea4d1c1fb1e0641cbccfb021b31de25462f25b355cc99c7d509cdc1b"
+                ))
+            );
+        }
+
+        #[test]
+        #[ignore] // Performs real Angstrom API call
+        fn test_encode_grouped_swap_integration() {
+            // This test performs a grouped swap: USDC -> WETH -> USDT on two consecutive Angstrom
+            // pools
+            let usdc_address = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
+            let weth_address = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2");
+            let usdt_address = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7");
+            let angstrom_hook = Bytes::from("0x0000000aa232009084Bd71A5797d089AA4Edfad4");
+
+            // Context for the grouped swap
+            let context = EncodingContext {
+                receiver: Bytes::from("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2"), // ALICE
+                exact_out: false,
+                router_address: Some(Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f")),
+                group_token_in: usdc_address.clone(),
+                group_token_out: usdt_address.clone(),
+                transfer_type: TransferType::Transfer,
+                historical_trade: false,
+            };
+
+            // Setup first pool: USDC -> WETH (use real tick spacing and fee from on-chain)
+            let mut usdc_weth_attributes: HashMap<String, Bytes> = HashMap::new();
+            usdc_weth_attributes.insert("key_lp_fee".into(), Bytes::from("0x800000")); // 8388608
+            usdc_weth_attributes.insert("tick_spacing".into(), Bytes::from("0x0a")); // 10
+            usdc_weth_attributes.insert("hooks".into(), angstrom_hook.clone());
+            usdc_weth_attributes.insert("hook_address".into(), angstrom_hook.clone());
+
+            let usdc_weth_pool = ProtocolComponent {
+                id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
+                static_attributes: usdc_weth_attributes,
+                ..Default::default()
+            };
+
+            // Setup second pool: WETH -> USDT (use real tick spacing and fee from on-chain)
+            let mut weth_usdt_attributes: HashMap<String, Bytes> = HashMap::new();
+            weth_usdt_attributes.insert("key_lp_fee".into(), Bytes::from("0x800000")); // 8388608
+            weth_usdt_attributes.insert("tick_spacing".into(), Bytes::from("0x0a")); // 10
+            weth_usdt_attributes.insert("hooks".into(), angstrom_hook.clone());
+            weth_usdt_attributes.insert("hook_address".into(), angstrom_hook.clone());
+
+            let weth_usdt_pool = ProtocolComponent {
+                id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
+                static_attributes: weth_usdt_attributes,
+                ..Default::default()
+            };
+
+            let first_swap =
+                SwapBuilder::new(usdc_weth_pool, usdc_address.clone(), weth_address.clone())
+                    .build();
+            let second_swap =
+                SwapBuilder::new(weth_usdt_pool, weth_address.clone(), usdt_address.clone())
+                    .build();
+
+            // Encoder reads Angstrom config from environment variables:
+            // - ANGSTROM_API_KEY (required)
+            // - ANGSTROM_API_URL (optional)
+            // - ANGSTROM_BLOCKS_IN_FUTURE (optional)
+            let encoder = UniswapV4SwapEncoder::new(
+                Bytes::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
+                Chain::Ethereum,
+                Some(HashMap::from([(
+                    "angstrom_hook_address".to_string(),
+                    "0x0000000aa232009084Bd71A5797d089AA4Edfad4".to_string(),
+                )])),
+            )
+            .unwrap();
+
+            // Encode both swaps and combine using prefix-length encoding for the second swap
+            let first_encoded = encoder
+                .encode_swap(&first_swap, &context)
+                .unwrap();
+            let second_encoded = encoder
+                .encode_swap(&second_swap, &context)
+                .unwrap();
+            let combined_hex =
+                format!("{}{}", encode(&first_encoded), encode(ple_encode(vec![second_encoded])));
+
+            write_calldata_to_file("test_encode_angstrom_grouped_swap", combined_hex.as_str());
+            assert!(!combined_hex.is_empty());
+        }
+    }
+
     mod ekubo {
         use super::*;
 

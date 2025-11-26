@@ -1,0 +1,213 @@
+// SPDX-License-Identifier: BUSL-1.1
+pragma solidity ^0.8.26;
+
+import "../../src/executors/UniswapV4AngstromExecutor.sol";
+import "../TestUtils.sol";
+import "./UniswapV4Utils.sol";
+import {Constants} from "../Constants.sol";
+import {Test} from "../../lib/forge-std/src/Test.sol";
+
+contract UniswapV4AngstromExecutorExposed is UniswapV4AngstromExecutor {
+    constructor(IPoolManager _POOL_MANAGER, address _permit2)
+        UniswapV4AngstromExecutor(_POOL_MANAGER, _permit2)
+    {}
+
+    function selectAttestation(bytes memory attestationData)
+        external
+        view
+        returns (bytes memory)
+    {
+        return _selectAttestation(attestationData);
+    }
+}
+
+contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
+    using SafeERC20 for IERC20;
+
+    UniswapV4AngstromExecutorExposed angstromExecutor;
+    IERC20 USDC = IERC20(USDC_ADDR);
+    IERC20 WETH = IERC20(WETH_ADDR);
+
+    function setUp() public {
+        uint256 forkBlock = 23873662;
+        vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
+        angstromExecutor = new UniswapV4AngstromExecutorExposed(
+            IPoolManager(POOL_MANAGER), PERMIT2_ADDRESS
+        );
+    }
+
+    /// @notice Test selecting the correct attestation based on block number
+    function testSelectAttestationForBlock() public {
+        uint64 block1 = 100;
+        bytes memory attestation1 =
+            hex"d437f3372f3add2c2bc3245e6bd6f9c202e61bb367c79a6f740c7c12ca9c54a760bead943516fafaf8a4fe65a907b31d45c2ab4b525f9f32ec2771033e0832359ceb2e38d9288a755c7c366ce889b0df24b5821b1c";
+        uint64 block2 = 150;
+        bytes memory attestation2 =
+            hex"d437f3372f3add2c2bc3245e6bd6f9c202e61bb30c337ddae661e68cc6986c7784cd0aaec455b1f7514b6cd91bff26f002ce7cb42b3b1e2092ea4d1c1fb1e0641cbccfb021b31de25462f25b355cc99c7d509cdc1b";
+        uint64 block3 = 250;
+        bytes memory attestation3 =
+            hex"d437f3372f3add2c2bc3245e6bd6f9c202e61bb3611fb86a0e296b693e974e731d155c438d94a3104cd1a538b335bf2260a2f709300a09ce4a5ef937bd0b4e10b8fac14807257eba12695c16e089a4e54a5494371b";
+
+        bytes memory encodedAttestations = abi.encodePacked(
+            block1, attestation1, block2, attestation2, block3, attestation3
+        );
+
+        // Test selecting for block 100 (should get attestation 0)
+        vm.roll(100);
+        bytes memory selected =
+            angstromExecutor.selectAttestation(encodedAttestations);
+        assertEq(selected, attestation1);
+
+        // Test selecting for block 150 (should get attestation 1)
+        vm.roll(150);
+        selected = angstromExecutor.selectAttestation(encodedAttestations);
+        assertEq(selected, attestation2);
+
+        // Test selecting for block 250 (should get attestation 2)
+        vm.roll(250);
+        selected = angstromExecutor.selectAttestation(encodedAttestations);
+        assertEq(selected, attestation3);
+
+        // Test selecting for block 350 (should revert)
+        vm.roll(350);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniswapV4AngstromExecutor__NoAttestationForBlock.selector, 350
+            )
+        );
+        selected = angstromExecutor.selectAttestation(encodedAttestations);
+    }
+
+    function testSelectAttestationEmptyAttestations() public {
+        // Encode empty attestations
+        bytes memory encodedAttestations;
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniswapV4AngstromExecutor__NoAttestationForBlock.selector,
+                block.number
+            )
+        );
+        angstromExecutor.selectAttestation(encodedAttestations);
+    }
+
+    function testSingleSwapAngstrom() public {
+        uint256 amountIn = 4160938619;
+        deal(USDC_ADDR, address(angstromExecutor), amountIn);
+        uint256 poolManagerBalanceBefore = USDC.balanceOf(POOL_MANAGER);
+
+        // Create attestations for multiple blocks
+        // The attestation is real return data from the Angstrom attestation API
+        bytes memory attestation =
+            hex"d437f3372f3add2c2bc3245e6bd6f9c202e61bb324e10ae0affbd0fb7b3622098b00d81ee679dd1adb41c03dda9b50565bddaead205a7c383603a49b4fc576c870d6fac726a007ddc008077f5f942a177cedf3ca1c";
+
+        uint256 currentBlock = block.number;
+        uint64 block1 = uint64(currentBlock - 1);
+        uint64 block2 = uint64(currentBlock);
+        uint64 block3 = uint64(currentBlock + 5);
+
+        bytes memory attestationsWithBlocks = abi.encodePacked(
+            block1, attestation, block2, attestation, block3, attestation
+        );
+
+        bytes memory firstPool = abi.encodePacked(
+            WETH_ADDR,
+            uint24(8388608),
+            int24(10),
+            address(0x0000000aa232009084Bd71A5797d089AA4Edfad4),
+            bytes2(uint16(93 * 3)), // hookdata length
+            attestationsWithBlocks
+        );
+
+        // Encode data with attestations
+        bytes memory data = abi.encodePacked(
+            USDC_ADDR,
+            WETH_ADDR,
+            true,
+            RestrictTransferFrom.TransferType.Transfer,
+            ALICE,
+            firstPool
+        );
+
+        uint256 amountOut = angstromExecutor.swap(amountIn, data);
+
+        assertEq(
+            USDC.balanceOf(POOL_MANAGER), poolManagerBalanceBefore + amountIn
+        );
+        assertTrue(WETH.balanceOf(ALICE) == amountOut);
+        assertTrue(amountOut > 0);
+    }
+
+    function testSwapFailsWithExpiredAttestations() public {
+        uint256 amountIn = 4160938619;
+        deal(USDC_ADDR, address(angstromExecutor), amountIn);
+
+        UniswapV4Executor.UniswapV4Pool[] memory pools =
+            new UniswapV4Executor.UniswapV4Pool[](1);
+        pools[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: WETH_ADDR,
+            fee: uint24(8388608),
+            tickSpacing: int24(10),
+            hook: address(0x0000000aa232009084Bd71A5797d089AA4Edfad4),
+            hookData: bytes("")
+        });
+
+        // Create attestations that are all in the past
+        uint256 currentBlock = block.number;
+        bytes memory attestation =
+            hex"d437f3372f3add2c2bc3245e6bd6f9c202e61bb367c79a6f740c7c12ca9c54a760bead943516fafaf8a4fe65a907b31d45c2ab4b525f9f32ec2771033e0832359ceb2e38d9288a755c7c366ce889b0df24b5821b1c";
+
+        bytes memory firstPool = abi.encodePacked(
+            WETH_ADDR,
+            uint24(8388608),
+            int24(10),
+            address(0x0000000aa232009084Bd71A5797d089AA4Edfad4),
+            bytes2(uint16(93)), // hookdata length
+            uint64(currentBlock - 10), // block number
+            attestation
+        );
+
+        bytes memory data = abi.encodePacked(
+            USDC_ADDR,
+            WETH_ADDR,
+            true,
+            RestrictTransferFrom.TransferType.Transfer,
+            ALICE,
+            firstPool
+        );
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniswapV4AngstromExecutor__NoAttestationForBlock.selector,
+                currentBlock
+            )
+        );
+        angstromExecutor.swap(amountIn, data);
+    }
+
+    function testGroupedSwapIntegration() public {
+        // Load calldata generated by test_encode_angstrom_grouped_swap
+        // If you update this data, you must also be sure to update the block number
+        // in the setUp() method, since the blocks need to align in order to have
+        // valid attestations.
+        bytes memory protocolData =
+            loadCallDataFromFile("test_encode_angstrom_grouped_swap");
+
+        uint256 amountIn = 1000 * 10 ** 6; // 1000 USDC
+        deal(USDC_ADDR, address(angstromExecutor), amountIn);
+        uint256 usdcBalanceBeforePool = USDC.balanceOf(POOL_MANAGER);
+        uint256 usdcBalanceBeforeExecutor =
+            USDC.balanceOf(address(angstromExecutor));
+        uint256 amountOut = angstromExecutor.swap(amountIn, protocolData);
+
+        // Verify USDC was transferred to pool manager
+        assertEq(USDC.balanceOf(POOL_MANAGER), usdcBalanceBeforePool + amountIn);
+        // Verify USDC was taken from executor
+        assertEq(
+            USDC.balanceOf(address(angstromExecutor)),
+            usdcBalanceBeforeExecutor - amountIn
+        );
+        // Verify USDT was received by ALICE
+        assertTrue(IERC20(USDT_ADDR).balanceOf(ALICE) == amountOut);
+        assertTrue(amountOut > 0);
+    }
+}
