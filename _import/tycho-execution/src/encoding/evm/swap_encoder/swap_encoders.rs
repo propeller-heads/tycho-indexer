@@ -163,7 +163,7 @@ impl UniswapV4SwapEncoder {
     }
 
     /// Fetches attestations from the Angstrom API (blocking)
-    fn fetch_attestations() -> Result<AttestationResponse, EncodingError> {
+    fn fetch_angstrom_attestations() -> Result<AttestationResponse, EncodingError> {
         let client = reqwest::blocking::Client::new();
 
         let api_url = std::env::var("ANGSTROM_API_URL")
@@ -222,7 +222,9 @@ impl UniswapV4SwapEncoder {
     ///
     /// Uses fixed-length format: each attestation is exactly 93 bytes
     /// (8 bytes block number + 85 bytes attestation)
-    fn encode_attestations(attestations: &AttestationResponse) -> Result<Vec<u8>, EncodingError> {
+    fn encode_angstrom_attestations(
+        attestations: &AttestationResponse,
+    ) -> Result<Vec<u8>, EncodingError> {
         let mut encoded = Vec::new();
         for att_data in &attestations.attestations {
             // Encode block number (first 8 bytes)
@@ -289,8 +291,8 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         let is_angstrom_hook = **hook_address == *self.angstrom_hook_address;
         let hook_data = if is_angstrom_hook {
             // Angstrom hook - obtain hook data from API
-            let attestations = Self::fetch_attestations()?;
-            Self::encode_attestations(&attestations)?
+            let attestations = Self::fetch_angstrom_attestations()?;
+            Self::encode_angstrom_attestations(&attestations)?
         } else {
             // Regular hook - use user_data as normal
             swap.user_data
@@ -1721,7 +1723,8 @@ mod tests {
                 ],
             };
 
-            let encoded = UniswapV4SwapEncoder::encode_attestations(&attestations).unwrap();
+            let encoded =
+                UniswapV4SwapEncoder::encode_angstrom_attestations(&attestations).unwrap();
 
             // Verify the structure with fixed-length format:
             // - For each attestation:
