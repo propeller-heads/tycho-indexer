@@ -116,6 +116,64 @@ pub fn _construc_result_i256(res: Option<I256>) -> Result<I256, SimulationError>
     }
 }
 
+/// Computes the integer square root of a U512 value using Newton's method.
+///
+/// Returns the floor of the square root.
+///
+/// # Algorithm
+///
+/// Uses Newton's method iteration:
+/// - Start with initial guess based on bit length
+/// - Iterate: x_new = (x + n/x) / 2
+/// - Stop when convergence is reached or value stops decreasing
+pub fn sqrt_u512(value: U512) -> U512 {
+    // Handle zero case
+    if value == U512::ZERO {
+        return U512::ZERO;
+    }
+
+    // Handle small values
+    if value == U512::from(1u32) {
+        return U512::from(1u32);
+    }
+
+    // Initial guess: use bit length to get approximate starting point
+    // For square root, start with 2^(bits/2)
+    let bits = 512 - value.leading_zeros();
+    let mut result = U512::from(1u32) << (bits / 2);
+
+    // Newton's method iteration for square root
+    // x_new = (x + n/x) / 2
+    let mut decreasing = false;
+    loop {
+        // Calculate: (value / result + result) / 2
+        let division = value / result;
+        let iter = (division + result) / U512::from(2u32);
+
+        // Check convergence
+        if iter == result {
+            // Hit fixed point, we're done
+            break;
+        }
+
+        if iter > result {
+            if decreasing {
+                // Was decreasing, now increasing - we've converged
+                break;
+            }
+            // Limit increase to prevent slow convergence
+            result =
+                if iter > result * U512::from(2u32) { result * U512::from(2u32) } else { iter };
+        } else {
+            // Converging downwards
+            decreasing = true;
+            result = iter;
+        }
+    }
+
+    result
+}
+
 #[cfg(test)]
 mod safe_math_tests {
     use std::str::FromStr;
@@ -389,5 +447,34 @@ mod safe_math_tests {
         if is_ok {
             assert_eq!(res.unwrap(), expected);
         }
+    }
+
+    #[test]
+    fn test_sqrt_u512() {
+        // Test edge cases
+        assert_eq!(sqrt_u512(U512::ZERO), U512::ZERO);
+        assert_eq!(sqrt_u512(U512::from(1u32)), U512::from(1u32));
+
+        // Test small perfect squares
+        assert_eq!(sqrt_u512(U512::from(4u32)), U512::from(2u32));
+        assert_eq!(sqrt_u512(U512::from(100u32)), U512::from(10u32));
+        assert_eq!(sqrt_u512(U512::from(10000u32)), U512::from(100u32));
+        assert_eq!(sqrt_u512(U512::from(1000000u32)), U512::from(1000u32));
+
+        // For non-perfect squares, should return floor of sqrt
+        assert_eq!(sqrt_u512(U512::from(2u32)), U512::from(1u32)); // sqrt(2) ≈ 1.41
+        assert_eq!(sqrt_u512(U512::from(3u32)), U512::from(1u32)); // sqrt(3) ≈ 1.73
+        assert_eq!(sqrt_u512(U512::from(5u32)), U512::from(2u32)); // sqrt(5) ≈ 2.23
+        assert_eq!(sqrt_u512(U512::from(8u32)), U512::from(2u32)); // sqrt(8) ≈ 2.82
+        assert_eq!(sqrt_u512(U512::from(10u32)), U512::from(3u32)); // sqrt(10) ≈ 3.16
+        assert_eq!(sqrt_u512(U512::from(15u32)), U512::from(3u32)); // sqrt(15) ≈ 3.87
+        assert_eq!(sqrt_u512(U512::from(99u32)), U512::from(9u32)); // sqrt(99) ≈ 9.94
+
+        // Test large values
+        let large = U512::from_str("1000000000000000000000000000000000000").unwrap();
+        let sqrt_large = sqrt_u512(large);
+        // Verify that sqrt_large^2 <= large < (sqrt_large + 1)^2
+        assert!(sqrt_large * sqrt_large <= large);
+        assert!((sqrt_large + U512::from(1u32)) * (sqrt_large + U512::from(1u32)) > large);
     }
 }
