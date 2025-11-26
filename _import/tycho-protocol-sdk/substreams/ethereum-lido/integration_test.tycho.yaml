@@ -3,7 +3,7 @@ protocol_system: "lido"
 protocol_type_names:
   - "stETH"
   - "wstETH"
-module_name: "map_component_balance"
+module_name: "map_protocol_changes"
 skip_balance_check: true
 tests:
   - name: test_pool_creation
