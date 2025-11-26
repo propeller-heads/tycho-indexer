@@ -52,6 +52,29 @@ impl fmt::Display for GetAmountOutResult {
     }
 }
 
+/// Represents a price as a rational fraction (numerator / denominator).
+///
+/// In the context of `swap_to_price` and `query_supply`, this represents the pool's price in
+/// the **token_out/token_in** direction:
+/// - `numerator`: Amount of token_out (what you receive)
+/// - `denominator`: Amount of token_in (what you pay)
+///
+/// A fraction struct is used for price to have flexibility in precision independent of the
+/// decimal precisions of the numerator and denominator tokens. This allows for:
+/// - Exact price representation without floating-point errors
+/// - Handling tokens with different decimal places without loss of precision
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Price {
+    pub numerator: BigUint,
+    pub denominator: BigUint,
+}
+
+impl Price {
+    pub fn new(numerator: BigUint, denominator: BigUint) -> Self {
+        Self { numerator, denominator }
+    }
+}
+
 /// ProtocolSim trait
 /// This trait defines the methods that a protocol state must implement in order to be used
 /// in the trade simulation.
@@ -149,6 +172,75 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
         tokens: &HashMap<Bytes, Token>,
         balances: &Balances,
     ) -> Result<(), TransitionError<String>>;
+
+    /// Calculates the exact amount of token_in required to move the pool's marginal price down to
+    /// a target price.
+    ///
+    /// # Arguments
+    ///
+    /// * `token_in` - The address of the token being sold (swapped into the pool)
+    /// * `token_out` - The address of the token being bought (swapped out of the pool)
+    /// * `target_price` - The target marginal price as a `Price` struct representing **token_out
+    ///   per token_in** (token_out/token_in) net of all fees:
+    ///   - `numerator`: Amount of token_out (what the pool offers)
+    ///   - `denominator`: Amount of token_in (what the pool wants)
+    ///   - The pool's price will move **down** to this level as token_in is sold into it
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(BigUint)` - The exact amount of token_in required to move the pool price down to the
+    ///   target
+    /// * `Err(SimulationError)` - If:
+    ///   - The calculation encounters numerical issues (overflow, division by zero, etc.)
+    ///   - The method is not implemented for this protocol
+    #[allow(unused)]
+    fn swap_to_price(
+        &self,
+        token_in: &Bytes,
+        token_out: &Bytes,
+        target_price: Price,
+    ) -> Result<BigUint, SimulationError> {
+        Err(SimulationError::FatalError("swap_to_price not implemented".into()))
+    }
+
+    /// Calculates how much token_out (sell token) a pool can supply when the pool's price moves
+    /// down to or below the target price.
+    ///
+    /// # Arguments
+    ///
+    /// * `token_in` - The address of the token being bought by the pool (the buy token)
+    /// * `token_out` - The address of the token being sold by the pool (the sell token)
+    /// * `target_price` - The minimum acceptable price as a `Price` struct representing **token_out
+    ///   per token_in** (token_out/token_in) net of all fees:
+    ///   - `numerator`: Amount of token_out (what the pool offers)
+    ///   - `denominator`: Amount of token_in (what the pool wants)
+    ///   - The pool will supply token_out down to this price level
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(BigUint)` - The maximum amount of token_out (sell token) that can be supplied as the
+    ///   pool's price moves down to the target. This represents the pool's supply capacity at this
+    ///   price level.
+    /// * `Err(SimulationError)` - If:
+    ///   - The calculation encounters numerical issues
+    ///   - The method is not implemented for this protocol
+    ///
+    /// # Relationship to swap_to_price
+    ///
+    /// These methods work together:
+    /// - `swap_to_price`: Returns the amount of token_in needed to move the pool's price down to
+    ///   target
+    /// - `query_supply`: Returns the amount of token_out the pool supplies as price moves down to
+    ///   target
+    #[allow(unused)]
+    fn query_supply(
+        &self,
+        token_in: &Bytes,
+        token_out: &Bytes,
+        target_price: Price,
+    ) -> Result<BigUint, SimulationError> {
+        Err(SimulationError::FatalError("query_supply not implemented".into()))
+    }
 
     /// Clones the protocol state as a trait object.
     /// This allows the state to be cloned when it is being used as a `Box<dyn ProtocolSim>`.
