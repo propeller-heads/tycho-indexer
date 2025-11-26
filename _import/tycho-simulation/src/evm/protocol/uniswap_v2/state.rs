@@ -100,6 +100,58 @@ impl ProtocolSim for UniswapV2State {
         cpmm_delta_transition(delta, reserve0_mut, reserve1_mut)
     }
 
+    /// Calculates the exact amount of token_in required to move the pool's marginal price down to
+    /// a target price.
+    ///
+    /// See [`ProtocolSim::swap_to_price`] for the trait documentation.
+    ///
+    /// # Algorithm
+    ///
+    /// Derives how much to swap to reach a target price using the constant product formula.
+    /// **Note**: This method assumes k remains constant, but in reality fees accrue to the pool,
+    /// causing k to increase slightly. This simplification leads to a conservative
+    /// underestimation of the pool's supply capacity.
+    ///
+    /// ## Base equations
+    /// 1. Constant product: `x * y = k` where x = reserve_in, y = reserve_out
+    /// 2. Swap with 0.3% fee: Only 99.7% of input affects price
+    /// 3. Marginal price after swap: `price = (x' * 1000) / (y' * 997)`
+    ///
+    /// ## Derivation
+    /// We want the pool to reach target price: `price = sell_price / buy_price`
+    ///
+    /// From marginal price formula:
+    /// ```text,no_run
+    /// x' / y' = (sell_price * 997) / (buy_price * 1000)  [call this target_price_w_fee]
+    /// ```
+    ///
+    /// From constant product:
+    /// ```text,no_run
+    /// x' * y' = k
+    /// ```
+    ///
+    ///
+    /// Substituting the first into the second:
+    /// ```text,no_run
+    /// x' = target_price_w_fee * y'
+    /// (target_price_w_fee * y') * y' = k
+    /// y'^2 = k / target_price_w_fee
+    /// y' = sqrt(k / target_price_w_fee)
+    /// ```
+    ///
+    /// Therefore:
+    /// ```text,no_run
+    /// x' = target_price_w_fee * y'
+    ///    = target_price_w_fee * sqrt(k / target_price_w_fee)
+    ///    = sqrt(k * target_price_w_fee)
+    /// ```
+    ///
+    /// Amount to swap in:
+    /// ```text,no_run
+    /// amount_in = x' - x = sqrt(k * target_price_w_fee) - reserve_in
+    /// ```
+    ///
+    /// where `target_price_w_fee = (sell_price * 997) / (buy_price * 1000)`
     fn swap_to_price(
         &self,
         token_in: &Bytes,
@@ -132,7 +184,6 @@ impl ProtocolSim for UniswapV2State {
             return Ok(BigUint::ZERO);
         }
 
-        // TODO: Detail arithmetic steps here.
         // Calculate new reserve_in: x' = sqrt(k * price_num * FEE_NUMERATOR / (price_den *
         // FEE_PRECISION))
         let k = U512::from(reserve_in) * U512::from(reserve_out);
@@ -716,6 +767,39 @@ mod tests {
             .query_supply(&token_in, &token_out, spot_price)
             .unwrap();
         assert_eq!(supply, BigUint::ZERO, "Should return 0 at spot price");
+    }
+
+    #[test]
+    fn test_query_supply_basic() {
+        let state = UniswapV2State::new(U256::from(1_000_000u32), U256::from(2_000_000u32));
+
+        let token_in = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
+        let token_out = Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap();
+
+        // APEX uses swap price 3/2 (token_in/token_out), tycho uses pool price (token_out/token_in)
+        // So we invert: 2/3
+        let target_price = Price::new(BigUint::from(2u32), BigUint::from(3u32));
+
+        let supply = state
+            .swap_to_price(&token_in, &token_out, target_price)
+            .unwrap();
+        assert!(supply > BigUint::ZERO, "Supply should be non-zero");
+
+        // Verify: if we swap (supply * 3/2) of token_in, we get at least supply of token_out
+        let supply_u256 = biguint_to_u256(&supply);
+        let implied_amount_in = (supply_u256 * U256::from(3u32)) / U256::from(2u32);
+
+        let zero2one = token_in < token_out;
+        let actual_amount_out = cpmm_get_amount_out(
+            implied_amount_in,
+            zero2one,
+            state.reserve0,
+            state.reserve1,
+            UNISWAP_V2_FEE_BPS,
+        )
+        .unwrap();
+
+        assert!(actual_amount_out >= supply_u256, "Actual output should be >= supply");
     }
 
     #[test]
