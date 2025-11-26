@@ -6,9 +6,10 @@ use crate::{
     },
     utils::get_changed_attributes,
 };
+use anyhow::Result;
 use itertools::Itertools;
 use std::collections::HashMap;
-use substreams::{errors::Error, pb::substreams::StoreDeltas};
+use substreams::pb::substreams::StoreDeltas;
 use substreams_ethereum::{pb::eth, Event};
 use tycho_substreams::{
     balances::aggregate_balances_changes,
@@ -75,11 +76,11 @@ fn map_protocol_changes(
 fn update_protocol_components(
     protocol_components: BlockTransactionProtocolComponents,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
-) -> Result<(), Error> {
+) -> Result<()> {
     protocol_components
         .tx_components
         .iter()
-        .map(|tx_component| {
+        .try_for_each(|tx_component| {
             let tx = tx_component
                 .tx
                 .as_ref()
@@ -87,19 +88,13 @@ fn update_protocol_components(
 
             let builder = transaction_changes
                 .entry(tx.index)
-                .or_insert_with(|| TransactionChangesBuilder::new(tx));
+                .or_insert_with(|| TransactionChangesBuilder::new(&tx));
 
-            tx_component
-                .components
-                .iter()
-                .for_each(|c| {
-                    builder.add_protocol_component(c);
-                });
-
-            Ok::<_, substreams::errors::Error>(())
+            for c in &tx_component.components {
+                builder.add_protocol_component(c);
+            }
+            Ok(())
         })
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(())
 }
 
 /// Extracts Rocket Pool network balance updates from the block logs.
