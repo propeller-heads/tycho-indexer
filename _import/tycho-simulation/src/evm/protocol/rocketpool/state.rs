@@ -1,6 +1,6 @@
 use std::{any::Any, collections::HashMap};
 
-use alloy::{hex, primitives::U256};
+use alloy::primitives::U256;
 use num_bigint::BigUint;
 use num_traits::FromPrimitive;
 use tycho_common::{
@@ -62,8 +62,8 @@ impl RocketPoolState {
         token_in.as_ref() == ETH_ADDRESS
     }
 
-    fn address_spot_price(&self, base: &Bytes) -> Result<f64, SimulationError> {
-        let is_depositing_eth = RocketPoolState::depositing_eth(base);
+    fn spot_price_for_direction(&self, sell_token: &Bytes) -> Result<f64, SimulationError> {
+        let is_depositing_eth = RocketPoolState::depositing_eth(sell_token);
 
         let res = if is_depositing_eth {
             self.assert_deposits_enabled()?;
@@ -89,12 +89,14 @@ impl RocketPoolState {
 }
 
 impl ProtocolSim for RocketPoolState {
+    /// Returns the fee applied on deposits (ETH -> rETH)
+    /// The withdrawals (rETH -> ETH) have no fee.
     fn fee(&self) -> f64 {
         self.deposit_fee
     }
 
     fn spot_price(&self, base: &Token, _quote: &Token) -> Result<f64, SimulationError> {
-        self.address_spot_price(&base.address)
+        self.spot_price_for_direction(&base.address)
     }
 
     fn get_amount_out(
@@ -177,7 +179,7 @@ impl ProtocolSim for RocketPoolState {
         };
 
         let max_reth =
-            U256::from_f64(u256_to_f64(max_eth)? * self.address_spot_price(&sell_token)?)
+            U256::from_f64(u256_to_f64(max_eth)? * self.spot_price_for_direction(&sell_token)?)
                 .ok_or_else(|| {
                     SimulationError::FatalError("Max rETH conversion to U256 failed".to_string())
                 })?;
