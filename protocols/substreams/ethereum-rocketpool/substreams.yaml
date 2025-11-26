@@ -1,0 +1,63 @@
+specVersion: v0.1.0
+package:
+  name: "ethereum_rocketpool"
+  version: v0.1.0
+
+protobuf:
+  files:
+    - tycho/protocols/adapter-integration/evm/v1/vm.proto
+    - tycho/protocols/adapter-integration/evm/v1/common.proto
+    - tycho/protocols/adapter-integration/evm/v1/utils.proto
+  importPaths:
+    - ../../proto
+
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ../target/wasm32-unknown-unknown/release/ethereum_rocketpool.wasm
+
+
+network: mainnet
+
+
+params:
+  map_protocol_components: &starting_block 17002370 # When the latest RocketDepositPool was deployed
+
+modules:
+  - name: map_protocol_components
+    kind: map
+    initialBlock: *starting_block
+    inputs:
+      - params: string
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:tycho.evm.v1.BlockTransactionProtocolComponents
+
+  - name: map_relative_component_balance
+    kind: map
+    initialBlock: *starting_block
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:tycho.evm.v1.BlockBalanceDeltas
+
+
+  - name: store_balance
+    kind: store
+    initialBlock: *starting_block
+    updatePolicy: add
+    valueType: bigint
+    inputs:
+      - map: map_relative_component_balance
+
+  - name: map_protocol_changes
+    kind: map
+    initialBlock: *starting_block
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+      - map: map_protocol_components
+      - map: map_relative_component_balance
+      - store: store_balance
+        mode: deltas
+    output:
+      type: proto:tycho.evm.v1.BlockChanges

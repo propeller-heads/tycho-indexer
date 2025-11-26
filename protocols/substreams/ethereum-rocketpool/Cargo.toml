@@ -1,0 +1,21 @@
+[package]
+name = "ethereum-rocketpool"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "ethereum_rocketpool"
+crate-type = ["cdylib"]
+
+[dependencies]
+substreams = "0.5.22"
+substreams-ethereum = "0.9.9"
+tycho-substreams = { git = "https://github.com/propeller-heads/tycho-protocol-sdk.git", rev = "52d5021" }
+anyhow = "1.0.95"
+ethabi = "18.0.0"
+num-bigint = "0.4.6"
+itertools = "0.10.5"
+
+[build-dependencies]
+anyhow = "1"
+substreams-ethereum = "0.9.9"
