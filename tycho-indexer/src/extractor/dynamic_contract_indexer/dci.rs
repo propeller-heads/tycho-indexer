@@ -79,6 +79,39 @@ static DCI_BLACKLIST: LazyLock<Vec<Address>> = LazyLock::new(|| {
     vec![] // Default to no blacklist
 });
 
+static DCI_SKIP_TRACING: LazyLock<Vec<Address>> = LazyLock::new(|| {
+    // Try to read from environment variable
+    if let Ok(skip_str) = std::env::var("DCI_SKIP_TRACING") {
+        let addresses: Result<Vec<_>, _> = skip_str
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(Address::from_str)
+            .collect();
+
+        match addresses {
+            Ok(addrs) if !addrs.is_empty() => {
+                info!(
+                    count = addrs.len(),
+                    "Loaded DCI skip tracing list from DCI_SKIP_TRACING environment variable"
+                );
+                return addrs;
+            }
+            Ok(_) => {
+                warn!("DCI_SKIP_TRACING is set but contains no valid addresses");
+            }
+            Err(e) => {
+                warn!(
+                    error = %e,
+                    "Failed to parse DCI_SKIP_TRACING"
+                );
+            }
+        }
+    }
+
+    vec![] // Default to no skip list
+});
+
 #[async_trait]
 impl<AE, T, G> ExtractorExtension for DynamicContractIndexer<AE, T, G>
 where
@@ -195,10 +228,15 @@ where
         let mut entrypoints_to_analyze: HashMap<EntryPointWithTracingParams, &Transaction> =
             HashMap::new();
         for (entrypoint_id, tracing_params) in all_entrypoint_params.iter() {
-            // Skip tracing entrypoints that are spammy and unsupported (Unichain specific)
-            // TODO: remove once unichain has synced/traces are more efficient
-            if entrypoint_id == "0xb4960cd4f9147f9e37a7aa9005df7156f61e4444:execute(bytes)" {
-                debug!("Skipping tracing entrypoint {:?}", entrypoint_id);
+            // Skip tracing entrypoints that contain addresses from skip list
+            if DCI_SKIP_TRACING
+                .iter()
+                .any(|addr| entrypoint_id.contains(&addr.to_string()))
+            {
+                debug!(
+                    "Skipping tracing entrypoint {:?} (contains address from skip list)",
+                    entrypoint_id
+                );
                 continue;
             }
 
