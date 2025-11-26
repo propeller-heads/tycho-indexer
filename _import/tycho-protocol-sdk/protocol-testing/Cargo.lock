@@ -4455,6 +4455,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "hex-literal"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fe2267d4ed49bc07b63801559be28c718ea06c4738b7a03c94df7386d2cde46"
+
+[[package]]
 name = "hidapi-rusb"
 version = "1.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9131,8 +9137,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.197.0"
-source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.197.0#c4f4c6d2b9412707130fa7fdf88d80b89b938a22"
+version = "0.202.2"
+source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.202.2#e16d2609055353c77cc9019e756e08bdeeaef3d2"
 dependencies = [
  "alloy",
  "async-stream",
@@ -9146,6 +9152,7 @@ dependencies = [
  "foundry-evm",
  "futures 0.3.31",
  "hex",
+ "hex-literal",
  "http 1.3.1",
  "itertools 0.10.5",
  "lazy_static",
@@ -9175,8 +9182,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-test"
-version = "0.197.0"
-source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.197.0#c4f4c6d2b9412707130fa7fdf88d80b89b938a22"
+version = "0.202.2"
+source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.202.2#e16d2609055353c77cc9019e756e08bdeeaef3d2"
 dependencies = [
  "actix-web",
  "alloy",

@@ -10,7 +10,7 @@ initialized_accounts:
 tests:
   - name: test_angstrom_pool_creation
     start_block: 22972017
-    stop_block: 22972020
+    stop_block: 22972937
     expected_components:
       - id: "0xe500210c7ea6bfd9f69dce044b09ef384ec2b34832f132baec3b418208e3a657"
         tokens:
@@ -22,7 +22,7 @@ tests:
           key_lp_fee: "0x00800000"
           hook_identifier: "0x616e677374726f6d5f7631" # angstrom_v1
         creation_tx: "0xf8faae3edf4e801a91f83381de9b2f8182d07a05442d6f5ed78410bced50a534"
-        skip_simulation: true
+        skip_simulation: false
         skip_execution: true
       - id: "0x90078845bceb849b171873cfbc92db8540e9c803ff57d9d21b1215ec158e79b3"
         tokens:
@@ -34,5 +34,5 @@ tests:
           key_lp_fee: "0x00800000"
           hook_identifier: "0x616e677374726f6d5f7631" # angstrom_v1
         creation_tx: "0xf8faae3edf4e801a91f83381de9b2f8182d07a05442d6f5ed78410bced50a534"
-        skip_simulation: true
+        skip_simulation: false
         skip_execution: true

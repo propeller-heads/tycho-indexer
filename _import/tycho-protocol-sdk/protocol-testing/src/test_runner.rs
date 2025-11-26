@@ -27,7 +27,13 @@ use tokio::runtime::Runtime;
 use tracing::{debug, error, info, warn};
 use tycho_execution::encoding::evm::utils::bytes_to_address;
 use tycho_simulation::{
-    evm::{protocol::u256_num::bytes_to_u256, stream::ProtocolStreamBuilder},
+    evm::{
+        protocol::{
+            u256_num::bytes_to_u256,
+            uniswap_v4::hooks::hook_handler_creator::initialize_hook_handlers,
+        },
+        stream::ProtocolStreamBuilder,
+    },
     protocol::models::{DecoderContext, ProtocolComponent as ProtocolComponentModel, Update},
     tycho_client::feed::{
         synchronizer::{Snapshot, StateSyncMessage},
@@ -803,6 +809,7 @@ impl TestRunner {
             register_protocol(protocol_stream_builder, protocol_system, decoder_context)?;
 
         let decoder = protocol_stream_builder.get_decoder();
+        initialize_hook_handlers().into_diagnostic()?;
 
         let state_msgs: HashMap<String, StateSyncMessage<BlockHeader>> = HashMap::from([(
             String::from(protocol_system),
