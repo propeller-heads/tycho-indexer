@@ -63,6 +63,7 @@ impl fmt::Display for GetAmountOutResult {
 /// decimal precisions of the numerator and denominator tokens. This allows for:
 /// - Exact price representation without floating-point errors
 /// - Handling tokens with different decimal places without loss of precision
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Price {
     pub numerator: BigUint,
     pub denominator: BigUint,
