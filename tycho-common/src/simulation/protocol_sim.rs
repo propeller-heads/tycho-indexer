@@ -92,6 +92,12 @@ pub struct Trade {
     pub amount_out: BigUint,
 }
 
+impl Trade {
+    pub fn new(amount_in: BigUint, amount_out: BigUint) -> Self {
+        Self { amount_in, amount_out }
+    }
+}
+
 /// ProtocolSim trait
 /// This trait defines the methods that a protocol state must implement in order to be used
 /// in the trade simulation.
