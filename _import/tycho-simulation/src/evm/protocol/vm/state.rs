@@ -638,15 +638,11 @@ where
         }
 
         // Update spot prices
-        let new_price = trade.price;
-        if new_price != 0.0f64 {
-            new_state
-                .spot_prices
-                .insert((sell_token_address, buy_token_address), new_price);
-            new_state
-                .spot_prices
-                .insert((buy_token_address, sell_token_address), 1.0f64 / new_price);
-        }
+        let tokens = HashMap::from([
+            (token_in.address.clone(), token_in.clone()),
+            (token_out.address.clone(), token_out.clone()),
+        ]);
+        let _ = new_state.set_spot_prices(&tokens);
 
         let buy_amount = trade.received_amount;
 
