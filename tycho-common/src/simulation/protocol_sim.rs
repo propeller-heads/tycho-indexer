@@ -188,8 +188,8 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Returns
     ///
-    /// * `Ok(BigUint)` - The exact amount of token_in required to move the pool price down to the
-    ///   target
+    /// * `Ok((BigUint, BigUint))` - A tuple containing the exact amount of token_in required to
+    ///   move the pool price down to the target and the exact amount of token_out received.
     /// * `Err(SimulationError)` - If:
     ///   - The calculation encounters numerical issues (overflow, division by zero, etc.)
     ///   - The method is not implemented for this protocol
@@ -199,12 +199,12 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
         token_in: &Bytes,
         token_out: &Bytes,
         target_price: Price,
-    ) -> Result<BigUint, SimulationError> {
+    ) -> Result<(BigUint, BigUint), SimulationError> {
         Err(SimulationError::FatalError("swap_to_price not implemented".into()))
     }
 
-    /// Calculates how much token_out (sell token) a pool can supply when the pool's price moves
-    /// down to or below the target price.
+    /// Calculates the maximum amount of token_out (sell token) a pool can supply while respecting a
+    /// minimum target price.
     ///
     /// # Arguments
     ///
@@ -218,9 +218,9 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Returns
     ///
-    /// * `Ok(BigUint)` - The maximum amount of token_out (sell token) that can be supplied as the
-    ///   pool's price moves down to the target. This represents the pool's supply capacity at this
-    ///   price level.
+    /// * `Ok((BigUint, BigUint))` - A tuple containing the maximum amount of token_out (sell token)
+    ///   that can be supplied and the maximum amount of token_in (buy token) that can be received
+    ///   at the target price.
     /// * `Err(SimulationError)` - If:
     ///   - The calculation encounters numerical issues
     ///   - The method is not implemented for this protocol
@@ -229,16 +229,16 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// These methods work together:
     /// - `swap_to_price`: Returns the amount of token_in needed to move the pool's price down to
-    ///   target
+    ///   target and the amount of token_out supplied.
     /// - `query_supply`: Returns the amount of token_out the pool supplies as price moves down to
-    ///   target
+    ///   target and the amount of token_in demanded.
     #[allow(unused)]
     fn query_supply(
         &self,
         token_in: &Bytes,
         token_out: &Bytes,
         target_price: Price,
-    ) -> Result<BigUint, SimulationError> {
+    ) -> Result<(BigUint, BigUint), SimulationError> {
         Err(SimulationError::FatalError("query_supply not implemented".into()))
     }
 
