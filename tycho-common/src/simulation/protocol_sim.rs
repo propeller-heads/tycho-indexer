@@ -54,10 +54,13 @@ impl fmt::Display for GetAmountOutResult {
 
 /// Represents a price as a rational fraction (numerator / denominator).
 ///
+/// # Fields
+///
+/// * `numerator` - The amount of token_out (what you receive)
+/// * `denominator` - The amount of token_in (what you pay)
+///
 /// In the context of `swap_to_price` and `query_supply`, this represents the pool's price in
-/// the **token_out/token_in** direction:
-/// - `numerator`: Amount of token_out (what you receive)
-/// - `denominator`: Amount of token_in (what you pay)
+/// the **token_out/token_in** direction
 ///
 /// A fraction struct is used for price to have flexibility in precision independent of the
 /// decimal precisions of the numerator and denominator tokens. This allows for:
@@ -73,6 +76,20 @@ impl Price {
     pub fn new(numerator: BigUint, denominator: BigUint) -> Self {
         Self { numerator, denominator }
     }
+}
+
+/// Represents a trade between two tokens at a given price on a pool.
+///
+/// # Fields
+///
+/// * `amount_in` - The amount of token_in (what you pay)
+/// * `amount_out` - The amount of token_out (what you receive)
+///
+/// The price of the trade is the ratio of amount_out to amount_in, i.e. amount_out / amount_in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Trade {
+    pub amount_in: BigUint,
+    pub amount_out: BigUint,
 }
 
 /// ProtocolSim trait
@@ -188,8 +205,8 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Returns
     ///
-    /// * `Ok((BigUint, BigUint))` - A tuple containing the amount of token_in required to move the
-    ///   pool price down to the target and the amount of token_out received.
+    /// * `Ok(Trade)` - A `Trade` struct containing the amount of token_in required to move the pool
+    ///   price down to the target and the amount of token_out received.
     /// * `Err(SimulationError)` - If:
     ///   - The calculation encounters numerical issues (overflow, division by zero, etc.)
     ///   - The method is not implemented for this protocol
@@ -199,7 +216,7 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
         token_in: &Bytes,
         token_out: &Bytes,
         target_price: Price,
-    ) -> Result<(BigUint, BigUint), SimulationError> {
+    ) -> Result<Trade, SimulationError> {
         Err(SimulationError::FatalError("swap_to_price not implemented".into()))
     }
 
@@ -219,7 +236,7 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Returns
     ///
-    /// * `Ok((BigUint, BigUint))` - A tuple containing the maximum amount of token_out (sell token)
+    /// * `Ok(Trade)` - A `Trade` struct containing the maximum amount of token_out (sell token)
     ///   that can be supplied at the target price, and the corresponding demanded amount of
     ///   token_in (buy token).
     /// * `Err(SimulationError)` - If:
@@ -239,7 +256,7 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
         token_in: &Bytes,
         token_out: &Bytes,
         target_price: Price,
-    ) -> Result<(BigUint, BigUint), SimulationError> {
+    ) -> Result<Trade, SimulationError> {
         Err(SimulationError::FatalError("query_supply not implemented".into()))
     }
 
