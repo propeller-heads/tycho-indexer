@@ -12,7 +12,6 @@ use diesel::{
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use diesel_derive_enum::DbEnum;
-use tracing::trace;
 use tycho_common::{
     models::{
         self,
@@ -353,7 +352,7 @@ pub struct ProtocolType {
     pub modified_ts: NaiveDateTime,
 }
 
-#[derive(Identifiable, Queryable, Selectable, Debug)]
+#[derive(Identifiable, Queryable, Selectable, Debug, QueryableByName)]
 #[diesel(table_name = component_balance)]
 #[diesel(belongs_to(ProtocolComponent))]
 #[diesel(primary_key(protocol_component_id, token_id, modify_tx))]
@@ -453,44 +452,27 @@ impl PartitionedVersionedRow for NewComponentBalance {
     where
         Self: Sized,
     {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+
         let (component_ids, token_ids): (Vec<_>, Vec<_>) = ids.into_iter().unzip();
 
-        let tuple_ids = component_ids
-            .iter()
-            .zip(token_ids.iter())
-            .collect::<HashSet<_>>();
-
-        let results: Vec<ComponentBalance> = component_balance::table
-            .select(ComponentBalance::as_select())
-            .into_boxed()
-            .filter(
-                component_balance::protocol_component_id
-                    .eq_any(&component_ids)
-                    .and(component_balance::token_id.eq_any(&token_ids))
-                    .and(component_balance::valid_to.eq(MAX_TS)),
-            )
-            .get_results(conn)
-            .await
-            .map_err(PostgresError::from)?;
-
-        let found_ids: HashSet<_> = results
-            .iter()
-            .map(|cb| (&cb.protocol_component_id, &cb.token_id))
-            .collect();
-
-        let missing_ids: Vec<_> = tuple_ids
-            .clone()
-            .into_iter()
-            .filter(|id| !found_ids.contains(id))
-            .collect();
-
-        if !missing_ids.is_empty() {
-            trace!(n_missing_ids=?missing_ids.len(), "Got potentially missing IDs. Skipping query");
-        }
+        let results: Vec<ComponentBalance> = diesel::sql_query(
+            "SELECT cb.*
+             FROM component_balance_default cb
+             INNER JOIN unnest($1::bigint[], $2::bigint[]) AS pairs(comp_id, tok_id)
+               ON cb.protocol_component_id = pairs.comp_id
+               AND cb.token_id = pairs.tok_id",
+        )
+        .bind::<diesel::sql_types::Array<diesel::sql_types::BigInt>, _>(&component_ids)
+        .bind::<diesel::sql_types::Array<diesel::sql_types::BigInt>, _>(&token_ids)
+        .load(conn)
+        .await
+        .map_err(PostgresError::from)?;
 
         Ok(results
             .into_iter()
-            .filter(|cb| tuple_ids.contains(&(&cb.protocol_component_id, &cb.token_id)))
             .map(NewComponentBalance::from)
             .collect())
     }
@@ -639,7 +621,7 @@ pub struct NewProtocolComponentHoldsContract {
     pub contract_code_id: i64,
 }
 
-#[derive(Identifiable, Queryable, Associations, Selectable, Clone, Debug)]
+#[derive(Identifiable, Queryable, Associations, Selectable, Clone, Debug, QueryableByName)]
 #[diesel(belongs_to(ProtocolComponent))]
 #[diesel(table_name = protocol_state)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -1117,43 +1099,27 @@ impl PartitionedVersionedRow for NewProtocolState {
     where
         Self: Sized,
     {
-        let (pc_id, attr_name): (Vec<_>, Vec<_>) = ids.into_iter().unzip();
-        let tuple_ids = pc_id
-            .iter()
-            .zip(attr_name.iter())
-            .collect::<HashSet<_>>();
-
-        let results: Vec<ProtocolState> = protocol_state::table
-            .select(ProtocolState::as_select())
-            .into_boxed()
-            .filter(
-                protocol_state::protocol_component_id
-                    .eq_any(&pc_id)
-                    .and(protocol_state::attribute_name.eq_any(&attr_name))
-                    .and(protocol_state::valid_to.eq(MAX_TS)),
-            )
-            .get_results(conn)
-            .await
-            .map_err(PostgresError::from)?;
-
-        let found_ids: HashSet<_> = results
-            .iter()
-            .map(|ps| (&ps.protocol_component_id, &ps.attribute_name))
-            .collect();
-
-        let missing_ids: Vec<_> = tuple_ids
-            .clone()
-            .into_iter()
-            .filter(|id| !found_ids.contains(id))
-            .collect();
-
-        if !missing_ids.is_empty() {
-            trace!(n_missing_ids=?missing_ids.len(), "Got potentially missing IDs. Skipping query");
+        if ids.is_empty() {
+            return Ok(vec![]);
         }
+
+        let (pc_ids, attr_names): (Vec<_>, Vec<_>) = ids.into_iter().unzip();
+
+        let results: Vec<ProtocolState> = diesel::sql_query(
+            "SELECT ps.* 
+             FROM protocol_state_default ps
+             INNER JOIN unnest($1::bigint[], $2::text[]) AS pairs(pc_id, attr_name)
+               ON ps.protocol_component_id = pairs.pc_id 
+               AND ps.attribute_name = pairs.attr_name",
+        )
+        .bind::<diesel::sql_types::Array<diesel::sql_types::BigInt>, _>(&pc_ids)
+        .bind::<diesel::sql_types::Array<diesel::sql_types::Text>, _>(&attr_names)
+        .load(conn)
+        .await
+        .map_err(PostgresError::from)?;
 
         Ok(results
             .into_iter()
-            .filter(|ps| tuple_ids.contains(&(&ps.protocol_component_id, &ps.attribute_name)))
             .map(NewProtocolState::from)
             .collect())
     }
@@ -1343,7 +1309,7 @@ impl NewToken {
     }
 }
 
-#[derive(Identifiable, Queryable, Associations, Selectable, Debug)]
+#[derive(Identifiable, Queryable, Associations, Selectable, Debug, QueryableByName)]
 #[diesel(belongs_to(Account))]
 #[diesel(table_name = account_balance)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -1397,24 +1363,27 @@ impl StoredVersionedRow for AccountBalance {
         conn: &mut AsyncPgConnection,
     ) -> Result<Vec<Box<Self>>, StorageError> {
         let (accounts, tokens): (Vec<_>, Vec<_>) = ids.into_iter().unzip();
-        let tuple_ids = accounts
-            .iter()
-            .zip(tokens.iter())
-            .collect::<HashSet<_>>();
 
-        Ok(account_balance::table
-            .filter(
-                account_balance::account_id
-                    .eq_any(&accounts)
-                    .and(account_balance::token_id.eq_any(&tokens))
-                    .and(account_balance::valid_to.is_null()),
-            )
-            .select(Self::as_select())
-            .get_results::<Self>(conn)
-            .await
-            .map_err(PostgresError::from)?
+        if accounts.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let results: Vec<AccountBalance> = diesel::sql_query(
+            "SELECT ab.*
+             FROM account_balance ab
+             INNER JOIN unnest($1::bigint[], $2::bigint[]) AS pairs(acc_id, tok_id)
+               ON ab.account_id = pairs.acc_id
+               AND ab.token_id = pairs.tok_id
+             WHERE ab.valid_to IS NULL",
+        )
+        .bind::<diesel::sql_types::Array<diesel::sql_types::BigInt>, _>(&accounts)
+        .bind::<diesel::sql_types::Array<diesel::sql_types::BigInt>, _>(&tokens)
+        .load(conn)
+        .await
+        .map_err(PostgresError::from)?;
+
+        Ok(results
             .into_iter()
-            .filter(|tb| tuple_ids.contains(&(&tb.account_id, &tb.token_id)))
             .map(Box::new)
             .collect())
     }
@@ -1585,7 +1554,7 @@ impl NewContract {
     }
 }
 
-#[derive(Identifiable, Queryable, Associations, Selectable, Debug)]
+#[derive(Identifiable, Queryable, Associations, Selectable, Debug, QueryableByName)]
 #[diesel(belongs_to(Account))]
 #[diesel(table_name = contract_storage)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -1650,48 +1619,27 @@ impl PartitionedVersionedRow for NewSlot {
     where
         Self: Sized,
     {
-        let (accounts, slots): (Vec<_>, Vec<_>) = ids.into_iter().unzip();
-        #[allow(clippy::mutable_key_type)]
-        let tuple_ids = accounts
-            .iter()
-            .zip(slots.iter())
-            .collect::<HashSet<_>>();
-
-        // PERF: The removal of the filter 'valid_to = MAX_TS' means we now search in archived
-        // tables as well. A possible optimisation would be to add the valid_to filter back
-        // and then use a second query for storage still missing that will access the
-        // archived tables. Therefore, performance is not impacted in the common case.
-        let results: Vec<ContractStorage> = contract_storage::table
-            .select(ContractStorage::as_select())
-            .into_boxed()
-            .filter(
-                contract_storage::account_id
-                    .eq_any(&accounts)
-                    .and(contract_storage::slot.eq_any(&slots))
-                    .and(contract_storage::valid_to.eq(MAX_TS)),
-            )
-            .get_results(conn)
-            .await
-            .map_err(PostgresError::from)?;
-
-        let found_ids: HashSet<_> = results
-            .iter()
-            .map(|cs| (&cs.account_id, &cs.slot))
-            .collect();
-
-        let missing_ids: Vec<_> = tuple_ids
-            .clone()
-            .into_iter()
-            .filter(|id| !found_ids.contains(id))
-            .collect();
-
-        if !missing_ids.is_empty() {
-            trace!(n_missing_ids=?missing_ids.len(), "Got potentially missing IDs. Skipping query");
+        if ids.is_empty() {
+            return Ok(vec![]);
         }
+
+        let (accounts, slots): (Vec<_>, Vec<_>) = ids.into_iter().unzip();
+
+        let results: Vec<ContractStorage> = diesel::sql_query(
+            "SELECT cs.*
+             FROM contract_storage_default cs
+             INNER JOIN unnest($1::bigint[], $2::bytea[]) AS pairs(acc_id, slot_val)
+               ON cs.account_id = pairs.acc_id
+               AND cs.slot = pairs.slot_val",
+        )
+        .bind::<diesel::sql_types::Array<diesel::sql_types::BigInt>, _>(&accounts)
+        .bind::<diesel::sql_types::Array<diesel::sql_types::Binary>, _>(&slots)
+        .load(conn)
+        .await
+        .map_err(PostgresError::from)?;
 
         Ok(results
             .into_iter()
-            .filter(|cs| tuple_ids.contains(&(&cs.account_id, &cs.slot)))
             .map(NewSlot::from)
             .collect())
     }
