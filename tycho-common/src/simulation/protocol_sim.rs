@@ -173,8 +173,8 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
         balances: &Balances,
     ) -> Result<(), TransitionError<String>>;
 
-    /// Calculates the exact amount of token_in required to move the pool's marginal price down to
-    /// a target price.
+    /// Calculates the amount of token_in required to move the pool's marginal price down to
+    /// a target price, and the amount of token_out received.
     ///
     /// # Arguments
     ///
@@ -188,8 +188,8 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Returns
     ///
-    /// * `Ok((BigUint, BigUint))` - A tuple containing the exact amount of token_in required to
-    ///   move the pool price down to the target and the exact amount of token_out received.
+    /// * `Ok((BigUint, BigUint))` - A tuple containing the amount of token_in required to move the
+    ///   pool price down to the target and the amount of token_out received.
     /// * `Err(SimulationError)` - If:
     ///   - The calculation encounters numerical issues (overflow, division by zero, etc.)
     ///   - The method is not implemented for this protocol
@@ -203,8 +203,9 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
         Err(SimulationError::FatalError("swap_to_price not implemented".into()))
     }
 
-    /// Calculates the maximum amount of token_out (sell token) a pool can supply while respecting a
-    /// minimum target price.
+    /// Calculates the maximum amount of token_out (sell token) a pool can supply, and the
+    /// corresponding demanded amount of token_in (buy token), while respecting a minimum target
+    /// price.
     ///
     /// # Arguments
     ///
@@ -219,8 +220,8 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     /// # Returns
     ///
     /// * `Ok((BigUint, BigUint))` - A tuple containing the maximum amount of token_out (sell token)
-    ///   that can be supplied and the maximum amount of token_in (buy token) that can be received
-    ///   at the target price.
+    ///   that can be supplied at the target price, and the corresponding demanded amount of
+    ///   token_in (buy token).
     /// * `Err(SimulationError)` - If:
     ///   - The calculation encounters numerical issues
     ///   - The method is not implemented for this protocol
