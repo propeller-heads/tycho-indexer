@@ -1,7 +1,7 @@
 substreams_yaml_path: ./substreams.yaml
 protocol_system: "rocketpool"
 protocol_type_names:
-  - "rocketpool"
+  - "rocketpool_pool"
 skip_balance_check: true # Rocket Deposit Pool components do not hold user funds directly
 tests:
   - name: test_pool_creation
@@ -14,5 +14,5 @@ tests:
           - "0x0000000000000000000000000000000000000000"
         static_attributes: { }
         creation_tx: "0xf8482ace6e3a761287c6e8d6550d2c7a4c8b889ffd46864d456f9711f9a16301"
-        skip_simulation: true # Currently we do not have a simulation implemented
+        skip_simulation: false
         skip_execution: true # Currently we do not have this implemented

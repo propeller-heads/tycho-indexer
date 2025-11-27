@@ -33,7 +33,7 @@ fn map_protocol_components(
 
     let component = ProtocolComponent::new(ROCKET_POOL_COMPONENT_ID)
         .with_tokens(&[RETH_ADDRESS.to_vec(), ETH_ADDRESS.to_vec()])
-        .as_swap_type("rocketpool", ImplementationType::Custom);
+        .as_swap_type("rocketpool_pool", ImplementationType::Custom);
 
     Ok(BlockTransactionProtocolComponents {
         tx_components: vec![TransactionProtocolComponents {
