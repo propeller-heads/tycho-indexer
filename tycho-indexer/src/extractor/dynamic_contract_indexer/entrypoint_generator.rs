@@ -910,6 +910,23 @@ where
                     );
                 }
 
+                // Add zero address balance override to ensure sufficient funds for gas
+                // When caller is None, RPC defaults to zero address as sender
+                let zero_address = Address::from([0u8; 20]);
+                let sufficient_balance_wei = U256::from(10_000_000_000_000_000_000u128); // 10 ETH
+                state_overrides.insert(
+                    zero_address,
+                    AccountOverrides {
+                        slots: None,
+                        native_balance: Some(Bytes::from(
+                            sufficient_balance_wei
+                                .to_be_bytes::<32>()
+                                .as_slice(),
+                        )),
+                        code: None,
+                    },
+                );
+
                 let entry_point_id = format!("{hook_address}:execute(bytes)");
                 debug!(
                     entry_point_id = %entry_point_id,
