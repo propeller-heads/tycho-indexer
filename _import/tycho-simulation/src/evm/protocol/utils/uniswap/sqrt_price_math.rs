@@ -1,13 +1,16 @@
-use alloy::primitives::U256;
+use alloy::primitives::{U256, U512};
 use tycho_common::simulation::errors::SimulationError;
 
 use super::solidity_math::{mul_div, mul_div_rounding_up};
 use crate::evm::protocol::{
-    safe_math::{div_mod_u256, safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
+    safe_math::{
+        div_mod_u256, safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256, sqrt_u512,
+    },
     u256_num::u256_to_f64,
 };
 
 const Q96: U256 = U256::from_limbs([0, 4294967296, 0, 0]);
+const Q192: U512 = U512::from_limbs([0, 0, 0, 1, 0, 0, 0, 0]); // 2^192
 const RESOLUTION: U256 = U256::from_limbs([96, 0, 0, 0]);
 const U160_MAX: U256 = U256::from_limbs([u64::MAX, u64::MAX, 4294967295, 0]);
 
@@ -172,6 +175,45 @@ pub(crate) fn sqrt_price_q96_to_f64(
 
     let price = u256_to_f64(x)? / 2.0f64.powi(96);
     Ok(price.powi(2) * token_correction)
+}
+
+/// Computes sqrt(price_0/price_1) * 2^96
+///
+/// This function calculates the square root price in Q96 format from a price ratio.
+/// The computation is: sqrt(price_0/price_1) * 2^96 = sqrt(price_0 * 2^192 / price_1)
+///
+/// # Arguments
+/// * `price_0` - Numerator of the price ratio
+/// * `price_1` - Denominator of the price ratio
+///
+/// # Returns
+/// The sqrt price in Q96 format as U256
+pub(crate) fn get_sqrt_price_q96(price_0: U256, price_1: U256) -> Result<U256, SimulationError> {
+    if price_1 == U256::ZERO {
+        return Err(SimulationError::FatalError("get_sqrt_price_q96: price_1 is zero".into()));
+    }
+
+    // sqrt(price_0/price_1) * 2^96 = sqrt(price_0 * 2^192 / price_1)
+    let numerator = U512::from(price_0) * Q192;
+    let ratio = numerator / U512::from(price_1);
+
+    // Compute integer square root (returns U512)
+    let sqrt_result = sqrt_u512(ratio);
+
+    // Convert U512 to U256 by taking lower 256 bits
+    // The result should fit in U256 since we're computing sqrt(price * 2^192)
+    // and the max sqrt_price is around 2^160
+    let limbs = sqrt_result.as_limbs();
+    let result = U256::from_limbs([limbs[0], limbs[1], limbs[2], limbs[3]]);
+
+    // Verify the higher bits are zero (sanity check)
+    if limbs[4] != 0 || limbs[5] != 0 || limbs[6] != 0 || limbs[7] != 0 {
+        return Err(SimulationError::FatalError(
+            "get_sqrt_price_q96: result exceeds U256 bounds".into(),
+        ));
+    }
+
+    Ok(result)
 }
 
 #[cfg(test)]
