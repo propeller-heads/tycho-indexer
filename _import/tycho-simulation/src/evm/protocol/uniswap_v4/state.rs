@@ -151,6 +151,8 @@ impl UniswapV4State {
         if amount_specified == I256::ZERO {
             return Ok(SwapResults {
                 amount_calculated: I256::ZERO,
+                amount_specified: I256::ZERO,
+                amount_remaining: I256::ZERO,
                 sqrt_price: self.sqrt_price,
                 liquidity: self.liquidity,
                 tick: self.tick,
@@ -277,6 +279,8 @@ impl UniswapV4State {
         }
         Ok(SwapResults {
             amount_calculated: state.amount_calculated,
+            amount_specified,
+            amount_remaining: state.amount_remaining,
             sqrt_price: state.sqrt_price,
             liquidity: state.liquidity,
             tick: state.tick,

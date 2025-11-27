@@ -32,6 +32,8 @@ pub(crate) struct StepComputation {
 #[derive(Debug)]
 pub(crate) struct SwapResults {
     pub(crate) amount_calculated: I256,
+    pub(crate) amount_specified: I256,
+    pub(crate) amount_remaining: I256,
     pub(crate) sqrt_price: U256,
     pub(crate) liquidity: u128,
     pub(crate) tick: i32,

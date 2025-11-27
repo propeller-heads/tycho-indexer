@@ -195,6 +195,8 @@ impl UniswapV3State {
         }
         Ok(SwapResults {
             amount_calculated: state.amount_calculated,
+            amount_specified,
+            amount_remaining: state.amount_remaining,
             sqrt_price: state.sqrt_price,
             liquidity: state.liquidity,
             tick: state.tick,
