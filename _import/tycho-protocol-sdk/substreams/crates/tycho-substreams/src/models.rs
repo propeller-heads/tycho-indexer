@@ -101,6 +101,40 @@ impl TransactionChangesBuilder {
         }
     }
 
+    /// Marks a protocol component as paused or unpaused.
+    ///
+    /// Enables/disables swapping on the protocol component.
+    ///
+    /// # Parameters
+    /// * `component_id` - The unique identifier of the protocol component
+    /// * `paused` - `true` to pause the component, `false` to unpause it
+    pub fn change_component_pause_state(&mut self, component_id: &str, paused: bool) {
+        let attribute = match paused {
+            true => Attribute {
+                name: "paused".to_string(),
+                value: vec![1u8],
+                change: ChangeType::Creation.into(),
+            },
+            false => Attribute {
+                name: "paused".to_string(),
+                value: vec![0u8],
+                change: ChangeType::Deletion.into(),
+            },
+        };
+
+        if let Some(entry) = self
+            .entity_changes
+            .get_mut(component_id)
+        {
+            entry.set_attribute(&attribute);
+        } else {
+            let mut change = InterimEntityChanges::new(component_id);
+            change.set_attribute(&attribute);
+            self.entity_changes
+                .insert(component_id.to_string(), change);
+        }
+    }
+
     /// Registers a new entity change.
     ///
     /// Will prioritize the new change over any already present one.
@@ -789,6 +823,95 @@ mod test {
         builder.add_entity_change(&changes);
 
         let tx_changes = builder.build();
+        assert!(tx_changes.is_none());
+    }
+
+    #[test]
+    fn test_change_component_pause_state_paused() {
+        let mut builder = TransactionChangesBuilder::new(&super::Transaction::default());
+
+        builder.change_component_pause_state("test_component", true);
+
+        let tx_changes = builder.build().unwrap();
+        assert_eq!(tx_changes.entity_changes.len(), 1);
+
+        let entity_change = &tx_changes.entity_changes[0];
+        assert_eq!(entity_change.component_id, "test_component");
+        assert_eq!(entity_change.attributes.len(), 1);
+
+        let attribute = &entity_change.attributes[0];
+        assert_eq!(attribute.name, "paused");
+        assert_eq!(attribute.value, vec![1u8]);
+        assert_eq!(attribute.change, i32::from(ChangeType::Creation));
+    }
+
+    #[test]
+    fn test_change_component_pause_state_unpaused() {
+        let mut builder = TransactionChangesBuilder::new(&super::Transaction::default());
+
+        builder.change_component_pause_state("test_component", false);
+
+        let tx_changes = builder.build().unwrap();
+        assert_eq!(tx_changes.entity_changes.len(), 1);
+
+        let entity_change = &tx_changes.entity_changes[0];
+        assert_eq!(entity_change.component_id, "test_component");
+        assert_eq!(entity_change.attributes.len(), 1);
+
+        let attribute = &entity_change.attributes[0];
+        assert_eq!(attribute.name, "paused");
+        assert_eq!(attribute.value, vec![0u8]);
+        assert_eq!(attribute.change, i32::from(ChangeType::Deletion));
+    }
+
+    #[test]
+    fn test_change_component_pause_state_existing_component() {
+        let mut builder = TransactionChangesBuilder::new(&super::Transaction::default());
+
+        // First add an existing entity change
+        builder.mark_component_as_updated("test_component");
+
+        // Then pause the component
+        builder.change_component_pause_state("test_component", true);
+
+        let tx_changes = builder.build().unwrap();
+        assert_eq!(tx_changes.entity_changes.len(), 1);
+
+        let entity_change = &tx_changes.entity_changes[0];
+        assert_eq!(entity_change.component_id, "test_component");
+        assert_eq!(entity_change.attributes.len(), 2);
+
+        // Check that both attributes are present
+        let attribute_names: Vec<&str> = entity_change
+            .attributes
+            .iter()
+            .map(|a| a.name.as_str())
+            .collect();
+        assert!(attribute_names.contains(&"update_marker"));
+        assert!(attribute_names.contains(&"paused"));
+
+        // Check the paused attribute specifically
+        let paused_attr = entity_change
+            .attributes
+            .iter()
+            .find(|a| a.name == "paused")
+            .unwrap();
+        assert_eq!(paused_attr.value, vec![1u8]);
+        assert_eq!(paused_attr.change, i32::from(ChangeType::Creation));
+    }
+
+    #[test]
+    fn test_change_component_pause_state_multiple_operations() {
+        let mut builder = TransactionChangesBuilder::new(&super::Transaction::default());
+
+        // Pause the component
+        builder.change_component_pause_state("test_component", true);
+
+        // Then unpause it
+        builder.change_component_pause_state("test_component", false);
+
+        let tx_changes = builder.build();
+        // Should be None because creation followed by deletion cancels out
         assert!(tx_changes.is_none());
     }
 }
