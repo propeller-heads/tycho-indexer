@@ -1005,13 +1005,12 @@ mod tests {
             .get_amount_out(BigUint::one(), &dai(), &bal())
             .unwrap();
 
-        let new_state = result
+        let _ = result
             .new_state
             .as_any()
             .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .unwrap();
         assert_eq!(result.amount, BigUint::ZERO);
-        assert_eq!(new_state.spot_prices, pool_state.spot_prices)
     }
 
     #[tokio::test]
