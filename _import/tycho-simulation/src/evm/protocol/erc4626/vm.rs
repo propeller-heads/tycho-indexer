@@ -5,7 +5,7 @@ use alloy::{
     primitives::{Address as AlloyAddress, U256},
     sol_types::SolCall,
 };
-use revm::DatabaseRef;
+use revm::{primitives::KECCAK_EMPTY, state::AccountInfo, DatabaseRef};
 use tycho_common::{
     models::{token::Token, Address},
     simulation::errors::SimulationError,
@@ -27,62 +27,71 @@ use crate::evm::{
 sol! {
     function convertToShares(uint256 assets) public returns (uint256);
     function convertToAssets(uint256 shares) public returns (uint256);
-    function maxDeposit(address user) external returns (uint256);
-    function maxWithdraw(address user) external returns (uint256);
+    function maxDeposit(address caller) external returns (uint256);
+    function maxWithdraw(address caller) external returns (uint256);
 }
 
 pub fn decode_from_vm<D: EngineDatabaseInterface + Clone + Debug>(
     pool: &Address,
     asset_token: &Token,
     share_token: &Token,
+    pool_asset_balance: U256,
     vm_engine: SimulationEngine<D>,
 ) -> Result<ERC4626State, SimulationError>
 where
     <D as DatabaseRef>::Error: Debug,
     <D as EngineDatabaseInterface>::Error: Debug,
 {
-    let convert_to_assets_call =
-        convertToAssetsCall { shares: U256::from(10).pow(U256::from(share_token.decimals)) };
     let share_price = simulate_and_decode_call(
         &vm_engine,
         pool,
         AlloyAddress::ZERO,
-        convert_to_assets_call,
+        convertToAssetsCall { shares: U256::from(10).pow(U256::from(share_token.decimals)) },
         None,
         "convertToAssets",
     )?;
 
-    let convert_to_shares_call =
-        convertToSharesCall { assets: U256::from(10).pow(U256::from(asset_token.decimals)) };
     let asset_price = simulate_and_decode_call(
         &vm_engine,
         pool,
         AlloyAddress::ZERO,
-        convert_to_shares_call,
+        convertToSharesCall { assets: U256::from(10).pow(U256::from(asset_token.decimals)) },
         None,
         "convertToShares",
     )?;
 
-    let token_overwrites = get_token_overwrites(share_token)?;
+    vm_engine
+        .state
+        .init_account(
+            *EXTERNAL_ACCOUNT,
+            AccountInfo { balance: *MAX_BALANCE, nonce: 0, code_hash: KECCAK_EMPTY, code: None },
+            None,
+            false,
+        )
+        .map_err(|err| {
+            SimulationError::FatalError(format!(
+                "Failed to decode from vm: Failed to init external account: {err:?}"
+            ))
+        })?;
+
+    let mut factory = TokenProxyOverwriteFactory::new(
+        AlloyAddress::from_slice(asset_token.address.as_ref()),
+        None,
+    );
+    factory.set_balance(*MAX_BALANCE, *EXTERNAL_ACCOUNT);
+    factory.set_balance(pool_asset_balance, AlloyAddress::from_slice(asset_token.address.as_ref()));
+    let token_overwrites = factory.get_overwrites();
+
     let caller = AlloyAddress::from_slice(&*EXTERNAL_ACCOUNT.0);
 
     let max_deposit = simulate_and_decode_call(
         &vm_engine,
         pool,
         caller,
-        maxDepositCall { user: caller },
+        maxDepositCall { caller },
         Some(token_overwrites.clone()),
         "maxDeposit",
     )?;
-
-    // let max_withdraw = simulate_and_decode_call(
-    //     &vm_engine,
-    //     pool,
-    //     caller,
-    //     maxWithdrawCall { user: caller },
-    //     Some(token_overwrites.clone()),
-    //     "maxWithdraw",
-    // )?;
 
     Ok(ERC4626State::new(
         pool,
@@ -91,21 +100,8 @@ where
         asset_price,
         share_price,
         max_deposit,
-        *MAX_BALANCE,
+        pool_asset_balance,
     ))
-}
-
-fn get_token_overwrites(
-    token: &Token,
-) -> Result<HashMap<AlloyAddress, Overwrites>, SimulationError> {
-    let owner = AlloyAddress::from_slice(&*EXTERNAL_ACCOUNT.0);
-    let balance = *MAX_BALANCE / U256::from(100);
-
-    let mut factory =
-        TokenProxyOverwriteFactory::new(AlloyAddress::from_slice(token.address.as_ref()), None);
-    factory.set_balance(balance, owner);
-
-    Ok(factory.get_overwrites())
 }
 
 fn simulate_and_decode_call<D, Call, Ret>(
@@ -114,7 +110,7 @@ fn simulate_and_decode_call<D, Call, Ret>(
     caller: AlloyAddress,
     call: Call,
     overrides: Option<HashMap<AlloyAddress, Overwrites>>,
-    err_prefix: &str,
+    method: &str,
 ) -> Result<Ret, SimulationError>
 where
     D: EngineDatabaseInterface + Clone + Debug,
@@ -137,16 +133,17 @@ where
 
     let res = vm_engine
         .simulate(&params)
-        .map_err(|e| SimulationError::FatalError(format!("{err_prefix} simulate failed: {e}")))?;
+        .map_err(|e| SimulationError::FatalError(format!("{method} simulate failed: {e}")))?;
 
     Call::abi_decode_returns(res.result.as_ref())
-        .map_err(|e| SimulationError::FatalError(format!("{err_prefix} decode failed: {e}")))
+        .map_err(|e| SimulationError::FatalError(format!("{method} decode failed: {e}")))
 }
 
 #[cfg(test)]
 mod test {
     use std::str::FromStr;
 
+    use alloy::primitives::U256;
     use tycho_client::feed::BlockHeader;
     use tycho_common::{
         models::{token::Token, Chain},
@@ -177,7 +174,7 @@ mod test {
         let sp_usdc = Token::new(
             &Bytes::from_str("0x28B3a8fb53B741A8Fd78c0fb9A6B2393d896a43d").unwrap(),
             "sp_usdc",
-            18,
+            6,
             0,
             &[Some(2000)],
             Chain::Ethereum,
@@ -201,6 +198,7 @@ mod test {
             &Bytes::from("0x28B3a8fb53B741A8Fd78c0fb9A6B2393d896a43d"),
             &usdc,
             &sp_usdc,
+            U256::from(1000000),
             vm,
         )
         .expect("decoding failed");

@@ -60,20 +60,20 @@ impl ProtocolSim for ERC4626State {
     }
 
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
-        if base.address == self.asset_token.address && quote.address == self.share_token.address {
-            Ok(u256_to_f64(self.asset_price)? /
-                u256_to_f64(U256::from(10).pow(U256::from(self.asset_token.decimals)))?)
-        } else if base.address == self.share_token.address &&
-            quote.address == self.asset_token.address
-        {
-            Ok(u256_to_f64(self.share_price)? /
-                u256_to_f64(U256::from(10).pow(U256::from(self.share_token.decimals)))?)
-        } else {
-            Err(SimulationError::FatalError(format!(
-                "Invalid token pair: {}, {}",
-                base.address, quote.address
-            )))
+        let share_unit = U256::from(10).pow(U256::from(self.share_token.decimals));
+
+        // real ratio: 1 share → asset
+        let share_to_asset = u256_to_f64(self.share_price)? / u256_to_f64(share_unit)?;
+
+        if base.address == self.share_token.address && quote.address == self.asset_token.address {
+            return Ok(share_to_asset);
         }
+
+        if base.address == self.asset_token.address && quote.address == self.share_token.address {
+            return Ok(1.0 / share_to_asset);
+        }
+
+        Err(SimulationError::FatalError("invalid pair".into()))
     }
 
     fn get_amount_out(
@@ -87,7 +87,10 @@ impl ProtocolSim for ERC4626State {
             token_out.address == self.share_token.address
         {
             Ok(GetAmountOutResult {
-                amount: u256_to_biguint(amount_in * self.share_price),
+                amount: u256_to_biguint(
+                    amount_in * self.share_price /
+                        U256::from(10).pow(U256::from(self.share_token.decimals)),
+                ),
                 gas: 155433.to_biguint().expect("infallible"),
                 new_state: self.clone_box(),
             })
@@ -95,7 +98,10 @@ impl ProtocolSim for ERC4626State {
             token_out.address == self.asset_token.address
         {
             Ok(GetAmountOutResult {
-                amount: u256_to_biguint(amount_in * self.asset_price),
+                amount: u256_to_biguint(
+                    amount_in * self.asset_price /
+                        U256::from(10).pow(U256::from(self.asset_token.decimals)),
+                ),
                 gas: 155433.to_biguint().expect("infallible"),
                 new_state: self.clone_box(),
             })
@@ -128,13 +134,28 @@ impl ProtocolSim for ERC4626State {
         &mut self,
         _delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
-        _balances: &Balances,
+        balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
         let engine =
             create_engine(SHARED_TYCHO_DB.clone(), false).expect("Failed to create engine");
-        let state =
-            vm::decode_from_vm(&self.pool_address, &self.asset_token, &self.share_token, engine)?;
+
+        let asset_balance_bytes = balances
+            .component_balances
+            .get(&self.pool_address.to_string())
+            .ok_or_else(|| SimulationError::FatalError("pool not found".into()))?
+            .get(&self.asset_token.address)
+            .ok_or_else(|| SimulationError::FatalError("asset not found".into()))?;
+
+        let state = vm::decode_from_vm(
+            &self.pool_address,
+            &self.asset_token,
+            &self.share_token,
+            U256::from_be_slice(asset_balance_bytes),
+            engine,
+        )?;
+
         trace!(?state, "Calling delta transition for {}", &self.pool_address);
+
         self.asset_price = state.asset_price;
         self.share_price = state.share_price;
         self.max_deposit = state.max_deposit;
