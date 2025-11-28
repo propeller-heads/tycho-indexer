@@ -1,3 +1,11 @@
+## [0.137.1](https://github.com/propeller-heads/tycho-execution/compare/0.137.0...0.137.1) (2025-11-28)
+
+
+### Bug Fixes
+
+* Put angstrom address under uniswap_v4_hooks ([8e0ed5d](https://github.com/propeller-heads/tycho-execution/commit/8e0ed5de1a5704c2e820c6051a233d26f8578f9d))
+* truncate to size if value is more than bytes desired ([34d651f](https://github.com/propeller-heads/tycho-execution/commit/34d651f39befd4e9865fe1ca420a9b751aa558c8))
+
 ## [0.137.0](https://github.com/propeller-heads/tycho-execution/compare/0.136.0...0.137.0) (2025-11-26)
 
 
