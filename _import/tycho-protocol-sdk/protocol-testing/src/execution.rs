@@ -39,22 +39,22 @@ static EXECUTOR_MAPPING: LazyLock<HashMap<&'static str, &'static str>> = LazyLoc
     map.insert("pancakeswap_v3", UNISWAP_V3_BYTECODE_JSON);
     map.insert("uniswap_v4", UNISWAP_V4_BYTECODE_JSON);
     map.insert("uniswap_v4_hooks", UNISWAP_V4_ANGSTROM_BYTECODE_JSON);
-    map.insert("balancer_v2", BALANCER_V2_BYTECODE_JSON);
-    map.insert("balancer_v3", BALANCER_V3_BYTECODE_JSON);
-    map.insert("curve", CURVE_BYTECODE_JSON);
-    map.insert("maverick_v2", MAVERICK_V2_BYTECODE_JSON);
+    map.insert("vm:balancer_v2", BALANCER_V2_BYTECODE_JSON);
+    map.insert("vm:balancer_v3", BALANCER_V3_BYTECODE_JSON);
+    map.insert("vm:curve", CURVE_BYTECODE_JSON);
+    map.insert("vm:maverick_v2", MAVERICK_V2_BYTECODE_JSON);
     map.insert("ekubo", EKUBO_BYTECODE_JSON);
     map
 });
 
-/// Get executor bytecode JSON based on component ID
-fn get_executor_bytecode_json(component_id: &str) -> miette::Result<&'static str> {
+/// Get executor bytecode JSON based on protocol system
+fn get_executor_bytecode_json(protocol_system: &str) -> miette::Result<&'static str> {
     for (pattern, executor_json) in EXECUTOR_MAPPING.iter() {
-        if component_id.contains(pattern) {
+        if protocol_system == *pattern {
             return Ok(executor_json);
         }
     }
-    Err(miette!("Unknown component type '{}' - no matching executor found", component_id))
+    Err(miette!("Unknown protocol system '{}' - no matching executor found", protocol_system))
 }
 
 /// Load executor bytecode from embedded constants based on the protocol system
