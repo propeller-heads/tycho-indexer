@@ -102,6 +102,11 @@ struct Cli {
     /// List of component IDs to always include in tests every block if not already selected
     #[arg(long, value_delimiter = ',')]
     always_test_components: Vec<String>,
+
+    /// List of protocols to enable (e.g., uniswap_v2,curve,balancer_v2)
+    /// If not provided, defaults to chain-specific protocols
+    #[arg(long, value_delimiter = ',')]
+    protocols: Option<Vec<String>>,
 }
 
 impl Debug for Cli {
@@ -224,6 +229,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
             cli.tycho_url.clone(),
             cli.tycho_api_key.clone(),
             cli.tvl_threshold,
+            cli.protocols.clone(),
         ) {
             protocol_handle = Some(
                 protocol_stream_processor
@@ -461,7 +467,7 @@ async fn process_update(
             match result {
                 Ok(passed) => {
                     if *passed {
-                        info!(
+                        debug!(
                             component_id = %component_id,
                             "State validation passed"
                         );

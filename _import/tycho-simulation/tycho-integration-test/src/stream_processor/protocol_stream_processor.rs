@@ -16,7 +16,7 @@ use tycho_simulation::{
         protocol::{
             aerodrome_slipstreams::state::AerodromeSlipstreamsState,
             ekubo::state::EkuboState,
-            filters::{balancer_v2_pool_filter, fluid_v1_paused_pools_filter},
+            filters::{balancer_v2_pool_filter, curve_pool_filter, fluid_v1_paused_pools_filter},
             fluid::FluidV1,
             pancakeswap_v2::state::PancakeswapV2State,
             uniswap_v2::state::UniswapV2State,
@@ -36,6 +36,7 @@ pub struct ProtocolStreamProcessor {
     tycho_url: String,
     tycho_api_key: String,
     tvl_threshold: f64,
+    protocols: Option<Vec<String>>,
 }
 
 impl ProtocolStreamProcessor {
@@ -44,8 +45,9 @@ impl ProtocolStreamProcessor {
         tycho_url: String,
         tycho_api_key: String,
         tvl_threshold: f64,
+        protocols: Option<Vec<String>>,
     ) -> miette::Result<Self> {
-        Ok(Self { chain, tycho_url, tycho_api_key, tvl_threshold })
+        Ok(Self { chain, tycho_url, tycho_api_key, tvl_threshold, protocols })
     }
 
     pub async fn run_stream(
@@ -114,53 +116,15 @@ impl ProtocolStreamProcessor {
     ) -> miette::Result<impl Stream<Item = Result<Update, StreamDecodeError>>> {
         let mut protocol_stream = ProtocolStreamBuilder::new(&self.tycho_url, self.chain);
         let tvl_filter = ComponentFilter::with_tvl_range(self.tvl_threshold, self.tvl_threshold);
-        match self.chain {
-            Chain::Ethereum => {
-                protocol_stream = protocol_stream
-                    .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
-                    .exchange::<UniswapV2State>("sushiswap_v2", tvl_filter.clone(), None)
-                    .exchange::<PancakeswapV2State>("pancakeswap_v2", tvl_filter.clone(), None)
-                    .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
-                    .exchange::<UniswapV3State>("pancakeswap_v3", tvl_filter.clone(), None)
-                    .exchange::<EVMPoolState<PreCachedDB>>(
-                        "vm:balancer_v2",
-                        tvl_filter.clone(),
-                        Some(balancer_v2_pool_filter),
-                    )
-                    .exchange::<UniswapV4State>("uniswap_v4", tvl_filter.clone(), None)
-                    .exchange::<EkuboState>("ekubo_v2", tvl_filter.clone(), None)
-                    .exchange::<EVMPoolState<PreCachedDB>>("vm:curve", tvl_filter.clone(), None)
-                    .exchange::<UniswapV4State>("uniswap_v4_hooks", tvl_filter.clone(), None)
-                    .exchange::<EVMPoolState<PreCachedDB>>(
-                        "vm:maverick_v2",
-                        tvl_filter.clone(),
-                        None,
-                    )
-                    .exchange::<FluidV1>(
-                        "fluid_v1",
-                        tvl_filter.clone(),
-                        Some(fluid_v1_paused_pools_filter),
-                    );
-            }
-            Chain::Base => {
-                protocol_stream = protocol_stream
-                    .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
-                    .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
-                    .exchange::<UniswapV4State>("uniswap_v4", tvl_filter.clone(), None)
-                    .exchange::<UniswapV3State>("pancakeswap_v3", tvl_filter.clone(), None)
-                    .exchange::<AerodromeSlipstreamsState>(
-                        "aerodrome_slipstreams",
-                        tvl_filter.clone(),
-                        None,
-                    )
-            }
-            Chain::Unichain => {
-                protocol_stream = protocol_stream
-                    .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
-                    .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
-                    .exchange::<UniswapV4State>("uniswap_v4", tvl_filter.clone(), None)
-            }
-            _ => {}
+
+        let protocols_to_enable = match &self.protocols {
+            Some(protocols) => protocols.clone(),
+            None => self.get_default_protocols_for_chain(),
+        };
+
+        for protocol in &protocols_to_enable {
+            protocol_stream =
+                self.add_protocol_to_stream(protocol_stream, protocol, &tvl_filter)?;
         }
         protocol_stream
             .auth_key(Some(self.tycho_api_key.clone()))
@@ -171,5 +135,116 @@ impl ProtocolStreamProcessor {
             .await
             .into_diagnostic()
             .wrap_err("Failed building protocol stream")
+    }
+
+    fn get_default_protocols_for_chain(&self) -> Vec<String> {
+        match self.chain {
+            Chain::Ethereum => vec![
+                "uniswap_v2".to_string(),
+                "sushiswap_v2".to_string(),
+                "pancakeswap_v2".to_string(),
+                "uniswap_v3".to_string(),
+                "pancakeswap_v3".to_string(),
+                "vm:balancer_v2".to_string(),
+                "uniswap_v4".to_string(),
+                "ekubo_v2".to_string(),
+                "vm:curve".to_string(),
+                "uniswap_v4_hooks".to_string(),
+                "vm:maverick_v2".to_string(),
+                "fluid_v1".to_string(),
+            ],
+            Chain::Base => vec![
+                "uniswap_v2".to_string(),
+                "uniswap_v3".to_string(),
+                "uniswap_v4".to_string(),
+                "pancakeswap_v3".to_string(),
+                "aerodrome_slipstreams".to_string(),
+            ],
+            Chain::Unichain => {
+                vec!["uniswap_v2".to_string(), "uniswap_v3".to_string(), "uniswap_v4".to_string()]
+            }
+            _ => vec![],
+        }
+    }
+
+    /// Add a specific protocol to the stream builder
+    fn add_protocol_to_stream(
+        &self,
+        mut stream: ProtocolStreamBuilder,
+        protocol: &str,
+        tvl_filter: &ComponentFilter,
+    ) -> miette::Result<ProtocolStreamBuilder> {
+        match protocol {
+            "uniswap_v2" => {
+                stream = stream.exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None);
+            }
+            "sushiswap_v2" => {
+                stream =
+                    stream.exchange::<UniswapV2State>("sushiswap_v2", tvl_filter.clone(), None);
+            }
+            "pancakeswap_v2" => {
+                stream = stream.exchange::<PancakeswapV2State>(
+                    "pancakeswap_v2",
+                    tvl_filter.clone(),
+                    None,
+                );
+            }
+            "uniswap_v3" => {
+                stream = stream.exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None);
+            }
+            "pancakeswap_v3" => {
+                stream =
+                    stream.exchange::<UniswapV3State>("pancakeswap_v3", tvl_filter.clone(), None);
+            }
+            "vm:balancer_v2" => {
+                stream = stream.exchange::<EVMPoolState<PreCachedDB>>(
+                    "vm:balancer_v2",
+                    tvl_filter.clone(),
+                    Some(balancer_v2_pool_filter),
+                );
+            }
+            "uniswap_v4" => {
+                stream = stream.exchange::<UniswapV4State>("uniswap_v4", tvl_filter.clone(), None);
+            }
+            "ekubo_v2" => {
+                stream = stream.exchange::<EkuboState>("ekubo_v2", tvl_filter.clone(), None);
+            }
+            "vm:curve" => {
+                stream = stream.exchange::<EVMPoolState<PreCachedDB>>(
+                    "vm:curve",
+                    tvl_filter.clone(),
+                    Some(curve_pool_filter),
+                );
+            }
+            "uniswap_v4_hooks" => {
+                stream =
+                    stream.exchange::<UniswapV4State>("uniswap_v4_hooks", tvl_filter.clone(), None);
+            }
+            "vm:maverick_v2" => {
+                stream = stream.exchange::<EVMPoolState<PreCachedDB>>(
+                    "vm:maverick_v2",
+                    tvl_filter.clone(),
+                    None,
+                );
+            }
+            "fluid_v1" => {
+                stream = stream.exchange::<FluidV1>(
+                    "fluid_v1",
+                    tvl_filter.clone(),
+                    Some(fluid_v1_paused_pools_filter),
+                );
+            }
+            "aerodrome_slipstreams" => {
+                stream = stream.exchange::<AerodromeSlipstreamsState>(
+                    "aerodrome_slipstreams",
+                    tvl_filter.clone(),
+                    None,
+                );
+            }
+            _ => {
+                return Err(miette::miette!("Unknown protocol: {}", protocol));
+            }
+        }
+        Ok(stream)
     }
 }
