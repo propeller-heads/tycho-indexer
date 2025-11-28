@@ -38,6 +38,8 @@ static EXECUTOR_MAPPING: LazyLock<HashMap<&'static str, &'static str>> = LazyLoc
     map.insert("uniswap_v3", UNISWAP_V3_BYTECODE_JSON);
     map.insert("pancakeswap_v3", UNISWAP_V3_BYTECODE_JSON);
     map.insert("uniswap_v4", UNISWAP_V4_BYTECODE_JSON);
+    // If you would like to test any other hook, replace this bytecode with the
+    // desired hook bytecode
     map.insert("uniswap_v4_hooks", UNISWAP_V4_ANGSTROM_BYTECODE_JSON);
     map.insert("vm:balancer_v2", BALANCER_V2_BYTECODE_JSON);
     map.insert("vm:balancer_v3", BALANCER_V3_BYTECODE_JSON);
