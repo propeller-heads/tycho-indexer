@@ -461,19 +461,15 @@ impl TestRunner {
         test_type: &TestTypeRange,
         terminal_width: usize,
     ) -> miette::Result<()> {
-        let is_ci = std::env::var("CI").is_ok();
-
         let tests = match &test_type.match_test {
             Some(filter) => config
                 .tests
                 .iter()
                 .filter(|test| test.name.contains(filter))
-                .filter(|test| !is_ci || !test.skip_in_ci)
                 .collect::<Vec<&IntegrationTest>>(),
             None => config
                 .tests
                 .iter()
-                .filter(|test| !is_ci || !test.skip_in_ci)
                 .collect::<Vec<&IntegrationTest>>(),
         };
         let tests_count = tests.len();

@@ -134,8 +134,6 @@ pub struct IntegrationTest {
     pub expected_components: Vec<ProtocolComponentWithTestConfig>,
     #[serde(default = "default_false")]
     pub execute_current_block: bool,
-    #[serde(default = "default_false")]
-    pub skip_in_ci: bool,
 }
 
 /// Main integration test configuration

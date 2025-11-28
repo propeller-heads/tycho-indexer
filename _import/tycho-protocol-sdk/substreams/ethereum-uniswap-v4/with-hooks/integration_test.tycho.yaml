@@ -14,7 +14,6 @@ tests:
     # For Angstrom, we can only get attestations in the present, so simulating
     # in the past won't work.
     execute_current_block: true
-    skip_in_ci: true
     expected_components:
       - id: "0xe500210c7ea6bfd9f69dce044b09ef384ec2b34832f132baec3b418208e3a657"
         tokens:
