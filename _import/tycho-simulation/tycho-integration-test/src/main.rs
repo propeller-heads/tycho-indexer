@@ -102,6 +102,11 @@ struct Cli {
     /// List of component IDs to always include in tests every block if not already selected
     #[arg(long, value_delimiter = ',')]
     always_test_components: Vec<String>,
+
+    /// List of protocols to enable (e.g., uniswap_v2,curve,balancer_v2)
+    /// If not provided, defaults to chain-specific protocols
+    #[arg(long, value_delimiter = ',')]
+    protocols: Option<Vec<String>>,
 }
 
 impl Debug for Cli {
@@ -215,16 +220,22 @@ async fn run(cli: Cli) -> miette::Result<()> {
 
     // Run streams in background tasks
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let mut protocol_handle = None;
+    let mut rfq_handle = None;
+
     if !cli.disable_onchain {
         if let Ok(protocol_stream_processor) = ProtocolStreamProcessor::new(
             chain,
             cli.tycho_url.clone(),
             cli.tycho_api_key.clone(),
             cli.tvl_threshold,
+            cli.protocols.clone(),
         ) {
-            protocol_stream_processor
-                .run_stream(&all_tokens, tx.clone())
-                .await?;
+            protocol_handle = Some(
+                protocol_stream_processor
+                    .run_stream(&all_tokens, tx.clone())
+                    .await?,
+            );
         }
     }
     if !cli.disable_rfq {
@@ -234,9 +245,11 @@ async fn run(cli: Cli) -> miette::Result<()> {
             cli.max_simulations as usize,
             Duration::from_secs(cli.skip_messages_duration),
         ) {
-            rfq_stream_processor
-                .run_stream(&all_tokens, tx)
-                .await?;
+            rfq_handle = Some(
+                rfq_stream_processor
+                    .run_stream(&all_tokens, tx)
+                    .await?,
+            );
         }
     }
 
@@ -245,30 +258,84 @@ async fn run(cli: Cli) -> miette::Result<()> {
     // Process streams updates
     info!("Waiting for first protocol update...");
     let semaphore = Arc::new(Semaphore::new(cli.parallel_updates as usize));
-    while let Some(update) = rx.recv().await {
-        let update = match update {
-            Ok(u) => Arc::new(u),
-            Err(e) => {
-                warn!("{}", format_error_chain(&e));
-                continue;
-            }
-        };
 
-        let cli = cli.clone();
-        let rpc_tools = rpc_tools.clone();
-        let tycho_state = tycho_state.clone();
-        let permit = semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .into_diagnostic()
-            .wrap_err("Failed to acquire permit")?;
-        tokio::spawn(async move {
-            if let Err(e) = process_update(cli, chain, rpc_tools, tycho_state, &update).await {
-                warn!("{}", format_error_chain(&e));
+    loop {
+        tokio::select! {
+            // Monitor protocol stream termination
+            result = async {
+                if let Some(handle) = protocol_handle.take() {
+                    handle.await
+                } else {
+                    std::future::pending().await
+                }
+            }, if protocol_handle.is_some() => {
+                match result {
+                    Ok(()) => {
+                        error!("Protocol stream terminated unexpectedly");
+                        return Err(miette!("Protocol stream terminated, exiting application"));
+                    }
+                    Err(e) => {
+                        error!("Protocol stream panicked: {:?}", e);
+                        return Err(miette!("Protocol stream panicked, exiting application"));
+                    }
+                }
             }
-            drop(permit);
-        });
+
+            // Monitor RFQ stream termination
+            result = async {
+                if let Some(handle) = rfq_handle.take() {
+                    handle.await
+                } else {
+                    std::future::pending().await
+                }
+            }, if rfq_handle.is_some() => {
+                match result {
+                    Ok(()) => {
+                        warn!("RFQ stream terminated");
+                        // rfq_handle is already None due to take()
+                    }
+                    Err(e) => {
+                        warn!("RFQ stream panicked: {:?}", e);
+                        // rfq_handle is already None due to take()
+                    }
+                }
+            }
+
+            // Process incoming updates
+            update = rx.recv() => {
+                match update {
+                    Some(update) => {
+                        let update = match update {
+                            Ok(u) => Arc::new(u),
+                            Err(e) => {
+                                warn!("{}", format_error_chain(&e));
+                                continue;
+                            }
+                        };
+
+                        let cli = cli.clone();
+                        let rpc_tools = rpc_tools.clone();
+                        let tycho_state = tycho_state.clone();
+                        let permit = semaphore
+                            .clone()
+                            .acquire_owned()
+                            .await
+                            .into_diagnostic()
+                            .wrap_err("Failed to acquire permit")?;
+                        tokio::spawn(async move {
+                            if let Err(e) = process_update(cli, chain, rpc_tools, tycho_state, &update).await {
+                                warn!("{}", format_error_chain(&e));
+                            }
+                            drop(permit);
+                        });
+                    }
+                    None => {
+                        info!("All streams closed, exiting");
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     Ok(())
@@ -400,7 +467,7 @@ async fn process_update(
             match result {
                 Ok(passed) => {
                     if *passed {
-                        info!(
+                        debug!(
                             component_id = %component_id,
                             "State validation passed"
                         );
@@ -561,72 +628,74 @@ fn select_components_to_process(
         components_to_process.push((id.clone(), component, state.clone_box()));
     }
 
-    // Collect stale components (not updated in this block)
-    let selected_ids = {
-        let current_state = tycho_state
-            .read()
-            .map_err(|e| miette!("Failed to acquire write lock on Tycho state: {e}"))?;
-
-        let mut all_selected_ids = Vec::new();
-
-        for component_id in &cli.always_test_components {
-            if !update
-                .update
-                .states
-                .keys()
-                .contains(component_id) &&
-                current_state
-                    .components
-                    .contains_key(component_id)
-            {
-                all_selected_ids.push(component_id.clone());
-            }
-        }
-
-        for component_ids in current_state
-            .component_ids_by_protocol
-            .values()
-        {
-            let available_ids: Vec<_> = component_ids
-                .iter()
-                .filter(|id| {
-                    !update.update.states.keys().contains(id) && !all_selected_ids.contains(id)
-                })
-                .cloned()
-                .collect();
-
-            let protocol_selected_ids: Vec<_> = available_ids
-                .choose_multiple(
-                    &mut rand::rng(),
-                    (cli.max_simulations_stale as usize).min(available_ids.len()),
-                )
-                .cloned()
-                .collect();
-
-            all_selected_ids.extend(protocol_selected_ids);
-        }
-        all_selected_ids
-    };
-
-    for id in &selected_ids {
-        let (component, state) = {
+    if update.update_type == UpdateType::Protocol {
+        // Collect stale components (not updated in this block)
+        let selected_ids = {
             let current_state = tycho_state
                 .read()
-                .map_err(|e| miette!("Failed to acquire read lock on Tycho state: {e}"))?;
+                .map_err(|e| miette!("Failed to acquire write lock on Tycho state: {e}"))?;
 
-            match (current_state.components.get(id), current_state.states.get(id)) {
-                (Some(comp), Some(state)) => (comp.clone(), state.clone()),
-                (None, _) => {
-                    error!(id=%id, "Component not found in saved protocol components.");
-                    continue;
-                }
-                (_, None) => {
-                    error!(id=%id, "State not found in saved protocol states");
-                    continue;
+            let mut all_selected_ids = Vec::new();
+
+            for component_id in &cli.always_test_components {
+                if !update
+                    .update
+                    .states
+                    .keys()
+                    .contains(component_id) &&
+                    current_state
+                        .components
+                        .contains_key(component_id)
+                {
+                    all_selected_ids.push(component_id.clone());
                 }
             }
+
+            for component_ids in current_state
+                .component_ids_by_protocol
+                .values()
+            {
+                let available_ids: Vec<_> = component_ids
+                    .iter()
+                    .filter(|id| {
+                        !update.update.states.keys().contains(id) && !all_selected_ids.contains(id)
+                    })
+                    .cloned()
+                    .collect();
+
+                let protocol_selected_ids: Vec<_> = available_ids
+                    .choose_multiple(
+                        &mut rand::rng(),
+                        (cli.max_simulations_stale as usize).min(available_ids.len()),
+                    )
+                    .cloned()
+                    .collect();
+
+                all_selected_ids.extend(protocol_selected_ids);
+            }
+            all_selected_ids
         };
-        components_to_process.push((id.clone(), component, state.clone_box()));
+
+        for id in &selected_ids {
+            let (component, state) = {
+                let current_state = tycho_state
+                    .read()
+                    .map_err(|e| miette!("Failed to acquire read lock on Tycho state: {e}"))?;
+
+                match (current_state.components.get(id), current_state.states.get(id)) {
+                    (Some(comp), Some(state)) => (comp.clone(), state.clone()),
+                    (None, _) => {
+                        error!(id=%id, "Component not found in saved protocol components.");
+                        continue;
+                    }
+                    (_, None) => {
+                        error!(id=%id, "State not found in saved protocol states");
+                        continue;
+                    }
+                }
+            };
+            components_to_process.push((id.clone(), component, state.clone_box()));
+        }
     }
     Ok(components_to_process)
 }
