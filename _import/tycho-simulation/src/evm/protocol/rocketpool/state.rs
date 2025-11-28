@@ -68,18 +68,13 @@ impl RocketPoolState {
     }
 
     /// Calculates ETH amount out for a given rETH burn amount.
-    /// Matches Solidity: `ethOut = rethIn * totalEth / rethSupply`
     fn get_eth_value(&self, reth_amount: U256) -> Result<U256, SimulationError> {
+        // ethOut = rethIn * totalEth / rethSupply
         safe_div_u256(safe_mul_u256(reth_amount, self.total_eth)?, self.reth_supply)
     }
 
     fn depositing_eth(token_in: &Bytes) -> bool {
         token_in.as_ref() == ETH_ADDRESS
-    }
-
-    /// Returns the deposit fee adjusted by the base (e.g., 0.005 for 0.5%)
-    fn deposit_fee_as_f64(&self) -> Result<f64, SimulationError> {
-        Ok(u256_to_f64(self.deposit_fee)? / DEPOSIT_FEE_BASE)
     }
 
     fn assert_deposits_enabled(&self) -> Result<(), SimulationError> {
@@ -101,14 +96,17 @@ impl ProtocolSim for RocketPoolState {
 
     fn spot_price(&self, base: &Token, _quote: &Token) -> Result<f64, SimulationError> {
         let is_depositing_eth = RocketPoolState::depositing_eth(&base.address);
+        // As the protocol has no slippage, we can use a fixed amount for spot price calculation
+        let amount = U256::from(1e18);
 
         let res = if is_depositing_eth {
             self.assert_deposits_enabled()?;
-            let fee = self.deposit_fee_as_f64()?;
-            u256_to_f64(self.reth_supply)? / u256_to_f64(self.total_eth)? * (1.0 - fee)
+            self.get_reth_value(amount)?
         } else {
-            u256_to_f64(self.total_eth)? / u256_to_f64(self.reth_supply)?
+            self.get_eth_value(amount)?
         };
+
+        let res = u256_to_f64(res)? / 1e18;
 
         Ok(res)
     }
