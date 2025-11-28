@@ -424,7 +424,6 @@ impl TestRunner {
                             &block,
                             &config.protocol_system,
                             &[], // No skip filters for live testing
-                            false, // is_current_block - live testing uses historical blocks
                         )
                         .await
                     {
@@ -547,24 +546,14 @@ impl TestRunner {
             .map(|c| c.base.id.to_lowercase())
             .collect::<Vec<String>>();
 
-        // Get block for execution - use current block if test requires it
-        let block = if test.execute_current_block {
-            info!("Test configured for current block execution (execute_current_block=true)");
-            self
-                .runtime
-                .block_on(
-                    self.rpc_provider
-                        .get_block(BlockNumberOrTag::Latest),
-                )
-                .wrap_err("Failed to get current block")?
-        } else {
-            self.runtime
-                .block_on(
-                    self.rpc_provider
-                        .get_block_header(stop_block),
-                )
-                .wrap_err("Failed to get historical block header")?
-        };
+        // Get block header to extract the timestamp
+        let block = self
+            .runtime
+            .block_on(
+                self.rpc_provider
+                    .get_block_header(stop_block),
+            )
+            .wrap_err("Failed to get block header")?;
 
         let (protocol_components, snapshot, all_tokens) =
             self.fetch_from_tycho_rpc(&config.protocol_system, expected_ids, stop_block)?;
@@ -638,7 +627,6 @@ impl TestRunner {
                 &block,
                 &config.protocol_system,
                 &test.expected_components,
-                test.execute_current_block, // Pass test-level flag
             ))?;
 
         Ok(())
@@ -1106,10 +1094,9 @@ impl TestRunner {
     ///
     /// # Arguments
     /// * `execution_data` - HashMap of simulation IDs to TychoExecutionInput data
-    /// * `block` - The block to use for execution testing
+    /// * `block` - The historical block to use for execution testing
     /// * `protocol_system` - The protocol system identifier
     /// * `expected_components` - Test configuration to determine which components to skip
-    /// * `is_current_block` - Whether executing on current block (skips slippage checks if true)
     ///
     /// # Returns
     /// Returns `Ok(())` if all executions complete successfully within tolerance.
@@ -1127,7 +1114,6 @@ impl TestRunner {
         block: &Block,
         protocol_system: &str,
         expected_components: &[ProtocolComponentWithTestConfig],
-        is_current_block: bool,
     ) -> miette::Result<()> {
         if execution_data.is_empty() {
             info!("No execution data to process");
@@ -1222,31 +1208,22 @@ impl TestRunner {
                     );
 
                     // Compare execution amount out with simulation amount out
-                    // Skip comparison if executing on current block (expected to differ)
-                    if is_current_block {
-                        success_count += 1;
-                        info!(
-                            "[{}] Skipping amount comparison (is_current_block=true): simulation={}, execution={}",
-                            expected_input.component_id, expected_input.expected_amount_out, amount_out
+                    let diff = BigInt::from(
+                        expected_input
+                            .expected_amount_out
+                            .clone(),
+                    ) - BigInt::from(amount_out.clone());
+                    let slippage: BigRational =
+                        BigRational::new(diff.abs(), BigInt::from(amount_out.clone()));
+
+                    if slippage.to_f64() > Some(0.005) {
+                        failure_count += 1;
+                        error!(
+                            "[{}] Execution amount and simulation amount differ more than 0.05% for {}: simulation={}, execution={}",
+                            expected_input.component_id, simulation_id, expected_input.expected_amount_out, amount_out
                         );
                     } else {
-                        let diff = BigInt::from(
-                            expected_input
-                                .expected_amount_out
-                                .clone(),
-                        ) - BigInt::from(amount_out.clone());
-                        let slippage: BigRational =
-                            BigRational::new(diff.abs(), BigInt::from(amount_out.clone()));
-
-                        if slippage.to_f64() > Some(0.005) {
-                            failure_count += 1;
-                            error!(
-                                "[{}] Execution amount and simulation amount differ more than 0.05% for {}: simulation={}, execution={}",
-                                expected_input.component_id, simulation_id, expected_input.expected_amount_out, amount_out
-                            );
-                        } else {
-                            success_count += 1;
-                        }
+                        success_count += 1;
                     }
                 }
                 Some(TychoExecutionResult::Revert { reason, .. }) => {
