@@ -6511,7 +6511,7 @@ dependencies = [
  "tokio-retry2",
  "tracing",
  "tracing-subscriber 0.3.20",
- "tycho-execution 0.136.0",
+ "tycho-execution 0.137.0",
  "tycho-simulation",
  "tycho-test",
 ]
@@ -9137,7 +9137,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.136.0"
+version = "0.137.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "504c7a9078857754b9a6bb10fbffd5606e06e775f1881123801f559874153998"
 dependencies = [
  "alloy",
  "chrono",
