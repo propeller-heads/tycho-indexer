@@ -423,7 +423,7 @@ impl TestRunner {
                             execution_data,
                             &block,
                             &config.protocol_system,
-                            &[],   // No skip filters for live testing
+                            &[], // No skip filters for live testing
                             false, // is_current_block - live testing uses historical blocks
                         )
                         .await
@@ -550,19 +550,13 @@ impl TestRunner {
         // Get block for execution - use current block if test requires it
         let block = if test.execute_current_block {
             info!("Test configured for current block execution (execute_current_block=true)");
-            let current_block = self
+            self
                 .runtime
                 .block_on(
                     self.rpc_provider
                         .get_block(BlockNumberOrTag::Latest),
                 )
-                .wrap_err("Failed to get current block")?;
-
-            // We want to simulate on the current pending block, not the latest
-            // finalized block.
-            let mut next_block = current_block.clone();
-            next_block.header.number += 1;
-            next_block
+                .wrap_err("Failed to get current block")?
         } else {
             self.runtime
                 .block_on(
@@ -1165,9 +1159,8 @@ impl TestRunner {
             Some(execution::create_router_overwrites_data(protocol_system)?);
 
         info!(
-            "Executing {} simulations in batches for block {}...",
-            filtered_execution_data.len(),
-            block.number()
+            "Executing {} simulations in batches ...",
+            filtered_execution_data.len()
         );
 
         // Split execution data into smaller batches to avoid RPC request size limits
