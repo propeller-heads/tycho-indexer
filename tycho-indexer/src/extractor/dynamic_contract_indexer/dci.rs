@@ -1266,12 +1266,20 @@ where
         &self,
         block_changes: &BlockChanges,
     ) -> Result<HashMap<TxHash, TxWithChanges>, ExtractionError> {
-        let mut tracked_updates: HashMap<TxHash, TxWithChanges> = HashMap::new();
+        // Pre-allocate with estimated size to reduce reallocations
+        let estimated_size = block_changes
+            .block_contract_changes
+            .len();
+        let mut tracked_updates: HashMap<TxHash, TxWithChanges> =
+            HashMap::with_capacity(estimated_size);
 
         for tx in block_changes
             .block_contract_changes
             .iter()
         {
+            let tx_hash = &tx.tx.hash;
+            let mut tx_account_deltas: HashMap<Address, AccountDelta> = HashMap::new();
+
             for (account, contract_changes) in tx.contract_changes.iter() {
                 // Early skip if the contract is not tracked
                 if !self
@@ -1279,6 +1287,14 @@ where
                     .tracked_contracts
                     .contains_key(account)
                 {
+                    continue;
+                }
+
+                // Early exit if no slots and no balance change to avoid unnecessary work
+                let has_balance_change = contract_changes
+                    .native_balance
+                    .is_some();
+                if contract_changes.slots.is_empty() && !has_balance_change {
                     continue;
                 }
 
@@ -1318,14 +1334,9 @@ where
                         .collect()
                 };
 
-                if !slot_updates.is_empty() ||
-                    contract_changes
-                        .native_balance
-                        .is_some()
-                {
-                    // Use with_capacity and insert instead of HashMap::from for better performance
-                    let mut account_delta = HashMap::with_capacity(1);
-                    account_delta.insert(
+                // Only create AccountDelta if we have updates
+                if !slot_updates.is_empty() || has_balance_change {
+                    tx_account_deltas.insert(
                         account.clone(),
                         AccountDelta::new(
                             self.chain,
@@ -1336,20 +1347,23 @@ where
                             ChangeType::Update,
                         ),
                     );
+                }
+            }
 
-                    let tx_with_changes = TxWithChanges {
-                        tx: tx.tx.clone(),
-                        account_deltas: account_delta,
-                        ..Default::default()
-                    };
+            // Only create TxWithChanges if we have account deltas
+            if !tx_account_deltas.is_empty() {
+                let tx_with_changes = TxWithChanges {
+                    tx: tx.tx.clone(),
+                    account_deltas: tx_account_deltas,
+                    ..Default::default()
+                };
 
-                    match tracked_updates.entry(tx.tx.hash.clone()) {
-                        Entry::Occupied(mut entry) => {
-                            entry.get_mut().merge(tx_with_changes)?;
-                        }
-                        Entry::Vacant(entry) => {
-                            entry.insert(tx_with_changes);
-                        }
+                match tracked_updates.entry(tx_hash.clone()) {
+                    Entry::Occupied(mut entry) => {
+                        entry.get_mut().merge(tx_with_changes)?;
+                    }
+                    Entry::Vacant(entry) => {
+                        entry.insert(tx_with_changes);
                     }
                 }
             }
