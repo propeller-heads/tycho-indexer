@@ -150,6 +150,7 @@ where
                     ?name,
                     ?chain,
                     cursor = &cursor_hex,
+                    block_number = last_processed_block.number,
                     "Found existing cursor! Resuming extractor.."
                 );
                 ProtocolExtractor {
@@ -701,7 +702,7 @@ where
     }
 
     #[allow(deprecated)]
-    #[instrument(skip_all, fields(block_number))]
+    #[instrument(skip_all, fields(block_number, final_block_height))]
     async fn handle_tick_scoped_data(
         &self,
         inp: BlockScopedData,
@@ -763,6 +764,7 @@ where
         let msg = match msg {
             Ok(changes) => {
                 tracing::Span::current().record("block_number", changes.block.number);
+                tracing::Span::current().record("final_block_height", inp.final_block_height);
                 changes
             }
             Err(ExtractionError::Empty) => {
