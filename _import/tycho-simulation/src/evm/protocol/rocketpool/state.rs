@@ -39,7 +39,7 @@ impl RocketPoolState {
         total_eth: U256,
         liquidity: U256,
         deposit_fee: U256,
-        deposit_enabled: bool,
+        deposits_enabled: bool,
         minimum_deposit: U256,
         maximum_deposit_pool_size: U256,
     ) -> Self {
@@ -48,7 +48,7 @@ impl RocketPoolState {
             total_eth,
             liquidity,
             deposit_fee,
-            deposits_enabled: deposit_enabled,
+            deposits_enabled,
             minimum_deposit,
             maximum_deposit_pool_size,
         }
