@@ -2,17 +2,16 @@ use crate::{
     abi::rocket_deposit_pool,
     constants::{ETH_ADDRESS, ROCKET_DEPOSIT_POOL_ADDRESSES, ROCKET_POOL_COMPONENT_ID},
 };
-use anyhow::Result;
 use substreams_ethereum::{pb::eth, Event};
 use tycho_substreams::models::{BalanceDelta, BlockBalanceDeltas};
 
 /// Extracts ETH balance changes for rocket pool component
 ///
-/// This function uses RocketDepositPool events to extract ETH balance changes. If a
+/// This function uses RocketDepositPool events to extract ETH liquidity changes. If a
 /// deposit to the component is detected, it's balanced is increased and if a balance
 /// from the component is withdrawn its balance is decreased.
 #[substreams::handlers::map]
-fn map_relative_component_balance(block: eth::v2::Block) -> Result<BlockBalanceDeltas> {
+fn map_relative_component_liquidity(block: eth::v2::Block) -> BlockBalanceDeltas {
     let res = block
         .logs()
         .filter_map(|log| {
@@ -51,5 +50,5 @@ fn map_relative_component_balance(block: eth::v2::Block) -> Result<BlockBalanceD
         })
         .collect::<Vec<_>>();
 
-    Ok(BlockBalanceDeltas { balance_deltas: res })
+    BlockBalanceDeltas { balance_deltas: res }
 }
