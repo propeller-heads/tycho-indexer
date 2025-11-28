@@ -187,6 +187,7 @@ modules:
       - params: string
       - source: sf.ethereum.type.v2.Block
       - store: store_tokens_to_pool_id_angstrom
+        mode: get
       - map: map_euler_enriched_protocol_changes
     output:
       type: proto:tycho.evm.v1.BlockChanges
