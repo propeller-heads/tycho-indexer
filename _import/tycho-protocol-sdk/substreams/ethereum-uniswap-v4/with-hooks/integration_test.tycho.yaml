@@ -26,7 +26,9 @@ tests:
           hook_identifier: "0x616e677374726f6d5f7631" # angstrom_v1
         creation_tx: "0xf8faae3edf4e801a91f83381de9b2f8182d07a05442d6f5ed78410bced50a534"
         skip_simulation: false
-        skip_execution: false
+        # For Angstrom, we can only get attestations in the present, so simulating execution
+        # in the past won't work.
+        skip_execution: true
 
       - id: "0x90078845bceb849b171873cfbc92db8540e9c803ff57d9d21b1215ec158e79b3"
         tokens:
@@ -39,4 +41,6 @@ tests:
           hook_identifier: "0x616e677374726f6d5f7631" # angstrom_v1
         creation_tx: "0xf8faae3edf4e801a91f83381de9b2f8182d07a05442d6f5ed78410bced50a534"
         skip_simulation: false
-        skip_execution: false
+        # For Angstrom, we can only get attestations in the present, so simulating execution
+        # in the past won't work.
+        skip_execution: true
