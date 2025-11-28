@@ -263,8 +263,15 @@ mod tests {
         assert_eq!(state.reth_supply, U256::from(95_000_000_000_000_000_000u128));
         assert_eq!(state.liquidity, U256::from(50_000_000_000_000_000_000u128));
         assert!(state.deposits_enabled);
+        assert!(state.assign_deposits_enabled);
         assert_eq!(state.minimum_deposit, U256::from(10_000_000_000_000_000u128));
         assert_eq!(state.maximum_deposit_pool_size, U256::from(5_000_000_000_000_000_000_000u128));
+        assert_eq!(state.queue_full_start, U256::from(5u64));
+        assert_eq!(state.queue_full_end, U256::from(10u64));
+        assert_eq!(state.queue_half_start, U256::from(0u64));
+        assert_eq!(state.queue_half_end, U256::from(3u64));
+        assert_eq!(state.queue_variable_start, U256::from(100u64));
+        assert_eq!(state.queue_variable_end, U256::from(105u64));
     }
 
     #[tokio::test]
@@ -279,6 +286,7 @@ mod tests {
                     ("reth_supply".to_string(), Bytes::from(U256::from(100u64).to_be_bytes_vec())),
                     ("liquidity".to_string(), Bytes::from(U256::from(50u64).to_be_bytes_vec())),
                     ("deposits_enabled".to_string(), Bytes::from(vec![0x00])), // disabled
+                    ("assign_deposits_enabled".to_string(), Bytes::from(vec![0x00])), // disabled
                     ("deposit_fee".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
                     (
                         "minimum_deposit".to_string(),
@@ -288,6 +296,15 @@ mod tests {
                         "maximum_deposit_pool_size".to_string(),
                         Bytes::from(U256::from(1000u64).to_be_bytes_vec()),
                     ),
+                    ("queue_full_start".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
+                    ("queue_full_end".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
+                    ("queue_half_start".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
+                    ("queue_half_end".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
+                    (
+                        "queue_variable_start".to_string(),
+                        Bytes::from(U256::from(0u64).to_be_bytes_vec()),
+                    ),
+                    ("queue_variable_end".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
                 ]),
                 balances: HashMap::from([(
                     eth_address,
@@ -311,6 +328,7 @@ mod tests {
         assert!(result.is_ok());
         let state = result.unwrap();
         assert!(!state.deposits_enabled);
+        assert!(!state.assign_deposits_enabled);
     }
 
     #[tokio::test]
@@ -319,9 +337,16 @@ mod tests {
     #[case::missing_reth_supply("reth_supply")]
     #[case::missing_liquidity("liquidity")]
     #[case::missing_deposits_enabled("deposits_enabled")]
+    #[case::missing_assign_deposits_enabled("assign_deposits_enabled")]
     #[case::missing_deposit_fee("deposit_fee")]
     #[case::missing_minimum_deposit("minimum_deposit")]
     #[case::missing_maximum_deposit_pool_size("maximum_deposit_pool_size")]
+    #[case::missing_queue_full_start("queue_full_start")]
+    #[case::missing_queue_full_end("queue_full_end")]
+    #[case::missing_queue_half_start("queue_half_start")]
+    #[case::missing_queue_half_end("queue_half_end")]
+    #[case::missing_queue_variable_start("queue_variable_start")]
+    #[case::missing_queue_variable_end("queue_variable_end")]
     async fn test_rocketpool_try_from_missing_attribute(#[case] missing_attribute: &str) {
         let eth_address = Bytes::from(vec![0u8; 20]);
 
@@ -330,12 +355,19 @@ mod tests {
             ("reth_supply".to_string(), Bytes::from(U256::from(100u64).to_be_bytes_vec())),
             ("liquidity".to_string(), Bytes::from(U256::from(50u64).to_be_bytes_vec())),
             ("deposits_enabled".to_string(), Bytes::from(vec![0x01])),
+            ("assign_deposits_enabled".to_string(), Bytes::from(vec![0x01])),
             ("deposit_fee".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
             ("minimum_deposit".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
             (
                 "maximum_deposit_pool_size".to_string(),
                 Bytes::from(U256::from(1000u64).to_be_bytes_vec()),
             ),
+            ("queue_full_start".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
+            ("queue_full_end".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
+            ("queue_half_start".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
+            ("queue_half_end".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
+            ("queue_variable_start".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
+            ("queue_variable_end".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
         ]);
         attributes.remove(missing_attribute);
 
