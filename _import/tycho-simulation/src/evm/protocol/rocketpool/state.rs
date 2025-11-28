@@ -14,7 +14,7 @@ use tycho_common::{
 use tycho_ethereum::BytesCodec;
 
 use crate::evm::protocol::{
-    rocketpool::{ETH_ADDRESS, ROCKET_POOL_COMPONENT_ID},
+    rocketpool::ETH_ADDRESS,
     safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
     u256_num::{biguint_to_u256, u256_to_biguint, u256_to_f64},
 };
@@ -205,29 +205,21 @@ impl ProtocolSim for RocketPoolState {
         &mut self,
         delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
-        balances: &Balances,
+        _balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
         self.total_eth = delta
             .updated_attributes
             .get("total_eth")
-            .map_or(self.total_eth, |val| U256::from_bytes(val));
-
+            .map_or(self.total_eth, U256::from_bytes);
         self.reth_supply = delta
             .updated_attributes
             .get("reth_supply")
-            .map_or(self.reth_supply, |val| U256::from_bytes(val));
+            .map_or(self.reth_supply, U256::from_bytes);
 
-        // TODO - check if we are correctly fetching the liquidity from the right component
-        self.liquidity = balances
-            .component_balances
-            .get(ROCKET_POOL_COMPONENT_ID)
-            .map_or(self.liquidity, |component_tokens_balances| {
-                component_tokens_balances
-                    .get(&Bytes::from(ETH_ADDRESS))
-                    .map_or(self.liquidity, |component_eth_balance| {
-                        U256::from_bytes(component_eth_balance)
-                    })
-            });
+        self.liquidity = delta
+            .updated_attributes
+            .get("liquidity")
+            .map_or(self.liquidity, U256::from_bytes);
 
         self.deposits_enabled = delta
             .updated_attributes
@@ -236,15 +228,15 @@ impl ProtocolSim for RocketPoolState {
         self.deposit_fee = delta
             .updated_attributes
             .get("deposit_fee")
-            .map_or(self.deposit_fee, |val| U256::from_bytes(val));
+            .map_or(self.deposit_fee, U256::from_bytes);
         self.minimum_deposit = delta
             .updated_attributes
             .get("minimum_deposit")
-            .map_or(self.minimum_deposit, |val| U256::from_bytes(val));
+            .map_or(self.minimum_deposit, U256::from_bytes);
         self.maximum_deposit_pool_size = delta
             .updated_attributes
             .get("maximum_deposit_pool_size")
-            .map_or(self.maximum_deposit_pool_size, |val| U256::from_bytes(val));
+            .map_or(self.maximum_deposit_pool_size, U256::from_bytes);
 
         Ok(())
     }
@@ -278,7 +270,6 @@ mod tests {
         str::FromStr,
     };
 
-    use alloy::hex;
     use approx::assert_ulps_eq;
     use num_bigint::BigUint;
     use rstest::rstest;
@@ -502,23 +493,21 @@ mod tests {
     fn test_fee() {
         let state = create_test_rocketpool_state();
 
-        let res = state.fee();
+        // Catch the unimplemented panic
+        let result = std::panic::catch_unwind(|| state.fee());
 
-        // 0.5% fee = 0.005
-        assert_ulps_eq!(res, 0.005);
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_delta_transition() {
         let mut state = create_test_rocketpool_state();
 
-        let eth_address = Bytes::from(hex!("0000000000000000000000000000000000000000"));
-        let component_id = ROCKET_POOL_COMPONENT_ID;
-
         // Update all fields including deposits_enabled (true -> false)
         let attributes: HashMap<String, Bytes> = vec![
             ("total_eth".to_string(), Bytes::from(U256::from(200u64).to_be_bytes_vec())),
             ("reth_supply".to_string(), Bytes::from(U256::from(180u64).to_be_bytes_vec())),
+            ("liquidity".to_string(), Bytes::from(U256::from(100u64).to_be_bytes_vec())),
             ("deposits_enabled".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
             ("deposit_fee".to_string(), Bytes::from(U256::from(1e16).to_be_bytes_vec())),
             ("minimum_deposit".to_string(), Bytes::from(U256::from(10u64).to_be_bytes_vec())),
@@ -531,17 +520,13 @@ mod tests {
         .collect();
 
         let delta = ProtocolStateDelta {
-            component_id: component_id.to_owned(),
+            component_id: "RocketPool".to_owned(),
             updated_attributes: attributes,
             deleted_attributes: HashSet::new(),
         };
 
-        let mut component_balances = HashMap::new();
-        component_balances.insert(
-            component_id.to_string(),
-            HashMap::from([(eth_address, Bytes::from(U256::from(100u64).to_be_bytes_vec()))]),
-        );
-        let balances = Balances { component_balances, account_balances: HashMap::new() };
+        let balances =
+            Balances { component_balances: HashMap::new(), account_balances: HashMap::new() };
 
         let res = state.delta_transition(delta, &HashMap::new(), &balances);
 
@@ -587,7 +572,6 @@ mod tests {
 
         // Verify deposit_fee was updated
         assert_eq!(state.deposit_fee, U256::from(1e16));
-        assert_ulps_eq!(state.fee(), 0.01);
 
         // Verify all other fields remain unchanged
         assert_eq!(state.total_eth, original_total_eth);

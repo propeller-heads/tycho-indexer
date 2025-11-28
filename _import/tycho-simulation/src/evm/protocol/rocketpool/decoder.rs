@@ -5,7 +5,7 @@ use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
 use tycho_common::{models::token::Token, Bytes};
 use tycho_ethereum::BytesCodec;
 
-use super::{state::RocketPoolState, ETH_ADDRESS};
+use super::state::RocketPoolState;
 use crate::protocol::{
     errors::InvalidSnapshotError,
     models::{DecoderContext, TryFromWithBlock},
@@ -27,26 +27,21 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketPoolState {
             .state
             .attributes
             .get("total_eth")
-            .map(|val| U256::from_bytes(val))
+            .map(U256::from_bytes)
             .ok_or_else(|| InvalidSnapshotError::MissingAttribute("total_eth".to_string()))?;
-
         let reth_supply = snapshot
             .state
             .attributes
             .get("reth_supply")
-            .map(|val| U256::from_bytes(val))
+            .map(U256::from_bytes)
             .ok_or_else(|| InvalidSnapshotError::MissingAttribute("reth_supply".to_string()))?;
 
-        // Liquidity is the ETH balance of the component
-        // TODO - check if this is the right way to get liquidity, or if we need account balances
         let liquidity = snapshot
             .state
-            .balances
-            .get(&Bytes::from(ETH_ADDRESS))
-            .map(|val| U256::from_bytes(val))
-            .ok_or_else(|| {
-                InvalidSnapshotError::MissingAttribute("liquidity (ETH balance)".to_string())
-            })?;
+            .attributes
+            .get("liquidity")
+            .map(U256::from_bytes)
+            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("liquidity".to_string()))?;
 
         let deposits_enabled = snapshot
             .state
@@ -61,21 +56,21 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketPoolState {
             .state
             .attributes
             .get("deposit_fee")
-            .map(|val| U256::from_bytes(val))
+            .map(U256::from_bytes)
             .ok_or_else(|| InvalidSnapshotError::MissingAttribute("deposit_fee".to_string()))?;
 
         let minimum_deposit = snapshot
             .state
             .attributes
             .get("minimum_deposit")
-            .map(|val| U256::from_bytes(val))
+            .map(U256::from_bytes)
             .ok_or_else(|| InvalidSnapshotError::MissingAttribute("minimum_deposit".to_string()))?;
 
         let maximum_deposit_pool_size = snapshot
             .state
             .attributes
             .get("maximum_deposit_pool_size")
-            .map(|val| U256::from_bytes(val))
+            .map(U256::from_bytes)
             .ok_or_else(|| {
                 InvalidSnapshotError::MissingAttribute("maximum_deposit_pool_size".to_string())
             })?;
@@ -118,8 +113,6 @@ mod tests {
     }
 
     fn create_test_snapshot() -> ComponentWithState {
-        let eth_address = Bytes::from(vec![0u8; 20]);
-
         ComponentWithState {
             state: ResponseProtocolState {
                 component_id: "RocketPool".to_owned(),
@@ -132,6 +125,10 @@ mod tests {
                         "reth_supply".to_string(),
                         Bytes::from(U256::from(95_000_000_000_000_000_000u128).to_be_bytes_vec()),
                     ),
+                    (
+                        "liquidity".to_string(),
+                        Bytes::from(U256::from(50_000_000_000_000_000_000u128).to_be_bytes_vec()),
+                    ), // 50 ETH liquidity
                     ("deposits_enabled".to_string(), Bytes::from(vec![0x01])),
                     (
                         "deposit_fee".to_string(),
@@ -148,12 +145,7 @@ mod tests {
                         ),
                     ), // 5000 ETH
                 ]),
-                balances: HashMap::from([
-                    (
-                        eth_address,
-                        Bytes::from(U256::from(50_000_000_000_000_000_000u128).to_be_bytes_vec()),
-                    ), // 50 ETH liquidity
-                ]),
+                balances: HashMap::new(),
             },
             component: Default::default(),
             component_tvl: None,
@@ -194,6 +186,7 @@ mod tests {
                 attributes: HashMap::from([
                     ("total_eth".to_string(), Bytes::from(U256::from(100u64).to_be_bytes_vec())),
                     ("reth_supply".to_string(), Bytes::from(U256::from(100u64).to_be_bytes_vec())),
+                    ("liquidity".to_string(), Bytes::from(U256::from(50u64).to_be_bytes_vec())),
                     ("deposits_enabled".to_string(), Bytes::from(vec![0x00])), // disabled
                     ("deposit_fee".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
                     (
@@ -233,6 +226,7 @@ mod tests {
     #[rstest]
     #[case::missing_total_eth("total_eth")]
     #[case::missing_reth_supply("reth_supply")]
+    #[case::missing_liquidity("liquidity")]
     #[case::missing_deposits_enabled("deposits_enabled")]
     #[case::missing_deposit_fee("deposit_fee")]
     #[case::missing_minimum_deposit("minimum_deposit")]
@@ -243,6 +237,7 @@ mod tests {
         let mut attributes = HashMap::from([
             ("total_eth".to_string(), Bytes::from(U256::from(100u64).to_be_bytes_vec())),
             ("reth_supply".to_string(), Bytes::from(U256::from(100u64).to_be_bytes_vec())),
+            ("liquidity".to_string(), Bytes::from(U256::from(50u64).to_be_bytes_vec())),
             ("deposits_enabled".to_string(), Bytes::from(vec![0x01])),
             ("deposit_fee".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
             ("minimum_deposit".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
@@ -280,48 +275,6 @@ mod tests {
         assert!(matches!(
             result.unwrap_err(),
             InvalidSnapshotError::MissingAttribute(ref x) if x == missing_attribute
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_rocketpool_try_from_missing_liquidity() {
-        let snapshot = ComponentWithState {
-            state: ResponseProtocolState {
-                component_id: "RocketPool".to_owned(),
-                attributes: HashMap::from([
-                    ("total_eth".to_string(), Bytes::from(U256::from(100u64).to_be_bytes_vec())),
-                    ("reth_supply".to_string(), Bytes::from(U256::from(100u64).to_be_bytes_vec())),
-                    ("deposits_enabled".to_string(), Bytes::from(vec![0x01])),
-                    ("deposit_fee".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
-                    (
-                        "minimum_deposit".to_string(),
-                        Bytes::from(U256::from(0u64).to_be_bytes_vec()),
-                    ),
-                    (
-                        "maximum_deposit_pool_size".to_string(),
-                        Bytes::from(U256::from(1000u64).to_be_bytes_vec()),
-                    ),
-                ]),
-                balances: HashMap::new(), // No ETH balance
-            },
-            component: Default::default(),
-            component_tvl: None,
-            entrypoints: Vec::new(),
-        };
-
-        let result = RocketPoolState::try_from_with_header(
-            snapshot,
-            header(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &DecoderContext::new(),
-        )
-        .await;
-
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            InvalidSnapshotError::MissingAttribute(ref x) if x.contains("liquidity")
         ));
     }
 }
