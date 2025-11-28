@@ -45,10 +45,14 @@ pub struct RocketPoolState {
     pub maximum_deposit_pool_size: U256,
     /// Whether assign deposits is enabled (allows using minipool queue capacity)
     pub assign_deposits_enabled: bool,
-    /// Minipool queue indices for full deposits
+    /// Maximum number of minipool assignments per deposit
+    pub deposit_assign_maximum: U256,
+    /// Socialised maximum assignments (base amount before scaling)
+    pub deposit_assign_socialised_maximum: U256,
+    /// Minipool queue indices for full deposits (legacy)
     pub queue_full_start: U256,
     pub queue_full_end: U256,
-    /// Minipool queue indices for half deposits
+    /// Minipool queue indices for half deposits (legacy)
     pub queue_half_start: U256,
     pub queue_half_end: U256,
     /// Minipool queue indices for variable deposits
@@ -67,6 +71,8 @@ impl RocketPoolState {
         minimum_deposit: U256,
         maximum_deposit_pool_size: U256,
         assign_deposits_enabled: bool,
+        deposit_assign_maximum: U256,
+        deposit_assign_socialised_maximum: U256,
         queue_full_start: U256,
         queue_full_end: U256,
         queue_half_start: U256,
@@ -83,6 +89,8 @@ impl RocketPoolState {
             minimum_deposit,
             maximum_deposit_pool_size,
             assign_deposits_enabled,
+            deposit_assign_maximum,
+            deposit_assign_socialised_maximum,
             queue_full_start,
             queue_full_end,
             queue_half_start,
@@ -167,6 +175,67 @@ impl RocketPoolState {
             Ok(self.maximum_deposit_pool_size)
         }
     }
+
+    /// Returns true if there are any legacy minipools in the queue (full or half queues non-empty).
+    fn contains_legacy(&self) -> bool {
+        let full_length = Self::get_queue_length(self.queue_full_start, self.queue_full_end);
+        let half_length = Self::get_queue_length(self.queue_half_start, self.queue_half_end);
+        full_length + half_length > U256::ZERO
+    }
+
+    /// Calculates the number of minipools to dequeue and the resulting ETH to withdraw.
+    /// Returns (minipools_dequeued, eth_withdrawn) or panics for legacy queue.
+    ///
+    /// Logic from _assignDepositsNew:
+    /// - scalingCount = deposit_amount / variableDepositAmount
+    /// - totalEthCount = new_liquidity / variableDepositAmount
+    /// - assignments = socialisedMax + scalingCount
+    /// - assignments = min(assignments, totalEthCount, maxAssignments, variable_queue_length)
+    /// - eth_withdrawn = assignments * variableDepositAmount
+    fn calculate_assign_deposits(
+        &self,
+        deposit_amount: U256,
+        new_liquidity: U256,
+    ) -> Result<(U256, U256), SimulationError> {
+        if !self.assign_deposits_enabled {
+            return Ok((U256::ZERO, U256::ZERO));
+        }
+
+        // Check for legacy minipools - we don't support this path
+        if self.contains_legacy() {
+            return Err(SimulationError::FatalError(
+                "Legacy minipool queue (full/half) contains items - not implemented".to_string(),
+            ));
+        }
+
+        let variable_deposit = U256::from(VARIABLE_DEPOSIT_AMOUNT);
+
+        // Calculate assignments
+        let scaling_count = deposit_amount / variable_deposit;
+        let total_eth_count = new_liquidity / variable_deposit;
+        let mut assignments = self.deposit_assign_socialised_maximum + scaling_count;
+
+        // Cap at total ETH available
+        if assignments > total_eth_count {
+            assignments = total_eth_count;
+        }
+
+        // Cap at max assignments
+        if assignments > self.deposit_assign_maximum {
+            assignments = self.deposit_assign_maximum;
+        }
+
+        // Cap at available queue length
+        let variable_queue_length =
+            Self::get_queue_length(self.queue_variable_start, self.queue_variable_end);
+        if assignments > variable_queue_length {
+            assignments = variable_queue_length;
+        }
+
+        let eth_withdrawn = safe_mul_u256(assignments, variable_deposit)?;
+
+        Ok((assignments, eth_withdrawn))
+    }
 }
 
 impl ProtocolSim for RocketPoolState {
@@ -242,6 +311,15 @@ impl ProtocolSim for RocketPoolState {
         // Note: total_eth and reth_supply are not updated as they are managed by an oracle.
         if is_depositing_eth {
             new_state.liquidity = safe_add_u256(new_state.liquidity, amount_in)?;
+
+            // Process assign deposits - dequeue minipools and withdraw ETH from vault
+            let (assignments, eth_withdrawn) =
+                new_state.calculate_assign_deposits(amount_in, new_state.liquidity)?;
+            if assignments > U256::ZERO {
+                new_state.liquidity = safe_sub_u256(new_state.liquidity, eth_withdrawn)?;
+                new_state.queue_variable_start =
+                    safe_add_u256(new_state.queue_variable_start, assignments)?;
+            }
         } else {
             new_state.liquidity = safe_sub_u256(new_state.liquidity, amount_out)?;
         };
@@ -318,6 +396,14 @@ impl ProtocolSim for RocketPoolState {
             .updated_attributes
             .get("maximum_deposit_pool_size")
             .map_or(self.maximum_deposit_pool_size, U256::from_bytes);
+        self.deposit_assign_maximum = delta
+            .updated_attributes
+            .get("deposit_assign_maximum")
+            .map_or(self.deposit_assign_maximum, U256::from_bytes);
+        self.deposit_assign_socialised_maximum = delta
+            .updated_attributes
+            .get("deposit_assign_socialised_maximum")
+            .map_or(self.deposit_assign_socialised_maximum, U256::from_bytes);
 
         self.queue_full_start = delta
             .updated_attributes
@@ -407,6 +493,8 @@ mod tests {
             U256::ZERO,                             // minimum_deposit
             U256::from(1000e18),                    // maximum_deposit_pool_size: 1000 ETH
             false,                                  // assign_deposits_enabled
+            U256::ZERO,                             // deposit_assign_maximum
+            U256::ZERO,                             // deposit_assign_socialised_maximum
             U256::ZERO,                             // queue_full_start
             U256::ZERO,                             // queue_full_end
             U256::ZERO,                             // queue_half_start
@@ -827,5 +915,178 @@ mod tests {
             &eth_token(),
         );
         assert!(matches!(res, Err(SimulationError::RecoverableError(_))));
+    }
+
+    // ============ Assign Deposits Tests ============
+
+    #[test]
+    fn test_assign_deposits_dequeues_minipools() {
+        let mut state = create_state();
+        state.liquidity = U256::from(100e18);
+        state.assign_deposits_enabled = true;
+        state.deposit_assign_maximum = U256::from(10u64);
+        state.deposit_assign_socialised_maximum = U256::from(2u64);
+        state.queue_variable_end = U256::from(5); // 5 minipools in queue
+
+        // Deposit 62 ETH (2 * 31 ETH)
+        // scalingCount = 62 / 31 = 2
+        // totalEthCount = (100 + 62) / 31 = 5
+        // assignments = socialised(2) + scaling(2) = 4
+        // capped at min(4, 5, 10, 5) = 4
+        // eth_withdrawn = 4 * 31 = 124 ETH
+        // new_liquidity = 100 + 62 - 124 = 38 ETH
+        let res = state
+            .get_amount_out(
+                BigUint::from(62_000_000_000_000_000_000u128),
+                &eth_token(),
+                &reth_token(),
+            )
+            .unwrap();
+
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketPoolState>()
+            .unwrap();
+
+        assert_eq!(new_state.liquidity, U256::from(38e18));
+        assert_eq!(new_state.queue_variable_start, U256::from(4u64));
+    }
+
+    #[test]
+    fn test_assign_deposits_capped_by_queue_length() {
+        let mut state = create_state();
+        state.liquidity = U256::from(100e18);
+        state.assign_deposits_enabled = true;
+        state.deposit_assign_maximum = U256::from(10u64);
+        state.deposit_assign_socialised_maximum = U256::from(5u64);
+        state.queue_variable_end = U256::from(2); // Only 2 minipools in queue
+
+        // Deposit 62 ETH
+        // assignments = 5 + 2 = 7, but capped at queue length of 2
+        // eth_withdrawn = 2 * 31 = 62 ETH
+        // new_liquidity = 100 + 62 - 62 = 100 ETH
+        let res = state
+            .get_amount_out(
+                BigUint::from(62_000_000_000_000_000_000u128),
+                &eth_token(),
+                &reth_token(),
+            )
+            .unwrap();
+
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketPoolState>()
+            .unwrap();
+
+        assert_eq!(new_state.liquidity, U256::from(100e18));
+        assert_eq!(new_state.queue_variable_start, U256::from(2u64));
+    }
+
+    #[test]
+    fn test_assign_deposits_capped_by_max_assignments() {
+        let mut state = create_state();
+        state.liquidity = U256::from(100e18);
+        state.assign_deposits_enabled = true;
+        state.deposit_assign_maximum = U256::from(1u64); // Only 1 assignment allowed
+        state.deposit_assign_socialised_maximum = U256::from(5u64);
+        state.queue_variable_end = U256::from(10);
+
+        // Deposit 62 ETH
+        // assignments = 5 + 2 = 7, but capped at max of 1
+        // eth_withdrawn = 1 * 31 = 31 ETH
+        // new_liquidity = 100 + 62 - 31 = 131 ETH
+        let res = state
+            .get_amount_out(
+                BigUint::from(62_000_000_000_000_000_000u128),
+                &eth_token(),
+                &reth_token(),
+            )
+            .unwrap();
+
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketPoolState>()
+            .unwrap();
+
+        assert_eq!(new_state.liquidity, U256::from(131e18));
+        assert_eq!(new_state.queue_variable_start, U256::from(1u64));
+    }
+
+    #[test]
+    fn test_assign_deposits_capped_by_total_eth() {
+        let mut state = create_state();
+        state.liquidity = U256::from(10e18); // Low liquidity
+        state.assign_deposits_enabled = true;
+        state.deposit_assign_maximum = U256::from(10u64);
+        state.deposit_assign_socialised_maximum = U256::from(5u64);
+        state.queue_variable_end = U256::from(10);
+
+        // Deposit 31 ETH
+        // totalEthCount = (10 + 31) / 31 = 1
+        // assignments = 5 + 1 = 6, but capped at totalEthCount of 1
+        // eth_withdrawn = 1 * 31 = 31 ETH
+        // new_liquidity = 10 + 31 - 31 = 10 ETH
+        let res = state
+            .get_amount_out(
+                BigUint::from(31_000_000_000_000_000_000u128),
+                &eth_token(),
+                &reth_token(),
+            )
+            .unwrap();
+
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketPoolState>()
+            .unwrap();
+
+        assert_eq!(new_state.liquidity, U256::from(10e18));
+        assert_eq!(new_state.queue_variable_start, U256::from(1u64));
+    }
+
+    #[test]
+    fn test_assign_deposits_legacy_queue_error() {
+        let mut state = create_state();
+        state.assign_deposits_enabled = true;
+        state.queue_full_end = U256::from(1); // Legacy queue has items
+
+        let res = state.get_amount_out(
+            BigUint::from(10_000_000_000_000_000_000u128),
+            &eth_token(),
+            &reth_token(),
+        );
+
+        assert!(matches!(res, Err(SimulationError::FatalError(_))));
+    }
+
+    #[test]
+    fn test_assign_deposits_empty_queue_no_change() {
+        let mut state = create_state();
+        state.assign_deposits_enabled = true;
+        state.deposit_assign_maximum = U256::from(10u64);
+        state.deposit_assign_socialised_maximum = U256::from(2u64);
+        // queue_variable_end = 0, so queue is empty
+
+        // Deposit 10 ETH - no minipools to dequeue
+        let res = state
+            .get_amount_out(
+                BigUint::from(10_000_000_000_000_000_000u128),
+                &eth_token(),
+                &reth_token(),
+            )
+            .unwrap();
+
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketPoolState>()
+            .unwrap();
+
+        // liquidity: 50 + 10 = 60 (no withdrawal)
+        assert_eq!(new_state.liquidity, U256::from(60e18));
+        assert_eq!(new_state.queue_variable_start, U256::ZERO);
     }
 }

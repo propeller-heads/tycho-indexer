@@ -84,6 +84,26 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketPoolState {
                 InvalidSnapshotError::MissingAttribute("maximum_deposit_pool_size".to_string())
             })?;
 
+        let deposit_assign_maximum = snapshot
+            .state
+            .attributes
+            .get("deposit_assign_maximum")
+            .map(U256::from_bytes)
+            .ok_or_else(|| {
+                InvalidSnapshotError::MissingAttribute("deposit_assign_maximum".to_string())
+            })?;
+
+        let deposit_assign_socialised_maximum = snapshot
+            .state
+            .attributes
+            .get("deposit_assign_socialised_maximum")
+            .map(U256::from_bytes)
+            .ok_or_else(|| {
+                InvalidSnapshotError::MissingAttribute(
+                    "deposit_assign_socialised_maximum".to_string(),
+                )
+            })?;
+
         let queue_full_start = snapshot
             .state
             .attributes
@@ -143,6 +163,8 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketPoolState {
             minimum_deposit,
             maximum_deposit_pool_size,
             assign_deposits_enabled,
+            deposit_assign_maximum,
+            deposit_assign_socialised_maximum,
             queue_full_start,
             queue_full_end,
             queue_half_start,
@@ -211,6 +233,14 @@ mod tests {
                             U256::from(5_000_000_000_000_000_000_000u128).to_be_bytes_vec(),
                         ),
                     ), // 5000 ETH
+                    (
+                        "deposit_assign_maximum".to_string(),
+                        Bytes::from(U256::from(10u64).to_be_bytes_vec()),
+                    ),
+                    (
+                        "deposit_assign_socialised_maximum".to_string(),
+                        Bytes::from(U256::from(2u64).to_be_bytes_vec()),
+                    ),
                     (
                         "queue_full_start".to_string(),
                         Bytes::from(U256::from(5u64).to_be_bytes_vec()),
@@ -296,6 +326,14 @@ mod tests {
                         "maximum_deposit_pool_size".to_string(),
                         Bytes::from(U256::from(1000u64).to_be_bytes_vec()),
                     ),
+                    (
+                        "deposit_assign_maximum".to_string(),
+                        Bytes::from(U256::from(0u64).to_be_bytes_vec()),
+                    ),
+                    (
+                        "deposit_assign_socialised_maximum".to_string(),
+                        Bytes::from(U256::from(0u64).to_be_bytes_vec()),
+                    ),
                     ("queue_full_start".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
                     ("queue_full_end".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
                     ("queue_half_start".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
@@ -341,6 +379,8 @@ mod tests {
     #[case::missing_deposit_fee("deposit_fee")]
     #[case::missing_minimum_deposit("minimum_deposit")]
     #[case::missing_maximum_deposit_pool_size("maximum_deposit_pool_size")]
+    #[case::missing_deposit_assign_maximum("deposit_assign_maximum")]
+    #[case::missing_deposit_assign_socialised_maximum("deposit_assign_socialised_maximum")]
     #[case::missing_queue_full_start("queue_full_start")]
     #[case::missing_queue_full_end("queue_full_end")]
     #[case::missing_queue_half_start("queue_half_start")]
@@ -361,6 +401,14 @@ mod tests {
             (
                 "maximum_deposit_pool_size".to_string(),
                 Bytes::from(U256::from(1000u64).to_be_bytes_vec()),
+            ),
+            (
+                "deposit_assign_maximum".to_string(),
+                Bytes::from(U256::from(0u64).to_be_bytes_vec()),
+            ),
+            (
+                "deposit_assign_socialised_maximum".to_string(),
+                Bytes::from(U256::from(0u64).to_be_bytes_vec()),
             ),
             ("queue_full_start".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
             ("queue_full_end".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
