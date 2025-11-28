@@ -1,6 +1,7 @@
 name: Substreams Tests
 
 env:
+  CI: true
   RPC_URL: ${{ secrets.ETH_RPC_URL }}
   SUBSTREAMS_API_TOKEN: ${{ secrets.SUBSTREAMS_API_TOKEN }}
   AUTH_API_KEY: ${{ secrets.AUTH_API_KEY }}

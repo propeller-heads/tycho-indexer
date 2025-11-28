@@ -40,6 +40,7 @@ runs:
 
     - name: Run protocol tests
       env:
+        CI: ${{ env.CI }}
         PROTOCOLS: ${{ inputs.protocols }}
         RPC_URL: ${{ env.RPC_URL }}
         SUBSTREAMS_API_TOKEN: ${{ env.SUBSTREAMS_API_TOKEN }}
