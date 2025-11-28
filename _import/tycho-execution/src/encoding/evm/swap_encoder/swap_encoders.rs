@@ -1776,7 +1776,6 @@ mod tests {
             usdc_weth_attributes.insert("key_lp_fee".into(), Bytes::from("0x800000")); // 8388608
             usdc_weth_attributes.insert("tick_spacing".into(), Bytes::from("0x0a")); // 10
             usdc_weth_attributes.insert("hooks".into(), angstrom_hook.clone());
-            usdc_weth_attributes.insert("hook_address".into(), angstrom_hook.clone());
 
             let usdc_weth_pool = ProtocolComponent {
                 id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
@@ -1789,7 +1788,6 @@ mod tests {
             weth_usdt_attributes.insert("key_lp_fee".into(), Bytes::from("0x800000")); // 8388608
             weth_usdt_attributes.insert("tick_spacing".into(), Bytes::from("0x0a")); // 10
             weth_usdt_attributes.insert("hooks".into(), angstrom_hook.clone());
-            weth_usdt_attributes.insert("hook_address".into(), angstrom_hook.clone());
 
             let weth_usdt_pool = ProtocolComponent {
                 id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
@@ -1829,7 +1827,8 @@ mod tests {
                 format!("{}{}", encode(&first_encoded), encode(ple_encode(vec![second_encoded])));
 
             write_calldata_to_file("test_encode_angstrom_grouped_swap", combined_hex.as_str());
-            assert!(!combined_hex.is_empty());
+            // Any different length could indicate we didn't encode attestation data
+            assert!(combined_hex.len() == 2552);
         }
     }
 
