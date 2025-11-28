@@ -279,8 +279,8 @@ impl TestRunner {
         let chain = ChainModel::from(self.chain);
         // Load tokens for the stream
         let all_tokens = tycho_simulation::utils::load_all_tokens(
-            "http://localhost:4242",
-            false,
+            "localhost:4242",
+            true,
             Some("dummy"),
             true,
             chain,
