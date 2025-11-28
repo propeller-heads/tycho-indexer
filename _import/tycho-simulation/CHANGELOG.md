@@ -1,3 +1,11 @@
+## [0.206.2](https://github.com/propeller-heads/tycho-simulation/compare/0.206.1...0.206.2) (2025-11-28)
+
+
+### Bug Fixes
+
+* **cluster-test:** Cap min amount in for Hashflow ([0cf166f](https://github.com/propeller-heads/tycho-simulation/commit/0cf166f79f938c570914f5355252972dc87641a5))
+* Don't allow the amount in to be bigger than 96 bits ([3754f18](https://github.com/propeller-heads/tycho-simulation/commit/3754f186f6d915cc858315353e78f1e861ec2e51))
+
 ## [0.206.1](https://github.com/propeller-heads/tycho-simulation/compare/0.206.0...0.206.1) (2025-11-28)
 
 
