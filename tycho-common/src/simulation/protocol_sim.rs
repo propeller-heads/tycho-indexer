@@ -52,12 +52,12 @@ impl fmt::Display for GetAmountOutResult {
     }
 }
 
-/// Represents a price as a rational fraction (numerator / denominator).
+/// Represents a price as a fraction in the token_in -> token_out direction. With units [token_out/token_in].
 ///
 /// # Fields
 ///
-/// * `numerator` - The amount of token_out (what you receive)
-/// * `denominator` - The amount of token_in (what you pay)
+/// * `numerator` - The amount of token_out (what you receive), including token decimals
+/// * `denominator` - The amount of token_in (what you pay), including token decimals
 ///
 /// In the context of `swap_to_price` and `query_supply`, this represents the pool's price in
 /// the **token_out/token_in** direction
@@ -211,11 +211,27 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Returns
     ///
-    /// * `Ok(Trade)` - A `Trade` struct containing the amount of token_in required to move the pool
-    ///   price down to the target and the amount of token_out received.
+    /// * `Ok(Trade)` - A `Trade` struct containing the amount that needs to be swapped on the pool to move its price to target_price.
     /// * `Err(SimulationError)` - If:
     ///   - The calculation encounters numerical issues (overflow, division by zero, etc.)
     ///   - The method is not implemented for this protocol
+    ///
+    /// # Edge Cases and Limitations
+    ///
+    /// ## Exact Price Achievement
+    ///
+    /// It is almost never possible to achieve the target price exactly, only within some margin
+    /// of tolerance. This is due to:
+    /// - **Discrete liquidity**: For concentrated liquidity protocols (e.g., Uniswap V3), liquidity
+    ///   is distributed across discrete price ticks, making exact price targeting impossible
+    /// - **Numerical precision**: Integer arithmetic and rounding may prevent exact price matching
+    /// - **Protocol constraints**: Some protocols have minimum trade sizes or other constraints
+    ///
+    /// ## Unreachable Prices
+    ///
+    /// If the target price is already below the current spot price (i.e., the price would need to
+    /// move in the wrong direction), implementations typically return a zero trade (`Trade` with
+    /// `amount_in = 0` and `amount_out = 0`).
     #[allow(unused)]
     fn swap_to_price(
         &self,
@@ -227,7 +243,7 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     }
 
     /// Calculates the maximum amount of token_out (sell token) a pool can supply, and the
-    /// corresponding demanded amount of token_in (buy token), while respecting a minimum target
+    /// corresponding demanded amount of token_in (buy token), while respecting a minimum trade
     /// price.
     ///
     /// # Arguments
@@ -242,20 +258,10 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Returns
     ///
-    /// * `Ok(Trade)` - A `Trade` struct containing the maximum amount of token_out (sell token)
-    ///   that can be supplied at the target price, and the corresponding demanded amount of
-    ///   token_in (buy token).
+    /// * `Ok(Trade)` - A `Trade` struct containing the largest trade that can be executed on this pool while respecting the provided trace price
     /// * `Err(SimulationError)` - If:
     ///   - The calculation encounters numerical issues
     ///   - The method is not implemented for this protocol
-    ///
-    /// # Relationship to swap_to_price
-    ///
-    /// These methods work together:
-    /// - `swap_to_price`: Returns the amount of token_in needed to move the pool's price down to
-    ///   target and the amount of token_out supplied.
-    /// - `query_supply`: Returns the amount of token_out the pool supplies as price moves down to
-    ///   target and the amount of token_in demanded.
     #[allow(unused)]
     fn query_supply(
         &self,
