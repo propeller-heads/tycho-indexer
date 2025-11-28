@@ -212,7 +212,7 @@ impl TychoRunner {
             "--chains",
             &self.chain.to_string(),
             "--retention-horizon",
-            "2024-01-01T00:00:00",
+            "2026-01-01T00:00:00",
         ]);
 
         cmd.stdout(Stdio::piped())
