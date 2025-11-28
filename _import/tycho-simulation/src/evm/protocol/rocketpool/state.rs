@@ -95,12 +95,8 @@ impl RocketPoolState {
 }
 
 impl ProtocolSim for RocketPoolState {
-    /// Returns the fee applied on deposits (ETH -> rETH) as a decimal.
-    /// The withdrawals (rETH -> ETH) have no fee.
     fn fee(&self) -> f64 {
-        // TODO: This needs to be handled gracefully - the trait should return Result
-        self.deposit_fee_as_f64()
-            .expect("deposit_fee conversion to f64 failed")
+        unimplemented!("RocketPool has asymmetric fees; use spot_price or get_amount_out instead")
     }
 
     fn spot_price(&self, base: &Token, _quote: &Token) -> Result<f64, SimulationError> {
