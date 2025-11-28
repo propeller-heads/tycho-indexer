@@ -15,7 +15,7 @@ use dotenv::dotenv;
 use itertools::Itertools;
 use miette::{miette, IntoDiagnostic, NarratableReportHandler, WrapErr};
 use num_bigint::BigUint;
-use num_traits::{ToPrimitive, Zero};
+use num_traits::{Pow, ToPrimitive, Zero};
 use rand::prelude::IndexedRandom;
 use tokio::{signal, sync::Semaphore};
 use tracing::{debug, error, info, warn};
@@ -461,7 +461,7 @@ async fn process_update(
 
     if block_execution_info.is_empty() {
         warn!("No simulations were gathered for block {}", block.number());
-        return Ok(())
+        return Ok(());
     }
 
     let results =
@@ -653,6 +653,7 @@ async fn process_state(
         error!("Component has less than 2 tokens, skipping...");
         return HashMap::new();
     }
+    let mut min_amount = BigUint::ZERO;
     // Get all the possible swap directions
     let swap_directions = match component.protocol_system.as_str() {
         HashflowClient::PROTOCOL_SYSTEM => {
@@ -669,6 +670,10 @@ async fn process_state(
                     return HashMap::new();
                 }
             };
+            // The smallest amount acceptable for hashflow is the amount of the first level, random
+            // small amounts are not accepted. The amount in will be capped to this value
+            let min_amount_in = BigUint::from(state.levels.levels[0].quantity.ceil() as u128);
+            min_amount = min_amount_in * BigUint::from(10u32).pow(state.base_token.decimals);
             vec![(state.base_token, state.quote_token)]
         }
         _ => component
@@ -724,10 +729,20 @@ async fn process_state(
         let percentage = 0.001;
         let percentage_biguint = BigUint::from((percentage * 1000.0) as u32);
         let thousand = BigUint::from(1000u32);
-        let amount_in = (&max_input * &percentage_biguint) / &thousand;
+        let mut amount_in = (&max_input * &percentage_biguint) / &thousand;
         if amount_in.is_zero() {
             debug!("Calculated amount_in is zero, skipping...");
             continue;
+        }
+        if min_amount != BigUint::ZERO && amount_in < min_amount {
+            amount_in = min_amount.clone();
+        }
+
+        // Cap amount_in to avoid "amount exceeds 96 bits" error (it happens for uniswap v3 and v4
+        // sometimes because the returned limits can be very high)
+        let max_96_bit = BigUint::from(2u128.pow(96) - 1);
+        if amount_in > max_96_bit {
+            amount_in = max_96_bit - BigUint::from(1u32);
         }
 
         // Get expected amount out using tycho-simulation and measure duration
@@ -778,7 +793,7 @@ async fn process_state(
         // Sometimes the expected amount out might be zero (e.g. pool is depleted in one direction)
         // Then execution will fail with TychoRouter__UndefinedMinAmountOut
         if expected_amount_out == BigUint::ZERO {
-            continue
+            continue;
         }
         // Simulate execution amount out against the RPC
         let (solution, transaction) = match encode_swap(
