@@ -1,9 +1,8 @@
 use crate::{
     abi::{rocket_dao_protocol_proposal, rocket_network_balances},
     constants::{
-        ETH_ADDRESS, ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS,
-        ROCKET_DAO_PROTOCOL_SETTINGS_DEPOSIT_ADDRESS, ROCKET_NETWORK_BALANCES_ADDRESS,
-        ROCKET_POOL_COMPONENT_ID, TRACKED_STORAGE_LOCATIONS,
+        DEPOSIT_SETTINGS_SLOTS, ETH_ADDRESS, ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS,
+        ROCKET_NETWORK_BALANCES_ADDRESS, ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS,
     },
     utils::get_changed_attributes,
 };
@@ -201,10 +200,8 @@ fn update_protocol_settings(
         let attributes = tx
             .calls
             .iter()
-            .filter(|call| call.address == ROCKET_DAO_PROTOCOL_SETTINGS_DEPOSIT_ADDRESS)
-            .flat_map(|call| {
-                get_changed_attributes(&call.storage_changes, &TRACKED_STORAGE_LOCATIONS)
-            })
+            .filter(|call| call.address == ROCKET_STORAGE_ADDRESS)
+            .flat_map(|call| get_changed_attributes(&call.storage_changes, &DEPOSIT_SETTINGS_SLOTS))
             .collect::<Vec<_>>();
 
         if !attributes.is_empty() {
