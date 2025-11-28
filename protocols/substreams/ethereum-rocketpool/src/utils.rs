@@ -1,3 +1,4 @@
+use anyhow::Result;
 use substreams::prelude::BigInt;
 use substreams_ethereum::pb::eth::v2::StorageChange;
 use tycho_substreams::models::{Attribute, ChangeType};
@@ -75,6 +76,12 @@ pub fn get_changed_attributes(
     }
 
     attributes
+}
+
+/// Convert a hex string (with or without 0x prefix) to bytes.
+pub(crate) fn hex_to_bytes(hex: &str) -> Result<Vec<u8>> {
+    let hex = hex.strip_prefix("0x").unwrap_or(hex);
+    hex::decode(hex).map_err(|e| anyhow::anyhow!("Failed to decode hex string: {}", e))
 }
 
 pub fn read_bytes(buf: &[u8], offset: usize, number_of_bytes: usize) -> &[u8] {

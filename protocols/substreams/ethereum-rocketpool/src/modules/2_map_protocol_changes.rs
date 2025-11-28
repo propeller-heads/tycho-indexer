@@ -4,14 +4,15 @@ use crate::{
         rocket_network_balances,
     },
     constants::{
-        DEPOSIT_SETTINGS_SLOTS, ETH_ADDRESS, QUEUE_END_SLOTS, QUEUE_START_SLOTS,
-        QUEUE_VARIABLE_END_SLOT, ROCKET_DAO_MINIPOOL_QUEUE_ADDRESS,
+        ALL_STORAGE_SLOTS, DEPOSITS_ENABLED_SLOT, DEPOSIT_FEE_SLOT, ETH_ADDRESS,
+        MAX_DEPOSIT_AMOUNT_SLOT, MIN_DEPOSIT_AMOUNT_SLOT, QUEUE_FULL_END_SLOT,
+        QUEUE_FULL_START_SLOT, QUEUE_HALF_END_SLOT, QUEUE_HALF_START_SLOT, QUEUE_VARIABLE_END_SLOT,
+        QUEUE_VARIABLE_START_SLOT, ROCKET_DAO_MINIPOOL_QUEUE_ADDRESS,
         ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS, ROCKET_DEPOSIT_POOL_ADDRESS_V1_2,
         ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT, ROCKET_NETWORK_BALANCES_ADDRESS,
         ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS, ROCKET_VAULT_ADDRESS,
     },
-    params::InitialState,
-    utils::get_changed_attributes,
+    utils::{get_changed_attributes, hex_to_bytes},
 };
 use anyhow::Result;
 use itertools::Itertools;
@@ -22,7 +23,7 @@ use substreams_ethereum::{
 };
 use tycho_substreams::{
     models::{
-        Attribute, BlockChanges, BlockTransactionProtocolComponents, EntityChanges,
+        Attribute, BlockChanges, BlockTransactionProtocolComponents, ChangeType, EntityChanges,
         TransactionChangesBuilder,
     },
     prelude::BalanceChange,
@@ -122,7 +123,8 @@ fn initialize_protocol_component(
     protocol_components: BlockTransactionProtocolComponents,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) -> Result<()> {
-    let initial_state = InitialState::from_json(params)
+    // Parse initial state JSON once
+    let initial_state: HashMap<String, String> = serde_json::from_str(params)
         .map_err(|e| anyhow::anyhow!("Failed to parse initial state: {}", e))?;
 
     // We expect exactly one tx_component with one component for RocketPool
@@ -130,36 +132,33 @@ fn initialize_protocol_component(
         .tx_components
         .into_iter()
         .next()
-        .ok_or(anyhow::anyhow!("No transaction component found"))?;
+        .ok_or_else(|| anyhow::anyhow!("No transaction component found"))?;
 
     let tx = tx_component
         .tx
         .as_ref()
-        .ok_or(anyhow::anyhow!("Transaction missing in protocol components"))?;
+        .ok_or_else(|| anyhow::anyhow!("Transaction missing in protocol components"))?;
 
     let component = tx_component
         .components
         .into_iter()
         .next()
-        .ok_or(anyhow::anyhow!("No component found in transaction"))?;
+        .ok_or_else(|| anyhow::anyhow!("No component found in transaction"))?;
 
     let builder = transaction_changes
         .entry(tx.index)
         .or_insert_with(|| TransactionChangesBuilder::new(tx));
 
-    // Add the protocol component
     builder.add_protocol_component(&component);
 
-    // Add initial attributes with ChangeType::Creation
     builder.add_entity_change(&EntityChanges {
         component_id: ROCKET_POOL_COMPONENT_ID.to_owned(),
-        attributes: initial_state.get_attributes()?,
+        attributes: build_initial_attributes(&initial_state)?,
     });
 
-    // Add initial ETH balance
     builder.add_balance_change(&BalanceChange {
         token: ETH_ADDRESS.to_vec(),
-        balance: initial_state.get_eth_balance()?,
+        balance: get_initial_eth_balance(&initial_state)?,
         component_id: ROCKET_POOL_COMPONENT_ID
             .as_bytes()
             .to_vec(),
@@ -204,14 +203,14 @@ fn update_network_balance(
                     value: balance_update
                         .reth_supply
                         .to_signed_bytes_be(),
-                    change: tycho_substreams::models::ChangeType::Update.into(),
+                    change: ChangeType::Update.into(),
                 },
                 Attribute {
                     name: "total_eth".to_string(),
                     value: balance_update
                         .total_eth
                         .to_signed_bytes_be(),
-                    change: tycho_substreams::models::ChangeType::Update.into(),
+                    change: ChangeType::Update.into(),
                 },
             ];
 
@@ -248,7 +247,17 @@ fn update_protocol_settings(
             .calls
             .iter()
             .filter(|call| call.address == ROCKET_STORAGE_ADDRESS)
-            .flat_map(|call| get_changed_attributes(&call.storage_changes, &DEPOSIT_SETTINGS_SLOTS))
+            .flat_map(|call| {
+                get_changed_attributes(
+                    &call.storage_changes,
+                    &[
+                        DEPOSITS_ENABLED_SLOT,
+                        MIN_DEPOSIT_AMOUNT_SLOT,
+                        MAX_DEPOSIT_AMOUNT_SLOT,
+                        DEPOSIT_FEE_SLOT,
+                    ],
+                )
+            })
             .collect::<Vec<_>>();
 
         add_entity_change_if_needed(attributes, tx, transaction_changes);
@@ -281,10 +290,10 @@ fn update_minipool_queue_sizes(
                 &[QUEUE_VARIABLE_END_SLOT]
             } else if rocket_minipool_queue::events::MinipoolDequeued::match_log(log.log) {
                 // MinipoolDequeued: fetch all start slots
-                &QUEUE_START_SLOTS
+                &[QUEUE_FULL_START_SLOT, QUEUE_HALF_START_SLOT, QUEUE_VARIABLE_START_SLOT]
             } else if rocket_minipool_queue::events::MinipoolRemoved::match_log(log.log) {
                 // MinipoolRemoved: fetch all end slots
-                &QUEUE_END_SLOTS
+                &[QUEUE_FULL_END_SLOT, QUEUE_HALF_END_SLOT, QUEUE_VARIABLE_END_SLOT]
             } else {
                 continue;
             };
@@ -317,4 +326,32 @@ fn add_entity_change_if_needed(
             attributes,
         });
     }
+}
+
+/// Build initial attributes from parsed state, validating all required attributes exist.
+fn build_initial_attributes(state: &HashMap<String, String>) -> Result<Vec<Attribute>> {
+    ALL_STORAGE_SLOTS
+        .iter()
+        .map(|loc| loc.name)
+        .chain(["total_eth", "reth_supply"])
+        .map(|name| {
+            let value = state
+                .get(name)
+                .ok_or_else(|| anyhow::anyhow!("Missing initial attribute: {}", name))?;
+            Ok(Attribute {
+                name: name.to_string(),
+                value: hex_to_bytes(value)?,
+                change: ChangeType::Creation.into(),
+            })
+        })
+        .collect()
+}
+
+/// Get the initial ETH balance from parsed state.
+fn get_initial_eth_balance(state: &HashMap<String, String>) -> Result<Vec<u8>> {
+    hex_to_bytes(
+        state
+            .get("total_eth")
+            .ok_or_else(|| anyhow::anyhow!("Missing initial attribute: total_eth"))?,
+    )
 }
