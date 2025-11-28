@@ -11,5 +11,8 @@ fn main() -> Result<(), anyhow::Error> {
     Abigen::new("RocketNetworkBalances", "abi/RocketNetworkBalances.json")?
         .generate()?
         .write_to_file("src/abi/rocket_network_balances.rs")?;
+    Abigen::new("RocketMinipoolQueue", "abi/RocketMinipoolQueue.json")?
+        .generate()?
+        .write_to_file("src/abi/rocket_minipool_queue.rs")?;
     anyhow::Ok(())
 }

@@ -1,8 +1,10 @@
 use crate::{
-    abi::{rocket_dao_protocol_proposal, rocket_network_balances},
+    abi::{rocket_dao_protocol_proposal, rocket_minipool_queue, rocket_network_balances},
     constants::{
-        DEPOSIT_SETTINGS_SLOTS, ETH_ADDRESS, ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS,
-        ROCKET_NETWORK_BALANCES_ADDRESS, ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS,
+        DEPOSIT_SETTINGS_SLOTS, ETH_ADDRESS, QUEUE_END_SLOTS, QUEUE_START_SLOTS,
+        QUEUE_VARIABLE_END_SLOT, ROCKET_DAO_MINIPOOL_QUEUE_ADDRESS,
+        ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS, ROCKET_NETWORK_BALANCES_ADDRESS,
+        ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS,
     },
     utils::get_changed_attributes,
 };
@@ -46,6 +48,9 @@ fn map_protocol_changes(
 
     // Update protocol settings updates per transaction.
     update_protocol_settings(&block, &mut transaction_changes);
+
+    // Update minipool queue sizes per transaction.
+    update_minipool_queue_sizes(&block, &mut transaction_changes);
 
     // Process all `transaction_changes` for final output in the `BlockChanges`,
     //  sorted by transaction index (the key).
@@ -205,6 +210,61 @@ fn update_protocol_settings(
             .collect::<Vec<_>>();
 
         if !attributes.is_empty() {
+            builder.add_entity_change(&EntityChanges {
+                component_id: ROCKET_POOL_COMPONENT_ID.to_owned(),
+                attributes,
+            });
+        }
+    }
+}
+
+/// Updates minipool queue sizes based on queue events.
+///
+/// Listens for MinipoolEnqueued, MinipoolDequeued, and MinipoolRemoved events from the
+/// RocketMinipoolQueue contract and fetches the updated queue storage values from RocketStorage.
+/// - MinipoolEnqueued: fetches the variable queue end slot (only variable queue is used now)
+/// - MinipoolDequeued: fetches all queue start slots
+/// - MinipoolRemoved: fetches all queue end slots
+fn update_minipool_queue_sizes(
+    block: &eth::v2::Block,
+    transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
+) {
+    for log in block.logs() {
+        // Only process events from the RocketMinipoolQueue contract
+        if log.log.address != ROCKET_DAO_MINIPOOL_QUEUE_ADDRESS {
+            continue;
+        }
+
+        let tx = log.receipt.transaction;
+
+        // Determine which storage slots to check based on the event type
+        let storage_slots: &[_] =
+            if rocket_minipool_queue::events::MinipoolEnqueued::match_log(log.log) {
+                // MinipoolEnqueued: fetch the variable queue end slot
+                &[QUEUE_VARIABLE_END_SLOT]
+            } else if rocket_minipool_queue::events::MinipoolDequeued::match_log(log.log) {
+                // MinipoolDequeued: fetch all start slots
+                &QUEUE_START_SLOTS
+            } else if rocket_minipool_queue::events::MinipoolRemoved::match_log(log.log) {
+                // MinipoolRemoved: fetch all end slots
+                &QUEUE_END_SLOTS
+            } else {
+                continue;
+            };
+
+        // Extract changed attributes from RocketStorage contract storage changes
+        let attributes = tx
+            .calls
+            .iter()
+            .filter(|call| call.address == ROCKET_STORAGE_ADDRESS)
+            .flat_map(|call| get_changed_attributes(&call.storage_changes, storage_slots))
+            .collect::<Vec<_>>();
+
+        if !attributes.is_empty() {
+            let builder = transaction_changes
+                .entry(tx.index as u64)
+                .or_insert_with(|| TransactionChangesBuilder::new(&(tx.into())));
+
             builder.add_entity_change(&EntityChanges {
                 component_id: ROCKET_POOL_COMPONENT_ID.to_owned(),
                 attributes,
