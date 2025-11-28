@@ -11,6 +11,9 @@ tests:
   - name: test_angstrom_pool_creation
     start_block: 22972017
     stop_block: 22972937
+    # For Angstrom, we can only get attestations in the present, so simulating
+    # in the past won't work.
+    execute_current_block: true
     expected_components:
       - id: "0xe500210c7ea6bfd9f69dce044b09ef384ec2b34832f132baec3b418208e3a657"
         tokens:
@@ -24,6 +27,7 @@ tests:
         creation_tx: "0xf8faae3edf4e801a91f83381de9b2f8182d07a05442d6f5ed78410bced50a534"
         skip_simulation: false
         skip_execution: false
+
       - id: "0x90078845bceb849b171873cfbc92db8540e9c803ff57d9d21b1215ec158e79b3"
         tokens:
           - "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
