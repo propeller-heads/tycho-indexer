@@ -1,12 +1,15 @@
 use alloy::primitives::{U256, U512};
-use tycho_common::simulation::errors::SimulationError;
+use tycho_common::{
+    simulation::{errors::SimulationError, protocol_sim::Price},
+    Bytes,
+};
 
 use super::solidity_math::{mul_div, mul_div_rounding_up};
 use crate::evm::protocol::{
     safe_math::{
         div_mod_u256, safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256, sqrt_u512,
     },
-    u256_num::u256_to_f64,
+    u256_num::{biguint_to_u256, u256_to_f64},
 };
 
 const Q96: U256 = U256::from_limbs([0, 4294967296, 0, 0]);
@@ -214,6 +217,47 @@ pub(crate) fn get_sqrt_price_q96(price_0: U256, price_1: U256) -> Result<U256, S
     }
 
     Ok(result)
+}
+
+/// Converts a target price to sqrt_price_x96 format with fee adjustment
+///
+/// # Arguments
+/// * `token_in` - The token being sold
+/// * `token_out` - The token being bought
+/// * `target_price` - The target price as token_out/token_in (tycho convention)
+///
+/// # Returns
+/// The sqrt price limit in Q96 format
+pub(crate) fn get_sqrt_price_limit(
+    token_in: &Bytes,
+    token_out: &Bytes,
+    target_price: &Price,
+    fee_tier: U256,
+) -> Result<U256, SimulationError> {
+    let zero_for_one = token_in < token_out;
+
+    // Convert target pool price (token_out/token_in) to swap price (token_in/token_out)
+    // by flipping numerator and denominator
+    let swap_price_numerator = biguint_to_u256(&target_price.denominator);
+    let swap_price_denominator = biguint_to_u256(&target_price.numerator);
+
+    // Apply fee to the sell price (numerator) using integer division to match APEX behavior
+    // For Uniswap V3: adjusted_price = price * (1 - fee)
+    let fee_precision = U256::from_limbs([1_000_000, 0, 0, 0]);
+    let sell_price_after_fee =
+        safe_div_u256(swap_price_numerator * (fee_precision - fee_tier), fee_precision)?;
+    let buy_price = swap_price_denominator;
+
+    // Determine which price goes to which parameter based on swap direction
+    // For Uniswap V3, sqrt_price_x96 = sqrt(token1/token0) * 2^96
+    let (price_0, price_1) = if zero_for_one {
+        (sell_price_after_fee, buy_price)
+    } else {
+        (buy_price, sell_price_after_fee)
+    };
+
+    // Convert to sqrt price: sqrt(price_1 / price_0) * 2^96
+    get_sqrt_price_q96(price_1, price_0)
 }
 
 #[cfg(test)]
