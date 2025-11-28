@@ -6,11 +6,11 @@ use crate::{
     constants::{
         DEPOSIT_SETTINGS_SLOTS, ETH_ADDRESS, QUEUE_END_SLOTS, QUEUE_START_SLOTS,
         QUEUE_VARIABLE_END_SLOT, ROCKET_DAO_MINIPOOL_QUEUE_ADDRESS,
-        ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS, ROCKET_DEPOSIT_POOL_ADDRESSES,
-        ROCKET_DEPOSIT_POOL_ADDRESS_V1_2, ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT,
-        ROCKET_NETWORK_BALANCES_ADDRESS, ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS,
-        ROCKET_VAULT_ADDRESS,
+        ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS, ROCKET_DEPOSIT_POOL_ADDRESS_V1_2,
+        ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT, ROCKET_NETWORK_BALANCES_ADDRESS,
+        ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS, ROCKET_VAULT_ADDRESS,
     },
+    params::InitialState,
     utils::get_changed_attributes,
 };
 use anyhow::Result;
@@ -34,37 +34,39 @@ use tycho_substreams::{
 /// relevant contract storage deltas.
 #[substreams::handlers::map]
 fn map_protocol_changes(
+    params: String,
     block: eth::v2::Block,
     protocol_components: BlockTransactionProtocolComponents,
-) -> Result<BlockChanges, substreams::errors::Error> {
-    // We merge contract changes by transaction (identified by transaction index)
-    // making it easy to sort them at the very end.
+) -> Result<BlockChanges> {
     let mut transaction_changes: HashMap<_, TransactionChangesBuilder> = HashMap::new();
 
-    // Update protocol component changes per transaction.
-    update_protocol_components(protocol_components, &mut transaction_changes)?;
+    // As we start indexing mid-protocol (at Deposit Pool V1.2 deployment), we provide
+    // initial attribute values that represent the state at the END of the deployment block.
+    // Therefore, if a protocol component was created in this block, we need to initialize it
+    // with the provided initial state values, and we can skip further updates for this block.
+    let component_created = !protocol_components
+        .tx_components
+        .is_empty();
 
-    // Update vault liquidity (ETH balance) per transaction.
-    update_vault_liquidity(&block, &mut transaction_changes);
+    if component_created {
+        initialize_protocol_component(&params, protocol_components, &mut transaction_changes)?;
+    } else {
+        update_liquidity(&block, &mut transaction_changes);
 
-    // Update network balance updates per transaction.
-    update_network_balance(&block, &mut transaction_changes);
+        update_network_balance(&block, &mut transaction_changes);
 
-    // Update protocol settings updates per transaction.
-    update_protocol_settings(&block, &mut transaction_changes);
+        update_protocol_settings(&block, &mut transaction_changes);
 
-    // Update minipool queue sizes per transaction.
-    update_minipool_queue_sizes(&block, &mut transaction_changes);
+        update_minipool_queue_sizes(&block, &mut transaction_changes);
+    }
 
-    // Process all `transaction_changes` for final output in the `BlockChanges`,
-    //  sorted by transaction index (the key).
     Ok(BlockChanges {
         block: Some((&block).into()),
         changes: transaction_changes
             .drain()
             .sorted_unstable_by_key(|(index, _)| *index)
             .filter_map(|(_, builder)| builder.build())
-            .collect::<Vec<_>>(),
+            .collect(),
         storage_changes: vec![],
     })
 }
@@ -74,7 +76,7 @@ fn map_protocol_changes(
 /// Listens for DepositReceived, DepositAssigned, DepositRecycled, and ExcessWithdrawn events
 /// from the RocketDepositPool contracts and fetches the updated ETH balance from RocketVault's
 /// etherBalances storage slot.
-fn update_vault_liquidity(
+fn update_liquidity(
     block: &eth::v2::Block,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
@@ -111,29 +113,59 @@ fn update_vault_liquidity(
     }
 }
 
-/// Updates protocol component changes per transaction.
-fn update_protocol_components(
+/// Initializes the protocol component with initial state values.
+///
+/// This function is called only once when the component is created. It adds the protocol
+/// component, initial attributes (with ChangeType::Creation), and initial ETH balance.
+fn initialize_protocol_component(
+    params: &str,
     protocol_components: BlockTransactionProtocolComponents,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) -> Result<()> {
-    protocol_components
+    let initial_state = InitialState::from_json(params)
+        .map_err(|e| anyhow::anyhow!("Failed to parse initial state: {}", e))?;
+
+    // We expect exactly one tx_component with one component for RocketPool
+    let tx_component = protocol_components
         .tx_components
-        .iter()
-        .try_for_each(|tx_component| {
-            let tx = tx_component
-                .tx
-                .as_ref()
-                .ok_or(anyhow::anyhow!("Transaction missing in protocol components"))?;
+        .into_iter()
+        .next()
+        .ok_or(anyhow::anyhow!("No transaction component found"))?;
 
-            let builder = transaction_changes
-                .entry(tx.index)
-                .or_insert_with(|| TransactionChangesBuilder::new(tx));
+    let tx = tx_component
+        .tx
+        .as_ref()
+        .ok_or(anyhow::anyhow!("Transaction missing in protocol components"))?;
 
-            for c in &tx_component.components {
-                builder.add_protocol_component(c);
-            }
-            Ok(())
-        })
+    let component = tx_component
+        .components
+        .into_iter()
+        .next()
+        .ok_or(anyhow::anyhow!("No component found in transaction"))?;
+
+    let builder = transaction_changes
+        .entry(tx.index)
+        .or_insert_with(|| TransactionChangesBuilder::new(tx));
+
+    // Add the protocol component
+    builder.add_protocol_component(&component);
+
+    // Add initial attributes with ChangeType::Creation
+    builder.add_entity_change(&EntityChanges {
+        component_id: ROCKET_POOL_COMPONENT_ID.to_owned(),
+        attributes: initial_state.get_attributes()?,
+    });
+
+    // Add initial ETH balance
+    builder.add_balance_change(&BalanceChange {
+        token: ETH_ADDRESS.to_vec(),
+        balance: initial_state.get_eth_balance()?,
+        component_id: ROCKET_POOL_COMPONENT_ID
+            .as_bytes()
+            .to_vec(),
+    });
+
+    Ok(())
 }
 
 /// Extracts Rocket Pool network balance updates from the block logs.
@@ -167,14 +199,14 @@ fn update_network_balance(
             };
 
             let attributes = vec![
-                tycho_substreams::models::Attribute {
+                Attribute {
                     name: "reth_supply".to_string(),
                     value: balance_update
                         .reth_supply
                         .to_signed_bytes_be(),
                     change: tycho_substreams::models::ChangeType::Update.into(),
                 },
-                tycho_substreams::models::Attribute {
+                Attribute {
                     name: "total_eth".to_string(),
                     value: balance_update
                         .total_eth
