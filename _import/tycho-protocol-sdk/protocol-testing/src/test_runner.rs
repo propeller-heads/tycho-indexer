@@ -550,7 +550,8 @@ impl TestRunner {
         // Get block for execution - use current block if test requires it
         let block = if test.execute_current_block {
             info!("Test configured for current block execution (execute_current_block=true)");
-            let current_block = self.runtime
+            let current_block = self
+                .runtime
                 .block_on(
                     self.rpc_provider
                         .get_block(BlockNumberOrTag::Latest),
@@ -1163,7 +1164,11 @@ impl TestRunner {
         let router_overwrites_data =
             Some(execution::create_router_overwrites_data(protocol_system)?);
 
-        info!("Executing {} simulations in batches for block {}...", filtered_execution_data.len(), block.number());
+        info!(
+            "Executing {} simulations in batches for block {}...",
+            filtered_execution_data.len(),
+            block.number()
+        );
 
         // Split execution data into smaller batches to avoid RPC request size limits
         // This happens because our overwrites are colossal
