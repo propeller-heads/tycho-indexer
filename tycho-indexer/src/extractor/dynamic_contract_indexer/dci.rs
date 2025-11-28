@@ -628,16 +628,7 @@ where
                     .map(|ep| (ep.external_id.clone(), ep)),
             )?;
 
-        let _span = span!(
-            Level::INFO,
-            "dci_extract_tracked_updates",
-            block_contract_changes = block_changes
-                .block_contract_changes
-                .len()
-        )
-        .entered();
         let tracked_updates = self.extract_tracked_updates(block_changes)?;
-        drop(_span);
 
         let mut tx_with_changes = block_changes
             .txs_with_update
@@ -1262,6 +1253,12 @@ where
     ///
     /// Note: the tx_with_changes are only contain the account deltas for the tracked contracts;
     /// they need to be merged with the `txs_with_update` vector from the block changes.
+    #[instrument(
+        level = "info",
+        name = "dci_extract_tracked_updates",
+        skip(self),
+        fields(block_contract_changes = block_changes.block_contract_changes.len())
+    )]
     fn extract_tracked_updates(
         &self,
         block_changes: &BlockChanges,
@@ -1277,63 +1274,106 @@ where
             .block_contract_changes
             .iter()
         {
+            let _tx_span = span!(
+                Level::DEBUG,
+                "process_tx",
+                tx_hash = %tx.tx.hash,
+                contract_count = tx.contract_changes.len()
+            )
+            .entered();
+
             let tx_hash = &tx.tx.hash;
             let mut tx_account_deltas: HashMap<Address, AccountDelta> = HashMap::new();
 
             for (account, contract_changes) in tx.contract_changes.iter() {
-                // Early skip if the contract is not tracked
-                if !self
+                let _contract_span = span!(
+                    Level::DEBUG,
+                    "process_contract",
+                    account = %account,
+                    slot_count = contract_changes.slots.len(),
+                    has_balance = contract_changes.native_balance.is_some()
+                )
+                .entered();
+
+                // Check if tracked - use contains_key which is cheaper than get_all when we don't
+                // need the data yet
+                let check_tracked_span = span!(Level::DEBUG, "check_tracked").entered();
+                let is_tracked = self
                     .cache
                     .tracked_contracts
-                    .contains_key(account)
-                {
-                    continue;
-                }
+                    .contains_key(account);
+                drop(check_tracked_span);
 
-                // Early exit if no slots and no balance change to avoid unnecessary work
-                let has_balance_change = contract_changes
-                    .native_balance
-                    .is_some();
-                if contract_changes.slots.is_empty() && !has_balance_change {
+                if !is_tracked {
                     continue;
                 }
 
                 // Collect slot updates, filtering during collection if needed to avoid unnecessary
                 // clones
-                let slot_updates: ContractStoreDeltas = if self.should_skip_full_indexing(account) {
-                    // Only call get_all and collect tracked_keys when we actually need it
-                    let tracked_keys: HashSet<&StoreKey> = self
-                        .cache
-                        .tracked_contracts
-                        .get_all(account.clone())
-                        .unwrap()
-                        .flatten()
-                        .collect();
-                    contract_changes
-                        .slots
-                        .iter()
-                        .filter_map(|(slot, ContractStorageChange { value, .. })| {
-                            // Only process slots that are tracked
-                            if tracked_keys.contains(slot) {
-                                Some((
+                let slot_updates: ContractStoreDeltas = {
+                    let skip_full_indexing_span =
+                        span!(Level::DEBUG, "check_skip_full_indexing").entered();
+                    let skip_full_indexing = self.should_skip_full_indexing(account);
+                    drop(skip_full_indexing_span);
+
+                    if skip_full_indexing {
+                        let collect_tracked_keys_span =
+                            span!(Level::DEBUG, "collect_tracked_keys").entered();
+                        // Only call get_all and collect tracked_keys when we actually need it
+                        let tracked_keys: HashSet<&StoreKey> = self
+                            .cache
+                            .tracked_contracts
+                            .get_all(account.clone())
+                            .unwrap()
+                            .flatten()
+                            .collect();
+                        drop(collect_tracked_keys_span);
+
+                        let _filter_slots_span = span!(
+                            Level::DEBUG,
+                            "filter_slots",
+                            total_slots = contract_changes.slots.len(),
+                            tracked_keys_count = tracked_keys.len()
+                        )
+                        .entered();
+                        contract_changes
+                            .slots
+                            .iter()
+                            .filter_map(|(slot, ContractStorageChange { value, .. })| {
+                                // Only process slots that are tracked
+                                if tracked_keys.contains(slot) {
+                                    Some((
+                                        slot.clone(),
+                                        if value.is_zero() { None } else { Some(value.clone()) },
+                                    ))
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect()
+                    } else {
+                        let _collect_all_slots_span = span!(
+                            Level::DEBUG,
+                            "collect_all_slots",
+                            slot_count = contract_changes.slots.len()
+                        )
+                        .entered();
+                        contract_changes
+                            .slots
+                            .iter()
+                            .map(|(slot, ContractStorageChange { value, .. })| {
+                                (
                                     slot.clone(),
                                     if value.is_zero() { None } else { Some(value.clone()) },
-                                ))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect()
-                } else {
-                    contract_changes
-                        .slots
-                        .iter()
-                        .map(|(slot, ContractStorageChange { value, .. })| {
-                            (slot.clone(), if value.is_zero() { None } else { Some(value.clone()) })
-                        })
-                        .collect()
+                                )
+                            })
+                            .collect()
+                    }
                 };
 
+                let has_balance_change = contract_changes
+                    .native_balance
+                    .is_some();
                 // Only create AccountDelta if we have updates
                 if !slot_updates.is_empty() || has_balance_change {
                     tx_account_deltas.insert(
@@ -1352,6 +1392,12 @@ where
 
             // Only create TxWithChanges if we have account deltas
             if !tx_account_deltas.is_empty() {
+                let _merge_span = span!(
+                    Level::DEBUG,
+                    "merge_tx_changes",
+                    account_delta_count = tx_account_deltas.len()
+                )
+                .entered();
                 let tx_with_changes = TxWithChanges {
                     tx: tx.tx.clone(),
                     account_deltas: tx_account_deltas,
