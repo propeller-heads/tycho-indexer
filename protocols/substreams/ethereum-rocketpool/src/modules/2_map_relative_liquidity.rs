@@ -11,7 +11,7 @@ use tycho_substreams::models::{BalanceDelta, BlockBalanceDeltas};
 /// deposit to the component is detected, it's balanced is increased and if a balance
 /// from the component is withdrawn its balance is decreased.
 #[substreams::handlers::map]
-fn map_relative_component_liquidity(block: eth::v2::Block) -> BlockBalanceDeltas {
+fn map_relative_liquidity(block: eth::v2::Block) -> BlockBalanceDeltas {
     let res = block
         .logs()
         .filter_map(|log| {

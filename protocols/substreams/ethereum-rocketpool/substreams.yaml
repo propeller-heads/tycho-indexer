@@ -33,7 +33,7 @@ modules:
     output:
       type: proto:tycho.evm.v1.BlockTransactionProtocolComponents
 
-  - name: map_relative_component_balance
+  - name: map_relative_liquidity
     kind: map
     initialBlock: *starting_block
     inputs:
@@ -42,13 +42,13 @@ modules:
       type: proto:tycho.evm.v1.BlockBalanceDeltas
 
 
-  - name: store_balance
+  - name: store_liquidity
     kind: store
     initialBlock: *starting_block
     updatePolicy: add
     valueType: bigint
     inputs:
-      - map: map_relative_component_balance
+      - map: map_relative_liquidity
 
   - name: map_protocol_changes
     kind: map
@@ -56,8 +56,8 @@ modules:
     inputs:
       - source: sf.ethereum.type.v2.Block
       - map: map_protocol_components
-      - map: map_relative_component_balance
-      - store: store_balance
+      - map: map_relative_liquidity
+      - store: store_liquidity
         mode: deltas
     output:
       type: proto:tycho.evm.v1.BlockChanges

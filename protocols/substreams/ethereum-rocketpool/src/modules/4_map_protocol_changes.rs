@@ -1,8 +1,9 @@
 use crate::{
     abi::{rocket_dao_protocol_proposal, rocket_network_balances},
     constants::{
-        ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS, ROCKET_DAO_PROTOCOL_SETTINGS_DEPOSIT_ADDRESS,
-        ROCKET_NETWORK_BALANCES_ADDRESS, ROCKET_POOL_COMPONENT_ID, TRACKED_STORAGE_LOCATIONS,
+        ETH_ADDRESS, ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS,
+        ROCKET_DAO_PROTOCOL_SETTINGS_DEPOSIT_ADDRESS, ROCKET_NETWORK_BALANCES_ADDRESS,
+        ROCKET_POOL_COMPONENT_ID, TRACKED_STORAGE_LOCATIONS,
     },
     utils::get_changed_attributes,
 };
@@ -17,6 +18,7 @@ use tycho_substreams::{
         BlockBalanceDeltas, BlockChanges, BlockTransactionProtocolComponents, EntityChanges,
         TransactionChangesBuilder,
     },
+    prelude::BalanceChange,
 };
 
 /// Aggregates protocol component, balance and attribute changes by transaction.
@@ -28,7 +30,7 @@ fn map_protocol_changes(
     block: eth::v2::Block,
     protocol_components: BlockTransactionProtocolComponents,
     deltas: BlockBalanceDeltas,
-    balance_store: StoreDeltas,
+    liquidity_store: StoreDeltas,
 ) -> Result<BlockChanges, substreams::errors::Error> {
     // We merge contract changes by transaction (identified by transaction index)
     // making it easy to sort them at the very end.
@@ -38,21 +40,7 @@ fn map_protocol_changes(
     update_protocol_components(protocol_components, &mut transaction_changes)?;
 
     // Update absolute Eth balances per transaction.
-    aggregate_balances_changes(balance_store, deltas)
-        .into_iter()
-        .for_each(|(_, (tx, balances))| {
-            let builder = transaction_changes
-                .entry(tx.index)
-                .or_insert_with(|| TransactionChangesBuilder::new(&tx));
-
-            balances
-                .values()
-                .for_each(|token_bc_map| {
-                    token_bc_map
-                        .values()
-                        .for_each(|bc| builder.add_balance_change(bc))
-                });
-        });
+    update_protocol_liquidity(deltas, liquidity_store, &mut transaction_changes);
 
     // Update network balance updates per transaction.
     update_network_balance(&block, &mut transaction_changes);
@@ -69,7 +57,40 @@ fn map_protocol_changes(
             .sorted_unstable_by_key(|(index, _)| *index)
             .filter_map(|(_, builder)| builder.build())
             .collect::<Vec<_>>(),
+        storage_changes: vec![],
     })
+}
+
+/// Updates protocol liquidity changes per transaction.
+fn update_protocol_liquidity(
+    deltas: BlockBalanceDeltas,
+    store: StoreDeltas,
+    transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
+) {
+    aggregate_balances_changes(store, deltas)
+        .into_iter()
+        .for_each(|(_, (tx, balances))| {
+            let builder = transaction_changes
+                .entry(tx.index)
+                .or_insert_with(|| TransactionChangesBuilder::new(&tx));
+
+            balances
+                .into_values()
+                .for_each(|token_lc_map| {
+                    token_lc_map
+                        .into_values()
+                        .for_each(|lc| {
+                            builder.add_entity_change(&EntityChanges {
+                                component_id: ROCKET_POOL_COMPONENT_ID.to_owned(),
+                                attributes: vec![tycho_substreams::models::Attribute {
+                                    name: "liquidity".to_owned(),
+                                    value: lc.balance,
+                                    change: tycho_substreams::models::ChangeType::Update.into(),
+                                }],
+                            });
+                        })
+                });
+        });
 }
 
 /// Updates protocol component changes per transaction.
@@ -117,6 +138,16 @@ fn update_network_balance(
                 .entry(tx.index as u64)
                 .or_insert_with(|| TransactionChangesBuilder::new(&(tx.into())));
 
+            let eth_bc = BalanceChange {
+                token: ETH_ADDRESS.to_vec(),
+                balance: balance_update
+                    .total_eth
+                    .to_signed_bytes_be(),
+                component_id: ROCKET_POOL_COMPONENT_ID
+                    .as_bytes()
+                    .to_vec(),
+            };
+
             let attributes = vec![
                 tycho_substreams::models::Attribute {
                     name: "reth_supply".to_string(),
@@ -134,6 +165,7 @@ fn update_network_balance(
                 },
             ];
 
+            builder.add_balance_change(&eth_bc);
             builder.add_entity_change(&EntityChanges {
                 component_id: ROCKET_POOL_COMPONENT_ID.to_owned(),
                 attributes,
