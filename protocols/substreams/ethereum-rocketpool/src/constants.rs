@@ -18,9 +18,10 @@ pub const ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS: [u8; 20] =
 pub const ROCKET_DEPOSIT_POOL_ADDRESS_V1_2: [u8; 20] =
     hex!("DD3f50F8A6CafbE9b31a427582963f465E745AF8");
 
-pub(crate) const ALL_STORAGE_SLOTS: [StorageLocation; 11] = [
+pub(crate) const ALL_STORAGE_SLOTS: [StorageLocation; 12] = [
     ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT,
     DEPOSITS_ENABLED_SLOT,
+    DEPOSIT_ASSIGN_ENABLED_SLOT,
     MIN_DEPOSIT_AMOUNT_SLOT,
     MAX_DEPOSIT_AMOUNT_SLOT,
     DEPOSIT_FEE_SLOT,
@@ -119,5 +120,13 @@ pub(crate) const DEPOSIT_FEE_SLOT: StorageLocation = StorageLocation {
     slot: hex!("a1713e68e8e6d7580de48bb14bd78c7f293a5a0e42a40f7fe428d9943dc63264"),
     offset: 0,
     number_of_bytes: 32,
+    signed: false,
+};
+
+pub(crate) const DEPOSIT_ASSIGN_ENABLED_SLOT: StorageLocation = StorageLocation {
+    name: "deposit_assign_enabled",
+    slot: hex!("3c4ef260cb76105ef0fda3d75cf7af776accf2a871c39fd5530453efa532aba4"),
+    offset: 0,
+    number_of_bytes: 1,
     signed: false,
 };
