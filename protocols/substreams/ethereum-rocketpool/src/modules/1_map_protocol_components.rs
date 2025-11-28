@@ -1,5 +1,5 @@
 use crate::constants::{
-    ETH_ADDRESS, RETH_ADDRESS, ROCKET_DEPOSIT_POOL_ADDRESS_V1_0, ROCKET_POOL_COMPONENT_ID,
+    ETH_ADDRESS, RETH_ADDRESS, ROCKET_DEPOSIT_POOL_ADDRESS_V1_2, ROCKET_POOL_COMPONENT_ID,
 };
 use anyhow::Result;
 use substreams_ethereum::pb::eth;
@@ -27,7 +27,7 @@ fn map_protocol_components(
             tx.calls
                 .iter()
                 .flat_map(|call| &call.account_creations)
-                .any(|account| account.account == ROCKET_DEPOSIT_POOL_ADDRESS_V1_0)
+                .any(|account| account.account == ROCKET_DEPOSIT_POOL_ADDRESS_V1_2)
         })
         .ok_or(anyhow::anyhow!("No transaction found for Rocket Deposit Pool"))?;
 

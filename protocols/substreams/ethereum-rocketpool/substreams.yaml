@@ -21,7 +21,7 @@ network: mainnet
 
 
 params:
-  map_protocol_components: &starting_block 13325238 # RocketDepositPool_V1_0 was deployed
+  map_protocol_components: &starting_block 17002370 # RocketDepositPool_V1_2 was deployed
 
 modules:
   - name: map_protocol_components
@@ -56,8 +56,5 @@ modules:
     inputs:
       - source: sf.ethereum.type.v2.Block
       - map: map_protocol_components
-      - map: map_relative_liquidity
-      - store: store_liquidity
-        mode: deltas
     output:
       type: proto:tycho.evm.v1.BlockChanges

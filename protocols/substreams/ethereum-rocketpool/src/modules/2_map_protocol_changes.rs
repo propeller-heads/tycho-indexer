@@ -7,8 +7,9 @@ use crate::{
         DEPOSIT_SETTINGS_SLOTS, ETH_ADDRESS, QUEUE_END_SLOTS, QUEUE_START_SLOTS,
         QUEUE_VARIABLE_END_SLOT, ROCKET_DAO_MINIPOOL_QUEUE_ADDRESS,
         ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS, ROCKET_DEPOSIT_POOL_ADDRESSES,
-        ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT, ROCKET_NETWORK_BALANCES_ADDRESS,
-        ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS, ROCKET_VAULT_ADDRESS,
+        ROCKET_DEPOSIT_POOL_ADDRESS_V1_2, ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT,
+        ROCKET_NETWORK_BALANCES_ADDRESS, ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS,
+        ROCKET_VAULT_ADDRESS,
     },
     utils::get_changed_attributes,
 };
@@ -79,7 +80,7 @@ fn update_vault_liquidity(
 ) {
     for log in block.logs() {
         // Only process events from RocketDepositPool contracts
-        if !ROCKET_DEPOSIT_POOL_ADDRESSES.contains(&log.log.address.as_slice()) {
+        if log.log.address != ROCKET_DEPOSIT_POOL_ADDRESS_V1_2 {
             continue;
         }
 
