@@ -738,6 +738,13 @@ async fn process_state(
             amount_in = min_amount.clone();
         }
 
+        // Cap amount_in to avoid "amount exceeds 96 bits" error (it happens for uniswap v3 and v4
+        // sometimes because the returned limits can be very high)
+        let max_96_bit = BigUint::from(2u128.pow(96) - 1);
+        if amount_in > max_96_bit {
+            amount_in = max_96_bit - BigUint::from(1u32);
+        }
+
         // Get expected amount out using tycho-simulation and measure duration
         let start_time = std::time::Instant::now();
         let amount_out_result = match state
