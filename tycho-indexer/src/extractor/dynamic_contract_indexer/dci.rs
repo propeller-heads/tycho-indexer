@@ -1273,39 +1273,59 @@ where
             .iter()
         {
             for (account, contract_changes) in tx.contract_changes.iter() {
-                let tracked_keys: HashSet<&StoreKey> = match self
+                // Early skip if the contract is not tracked
+                if !self
                     .cache
                     .tracked_contracts
-                    .get_all(account.clone())
+                    .contains_key(account)
                 {
-                    // Early skip if the contract is not tracked
-                    None => continue,
-                    Some(keys) => keys.flatten().collect(),
-                };
-
-                let mut slot_updates = contract_changes
-                    .slots
-                    .iter()
-                    .map(|(slot, ContractStorageChange { value, .. })| {
-                        if value.is_zero() {
-                            (slot.clone(), None)
-                        } else {
-                            (slot.clone(), Some(value.clone()))
-                        }
-                    })
-                    .collect::<ContractStoreDeltas>();
-
-                // Only filter slots if skipping full indexing
-                if self.should_skip_full_indexing(account) {
-                    slot_updates.retain(|slot, _| tracked_keys.contains(slot));
+                    continue;
                 }
+
+                // Collect slot updates, filtering during collection if needed to avoid unnecessary
+                // clones
+                let slot_updates: ContractStoreDeltas = if self.should_skip_full_indexing(account) {
+                    // Only call get_all and collect tracked_keys when we actually need it
+                    let tracked_keys: HashSet<&StoreKey> = self
+                        .cache
+                        .tracked_contracts
+                        .get_all(account.clone())
+                        .unwrap()
+                        .flatten()
+                        .collect();
+                    contract_changes
+                        .slots
+                        .iter()
+                        .filter_map(|(slot, ContractStorageChange { value, .. })| {
+                            // Only process slots that are tracked
+                            if tracked_keys.contains(slot) {
+                                Some((
+                                    slot.clone(),
+                                    if value.is_zero() { None } else { Some(value.clone()) },
+                                ))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect()
+                } else {
+                    contract_changes
+                        .slots
+                        .iter()
+                        .map(|(slot, ContractStorageChange { value, .. })| {
+                            (slot.clone(), if value.is_zero() { None } else { Some(value.clone()) })
+                        })
+                        .collect()
+                };
 
                 if !slot_updates.is_empty() ||
                     contract_changes
                         .native_balance
                         .is_some()
                 {
-                    let account_delta = HashMap::from([(
+                    // Use with_capacity and insert instead of HashMap::from for better performance
+                    let mut account_delta = HashMap::with_capacity(1);
+                    account_delta.insert(
                         account.clone(),
                         AccountDelta::new(
                             self.chain,
@@ -1315,7 +1335,7 @@ where
                             None,
                             ChangeType::Update,
                         ),
-                    )]);
+                    );
 
                     let tx_with_changes = TxWithChanges {
                         tx: tx.tx.clone(),
