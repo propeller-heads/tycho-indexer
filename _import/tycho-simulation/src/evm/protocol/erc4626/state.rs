@@ -29,7 +29,7 @@ pub struct ERC4626State {
     asset_price: U256,
     share_price: U256,
     max_deposit: U256,
-    max_withdraw: U256,
+    max_redeem: U256,
 }
 
 impl ERC4626State {
@@ -40,7 +40,7 @@ impl ERC4626State {
         asset_price: U256,
         share_price: U256,
         max_deposit: U256,
-        max_withdraw: U256,
+        max_redeem: U256,
     ) -> Self {
         Self {
             pool_address: pool_address.clone(),
@@ -49,7 +49,7 @@ impl ERC4626State {
             asset_price,
             share_price,
             max_deposit,
-            max_withdraw,
+            max_redeem,
         }
     }
 }
@@ -86,23 +86,27 @@ impl ProtocolSim for ERC4626State {
         if token_in.address == self.asset_token.address &&
             token_out.address == self.share_token.address
         {
+            // asset → share: this corresponds to an ERC4626.deposit operation.
+            // The user deposits underlying assets and receives vault shares.
             Ok(GetAmountOutResult {
                 amount: u256_to_biguint(
                     amount_in * self.share_price /
                         U256::from(10).pow(U256::from(self.share_token.decimals)),
                 ),
-                gas: 155433.to_biguint().expect("infallible"),
+                gas: 86107.to_biguint().expect("infallible"),
                 new_state: self.clone_box(),
             })
         } else if token_in.address == self.share_token.address &&
             token_out.address == self.asset_token.address
         {
+            // share → asset: this corresponds to an ERC4626.redeem operation.
+            // The user burns vault shares and receives underlying assets.
             Ok(GetAmountOutResult {
                 amount: u256_to_biguint(
                     amount_in * self.asset_price /
                         U256::from(10).pow(U256::from(self.asset_token.decimals)),
                 ),
-                gas: 155433.to_biguint().expect("infallible"),
+                gas: 74977.to_biguint().expect("infallible"),
                 new_state: self.clone_box(),
             })
         } else {
@@ -118,48 +122,48 @@ impl ProtocolSim for ERC4626State {
         sell_token: Bytes,
         buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
-        if sell_token == self.asset_token.address && buy_token == self.share_token.address {
-            Ok((u256_to_biguint(self.max_deposit), u256_to_biguint(self.max_withdraw)))
-        } else if sell_token == self.share_token.address && buy_token == self.asset_token.address {
-            Ok((u256_to_biguint(self.max_withdraw), u256_to_biguint(self.max_deposit)))
-        } else {
-            Err(SimulationError::FatalError(format!(
-                "Invalid token pair: {}, {}",
-                sell_token, buy_token
-            )))
+        let share_scale = BigUint::from(10u32).pow(self.share_token.decimals);
+        let asset_scale = BigUint::from(10u32).pow(self.asset_token.decimals);
+
+        if sell_token == self.share_token.address && buy_token == self.asset_token.address {
+            // asset_out_raw = shares_raw * share_price_raw / 10^share_decimals
+            let buy_raw = (&u256_to_biguint(self.max_redeem) * &u256_to_biguint(self.share_price)) /
+                &share_scale;
+            return Ok((u256_to_biguint(self.max_redeem), buy_raw));
         }
+
+        if sell_token == self.asset_token.address && buy_token == self.share_token.address {
+            // share_out_raw = asset_raw * asset_price_raw / 10^asset_decimals
+            let buy_raw = (&u256_to_biguint(self.max_deposit) * &u256_to_biguint(self.asset_price)) /
+                &asset_scale;
+
+            return Ok((u256_to_biguint(self.max_deposit), buy_raw));
+        }
+
+        Err(SimulationError::FatalError(format!(
+            "Invalid token pair: {}, {}",
+            sell_token, buy_token
+        )))
     }
 
     fn delta_transition(
         &mut self,
         _delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
-        balances: &Balances,
+        _balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
         let engine =
             create_engine(SHARED_TYCHO_DB.clone(), false).expect("Failed to create engine");
 
-        let asset_balance_bytes = balances
-            .component_balances
-            .get(&self.pool_address.to_string())
-            .ok_or_else(|| SimulationError::FatalError("pool not found".into()))?
-            .get(&self.asset_token.address)
-            .ok_or_else(|| SimulationError::FatalError("asset not found".into()))?;
-
-        let state = vm::decode_from_vm(
-            &self.pool_address,
-            &self.asset_token,
-            &self.share_token,
-            U256::from_be_slice(asset_balance_bytes),
-            engine,
-        )?;
+        let state =
+            vm::decode_from_vm(&self.pool_address, &self.asset_token, &self.share_token, engine)?;
 
         trace!(?state, "Calling delta transition for {}", &self.pool_address);
 
         self.asset_price = state.asset_price;
         self.share_price = state.share_price;
         self.max_deposit = state.max_deposit;
-        self.max_withdraw = state.max_withdraw;
+        self.max_redeem = state.max_redeem;
         Ok(())
     }
 
@@ -186,7 +190,7 @@ impl ProtocolSim for ERC4626State {
                 self.asset_price == other_state.asset_price &&
                 self.share_price == other_state.share_price &&
                 self.max_deposit == other_state.max_deposit &&
-                self.max_withdraw == other_state.max_withdraw
+                self.max_redeem == other_state.max_redeem
         } else {
             false
         }

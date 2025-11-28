@@ -1,6 +1,5 @@
 use std::{collections::HashMap, str::FromStr};
 
-use alloy::primitives::{Address, U256};
 use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
 use tycho_common::{models::token::Token, Bytes};
 
@@ -34,42 +33,25 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for ERC4626State {
         let asset_address = snapshot
             .component
             .tokens
-            .first()
+            .iter()
+            .find(|t| **t != pool_address)
             .ok_or_else(|| {
-                InvalidSnapshotError::ValueError("Missing asset_address in component".to_string())
+                InvalidSnapshotError::ValueError(format!(
+                    "Failed to determine asset address: no token different from pool address ({pool_address}) was found"
+                ))
             })?;
         let asset_token = all_tokens
             .get(asset_address)
             .ok_or_else(|| {
                 InvalidSnapshotError::ValueError(format!(
-                    "Missing token0 in state: {asset_address}"
+                    "Missing asset_token in state: {asset_address}"
                 ))
-            })?;
-        let share_address = snapshot
-            .component
-            .tokens
-            .get(1)
-            .ok_or_else(|| {
-                InvalidSnapshotError::ValueError("Missing share_address in component".to_string())
             })?;
         let share_token = all_tokens
-            .get(share_address)
+            .get(&pool_address)
             .ok_or_else(|| {
                 InvalidSnapshotError::ValueError(format!(
-                    "Missing share_address in state: {share_address}"
-                ))
-            })?;
-        let component_balances = snapshot
-            .state
-            .balances
-            .iter()
-            .map(|(k, v)| (Address::from_slice(k), U256::from_be_slice(v)))
-            .collect::<HashMap<_, _>>();
-        let pool_asset_balance = component_balances
-            .get(&Address::from_slice(asset_address.0.as_ref()))
-            .ok_or_else(|| {
-                InvalidSnapshotError::ValueError(format!(
-                    "Missing asset_address in state: {asset_address}"
+                    "Missing share_token in state: {pool_address}"
                 ))
             })?;
         let engine = create_engine(
@@ -79,13 +61,8 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for ERC4626State {
                 .unwrap_or_default(),
         )
         .expect("Failed to create engine");
-        let erc4626_state = vm::decode_from_vm(
-            &pool_address,
-            asset_token,
-            share_token,
-            *pool_asset_balance,
-            engine,
-        )?;
+
+        let erc4626_state = vm::decode_from_vm(&pool_address, asset_token, share_token, engine)?;
         Ok(erc4626_state)
     }
 }
