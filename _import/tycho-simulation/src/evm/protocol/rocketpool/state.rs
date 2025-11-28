@@ -239,13 +239,10 @@ impl ProtocolSim for RocketPoolState {
         };
 
         let mut new_state = self.clone();
+        // Note: total_eth and reth_supply are not updated as they are managed by an oracle.
         if is_depositing_eth {
-            new_state.total_eth = safe_add_u256(new_state.total_eth, amount_in)?;
-            new_state.reth_supply = safe_add_u256(new_state.reth_supply, amount_out)?;
             new_state.liquidity = safe_add_u256(new_state.liquidity, amount_in)?;
         } else {
-            new_state.total_eth = safe_sub_u256(new_state.total_eth, amount_out)?;
-            new_state.reth_supply = safe_sub_u256(new_state.reth_supply, amount_in)?;
             new_state.liquidity = safe_sub_u256(new_state.liquidity, amount_out)?;
         };
 
@@ -686,12 +683,11 @@ mod tests {
             .as_any()
             .downcast_ref::<RocketPoolState>()
             .unwrap();
-        // total_eth: 200 + 10 = 210
-        assert_eq!(new_state.total_eth, U256::from(210e18));
         // liquidity: 50 + 10 = 60
         assert_eq!(new_state.liquidity, U256::from(60e18));
-        // reth_supply: 100 + 3 = 103
-        assert_eq!(new_state.reth_supply, U256::from(103_000_000_000_000_000_000u128));
+        // total_eth and reth_supply unchanged (managed by oracle)
+        assert_eq!(new_state.total_eth, U256::from(200e18));
+        assert_eq!(new_state.reth_supply, U256::from(100e18));
     }
 
     #[test]
@@ -719,12 +715,11 @@ mod tests {
             .as_any()
             .downcast_ref::<RocketPoolState>()
             .unwrap();
-        // total_eth: 200 + 20 = 220
-        assert_eq!(new_state.total_eth, U256::from(220e18));
         // liquidity: 990 + 20 = 1010
         assert_eq!(new_state.liquidity, U256::from(1010e18));
-        // reth_supply: 100 + 6 = 106
-        assert_eq!(new_state.reth_supply, U256::from(106e18));
+        // total_eth and reth_supply unchanged (managed by oracle)
+        assert_eq!(new_state.total_eth, U256::from(200e18));
+        assert_eq!(new_state.reth_supply, U256::from(100e18));
     }
 
     #[test]
@@ -747,12 +742,11 @@ mod tests {
             .as_any()
             .downcast_ref::<RocketPoolState>()
             .unwrap();
-        // total_eth: 200 - 20 = 180
-        assert_eq!(new_state.total_eth, U256::from(180e18));
         // liquidity: 50 - 20 = 30
         assert_eq!(new_state.liquidity, U256::from(30e18));
-        // reth_supply: 100 - 10 = 90
-        assert_eq!(new_state.reth_supply, U256::from(90e18));
+        // total_eth and reth_supply unchanged (managed by oracle)
+        assert_eq!(new_state.total_eth, U256::from(200e18));
+        assert_eq!(new_state.reth_supply, U256::from(100e18));
     }
 
     // ============ Get Amount Out - Error Cases Tests ============
