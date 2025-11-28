@@ -79,9 +79,8 @@ impl RocketPoolState {
 
     fn assert_deposits_enabled(&self) -> Result<(), SimulationError> {
         if !self.deposits_enabled {
-            Err(SimulationError::InvalidInput(
+            Err(SimulationError::RecoverableError(
                 "Deposits are currently disabled in RocketPool".to_string(),
-                None,
             ))
         } else {
             Ok(())
