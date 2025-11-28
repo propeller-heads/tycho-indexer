@@ -10,9 +10,6 @@ pub mod store_tokens_to_pool_id_angstrom;
 #[path = "3_store_pool_per_euler_hook.rs"]
 pub mod store_pool_per_euler_hook;
 
-#[path = "3_store_angstrom_config.rs"]
-pub mod store_angstrom_config;
-
 #[path = "4_map_euler_enriched_protocol_changes.rs"]
 pub mod map_euler_enriched_protocol_changes;
 

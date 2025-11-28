@@ -27,12 +27,6 @@ pub fn store_tokens_to_pool_id_angstrom(
                             &protocol_component.tokens[0],
                             &protocol_component.tokens[1],
                         );
-                        substreams::log::debug!(
-                            "Angstrom Key: {:?} with asset0 {:?} and asset1 {:?}",
-                            store_key,
-                            &protocol_component.tokens[0].to_hex(),
-                            &protocol_component.tokens[1].to_hex()
-                        );
                         store.set(0, &store_key, &protocol_component.id);
                     }
                 }
