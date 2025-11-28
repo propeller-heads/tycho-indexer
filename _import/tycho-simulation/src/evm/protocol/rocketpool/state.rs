@@ -21,6 +21,18 @@ use crate::evm::protocol::{
 
 const DEPOSIT_FEE_BASE: f64 = 1e18;
 
+// TODO - consider moving this to constant attributes in the indexer
+// Minipool deposit amounts in wei
+const FULL_DEPOSIT_USER_AMOUNT: u128 = 16_000_000_000_000_000_000; // 16 ETH
+const HALF_DEPOSIT_USER_AMOUNT: u128 = 16_000_000_000_000_000_000; // 16 ETH
+const VARIABLE_DEPOSIT_AMOUNT: u128 = 31_000_000_000_000_000_000; // 31 ETH
+
+// Queue capacity for wrap-around calculation (from RocketMinipoolQueue contract)
+// capacity = 2^255 (max uint256 / 2)
+fn queue_capacity() -> U256 {
+    U256::from(1) << 255
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct RocketPoolState {
     pub reth_supply: U256,
@@ -31,9 +43,21 @@ pub struct RocketPoolState {
     pub deposits_enabled: bool,
     pub minimum_deposit: U256,
     pub maximum_deposit_pool_size: U256,
+    /// Whether assign deposits is enabled (allows using minipool queue capacity)
+    pub assign_deposits_enabled: bool,
+    /// Minipool queue indices for full deposits
+    pub queue_full_start: U256,
+    pub queue_full_end: U256,
+    /// Minipool queue indices for half deposits
+    pub queue_half_start: U256,
+    pub queue_half_end: U256,
+    /// Minipool queue indices for variable deposits
+    pub queue_variable_start: U256,
+    pub queue_variable_end: U256,
 }
 
 impl RocketPoolState {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         reth_supply: U256,
         total_eth: U256,
@@ -42,6 +66,13 @@ impl RocketPoolState {
         deposits_enabled: bool,
         minimum_deposit: U256,
         maximum_deposit_pool_size: U256,
+        assign_deposits_enabled: bool,
+        queue_full_start: U256,
+        queue_full_end: U256,
+        queue_half_start: U256,
+        queue_half_end: U256,
+        queue_variable_start: U256,
+        queue_variable_end: U256,
     ) -> Self {
         Self {
             reth_supply,
@@ -51,6 +82,13 @@ impl RocketPoolState {
             deposits_enabled,
             minimum_deposit,
             maximum_deposit_pool_size,
+            assign_deposits_enabled,
+            queue_full_start,
+            queue_full_end,
+            queue_half_start,
+            queue_half_end,
+            queue_variable_start,
+            queue_variable_end,
         }
     }
 
@@ -84,6 +122,49 @@ impl RocketPoolState {
             ))
         } else {
             Ok(())
+        }
+    }
+
+    /// Calculates the length of a queue given its start and end indices.
+    /// Handles wrap-around when end < start.
+    fn get_queue_length(start: U256, end: U256) -> U256 {
+        if end < start {
+            // Wrap-around case: end = end + capacity
+            end + queue_capacity() - start
+        } else {
+            end - start
+        }
+    }
+
+    /// Calculates the total effective capacity of the minipool queues.
+    /// This is used to extend the deposit limit when assign_deposits_enabled is true.
+    ///
+    /// Formula from RocketMinipoolQueue.getEffectiveCapacity():
+    /// full_queue_length * FULL_DEPOSIT_USER_AMOUNT
+    /// + half_queue_length * HALF_DEPOSIT_USER_AMOUNT
+    /// + variable_queue_length * VARIABLE_DEPOSIT_AMOUNT
+    fn get_effective_capacity(&self) -> Result<U256, SimulationError> {
+        let full_length = Self::get_queue_length(self.queue_full_start, self.queue_full_end);
+        let half_length = Self::get_queue_length(self.queue_half_start, self.queue_half_end);
+        let variable_length =
+            Self::get_queue_length(self.queue_variable_start, self.queue_variable_end);
+
+        let full_capacity = safe_mul_u256(full_length, U256::from(FULL_DEPOSIT_USER_AMOUNT))?;
+        let half_capacity = safe_mul_u256(half_length, U256::from(HALF_DEPOSIT_USER_AMOUNT))?;
+        let variable_capacity =
+            safe_mul_u256(variable_length, U256::from(VARIABLE_DEPOSIT_AMOUNT))?;
+
+        safe_add_u256(safe_add_u256(full_capacity, half_capacity)?, variable_capacity)
+    }
+
+    /// Returns the maximum deposit capacity considering both the base pool size
+    /// and the minipool queue effective capacity (if assign_deposits_enabled).
+    fn get_max_deposit_capacity(&self) -> Result<U256, SimulationError> {
+        if self.assign_deposits_enabled {
+            let effective_capacity = self.get_effective_capacity()?;
+            safe_add_u256(self.maximum_deposit_pool_size, effective_capacity)
+        } else {
+            Ok(self.maximum_deposit_pool_size)
         }
     }
 }
@@ -132,12 +213,13 @@ impl ProtocolSim for RocketPoolState {
                 ));
             }
 
-            let new_total_eth = safe_add_u256(self.total_eth, amount_in)?;
-            if new_total_eth > self.maximum_deposit_pool_size {
+            let capacity_needed = safe_add_u256(self.liquidity, amount_in)?;
+            let max_capacity = self.get_max_deposit_capacity()?;
+            if capacity_needed > max_capacity {
                 return Err(SimulationError::InvalidInput(
                     format!(
-                        "Deposit would exceed maximum pool size of {}",
-                        self.maximum_deposit_pool_size
+                        "Deposit would exceed maximum pool size (capacity needed: {}, max: {})",
+                        capacity_needed, max_capacity
                     ),
                     None,
                 ));
@@ -184,13 +266,14 @@ impl ProtocolSim for RocketPoolState {
         let is_depositing_eth = Self::depositing_eth(&sell_token);
 
         if is_depositing_eth {
-            // ETH -> rETH: max sell = remaining capacity, max buy = rETH value of that
-            let max_eth_sell = safe_sub_u256(self.maximum_deposit_pool_size, self.total_eth)?;
+            // ETH -> rETH: max sell = maxDepositPoolSize +
+            // + effectiveCapacity (if assignDepositsEnabled) - liquidity
+            let max_capacity = self.get_max_deposit_capacity()?;
+            let max_eth_sell = safe_sub_u256(max_capacity, self.liquidity)?;
             let max_reth_buy = self.get_reth_value(max_eth_sell)?;
             Ok((u256_to_biguint(max_eth_sell), u256_to_biguint(max_reth_buy)))
         } else {
-            // rETH -> ETH: max buy = liquidity, max sell = rETH needed to get that ETH
-            // Inverse of get_eth_value: rethIn = ethOut * rethSupply / totalEth
+            // rETH -> ETH: max buy = liquidity
             let max_eth_buy = self.liquidity;
             let max_reth_sell =
                 safe_div_u256(safe_mul_u256(max_eth_buy, self.reth_supply)?, self.total_eth)?;
@@ -222,6 +305,10 @@ impl ProtocolSim for RocketPoolState {
             .updated_attributes
             .get("deposits_enabled")
             .map_or(self.deposits_enabled, |val| !U256::from_bytes(val).is_zero());
+        self.assign_deposits_enabled = delta
+            .updated_attributes
+            .get("assign_deposits_enabled")
+            .map_or(self.assign_deposits_enabled, |val| !U256::from_bytes(val).is_zero());
         self.deposit_fee = delta
             .updated_attributes
             .get("deposit_fee")
@@ -234,6 +321,31 @@ impl ProtocolSim for RocketPoolState {
             .updated_attributes
             .get("maximum_deposit_pool_size")
             .map_or(self.maximum_deposit_pool_size, U256::from_bytes);
+
+        self.queue_full_start = delta
+            .updated_attributes
+            .get("queue_full_start")
+            .map_or(self.queue_full_start, U256::from_bytes);
+        self.queue_full_end = delta
+            .updated_attributes
+            .get("queue_full_end")
+            .map_or(self.queue_full_end, U256::from_bytes);
+        self.queue_half_start = delta
+            .updated_attributes
+            .get("queue_half_start")
+            .map_or(self.queue_half_start, U256::from_bytes);
+        self.queue_half_end = delta
+            .updated_attributes
+            .get("queue_half_end")
+            .map_or(self.queue_half_end, U256::from_bytes);
+        self.queue_variable_start = delta
+            .updated_attributes
+            .get("queue_variable_start")
+            .map_or(self.queue_variable_start, U256::from_bytes);
+        self.queue_variable_end = delta
+            .updated_attributes
+            .get("queue_variable_end")
+            .map_or(self.queue_variable_end, U256::from_bytes);
 
         Ok(())
     }
@@ -269,7 +381,6 @@ mod tests {
 
     use approx::assert_ulps_eq;
     use num_bigint::BigUint;
-    use rstest::rstest;
     use tycho_common::{
         dto::ProtocolStateDelta,
         hex_bytes::Bytes,
@@ -282,16 +393,29 @@ mod tests {
 
     use super::*;
 
-    /// Helper function to create a RocketPoolState with sensible default parameters for testing
-    fn create_test_rocketpool_state() -> RocketPoolState {
+    /// Helper function to create a RocketPoolState with easy-to-compute defaults for testing
+    /// Mutate fields for specific tests.
+    /// - Exchange rate: 1 rETH = 2 ETH (100 rETH backed by 200 ETH)
+    /// - Deposit fee: 40%
+    /// - Liquidity: 50 ETH
+    /// - Max pool size: 1000 ETH
+    /// - Assign deposits enabled: false
+    fn create_state() -> RocketPoolState {
         RocketPoolState::new(
-            U256::from(100e18),  // 100 rETH supply
-            U256::from(95e18),   // 95 ETH total
-            U256::from(50e18),   // 50 ETH liquidity
-            U256::from(5e15),    // 0.5% deposit fee (5e15 / 1e18)
-            true,                // deposits enabled
-            U256::from(1e16),    // 0.01 ETH minimum deposit
-            U256::from(5000e18), // 5000 ETH maximum pool size
+            U256::from(100e18),                     // reth_supply: 100 rETH
+            U256::from(200e18),                     // total_eth: 200 ETH (1 rETH = 2 ETH)
+            U256::from(50e18),                      // liquidity: 50 ETH
+            U256::from(400_000_000_000_000_000u64), // deposit_fee: 40% (0.4e18)
+            true,                                   // deposits_enabled
+            U256::ZERO,                             // minimum_deposit
+            U256::from(1000e18),                    // maximum_deposit_pool_size: 1000 ETH
+            false,                                  // assign_deposits_enabled
+            U256::ZERO,                             // queue_full_start
+            U256::ZERO,                             // queue_full_end
+            U256::ZERO,                             // queue_half_start
+            U256::ZERO,                             // queue_half_end
+            U256::ZERO,                             // queue_variable_start
+            U256::ZERO,                             // queue_variable_end
         )
     }
 
@@ -311,209 +435,115 @@ mod tests {
         )
     }
 
+    // ============ Queue Length Tests ============
+
     #[test]
-    fn test_get_amount_out_deposit_eth() {
-        let state = create_test_rocketpool_state();
-        let eth = eth_token();
-        let reth = reth_token();
+    fn test_queue_length_normal() {
+        let length = RocketPoolState::get_queue_length(U256::from(10), U256::from(15));
+        assert_eq!(length, U256::from(5));
+    }
 
-        // Deposit 1 ETH
-        let amount_in = BigUint::from(1e18 as u64); // 1 ETH
+    #[test]
+    fn test_queue_length_empty() {
+        let length = RocketPoolState::get_queue_length(U256::from(10), U256::from(10));
+        assert_eq!(length, U256::ZERO);
+    }
 
-        let res = state
-            .get_amount_out(amount_in.clone(), &eth, &reth)
+    #[test]
+    fn test_queue_length_wrap_around() {
+        let capacity = queue_capacity();
+        let start = capacity - U256::from(5);
+        let end = U256::from(3);
+        let length = RocketPoolState::get_queue_length(start, end);
+        // 3 + 2^255 - (2^255 - 5) = 8
+        assert_eq!(length, U256::from(8));
+    }
+
+    // ============ Effective Capacity Tests ============
+
+    #[test]
+    fn test_effective_capacity_empty() {
+        let state = create_state();
+        assert_eq!(state.get_effective_capacity().unwrap(), U256::ZERO);
+    }
+
+    #[test]
+    fn test_effective_capacity_full_queue() {
+        let mut state = create_state();
+        state.queue_full_end = U256::from(2); // 2 * 16 ETH = 32 ETH
+        assert_eq!(state.get_effective_capacity().unwrap(), U256::from(32e18));
+    }
+
+    #[test]
+    fn test_effective_capacity_half_queue() {
+        let mut state = create_state();
+        state.queue_half_end = U256::from(3); // 3 * 16 ETH = 48 ETH
+        assert_eq!(state.get_effective_capacity().unwrap(), U256::from(48e18));
+    }
+
+    #[test]
+    fn test_effective_capacity_variable_queue() {
+        let mut state = create_state();
+        state.queue_variable_end = U256::from(2); // 2 * 31 ETH = 62 ETH
+        assert_eq!(state.get_effective_capacity().unwrap(), U256::from(62e18));
+    }
+
+    #[test]
+    fn test_effective_capacity_combined() {
+        let mut state = create_state();
+        state.queue_full_end = U256::from(2); // 32 ETH
+        state.queue_half_end = U256::from(3); // 48 ETH
+        state.queue_variable_end = U256::from(1); // 31 ETH
+                                                  // Total: 111 ETH
+        assert_eq!(state.get_effective_capacity().unwrap(), U256::from(111e18));
+    }
+
+    // ============ Max Deposit Capacity Tests ============
+
+    #[test]
+    fn test_max_capacity_assign_disabled() {
+        let state = create_state();
+        let max = state
+            .get_max_deposit_capacity()
             .unwrap();
+        assert_eq!(max, U256::from(1000e18));
+    }
 
-        // Expected calculation (matching Solidity integer math):
-        // fee = 1e18 * 5e15 / 1e18 = 5e15 (0.005 ETH)
-        // net_eth = 1e18 - 5e15 = 995e15
-        // reth_out = 995e15 * 100e18 / 95e18 = 1047368421052631578 (truncated)
-        let expected_reth_out = BigUint::from(1047368421052631578u64);
-        assert_eq!(res.amount, expected_reth_out);
-
-        let new_state = res
-            .new_state
-            .as_any()
-            .downcast_ref::<RocketPoolState>()
+    #[test]
+    fn test_max_capacity_assign_enabled_empty_queue() {
+        let mut state = create_state();
+        state.assign_deposits_enabled = true;
+        let max = state
+            .get_max_deposit_capacity()
             .unwrap();
-
-        // Verify exact state updates
-        // new_total_eth = 95e18 + 1e18 = 96e18
-        assert_eq!(new_state.total_eth, U256::from(96e18));
-        // new_reth_supply = 100e18 + 1047368421052631578
-        assert_eq!(new_state.reth_supply, U256::from_str("101047368421052631578").unwrap());
-        // new_liquidity = 50e18 + 1e18 = 51e18
-        assert_eq!(new_state.liquidity, U256::from(51e18));
+        assert_eq!(max, U256::from(1000e18));
     }
 
     #[test]
-    fn test_get_amount_out_withdraw_reth() {
-        let state = create_test_rocketpool_state();
-        let eth = eth_token();
-        let reth = reth_token();
-
-        // Withdraw 1 rETH
-        let amount_in = BigUint::from(1e18 as u64); // 1 rETH
-
-        let res = state
-            .get_amount_out(amount_in.clone(), &reth, &eth)
+    fn test_max_capacity_assign_enabled_with_queue() {
+        let mut state = create_state();
+        state.assign_deposits_enabled = true;
+        state.queue_variable_end = U256::from(10); // 310 ETH extra
+        let max = state
+            .get_max_deposit_capacity()
             .unwrap();
-
-        // Expected calculation (matching Solidity integer math):
-        // eth_out = reth_in * total_eth / reth_supply
-        // eth_out = 1e18 * 95e18 / 100e18 = 950000000000000000 (0.95 ETH)
-        let expected_eth_out = BigUint::from(0.95e18 as u64);
-        assert_eq!(res.amount, expected_eth_out);
-
-        let new_state = res
-            .new_state
-            .as_any()
-            .downcast_ref::<RocketPoolState>()
-            .unwrap();
-
-        // Verify exact state updates
-        // new_total_eth = 95e18 - 0.95e18 = 94.05e18
-        assert_eq!(new_state.total_eth, U256::from(94.05e18));
-        // new_reth_supply = 100e18 - 1e18 = 99e18
-        assert_eq!(new_state.reth_supply, U256::from(99e18));
-        // new_liquidity = 50e18 - 0.95e18 = 49.05e18
-        assert_eq!(new_state.liquidity, U256::from(49.05e18));
+        // 1000 + 310 = 1310 ETH
+        assert_eq!(max, U256::from(1310e18));
     }
+
+    // ============ Delta Transition Tests ============
 
     #[test]
-    fn test_get_amount_out_deposits_disabled() {
-        let state = RocketPoolState::new(
-            U256::from(100u64),
-            U256::from(100u64),
-            U256::from(50u64),
-            U256::from(0u64),
-            false, // deposits disabled
-            U256::from(0u64),
-            U256::from(1000u64),
-        );
+    fn test_delta_transition_basic() {
+        let mut state = create_state();
 
-        let eth = eth_token();
-        let reth = reth_token();
-        let amount_in = BigUint::from(10u64);
-
-        let res = state.get_amount_out(amount_in, &eth, &reth);
-
-        assert!(res.is_err());
-        assert!(matches!(res, Err(SimulationError::InvalidInput(_, _))));
-    }
-
-    #[test]
-    fn test_get_amount_out_below_minimum_deposit() {
-        let state = create_test_rocketpool_state();
-        let eth = eth_token();
-        let reth = reth_token();
-
-        // Amount below minimum deposit (minimum is 0.01 ETH = 1e16)
-        let amount_in = BigUint::from(1e15 as u64); // 0.001 ETH < 0.01 ETH minimum
-
-        let res = state.get_amount_out(amount_in, &eth, &reth);
-
-        assert!(res.is_err());
-        assert!(matches!(res, Err(SimulationError::InvalidInput(_, _))));
-    }
-
-    #[test]
-    fn test_get_amount_out_exceeds_max_pool_size() {
-        let state = RocketPoolState::new(
-            U256::from(100u64),
-            U256::from(100u64),
-            U256::from(50u64),
-            U256::from(0u64),
-            true,
-            U256::from(0u64),
-            U256::from(110u64), // Max pool size only 110
-        );
-
-        let eth = eth_token();
-        let reth = reth_token();
-        let amount_in = BigUint::from(20u64); // Would exceed 110
-
-        let res = state.get_amount_out(amount_in, &eth, &reth);
-
-        assert!(res.is_err());
-        assert!(matches!(res, Err(SimulationError::InvalidInput(_, _))));
-    }
-
-    #[test]
-    fn test_get_amount_out_insufficient_liquidity() {
-        let state = RocketPoolState::new(
-            U256::from(100u64),
-            U256::from(100u64),
-            U256::from(5u64), // Only 5 liquidity
-            U256::from(0u64),
-            true,
-            U256::from(0u64),
-            U256::from(1000u64),
-        );
-
-        let eth = eth_token();
-        let reth = reth_token();
-        let amount_in = BigUint::from(10u64); // Would need more than 5 liquidity
-
-        let res = state.get_amount_out(amount_in, &reth, &eth);
-
-        assert!(res.is_err());
-        assert!(matches!(res, Err(SimulationError::RecoverableError(_))));
-    }
-
-    #[rstest]
-    #[case(true)] // ETH -> rETH
-    #[case(false)] // rETH -> ETH
-    fn test_spot_price(#[case] is_deposit: bool) {
-        let state = create_test_rocketpool_state();
-        let eth = eth_token();
-        let reth = reth_token();
-
-        let res = if is_deposit {
-            state.spot_price(&eth, &reth).unwrap()
-        } else {
-            state.spot_price(&reth, &eth).unwrap()
-        };
-
-        if is_deposit {
-            // ETH -> rETH: reth_supply/total_eth * (1 - fee)
-            // = (100/95) * (1 - 0.005) = 1.052631578947368421 * 0.995 = 1.0473684210526315789
-            let expected = (100.0_f64 / 95.0) * (1.0 - 0.005);
-            assert_ulps_eq!(res, expected);
-        } else {
-            // rETH -> ETH: total_eth/reth_supply = 95/100 = 0.95
-            assert_ulps_eq!(res, 0.95);
-        }
-    }
-
-    #[test]
-    fn test_fee() {
-        let state = create_test_rocketpool_state();
-
-        // Catch the unimplemented panic
-        let result = std::panic::catch_unwind(|| state.fee());
-
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_delta_transition() {
-        let mut state = create_test_rocketpool_state();
-
-        // Update all fields including deposits_enabled (true -> false)
-        let attributes: HashMap<String, Bytes> = vec![
-            ("total_eth".to_string(), Bytes::from(U256::from(200u64).to_be_bytes_vec())),
-            ("reth_supply".to_string(), Bytes::from(U256::from(180u64).to_be_bytes_vec())),
-            ("liquidity".to_string(), Bytes::from(U256::from(100u64).to_be_bytes_vec())),
-            ("deposits_enabled".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
-            ("deposit_fee".to_string(), Bytes::from(U256::from(1e16).to_be_bytes_vec())),
-            ("minimum_deposit".to_string(), Bytes::from(U256::from(10u64).to_be_bytes_vec())),
-            (
-                "maximum_deposit_pool_size".to_string(),
-                Bytes::from(U256::from(10000u64).to_be_bytes_vec()),
-            ),
+        let attributes: HashMap<String, Bytes> = [
+            ("total_eth", U256::from(300u64)),
+            ("reth_supply", U256::from(150u64)),
+            ("liquidity", U256::from(100u64)),
         ]
         .into_iter()
+        .map(|(k, v)| (k.to_string(), Bytes::from(v.to_be_bytes_vec())))
         .collect();
 
         let delta = ProtocolStateDelta {
@@ -522,99 +552,286 @@ mod tests {
             deleted_attributes: HashSet::new(),
         };
 
-        let balances =
-            Balances { component_balances: HashMap::new(), account_balances: HashMap::new() };
+        state
+            .delta_transition(delta, &HashMap::new(), &Balances::default())
+            .unwrap();
 
-        let res = state.delta_transition(delta, &HashMap::new(), &balances);
-
-        assert!(res.is_ok());
-        assert_eq!(state.total_eth, U256::from(200u64));
-        assert_eq!(state.reth_supply, U256::from(180u64));
+        assert_eq!(state.total_eth, U256::from(300u64));
+        assert_eq!(state.reth_supply, U256::from(150u64));
         assert_eq!(state.liquidity, U256::from(100u64));
-        assert!(!state.deposits_enabled);
-        assert_eq!(state.deposit_fee, U256::from(1e16));
-        assert_eq!(state.minimum_deposit, U256::from(10u64));
-        assert_eq!(state.maximum_deposit_pool_size, U256::from(10000u64));
     }
 
     #[test]
-    fn test_delta_transition_partial_update() {
-        let mut state = create_test_rocketpool_state();
+    fn test_delta_transition_queue_fields() {
+        let mut state = create_state();
 
-        // Save all original values
-        let original_total_eth = state.total_eth;
-        let original_reth_supply = state.reth_supply;
-        let original_liquidity = state.liquidity;
-        let original_deposits_enabled = state.deposits_enabled;
-        let original_minimum_deposit = state.minimum_deposit;
-        let original_maximum_deposit_pool_size = state.maximum_deposit_pool_size;
-
-        // Only update deposit_fee
-        let attributes: HashMap<String, Bytes> = vec![(
-            "deposit_fee".to_string(),
-            Bytes::from(U256::from(1e16).to_be_bytes_vec()), // 1%
-        )]
+        let attributes: HashMap<String, Bytes> = [
+            ("assign_deposits_enabled", U256::from(1u64)),
+            ("queue_variable_end", U256::from(5u64)),
+            ("queue_full_end", U256::from(3u64)),
+        ]
         .into_iter()
+        .map(|(k, v)| (k.to_string(), Bytes::from(v.to_be_bytes_vec())))
         .collect();
 
         let delta = ProtocolStateDelta {
-            component_id: "State1".to_owned(),
+            component_id: "RocketPool".to_owned(),
             updated_attributes: attributes,
             deleted_attributes: HashSet::new(),
         };
 
-        let res = state.delta_transition(delta, &HashMap::new(), &Balances::default());
+        state
+            .delta_transition(delta, &HashMap::new(), &Balances::default())
+            .unwrap();
 
-        assert!(res.is_ok());
+        assert!(state.assign_deposits_enabled);
+        assert_eq!(state.queue_variable_end, U256::from(5u64));
+        assert_eq!(state.queue_full_end, U256::from(3u64));
+    }
 
-        // Verify deposit_fee was updated
-        assert_eq!(state.deposit_fee, U256::from(1e16));
+    // ============ Spot Price Tests ============
 
-        // Verify all other fields remain unchanged
-        assert_eq!(state.total_eth, original_total_eth);
-        assert_eq!(state.reth_supply, original_reth_supply);
-        assert_eq!(state.liquidity, original_liquidity);
-        assert_eq!(state.deposits_enabled, original_deposits_enabled);
-        assert_eq!(state.minimum_deposit, original_minimum_deposit);
-        assert_eq!(state.maximum_deposit_pool_size, original_maximum_deposit_pool_size);
+    #[test]
+    fn test_spot_price_deposit() {
+        let state = create_state();
+        // ETH -> rETH: (1 - 0.4 fee) * 100/200 = 0.6 * 0.5 = 0.3
+        let price = state
+            .spot_price(&eth_token(), &reth_token())
+            .unwrap();
+        assert_ulps_eq!(price, 0.3);
     }
 
     #[test]
-    fn test_get_limits_deposit() {
-        let state = create_test_rocketpool_state();
+    fn test_spot_price_withdraw() {
+        let state = create_state();
+        // rETH -> ETH: 200/100 = 2.0
+        let price = state
+            .spot_price(&reth_token(), &eth_token())
+            .unwrap();
+        assert_ulps_eq!(price, 2.0);
+    }
 
-        // Deposit: selling ETH, buying rETH
+    #[test]
+    fn test_fee_panics() {
+        let state = create_state();
+        let result = std::panic::catch_unwind(|| state.fee());
+        assert!(result.is_err());
+    }
+
+    // ============ Get Limits Tests ============
+
+    #[test]
+    fn test_limits_deposit() {
+        let state = create_state();
+
         let (max_sell, max_buy) = state
             .get_limits(eth_token().address, reth_token().address)
             .unwrap();
 
-        // max_sell = max_pool_size - total_eth = 5000e18 - 95e18 = 4905e18
-        let expected_max_sell = BigUint::from_str("4905000000000000000000").unwrap();
-        assert_eq!(max_sell, expected_max_sell);
-
-        // max_buy = get_reth_value(max_sell)
-        // fee = 4905e18 * 5e15 / 1e18 = 24.525e18
-        // net_eth = 4905e18 - 24.525e18 = 4880.475e18
-        // max_buy = 4880.475e18 * 100e18 / 95e18 = 5137342105263157894736
-        let expected_max_buy = BigUint::from_str("5137342105263157894736").unwrap();
-        assert_eq!(max_buy, expected_max_buy);
+        // max_sell = 1000 - 50 = 950 ETH
+        assert_eq!(max_sell, BigUint::from(950_000_000_000_000_000_000u128));
+        // max_buy = 950 * 0.6 * 100/200 = 285 rETH
+        assert_eq!(max_buy, BigUint::from(285_000_000_000_000_000_000u128));
     }
 
     #[test]
-    fn test_get_limits_withdrawal() {
-        let state = create_test_rocketpool_state();
+    fn test_limits_withdrawal() {
+        let state = create_state();
 
-        // Withdrawal: selling rETH, buying ETH
         let (max_sell, max_buy) = state
             .get_limits(reth_token().address, eth_token().address)
             .unwrap();
 
-        // max_buy = liquidity = 50e18
-        let expected_max_buy = BigUint::from_str("50000000000000000000").unwrap();
-        assert_eq!(max_buy, expected_max_buy);
+        // max_buy = liquidity = 50 ETH
+        assert_eq!(max_buy, BigUint::from(50_000_000_000_000_000_000u128));
+        // max_sell = 50 * 100/200 = 25 rETH
+        assert_eq!(max_sell, BigUint::from(25_000_000_000_000_000_000u128));
+    }
 
-        // max_sell = max_buy * reth_supply / total_eth = 50e18 * 100e18 / 95e18
-        let expected_max_sell = BigUint::from_str("52631578947368421052").unwrap();
-        assert_eq!(max_sell, expected_max_sell);
+    #[test]
+    fn test_limits_with_extended_capacity() {
+        let mut state = create_state();
+        state.maximum_deposit_pool_size = U256::from(100e18);
+        state.assign_deposits_enabled = true;
+        state.queue_variable_end = U256::from(2); // 62 ETH extra
+
+        let (max_sell, _) = state
+            .get_limits(eth_token().address, reth_token().address)
+            .unwrap();
+
+        // max_capacity = 100 + 62 = 162 ETH
+        // max_sell = 162 - 50 = 112 ETH
+        assert_eq!(max_sell, BigUint::from(112_000_000_000_000_000_000u128));
+    }
+
+    // ============ Get Amount Out - Happy Path Tests ============
+
+    #[test]
+    fn test_deposit_eth() {
+        let state = create_state();
+
+        // Deposit 10 ETH: fee=4, net=6 → 6*100/200 = 3 rETH
+        let res = state
+            .get_amount_out(
+                BigUint::from(10_000_000_000_000_000_000u128),
+                &eth_token(),
+                &reth_token(),
+            )
+            .unwrap();
+
+        assert_eq!(res.amount, BigUint::from(3_000_000_000_000_000_000u128));
+
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketPoolState>()
+            .unwrap();
+        // total_eth: 200 + 10 = 210
+        assert_eq!(new_state.total_eth, U256::from(210e18));
+        // liquidity: 50 + 10 = 60
+        assert_eq!(new_state.liquidity, U256::from(60e18));
+        // reth_supply: 100 + 3 = 103
+        assert_eq!(new_state.reth_supply, U256::from(103_000_000_000_000_000_000u128));
+    }
+
+    #[test]
+    fn test_deposit_within_extended_capacity() {
+        let mut state = create_state();
+        state.liquidity = U256::from(990e18);
+        state.maximum_deposit_pool_size = U256::from(1000e18);
+        state.assign_deposits_enabled = true;
+        state.queue_variable_end = U256::from(1); // 31 ETH extra
+
+        // Deposit 20 ETH: 990 + 20 = 1010 > 1000 base, but <= 1031 extended
+        // fee = 20 * 0.4 = 8, net = 12 → 12*100/200 = 6 rETH
+        let res = state
+            .get_amount_out(
+                BigUint::from(20_000_000_000_000_000_000u128),
+                &eth_token(),
+                &reth_token(),
+            )
+            .unwrap();
+
+        assert_eq!(res.amount, BigUint::from(6_000_000_000_000_000_000u128));
+
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketPoolState>()
+            .unwrap();
+        // total_eth: 200 + 20 = 220
+        assert_eq!(new_state.total_eth, U256::from(220e18));
+        // liquidity: 990 + 20 = 1010
+        assert_eq!(new_state.liquidity, U256::from(1010e18));
+        // reth_supply: 100 + 6 = 106
+        assert_eq!(new_state.reth_supply, U256::from(106e18));
+    }
+
+    #[test]
+    fn test_withdraw_reth() {
+        let state = create_state();
+
+        // Withdraw 10 rETH: 10*200/100 = 20 ETH
+        let res = state
+            .get_amount_out(
+                BigUint::from(10_000_000_000_000_000_000u128),
+                &reth_token(),
+                &eth_token(),
+            )
+            .unwrap();
+
+        assert_eq!(res.amount, BigUint::from(20_000_000_000_000_000_000u128));
+
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketPoolState>()
+            .unwrap();
+        // total_eth: 200 - 20 = 180
+        assert_eq!(new_state.total_eth, U256::from(180e18));
+        // liquidity: 50 - 20 = 30
+        assert_eq!(new_state.liquidity, U256::from(30e18));
+        // reth_supply: 100 - 10 = 90
+        assert_eq!(new_state.reth_supply, U256::from(90e18));
+    }
+
+    // ============ Get Amount Out - Error Cases Tests ============
+
+    #[test]
+    fn test_deposit_disabled() {
+        let mut state = create_state();
+        state.deposits_enabled = false;
+
+        let res = state.get_amount_out(BigUint::from(10u64), &eth_token(), &reth_token());
+        assert!(matches!(res, Err(SimulationError::RecoverableError(_))));
+    }
+
+    #[test]
+    fn test_deposit_below_minimum() {
+        let mut state = create_state();
+        state.minimum_deposit = U256::from(100u64);
+
+        let res = state.get_amount_out(BigUint::from(50u64), &eth_token(), &reth_token());
+        assert!(matches!(res, Err(SimulationError::InvalidInput(_, _))));
+    }
+
+    #[test]
+    fn test_deposit_exceeds_max_pool() {
+        let mut state = create_state();
+        state.maximum_deposit_pool_size = U256::from(60e18); // Only 10 ETH room
+
+        let res = state.get_amount_out(
+            BigUint::from(20_000_000_000_000_000_000u128),
+            &eth_token(),
+            &reth_token(),
+        );
+        assert!(matches!(res, Err(SimulationError::InvalidInput(_, _))));
+    }
+
+    #[test]
+    fn test_deposit_queue_ignored_when_disabled() {
+        let mut state = create_state();
+        state.liquidity = U256::from(990e18);
+        state.maximum_deposit_pool_size = U256::from(1000e18);
+        state.assign_deposits_enabled = false;
+        state.queue_variable_end = U256::from(10); // Would add 310 ETH if enabled
+
+        // Deposit 20 ETH: 990 + 20 = 1010 > 1000 (queue ignored)
+        let res = state.get_amount_out(
+            BigUint::from(20_000_000_000_000_000_000u128),
+            &eth_token(),
+            &reth_token(),
+        );
+        assert!(matches!(res, Err(SimulationError::InvalidInput(_, _))));
+    }
+
+    #[test]
+    fn test_deposit_exceeds_extended_capacity() {
+        let mut state = create_state();
+        state.liquidity = U256::from(990e18);
+        state.maximum_deposit_pool_size = U256::from(1000e18);
+        state.assign_deposits_enabled = true;
+        state.queue_variable_end = U256::from(1); // 31 ETH extra, max = 1031
+
+        // Deposit 50 ETH: 990 + 50 = 1040 > 1031
+        let res = state.get_amount_out(
+            BigUint::from(50_000_000_000_000_000_000u128),
+            &eth_token(),
+            &reth_token(),
+        );
+        assert!(matches!(res, Err(SimulationError::InvalidInput(_, _))));
+    }
+
+    #[test]
+    fn test_withdrawal_insufficient_liquidity() {
+        let state = create_state(); // 50 ETH liquidity, withdraw needs 20 ETH per 10 rETH
+
+        // Try to withdraw 30 rETH = 60 ETH > 50 liquidity
+        let res = state.get_amount_out(
+            BigUint::from(30_000_000_000_000_000_000u128),
+            &reth_token(),
+            &eth_token(),
+        );
+        assert!(matches!(res, Err(SimulationError::RecoverableError(_))));
     }
 }

@@ -52,6 +52,15 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketPoolState {
                 InvalidSnapshotError::MissingAttribute("deposits_enabled".to_string())
             })?;
 
+        let assign_deposits_enabled = snapshot
+            .state
+            .attributes
+            .get("assign_deposits_enabled")
+            .map(|val| !U256::from_bytes(val).is_zero())
+            .ok_or_else(|| {
+                InvalidSnapshotError::MissingAttribute("assign_deposits_enabled".to_string())
+            })?;
+
         let deposit_fee = snapshot
             .state
             .attributes
@@ -75,6 +84,56 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketPoolState {
                 InvalidSnapshotError::MissingAttribute("maximum_deposit_pool_size".to_string())
             })?;
 
+        let queue_full_start = snapshot
+            .state
+            .attributes
+            .get("queue_full_start")
+            .map(U256::from_bytes)
+            .ok_or_else(|| {
+                InvalidSnapshotError::MissingAttribute("queue_full_start".to_string())
+            })?;
+
+        let queue_full_end = snapshot
+            .state
+            .attributes
+            .get("queue_full_end")
+            .map(U256::from_bytes)
+            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("queue_full_end".to_string()))?;
+
+        let queue_half_start = snapshot
+            .state
+            .attributes
+            .get("queue_half_start")
+            .map(U256::from_bytes)
+            .ok_or_else(|| {
+                InvalidSnapshotError::MissingAttribute("queue_half_start".to_string())
+            })?;
+
+        let queue_half_end = snapshot
+            .state
+            .attributes
+            .get("queue_half_end")
+            .map(U256::from_bytes)
+            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("queue_half_end".to_string()))?;
+
+        let queue_variable_start = snapshot
+            .state
+            .attributes
+            .get("queue_variable_start")
+            .map(U256::from_bytes)
+            .ok_or_else(|| {
+                InvalidSnapshotError::MissingAttribute("queue_variable_start".to_string())
+            })?;
+
+        let queue_variable_end = snapshot
+            .state
+            .attributes
+            .get("queue_variable_end")
+            .map(U256::from_bytes)
+            .ok_or_else(|| {
+                InvalidSnapshotError::MissingAttribute("queue_variable_end".to_string())
+            })?;
+
         Ok(RocketPoolState::new(
             reth_supply,
             total_eth,
@@ -83,6 +142,13 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketPoolState {
             deposits_enabled,
             minimum_deposit,
             maximum_deposit_pool_size,
+            assign_deposits_enabled,
+            queue_full_start,
+            queue_full_end,
+            queue_half_start,
+            queue_half_end,
+            queue_variable_start,
+            queue_variable_end,
         ))
     }
 }
@@ -130,6 +196,7 @@ mod tests {
                         Bytes::from(U256::from(50_000_000_000_000_000_000u128).to_be_bytes_vec()),
                     ), // 50 ETH liquidity
                     ("deposits_enabled".to_string(), Bytes::from(vec![0x01])),
+                    ("assign_deposits_enabled".to_string(), Bytes::from(vec![0x01])),
                     (
                         "deposit_fee".to_string(),
                         Bytes::from(U256::from(5_000_000_000_000_000u128).to_be_bytes_vec()),
@@ -144,6 +211,30 @@ mod tests {
                             U256::from(5_000_000_000_000_000_000_000u128).to_be_bytes_vec(),
                         ),
                     ), // 5000 ETH
+                    (
+                        "queue_full_start".to_string(),
+                        Bytes::from(U256::from(5u64).to_be_bytes_vec()),
+                    ),
+                    (
+                        "queue_full_end".to_string(),
+                        Bytes::from(U256::from(10u64).to_be_bytes_vec()),
+                    ),
+                    (
+                        "queue_half_start".to_string(),
+                        Bytes::from(U256::from(0u64).to_be_bytes_vec()),
+                    ),
+                    (
+                        "queue_half_end".to_string(),
+                        Bytes::from(U256::from(3u64).to_be_bytes_vec()),
+                    ),
+                    (
+                        "queue_variable_start".to_string(),
+                        Bytes::from(U256::from(100u64).to_be_bytes_vec()),
+                    ),
+                    (
+                        "queue_variable_end".to_string(),
+                        Bytes::from(U256::from(105u64).to_be_bytes_vec()),
+                    ),
                 ]),
                 balances: HashMap::new(),
             },
