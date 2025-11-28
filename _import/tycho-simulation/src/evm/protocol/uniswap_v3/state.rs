@@ -9,7 +9,7 @@ use tycho_common::{
     models::token::Token,
     simulation::{
         errors::{SimulationError, TransitionError},
-        protocol_sim::{Balances, GetAmountOutResult, Price, ProtocolSim},
+        protocol_sim::{Balances, GetAmountOutResult, Price, ProtocolSim, Trade},
     },
     Bytes,
 };
@@ -268,63 +268,6 @@ impl UniswapV3State {
         // Convert to sqrt price: sqrt(price_1 / price_0) * 2^96
         get_sqrt_price_q96(price_1, price_0)
     }
-
-    /// Helper method to execute a swap to a target price limit.
-    /// Returns the swap results containing both amount_in and amount_out.
-    fn execute_swap_to_price_limit(
-        &self,
-        token_in: &Bytes,
-        token_out: &Bytes,
-        target_price: &Price,
-    ) -> Result<Option<(U256, U256, bool)>, SimulationError> {
-        if self.liquidity == 0 {
-            return Ok(None);
-        }
-
-        // Calculate sqrt_price_limit from target_price
-        let sqrt_price_limit = self.get_sqrt_price_limit(token_in, token_out, target_price)?;
-
-        // Determine swap direction
-        let zero_for_one = token_in < token_out;
-
-        // Validate price limit is compatible with swap direction
-        if zero_for_one && sqrt_price_limit >= self.sqrt_price {
-            return Ok(None);
-        }
-        if !zero_for_one && sqrt_price_limit <= self.sqrt_price {
-            return Ok(None);
-        }
-
-        // Use U160_MAX as "infinite" amount to find maximum available liquidity
-        let amount_specified = I256::checked_from_sign_and_abs(Sign::Positive, U160_MAX)
-            .ok_or_else(|| {
-                SimulationError::InvalidInput("I256 overflow: U160_MAX".to_string(), None)
-            })?;
-
-        // Execute swap with price limit
-        let result = self.swap(zero_for_one, amount_specified, Some(sqrt_price_limit))?;
-
-        // Calculate amount_in from amount consumed (correctly accounts for variable liquidity
-        // across ticks) amount_in = amount_specified - amount_remaining
-        let amount_in = (result.amount_specified - result.amount_remaining)
-            .abs()
-            .into_raw();
-
-        // Use the accumulated amount_calculated for output (correctly accounts for variable
-        // liquidity across ticks)
-        let amount_out = result
-            .amount_calculated
-            .abs()
-            .into_raw();
-
-        #[cfg(test)]
-        println!(
-            "execute_swap_to_price_limit: zero_for_one={}, amount_in={}, amount_out={}, start_price={}, limit_price={}, end_price={}",
-            zero_for_one, amount_in, amount_out, self.sqrt_price, sqrt_price_limit, result.sqrt_price
-        );
-
-        Ok(Some((amount_in, amount_out, zero_for_one)))
-    }
 }
 
 impl ProtocolSim for UniswapV3State {
@@ -567,11 +510,43 @@ impl ProtocolSim for UniswapV3State {
         token_in: &Bytes,
         token_out: &Bytes,
         target_price: Price,
-    ) -> Result<BigUint, SimulationError> {
-        match self.execute_swap_to_price_limit(token_in, token_out, &target_price)? {
-            Some((amount_in, _, _)) => Ok(u256_to_biguint(amount_in)),
-            None => Ok(BigUint::zero()),
+    ) -> Result<Trade, SimulationError> {
+        if self.liquidity == 0 {
+            return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
         }
+
+        // Calculate sqrt_price_limit from target_price
+        let sqrt_price_limit = self.get_sqrt_price_limit(token_in, token_out, &target_price)?;
+        let zero_for_one = token_in < token_out;
+
+        // Validate price limit is compatible with swap direction
+        if zero_for_one && sqrt_price_limit >= self.sqrt_price {
+            return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
+        }
+        if !zero_for_one && sqrt_price_limit <= self.sqrt_price {
+            return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
+        }
+
+        // Use U160_MAX as "infinite" amount to find maximum available liquidity
+        let amount_specified = I256::checked_from_sign_and_abs(Sign::Positive, U160_MAX)
+            .ok_or_else(|| {
+                SimulationError::InvalidInput("I256 overflow: U160_MAX".to_string(), None)
+            })?;
+
+        let result = self.swap(zero_for_one, amount_specified, Some(sqrt_price_limit))?;
+
+        // Calculate amount_in from amount consumed: amount_in = amount_specified - amount_remaining
+        let amount_in = (result.amount_specified - result.amount_remaining)
+            .abs()
+            .into_raw();
+
+        // Use the accumulated amount_calculated for output
+        let amount_out = result
+            .amount_calculated
+            .abs()
+            .into_raw();
+
+        Ok(Trade::new(u256_to_biguint(amount_in), u256_to_biguint(amount_out)))
     }
 
     fn query_supply(
@@ -579,35 +554,33 @@ impl ProtocolSim for UniswapV3State {
         token_in: &Bytes,
         token_out: &Bytes,
         target_price: Price,
-    ) -> Result<BigUint, SimulationError> {
-        match self.execute_swap_to_price_limit(token_in, token_out, &target_price)? {
-            Some((amount_in, amount_out, _)) => {
-                // Validate that the executed price doesn't exceed the target price
-                // executed_price = amount_in / amount_out (token_in per token_out)
-                // target_price is token_out/token_in, so we need: amount_in/amount_out <=
-                // denominator/numerator Which gives: amount_in * numerator <= amount_out *
-                // denominator
-                let amount_in_big = u256_to_biguint(amount_in);
-                let amount_out_big = u256_to_biguint(amount_out);
+    ) -> Result<Trade, SimulationError> {
+        let trade = self.swap_to_price(token_in, token_out, target_price.clone())?;
 
-                if &amount_in_big * &target_price.numerator >
-                    &amount_out_big * &target_price.denominator
-                {
-                    trace!(
-                        "Executed price exceeds target price. amount_in={}, amount_out={}, \
-                         target_price=({}/{})",
-                        amount_in_big,
-                        amount_out_big,
-                        target_price.numerator,
-                        target_price.denominator
-                    );
-                    return Ok(BigUint::zero());
-                }
-
-                Ok(amount_out_big)
-            }
-            None => Ok(BigUint::zero()),
+        if trade.amount_in == BigUint::ZERO {
+            return Ok(trade);
         }
+
+        // Validate that the executed price doesn't exceed the target price
+        // executed_price = amount_in / amount_out (token_in per token_out)
+        // target_price is token_out/token_in, so we need: amount_in/amount_out <=
+        // denominator/numerator Which gives: amount_in * numerator <= amount_out *
+        // denominator
+        if &trade.amount_in * &target_price.numerator >
+            &trade.amount_out * &target_price.denominator
+        {
+            trace!(
+                "Executed price exceeds target price. amount_in={}, amount_out={}, \
+                    target_price=({}/{})",
+                trade.amount_in,
+                trade.amount_out,
+                target_price.numerator,
+                target_price.denominator
+            );
+            return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
+        }
+
+        Ok(trade)
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {
@@ -1049,9 +1022,10 @@ mod tests {
             Price::new(2_000_000u64.to_biguint().unwrap(), 1_010_000u64.to_biguint().unwrap());
 
         // Query how much Y the pool can supply when buying X at this price
-        let pool_y_supply = pool
+        let trade = pool
             .query_supply(&token_x.address, &token_y.address, target_price.clone())
             .expect("query_supply failed");
+        let pool_y_supply = trade.amount_out;
 
         let expected = 666_654_216_061_393_561u64
             .to_biguint()
@@ -1104,9 +1078,10 @@ mod tests {
             Price::new(2_000_000u64.to_biguint().unwrap(), 1_010_000u64.to_biguint().unwrap());
 
         // Calculate amount of X needed to reach this price
-        let amount_in_x = pool
+        let trade_swap_to_price = pool
             .swap_to_price(&token_x.address, &token_y.address, target_price)
             .expect("swap_to_price failed");
+        let amount_in_x = trade_swap_to_price.amount_in;
 
         // Should return a non-zero amount
         assert!(amount_in_x > BigUint::zero(), "swap_to_price returned zero");
@@ -1117,22 +1092,23 @@ mod tests {
             .expect("get_amount_out failed");
 
         // The output should be close to what query_supply returned
-        let query_supply_result = pool
+        let trade_query_supply = pool
             .query_supply(
                 &token_x.address,
                 &token_y.address,
                 Price::new(2_000_000u64.to_biguint().unwrap(), 1_010_000u64.to_biguint().unwrap()),
             )
             .expect("query_supply failed");
+        let amount_out_y = trade_query_supply.amount_out;
 
         // Allow some tolerance due to rounding
-        let tolerance = query_supply_result.clone() / 1000u32; // 0.1% tolerance
+        let tolerance = amount_out_y.clone() / 1000u32; // 0.1% tolerance
         assert!(
-            result.amount >= query_supply_result.clone() - tolerance.clone() &&
-                result.amount <= query_supply_result.clone() + tolerance,
+            result.amount >= amount_out_y.clone() - tolerance.clone() &&
+                result.amount <= amount_out_y.clone() + tolerance,
             "Output amount {} not close to query_supply {}",
             result.amount,
-            query_supply_result
+            amount_out_y
         );
     }
 
@@ -1163,9 +1139,10 @@ mod tests {
         let target_price =
             Price::new(10_000_000u64.to_biguint().unwrap(), 1_000_000u64.to_biguint().unwrap());
 
-        let pool_y_supply = pool
+        let trade = pool
             .query_supply(&token_x.address, &token_y.address, target_price)
             .expect("query_supply failed");
+        let pool_y_supply = trade.amount_out;
 
         assert_eq!(
             pool_y_supply,
@@ -1281,9 +1258,10 @@ mod tests {
 
             let expected = BigUint::from_str(expected_str).expect("Failed to parse expected value");
 
-            let amount_for_sale = pool
+            let trade = pool
                 .query_supply(buy_token, sell_token, target_price.clone())
                 .unwrap_or_else(|e| panic!("{} - query_supply failed: {:?}", test_id, e));
+            let amount_for_sale = trade.amount_out;
 
             assert_eq!(amount_for_sale, expected, "{}", test_id);
 
@@ -1330,9 +1308,10 @@ mod tests {
         let target_price =
             Price::new(1_999_750u64.to_biguint().unwrap(), 1_000_250u64.to_biguint().unwrap());
 
-        let supply = pool
+        let trade = pool
             .query_supply(&token_x, &token_y, target_price)
             .expect("query_supply failed");
+        let supply = trade.amount_out;
 
         assert_eq!(supply, BigUint::zero(), "Expected zero supply when price doesn't cover fees");
 
@@ -1341,9 +1320,10 @@ mod tests {
         let target_price =
             Price::new(1_999_000u64.to_biguint().unwrap(), 1_001_000u64.to_biguint().unwrap());
 
-        let supply = pool
+        let trade = pool
             .query_supply(&token_x, &token_y, target_price)
             .expect("query_supply failed");
+        let supply = trade.amount_out;
 
         let expected = BigUint::from_str("7062236922008").expect("Failed to parse expected value");
         assert_eq!(supply, expected, "Expected supply when price covers fees");
