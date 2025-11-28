@@ -60,12 +60,23 @@ pub fn get_token_position(tokens: &Vec<&Bytes>, token: &Bytes) -> Result<U8, Enc
     Ok(position)
 }
 
-/// Pads a byte slice to a fixed size array of N bytes.
-pub fn pad_to_fixed_size<const N: usize>(input: &[u8]) -> Result<[u8; N], EncodingError> {
-    let mut padded = [0u8; N];
-    let start = N - input.len();
-    padded[start..].copy_from_slice(input);
-    Ok(padded)
+/// Pads or truncates a byte slice to a fixed size array of N bytes.
+/// If input is shorter than N, it pads with zeros at the start.
+/// If input is longer than N, it truncates from the start (keeps last N bytes).
+pub fn pad_or_truncate_to_size<const N: usize>(input: &[u8]) -> Result<[u8; N], EncodingError> {
+    let mut result = [0u8; N];
+
+    if input.len() <= N {
+        // Pad with zeros at the start
+        let start = N - input.len();
+        result[start..].copy_from_slice(input);
+    } else {
+        // Truncate from the start (take last N bytes)
+        let start = input.len() - N;
+        result.copy_from_slice(&input[start..]);
+    }
+
+    Ok(result)
 }
 
 /// Extracts a static attribute from a swap.
@@ -172,5 +183,23 @@ pub fn write_calldata_to_file(test_identifier: &str, hex_calldata: &str) {
 
     for line in lines {
         writeln!(file, "{line}").expect("Failed to write calldata");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pad_or_truncate_to_size() {
+        // Test padding
+        let input = hex::decode("0110").unwrap();
+        let result = pad_or_truncate_to_size::<3>(&input).unwrap();
+        assert_eq!(hex::encode(result), "000110");
+
+        // Test truncation
+        let input_long = hex::decode("00800000").unwrap();
+        let result_truncated = pad_or_truncate_to_size::<3>(&input_long).unwrap();
+        assert_eq!(hex::encode(result_truncated), "800000");
     }
 }

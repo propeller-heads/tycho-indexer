@@ -21,7 +21,8 @@ use crate::encoding::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,
         constants::ANGSTROM_DEFAULT_BLOCKS_IN_FUTURE,
         utils::{
-            biguint_to_u256, bytes_to_address, get_runtime, get_static_attribute, pad_to_fixed_size,
+            biguint_to_u256, bytes_to_address, get_runtime, get_static_attribute,
+            pad_or_truncate_to_size,
         },
     },
     models::{EncodingContext, Swap},
@@ -123,7 +124,7 @@ impl SwapEncoder for UniswapV3SwapEncoder {
             .map_err(|_| EncodingError::FatalError("Invalid USV3 component id".to_string()))?;
         let pool_fee_bytes = get_static_attribute(swap, "fee")?;
 
-        let pool_fee_u24 = pad_to_fixed_size::<3>(&pool_fee_bytes)
+        let pool_fee_u24 = pad_or_truncate_to_size::<3>(&pool_fee_bytes)
             .map_err(|_| EncodingError::FatalError("Failed to extract fee bytes".to_string()))?;
 
         let args = (
@@ -274,12 +275,12 @@ impl SwapEncoder for UniswapV4SwapEncoder {
     ) -> Result<Vec<u8>, EncodingError> {
         let fee = get_static_attribute(swap, "key_lp_fee")?;
 
-        let pool_fee_u24 = pad_to_fixed_size::<3>(&fee)
+        let pool_fee_u24 = pad_or_truncate_to_size::<3>(&fee)
             .map_err(|_| EncodingError::FatalError("Failed to pad fee bytes".to_string()))?;
 
         let tick_spacing = get_static_attribute(swap, "tick_spacing")?;
 
-        let pool_tick_spacing_u24 = pad_to_fixed_size::<3>(&tick_spacing).map_err(|_| {
+        let pool_tick_spacing_u24 = pad_or_truncate_to_size::<3>(&tick_spacing).map_err(|_| {
             EncodingError::FatalError("Failed to pad tick spacing bytes".to_string())
         })?;
 
@@ -1229,9 +1230,10 @@ impl SwapEncoder for SlipstreamsSwapEncoder {
         })?;
         let tick_spacing_bytes = get_static_attribute(swap, "tick_spacing")?;
 
-        let tick_spacing_bytes_u24 = pad_to_fixed_size::<3>(&tick_spacing_bytes).map_err(|_| {
-            EncodingError::FatalError("Failed to extract tick_spacing bytes".to_string())
-        })?;
+        let tick_spacing_bytes_u24 =
+            pad_or_truncate_to_size::<3>(&tick_spacing_bytes).map_err(|_| {
+                EncodingError::FatalError("Failed to extract tick_spacing bytes".to_string())
+            })?;
 
         let args = (
             token_in_address,
