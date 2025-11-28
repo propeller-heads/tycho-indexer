@@ -1,22 +1,27 @@
 use crate::{
-    abi::{rocket_dao_protocol_proposal, rocket_minipool_queue, rocket_network_balances},
+    abi::{
+        rocket_dao_protocol_proposal, rocket_deposit_pool, rocket_minipool_queue,
+        rocket_network_balances,
+    },
     constants::{
         DEPOSIT_SETTINGS_SLOTS, ETH_ADDRESS, QUEUE_END_SLOTS, QUEUE_START_SLOTS,
         QUEUE_VARIABLE_END_SLOT, ROCKET_DAO_MINIPOOL_QUEUE_ADDRESS,
-        ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS, ROCKET_NETWORK_BALANCES_ADDRESS,
-        ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS,
+        ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS, ROCKET_DEPOSIT_POOL_ADDRESSES,
+        ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT, ROCKET_NETWORK_BALANCES_ADDRESS,
+        ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS, ROCKET_VAULT_ADDRESS,
     },
     utils::get_changed_attributes,
 };
 use anyhow::Result;
 use itertools::Itertools;
 use std::collections::HashMap;
-use substreams::pb::substreams::StoreDeltas;
-use substreams_ethereum::{pb::eth, Event};
+use substreams_ethereum::{
+    pb::eth::{self, v2::TransactionTrace},
+    Event,
+};
 use tycho_substreams::{
-    balances::aggregate_balances_changes,
     models::{
-        BlockBalanceDeltas, BlockChanges, BlockTransactionProtocolComponents, EntityChanges,
+        Attribute, BlockChanges, BlockTransactionProtocolComponents, EntityChanges,
         TransactionChangesBuilder,
     },
     prelude::BalanceChange,
@@ -30,8 +35,6 @@ use tycho_substreams::{
 fn map_protocol_changes(
     block: eth::v2::Block,
     protocol_components: BlockTransactionProtocolComponents,
-    deltas: BlockBalanceDeltas,
-    liquidity_store: StoreDeltas,
 ) -> Result<BlockChanges, substreams::errors::Error> {
     // We merge contract changes by transaction (identified by transaction index)
     // making it easy to sort them at the very end.
@@ -40,8 +43,8 @@ fn map_protocol_changes(
     // Update protocol component changes per transaction.
     update_protocol_components(protocol_components, &mut transaction_changes)?;
 
-    // Update absolute Eth balances per transaction.
-    update_protocol_liquidity(deltas, liquidity_store, &mut transaction_changes);
+    // Update vault liquidity (ETH balance) per transaction.
+    update_vault_liquidity(&block, &mut transaction_changes);
 
     // Update network balance updates per transaction.
     update_network_balance(&block, &mut transaction_changes);
@@ -65,36 +68,46 @@ fn map_protocol_changes(
     })
 }
 
-/// Updates protocol liquidity changes per transaction.
-fn update_protocol_liquidity(
-    deltas: BlockBalanceDeltas,
-    store: StoreDeltas,
+/// Updates vault liquidity based on deposit pool events.
+///
+/// Listens for DepositReceived, DepositAssigned, DepositRecycled, and ExcessWithdrawn events
+/// from the RocketDepositPool contracts and fetches the updated ETH balance from RocketVault's
+/// etherBalances storage slot.
+fn update_vault_liquidity(
+    block: &eth::v2::Block,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
-    aggregate_balances_changes(store, deltas)
-        .into_iter()
-        .for_each(|(_, (tx, balances))| {
-            let builder = transaction_changes
-                .entry(tx.index)
-                .or_insert_with(|| TransactionChangesBuilder::new(&tx));
+    for log in block.logs() {
+        // Only process events from RocketDepositPool contracts
+        if !ROCKET_DEPOSIT_POOL_ADDRESSES.contains(&log.log.address.as_slice()) {
+            continue;
+        }
 
-            balances
-                .into_values()
-                .for_each(|token_lc_map| {
-                    token_lc_map
-                        .into_values()
-                        .for_each(|lc| {
-                            builder.add_entity_change(&EntityChanges {
-                                component_id: ROCKET_POOL_COMPONENT_ID.to_owned(),
-                                attributes: vec![tycho_substreams::models::Attribute {
-                                    name: "liquidity".to_owned(),
-                                    value: lc.balance,
-                                    change: tycho_substreams::models::ChangeType::Update.into(),
-                                }],
-                            });
-                        })
-                });
-        });
+        let is_deposit_event = rocket_deposit_pool::events::DepositReceived::match_log(log.log) ||
+            rocket_deposit_pool::events::DepositAssigned::match_log(log.log) ||
+            rocket_deposit_pool::events::DepositRecycled::match_log(log.log) ||
+            rocket_deposit_pool::events::ExcessWithdrawn::match_log(log.log);
+
+        if !is_deposit_event {
+            continue;
+        }
+
+        let tx = log.receipt.transaction;
+
+        let attributes = tx
+            .calls
+            .iter()
+            .filter(|call| call.address == ROCKET_VAULT_ADDRESS)
+            .flat_map(|call| {
+                get_changed_attributes(
+                    &call.storage_changes,
+                    &[ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT],
+                )
+            })
+            .collect::<Vec<_>>();
+
+        add_entity_change_if_needed(attributes, tx, transaction_changes);
+    }
 }
 
 /// Updates protocol component changes per transaction.
@@ -198,10 +211,6 @@ fn update_protocol_settings(
 
         let tx = log.receipt.transaction;
 
-        let builder = transaction_changes
-            .entry(tx.index as u64)
-            .or_insert_with(|| TransactionChangesBuilder::new(&(tx.into())));
-
         let attributes = tx
             .calls
             .iter()
@@ -209,12 +218,7 @@ fn update_protocol_settings(
             .flat_map(|call| get_changed_attributes(&call.storage_changes, &DEPOSIT_SETTINGS_SLOTS))
             .collect::<Vec<_>>();
 
-        if !attributes.is_empty() {
-            builder.add_entity_change(&EntityChanges {
-                component_id: ROCKET_POOL_COMPONENT_ID.to_owned(),
-                attributes,
-            });
-        }
+        add_entity_change_if_needed(attributes, tx, transaction_changes);
     }
 }
 
@@ -260,15 +264,24 @@ fn update_minipool_queue_sizes(
             .flat_map(|call| get_changed_attributes(&call.storage_changes, storage_slots))
             .collect::<Vec<_>>();
 
-        if !attributes.is_empty() {
-            let builder = transaction_changes
-                .entry(tx.index as u64)
-                .or_insert_with(|| TransactionChangesBuilder::new(&(tx.into())));
+        add_entity_change_if_needed(attributes, tx, transaction_changes);
+    }
+}
 
-            builder.add_entity_change(&EntityChanges {
-                component_id: ROCKET_POOL_COMPONENT_ID.to_owned(),
-                attributes,
-            });
-        }
+/// Helper to add entity changes for a transaction if attributes are non-empty.
+fn add_entity_change_if_needed(
+    attributes: Vec<Attribute>,
+    tx: &TransactionTrace,
+    transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
+) {
+    if !attributes.is_empty() {
+        let builder = transaction_changes
+            .entry(tx.index as u64)
+            .or_insert_with(|| TransactionChangesBuilder::new(&(tx.into())));
+
+        builder.add_entity_change(&EntityChanges {
+            component_id: ROCKET_POOL_COMPONENT_ID.to_owned(),
+            attributes,
+        });
     }
 }

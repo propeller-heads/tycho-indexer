@@ -29,8 +29,8 @@ pub const ROCKET_DEPOSIT_POOL_ADDRESSES: [&[u8]; 3] = [
 ];
 
 // ----------- Contract: Rocket Vault -----------
-const ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT: StorageLocation = StorageLocation {
-    name: "rocket_deposit_pool_eth_balance",
+pub const ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT: StorageLocation = StorageLocation {
+    name: "liquidity",
     slot: hex!("00ab4654686e0d7a1f921cc85a932fd8efbc8a1f247b51fa6bca2f7a3976a5bb"),
     offset: 0,
     number_of_bytes: 32,
