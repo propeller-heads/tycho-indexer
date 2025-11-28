@@ -1,3 +1,15 @@
+## [0.207.0](https://github.com/propeller-heads/tycho-simulation/compare/0.206.2...0.207.0) (2025-11-28)
+
+
+### Features
+
+* Allow passing protocols as cli args ([f53a990](https://github.com/propeller-heads/tycho-simulation/commit/f53a990dee51f51b984cfebd1ccf6436aae5a743))
+
+
+### Bug Fixes
+
+* Exit application when protocol stream terminates ([47f1e95](https://github.com/propeller-heads/tycho-simulation/commit/47f1e95e6aa45732f6e9129e0c0b20e5fca27ed5))
+
 ## [0.206.2](https://github.com/propeller-heads/tycho-simulation/compare/0.206.1...0.206.2) (2025-11-28)
 
 
