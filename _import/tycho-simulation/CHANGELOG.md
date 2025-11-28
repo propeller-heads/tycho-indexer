@@ -1,3 +1,12 @@
+## [0.206.1](https://github.com/propeller-heads/tycho-simulation/compare/0.206.0...0.206.1) (2025-11-28)
+
+
+### Bug Fixes
+
+* **CI:** Temporarily don't run docs tests ([b0f1fba](https://github.com/propeller-heads/tycho-simulation/commit/b0f1fba236614ac43800ab361dc18d8918508701))
+* **EVMPoolState:** After swapping, set the spot prices correctly ([8bfd22c](https://github.com/propeller-heads/tycho-simulation/commit/8bfd22c51cdd15ee7e4bbc1353feb305796d2a6a))
+* Fix test ([7c8a30c](https://github.com/propeller-heads/tycho-simulation/commit/7c8a30ce1a3384ad72fc62c93765112551d617ac))
+
 ## [0.206.0](https://github.com/propeller-heads/tycho-simulation/compare/0.205.0...0.206.0) (2025-11-26)
 
 
