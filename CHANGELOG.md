@@ -1,3 +1,11 @@
+## [0.117.2](https://github.com/propeller-heads/tycho-indexer/compare/0.117.1...0.117.2) (2025-11-28)
+
+
+### Bug Fixes
+
+* ping point the source of untracked memory and adjust for it ([00350c5](https://github.com/propeller-heads/tycho-indexer/commit/00350c52fae87462ef5ebe87a6d4ab488e424c27))
+* ping point the source of untracked memory and resolve most of it ([#788](https://github.com/propeller-heads/tycho-indexer/issues/788)) ([659a9f3](https://github.com/propeller-heads/tycho-indexer/commit/659a9f3cb7ad53308bf566169ffeccd0c6b70bc3))
+
 ## [0.117.1](https://github.com/propeller-heads/tycho-indexer/compare/0.117.0...0.117.1) (2025-11-27)
 
 ## [0.117.0](https://github.com/propeller-heads/tycho-indexer/compare/0.116.0...0.117.0) (2025-11-26)
