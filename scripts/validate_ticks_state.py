@@ -26,7 +26,7 @@ default_url_per_chain = {
 
 default_exchanges_per_chain = {
     "ethereum": "uniswap_v3,uniswap_v4,ekubo_v2,pancakeswap_v3",
-    "base": "uniswap_v3,uniswap_v4",
+    "base": "uniswap_v3,uniswap_v4,aerodrome_slipstreams",
     "unichain": "uniswap_v3,uniswap_v4",
 }
 
