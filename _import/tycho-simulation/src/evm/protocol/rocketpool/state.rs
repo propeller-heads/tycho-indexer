@@ -15,7 +15,7 @@ use tycho_ethereum::BytesCodec;
 
 use crate::evm::protocol::{
     rocketpool::ETH_ADDRESS,
-    safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
+    safe_math::{safe_add_u256, safe_mul_u256, safe_sub_u256},
     u256_num::{biguint_to_u256, u256_to_biguint, u256_to_f64},
     utils::uniswap::solidity_math::mul_div,
 };
@@ -173,6 +173,21 @@ impl RocketPoolState {
         }
     }
 
+    /// Returns the excess balance available for withdrawals.
+    /// This is the liquidity in excess of what's needed for the minipool queue.
+    ///
+    /// Formula from RocketDepositPool.getExcessBalance():
+    /// if minipoolCapacity >= balance: return 0
+    /// else: return balance - minipoolCapacity
+    fn get_excess_balance(&self) -> Result<U256, SimulationError> {
+        let minipool_capacity = self.get_effective_capacity()?;
+        if minipool_capacity >= self.liquidity {
+            Ok(U256::ZERO)
+        } else {
+            safe_sub_u256(self.liquidity, minipool_capacity)
+        }
+    }
+
     /// Returns true if there are any legacy minipools in the queue (full or half queues non-empty).
     fn contains_legacy(&self) -> bool {
         let full_length = Self::get_queue_length(self.queue_full_start, self.queue_full_end);
@@ -295,10 +310,12 @@ impl ProtocolSim for RocketPoolState {
         } else {
             let eth_out = self.get_eth_value(amount_in)?;
 
-            if eth_out >= self.liquidity {
-                return Err(SimulationError::RecoverableError(
-                    "Not enough ETH in the pool to support this withdrawal".to_string(),
-                ));
+            let excess_balance = self.get_excess_balance()?;
+            if eth_out > excess_balance {
+                return Err(SimulationError::RecoverableError(format!(
+                    "Withdrawal {} exceeds excess balance {} (liquidity reserved for minipool queue)",
+                    eth_out, excess_balance
+                )));
             }
 
             eth_out
@@ -345,10 +362,9 @@ impl ProtocolSim for RocketPoolState {
             let max_reth_buy = self.get_reth_value(max_eth_sell)?;
             Ok((u256_to_biguint(max_eth_sell), u256_to_biguint(max_reth_buy)))
         } else {
-            // rETH -> ETH: max buy = liquidity
-            let max_eth_buy = self.liquidity;
-            let max_reth_sell =
-                safe_div_u256(safe_mul_u256(max_eth_buy, self.reth_supply)?, self.total_eth)?;
+            // rETH -> ETH: max buy = excess balance (liquidity - minipool queue capacity)
+            let max_eth_buy = self.get_excess_balance()?;
+            let max_reth_sell = mul_div(max_eth_buy, self.reth_supply, self.total_eth)?;
             Ok((u256_to_biguint(max_reth_sell), u256_to_biguint(max_eth_buy)))
         }
     }
@@ -912,6 +928,67 @@ mod tests {
             &eth_token(),
         );
         assert!(matches!(res, Err(SimulationError::RecoverableError(_))));
+    }
+
+    #[test]
+    fn test_withdrawal_limited_by_minipool_queue() {
+        let mut state = create_state();
+        state.liquidity = U256::from(100e18);
+        // Queue has 2 variable minipools = 62 ETH capacity
+        state.queue_variable_end = U256::from(2);
+        // excess_balance = 100 - 62 = 38 ETH
+
+        // Try to withdraw 20 rETH = 40 ETH > 38 excess balance (but < 100 liquidity)
+        let res = state.get_amount_out(
+            BigUint::from(20_000_000_000_000_000_000u128),
+            &reth_token(),
+            &eth_token(),
+        );
+        assert!(matches!(res, Err(SimulationError::RecoverableError(_))));
+
+        // Withdraw 15 rETH = 30 ETH <= 38 excess balance should work
+        let res = state
+            .get_amount_out(
+                BigUint::from(15_000_000_000_000_000_000u128),
+                &reth_token(),
+                &eth_token(),
+            )
+            .unwrap();
+        assert_eq!(res.amount, BigUint::from(30_000_000_000_000_000_000u128));
+    }
+
+    #[test]
+    fn test_withdrawal_zero_excess_balance() {
+        let mut state = create_state();
+        state.liquidity = U256::from(62e18);
+        // Queue has 2 variable minipools = 62 ETH capacity
+        state.queue_variable_end = U256::from(2);
+        // excess_balance = 62 - 62 = 0 ETH
+
+        // Any withdrawal should fail
+        let res = state.get_amount_out(
+            BigUint::from(1_000_000_000_000_000_000u128),
+            &reth_token(),
+            &eth_token(),
+        );
+        assert!(matches!(res, Err(SimulationError::RecoverableError(_))));
+    }
+
+    #[test]
+    fn test_limits_withdrawal_with_queue() {
+        let mut state = create_state();
+        state.liquidity = U256::from(100e18);
+        // Queue has 2 variable minipools = 62 ETH capacity
+        state.queue_variable_end = U256::from(2);
+
+        let (max_sell, max_buy) = state
+            .get_limits(reth_token().address, eth_token().address)
+            .unwrap();
+
+        // max_buy = excess_balance = 100 - 62 = 38 ETH
+        assert_eq!(max_buy, BigUint::from(38_000_000_000_000_000_000u128));
+        // max_sell = 38 * 100/200 = 19 rETH
+        assert_eq!(max_sell, BigUint::from(19_000_000_000_000_000_000u128));
     }
 
     // ============ Assign Deposits Tests ============
