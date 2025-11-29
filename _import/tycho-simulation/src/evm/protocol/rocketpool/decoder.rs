@@ -253,10 +253,7 @@ mod tests {
                         "queue_half_start".to_string(),
                         Bytes::from(U256::from(0u64).to_be_bytes_vec()),
                     ),
-                    (
-                        "queue_half_end".to_string(),
-                        Bytes::from(U256::from(3u64).to_be_bytes_vec()),
-                    ),
+                    ("queue_half_end".to_string(), Bytes::from(U256::from(3u64).to_be_bytes_vec())),
                     (
                         "queue_variable_start".to_string(),
                         Bytes::from(U256::from(100u64).to_be_bytes_vec()),
@@ -334,15 +331,24 @@ mod tests {
                         "deposit_assign_socialised_maximum".to_string(),
                         Bytes::from(U256::from(0u64).to_be_bytes_vec()),
                     ),
-                    ("queue_full_start".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
+                    (
+                        "queue_full_start".to_string(),
+                        Bytes::from(U256::from(0u64).to_be_bytes_vec()),
+                    ),
                     ("queue_full_end".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
-                    ("queue_half_start".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
+                    (
+                        "queue_half_start".to_string(),
+                        Bytes::from(U256::from(0u64).to_be_bytes_vec()),
+                    ),
                     ("queue_half_end".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
                     (
                         "queue_variable_start".to_string(),
                         Bytes::from(U256::from(0u64).to_be_bytes_vec()),
                     ),
-                    ("queue_variable_end".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
+                    (
+                        "queue_variable_end".to_string(),
+                        Bytes::from(U256::from(0u64).to_be_bytes_vec()),
+                    ),
                 ]),
                 balances: HashMap::from([(
                     eth_address,
@@ -402,10 +408,7 @@ mod tests {
                 "maximum_deposit_pool_size".to_string(),
                 Bytes::from(U256::from(1000u64).to_be_bytes_vec()),
             ),
-            (
-                "deposit_assign_maximum".to_string(),
-                Bytes::from(U256::from(0u64).to_be_bytes_vec()),
-            ),
+            ("deposit_assign_maximum".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
             (
                 "deposit_assign_socialised_maximum".to_string(),
                 Bytes::from(U256::from(0u64).to_be_bytes_vec()),
