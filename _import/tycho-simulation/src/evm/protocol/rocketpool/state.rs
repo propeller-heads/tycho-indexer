@@ -22,7 +22,6 @@ use crate::evm::protocol::{
 
 const DEPOSIT_FEE_BASE: u128 = 1_000_000_000_000_000_000; // 1e18
 
-// TODO - consider moving this to constant attributes in the indexer
 // Minipool deposit amounts in wei
 const FULL_DEPOSIT_USER_AMOUNT: u128 = 16_000_000_000_000_000_000; // 16 ETH
 const HALF_DEPOSIT_USER_AMOUNT: u128 = 16_000_000_000_000_000_000; // 16 ETH
@@ -1101,13 +1100,13 @@ mod tests {
         let state = RocketPoolState::new(
             U256::from_str_radix("4ec08ba071647b927594", 16).unwrap(), // reth_supply
             U256::from_str_radix("5aafbb189fbbc1704662", 16).unwrap(), // total_eth
-            U256::from_str_radix("17a651238b0dbf892", 16).unwrap(), // liquidity
-            U256::from_str_radix("1c6bf52634000", 16).unwrap(),     // deposit_fee (0.05%)
-            true,                                                   // deposits_enabled
-            U256::from_str_radix("2386f26fc10000", 16).unwrap(),    // minimum_deposit
-            U256::from_str_radix("3cfc82e37e9a7400000", 16).unwrap(), // maximum_deposit_pool_size
-            true,                                                   // assign_deposits_enabled
-            U256::from_str_radix("5a", 16).unwrap(),                // deposit_assign_maximum
+            U256::from_str_radix("17a651238b0dbf892", 16).unwrap(),    // liquidity
+            U256::from_str_radix("1c6bf52634000", 16).unwrap(),        // deposit_fee (0.05%)
+            true,                                                      // deposits_enabled
+            U256::from_str_radix("2386f26fc10000", 16).unwrap(),       // minimum_deposit
+            U256::from_str_radix("3cfc82e37e9a7400000", 16).unwrap(),  // maximum_deposit_pool_size
+            true,                                                      // assign_deposits_enabled
+            U256::from_str_radix("5a", 16).unwrap(),                   // deposit_assign_maximum
             U256::from_str_radix("2", 16).unwrap(), // deposit_assign_socialised_maximum
             U256::from_str_radix("1bf", 16).unwrap(), // queue_full_start (empty: start == end)
             U256::from_str_radix("1bf", 16).unwrap(), // queue_full_end
