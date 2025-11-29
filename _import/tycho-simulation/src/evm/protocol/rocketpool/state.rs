@@ -17,9 +17,10 @@ use crate::evm::protocol::{
     rocketpool::ETH_ADDRESS,
     safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
     u256_num::{biguint_to_u256, u256_to_biguint, u256_to_f64},
+    utils::uniswap::solidity_math::mul_div,
 };
 
-const DEPOSIT_FEE_BASE: f64 = 1e18;
+const DEPOSIT_FEE_BASE: u128 = 1_000_000_000_000_000_000; // 1e18
 
 // TODO - consider moving this to constant attributes in the indexer
 // Minipool deposit amounts in wei
@@ -103,20 +104,17 @@ impl RocketPoolState {
     /// Calculates rETH amount out for a given ETH deposit amount.
     fn get_reth_value(&self, eth_amount: U256) -> Result<U256, SimulationError> {
         // fee = ethIn * deposit_fee / DEPOSIT_FEE_BASE
-        let fee = safe_div_u256(
-            safe_mul_u256(eth_amount, self.deposit_fee)?,
-            U256::from(DEPOSIT_FEE_BASE),
-        )?;
+        let fee = mul_div(eth_amount, self.deposit_fee, U256::from(DEPOSIT_FEE_BASE))?;
         let net_eth = safe_sub_u256(eth_amount, fee)?;
 
         // rethOut = netEth * rethSupply / totalEth
-        safe_div_u256(safe_mul_u256(net_eth, self.reth_supply)?, self.total_eth)
+        mul_div(net_eth, self.reth_supply, self.total_eth)
     }
 
     /// Calculates ETH amount out for a given rETH burn amount.
     fn get_eth_value(&self, reth_amount: U256) -> Result<U256, SimulationError> {
         // ethOut = rethIn * totalEth / rethSupply
-        safe_div_u256(safe_mul_u256(reth_amount, self.total_eth)?, self.reth_supply)
+        mul_div(reth_amount, self.total_eth, self.reth_supply)
     }
 
     fn depositing_eth(token_in: &Bytes) -> bool {
@@ -1088,5 +1086,79 @@ mod tests {
         // liquidity: 50 + 10 = 60 (no withdrawal)
         assert_eq!(new_state.liquidity, U256::from(60e18));
         assert_eq!(new_state.queue_variable_start, U256::ZERO);
+    }
+
+    // ============ Live Transaction Tests ============
+
+    /// Test against real transaction deposit on RocketPool
+    /// 0x6213b6c235c52d2132711c18a1c66934832722fd71c098e843bc792ecdbd11b3 User deposited
+    /// exactly 4.5 ETH and received 3.905847020555141679 rETH 1 minipool was assigned (31 ETH
+    /// withdrawn from pool)
+    /// Note that as there were no excess withdrawals from the pool, we can not check the other
+    /// direction
+    #[test]
+    fn test_live_deposit_tx_6213b6c2() {
+        let state = RocketPoolState::new(
+            U256::from_str_radix("4ec08ba071647b927594", 16).unwrap(), // reth_supply
+            U256::from_str_radix("5aafbb189fbbc1704662", 16).unwrap(), // total_eth
+            U256::from_str_radix("17a651238b0dbf892", 16).unwrap(), // liquidity
+            U256::from_str_radix("1c6bf52634000", 16).unwrap(),     // deposit_fee (0.05%)
+            true,                                                   // deposits_enabled
+            U256::from_str_radix("2386f26fc10000", 16).unwrap(),    // minimum_deposit
+            U256::from_str_radix("3cfc82e37e9a7400000", 16).unwrap(), // maximum_deposit_pool_size
+            true,                                                   // assign_deposits_enabled
+            U256::from_str_radix("5a", 16).unwrap(),                // deposit_assign_maximum
+            U256::from_str_radix("2", 16).unwrap(), // deposit_assign_socialised_maximum
+            U256::from_str_radix("1bf", 16).unwrap(), // queue_full_start (empty: start == end)
+            U256::from_str_radix("1bf", 16).unwrap(), // queue_full_end
+            U256::from_str_radix("3533", 16).unwrap(), // queue_half_start (empty: start == end)
+            U256::from_str_radix("3533", 16).unwrap(), // queue_half_end
+            U256::from_str_radix("6d43", 16).unwrap(), // queue_variable_start
+            U256::from_str_radix("6dde", 16).unwrap(), // queue_variable_end
+        );
+
+        // User deposited exactly 4.5 ETH
+        let deposit_amount = BigUint::from(4_500_000_000_000_000_000u128);
+
+        let res = state
+            .get_amount_out(deposit_amount, &eth_token(), &reth_token())
+            .unwrap();
+
+        println!("calculated rETH out: {}", res.amount);
+        let expected_reth_out = BigUint::from(3_905_847_020_555_141_679u128);
+        assert_eq!(res.amount, expected_reth_out);
+
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketPoolState>()
+            .unwrap();
+
+        // Expected final liquidity to reduce by 31 ETH (1 minipool assigned)
+        let expected_liquidity = U256::from_str_radix("0aa2289fdd01f892", 16).unwrap();
+        assert_eq!(new_state.liquidity, expected_liquidity);
+
+        // Expected queue_variable_start to advance by 1 (1 minipool assigned)
+        let expected_queue_start = U256::from_str_radix("6d44", 16).unwrap();
+        assert_eq!(new_state.queue_variable_start, expected_queue_start);
+
+        // Other state variables unchanged
+        assert_eq!(new_state.total_eth, state.total_eth);
+        assert_eq!(new_state.reth_supply, state.reth_supply);
+        assert_eq!(new_state.deposit_fee, state.deposit_fee);
+        assert_eq!(new_state.deposits_enabled, state.deposits_enabled);
+        assert_eq!(new_state.minimum_deposit, state.minimum_deposit);
+        assert_eq!(new_state.maximum_deposit_pool_size, state.maximum_deposit_pool_size);
+        assert_eq!(new_state.assign_deposits_enabled, state.assign_deposits_enabled);
+        assert_eq!(new_state.deposit_assign_maximum, state.deposit_assign_maximum);
+        assert_eq!(
+            new_state.deposit_assign_socialised_maximum,
+            state.deposit_assign_socialised_maximum
+        );
+        assert_eq!(new_state.queue_full_start, state.queue_full_start);
+        assert_eq!(new_state.queue_full_end, state.queue_full_end);
+        assert_eq!(new_state.queue_half_start, state.queue_half_start);
+        assert_eq!(new_state.queue_half_end, state.queue_half_end);
+        assert_eq!(new_state.queue_variable_end, state.queue_variable_end);
     }
 }
