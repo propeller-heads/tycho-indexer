@@ -1345,28 +1345,31 @@ where
                             let _filter_slots_span = span!(
                                 Level::DEBUG,
                                 "filter_slots",
-                                total_slots = contract_changes.slots.len()
+                                updated_slots = contract_changes.slots.len(),
+                                tracked_slots = tracked_keys.len()
                             )
                             .entered();
                             // Filter slots using cached tracked keys
-                            tracked_keys
-                                .iter()
-                                .filter_map(|slot| {
-                                    contract_changes
-                                        .slots
-                                        .get(slot)
-                                        .map(|change| {
-                                            (
-                                                slot.clone(),
-                                                if change.value.is_zero() {
-                                                    None
-                                                } else {
-                                                    Some(change.value.clone())
-                                                },
-                                            )
-                                        })
-                                })
-                                .collect()
+                            // Pre-allocate with estimated capacity to reduce reallocations
+                            let estimated_capacity = tracked_keys
+                                .len()
+                                .min(contract_changes.slots.len());
+                            let mut result = ContractStoreDeltas::with_capacity(estimated_capacity);
+
+                            // Manual loop is faster than iterator chain for this hot path
+                            for slot in tracked_keys.iter() {
+                                if let Some(change) = contract_changes.slots.get(slot) {
+                                    result.insert(
+                                        slot.clone(),
+                                        if change.value.is_zero() {
+                                            None
+                                        } else {
+                                            Some(change.value.clone())
+                                        },
+                                    );
+                                }
+                            }
+                            result
                         }
                     } else {
                         let _collect_all_slots_span = span!(
