@@ -1270,6 +1270,10 @@ where
         let mut tracked_updates: HashMap<TxHash, TxWithChanges> =
             HashMap::with_capacity(estimated_size);
 
+        // Cache tracked keys per account to avoid repeated get_all() calls
+        // This is especially beneficial when the same account appears in multiple transactions
+        let mut tracked_keys_cache: HashMap<Address, HashSet<StoreKey>> = HashMap::new();
+
         for tx in block_changes
             .block_contract_changes
             .iter()
@@ -1321,39 +1325,48 @@ where
                         if contract_changes.slots.is_empty() {
                             ContractStoreDeltas::new()
                         } else {
-                            let _collect_tracked_keys_span = span!(
+                            let collect_tracked_keys_span =
+                                span!(Level::DEBUG, "collect_tracked_keys").entered();
+                            let tracked_keys = tracked_keys_cache
+                                .entry(account.clone())
+                                .or_insert_with(|| {
+                                    if let Some(all_tracked) = self
+                                        .cache
+                                        .tracked_contracts
+                                        .get_all(account.clone())
+                                    {
+                                        all_tracked.flatten().cloned().collect()
+                                    } else {
+                                        HashSet::new()
+                                    }
+                                });
+                            drop(collect_tracked_keys_span);
+
+                            let _filter_slots_span = span!(
                                 Level::DEBUG,
-                                "collect_tracked_keys",
+                                "filter_slots",
                                 total_slots = contract_changes.slots.len()
                             )
                             .entered();
-                            let result = if let Some(all_tracked) = self
-                                .cache
-                                .tracked_contracts
-                                .get_all(account.clone())
-                            {
-                                all_tracked
-                                    .flatten()
-                                    .filter_map(|slot| {
-                                        contract_changes
-                                            .slots
-                                            .get(slot)
-                                            .map(|change| {
-                                                (
-                                                    slot.clone(),
-                                                    if change.value.is_zero() {
-                                                        None
-                                                    } else {
-                                                        Some(change.value.clone())
-                                                    },
-                                                )
-                                            })
-                                    })
-                                    .collect()
-                            } else {
-                                ContractStoreDeltas::new()
-                            };
-                            result
+                            // Filter slots using cached tracked keys
+                            tracked_keys
+                                .iter()
+                                .filter_map(|slot| {
+                                    contract_changes
+                                        .slots
+                                        .get(slot)
+                                        .map(|change| {
+                                            (
+                                                slot.clone(),
+                                                if change.value.is_zero() {
+                                                    None
+                                                } else {
+                                                    Some(change.value.clone())
+                                                },
+                                            )
+                                        })
+                                })
+                                .collect()
                         }
                     } else {
                         let _collect_all_slots_span = span!(
