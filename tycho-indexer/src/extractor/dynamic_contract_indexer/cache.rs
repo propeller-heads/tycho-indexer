@@ -61,6 +61,9 @@ pub(super) struct DCICache {
     /// Tracks the number of retry attempts for each failed tracing params.
     /// Used to cap retries at a maximum number of attempts (e.g., 5).
     pub(super) tracing_retry_counts: VersionedCache<(EntryPointId, TracingParams), u32>,
+    /// Tracks which components were paused by SDK reason (0x1).
+    /// When a component is SDK-paused, DCI should skip tracing for that component.
+    pub(super) indexing_paused_components: VersionedCache<ComponentId, bool>,
 }
 
 impl DCICache {
@@ -75,6 +78,7 @@ impl DCICache {
             ep_id_to_component_id: VersionedCache::new(),
             component_id_to_entrypoint_params: VersionedCache::new(),
             tracing_retry_counts: VersionedCache::new(),
+            indexing_paused_components: VersionedCache::new(),
         }
     }
 
@@ -107,7 +111,8 @@ impl DCICache {
             .revert_to(block)?;
         self.tracing_retry_counts
             .revert_to(block)?;
-
+        self.indexing_paused_components
+            .revert_to(block)?;
         Ok(())
     }
 
@@ -181,6 +186,8 @@ impl DCICache {
         self.tracing_retry_counts
             .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
 
+        self.indexing_paused_components
+            .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
         Ok(())
     }
 
@@ -215,7 +222,8 @@ impl DCICache {
             .validate_and_ensure_block_layer_internal(block)?;
         self.tracing_retry_counts
             .validate_and_ensure_block_layer_internal(block)?;
-
+        self.indexing_paused_components
+            .validate_and_ensure_block_layer_internal(block)?;
         Ok(())
     }
 }
@@ -227,11 +235,18 @@ pub(super) struct HooksDCICache {
     pub(super) component_states: VersionedCache<ComponentId, ComponentProcessingState>,
     /// Stores ProtocolComponent data for both newly created and mutated components.
     pub(super) protocol_components: VersionedCache<ComponentId, ProtocolComponent>,
+    /// Tracks which components were paused by SDK reason (0x1).
+    /// When a component is SDK-paused, HooksDCI should skip processing (param generation, etc.).
+    pub(super) sdk_paused_components: VersionedCache<ComponentId, bool>,
 }
 
 impl HooksDCICache {
     pub(super) fn new() -> Self {
-        Self { component_states: VersionedCache::new(), protocol_components: VersionedCache::new() }
+        Self {
+            component_states: VersionedCache::new(),
+            protocol_components: VersionedCache::new(),
+            sdk_paused_components: VersionedCache::new(),
+        }
     }
 
     /// Reverts the cache to the state at a specific block hash.
@@ -250,6 +265,8 @@ impl HooksDCICache {
         self.component_states.revert_to(block)?;
         self.protocol_components
             .revert_to(block)?;
+        self.sdk_paused_components
+            .revert_to(block)?;
         Ok(())
     }
 
@@ -264,6 +281,8 @@ impl HooksDCICache {
         self.component_states
             .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
         self.protocol_components
+            .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
+        self.sdk_paused_components
             .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
         Ok(())
     }
@@ -284,6 +303,8 @@ impl HooksDCICache {
         self.component_states
             .validate_and_ensure_block_layer_internal(block)?;
         self.protocol_components
+            .validate_and_ensure_block_layer_internal(block)?;
+        self.sdk_paused_components
             .validate_and_ensure_block_layer_internal(block)?;
         Ok(())
     }
@@ -427,6 +448,34 @@ where
             }
         }
         self.permanent.contains_key(key)
+    }
+
+    /// Iterates over all key-value pairs, returning the latest value for each key.
+    ///
+    /// Keys that appear in multiple layers will only be returned once with their most recent value
+    /// (from the latest pending layer, or permanent if not in pending).
+    pub(super) fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
+        // Collect all keys and their latest values
+        let mut seen: std::collections::HashSet<&K> = std::collections::HashSet::new();
+        let mut result: Vec<(&K, &V)> = Vec::new();
+
+        // Process pending layers from newest to oldest
+        for layer in self.pending.iter().rev() {
+            for (k, v) in layer.data.iter() {
+                if seen.insert(k) {
+                    result.push((k, v));
+                }
+            }
+        }
+
+        // Process permanent layer
+        for (k, v) in self.permanent.iter() {
+            if seen.insert(k) {
+                result.push((k, v));
+            }
+        }
+
+        result.into_iter()
     }
 
     /// Process block finality by moving all finalized layers from pending to permanent storage.
