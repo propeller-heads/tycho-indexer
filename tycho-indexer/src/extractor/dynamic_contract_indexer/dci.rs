@@ -1317,40 +1317,44 @@ where
                     drop(skip_full_indexing_span);
 
                     if skip_full_indexing {
-                        let collect_tracked_keys_span =
-                            span!(Level::DEBUG, "collect_tracked_keys").entered();
-                        // Only call get_all and collect tracked_keys when we actually need it
-                        let tracked_keys: HashSet<&StoreKey> = self
-                            .cache
-                            .tracked_contracts
-                            .get_all(account.clone())
-                            .unwrap()
-                            .flatten()
-                            .collect();
-                        drop(collect_tracked_keys_span);
-
-                        let _filter_slots_span = span!(
-                            Level::DEBUG,
-                            "filter_slots",
-                            total_slots = contract_changes.slots.len(),
-                            tracked_keys_count = tracked_keys.len()
-                        )
-                        .entered();
-                        contract_changes
-                            .slots
-                            .iter()
-                            .filter_map(|(slot, ContractStorageChange { value, .. })| {
-                                // Only process slots that are tracked
-                                if tracked_keys.contains(slot) {
-                                    Some((
-                                        slot.clone(),
-                                        if value.is_zero() { None } else { Some(value.clone()) },
-                                    ))
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect()
+                        // Early exit if no slots to filter
+                        if contract_changes.slots.is_empty() {
+                            ContractStoreDeltas::new()
+                        } else {
+                            let _collect_tracked_keys_span = span!(
+                                Level::DEBUG,
+                                "collect_tracked_keys",
+                                total_slots = contract_changes.slots.len()
+                            )
+                            .entered();
+                            let result = if let Some(all_tracked) = self
+                                .cache
+                                .tracked_contracts
+                                .get_all(account.clone())
+                            {
+                                all_tracked
+                                    .flatten()
+                                    .filter_map(|slot| {
+                                        contract_changes
+                                            .slots
+                                            .get(slot)
+                                            .map(|change| {
+                                                (
+                                                    slot.clone(),
+                                                    if change.value.is_zero() {
+                                                        None
+                                                    } else {
+                                                        Some(change.value.clone())
+                                                    },
+                                                )
+                                            })
+                                    })
+                                    .collect()
+                            } else {
+                                ContractStoreDeltas::new()
+                            };
+                            result
+                        }
                     } else {
                         let _collect_all_slots_span = span!(
                             Level::DEBUG,
