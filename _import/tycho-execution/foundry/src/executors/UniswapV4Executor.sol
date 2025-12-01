@@ -42,6 +42,7 @@ error UniswapV4Executor__V4TooMuchRequested(
 );
 error UniswapV4Executor__NoAngstromAttestationForBlock(uint256 blockNumber);
 error UniswapV4Executor__InvalidAngstromAttestationDataLength(uint256 length);
+error UniswapV4Executor__ZeroAddressAngstromHook();
 
 contract UniswapV4Executor is
     IExecutor,
@@ -75,6 +76,9 @@ contract UniswapV4Executor is
         address _angstromHook,
         address _permit2
     ) RestrictTransferFrom(_permit2) {
+        if (_angstromHook == address(0)) {
+            revert UniswapV4Executor__ZeroAddressAngstromHook();
+        }
         poolManager = _poolManager;
         _angstromHookAddress = _angstromHook;
         _self = address(this);
