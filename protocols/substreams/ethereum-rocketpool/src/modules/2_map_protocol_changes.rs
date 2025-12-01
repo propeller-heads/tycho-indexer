@@ -254,7 +254,7 @@ fn update_protocol_settings(
                     &[
                         DEPOSITS_ENABLED_SLOT,
                         DEPOSIT_ASSIGN_ENABLED_SLOT,
-                         DEPOSIT_ASSIGN_MAXIMUM_SLOT,
+                        DEPOSIT_ASSIGN_MAXIMUM_SLOT,
                         DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT,
                         MIN_DEPOSIT_AMOUNT_SLOT,
                         MAX_DEPOSIT_AMOUNT_SLOT,
