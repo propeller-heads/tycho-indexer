@@ -175,6 +175,9 @@ contract Constants is Test, BaseConstants {
     // Fluid liquidity contract on mainnet
     address FLUIDV1_LIQUIDITY = 0x52Aa899454998Be5b000Ad077a46Bbe360F4e497;
 
+    // Angstrom hook address
+    address ANGSTROM_HOOK = 0x0000000aa232009084Bd71A5797d089AA4Edfad4;
+
     /**
      * @dev Deploys a dummy contract with non-empty bytecode
      */
