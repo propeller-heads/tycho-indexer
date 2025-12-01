@@ -46,6 +46,7 @@ pub struct ServicesBuilder<G> {
     api_key: String,
     extractor_handles: ws::MessageSenderMap,
     db_gateway: G,
+    min_tvl: Option<f64>,
 }
 
 impl<G> ServicesBuilder<G>
@@ -61,6 +62,7 @@ where
             api_key,
             extractor_handles: HashMap::new(),
             db_gateway,
+            min_tvl: None,
         }
     }
 
@@ -89,6 +91,12 @@ where
     /// Sets the port for the server
     pub fn port(mut self, v: u16) -> Self {
         self.port = v;
+        self
+    }
+
+    /// Sets the minimum TVL threshold for RPC responses
+    pub fn min_tvl(mut self, v: Option<f64>) -> Self {
+        self.min_tvl = v;
         self
     }
 
@@ -163,8 +171,12 @@ where
     ) -> Result<(ServerHandle, JoinHandle<Result<(), ExtractionError>>), ExtractionError> {
         let tracer = EVMEntrypointService::new(&self.rpc);
 
-        let rpc_data =
-            web::Data::new(rpc::RpcHandler::new(self.db_gateway, pending_deltas, tracer));
+        let rpc_data = web::Data::new(rpc::RpcHandler::new(
+            self.db_gateway,
+            pending_deltas,
+            tracer,
+            self.min_tvl,
+        ));
 
         let server = HttpServer::new(move || {
             let cors = Cors::default()
