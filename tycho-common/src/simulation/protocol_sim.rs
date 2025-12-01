@@ -52,12 +52,16 @@ impl fmt::Display for GetAmountOutResult {
     }
 }
 
-/// Represents a price as a rational fraction (numerator / denominator).
+/// Represents a price as a fraction in the token_in -> token_out direction. With units
+/// [token_out/token_in].
+///
+/// # Fields
+///
+/// * `numerator` - The amount of token_out (what you receive), including token decimals
+/// * `denominator` - The amount of token_in (what you pay), including token decimals
 ///
 /// In the context of `swap_to_price` and `query_supply`, this represents the pool's price in
-/// the **token_out/token_in** direction:
-/// - `numerator`: Amount of token_out (what you receive)
-/// - `denominator`: Amount of token_in (what you pay)
+/// the **token_out/token_in** direction
 ///
 /// A fraction struct is used for price to have flexibility in precision independent of the
 /// decimal precisions of the numerator and denominator tokens. This allows for:
@@ -72,6 +76,26 @@ pub struct Price {
 impl Price {
     pub fn new(numerator: BigUint, denominator: BigUint) -> Self {
         Self { numerator, denominator }
+    }
+}
+
+/// Represents a trade between two tokens at a given price on a pool.
+///
+/// # Fields
+///
+/// * `amount_in` - The amount of token_in (what you pay)
+/// * `amount_out` - The amount of token_out (what you receive)
+///
+/// The price of the trade is the ratio of amount_out to amount_in, i.e. amount_out / amount_in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Trade {
+    pub amount_in: BigUint,
+    pub amount_out: BigUint,
+}
+
+impl Trade {
+    pub fn new(amount_in: BigUint, amount_out: BigUint) -> Self {
+        Self { amount_in, amount_out }
     }
 }
 
@@ -173,8 +197,8 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
         balances: &Balances,
     ) -> Result<(), TransitionError<String>>;
 
-    /// Calculates the exact amount of token_in required to move the pool's marginal price down to
-    /// a target price.
+    /// Calculates the amount of token_in required to move the pool's marginal price down to
+    /// a target price, and the amount of token_out received.
     ///
     /// # Arguments
     ///
@@ -188,23 +212,41 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Returns
     ///
-    /// * `Ok(BigUint)` - The exact amount of token_in required to move the pool price down to the
-    ///   target
+    /// * `Ok(Trade)` - A `Trade` struct containing the amount that needs to be swapped on the pool
+    ///   to move its price to target_price.
     /// * `Err(SimulationError)` - If:
     ///   - The calculation encounters numerical issues (overflow, division by zero, etc.)
     ///   - The method is not implemented for this protocol
+    ///
+    /// # Edge Cases and Limitations
+    ///
+    /// ## Exact Price Achievement
+    ///
+    /// It is almost never possible to achieve the target price exactly, only within some margin
+    /// of tolerance. This is due to:
+    /// - **Discrete liquidity**: For concentrated liquidity protocols (e.g., Uniswap V3), liquidity
+    ///   is distributed across discrete price ticks, making exact price targeting impossible
+    /// - **Numerical precision**: Integer arithmetic and rounding may prevent exact price matching
+    /// - **Protocol constraints**: Some protocols have minimum trade sizes or other constraints
+    ///
+    /// ## Unreachable Prices
+    ///
+    /// If the target price is already below the current spot price (i.e., the price would need to
+    /// move in the wrong direction), implementations typically return a zero trade (`Trade` with
+    /// `amount_in = 0` and `amount_out = 0`).
     #[allow(unused)]
     fn swap_to_price(
         &self,
         token_in: &Bytes,
         token_out: &Bytes,
         target_price: Price,
-    ) -> Result<BigUint, SimulationError> {
+    ) -> Result<Trade, SimulationError> {
         Err(SimulationError::FatalError("swap_to_price not implemented".into()))
     }
 
-    /// Calculates how much token_out (sell token) a pool can supply when the pool's price moves
-    /// down to or below the target price.
+    /// Calculates the maximum amount of token_out (sell token) a pool can supply, and the
+    /// corresponding demanded amount of token_in (buy token), while respecting a minimum trade
+    /// price.
     ///
     /// # Arguments
     ///
@@ -218,27 +260,18 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Returns
     ///
-    /// * `Ok(BigUint)` - The maximum amount of token_out (sell token) that can be supplied as the
-    ///   pool's price moves down to the target. This represents the pool's supply capacity at this
-    ///   price level.
+    /// * `Ok(Trade)` - A `Trade` struct containing the largest trade that can be executed on this
+    ///   pool while respecting the provided trace price
     /// * `Err(SimulationError)` - If:
     ///   - The calculation encounters numerical issues
     ///   - The method is not implemented for this protocol
-    ///
-    /// # Relationship to swap_to_price
-    ///
-    /// These methods work together:
-    /// - `swap_to_price`: Returns the amount of token_in needed to move the pool's price down to
-    ///   target
-    /// - `query_supply`: Returns the amount of token_out the pool supplies as price moves down to
-    ///   target
     #[allow(unused)]
     fn query_supply(
         &self,
         token_in: &Bytes,
         token_out: &Bytes,
         target_price: Price,
-    ) -> Result<BigUint, SimulationError> {
+    ) -> Result<Trade, SimulationError> {
         Err(SimulationError::FatalError("query_supply not implemented".into()))
     }
 
