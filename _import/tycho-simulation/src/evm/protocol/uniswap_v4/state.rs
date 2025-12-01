@@ -225,7 +225,7 @@ impl UniswapV4State {
             let (sqrt_price, amount_in, amount_out, fee_amount) = swap_math::compute_swap_step(
                 state.sqrt_price,
                 UniswapV4State::get_sqrt_ratio_target(sqrt_price_next, price_limit, zero_for_one),
-                state.liquidity,
+                U256::from(state.liquidity),
                 // The core univ4 swap logic assumes that if the amount is > 0 it's exact in, and
                 // if it's < 0 it's exact out. The compute_swap_step assumes the
                 // opposite (it's like that for univ3).
@@ -689,13 +689,13 @@ impl ProtocolSim for UniswapV4State {
                 let amount0 = get_amount0_delta(
                     sqrt_price_next,
                     current_sqrt_price,
-                    current_liquidity,
+                    U256::from(current_liquidity),
                     true,
                 )?;
                 let amount1 = get_amount1_delta(
                     sqrt_price_next,
                     current_sqrt_price,
-                    current_liquidity,
+                    U256::from(current_liquidity),
                     false,
                 )?;
                 (amount0, amount1)
@@ -703,13 +703,13 @@ impl ProtocolSim for UniswapV4State {
                 let amount0 = get_amount0_delta(
                     sqrt_price_next,
                     current_sqrt_price,
-                    current_liquidity,
+                    U256::from(current_liquidity),
                     false,
                 )?;
                 let amount1 = get_amount1_delta(
                     sqrt_price_next,
                     current_sqrt_price,
-                    current_liquidity,
+                    U256::from(current_liquidity),
                     true,
                 )?;
                 (amount1, amount0)
