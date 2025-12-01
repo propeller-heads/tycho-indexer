@@ -63,8 +63,9 @@ jobs:
           BASE_TAG="${{ inputs.base_tag || steps.latest_tag.outputs.tag }}"
           
           # If called from main workflow (base_tag is provided), use only the base tag
-          # If manually triggered or from other branches, add commit hash suffix
-          if [[ -n "${{ inputs.base_tag }}" ]]; then
+          # If manually triggered from main branch, use only the base tag (no commit hash)
+          # If manually triggered from other branches, add commit hash suffix
+          if [[ -n "${{ inputs.base_tag }}" ]] || [[ "${{ github.ref_name }}" == "main" ]]; then
             IMAGE_TAG="$BASE_TAG"
           else
             TAG_SUFFIX="${{ inputs.tag_suffix || steps.commit.outputs.hash }}"
