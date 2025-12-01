@@ -1174,8 +1174,8 @@ pub struct TokensRequestBody {
 
 // When INCREASING these limits, please read the warning in the macro definition.
 // TODO: Revert to higher limits once we are ready to redeploy servers.
-// impl_pagination_limits!(TokensRequestBody, compressed = 12900, uncompressed = 3000);
-impl_pagination_limits!(TokensRequestBody, compressed = 3000, uncompressed = 3000);
+impl_pagination_limits!(TokensRequestBody, compressed = 12900, uncompressed = 3000);
+// impl_pagination_limits!(TokensRequestBody, compressed = 3000, uncompressed = 3000);
 
 /// Response from Tycho server for a tokens request.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash, DeepSizeOf)]
