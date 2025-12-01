@@ -5,7 +5,7 @@ use std::{
 
 use deepsize::DeepSizeOf;
 use thiserror::Error;
-use tracing::{debug, trace, warn};
+use tracing::{debug, instrument, trace, warn};
 use tycho_common::models::{
     blockchain::{Block, EntryPoint, EntryPointWithTracingParams, TracingParams, TracingResult},
     protocol::ProtocolComponent,
@@ -397,12 +397,7 @@ where
     /// * `Some(Iterator<Item = &V>)` - An iterator of all values for the key, starting from the
     ///   latest pending layer.
     /// * `None` - If the key is not found in any layer.
-    #[instrument(
-        level = "debug",
-        name = "dci_cache_get_all",
-        skip(self),
-        fields(key = %k)
-    )]
+    #[instrument(level = "debug", name = "dci_cache_get_all", skip(self))]
     pub(super) fn get_all<'a>(&'a self, k: K) -> Option<impl Iterator<Item = &'a V> + 'a> {
         let key_for_pending = k.clone();
         let key_for_permanent = k;
@@ -556,8 +551,8 @@ where
                 .front()
                 .unwrap()
                 .block
-                .parent_hash ==
-                *block
+                .parent_hash
+                == *block
             {
                 self.pending.clear();
                 return Ok(());
