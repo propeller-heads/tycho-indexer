@@ -1,3 +1,10 @@
+## [0.208.0](https://github.com/propeller-heads/tycho-simulation/compare/0.207.0...0.208.0) (2025-12-01)
+
+
+### Features
+
+* add swap_to_price and query_supply methods for UniswapV2State ([b8aa3b7](https://github.com/propeller-heads/tycho-simulation/commit/b8aa3b74557efc6bb6491cdac0905b91bd4b6a32))
+
 ## [0.207.0](https://github.com/propeller-heads/tycho-simulation/compare/0.206.2...0.207.0) (2025-11-28)
 
 
