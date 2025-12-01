@@ -1,6 +1,7 @@
-use std::ops::BitOr;
+use std::{cell::RefCell, ops::BitOr};
 
 use alloy::primitives::{Sign, I256, U256};
+use rustc_hash::FxHashMap;
 use tycho_common::simulation::errors::SimulationError;
 
 use crate::evm::protocol::safe_math::{div_mod_u256, safe_div_u256, safe_mul_u256};
@@ -15,7 +16,18 @@ pub(crate) const MIN_SQRT_RATIO: U256 = U256::from_limbs([4295128739u64, 0, 0, 0
 pub(crate) const MAX_SQRT_RATIO: U256 =
     U256::from_limbs([6743328256752651558u64, 17280870778742802505u64, 4294805859u64, 0]);
 
+// Thread-local cache for memoizing sqrt ratios
+thread_local! {
+    static SQRT_RATIO_CACHE: RefCell<FxHashMap<i32, U256>> = RefCell::new(FxHashMap::default());
+}
+
 pub(crate) fn get_sqrt_ratio_at_tick(tick: i32) -> Result<U256, SimulationError> {
+    // Check cache first
+    let cached = SQRT_RATIO_CACHE.with(|cache| cache.borrow().get(&tick).copied());
+    if let Some(result) = cached {
+        return Ok(result);
+    }
+
     if tick.abs() > MAX_TICK {
         return Err(SimulationError::FatalError(format!(
             "Tick {} is outside valid range [{}, {}]",
@@ -149,7 +161,13 @@ pub(crate) fn get_sqrt_ratio_at_tick(tick: i32) -> Result<U256, SimulationError>
     }
 
     let (_, rest) = div_mod_u256(ratio, U256::from(1u64) << 32)?;
-    Ok((ratio >> 32) + if rest == U256::from(0u64) { U256::from(0u64) } else { U256::from(1u64) })
+    let result =
+        (ratio >> 32) + if rest == U256::from(0u64) { U256::from(0u64) } else { U256::from(1u64) };
+
+    // Cache the result before returning
+    SQRT_RATIO_CACHE.with(|cache| cache.borrow_mut().insert(tick, result));
+
+    Ok(result)
 }
 
 fn most_significant_bit(x: U256) -> Result<usize, SimulationError> {

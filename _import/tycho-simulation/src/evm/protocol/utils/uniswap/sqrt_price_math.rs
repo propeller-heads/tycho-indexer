@@ -1,4 +1,7 @@
-use alloy::primitives::{U256, U512};
+use std::cell::RefCell;
+
+use alloy::primitives::U256;
+use rustc_hash::FxHashMap;
 use tycho_common::{
     simulation::{errors::SimulationError, protocol_sim::Price},
     Bytes,
@@ -6,14 +9,20 @@ use tycho_common::{
 
 use super::solidity_math::{mul_div, mul_div_rounding_up};
 use crate::evm::protocol::{
-    safe_math::{
-        div_mod_u256, safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256, sqrt_u512,
-    },
+    safe_math::{div_mod_u256, safe_add_u256, safe_div_u256, safe_sub_u256, sqrt_u256},
     u256_num::{biguint_to_u256, u256_to_f64},
 };
 
+// Thread-local caches for amount delta functions
+type AmountDeltaKey = (U256, U256, U256, bool);
+
+thread_local! {
+    static AMOUNT0_CACHE: RefCell<FxHashMap<AmountDeltaKey, U256>> = RefCell::new(FxHashMap::default());
+    static AMOUNT1_CACHE: RefCell<FxHashMap<AmountDeltaKey, U256>> = RefCell::new(FxHashMap::default());
+}
+
 const Q96: U256 = U256::from_limbs([0, 4294967296, 0, 0]);
-const Q192: U512 = U512::from_limbs([0, 0, 0, 1, 0, 0, 0, 0]); // 2^192
+const Q192: U256 = U256::from_limbs([0, 0, 0, 1]); // 2^192
 const RESOLUTION: U256 = U256::from_limbs([96, 0, 0, 0]);
 const U160_MAX: U256 = U256::from_limbs([u64::MAX, u64::MAX, 4294967295, 0]);
 
@@ -35,41 +44,70 @@ fn div_rounding_up(a: U256, b: U256) -> Result<U256, SimulationError> {
     }
 }
 
+/// Calculate amount of token0 given sqrt price range and liquidity
 pub(crate) fn get_amount0_delta(
     a: U256,
     b: U256,
     liquidity: U256,
     round_up: bool,
 ) -> Result<U256, SimulationError> {
-    let (sqrt_ratio_a, sqrt_ratio_b) = maybe_flip_ratios(a, b);
+    let key = (a, b, liquidity, round_up);
 
-    let numerator1 = U256::from(liquidity) << RESOLUTION;
-    let numerator2 = sqrt_ratio_b - sqrt_ratio_a;
+    // Single thread-local access using entry API
+    AMOUNT0_CACHE.with(|cache| {
+        let mut cache_ref = cache.borrow_mut();
+        if let Some(&cached_value) = cache_ref.get(&key) {
+            return Ok(cached_value);
+        }
 
-    assert!(sqrt_ratio_a > U256::from(0u64));
+        // Compute if not cached
+        let (sqrt_ratio_a, sqrt_ratio_b) = maybe_flip_ratios(a, b);
 
-    if round_up {
-        div_rounding_up(mul_div_rounding_up(numerator1, numerator2, sqrt_ratio_b)?, sqrt_ratio_a)
-    } else {
-        safe_div_u256(mul_div_rounding_up(numerator1, numerator2, sqrt_ratio_b)?, sqrt_ratio_a)
-    }
+        let numerator1 = U256::from(liquidity) << RESOLUTION;
+        let numerator2 = sqrt_ratio_b - sqrt_ratio_a;
+
+        let value = if round_up {
+            div_rounding_up(
+                mul_div_rounding_up(numerator1, numerator2, sqrt_ratio_b)?,
+                sqrt_ratio_a,
+            )?
+        } else {
+            mul_div(numerator1, numerator2, sqrt_ratio_b)? / sqrt_ratio_a
+        };
+
+        cache_ref.insert(key, value);
+        Ok(value)
+    })
 }
 
+/// Calculate amount of token1 given sqrt price range and liquidity
 pub(crate) fn get_amount1_delta(
     a: U256,
     b: U256,
     liquidity: U256,
     round_up: bool,
 ) -> Result<U256, SimulationError> {
-    let (sqrt_ratio_a, sqrt_ratio_b) = maybe_flip_ratios(a, b);
-    if round_up {
-        mul_div_rounding_up(U256::from(liquidity), sqrt_ratio_b - sqrt_ratio_a, Q96)
-    } else {
-        safe_div_u256(
-            safe_mul_u256(U256::from(liquidity), safe_sub_u256(sqrt_ratio_b, sqrt_ratio_a)?)?,
-            Q96,
-        )
-    }
+    let key = (a, b, liquidity, round_up);
+
+    // Single thread-local access using entry API
+    AMOUNT1_CACHE.with(|cache| {
+        let mut cache_ref = cache.borrow_mut();
+        if let Some(&cached_value) = cache_ref.get(&key) {
+            return Ok(cached_value);
+        }
+
+        // Compute if not cached
+        let (sqrt_ratio_a, sqrt_ratio_b) = maybe_flip_ratios(a, b);
+
+        let value = if round_up {
+            mul_div_rounding_up(U256::from(liquidity), sqrt_ratio_b - sqrt_ratio_a, Q96)?
+        } else {
+            mul_div(U256::from(liquidity), sqrt_ratio_b - sqrt_ratio_a, Q96)?
+        };
+
+        cache_ref.insert(key, value);
+        Ok(value)
+    })
 }
 
 pub(super) fn get_next_sqrt_price_from_input(
