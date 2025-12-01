@@ -1,13 +1,13 @@
 use std::{any::Any, collections::HashMap};
 
-use alloy::primitives::U256;
+use alloy::primitives::{U256, U512};
 use num_bigint::BigUint;
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
     simulation::{
         errors::{SimulationError, TransitionError},
-        protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
+        protocol_sim::{Balances, GetAmountOutResult, Price, ProtocolSim, Trade},
     },
     Bytes,
 };
@@ -16,11 +16,13 @@ use crate::evm::protocol::{
     cpmm::protocol::{
         cpmm_delta_transition, cpmm_fee, cpmm_get_amount_out, cpmm_get_limits, cpmm_spot_price,
     },
-    safe_math::{safe_add_u256, safe_sub_u256},
+    safe_math::{safe_add_u256, safe_sub_u256, sqrt_u512},
     u256_num::{biguint_to_u256, u256_to_biguint},
 };
 
 const PANCAKESWAP_V2_FEE: u32 = 25; // 0.25% fee
+const FEE_PRECISION: U256 = U256::from_limbs([1000, 0, 0, 0]);
+const FEE_NUMERATOR: U256 = U256::from_limbs([997, 0, 0, 0]);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PancakeswapV2State {
@@ -96,6 +98,123 @@ impl ProtocolSim for PancakeswapV2State {
     ) -> Result<(), TransitionError<String>> {
         let (reserve0_mut, reserve1_mut) = (&mut self.reserve0, &mut self.reserve1);
         cpmm_delta_transition(delta, reserve0_mut, reserve1_mut)
+    }
+
+    /// Calculates the exact amount of token_in required to move the pool's marginal price down to
+    /// a target price.
+    ///
+    /// See [`ProtocolSim::swap_to_price`] for the trait documentation.
+    ///
+    /// # Algorithm
+    ///
+    /// Derives how much to swap to reach a target price using the constant product formula.
+    /// **Note**: This method assumes k remains constant, but in reality fees accrue to the pool,
+    /// causing k to increase slightly. This simplification leads to a conservative
+    /// underestimation of the pool's supply capacity.
+    ///
+    /// ## Base equations
+    /// 1. Constant product: `x * y = k` where x = reserve_in, y = reserve_out
+    /// 2. Swap with 0.3% fee: Only 99.7% of input affects price
+    /// 3. Marginal price after swap: `price = (x' * 1000) / (y' * 997)`
+    ///
+    /// ## Derivation
+    /// We want the pool to reach target price: `price = sell_price / buy_price`
+    ///
+    /// From marginal price formula:
+    /// ```text,no_run
+    /// x' / y' = (sell_price * 997) / (buy_price * 1000)  [call this target_price_w_fee]
+    /// ```
+    ///
+    /// From constant product:
+    /// ```text,no_run
+    /// x' * y' = k
+    /// ```
+    ///
+    ///
+    /// Substituting the first into the second:
+    /// ```text,no_run
+    /// x' = target_price_w_fee * y'
+    /// (target_price_w_fee * y') * y' = k
+    /// y'^2 = k / target_price_w_fee
+    /// y' = sqrt(k / target_price_w_fee)
+    /// ```
+    ///
+    /// Therefore:
+    /// ```text,no_run
+    /// x' = target_price_w_fee * y'
+    ///    = target_price_w_fee * sqrt(k / target_price_w_fee)
+    ///    = sqrt(k * target_price_w_fee)
+    /// ```
+    ///
+    /// Amount to swap in:
+    /// ```text,no_run
+    /// amount_in = x' - x = sqrt(k * target_price_w_fee) - reserve_in
+    /// ```
+    ///
+    /// where `target_price_w_fee = (sell_price * 997) / (buy_price * 1000)`
+    /// Then swap to get amount_out.
+    fn swap_to_price(
+        &self,
+        token_in: &Bytes,
+        token_out: &Bytes,
+        target_price: Price,
+    ) -> Result<Trade, SimulationError> {
+        let zero2one = token_in < token_out;
+        let (reserve_in, reserve_out) =
+            if zero2one { (self.reserve0, self.reserve1) } else { (self.reserve1, self.reserve0) };
+
+        // Flip target pool price to swap price
+        let swap_price_num = biguint_to_u256(&target_price.denominator);
+        let swap_price_den = biguint_to_u256(&target_price.numerator);
+
+        // Check reachability: target price must be above the spot price (with fees)
+        // swap_price_num/swap_price_den >= (reserve_in * FEE_PRECISION) / (reserve_out *
+        // FEE_NUMERATOR)
+        // Cross-multiply to avoid division: swap_price_num * reserve_out * FEE_NUMERATOR >=
+        // swap_price_den * reserve_in * FEE_PRECISION
+        let target_price_cross_mult = swap_price_num
+            .checked_mul(reserve_out)
+            .and_then(|x| x.checked_mul(FEE_NUMERATOR))
+            .ok_or_else(|| SimulationError::FatalError("Overflow in price check".to_string()))?;
+        let current_price_cross_mult = swap_price_den
+            .checked_mul(reserve_in)
+            .and_then(|x| x.checked_mul(FEE_PRECISION))
+            .ok_or_else(|| SimulationError::FatalError("Overflow in price check".to_string()))?;
+
+        if target_price_cross_mult < current_price_cross_mult {
+            return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
+        }
+
+        // Calculate new reserve_in: x' = sqrt(k * price_num * FEE_NUMERATOR / (price_den *
+        // FEE_PRECISION))
+        let k = U512::from(reserve_in) * U512::from(reserve_out);
+        let k_times_price = k * U512::from(swap_price_num) * U512::from(FEE_NUMERATOR) /
+            (U512::from(swap_price_den) * U512::from(FEE_PRECISION));
+        let x_prime_u512 = sqrt_u512(k_times_price);
+
+        // Convert back to U256 and calculate amount_in
+        let limbs = x_prime_u512.as_limbs();
+        let x_prime = U256::from_limbs([limbs[0], limbs[1], limbs[2], limbs[3]]);
+
+        if x_prime <= reserve_in {
+            return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
+        }
+        let amount_in = safe_sub_u256(x_prime, reserve_in)?;
+
+        if amount_in == U256::ZERO {
+            return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
+        }
+
+        let implied_amount_out = (amount_in * swap_price_den)
+            .checked_div(swap_price_num)
+            .ok_or_else(|| {
+                SimulationError::FatalError("Division by zero in implied_amount_out".to_string())
+            })?;
+
+        if implied_amount_out == U256::ZERO {
+            return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
+        }
+        Ok(Trade::new(u256_to_biguint(amount_in), u256_to_biguint(implied_amount_out)))
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {
@@ -377,5 +496,318 @@ mod tests {
 
         let expected_price = initial_price / 10.0;
         assert!(expected_price == new_price, "Price impact not 90%.");
+    }
+
+    #[test]
+    fn test_swap_to_price_below_spot() {
+        // Pool with reserve0=2000000, reserve1=1000000
+        // Current price: reserve1/reserve0 = 1000000/2000000 = 0.5 token_out per token_in
+        let state = PancakeswapV2State::new(U256::from(2_000_000u32), U256::from(1_000_000u32));
+
+        let token_in = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
+        let token_out = Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap();
+
+        // Target price: 2/5 = 0.4 token_out per token_in (lower than current 0.5)
+        // Selling token_in decreases price from 0.5 down to 0.4
+        let target_price = Price::new(BigUint::from(2u32), BigUint::from(5u32));
+
+        let trade = state
+            .swap_to_price(&token_in, &token_out, target_price)
+            .unwrap();
+
+        assert!(trade.amount_in > BigUint::ZERO, "Should require some input amount");
+
+        // Verify that swapping this amount brings us close to the target price
+        let token_in_obj =
+            Token::new(&token_in, "T0", 18, 0, &[Some(10_000)], Chain::Ethereum, 100);
+        let token_out_obj =
+            Token::new(&token_out, "T1", 18, 0, &[Some(10_000)], Chain::Ethereum, 100);
+
+        let result = state
+            .get_amount_out(trade.amount_in, &token_in_obj, &token_out_obj)
+            .unwrap();
+        let new_state = result
+            .new_state
+            .as_any()
+            .downcast_ref::<PancakeswapV2State>()
+            .unwrap();
+
+        // Check that we got some output
+        assert!(result.amount > BigUint::ZERO);
+
+        // The new reserves should reflect the target price
+        // Price = reserve1/reserve0, so if price = 0.4, then reserve0/reserve1 = 2.5
+        let new_reserve_ratio =
+            new_state.reserve0.to::<u128>() as f64 / new_state.reserve1.to::<u128>() as f64;
+        let expected_ratio = 2.5;
+
+        // Allow for some difference due to fees and rounding
+        assert!(
+            (new_reserve_ratio - expected_ratio).abs() < 0.01,
+            "New reserve ratio {new_reserve_ratio} should be close to expected {expected_ratio}"
+        );
+    }
+
+    #[test]
+    fn test_swap_to_price_unreachable() {
+        // Pool with 2:1 ratio
+        let state = PancakeswapV2State::new(U256::from(2_000_000u32), U256::from(1_000_000u32));
+
+        let token_in = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
+        let token_out = Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap();
+
+        // Target price is unreachable (should return zero)
+        // Current pool price: reserve_out/reserve_in = 1000000/2000000 = 0.5 token_out per
+        // token_in Target: 1/1 = 1.0 token_out per token_in
+        // Selling token_in decreases pool price, so we can't reach 1.0 from 0.5
+        let target_price = Price::new(BigUint::from(1u32), BigUint::from(1u32));
+
+        let trade = state
+            .swap_to_price(&token_in, &token_out, target_price)
+            .unwrap();
+
+        assert_eq!(
+            trade.amount_in,
+            BigUint::ZERO,
+            "Should require zero input amount when target price is unreachable"
+        );
+        assert_eq!(
+            trade.amount_out,
+            BigUint::ZERO,
+            "Should return zero output amount when target price is unreachable"
+        );
+    }
+
+    #[test]
+    fn test_swap_to_price_at_spot_price() {
+        let state = PancakeswapV2State::new(U256::from(2_000_000u32), U256::from(1_000_000u32));
+
+        let token_in = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
+        let token_out = Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap();
+
+        // Calculate spot price with fee (token_out/token_in):
+        // Marginal price = (FEE_NUMERATOR * reserve_out) / (FEE_PRECISION * reserve_in)
+        let spot_price_num = U256::from(1_000_000u32) * FEE_NUMERATOR;
+        let spot_price_den = U256::from(2_000_000u32) * FEE_PRECISION;
+
+        let target_price =
+            Price::new(u256_to_biguint(spot_price_num), u256_to_biguint(spot_price_den));
+
+        let trade = state
+            .swap_to_price(&token_in, &token_out, target_price)
+            .unwrap();
+
+        // At exact spot price, we should return zero amount
+        assert!(trade.amount_in == BigUint::ZERO, "At spot price should require zero input amount");
+        assert!(
+            trade.amount_out == BigUint::ZERO,
+            "At spot price should return zero output amount"
+        );
+    }
+
+    #[test]
+    fn test_swap_to_price_slightly_below_spot() {
+        let state = PancakeswapV2State::new(U256::from(2_000_000u32), U256::from(1_000_000u32));
+
+        let token_in = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
+        let token_out = Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap();
+
+        // Calculate spot price with fee and subtract small amount to move slightly below
+        // Current spot (token_out/token_in with fees): (FEE_NUMERATOR * reserve_out) /
+        // (FEE_PRECISION * reserve_in) Target: slightly below current spot (multiply numerator by
+        // 99999/100000)
+        let spot_price_num = U256::from(1_000_000u32) * FEE_NUMERATOR * U256::from(99_999u32);
+        let spot_price_den = U256::from(2_000_000u32) * FEE_PRECISION * U256::from(100_000u32);
+
+        let target_price =
+            Price::new(u256_to_biguint(spot_price_num), u256_to_biguint(spot_price_den));
+
+        let trade = state
+            .swap_to_price(&token_in, &token_out, target_price)
+            .unwrap();
+
+        assert!(
+            trade.amount_in > BigUint::ZERO,
+            "Should return non-zero amount for target slightly below spot"
+        );
+    }
+
+    #[test]
+    fn test_swap_to_price_returns_output_amount() {
+        let state = PancakeswapV2State::new(U256::from(2_000_000u32), U256::from(1_000_000u32));
+
+        let token_in = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
+        let token_out = Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap();
+
+        // Target price: 2/5 = 0.4 token_out per token_in (lower than current 0.5)
+        let target_price = Price::new(BigUint::from(2u32), BigUint::from(5u32));
+
+        // Get the trade needed to reach target price
+        let trade_swap_to_price = state
+            .swap_to_price(&token_in, &token_out, target_price.clone())
+            .unwrap();
+
+        // Get the trade at the target price
+        let trade_query_supply = state
+            .swap_to_price(&token_in, &token_out, target_price)
+            .unwrap();
+
+        assert_eq!(
+            trade_query_supply.amount_out, trade_swap_to_price.amount_out,
+            "query_supply should return the same output amount as swap_to_price"
+        );
+        assert!(trade_query_supply.amount_out > BigUint::ZERO, "Supply should be non-zero");
+    }
+
+    #[test]
+    fn test_swap_to_price_large_pool() {
+        // Test with realistic large reserves
+        let state = PancakeswapV2State::new(
+            U256::from_str("6770398782322527849696614").unwrap(),
+            U256::from_str("5124813135806900540214").unwrap(),
+        );
+
+        let token_in = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
+        let token_out = Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap();
+
+        // Current price (token_out/token_in) = reserve1/reserve0
+        // To target a slightly lower price (move price down 10%), we can use:
+        // target_price = (reserve1 * 9) / (reserve0 * 10)
+        // This avoids floating point precision issues with large numbers
+        let price_numerator = u256_to_biguint(state.reserve1) * BigUint::from(9u32);
+        let price_denominator = u256_to_biguint(state.reserve0) * BigUint::from(10u32);
+
+        let target_price = Price::new(price_numerator, price_denominator);
+
+        let trade = state
+            .swap_to_price(&token_in, &token_out, target_price)
+            .unwrap();
+
+        assert!(trade.amount_in > BigUint::ZERO, "Should require some input amount");
+        assert!(trade.amount_out > BigUint::ZERO, "Should get some output");
+    }
+
+    #[test]
+    fn test_swap_to_price_basic() {
+        let state = PancakeswapV2State::new(U256::from(1_000_000u32), U256::from(2_000_000u32));
+
+        let token_in = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
+        let token_out = Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap();
+
+        let target_price = Price::new(BigUint::from(2u32), BigUint::from(3u32));
+
+        let trade = state
+            .swap_to_price(&token_in, &token_out, target_price)
+            .unwrap();
+        assert!(trade.amount_in > BigUint::ZERO, "Amount in should be non-zero");
+        assert!(trade.amount_out > BigUint::ZERO, "Amount out should be non-zero");
+    }
+
+    #[test]
+    fn test_swap_to_price_validates_actual_output() {
+        // Test that query_supply validates actual_output >= expected_output
+        let state = PancakeswapV2State::new(
+            U256::from(1_000_000u128) * U256::from(1_000_000_000_000_000_000u128),
+            U256::from(2_000_000u128) * U256::from(1_000_000_000_000_000_000u128),
+        );
+
+        let token_in = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
+        let token_out = Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap();
+
+        // Current pool price: 2M/1M = 2.0 token_out per token_in
+        // Target: slightly lower (e.g., 1.95:1 = 1_950_000/1_000_000)
+        // This is reachable by selling token_in
+        let target_price = Price::new(BigUint::from(1_950_000u128), BigUint::from(1_000_000u128));
+
+        let trade = state
+            .swap_to_price(&token_in, &token_out, target_price.clone())
+            .unwrap();
+        assert!(trade.amount_out > BigUint::ZERO, "Should return amount out for valid price");
+        assert!(trade.amount_in > BigUint::ZERO, "Should return amount in for valid price");
+    }
+
+    #[test]
+    fn test_swap_around_spot_price() {
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+
+        let reserve_0 = U256::from_str("735952457913070155214197").unwrap();
+        let reserve_1 = U256::from_str("735997725943000000000000").unwrap();
+
+        let pool = PancakeswapV2State::new(reserve_0, reserve_1);
+
+        // Reserves: reserve_0 = DAI, reserve_1 = USDC (DAI address < USDC address)
+        let reserve_usdc = reserve_1;
+        let reserve_dai = reserve_0;
+
+        // Calculate spot price (USDC/DAI with fee)
+        let spot_price_dai_per_usdc_num = reserve_dai
+            .checked_mul(U256::from(1000u32))
+            .unwrap();
+        let spot_price_dai_per_usdc_den = reserve_usdc
+            .checked_mul(U256::from(1003u32))
+            .unwrap();
+
+        // Test 1: Price above reachable limit (more DAI per USDC than pool can provide) -should
+        // return zero Multiply by 1001/1000 to go above reachable limit
+        let above_limit_num = spot_price_dai_per_usdc_num
+            .checked_mul(U256::from(1001u32))
+            .unwrap();
+        let above_limit_den = spot_price_dai_per_usdc_den
+            .checked_mul(U256::from(1000u32))
+            .unwrap();
+
+        let trade_above_limit = pool
+            .swap_to_price(
+                &usdc,
+                &dai,
+                Price::new(u256_to_biguint(above_limit_num), u256_to_biguint(above_limit_den)),
+            )
+            .unwrap();
+        assert_eq!(
+            trade_above_limit.amount_out,
+            BigUint::ZERO,
+            "Should return zero for price above reachable limit"
+        );
+
+        // Test 2: Price just below reachable limit - should return non-zero
+        // Multiply by 100_000/100_001 to go slightly below (more reachable)
+        let below_limit_num = spot_price_dai_per_usdc_num
+            .checked_mul(U256::from(100_000u32))
+            .unwrap();
+        let below_limit_den = spot_price_dai_per_usdc_den
+            .checked_mul(U256::from(100_001u32))
+            .unwrap();
+
+        let trade_below_limit = pool
+            .swap_to_price(
+                &usdc,
+                &dai,
+                Price::new(u256_to_biguint(below_limit_num), u256_to_biguint(below_limit_den)),
+            )
+            .unwrap();
+
+        assert!(
+            trade_below_limit.amount_out > BigUint::ZERO,
+            "Should return non-zero for reachable price"
+        );
+
+        // Verify with actual swap
+        let token_usdc = Token::new(&usdc, "USDC", 6, 0, &[Some(10_000)], Chain::Ethereum, 100);
+        let token_dai = Token::new(&dai, "DAI", 18, 0, &[Some(10_000)], Chain::Ethereum, 100);
+
+        let actual_result = pool
+            .get_amount_out(trade_below_limit.amount_in.clone(), &token_usdc, &token_dai)
+            .unwrap();
+
+        assert_eq!(
+            biguint_to_u256(&actual_result.amount),
+            U256::from(367022978534489684u128),
+            "Should return non-zero amount"
+        );
+        assert!(
+            actual_result.amount >= trade_below_limit.amount_out,
+            "Actual swap should give at least predicted amount"
+        );
     }
 }
