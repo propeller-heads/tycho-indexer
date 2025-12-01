@@ -52,7 +52,8 @@ impl fmt::Display for GetAmountOutResult {
     }
 }
 
-/// Represents a price as a fraction in the token_in -> token_out direction. With units [token_out/token_in].
+/// Represents a price as a fraction in the token_in -> token_out direction. With units
+/// [token_out/token_in].
 ///
 /// # Fields
 ///
@@ -211,7 +212,8 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Returns
     ///
-    /// * `Ok(Trade)` - A `Trade` struct containing the amount that needs to be swapped on the pool to move its price to target_price.
+    /// * `Ok(Trade)` - A `Trade` struct containing the amount that needs to be swapped on the pool
+    ///   to move its price to target_price.
     /// * `Err(SimulationError)` - If:
     ///   - The calculation encounters numerical issues (overflow, division by zero, etc.)
     ///   - The method is not implemented for this protocol
@@ -258,7 +260,8 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Returns
     ///
-    /// * `Ok(Trade)` - A `Trade` struct containing the largest trade that can be executed on this pool while respecting the provided trace price
+    /// * `Ok(Trade)` - A `Trade` struct containing the largest trade that can be executed on this
+    ///   pool while respecting the provided trace price
     /// * `Err(SimulationError)` - If:
     ///   - The calculation encounters numerical issues
     ///   - The method is not implemented for this protocol
