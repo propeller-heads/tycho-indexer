@@ -1330,7 +1330,23 @@ where
                                         .tracked_contracts
                                         .get_all(account.clone())
                                     {
-                                        all_tracked.flatten().cloned().collect()
+                                        // Use latest layer's size as capacity estimate
+                                        let estimated_capacity = self
+                                            .cache
+                                            .tracked_contracts
+                                            .get(account)
+                                            .map(|set| set.len())
+                                            .unwrap_or(16);
+
+                                        let mut merged = HashSet::with_capacity(estimated_capacity);
+
+                                        // Merge all sets in a single pass
+                                        for tracked_set in all_tracked {
+                                            // Bytes uses reference-counted storage, so clone() is
+                                            // cheap
+                                            merged.extend(tracked_set.iter().cloned());
+                                        }
+                                        merged
                                     } else {
                                         HashSet::new()
                                     }

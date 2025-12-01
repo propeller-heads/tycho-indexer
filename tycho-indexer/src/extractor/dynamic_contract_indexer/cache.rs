@@ -397,6 +397,12 @@ where
     /// * `Some(Iterator<Item = &V>)` - An iterator of all values for the key, starting from the
     ///   latest pending layer.
     /// * `None` - If the key is not found in any layer.
+    #[instrument(
+        level = "debug",
+        name = "dci_cache_get_all",
+        skip(self),
+        fields(key = %k)
+    )]
     pub(super) fn get_all<'a>(&'a self, k: K) -> Option<impl Iterator<Item = &'a V> + 'a> {
         let key_for_pending = k.clone();
         let key_for_permanent = k;
