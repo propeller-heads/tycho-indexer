@@ -78,6 +78,11 @@ fn map_protocol_changes(
 /// Listens for DepositReceived, DepositAssigned, DepositRecycled, and ExcessWithdrawn events
 /// from the RocketDepositPool contracts and fetches the updated ETH balance from RocketVault's
 /// etherBalances storage slot.
+/// The reason we do not use the event parameters directly is that they only contain the delta
+/// change, whereas we want to track the absolute balance. We have decided against using the
+/// balance stores to accumulate the changes due to added complexity and need to start from the
+/// first deployed Deposit Pool contract, while with the storage slot approach we can start
+/// indexing at any point in time (in our case, at Deposit Pool V1.2 deployment).
 fn update_liquidity(
     block: &eth::v2::Block,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
