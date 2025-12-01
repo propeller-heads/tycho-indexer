@@ -1301,12 +1301,10 @@ where
 
                 // Check if tracked - use contains_key which is cheaper than get_all when we don't
                 // need the data yet
-                let check_tracked_span = span!(Level::DEBUG, "check_tracked").entered();
                 let is_tracked = self
                     .cache
                     .tracked_contracts
                     .contains_key(account);
-                drop(check_tracked_span);
 
                 if !is_tracked {
                     continue;
@@ -1315,10 +1313,7 @@ where
                 // Collect slot updates, filtering during collection if needed to avoid unnecessary
                 // clones
                 let slot_updates: ContractStoreDeltas = {
-                    let skip_full_indexing_span =
-                        span!(Level::DEBUG, "check_skip_full_indexing").entered();
                     let skip_full_indexing = self.should_skip_full_indexing(account);
-                    drop(skip_full_indexing_span);
 
                     if skip_full_indexing {
                         // Early exit if no slots to filter
@@ -1430,12 +1425,6 @@ where
 
             // Only create TxWithChanges if we have account deltas
             if !tx_account_deltas.is_empty() {
-                let _merge_span = span!(
-                    Level::DEBUG,
-                    "merge_tx_changes",
-                    account_delta_count = tx_account_deltas.len()
-                )
-                .entered();
                 let tx_with_changes = TxWithChanges {
                     tx: tx.tx.clone(),
                     account_deltas: tx_account_deltas,
