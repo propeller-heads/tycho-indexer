@@ -11,9 +11,11 @@ import {SafeCallback} from "@uniswap/v4-periphery/src/base/SafeCallback.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
 
 contract UniswapV4ExecutorExposed is UniswapV4Executor {
-    constructor(IPoolManager _POOL_MANAGER, address _permit2)
-        UniswapV4Executor(_POOL_MANAGER, _permit2)
-    {}
+    constructor(
+        IPoolManager _POOL_MANAGER,
+        address _ANGSTROM_HOOK,
+        address _permit2
+    ) UniswapV4Executor(_POOL_MANAGER, _ANGSTROM_HOOK, _permit2) {}
 
     function decodeData(bytes calldata data)
         external
@@ -43,7 +45,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         uint256 forkBlock = 22689128;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
         uniswapV4Exposed = new UniswapV4ExecutorExposed(
-            IPoolManager(POOL_MANAGER), PERMIT2_ADDRESS
+            IPoolManager(POOL_MANAGER), ANGSTROM_HOOK, PERMIT2_ADDRESS
         );
     }
 
@@ -289,7 +291,7 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
         uint256 forkBlock = 23535338;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
         uniswapV4Exposed = new UniswapV4ExecutorExposed(
-            IPoolManager(POOL_MANAGER), PERMIT2_ADDRESS
+            IPoolManager(POOL_MANAGER), ANGSTROM_HOOK, PERMIT2_ADDRESS
         );
     }
 

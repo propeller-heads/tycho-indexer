@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "../../src/executors/UniswapV4AngstromExecutor.sol";
+import "../../src/executors/UniswapV4Executor.sol";
 import "../TestUtils.sol";
 import "./UniswapV4Utils.sol";
 import {Constants} from "../Constants.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
 
-contract UniswapV4AngstromExecutorExposed is UniswapV4AngstromExecutor {
-    constructor(IPoolManager _POOL_MANAGER, address _permit2)
-        UniswapV4AngstromExecutor(_POOL_MANAGER, _permit2)
-    {}
+contract UniswapV4ExecutorExposed is UniswapV4Executor {
+    constructor(
+        IPoolManager _POOL_MANAGER,
+        address _ANGSTROM_HOOK,
+        address _permit2
+    ) UniswapV4Executor(_POOL_MANAGER, _ANGSTROM_HOOK, _permit2) {}
 
     function selectAttestation(bytes memory attestationData)
         external
@@ -24,15 +26,15 @@ contract UniswapV4AngstromExecutorExposed is UniswapV4AngstromExecutor {
 contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
     using SafeERC20 for IERC20;
 
-    UniswapV4AngstromExecutorExposed angstromExecutor;
+    UniswapV4ExecutorExposed angstromExecutor;
     IERC20 USDC = IERC20(USDC_ADDR);
     IERC20 WETH = IERC20(WETH_ADDR);
 
     function setUp() public {
         uint256 forkBlock = 23873662;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        angstromExecutor = new UniswapV4AngstromExecutorExposed(
-            IPoolManager(POOL_MANAGER), PERMIT2_ADDRESS
+        angstromExecutor = new UniswapV4ExecutorExposed(
+            IPoolManager(POOL_MANAGER), ANGSTROM_HOOK, PERMIT2_ADDRESS
         );
     }
 
@@ -72,7 +74,7 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
         vm.roll(350);
         vm.expectRevert(
             abi.encodeWithSelector(
-                UniswapV4AngstromExecutor__NoAttestationForBlock.selector, 350
+                UniswapV4Executor__NoAngstromAttestationForBlock.selector, 350
             )
         );
         selected = angstromExecutor.selectAttestation(encodedAttestations);
@@ -83,7 +85,7 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
         bytes memory encodedAttestations;
         vm.expectRevert(
             abi.encodeWithSelector(
-                UniswapV4AngstromExecutor__NoAttestationForBlock.selector,
+                UniswapV4Executor__NoAngstromAttestationForBlock.selector,
                 block.number
             )
         );
@@ -177,7 +179,7 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                UniswapV4AngstromExecutor__NoAttestationForBlock.selector,
+                UniswapV4Executor__NoAngstromAttestationForBlock.selector,
                 currentBlock
             )
         );
