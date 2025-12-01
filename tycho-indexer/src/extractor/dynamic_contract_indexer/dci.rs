@@ -1356,17 +1356,35 @@ where
                                 .min(contract_changes.slots.len());
                             let mut result = ContractStoreDeltas::with_capacity(estimated_capacity);
 
-                            // Manual loop is faster than iterator chain for this hot path
-                            for slot in tracked_keys.iter() {
-                                if let Some(change) = contract_changes.slots.get(slot) {
-                                    result.insert(
-                                        slot.clone(),
-                                        if change.value.is_zero() {
-                                            None
-                                        } else {
-                                            Some(change.value.clone())
-                                        },
-                                    );
+                            // Iterate through the smaller collection to minimize iterations
+                            if contract_changes.slots.len() < tracked_keys.len() {
+                                // Fewer slots - iterate through slots and check tracked_keys
+                                for (slot, change) in contract_changes.slots.iter() {
+                                    if tracked_keys.contains(slot) {
+                                        result.insert(
+                                            slot.clone(),
+                                            if change.value.is_zero() {
+                                                None
+                                            } else {
+                                                Some(change.value.clone())
+                                            },
+                                        );
+                                    }
+                                }
+                            } else {
+                                // Fewer tracked keys - iterate through tracked_keys and look up in
+                                // slots
+                                for slot in tracked_keys.iter() {
+                                    if let Some(change) = contract_changes.slots.get(slot) {
+                                        result.insert(
+                                            slot.clone(),
+                                            if change.value.is_zero() {
+                                                None
+                                            } else {
+                                                Some(change.value.clone())
+                                            },
+                                        );
+                                    }
                                 }
                             }
                             result
