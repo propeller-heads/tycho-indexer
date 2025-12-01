@@ -192,31 +192,13 @@ pub(crate) fn sqrt_price_q96_to_f64(
 /// # Returns
 /// The sqrt price in Q96 format as U256
 pub(crate) fn get_sqrt_price_q96(price_0: U256, price_1: U256) -> Result<U256, SimulationError> {
-    if price_1 == U256::ZERO {
-        return Err(SimulationError::FatalError("get_sqrt_price_q96: price_1 is zero".into()));
-    }
-
     // sqrt(price_0/price_1) * 2^96 = sqrt(price_0 * 2^192 / price_1)
-    let numerator = U512::from(price_0) * Q192;
-    let ratio = numerator / U512::from(price_1);
+    // We need to compute this carefully to avoid overflow
 
-    // Compute integer square root (returns U512)
-    let sqrt_result = sqrt_u512(ratio);
+    let ratio = mul_div(price_0, Q192, price_1)?;
 
-    // Convert U512 to U256 by taking lower 256 bits
-    // The result should fit in U256 since we're computing sqrt(price * 2^192)
-    // and the max sqrt_price is around 2^160
-    let limbs = sqrt_result.as_limbs();
-    let result = U256::from_limbs([limbs[0], limbs[1], limbs[2], limbs[3]]);
-
-    // Verify the higher bits are zero (sanity check)
-    if limbs[4] != 0 || limbs[5] != 0 || limbs[6] != 0 || limbs[7] != 0 {
-        return Err(SimulationError::FatalError(
-            "get_sqrt_price_q96: result exceeds U256 bounds".into(),
-        ));
-    }
-
-    Ok(result)
+    // Compute integer square root
+    sqrt_u256(ratio)
 }
 
 /// Converts a target price to sqrt_price_x96 format with fee adjustment
