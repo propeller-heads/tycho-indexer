@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "_tycho_simulation_py"
-version = "0.206.0"
+version = "0.207.0"
 dependencies = [
  "alloy",
  "num-bigint",
@@ -9359,9 +9359,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.113.2"
+version = "0.117.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d96184f741bd7ee0b9baa62bad31f8e2cde5ef2588be781cdbee2f9cd20c3c7d"
+checksum = "1229d562a92e05b5f0e641bac7d2d6d4a58dea0b86cd88d0b1f7f1eb9b5ed34b"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9389,9 +9389,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-common"
-version = "0.113.2"
+version = "0.117.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bf3dc0104644692572bac7378b56902a4448bda79d64261869dd4b53272192b"
+checksum = "f84e53134dd3d93646ff88e60dcc841e255eed99139e06bb37111d685a760fb6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9415,15 +9415,16 @@ dependencies = [
 
 [[package]]
 name = "tycho-ethereum"
-version = "0.113.0"
+version = "0.117.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f7204878fc91128b34e8aee9d5e7a9be91bbf43f60958e71ebd00c26db77f08"
+checksum = "5755e7f5e072682725d9a187501be219dc734570eb17c5627f994ee6cd3fe6cd"
 dependencies = [
  "alloy",
  "async-trait",
  "chrono",
  "futures 0.3.31",
  "rand 0.8.5",
+ "serde",
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
@@ -9434,9 +9435,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.136.0"
+version = "0.137.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0966ed76cf1ce780f1f40e9e65f0190feaf0114aa980e77a1856ac46bf62977b"
+checksum = "472708a52f8eae9f049f58f34cfaa7c37e27f5747e7545e769660b89dbfe7a84"
 dependencies = [
  "alloy",
  "chrono",
@@ -9447,6 +9448,7 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "once_cell",
+ "reqwest",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -9456,7 +9458,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-integration-test"
-version = "0.206.0"
+version = "0.207.0"
 dependencies = [
  "actix-web",
  "alloy",
@@ -9485,7 +9487,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.206.0"
+version = "0.207.0"
 dependencies = [
  "alloy",
  "anyhow",
@@ -9543,7 +9545,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-test"
-version = "0.206.0"
+version = "0.207.0"
 dependencies = [
  "actix-web",
  "alloy",

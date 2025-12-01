@@ -1,5 +1,5 @@
 [workspace.package]
-version = "0.206.0"
+version = "0.207.0"
 
 [package]
 name = "tycho-simulation"
@@ -41,10 +41,10 @@ async-trait = "0.1.88"
 rustc-hash = "2.1.1"
 
 # Tycho dependencies
-tycho-client = ">=0.113.0"
-tycho-common = ">=0.113.0"
-tycho-ethereum = ">=0.113.0"
-tycho-execution = ">=0.129.1"
+tycho-client = ">=0.117.4"
+tycho-common = ">=0.117.4"
+tycho-ethereum = ">=0.117.4"
+tycho-execution = ">=0.137.1"
 
 # EVM dependencies
 alloy = { version = "1.0.30", features = ["providers", "signer-local", "rpc-types-eth"] }

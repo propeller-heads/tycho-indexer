@@ -239,9 +239,11 @@ impl ExecutionSimulator {
                         .is_some();
 
                     if has_error {
-                        error!("=== Transaction {} Trace (FAILURE) ===", simulation_id);
-                        print_call_trace(&trace_value, 0).await;
-                        error!("=== End Trace ===");
+                        if tracing::enabled!(tracing::Level::DEBUG) {
+                            error!("=== Transaction {} Trace (FAILURE) ===", simulation_id);
+                            print_call_trace(&trace_value, 0).await;
+                            error!("=== End Trace ===");
+                        }
 
                         // Try to get revert reason from multiple possible locations
                         let reason = if let Some(revert_reason) = trace_value

@@ -1,3 +1,32 @@
+## [0.207.0](https://github.com/propeller-heads/tycho-simulation/compare/0.206.2...0.207.0) (2025-11-28)
+
+
+### Features
+
+* Allow passing protocols as cli args ([f53a990](https://github.com/propeller-heads/tycho-simulation/commit/f53a990dee51f51b984cfebd1ccf6436aae5a743))
+
+
+### Bug Fixes
+
+* Exit application when protocol stream terminates ([47f1e95](https://github.com/propeller-heads/tycho-simulation/commit/47f1e95e6aa45732f6e9129e0c0b20e5fca27ed5))
+
+## [0.206.2](https://github.com/propeller-heads/tycho-simulation/compare/0.206.1...0.206.2) (2025-11-28)
+
+
+### Bug Fixes
+
+* **cluster-test:** Cap min amount in for Hashflow ([0cf166f](https://github.com/propeller-heads/tycho-simulation/commit/0cf166f79f938c570914f5355252972dc87641a5))
+* Don't allow the amount in to be bigger than 96 bits ([3754f18](https://github.com/propeller-heads/tycho-simulation/commit/3754f186f6d915cc858315353e78f1e861ec2e51))
+
+## [0.206.1](https://github.com/propeller-heads/tycho-simulation/compare/0.206.0...0.206.1) (2025-11-28)
+
+
+### Bug Fixes
+
+* **CI:** Temporarily don't run docs tests ([b0f1fba](https://github.com/propeller-heads/tycho-simulation/commit/b0f1fba236614ac43800ab361dc18d8918508701))
+* **EVMPoolState:** After swapping, set the spot prices correctly ([8bfd22c](https://github.com/propeller-heads/tycho-simulation/commit/8bfd22c51cdd15ee7e4bbc1353feb305796d2a6a))
+* Fix test ([7c8a30c](https://github.com/propeller-heads/tycho-simulation/commit/7c8a30ce1a3384ad72fc62c93765112551d617ac))
+
 ## [0.206.0](https://github.com/propeller-heads/tycho-simulation/compare/0.205.0...0.206.0) (2025-11-26)
 
 
