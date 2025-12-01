@@ -8,11 +8,11 @@ description: Simulate interactions with any protocol.
 
 Tycho Simulation is a Rust crate that provides powerful tools for **interacting with protocol states**, **calculating spot prices**, and **simulating token swaps**.
 
-The repository is available [here](https://github.com/propeller-heads/tycho-simulation).&#x20;
+The repository is available [here](https://github.com/propeller-heads/tycho-simulation).
 
 ## Installation
 
-The `tycho-simulation` package is available on [Github](https://github.com/propeller-heads/tycho-simulation).&#x20;
+The `tycho-simulation` package is available on [Github](https://github.com/propeller-heads/tycho-simulation).
 
 To use the simulation tools with Ethereum Virtual Machine (EVM) chains, add the optional `evm` feature flag to your dependency configuration:
 
@@ -69,7 +69,7 @@ pub struct GetAmountOutResult {
 
 `new state` allows you to, for example, simulate consecutive swaps in the same protocol.
 
-Please refer to the in-code documentation of the `ProtocolSim` trait and its methods for more in-depth information.
+Please refer to the [in-code documentation](../../tycho-common/src/simulation/protocol_sim.rs#L116) of the `ProtocolSim` trait and its methods for more in-depth information.
 
 #### Fee
 
@@ -86,7 +86,7 @@ fn fee(&self) -> f64;
 
 #### Get limits
 
-`get_limits` returns a tuple containing the maximum amount in and out that can be traded between two tokens.&#x20;
+`get_limits` returns a tuple containing the maximum amount in and out that can be traded between two tokens.
 
 {% hint style="info" %}
 If there are no hard limits to the swap (for example for Uniswap V2), the returned amount will be a "soft" limit, meaning that the actual amount traded could be higher but it's advised to not exceed it.
@@ -99,6 +99,53 @@ fn get_limits(
         buy_token: Address,
     ) -> Result<(BigUint, BigUint), SimulationError>;
 ```
+
+#### Swap to price
+
+`swap_to_price` returns the amount of `token_in` required to move the pool's marginal price down to a target price, and the amount of `token_out` received.\
+The `target_price` is denoted as `token_out` (numerator) per `token_in` (denominator) net of all fees.
+
+```rust
+fn swap_to_price(
+        &self,
+        token_in: Address,
+        token_out: Address,
+        target_price: Price,
+    ) -> Result<Trade, SimulationError>
+```
+
+`Price` represents a price as a rational fraction (numerator / denominator).
+
+```rust
+pub struct Price {
+    pub numerator: BigUint,
+    pub denominator: BigUint,
+}
+```
+
+`Trade` represents a trade between two tokens at a given price on a pool.
+
+```rust
+pub struct Trade {
+    pub amount_in: BigUint,
+    pub amount_out: BigUint,
+}
+```
+
+#### Query supply
+
+`query_supply` returns the maximum amount of `token_out` a pool can supply, and corresponding `token_in` demand, while respecting a minimum trade price.\
+The `target_price` is denoted as `token_out` (numerator) per `token_in` (denominator) net of all fees.
+
+<pre class="language-rust"><code class="lang-rust">fn query_supply(
+        &#x26;self,
+        token_in: Address,
+        token_out: Address,
+        target_price: Price,
+<strong>    ) -> Result&#x3C;Trade, SimulationError>
+</strong></code></pre>
+
+Please refer to the [in-code documentation](../../tycho-common/src/simulation/protocol_sim.rs#L236) of the `ProtocolSim` trait and its methods for more in-depth information.
 
 ## Streaming Protocol States
 
@@ -124,7 +171,7 @@ let all_tokens = load_all_tokens(
 
 #### Step 2: Create a stream
 
-You can use the [ProtocolStreamBuilder](https://github.com/propeller-heads/tycho-simulation/blob/main/src/evm/stream.rs#L55) to easily set up and manage multiple protocols within one stream. An example of creating such a stream with Uniswap V2 and Balancer V2 protocols is as follows:&#x20;
+You can use the [ProtocolStreamBuilder](https://github.com/propeller-heads/tycho-simulation/blob/main/src/evm/stream.rs#L55) to easily set up and manage multiple protocols within one stream. An example of creating such a stream with Uniswap V2 and Balancer V2 protocols is as follows:
 
 ```rust
 use tycho_simulation::evm::{
@@ -188,8 +235,8 @@ In this example we choose 2 tokens: a buy and a sell token, and simulate only on
 let mut all_pools = HashMap::new();
 // track all amount_outs for each pool simulated
 let mut amount_out = HashMap::new()
-<strong>
-</strong><strong>// loop through stream messages
+
+<strong>// loop through stream messages
 </strong><strong>while let Some(stream_message) = protocol_stream.next().await {
 </strong>     let message = match stream_message {
         Ok(msg) => msg,
@@ -235,7 +282,7 @@ let mut amount_out = HashMap::new()
 
 You can find an example of a **price printer** [here](https://github.com/propeller-heads/tycho-simulation/tree/main/examples).
 
-&#x20;Clone the repo, then run:
+Clone the repo, then run:
 
 ```bash
 export RPC_URL=<your-eth-rpc-url>
@@ -243,7 +290,7 @@ cargo run --release --example price_printer -- --tvl-threshold 1000
 ```
 
 {% hint style="info" %}
-You'll need an RPC to fetch some static protocol info. You can use any RPC provider – e.g. set one up with [Infura](https://www.infura.io/).&#x20;
+You'll need an RPC to fetch some static protocol info. You can use any RPC provider – e.g. set one up with [Infura](https://www.infura.io/).
 {% endhint %}
 
 You will see a UI where you can select any pool, press enter, and simulate different trade amounts on the pool.
