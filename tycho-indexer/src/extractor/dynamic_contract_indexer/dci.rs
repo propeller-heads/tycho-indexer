@@ -1314,18 +1314,19 @@ where
                                         .tracked_contracts
                                         .get_all(account.clone())
                                     {
-                                        // Use latest layer's size as capacity estimate
-                                        let estimated_capacity = self
-                                            .cache
-                                            .tracked_contracts
-                                            .get(account)
-                                            .map(|set| set.len())
-                                            .unwrap_or(16);
+                                        // Collect iterator to allow multiple passes and accurate
+                                        // capacity calculation
+                                        let sets: Vec<_> = all_tracked.collect();
 
-                                        let mut merged = HashSet::with_capacity(estimated_capacity);
+                                        // Calculate total capacity by summing all set sizes
+                                        // This avoids reallocations during extend operations
+                                        let total_capacity: usize =
+                                            sets.iter().map(|set| set.len()).sum();
+
+                                        let mut merged = HashSet::with_capacity(total_capacity);
 
                                         // Merge all sets in a single pass
-                                        for tracked_set in all_tracked {
+                                        for tracked_set in sets {
                                             // Bytes uses reference-counted storage, so clone() is
                                             // cheap
                                             merged.extend(tracked_set.iter().cloned());
