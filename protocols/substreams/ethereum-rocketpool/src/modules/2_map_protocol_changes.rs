@@ -74,6 +74,59 @@ fn map_protocol_changes(
     })
 }
 
+/// Initializes the protocol component with initial state values.
+///
+/// This function is called only once when the component is created. It adds the protocol
+/// component, initial attributes (with ChangeType::Creation), and initial ETH balance.
+fn initialize_protocol_component(
+    params: &str,
+    protocol_components: BlockTransactionProtocolComponents,
+    transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
+) -> Result<()> {
+    // Parse initial state JSON once
+    let initial_state: HashMap<String, String> = serde_json::from_str(params)
+        .map_err(|e| anyhow::anyhow!("Failed to parse initial state: {}", e))?;
+
+    // We expect exactly one tx_component with one component for RocketPool
+    let tx_component = protocol_components
+        .tx_components
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("No transaction component found"))?;
+
+    let tx = tx_component
+        .tx
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Transaction missing in protocol components"))?;
+
+    let component = tx_component
+        .components
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("No component found in transaction"))?;
+
+    let builder = transaction_changes
+        .entry(tx.index)
+        .or_insert_with(|| TransactionChangesBuilder::new(tx));
+
+    builder.add_protocol_component(&component);
+
+    builder.add_entity_change(&EntityChanges {
+        component_id: ROCKET_POOL_COMPONENT_ID.to_owned(),
+        attributes: build_initial_attributes(&initial_state)?,
+    });
+
+    builder.add_balance_change(&BalanceChange {
+        token: ETH_ADDRESS.to_vec(),
+        balance: get_initial_eth_balance(&initial_state)?,
+        component_id: ROCKET_POOL_COMPONENT_ID
+            .as_bytes()
+            .to_vec(),
+    });
+
+    Ok(())
+}
+
 /// Updates deposit contract liquidity based on deposit pool events.
 /// This is part of the overall Rocket Pool ETH liquidity tracking.
 ///
@@ -169,59 +222,6 @@ fn update_reth_liquidity(
             add_entity_change_if_needed(attributes, tx, transaction_changes);
         }
     }
-}
-
-/// Initializes the protocol component with initial state values.
-///
-/// This function is called only once when the component is created. It adds the protocol
-/// component, initial attributes (with ChangeType::Creation), and initial ETH balance.
-fn initialize_protocol_component(
-    params: &str,
-    protocol_components: BlockTransactionProtocolComponents,
-    transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
-) -> Result<()> {
-    // Parse initial state JSON once
-    let initial_state: HashMap<String, String> = serde_json::from_str(params)
-        .map_err(|e| anyhow::anyhow!("Failed to parse initial state: {}", e))?;
-
-    // We expect exactly one tx_component with one component for RocketPool
-    let tx_component = protocol_components
-        .tx_components
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("No transaction component found"))?;
-
-    let tx = tx_component
-        .tx
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Transaction missing in protocol components"))?;
-
-    let component = tx_component
-        .components
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("No component found in transaction"))?;
-
-    let builder = transaction_changes
-        .entry(tx.index)
-        .or_insert_with(|| TransactionChangesBuilder::new(tx));
-
-    builder.add_protocol_component(&component);
-
-    builder.add_entity_change(&EntityChanges {
-        component_id: ROCKET_POOL_COMPONENT_ID.to_owned(),
-        attributes: build_initial_attributes(&initial_state)?,
-    });
-
-    builder.add_balance_change(&BalanceChange {
-        token: ETH_ADDRESS.to_vec(),
-        balance: get_initial_eth_balance(&initial_state)?,
-        component_id: ROCKET_POOL_COMPONENT_ID
-            .as_bytes()
-            .to_vec(),
-    });
-
-    Ok(())
 }
 
 /// Extracts Rocket Pool network balance updates from the block logs.
