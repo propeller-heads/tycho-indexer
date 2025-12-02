@@ -38,7 +38,6 @@ itertools = "0.10.5"
 hex-literal = "0.4.1"
 hex = "0.4.3"
 async-trait = "0.1.88"
-rustc-hash = "2.1.1"
 
 # Tycho dependencies
 tycho-client = ">=0.117.4"
@@ -111,7 +110,6 @@ async-stream = { version = "0.3.6", optional = true }
 http = { version = "1.0", optional = true }
 prost = { version = "0.13", optional = true }
 hex-literal.workspace = true
-rustc-hash.workspace = true
 
 [dev-dependencies]
 # tycho execution for quickstart
