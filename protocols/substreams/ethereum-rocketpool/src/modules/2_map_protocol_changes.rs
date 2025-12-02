@@ -6,15 +6,14 @@ use crate::{
     constants::{
         ALL_STORAGE_SLOTS, DEPOSITS_ENABLED_SLOT, DEPOSIT_ASSIGN_ENABLED_SLOT,
         DEPOSIT_ASSIGN_MAXIMUM_SLOT, DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT, DEPOSIT_FEE_SLOT,
-        ETH_ADDRESS, MAX_DEPOSIT_AMOUNT_SLOT, MIN_DEPOSIT_AMOUNT_SLOT, QUEUE_FULL_END_SLOT,
-        QUEUE_FULL_START_SLOT, QUEUE_HALF_END_SLOT, QUEUE_HALF_START_SLOT, QUEUE_KEY_FULL,
+        ETH_ADDRESS, MAX_DEPOSIT_AMOUNT_SLOT, MIN_DEPOSIT_AMOUNT_SLOT, QUEUE_KEY_FULL,
         QUEUE_KEY_HALF, QUEUE_KEY_VARIABLE, QUEUE_VARIABLE_END_SLOT, QUEUE_VARIABLE_START_SLOT,
         RETH_ADDRESS, ROCKET_DAO_MINIPOOL_QUEUE_ADDRESS, ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS,
         ROCKET_DEPOSIT_POOL_ADDRESS_V1_2, ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT,
         ROCKET_NETWORK_BALANCES_ADDRESS, ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS,
         ROCKET_VAULT_ADDRESS,
     },
-    utils::{get_changed_attributes, hex_to_bytes, StorageLocation},
+    utils::{get_changed_attributes, hex_to_bytes},
 };
 use anyhow::Result;
 use itertools::Itertools;
@@ -329,14 +328,13 @@ fn update_protocol_settings(
 ///
 /// Listens for MinipoolEnqueued, MinipoolDequeued, and MinipoolRemoved events from the
 /// RocketMinipoolQueue contract and fetches the updated queue storage values from RocketStorage.
-/// Uses the queue_id from each event to determine exactly which storage slot to check:
-/// - MinipoolEnqueued: updates the end slot for the queue (only variable queue supported)
-/// - MinipoolDequeued: updates the start slot for the queue
-/// - MinipoolRemoved: updates the end slot for the queue
+/// - MinipoolEnqueued: updates the end slot for the variable queue
+/// - MinipoolDequeued: updates the start slot for the variable queue
+/// - MinipoolRemoved: updates the end slot for the variable queue
 ///
 /// Note that since the V1.2 Deposit Pool deployment, only the variable queue can receive new
-/// minipools (Enqueued), while Dequeued and Removed events can still affect all queues until
-/// they are fully depleted, which they are at the time of writing.
+/// minipools (Enqueued), and as there were no minipools in the full or half queues at that time,
+/// we do not expect any enqueue events for those queues.
 fn update_minipool_queue_sizes(
     block: &eth::v2::Block,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
@@ -353,15 +351,21 @@ fn update_minipool_queue_sizes(
         let storage_slot = if let Some(event) =
             rocket_minipool_queue::events::MinipoolEnqueued::match_and_decode(log)
         {
-            queue_enqueue_slot(event.queue_id)?
+            assert_variable_queue_id(event.queue_id)?;
+
+            QUEUE_VARIABLE_END_SLOT
         } else if let Some(event) =
             rocket_minipool_queue::events::MinipoolDequeued::match_and_decode(log)
         {
-            queue_start_slot(event.queue_id)?
+            assert_variable_queue_id(event.queue_id)?;
+
+            QUEUE_VARIABLE_START_SLOT
         } else if let Some(event) =
             rocket_minipool_queue::events::MinipoolRemoved::match_and_decode(log)
         {
-            queue_end_slot(event.queue_id)?
+            assert_variable_queue_id(event.queue_id)?;
+
+            QUEUE_VARIABLE_END_SLOT
         } else {
             continue;
         };
@@ -381,37 +385,16 @@ fn update_minipool_queue_sizes(
     Ok(())
 }
 
-/// Maps a queue_id to its corresponding start storage slot for dequeue operations.
-fn queue_start_slot(queue_id: [u8; 32]) -> Result<StorageLocation<'static>> {
+/// Asserts that the provided queue_id corresponds to the variable queue.
+fn assert_variable_queue_id(queue_id: [u8; 32]) -> Result<()> {
     match queue_id {
-        QUEUE_KEY_FULL => Ok(QUEUE_FULL_START_SLOT),
-        QUEUE_KEY_HALF => Ok(QUEUE_HALF_START_SLOT),
-        QUEUE_KEY_VARIABLE => Ok(QUEUE_VARIABLE_START_SLOT),
-        _ => Err(anyhow::anyhow!("Unknown queue_id for dequeue: 0x{}", hex::encode(queue_id))),
-    }
-}
-
-/// Maps a queue_id to its corresponding end storage slot for remove operations.
-fn queue_end_slot(queue_id: [u8; 32]) -> Result<StorageLocation<'static>> {
-    match queue_id {
-        QUEUE_KEY_FULL => Ok(QUEUE_FULL_END_SLOT),
-        QUEUE_KEY_HALF => Ok(QUEUE_HALF_END_SLOT),
-        QUEUE_KEY_VARIABLE => Ok(QUEUE_VARIABLE_END_SLOT),
-        _ => Err(anyhow::anyhow!("Unknown queue_id for remove: 0x{}", hex::encode(queue_id))),
-    }
-}
-
-/// Maps a queue_id to its corresponding end storage slot for enqueue operations.
-/// Only the variable queue is supported for new enqueues since Deposit Pool V1.2.
-fn queue_enqueue_slot(queue_id: [u8; 32]) -> Result<StorageLocation<'static>> {
-    match queue_id {
-        QUEUE_KEY_VARIABLE => Ok(QUEUE_VARIABLE_END_SLOT),
-        QUEUE_KEY_FULL => Err(anyhow::anyhow!(
-            "Full queue is not supported for enqueue operations since Deposit Pool V1.2"
-        )),
-        QUEUE_KEY_HALF => Err(anyhow::anyhow!(
-            "Half queue is not supported for enqueue operations since Deposit Pool V1.2"
-        )),
+        QUEUE_KEY_VARIABLE => Ok(()),
+        QUEUE_KEY_FULL => {
+            Err(anyhow::anyhow!("Full queue is not supported since Deposit Pool V1.2"))
+        }
+        QUEUE_KEY_HALF => {
+            Err(anyhow::anyhow!("Half queue is not supported since Deposit Pool V1.2"))
+        }
         _ => Err(anyhow::anyhow!("Unknown queue_id for enqueue: 0x{}", hex::encode(queue_id))),
     }
 }

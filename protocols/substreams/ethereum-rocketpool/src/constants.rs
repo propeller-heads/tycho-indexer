@@ -18,7 +18,7 @@ pub const ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS: [u8; 20] =
 pub const ROCKET_DEPOSIT_POOL_ADDRESS_V1_2: [u8; 20] =
     hex!("DD3f50F8A6CafbE9b31a427582963f465E745AF8");
 
-pub(crate) const ALL_STORAGE_SLOTS: [StorageLocation; 14] = [
+pub(crate) const ALL_STORAGE_SLOTS: [StorageLocation; 10] = [
     ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT,
     DEPOSITS_ENABLED_SLOT,
     DEPOSIT_ASSIGN_ENABLED_SLOT,
@@ -27,10 +27,6 @@ pub(crate) const ALL_STORAGE_SLOTS: [StorageLocation; 14] = [
     MIN_DEPOSIT_AMOUNT_SLOT,
     MAX_DEPOSIT_AMOUNT_SLOT,
     DEPOSIT_FEE_SLOT,
-    QUEUE_FULL_START_SLOT,
-    QUEUE_FULL_END_SLOT,
-    QUEUE_HALF_START_SLOT,
-    QUEUE_HALF_END_SLOT,
     QUEUE_VARIABLE_START_SLOT,
     QUEUE_VARIABLE_END_SLOT,
 ];
@@ -45,38 +41,6 @@ pub(crate) const ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT: StorageLocation = Storage
 };
 
 // ----------- Contract: Rocket Storage -----------
-pub(crate) const QUEUE_FULL_START_SLOT: StorageLocation = StorageLocation {
-    name: "queue_full_start",
-    slot: hex!("66fbb2bc01c7f3354379985511bb047cddc3089cc9aa6432e0b4de8646473756"),
-    offset: 0,
-    number_of_bytes: 32,
-    signed: false,
-};
-
-pub(crate) const QUEUE_FULL_END_SLOT: StorageLocation = StorageLocation {
-    name: "queue_full_end",
-    slot: hex!("a9ca39f6099c1d39d48a086017baafe1c63c2875fbe17fab99a52408cbbc80ad"),
-    offset: 0,
-    number_of_bytes: 32,
-    signed: false,
-};
-
-pub(crate) const QUEUE_HALF_START_SLOT: StorageLocation = StorageLocation {
-    name: "queue_half_start",
-    slot: hex!("ada5623cd46c40afb4bc5a397a7e76242f78a98958558c5d20ca1574e2fcd02e"),
-    offset: 0,
-    number_of_bytes: 32,
-    signed: false,
-};
-
-pub(crate) const QUEUE_HALF_END_SLOT: StorageLocation = StorageLocation {
-    name: "queue_half_end",
-    slot: hex!("49585eaefe7634c78147facb0153201345aa8526bd04dfba2c88d373611930c6"),
-    offset: 0,
-    number_of_bytes: 32,
-    signed: false,
-};
-
 pub(crate) const QUEUE_VARIABLE_START_SLOT: StorageLocation = StorageLocation {
     name: "queue_variable_start",
     slot: hex!("3d568e1d0910a705e47c1e34016aabfe207c556ec3d7b6bced9112251062388b"),
