@@ -1303,12 +1303,13 @@ where
                         if contract_changes.slots.is_empty() {
                             ContractStoreDeltas::new()
                         } else {
-                            let collect_tracked_keys_span =
-                                span!(Level::DEBUG, "collect_tracked_keys", account = %account)
-                                    .entered();
                             let tracked_keys = tracked_keys_cache
                                 .entry(account.clone())
                                 .or_insert_with(|| {
+                                    let _collect_tracked_keys_span =
+                                        span!(Level::DEBUG, "collect_tracked_keys", account = %account)
+                                            .entered();
+
                                     if let Some(all_tracked) = self
                                         .cache
                                         .tracked_contracts
@@ -1318,17 +1319,13 @@ where
                                         // capacity calculation
                                         let sets: Vec<_> = all_tracked.collect();
 
-                                        // Calculate total capacity by summing all set sizes
-                                        // This avoids reallocations during extend operations
-                                        let total_capacity: usize =
-                                            sets.iter().map(|set| set.len()).sum();
+                                        // Calculate total capacity (may overestimate due to duplicates, but avoids reallocations)
+                                        let total_capacity: usize = sets.iter().map(|set| set.len()).sum();
 
                                         let mut merged = HashSet::with_capacity(total_capacity);
 
                                         // Merge all sets in a single pass
                                         for tracked_set in sets {
-                                            // Bytes uses reference-counted storage, so clone() is
-                                            // cheap
                                             merged.extend(tracked_set.iter().cloned());
                                         }
                                         merged
@@ -1336,15 +1333,7 @@ where
                                         HashSet::new()
                                     }
                                 });
-                            drop(collect_tracked_keys_span);
 
-                            let _filter_slots_span = span!(
-                                Level::DEBUG,
-                                "filter_slots",
-                                updated_slots = contract_changes.slots.len(),
-                                tracked_slots = tracked_keys.len()
-                            )
-                            .entered();
                             // Filter slots using cached tracked keys
                             // Pre-allocate with estimated capacity to reduce reallocations
                             let estimated_capacity = tracked_keys
@@ -1386,12 +1375,6 @@ where
                             result
                         }
                     } else {
-                        let _collect_all_slots_span = span!(
-                            Level::DEBUG,
-                            "collect_all_slots",
-                            slot_count = contract_changes.slots.len()
-                        )
-                        .entered();
                         contract_changes
                             .slots
                             .iter()
