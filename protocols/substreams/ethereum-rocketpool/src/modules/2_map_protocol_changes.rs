@@ -1,14 +1,14 @@
 use crate::{
     abi::{
         rocket_dao_protocol_proposal, rocket_deposit_pool, rocket_minipool_queue,
-        rocket_network_balances,
+        rocket_network_balances, rocket_token_reth,
     },
     constants::{
         ALL_STORAGE_SLOTS, DEPOSITS_ENABLED_SLOT, DEPOSIT_ASSIGN_ENABLED_SLOT,
         DEPOSIT_ASSIGN_MAXIMUM_SLOT, DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT, DEPOSIT_FEE_SLOT,
         ETH_ADDRESS, MAX_DEPOSIT_AMOUNT_SLOT, MIN_DEPOSIT_AMOUNT_SLOT, QUEUE_FULL_END_SLOT,
         QUEUE_FULL_START_SLOT, QUEUE_HALF_END_SLOT, QUEUE_HALF_START_SLOT, QUEUE_VARIABLE_END_SLOT,
-        QUEUE_VARIABLE_START_SLOT, ROCKET_DAO_MINIPOOL_QUEUE_ADDRESS,
+        QUEUE_VARIABLE_START_SLOT, RETH_ADDRESS, ROCKET_DAO_MINIPOOL_QUEUE_ADDRESS,
         ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS, ROCKET_DEPOSIT_POOL_ADDRESS_V1_2,
         ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT, ROCKET_NETWORK_BALANCES_ADDRESS,
         ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS, ROCKET_VAULT_ADDRESS,
@@ -53,7 +53,8 @@ fn map_protocol_changes(
     if component_created {
         initialize_protocol_component(&params, protocol_components, &mut transaction_changes)?;
     } else {
-        update_liquidity(&block, &mut transaction_changes);
+        update_deposit_liquidity(&block, &mut transaction_changes);
+        update_reth_liquidity(&block, &mut transaction_changes);
 
         update_network_balance(&block, &mut transaction_changes);
 
@@ -73,7 +74,8 @@ fn map_protocol_changes(
     })
 }
 
-/// Updates vault liquidity based on deposit pool events.
+/// Updates deposit contract liquidity based on deposit pool events.
+/// This is part of the overall Rocket Pool ETH liquidity tracking.
 ///
 /// Listens for DepositReceived, DepositAssigned, DepositRecycled, and ExcessWithdrawn events
 /// from the RocketDepositPool contracts and fetches the updated ETH balance from RocketVault's
@@ -83,7 +85,7 @@ fn map_protocol_changes(
 /// balance stores to accumulate the changes due to added complexity and need to start from the
 /// first deployed Deposit Pool contract, while with the storage slot approach we can start
 /// indexing at any point in time (in our case, at Deposit Pool V1.2 deployment).
-fn update_liquidity(
+fn update_deposit_liquidity(
     block: &eth::v2::Block,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
@@ -117,6 +119,55 @@ fn update_liquidity(
             .collect::<Vec<_>>();
 
         add_entity_change_if_needed(attributes, tx, transaction_changes);
+    }
+}
+
+/// Updates rETH contract liquidity based on rETH events.
+/// This is part of the overall Rocket Pool ETH liquidity tracking.
+///
+/// Listens for EtherDeposited and TokensBurned events from the RocketTokenRETH contract and
+/// fetches the updated native ETH balance from the transaction's balance changes.
+///
+/// The reason we do not use the event parameters directly is that they only contain the delta
+/// change, and would force us to start indexing from the very beginning of the protocol.
+fn update_reth_liquidity(
+    block: &eth::v2::Block,
+    transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
+) {
+    for log in block.logs() {
+        // Only process events from the RocketTokenRETH contract
+        if log.log.address != RETH_ADDRESS {
+            continue;
+        }
+
+        // Check if any of the relevant rETH token events fired
+        let is_eth_event = rocket_token_reth::events::EtherDeposited::match_log(log.log) ||
+            rocket_token_reth::events::TokensBurned::match_log(log.log);
+
+        if !is_eth_event {
+            continue;
+        }
+
+        let tx = log.receipt.transaction;
+
+        // Extract the updated ETH balance from the transaction's balance changes
+        let reth_balance = tx
+            .calls
+            .iter()
+            .flat_map(|call| call.balance_changes.iter())
+            .filter(|bc| bc.address == RETH_ADDRESS)
+            .filter_map(|bc| bc.new_value.as_ref())
+            .last();
+
+        if let Some(reth_balance) = reth_balance {
+            let attributes = vec![Attribute {
+                name: "reth_contract_liquidity".to_string(),
+                value: reth_balance.bytes.to_vec(),
+                change: ChangeType::Update.into(),
+            }];
+
+            add_entity_change_if_needed(attributes, tx, transaction_changes);
+        }
     }
 }
 
@@ -342,7 +393,7 @@ fn build_initial_attributes(state: &HashMap<String, String>) -> Result<Vec<Attri
     ALL_STORAGE_SLOTS
         .iter()
         .map(|loc| loc.name)
-        .chain(["total_eth", "reth_supply"])
+        .chain(["total_eth", "reth_supply", "reth_contract_liquidity"])
         .map(|name| {
             let value = state
                 .get(name)
