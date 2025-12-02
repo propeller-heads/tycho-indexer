@@ -85,7 +85,7 @@ pub(crate) const QUEUE_VARIABLE_START_SLOT: StorageLocation = StorageLocation {
     signed: false,
 };
 
-pub const QUEUE_VARIABLE_END_SLOT: StorageLocation = StorageLocation {
+pub(crate) const QUEUE_VARIABLE_END_SLOT: StorageLocation = StorageLocation {
     name: "queue_variable_end",
     slot: hex!("f4cc19457af09f7bd6b792f1932b490f46f646363b59314a4c6ad6ef1c9f44e4"),
     offset: 0,
@@ -148,3 +148,12 @@ pub(crate) const DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT: StorageLocation = Stora
     number_of_bytes: 32,
     signed: false,
 };
+
+// ----------- Queue Keys (keccak256 hashes) -----------
+// These are used to identify which queue type an event belongs to
+pub(crate) const QUEUE_KEY_FULL: [u8; 32] =
+    hex!("885adb3a1c7cf88a1f3627e1265f3090cd728e0fc96765288e91e8777267ff78");
+pub(crate) const QUEUE_KEY_HALF: [u8; 32] =
+    hex!("6eea9e53dc9c4fb5c4b0ba0e9db7370a823b1513965347e82945eb8966218188");
+pub(crate) const QUEUE_KEY_VARIABLE: [u8; 32] =
+    hex!("a7c30d79bac38383b63cf527b2a68c8a7efff3ba22dfd5b81d98030643ef0fca");
