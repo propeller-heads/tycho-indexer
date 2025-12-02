@@ -78,7 +78,23 @@ pub enum RPCError {
 
 impl RPCError {
     pub fn should_retry(&self) -> bool {
-        matches!(self, Self::RequestError(_))
+        match self {
+            // Retry network/HTTP errors
+            Self::RequestError(_) => true,
+            // Retry rate limit errors
+            // -32005: Standard JSON-RPC "limit exceeded" error
+            // -32009: QuickNode-specific trace request rate limit error
+            Self::TracingFailure(msg) | Self::UnknownError(msg) => {
+                // Check if the error message contains a rate limit error code
+                // The error message includes the full JSON error object:
+                // {"code":-32009,"message":"..."}
+                msg.contains("\"code\":-32005")
+                    || msg.contains("\"code\": -32005")
+                    || msg.contains("\"code\":-32009")
+                    || msg.contains("\"code\": -32009")
+            }
+            _ => false,
+        }
     }
 }
 
