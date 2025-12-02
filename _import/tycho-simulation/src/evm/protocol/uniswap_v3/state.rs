@@ -149,7 +149,7 @@ impl UniswapV3State {
             let (sqrt_price, amount_in, amount_out, fee_amount) = swap_math::compute_swap_step(
                 state.sqrt_price,
                 UniswapV3State::get_sqrt_ratio_target(sqrt_price_next, price_limit, zero_for_one),
-                U256::from(state.liquidity),
+                state.liquidity,
                 state.amount_remaining,
                 self.fee as u32,
             )?;
@@ -312,13 +312,13 @@ impl ProtocolSim for UniswapV3State {
                 let amount0 = get_amount0_delta(
                     sqrt_price_next,
                     current_sqrt_price,
-                    U256::from(current_liquidity),
+                    current_liquidity,
                     true,
                 )?;
                 let amount1 = get_amount1_delta(
                     sqrt_price_next,
                     current_sqrt_price,
-                    U256::from(current_liquidity),
+                    current_liquidity,
                     false,
                 )?;
                 (amount0, amount1)
@@ -326,13 +326,13 @@ impl ProtocolSim for UniswapV3State {
                 let amount0 = get_amount0_delta(
                     sqrt_price_next,
                     current_sqrt_price,
-                    U256::from(current_liquidity),
+                    current_liquidity,
                     false,
                 )?;
                 let amount1 = get_amount1_delta(
                     sqrt_price_next,
                     current_sqrt_price,
-                    U256::from(current_liquidity),
+                    current_liquidity,
                     true,
                 )?;
                 (amount1, amount0)

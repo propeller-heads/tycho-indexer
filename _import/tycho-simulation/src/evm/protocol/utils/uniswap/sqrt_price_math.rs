@@ -38,7 +38,7 @@ fn div_rounding_up(a: U256, b: U256) -> Result<U256, SimulationError> {
 pub(crate) fn get_amount0_delta(
     a: U256,
     b: U256,
-    liquidity: U256,
+    liquidity: u128,
     round_up: bool,
 ) -> Result<U256, SimulationError> {
     let (sqrt_ratio_a, sqrt_ratio_b) = maybe_flip_ratios(a, b);
@@ -58,7 +58,7 @@ pub(crate) fn get_amount0_delta(
 pub(crate) fn get_amount1_delta(
     a: U256,
     b: U256,
-    liquidity: U256,
+    liquidity: u128,
     round_up: bool,
 ) -> Result<U256, SimulationError> {
     let (sqrt_ratio_a, sqrt_ratio_b) = maybe_flip_ratios(a, b);
@@ -74,7 +74,7 @@ pub(crate) fn get_amount1_delta(
 
 pub(super) fn get_next_sqrt_price_from_input(
     sqrt_price: U256,
-    liquidity: U256,
+    liquidity: u128,
     amount_in: U256,
     zero_for_one: bool,
 ) -> Result<U256, SimulationError> {
@@ -89,7 +89,7 @@ pub(super) fn get_next_sqrt_price_from_input(
 
 pub(super) fn get_next_sqrt_price_from_output(
     sqrt_price: U256,
-    liquidity: U256,
+    liquidity: u128,
     amount_in: U256,
     zero_for_one: bool,
 ) -> Result<U256, SimulationError> {
@@ -105,7 +105,7 @@ pub(super) fn get_next_sqrt_price_from_output(
 
 fn get_next_sqrt_price_from_amount0_rounding_up(
     sqrt_price: U256,
-    liquidity: U256,
+    liquidity: u128,
     amount: U256,
     add: bool,
 ) -> Result<U256, SimulationError> {
@@ -136,23 +136,23 @@ fn get_next_sqrt_price_from_amount0_rounding_up(
 
 fn get_next_sqrt_price_from_amount1_rounding_down(
     sqrt_price: U256,
-    liquidity: U256,
+    liquidity: u128,
     amount: U256,
     add: bool,
 ) -> Result<U256, SimulationError> {
     if add {
         let quotient = if amount <= U160_MAX {
-            safe_div_u256(amount << RESOLUTION, liquidity)
+            safe_div_u256(amount << RESOLUTION, U256::from(liquidity))
         } else {
-            mul_div(amount, Q96, liquidity)
+            mul_div(amount, Q96, U256::from(liquidity))
         };
 
         safe_add_u256(sqrt_price, quotient?)
     } else {
         let quotient = if amount <= U160_MAX {
-            div_rounding_up(amount << RESOLUTION, liquidity)?
+            div_rounding_up(amount << RESOLUTION, U256::from(liquidity))?
         } else {
-            mul_div_rounding_up(amount, Q96, liquidity)?
+            mul_div_rounding_up(amount, Q96, U256::from(liquidity))?
         };
 
         assert!(sqrt_price > quotient);
@@ -301,7 +301,7 @@ mod tests {
         #[case] round_up: bool,
         #[case] exp: U256,
     ) {
-        let res = get_amount0_delta(a, b, U256::from(liquidity), round_up).unwrap();
+        let res = get_amount0_delta(a, b, liquidity, round_up).unwrap();
         assert_eq!(res, exp);
     }
 
@@ -341,7 +341,7 @@ mod tests {
         #[case] round_up: bool,
         #[case] exp: U256,
     ) {
-        let res = get_amount1_delta(a, b, U256::from(liquidity), round_up).unwrap();
+        let res = get_amount1_delta(a, b, liquidity, round_up).unwrap();
         assert_eq!(res, exp);
     }
 
@@ -367,13 +367,8 @@ mod tests {
         #[case] zero_for_one: bool,
         #[case] exp: U256,
     ) {
-        let res = get_next_sqrt_price_from_input(
-            sqrt_price,
-            U256::from(liquidity),
-            amount_in,
-            zero_for_one,
-        )
-        .unwrap();
+        let res =
+            get_next_sqrt_price_from_input(sqrt_price, liquidity, amount_in, zero_for_one).unwrap();
         assert_eq!(res, exp);
     }
 
@@ -399,13 +394,8 @@ mod tests {
         #[case] zero_for_one: bool,
         #[case] exp: U256,
     ) {
-        let res = get_next_sqrt_price_from_output(
-            sqrt_price,
-            U256::from(liquidity),
-            amount_in,
-            zero_for_one,
-        )
-        .unwrap();
+        let res = get_next_sqrt_price_from_output(sqrt_price, liquidity, amount_in, zero_for_one)
+            .unwrap();
         assert_eq!(res, exp);
     }
 

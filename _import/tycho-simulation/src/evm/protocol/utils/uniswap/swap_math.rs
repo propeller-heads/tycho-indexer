@@ -10,7 +10,7 @@ use crate::evm::protocol::safe_math::safe_sub_u256;
 pub(crate) fn compute_swap_step(
     sqrt_ratio_current: U256,
     sqrt_ratio_target: U256,
-    liquidity: U256,
+    liquidity: u128,
     amount_remaining: I256,
     fee_pips: u32,
 ) -> Result<(U256, U256, U256, U256), SimulationError> {
@@ -226,7 +226,7 @@ mod tests {
             let res = compute_swap_step(
                 case.price,
                 case.target,
-                U256::from(case.liquidity),
+                case.liquidity,
                 case.remaining,
                 case.fee,
             )

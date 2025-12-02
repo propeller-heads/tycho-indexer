@@ -184,7 +184,7 @@ impl AerodromeSlipstreamsState {
                     price_limit,
                     zero_for_one,
                 ),
-                U256::from(state.liquidity),
+                state.liquidity,
                 state.amount_remaining,
                 fee,
             )?;
@@ -347,13 +347,13 @@ impl ProtocolSim for AerodromeSlipstreamsState {
                 let amount0 = get_amount0_delta(
                     sqrt_price_next,
                     current_sqrt_price,
-                    U256::from(current_liquidity),
+                    current_liquidity,
                     true,
                 )?;
                 let amount1 = get_amount1_delta(
                     sqrt_price_next,
                     current_sqrt_price,
-                    U256::from(current_liquidity),
+                    current_liquidity,
                     false,
                 )?;
                 (amount0, amount1)
@@ -361,13 +361,13 @@ impl ProtocolSim for AerodromeSlipstreamsState {
                 let amount0 = get_amount0_delta(
                     sqrt_price_next,
                     current_sqrt_price,
-                    U256::from(current_liquidity),
+                    current_liquidity,
                     false,
                 )?;
                 let amount1 = get_amount1_delta(
                     sqrt_price_next,
                     current_sqrt_price,
-                    U256::from(current_liquidity),
+                    current_liquidity,
                     true,
                 )?;
                 (amount1, amount0)
