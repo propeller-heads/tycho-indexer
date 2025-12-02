@@ -47,7 +47,7 @@ pub struct RocketPoolState {
     pub assign_deposits_enabled: bool,
     /// Maximum number of minipool assignments per deposit
     pub deposit_assign_maximum: U256,
-    /// Socialised maximum assignments (base amount before scaling)
+    /// The base minimum number of minipools to try to assign per deposit
     pub deposit_assign_socialised_maximum: U256,
     /// Minipool queue indices for full deposits (legacy)
     pub queue_full_start: U256,
