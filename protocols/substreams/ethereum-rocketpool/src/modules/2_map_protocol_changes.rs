@@ -331,6 +331,10 @@ fn update_protocol_settings(
 /// - MinipoolEnqueued: fetches the variable queue end slot (only variable queue is used now)
 /// - MinipoolDequeued: fetches all queue start slots
 /// - MinipoolRemoved: fetches all queue end slots
+///
+/// Note that since the V1.2 Deposit Pool deployment, only the variable queue pools can be Enqueued,
+/// while Dequeued and Removed events can still affect all queues until they are fully depleted.
+/// At the point of writing, all half and full queues are already depleted and empty.
 fn update_minipool_queue_sizes(
     block: &eth::v2::Block,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
