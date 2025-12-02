@@ -1,3 +1,10 @@
+## [0.208.2](https://github.com/propeller-heads/tycho-simulation/compare/0.208.1...0.208.2) (2025-12-02)
+
+
+### Bug Fixes
+
+* **cluster-test:** Decrease slippage threshold to be logged ([ddf0828](https://github.com/propeller-heads/tycho-simulation/commit/ddf082855ce0731b91ad65b0157f37d4ada77c11))
+
 ## [0.208.1](https://github.com/propeller-heads/tycho-simulation/compare/0.208.0...0.208.1) (2025-12-02)
 
 
