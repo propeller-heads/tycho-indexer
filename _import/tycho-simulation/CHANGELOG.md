@@ -1,3 +1,10 @@
+## [0.208.1](https://github.com/propeller-heads/tycho-simulation/compare/0.208.0...0.208.1) (2025-12-02)
+
+
+### Bug Fixes
+
+* **CI:** Bring back testing docs ([2577fd5](https://github.com/propeller-heads/tycho-simulation/commit/2577fd5762214b1f0844dc9277024deb8f89b7b0))
+
 ## [0.208.0](https://github.com/propeller-heads/tycho-simulation/compare/0.207.0...0.208.0) (2025-12-01)
 
 
