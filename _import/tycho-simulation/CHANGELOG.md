@@ -1,3 +1,10 @@
+## [0.209.1](https://github.com/propeller-heads/tycho-simulation/compare/0.209.0...0.209.1) (2025-12-02)
+
+
+### Bug Fixes
+
+* decode from error message instead of name ([b863df0](https://github.com/propeller-heads/tycho-simulation/commit/b863df02e12749bd709e84947414049d1a15125f))
+
 ## [0.209.0](https://github.com/propeller-heads/tycho-simulation/compare/0.208.3...0.209.0) (2025-12-02)
 
 
