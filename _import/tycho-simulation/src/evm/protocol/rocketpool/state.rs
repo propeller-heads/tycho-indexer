@@ -195,8 +195,10 @@ impl RocketPoolState {
         full_length + half_length > U256::ZERO
     }
 
-    /// Calculates the number of minipools to dequeue and the resulting ETH to withdraw.
-    /// Returns (minipools_dequeued, eth_withdrawn) or panics for legacy queue.
+    /// Calculates the number of minipools to dequeue and the resulting ETH to withdraw given a
+    /// deposit. Returns (minipools_dequeued, eth_withdrawn) or panics for legacy queue.
+    ///
+    /// This method assumes deposit has already been added to liquidity.
     ///
     /// Logic from _assignDepositsNew:
     /// - scalingCount = deposit_amount / variableDepositAmount
@@ -207,7 +209,6 @@ impl RocketPoolState {
     fn calculate_assign_deposits(
         &self,
         deposit_amount: U256,
-        new_liquidity: U256,
     ) -> Result<(U256, U256), SimulationError> {
         if !self.assign_deposits_enabled {
             return Ok((U256::ZERO, U256::ZERO));
@@ -227,7 +228,7 @@ impl RocketPoolState {
 
         // Calculate assignments
         let scaling_count = deposit_amount / variable_deposit;
-        let total_eth_count = new_liquidity / variable_deposit;
+        let total_eth_count = self.liquidity / variable_deposit;
         let mut assignments = self.deposit_assign_socialised_maximum + scaling_count;
 
         // Cap at total ETH available
@@ -330,8 +331,7 @@ impl ProtocolSim for RocketPoolState {
             new_state.liquidity = safe_add_u256(new_state.liquidity, amount_in)?;
 
             // Process assign deposits - dequeue minipools and withdraw ETH from vault
-            let (assignments, eth_withdrawn) =
-                new_state.calculate_assign_deposits(amount_in, new_state.liquidity)?;
+            let (assignments, eth_withdrawn) = new_state.calculate_assign_deposits(amount_in)?;
             if assignments > U256::ZERO {
                 new_state.liquidity = safe_sub_u256(new_state.liquidity, eth_withdrawn)?;
                 new_state.queue_variable_start =
