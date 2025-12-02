@@ -1,21 +1,15 @@
 use anyhow::Result;
+use heck::ToSnakeCase;
+use std::fs;
 use substreams_ethereum::Abigen;
 
-fn main() -> Result<(), anyhow::Error> {
-    Abigen::new("RocketDAOProtocolProposal", "abi/RocketDAOProtocolProposal.json")?
-        .generate()?
-        .write_to_file("src/abi/rocket_dao_protocol_proposal.rs")?;
-    Abigen::new("RocketDepositPool", "abi/RocketDepositPool.json")?
-        .generate()?
-        .write_to_file("src/abi/rocket_deposit_pool.rs")?;
-    Abigen::new("RocketNetworkBalances", "abi/RocketNetworkBalances.json")?
-        .generate()?
-        .write_to_file("src/abi/rocket_network_balances.rs")?;
-    Abigen::new("RocketMinipoolQueue", "abi/RocketMinipoolQueue.json")?
-        .generate()?
-        .write_to_file("src/abi/rocket_minipool_queue.rs")?;
-    Abigen::new("RocketTokenRETH", "abi/RocketTokenRETH.json")?
-        .generate()?
-        .write_to_file("src/abi/rocket_token_reth.rs")?;
-    anyhow::Ok(())
+fn main() -> Result<()> {
+    for entry in fs::read_dir("abi")? {
+        let path = entry?.path();
+        let name = path.file_stem().unwrap().to_str().unwrap();
+        Abigen::new(name, path.to_str().unwrap())?
+            .generate()?
+            .write_to_file(format!("src/abi/{}.rs", name.to_snake_case()))?;
+    }
+    Ok(())
 }
