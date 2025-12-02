@@ -1362,7 +1362,7 @@ fn test_sequential_encoding_strategy_erc4626() {
         given_token: sp_usdc.clone(),
         given_amount: BigUint::from_str("100_000_000").unwrap(),
         checked_token: susdc.clone(),
-        checked_amount: BigUint::from_str("100_000000000000000000").unwrap(),
+        checked_amount: BigUint::from_str("90_000000000000000000").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),

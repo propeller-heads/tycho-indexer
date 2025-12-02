@@ -114,7 +114,7 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
 
 contract TychoRouterForERC4626Test is TychoRouterTestSetup {
     function getForkBlock() public pure override returns (uint256) {
-        return 23922291;
+        return 23889103;
     }
 
     function testSingleERC4626Integration() public {
