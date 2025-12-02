@@ -23,7 +23,7 @@ use crate::evm::protocol::{
 
 const PANCAKESWAP_V2_FEE: u32 = 25; // 0.25% fee
 const FEE_PRECISION: U256 = U256::from_limbs([10000, 0, 0, 0]);
-const FEE_NUMERATOR: U256 = U256::from_limbs([9985, 0, 0, 0]);
+const FEE_NUMERATOR: U256 = U256::from_limbs([9975, 0, 0, 0]);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PancakeswapV2State {
@@ -640,10 +640,10 @@ mod tests {
 
         // Calculate spot price (USDC/DAI with fee)
         let spot_price_dai_per_usdc_num = reserve_dai
-            .checked_mul(U256::from(1000u32))
+            .checked_mul(U256::from(10000u32))
             .unwrap();
         let spot_price_dai_per_usdc_den = reserve_usdc
-            .checked_mul(U256::from(1003u32))
+            .checked_mul(U256::from(10025u32))
             .unwrap();
 
         // Test 1: Price above reachable limit (more DAI per USDC than pool can provide) -should
@@ -700,7 +700,7 @@ mod tests {
 
         assert_eq!(
             biguint_to_u256(&actual_result.amount),
-            U256::from(367022978534489684u128),
+            U256::from(1376434275718772760u128),
             "Should return non-zero amount"
         );
         assert!(
