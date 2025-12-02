@@ -116,7 +116,7 @@ impl RocketPoolState {
         mul_div(reth_amount, self.total_eth, self.reth_supply)
     }
 
-    fn depositing_eth(token_in: &Bytes) -> bool {
+    fn is_depositing_eth(token_in: &Bytes) -> bool {
         token_in.as_ref() == ETH_ADDRESS
     }
 
@@ -256,7 +256,7 @@ impl ProtocolSim for RocketPoolState {
     }
 
     fn spot_price(&self, base: &Token, _quote: &Token) -> Result<f64, SimulationError> {
-        let is_depositing_eth = RocketPoolState::depositing_eth(&base.address);
+        let is_depositing_eth = RocketPoolState::is_depositing_eth(&base.address);
         // As the protocol has no slippage, we can use a fixed amount for spot price calculation
         let amount = U256::from(1e18);
 
@@ -279,7 +279,7 @@ impl ProtocolSim for RocketPoolState {
         _token_out: &Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
         let amount_in = biguint_to_u256(&amount_in);
-        let is_depositing_eth = RocketPoolState::depositing_eth(&token_in.address);
+        let is_depositing_eth = RocketPoolState::is_depositing_eth(&token_in.address);
 
         let amount_out = if is_depositing_eth {
             self.assert_deposits_enabled()?;
@@ -352,7 +352,7 @@ impl ProtocolSim for RocketPoolState {
         sell_token: Bytes,
         _buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
-        let is_depositing_eth = Self::depositing_eth(&sell_token);
+        let is_depositing_eth = Self::is_depositing_eth(&sell_token);
 
         if is_depositing_eth {
             // ETH -> rETH: max sell = maxDepositPoolSize +
