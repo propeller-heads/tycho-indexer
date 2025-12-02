@@ -174,6 +174,77 @@ pub fn sqrt_u512(value: U512) -> U512 {
     result
 }
 
+/// Integer square root for U256, returning U256
+pub fn sqrt_u256(value: U256) -> Result<U256, SimulationError> {
+    if value == U256::ZERO {
+        return Ok(U256::ZERO);
+    }
+
+    let bits = 256 - value.leading_zeros();
+    let mut remainder = U256::ZERO;
+    let mut temp = U256::ZERO;
+    let result = compute_karatsuba_sqrt(value, &mut remainder, &mut temp, bits);
+
+    // Extract lower 256 bits
+    let limbs = result.as_limbs();
+    Ok(U256::from_limbs([limbs[0], limbs[1], limbs[2], limbs[3]]))
+}
+
+/// Recursive Karatsuba square root implementation
+/// Computes sqrt(x) and stores remainder in r
+/// Uses temp variable t for intermediate calculations
+/// Ref: https://hal.inria.fr/file/index/docid/72854/filename/RR-3805.pdf
+fn compute_karatsuba_sqrt(x: U256, r: &mut U256, t: &mut U256, bits: usize) -> U256 {
+    // Base case: use simple method for small numbers
+    if bits <= 64 {
+        let x_small = x.as_limbs()[0];
+        let result = (x_small as f64).sqrt() as u64;
+        *r = x - U256::from(result * result);
+        return U256::from(result);
+    }
+
+    // Divide-and-conquer approach
+    // Split into quarters: process b bits at a time where b = bits/4
+    let b = bits / 4;
+
+    // q = x >> (2*b)  -- extract upper bits
+    let mut q = x >> (b * 2);
+
+    // Recursively compute sqrt of upper portion
+    let mut s = compute_karatsuba_sqrt(q, r, t, bits - b * 2);
+
+    // Build mask for extracting bits: (1 << (2*b)) - 1
+    *t = (U256::from(1u32) << (b * 2)) - U256::from(1u32);
+
+    // Extract middle bits and combine with remainder from recursive call
+    *r = (*r << b) | ((x & *t) >> b);
+
+    // Divide: t = r / (2*s), with quotient q and remainder r
+    s <<= 1;
+    q = *r / s;
+    *r -= q * s;
+
+    // Build s = (s << (b-1)) + q
+    s = (s << (b - 1)) + q;
+
+    // Extract lower b bits
+    *t = (U256::from(1u32) << b) - U256::from(1u32);
+    *r = (*r << b) | (x & *t);
+
+    // Compute q^2
+    let q_squared = q * q;
+
+    // Adjust if remainder is too small
+    if *r < q_squared {
+        *t = (s << 1) - U256::from(1u32);
+        *r += *t;
+        s -= U256::from(1u32);
+    }
+
+    *r -= q_squared;
+    s
+}
+
 #[cfg(test)]
 mod safe_math_tests {
     use std::str::FromStr;
