@@ -213,7 +213,10 @@ impl RocketPoolState {
             return Ok((U256::ZERO, U256::ZERO));
         }
 
-        // Check for legacy minipools - we don't support this path
+        // The simulation does not support legacy minipool queues (full/half) assignments.
+        // This decision is made to limit unnecessary complexity in the simulation logic as
+        // since the V1.2 upgrade, minipools can no longer be added to legacy queues,
+        // and at the time of the upgrade, legacy queues were already empty.
         if self.contains_legacy() {
             return Err(SimulationError::FatalError(
                 "Legacy minipool queue (full/half) contains items - not implemented".to_string(),
