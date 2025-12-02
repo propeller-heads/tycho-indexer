@@ -47,17 +47,17 @@ struct CliArgs {
     /// Specifies the minimum TVL to filter the components. Denoted in the native token (e.g.
     /// Mainnet -> ETH). Ignored if addresses or range tvl values are provided.
     #[clap(long, default_value = "10")]
-    min_tvl: u32,
+    min_tvl: f64,
 
     /// Specifies the lower bound of the TVL threshold range. Denoted in the native token (e.g.
     /// Mainnet -> ETH). Components below this TVL will be removed from tracking.
     #[clap(long)]
-    remove_tvl_threshold: Option<u32>,
+    remove_tvl_threshold: Option<f64>,
 
     /// Specifies the upper bound of the TVL threshold range. Denoted in the native token (e.g.
     /// Mainnet -> ETH). Components above this TVL will be added to tracking.
     #[clap(long)]
-    add_tvl_threshold: Option<u32>,
+    add_tvl_threshold: Option<f64>,
 
     /// Expected block time in seconds. For blockchains with consistent intervals,
     /// set to the average block time (e.g., "600" for a 10-minute interval).
@@ -271,9 +271,9 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
         } else if let (Some(remove_tvl), Some(add_tvl)) =
             (args.remove_tvl_threshold, args.add_tvl_threshold)
         {
-            ComponentFilter::with_tvl_range(remove_tvl as f64, add_tvl as f64)
+            ComponentFilter::with_tvl_range(remove_tvl, add_tvl)
         } else {
-            ComponentFilter::with_tvl_range(args.min_tvl as f64, args.min_tvl as f64)
+            ComponentFilter::with_tvl_range(args.min_tvl, args.min_tvl)
         };
         let sync = ProtocolStateSynchronizer::new(
             id.clone(),
@@ -373,7 +373,7 @@ mod cli_tests {
         let exchanges: Vec<String> = vec!["uniswap_v2".to_string()];
         assert_eq!(args.tycho_url, "localhost:5000");
         assert_eq!(args.exchange, exchanges);
-        assert_eq!(args.min_tvl, 3000);
+        assert_eq!(args.min_tvl, 3000.0);
         assert_eq!(args.block_time, 50);
         assert_eq!(args.timeout, 5);
         assert_eq!(args.log_folder, "test_logs");
