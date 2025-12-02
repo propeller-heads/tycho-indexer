@@ -1,3 +1,16 @@
+## [0.138.0](https://github.com/propeller-heads/tycho-execution/compare/0.137.1...0.138.0) (2025-12-02)
+
+
+### Features
+
+* Check for Angstrom hook in Executor ([df054e5](https://github.com/propeller-heads/tycho-execution/commit/df054e5f66eb33bf7ef59a0a57945cbba2f97263))
+* Check for Angstrom hook in Executor ([5afe4ed](https://github.com/propeller-heads/tycho-execution/commit/5afe4ed755013426648c47e4fb08a14b6e292181))
+
+
+### Bug Fixes
+
+* angstrom hook zero address velidation ([06119af](https://github.com/propeller-heads/tycho-execution/commit/06119af210edf0b9d6e91c32dff4f0028c4e1493))
+
 ## [0.137.1](https://github.com/propeller-heads/tycho-execution/compare/0.137.0...0.137.1) (2025-11-28)
 
 
