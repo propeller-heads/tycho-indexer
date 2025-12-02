@@ -1,4 +1,4 @@
-use alloy::primitives::{U256, U512};
+use alloy::primitives::{U256};
 use tycho_common::{
     simulation::{errors::SimulationError, protocol_sim::Price},
     Bytes,
@@ -7,13 +7,13 @@ use tycho_common::{
 use super::solidity_math::{mul_div, mul_div_rounding_up};
 use crate::evm::protocol::{
     safe_math::{
-        div_mod_u256, safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256, sqrt_u512,
+        div_mod_u256, safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256, sqrt_u256,
     },
     u256_num::{biguint_to_u256, u256_to_f64},
 };
 
 const Q96: U256 = U256::from_limbs([0, 4294967296, 0, 0]);
-const Q192: U512 = U512::from_limbs([0, 0, 0, 1, 0, 0, 0, 0]); // 2^192
+const Q192: U256 = U256::from_limbs([0, 0, 0, 1]); // 2^192
 const RESOLUTION: U256 = U256::from_limbs([96, 0, 0, 0]);
 const U160_MAX: U256 = U256::from_limbs([u64::MAX, u64::MAX, 4294967295, 0]);
 
