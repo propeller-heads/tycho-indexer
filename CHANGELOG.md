@@ -1,3 +1,13 @@
+## [0.118.0](https://github.com/propeller-heads/tycho-indexer/compare/0.117.4...0.118.0) (2025-12-02)
+
+
+### Features
+
+* add minimum TVL config for RPC responses ([#794](https://github.com/propeller-heads/tycho-indexer/issues/794)) ([9caaa9f](https://github.com/propeller-heads/tycho-indexer/commit/9caaa9f7c7d49e3daf09dd4b94a545b456733dc1))
+* add minimum TVL threshold for RPC responses ([1f651a8](https://github.com/propeller-heads/tycho-indexer/commit/1f651a8d61d65900597c347b1e58768cff207d66))
+* Add script to compare slipstreams observations with on-chain state ([fbb3fae](https://github.com/propeller-heads/tycho-indexer/commit/fbb3faede0b13d8c941957e53af412a8b3cfa516))
+* Add script to compare slipstreams observations with on-chain state ([#776](https://github.com/propeller-heads/tycho-indexer/issues/776)) ([5fa1166](https://github.com/propeller-heads/tycho-indexer/commit/5fa11660f99f6511da0ddc0337c52ffd40e3b6c5))
+
 ## [0.117.4](https://github.com/propeller-heads/tycho-indexer/compare/0.117.3...0.117.4) (2025-12-01)
 
 ## [0.117.3](https://github.com/propeller-heads/tycho-indexer/compare/0.117.2...0.117.3) (2025-11-28)
