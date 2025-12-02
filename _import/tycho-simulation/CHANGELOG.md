@@ -1,3 +1,10 @@
+## [0.208.3](https://github.com/propeller-heads/tycho-simulation/compare/0.208.2...0.208.3) (2025-12-02)
+
+
+### Bug Fixes
+
+* Limit token loading for integration test ([756b5bb](https://github.com/propeller-heads/tycho-simulation/commit/756b5bb0fd12f62d0c67894402fd6e6c47e16e5c))
+
 ## [0.208.2](https://github.com/propeller-heads/tycho-simulation/compare/0.208.1...0.208.2) (2025-12-02)
 
 
