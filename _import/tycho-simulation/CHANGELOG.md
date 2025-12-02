@@ -1,3 +1,24 @@
+## [0.208.3](https://github.com/propeller-heads/tycho-simulation/compare/0.208.2...0.208.3) (2025-12-02)
+
+
+### Bug Fixes
+
+* Limit token loading for integration test ([756b5bb](https://github.com/propeller-heads/tycho-simulation/commit/756b5bb0fd12f62d0c67894402fd6e6c47e16e5c))
+
+## [0.208.2](https://github.com/propeller-heads/tycho-simulation/compare/0.208.1...0.208.2) (2025-12-02)
+
+
+### Bug Fixes
+
+* **cluster-test:** Decrease slippage threshold to be logged ([ddf0828](https://github.com/propeller-heads/tycho-simulation/commit/ddf082855ce0731b91ad65b0157f37d4ada77c11))
+
+## [0.208.1](https://github.com/propeller-heads/tycho-simulation/compare/0.208.0...0.208.1) (2025-12-02)
+
+
+### Bug Fixes
+
+* **CI:** Bring back testing docs ([2577fd5](https://github.com/propeller-heads/tycho-simulation/commit/2577fd5762214b1f0844dc9277024deb8f89b7b0))
+
 ## [0.208.0](https://github.com/propeller-heads/tycho-simulation/compare/0.207.0...0.208.0) (2025-12-01)
 
 

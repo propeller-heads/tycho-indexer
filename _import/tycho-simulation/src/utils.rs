@@ -90,7 +90,7 @@ pub async fn load_all_tokens(
                 .get(&chain)
                 .or(Some(&42))
                 .copied()),
-            None,
+            Some(3000),
             RPC_CLIENT_CONCURRENCY,
         )
         .await
