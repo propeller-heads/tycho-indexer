@@ -1256,7 +1256,7 @@ where
     #[instrument(
         level = "info",
         name = "dci_extract_tracked_updates",
-        skip(self),
+        skip(self, block_changes),
         fields(block_contract_changes = block_changes.block_contract_changes.len())
     )]
     fn extract_tracked_updates(
@@ -1278,27 +1278,10 @@ where
             .block_contract_changes
             .iter()
         {
-            let _tx_span = span!(
-                Level::DEBUG,
-                "process_tx",
-                tx_hash = %tx.tx.hash,
-                contract_count = tx.contract_changes.len()
-            )
-            .entered();
-
             let tx_hash = &tx.tx.hash;
             let mut tx_account_deltas: HashMap<Address, AccountDelta> = HashMap::new();
 
             for (account, contract_changes) in tx.contract_changes.iter() {
-                let _contract_span = span!(
-                    Level::DEBUG,
-                    "process_contract",
-                    account = %account,
-                    slot_count = contract_changes.slots.len(),
-                    has_balance = contract_changes.native_balance.is_some()
-                )
-                .entered();
-
                 // Check if tracked - use contains_key which is cheaper than get_all when we don't
                 // need the data yet
                 let is_tracked = self
@@ -1321,7 +1304,8 @@ where
                             ContractStoreDeltas::new()
                         } else {
                             let collect_tracked_keys_span =
-                                span!(Level::DEBUG, "collect_tracked_keys").entered();
+                                span!(Level::DEBUG, "collect_tracked_keys", account = %account)
+                                    .entered();
                             let tracked_keys = tracked_keys_cache
                                 .entry(account.clone())
                                 .or_insert_with(|| {
