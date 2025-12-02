@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use tracing::info;
+use tracing::{debug, info};
 use tycho_common::{
     models::{Address, BlockHash},
     traits::AllowanceSlotDetector,
@@ -61,9 +61,25 @@ impl AllowanceSlotDetector for EVMAllowanceSlotDetector {
     ) -> HashMap<Address, Result<(Address, Bytes), Self::Error>> {
         info!("Starting allowance slot detection for {} tokens", tokens.len());
 
+        let filtered_tokens = tokens
+            .iter()
+            .filter_map(|token| {
+                if !token.is_zero() {
+                    Some(token.clone())
+                } else {
+                    debug!("Skipping zero token: {token}");
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        if filtered_tokens.is_empty() {
+            return HashMap::new();
+        }
+
         let params = (owner, spender);
         let results = self
-            .detect_slots_chunked(tokens, &params, &block_hash)
+            .detect_slots_chunked(&filtered_tokens, &params, &block_hash)
             .await;
 
         info!("Allowance slot detection completed. Found results for {} tokens", results.len());

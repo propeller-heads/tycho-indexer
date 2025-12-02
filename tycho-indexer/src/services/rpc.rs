@@ -54,6 +54,9 @@ pub enum RpcError {
 
     #[error("Unknown error: {0}")]
     Unknown(String),
+
+    #[error("Minimum TVL threshold not met: {0}")]
+    MinimumTvlThresholdNotMet(String),
 }
 
 impl From<anyhow::Error> for RpcError {
@@ -71,6 +74,7 @@ impl ResponseError for RpcError {
             RpcError::DeltasError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             RpcError::Pagination(_) => StatusCode::BAD_REQUEST,
             RpcError::Unknown(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            RpcError::MinimumTvlThresholdNotMet(_) => StatusCode::BAD_REQUEST,
         }
     }
 
@@ -83,6 +87,7 @@ impl ResponseError for RpcError {
             RpcError::Pagination(e) => HttpResponse::BadRequest()
                 .body(format!("Page size must be less than or equal to {e}.")),
             RpcError::Unknown(e) => HttpResponse::InternalServerError().body(e.to_string()),
+            RpcError::MinimumTvlThresholdNotMet(e) => HttpResponse::BadRequest().body(e.to_owned()),
         }
     }
 }
@@ -103,6 +108,8 @@ pub struct RpcHandler<G, T> {
         RpcCache<dto::TracedEntryPointRequestBody, dto::TracedEntryPointRequestResponse>,
     #[allow(dead_code)]
     tracer: T,
+    /// Minimum TVL threshold for filtering components
+    min_tvl: Option<f64>,
 }
 
 impl<G, T> RpcHandler<G, T>
@@ -114,6 +121,7 @@ where
         db_gateway: G,
         pending_deltas: Option<Arc<dyn PendingDeltasBuffer + Send + Sync>>,
         tracer: T,
+        min_tvl: Option<f64>,
     ) -> Self {
         const ONE_MB: u64 = 1_024 * 1_024;
         const HUNDRED_MB: u64 = ONE_MB * 100;
@@ -157,6 +165,7 @@ where
             component_cache,
             traced_entry_point_cache,
             tracer,
+            min_tvl,
         }
     }
 
@@ -716,6 +725,25 @@ where
         let system = request.protocol_system.clone();
         let pagination_params: PaginationParams = (&request.pagination).into();
 
+        // Validate and determine effective TVL filter
+        // If min_tvl is set, reject requests with None or below threshold
+        let effective_tvl_gt = match (self.min_tvl, request.tvl_gt) {
+            (Some(min_tvl), None) => {
+                return Err(RpcError::MinimumTvlThresholdNotMet(format!(
+                    "tvl_gt parameter is required (minimum: {})",
+                    min_tvl
+                )));
+            }
+            (Some(min_tvl), Some(requested_tvl)) if requested_tvl < min_tvl => {
+                return Err(RpcError::MinimumTvlThresholdNotMet(format!(
+                    "tvl_gt must be at least {} (requested: {})",
+                    min_tvl, requested_tvl
+                )));
+            }
+            (Some(_), Some(requested_tvl)) => Some(requested_tvl),
+            (None, tvl_gt) => tvl_gt,
+        };
+
         let ids_strs: Option<Vec<&str>> = request
             .component_ids
             .as_ref()
@@ -727,7 +755,7 @@ where
             .pending_deltas
             .as_ref()
             .map_or(Ok(Vec::new()), |pending_delta| {
-                pending_delta.get_new_components(ids_slice, &system, request.tvl_gt)
+                pending_delta.get_new_components(ids_slice, &system, effective_tvl_gt)
             })?;
 
         debug!(n_components = buffered_components.len(), "RetrievedBufferedComponents");
@@ -773,7 +801,7 @@ where
                 &request.chain.into(),
                 Some(system),
                 ids_slice,
-                request.tvl_gt,
+                effective_tvl_gt,
                 Some(&pagination_params),
             )
             .await
@@ -1421,6 +1449,7 @@ mod tests {
     use actix_web::test;
     use chrono::NaiveDateTime;
     use mockall::{mock, predicate::eq};
+    use rstest::rstest;
     use tycho_common::{
         dto, keccak256,
         models::{
@@ -1650,7 +1679,7 @@ mod tests {
             .return_once(|_, _| Ok(Some(CommitStatus::Uncommitted)));
 
         let req_handler =
-            RpcHandler::new(gw, Some(Arc::new(mock_buffer)), MockEntryPointTracer::new());
+            RpcHandler::new(gw, Some(Arc::new(mock_buffer)), MockEntryPointTracer::new(), None);
 
         let request = dto::StateRequestBody {
             contract_ids: Some(vec![
@@ -1953,7 +1982,7 @@ mod tests {
             expected_upserted_tracing_results,
         );
 
-        let req_handler = RpcHandler::new(gw, None, mock_entrypoint_tracer);
+        let req_handler = RpcHandler::new(gw, None, mock_entrypoint_tracer, None);
         let response = req_handler
             .add_entry_points(&req_body)
             .await
@@ -2027,7 +2056,7 @@ mod tests {
             expected_upserted_tracing_results,
         );
 
-        let req_handler = RpcHandler::new(gw, None, tracer);
+        let req_handler = RpcHandler::new(gw, None, tracer, None);
         let response = req_handler
             .add_entry_points(&req_body)
             .await
@@ -2146,7 +2175,7 @@ mod tests {
         gw.expect_get_traced_entry_points()
             .return_once(|_| Box::pin(async move { mock_traced_entry_points_response }));
 
-        let req_handler = RpcHandler::new(gw, None, MockEntryPointTracer::new());
+        let req_handler = RpcHandler::new(gw, None, MockEntryPointTracer::new(), None);
 
         // Request for two protocol components
         let request = dto::TracedEntryPointRequestBody {
@@ -2344,7 +2373,7 @@ mod tests {
         gw.expect_get_traced_entry_points()
             .return_once(|_| Box::pin(async move { mock_traced_entry_points_response }));
 
-        let req_handler = RpcHandler::new(gw, None, MockEntryPointTracer::new());
+        let req_handler = RpcHandler::new(gw, None, MockEntryPointTracer::new(), None);
 
         let request = dto::TracedEntryPointRequestBody {
             chain: dto::Chain::Ethereum,
@@ -2413,7 +2442,7 @@ mod tests {
         // ensure the gateway is only accessed once - the second request should hit cache
         gw.expect_get_tokens()
             .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
-        let req_handler = RpcHandler::new(gw, None, MockEntryPointTracer::new());
+        let req_handler = RpcHandler::new(gw, None, MockEntryPointTracer::new(), None);
 
         // request for 2 tokens that are in the DB (WETH and USDC)
         let request = dto::TokensRequestBody {
@@ -2484,7 +2513,7 @@ mod tests {
             .return_once(|_, _| Ok(Some(CommitStatus::Uncommitted)));
 
         let req_handler =
-            RpcHandler::new(gw, Some(Arc::new(mock_buffer)), MockEntryPointTracer::new());
+            RpcHandler::new(gw, Some(Arc::new(mock_buffer)), MockEntryPointTracer::new(), None);
 
         let request = dto::ProtocolStateRequestBody {
             protocol_ids: Some(vec!["state1".to_owned(), "state_buff".to_owned()]),
@@ -2566,7 +2595,7 @@ mod tests {
             .return_once(move |_, _, _| Ok(vec![mock_res]));
 
         let req_handler =
-            RpcHandler::new(gw, Some(Arc::new(mock_buffer)), MockEntryPointTracer::new());
+            RpcHandler::new(gw, Some(Arc::new(mock_buffer)), MockEntryPointTracer::new(), None);
 
         let request = dto::ProtocolComponentsRequestBody {
             protocol_system: "ambient".to_string(),
@@ -2660,7 +2689,7 @@ mod tests {
             });
 
         let req_handler =
-            RpcHandler::new(gw, Some(Arc::new(mock_buffer)), MockEntryPointTracer::new());
+            RpcHandler::new(gw, Some(Arc::new(mock_buffer)), MockEntryPointTracer::new(), None);
 
         let request = dto::ProtocolComponentsRequestBody {
             protocol_system: "ambient".to_string(),
@@ -2696,5 +2725,78 @@ mod tests {
         assert_eq!(response2.protocol_components.len(), 1);
         assert_eq!(response2.protocol_components[0], buf_expected2.into());
         assert_eq!(response2.pagination.total, 3);
+    }
+
+    #[rstest]
+    #[case::rejects_none_when_min_tvl_set(
+        Some(1000.0),
+        None,
+        false,
+        Some("tvl_gt parameter is required")
+    )]
+    #[case::rejects_below_threshold(
+        Some(1000.0),
+        Some(500.0),
+        false,
+        Some("tvl_gt must be at least")
+    )]
+    #[case::accepts_equal_threshold(Some(1000.0), Some(1000.0), true, None)]
+    #[case::accepts_above_threshold(Some(1000.0), Some(5000.0), true, None)]
+    #[case::accepts_none_when_no_min_tvl(None, None, true, None)]
+    #[case::accepts_any_value_when_no_min_tvl(None, Some(100.0), true, None)]
+    #[tokio::test]
+    async fn test_min_tvl_validation(
+        #[case] min_tvl: Option<f64>,
+        #[case] request_tvl_gt: Option<f64>,
+        #[case] should_succeed: bool,
+        #[case] error_message_contains: Option<&str>,
+    ) {
+        let mut gw = MockGateway::new();
+
+        if should_succeed {
+            gw.expect_get_protocol_components()
+                .returning(|_, _, _, _, _| {
+                    Box::pin(async move { Ok(WithTotal { entity: vec![], total: Some(0) }) })
+                });
+        }
+
+        let mut mock_buffer = MockPendingDeltas::new();
+
+        if should_succeed {
+            mock_buffer
+                .expect_get_new_components()
+                .returning(|_, _, _| Ok(vec![]));
+        }
+
+        let req_handler =
+            RpcHandler::new(gw, Some(Arc::new(mock_buffer)), MockEntryPointTracer::new(), min_tvl);
+
+        let request = dto::ProtocolComponentsRequestBody {
+            protocol_system: "ambient".to_string(),
+            component_ids: None,
+            tvl_gt: request_tvl_gt,
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::new(0, 10),
+        };
+
+        let result = req_handler
+            .get_protocol_components_inner(request)
+            .await;
+
+        if should_succeed {
+            assert!(result.is_ok(), "Expected success but got error: {:?}", result);
+        } else {
+            assert!(result.is_err(), "Expected error but got success");
+            let err = result.unwrap_err();
+            assert!(matches!(err, RpcError::MinimumTvlThresholdNotMet(_)));
+            if let Some(msg) = error_message_contains {
+                assert!(
+                    err.to_string().contains(msg),
+                    "Error message '{}' does not contain '{}'",
+                    err,
+                    msg
+                );
+            }
+        }
     }
 }

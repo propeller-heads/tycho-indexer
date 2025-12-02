@@ -38,7 +38,7 @@ pub enum Command {
     Rpc,
 }
 
-#[derive(Parser, Debug, Clone, PartialEq, Eq)]
+#[derive(Parser, Debug, Clone, PartialEq)]
 #[command(version, about, long_about = None)]
 pub struct GlobalArgs {
     /// PostgresDB Connection Url
@@ -81,7 +81,7 @@ pub struct GlobalArgs {
 }
 
 /// RPC configuration arguments (url, retry settings, and potentially others, such as batching)
-#[derive(Args, Debug, Clone, PartialEq, Eq)]
+#[derive(Args, Debug, Clone, PartialEq)]
 pub struct RPCArgs {
     /// The RPC URL to connect to the Blockchain node
     #[clap(long = "rpc-url", env = "RPC_URL", hide_env_values = true)]
@@ -98,6 +98,11 @@ pub struct RPCArgs {
     /// Maximum backoff delay in milliseconds (backoff is capped at this value)
     #[clap(long = "rpc-max-backoff-ms", env = "RPC_MAX_BACKOFF_MS", default_value = "5000")]
     pub max_backoff_ms: u64,
+
+    /// Minimum TVL threshold for RPC responses (in chain's native token)
+    /// Components with TVL below this value or with no TVL will be rejected
+    #[clap(long = "rpc-min-tvl", env = "RPC_MIN_TVL")]
+    pub min_tvl: Option<f64>,
 }
 
 impl From<RPCArgs> for RPCRetryConfig {
@@ -272,6 +277,7 @@ mod cli_tests {
                     max_retries: 5,
                     initial_backoff_ms: 150,
                     max_backoff_ms: 5000,
+                    min_tvl: None,
                 },
             },
             command: Command::Run(RunSpkgArgs {
@@ -332,6 +338,7 @@ mod cli_tests {
                     max_retries: 10,
                     initial_backoff_ms: 200,
                     max_backoff_ms: 10000,
+                    min_tvl: None,
                 },
             },
             command: Command::Index(IndexArgs {
@@ -368,6 +375,7 @@ mod cli_tests {
             max_retries: 7,
             initial_backoff_ms: 250,
             max_backoff_ms: 8000,
+            min_tvl: None,
         };
 
         let rpc_config: RPCRetryConfig = rpc_args.into();
