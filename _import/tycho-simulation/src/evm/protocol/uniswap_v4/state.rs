@@ -2016,21 +2016,6 @@ mod tests {
         );
     }
 
-    // TODO: This test needs review - the target price may actually be valid for this swap direction
-    // Commenting out until price direction logic is verified
-    // #[test]
-    // fn test_swap_to_price_price_too_low() {
-    //     let pool = create_basic_v4_test_pool();
-    //     let token_x = Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap();
-    //     let token_y = Bytes::from_str("0x0000000000000000000000000000000000000002").unwrap();
-    //     let target_price = Price::new(BigUint::from(1_000_000u64), BigUint::from(10_000_000u64));
-    //     let trade = pool
-    //         .swap_to_price(&token_y, &token_x, target_price)
-    //         .expect("swap_to_price failed");
-    //     assert_eq!(trade.amount_in, BigUint::zero());
-    //     assert_eq!(trade.amount_out, BigUint::zero());
-    // }
-
     #[test]
     fn test_swap_to_price_no_liquidity() {
         // Test that swap_to_price returns zero for pool with no liquidity
@@ -2181,11 +2166,18 @@ mod tests {
             .expect("swap_to_price failed");
         assert!(trade.amount_out > BigUint::ZERO, "Expected non-zero for 1.90 Y/X target");
 
-        // Test 2: Target far from spot (1.5 Y/X)
+        // Test 3: Target far from spot (1.5 Y/X)
         let target_price = Price::new(BigUint::from(1_500_000u64), BigUint::from(1_000_000u64));
         let trade = pool
             .swap_to_price(&token_x, &token_y, target_price)
             .expect("swap_to_price failed");
-        assert!(trade.amount_out > BigUint::ZERO, "Expected non-zero for 1.90 Y/X target");
+        assert!(trade.amount_out > BigUint::ZERO, "Expected non-zero for 1.5 Y/X target");
+
+        // Test 4: Pool at 2.0 Y/X (20M/10M), target 0.1 Y/X (90% price drop)
+        let target_price = Price::new(BigUint::from(1_000_000u64), BigUint::from(10_000_000u64));
+        let trade = pool
+            .swap_to_price(&token_y, &token_x, target_price)
+            .expect("swap_to_price failed");
+        assert!(trade.amount_out > BigUint::ZERO, "Expected non-zero for 0.1 Y/X target");
     }
 }
