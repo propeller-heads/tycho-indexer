@@ -293,7 +293,7 @@ impl TestRunner {
 
         let _ = tycho_simulation::evm::engine_db::SHARED_TYCHO_DB.clear();
 
-        let protocol_stream_builder = ProtocolStreamBuilder::new("http://localhost:4242", chain)
+        let protocol_stream_builder = ProtocolStreamBuilder::new("localhost:4242/", chain)
             .skip_state_decode_failures(true);
 
         let adapter_contract_path = self.get_adapter_contract_path(
