@@ -951,11 +951,12 @@ fn process_execution_result(
                     100.0
             };
 
-            if !(-1.0..=1.0).contains(&slippage) {
-                info!(
+            if !(-0.2..=0.2).contains(&slippage) {
+                error!(
                     event_type = "execution_slippage",
                     token_in = %execution_info.token_in,
                     token_out = %execution_info.token_out,
+                    amount_in = %execution_info.solution.given_amount,
                     simulated_amount  = %amount_out,
                     executed_amount = %execution_info.expected_amount_out,
                     slippage_ratio = slippage,
