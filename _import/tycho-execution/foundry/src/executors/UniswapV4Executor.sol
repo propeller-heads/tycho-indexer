@@ -40,6 +40,9 @@ error UniswapV4Executor__DeltaNotNegative(Currency currency);
 error UniswapV4Executor__V4TooMuchRequested(
     uint256 maxAmountInRequested, uint256 amountRequested
 );
+error UniswapV4Executor__NoAngstromAttestationForBlock(uint256 blockNumber);
+error UniswapV4Executor__InvalidAngstromAttestationDataLength(uint256 length);
+error UniswapV4Executor__ZeroAddressAngstromHook();
 
 contract UniswapV4Executor is
     IExecutor,
@@ -54,6 +57,7 @@ contract UniswapV4Executor is
     using LibPrefixLengthEncodedByteArray for bytes;
 
     IPoolManager public immutable poolManager;
+    address private immutable _angstromHookAddress;
     address private immutable _self;
 
     bytes4 constant SWAP_EXACT_INPUT_SINGLE_SELECTOR = 0x6022fbcd;
@@ -67,10 +71,16 @@ contract UniswapV4Executor is
         bytes hookData;
     }
 
-    constructor(IPoolManager _poolManager, address _permit2)
-        RestrictTransferFrom(_permit2)
-    {
+    constructor(
+        IPoolManager _poolManager,
+        address _angstromHook,
+        address _permit2
+    ) RestrictTransferFrom(_permit2) {
+        if (_angstromHook == address(0)) {
+            revert UniswapV4Executor__ZeroAddressAngstromHook();
+        }
         poolManager = _poolManager;
+        _angstromHookAddress = _angstromHook;
         _self = address(this);
     }
 
@@ -190,7 +200,16 @@ contract UniswapV4Executor is
             revert UniswapV4Executor__InvalidDataLength();
         }
 
-        bytes memory firstHookData = remaining[48:48 + firstHookDataLength];
+        bytes memory firstHookData;
+        if (firstHook == _angstromHookAddress) {
+            // Select attestation from first pool's hook data
+            // Convert calldata to memory since _selectAttestation requires bytes memory
+            firstHookData = _selectAttestation(
+                bytes(remaining[48:48 + firstHookDataLength])
+            );
+        } else {
+            firstHookData = bytes(remaining[48:48 + firstHookDataLength]);
+        }
 
         // Remaining after first pool are ple encoded
         bytes[] memory encodedPools = LibPrefixLengthEncodedByteArray.toArray(
@@ -226,9 +245,19 @@ contract UniswapV4Executor is
                 revert UniswapV4Executor__InvalidDataLength();
             }
 
-            bytes memory hookData = new bytes(hookDataLength);
+            // Extract hookData bytes for this pool
+            // We copy byte-by-byte because we cannot slice bytes memory in Solidity
+            bytes memory rawHookData = new bytes(hookDataLength);
             for (uint256 j = 0; j < hookDataLength; j++) {
-                hookData[j] = poolData[48 + j];
+                rawHookData[j] = poolData[48 + j];
+            }
+
+            bytes memory hookData;
+            if (hook == _angstromHookAddress) {
+                // Select attestation from hookData
+                hookData = _selectAttestation(rawHookData);
+            } else {
+                hookData = rawHookData;
             }
 
             pools[i + 1] = UniswapV4Pool(
@@ -467,5 +496,59 @@ contract UniswapV4Executor is
         } else {
             return amount;
         }
+    }
+
+    /// @notice Selects the appropriate attestation for the current block number
+    /// @dev Each attestation is exactly 93 bytes: 8 bytes blockNumber + 85 bytes attestation
+    /// @param attestationData Raw bytes of encoded attestations for several blocks
+    /// @return The attestation bytes for the current or next valid block
+    function _selectAttestation(bytes memory attestationData)
+        internal
+        view
+        returns (bytes memory)
+    {
+        uint256 TOTAL_LENGTH = 93;
+        bytes memory attestation = new bytes(85);
+
+        // Calculate number of attestations from data length
+        if (attestationData.length % TOTAL_LENGTH != 0) {
+            revert UniswapV4Executor__InvalidAngstromAttestationDataLength(attestationData.length);
+        }
+
+        uint256 attestationCount = attestationData.length / TOTAL_LENGTH;
+
+        for (uint256 i = 0; i < attestationCount; i++) {
+            uint256 offset = i * TOTAL_LENGTH;
+
+            // Assembly is used because attestationData is bytes memory
+            uint64 blockNumber;
+            // slither-disable-next-line assembly
+            assembly {
+                // Load block number (8 bytes) - shift right to get the first 8 bytes
+                blockNumber := shr(
+                    192,
+                    mload(add(add(attestationData, 0x20), offset))
+                )
+
+                // Copy attestation (85 bytes)
+                let src := add(add(attestationData, 0x20), add(offset, 8))
+                let dst := add(attestation, 0x20)
+
+                // Copy 85 bytes (2 full words + 21 bytes)
+                mstore(dst, mload(src)) // Copy first 32 bytes
+                mstore(add(dst, 0x20), mload(add(src, 0x20))) // Copy next 32 bytes
+                mstore(add(dst, 0x40), mload(add(src, 0x40))) // Copy remaining 21 bytes (loads 32, but we only need 21)
+            }
+
+            // If we find the attestation for the current block, stop decoding early
+            // and return the attestation.
+            // slither-disable-next-line incorrect-equality
+            if (blockNumber == block.number) {
+                return attestation;
+            }
+        }
+
+        // All attestations decoded and no attestation found for the current block.
+        revert UniswapV4Executor__NoAngstromAttestationForBlock(block.number);
     }
 }
