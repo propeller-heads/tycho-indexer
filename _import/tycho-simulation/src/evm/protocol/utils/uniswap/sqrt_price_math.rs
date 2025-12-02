@@ -1,4 +1,4 @@
-use alloy::primitives::{U256};
+use alloy::primitives::U256;
 use tycho_common::{
     simulation::{errors::SimulationError, protocol_sim::Price},
     Bytes,
