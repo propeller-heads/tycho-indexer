@@ -194,13 +194,17 @@ where
         // Update the cache with the pause/unpause states
         for component_id in sdk_paused.iter() {
             self.cache
-                .indexing_paused_components
-                .insert_pending(block_changes.block.clone(), component_id.clone(), true)?;
+                .paused_components
+                .insert_pending(
+                    block_changes.block.clone(),
+                    component_id.clone(),
+                    Some(PausingReason::Substreams),
+                )?;
         }
         for component_id in sdk_unpaused.iter() {
             self.cache
-                .indexing_paused_components
-                .insert_pending(block_changes.block.clone(), component_id.clone(), false)?;
+                .paused_components
+                .insert_pending(block_changes.block.clone(), component_id.clone(), None)?;
         }
 
         let params_to_retry = self.extract_params_to_retry(block_changes);
@@ -291,9 +295,13 @@ where
         // Filter out entrypoints that belong exclusively to SDK-paused components.
         let sdk_paused_components: HashSet<_> = self
             .cache
-            .indexing_paused_components
+            .paused_components
             .iter()
-            .filter_map(|(cid, is_paused)| if *is_paused { Some(cid.clone()) } else { None })
+            .filter(|(_, opt)| {
+                opt.as_ref()
+                    .is_some_and(|r| r.is_sdk_paused())
+            })
+            .map(|(cid, _)| cid.clone())
             .collect();
 
         if !sdk_paused_components.is_empty() {
@@ -371,7 +379,7 @@ where
                 match result {
                     Ok(tracing_result) => traced_entry_points.push(tracing_result),
                     Err(e) => {
-                        tracing::warn!("DCI: Failed to trace entrypoint {:?}: {:?}", ep, e);
+                        warn!("DCI: Failed to trace entrypoint {:?}: {:?}", ep, e);
                         failed_entrypoints.push((ep.clone(), *tx));
                     }
                 }
@@ -391,7 +399,7 @@ where
                 })
                 .collect::<HashMap<_, _>>();
 
-            tracing::debug!(
+            debug!(
                 traced_entry_points = traced_entry_points
                     .iter()
                     .map(|x| x.to_string())
@@ -585,13 +593,40 @@ where
 
             // Insert the "paused" component state for the components that are paused
             for (component_id, tx) in component_ids_to_pause {
+                let reason = PausingReason::TracingError;
+
+                // Check if already paused with same reason - skip to avoid duplicate emissions
+                if let Some(Some(existing_reason)) = self
+                    .cache
+                    .paused_components
+                    .get(component_id)
+                {
+                    if *existing_reason == reason {
+                        debug!(
+                            component_id = %component_id,
+                            reason = ?reason,
+                            "Component already paused with same reason, skipping"
+                        );
+                        continue;
+                    }
+                }
+
                 insert_state_attribute_update(
                     &mut block_changes.txs_with_update,
                     component_id,
                     tx,
                     &"paused".to_string(),
-                    &PausingReason::TracingError.into(),
+                    &reason.into(),
                 )?;
+
+                // Update cache with new pause reason
+                self.cache
+                    .paused_components
+                    .insert_pending(
+                        block_changes.block.clone(),
+                        component_id.clone(),
+                        Some(reason),
+                    )?;
             }
 
             // Update the cache with new traced entrypoints and failed entrypoints
@@ -775,23 +810,23 @@ where
             .await
         {
             Ok(protocol_states) => {
-                let mut sdk_paused_count = 0;
+                let mut paused_count = 0;
                 for state in protocol_states.entity {
                     if let Some(paused_bytes) = state
                         .attributes
                         .get(PausingReason::ATTRIBUTE_NAME)
                     {
-                        if PausingReason::is_sdk_paused_bytes(paused_bytes) {
+                        if let Some(reason) = PausingReason::from_bytes(paused_bytes) {
                             self.cache
-                                .indexing_paused_components
-                                .insert_permanent(state.component_id.clone(), true);
-                            sdk_paused_count += 1;
+                                .paused_components
+                                .insert_permanent(state.component_id.clone(), Some(reason));
+                            paused_count += 1;
                         }
                     }
                 }
 
-                if sdk_paused_count > 0 {
-                    info!(sdk_paused_count, "Loaded SDK-paused components from storage");
+                if paused_count > 0 {
+                    info!(paused_count, "Loaded paused components from storage");
                 }
             }
             Err(e) => {
@@ -4107,8 +4142,8 @@ mod tests {
 
         // Manually set up a component as SDK-paused in the cache
         dci.cache
-            .indexing_paused_components
-            .insert_permanent("component_id_1".to_string(), true);
+            .paused_components
+            .insert_permanent("component_id_1".to_string(), Some(PausingReason::Substreams));
 
         // Add component_id_1 to component_id_to_entrypoint_params
         // This component uses entrypoint_1 with tracing_params_1
@@ -4231,10 +4266,10 @@ mod tests {
         // Verify that the paused component was loaded into the cache
         assert!(
             dci.cache
-                .indexing_paused_components
+                .paused_components
                 .get(&"paused_component_1".to_string())
-                .copied()
-                .unwrap_or(false),
+                .and_then(|opt| opt.as_ref())
+                .is_some_and(|r| r.is_sdk_paused()),
             "SDK-paused component should be in the cache after initialization"
         );
     }

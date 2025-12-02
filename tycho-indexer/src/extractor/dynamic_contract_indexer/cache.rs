@@ -12,7 +12,7 @@ use tycho_common::models::{
     Address, BlockHash, ComponentId, EntryPointId, StoreKey,
 };
 
-use super::hooks::hook_dci::ComponentProcessingState;
+use super::{hooks::hook_dci::ComponentProcessingState, PausingReason};
 
 /// A unique identifier for a storage location, consisting of an address and a storage key.
 type StorageLocation = (Address, StoreKey);
@@ -61,9 +61,11 @@ pub(super) struct DCICache {
     /// Tracks the number of retry attempts for each failed tracing params.
     /// Used to cap retries at a maximum number of attempts (e.g., 5).
     pub(super) tracing_retry_counts: VersionedCache<(EntryPointId, TracingParams), u32>,
-    /// Tracks which components were paused by SDK reason (0x1).
-    /// When a component is SDK-paused, DCI should skip tracing for that component.
-    pub(super) indexing_paused_components: VersionedCache<ComponentId, bool>,
+    /// Tracks paused components and their pause reason.
+    /// `Some(reason)` indicates the component is paused with that reason.
+    /// `None` indicates the component was unpaused (paused attribute deleted).
+    /// When a component is SDK-paused (reason = Substreams), DCI should skip tracing.
+    pub(super) paused_components: VersionedCache<ComponentId, Option<PausingReason>>,
 }
 
 impl DCICache {
@@ -78,7 +80,7 @@ impl DCICache {
             ep_id_to_component_id: VersionedCache::new(),
             component_id_to_entrypoint_params: VersionedCache::new(),
             tracing_retry_counts: VersionedCache::new(),
-            indexing_paused_components: VersionedCache::new(),
+            paused_components: VersionedCache::new(),
         }
     }
 
@@ -111,7 +113,7 @@ impl DCICache {
             .revert_to(block)?;
         self.tracing_retry_counts
             .revert_to(block)?;
-        self.indexing_paused_components
+        self.paused_components
             .revert_to(block)?;
         Ok(())
     }
@@ -186,7 +188,7 @@ impl DCICache {
         self.tracing_retry_counts
             .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
 
-        self.indexing_paused_components
+        self.paused_components
             .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
         Ok(())
     }
@@ -222,7 +224,7 @@ impl DCICache {
             .validate_and_ensure_block_layer_internal(block)?;
         self.tracing_retry_counts
             .validate_and_ensure_block_layer_internal(block)?;
-        self.indexing_paused_components
+        self.paused_components
             .validate_and_ensure_block_layer_internal(block)?;
         Ok(())
     }
@@ -235,9 +237,11 @@ pub(super) struct HooksDCICache {
     pub(super) component_states: VersionedCache<ComponentId, ComponentProcessingState>,
     /// Stores ProtocolComponent data for both newly created and mutated components.
     pub(super) protocol_components: VersionedCache<ComponentId, ProtocolComponent>,
-    /// Tracks which components were paused by SDK reason (0x1).
-    /// When a component is SDK-paused, HooksDCI should skip processing (param generation, etc.).
-    pub(super) sdk_paused_components: VersionedCache<ComponentId, bool>,
+    /// Tracks paused components and their pause reason.
+    /// `Some(reason)` indicates the component is paused with that reason.
+    /// `None` indicates the component was unpaused (paused attribute deleted).
+    /// When a component is SDK-paused (reason = Substreams), HooksDCI should skip processing.
+    pub(super) paused_components: VersionedCache<ComponentId, Option<PausingReason>>,
 }
 
 impl HooksDCICache {
@@ -245,7 +249,7 @@ impl HooksDCICache {
         Self {
             component_states: VersionedCache::new(),
             protocol_components: VersionedCache::new(),
-            sdk_paused_components: VersionedCache::new(),
+            paused_components: VersionedCache::new(),
         }
     }
 
@@ -265,7 +269,7 @@ impl HooksDCICache {
         self.component_states.revert_to(block)?;
         self.protocol_components
             .revert_to(block)?;
-        self.sdk_paused_components
+        self.paused_components
             .revert_to(block)?;
         Ok(())
     }
@@ -282,7 +286,7 @@ impl HooksDCICache {
             .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
         self.protocol_components
             .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
-        self.sdk_paused_components
+        self.paused_components
             .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
         Ok(())
     }
@@ -304,7 +308,7 @@ impl HooksDCICache {
             .validate_and_ensure_block_layer_internal(block)?;
         self.protocol_components
             .validate_and_ensure_block_layer_internal(block)?;
-        self.sdk_paused_components
+        self.paused_components
             .validate_and_ensure_block_layer_internal(block)?;
         Ok(())
     }

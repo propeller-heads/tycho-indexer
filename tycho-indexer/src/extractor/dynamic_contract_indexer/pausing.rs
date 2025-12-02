@@ -3,6 +3,8 @@
 //! This module defines the `PausingReason` enum which represents why a component
 //! has been paused during indexing.
 
+use deepsize::DeepSizeOf;
+
 /// Represents the reason why a component has been paused.
 ///
 /// The pausing attribute is stored as a single byte in the component's state:
@@ -12,7 +14,7 @@
 ///
 /// When a component is paused with `Substreams` reason (0x01), the indexer should
 /// skip all processing (tracing, metadata generation, etc.) for that component.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, DeepSizeOf)]
 pub(crate) enum PausingReason {
     /// Paused by SDK/substreams - indicates external pause request.
     /// Components paused with this reason should be fully skipped by DCI and HooksDCI.
