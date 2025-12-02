@@ -1,3 +1,15 @@
+## [0.119.0](https://github.com/propeller-heads/tycho-indexer/compare/0.118.1...0.119.0) (2025-12-02)
+
+
+### Features
+
+* restore higher pagination limits ([#796](https://github.com/propeller-heads/tycho-indexer/issues/796)) ([5a075c3](https://github.com/propeller-heads/tycho-indexer/commit/5a075c3c7f68395770b7bbd8410fb8d4b2353955))
+
+
+### Bug Fixes
+
+* restore higher pagination limits for StateRequestBody, TokensRequestBody, ProtocolComponentsRequestBody, and ProtocolStateRequestBody ([fdfde70](https://github.com/propeller-heads/tycho-indexer/commit/fdfde7040a0e3e511fc8f8529af6b0695cef2fbe))
+
 ## [0.118.1](https://github.com/propeller-heads/tycho-indexer/compare/0.118.0...0.118.1) (2025-12-02)
 
 ## [0.118.0](https://github.com/propeller-heads/tycho-indexer/compare/0.117.4...0.118.0) (2025-12-02)
