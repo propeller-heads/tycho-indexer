@@ -21,10 +21,6 @@ use crate::evm::protocol::{
 };
 
 const DEPOSIT_FEE_BASE: u128 = 1_000_000_000_000_000_000; // 1e18
-
-// Minipool deposit amounts in wei
-const FULL_DEPOSIT_USER_AMOUNT: u128 = 16_000_000_000_000_000_000; // 16 ETH
-const HALF_DEPOSIT_USER_AMOUNT: u128 = 16_000_000_000_000_000_000; // 16 ETH
 const VARIABLE_DEPOSIT_AMOUNT: u128 = 31_000_000_000_000_000_000; // 31 ETH
 
 // Queue capacity for wrap-around calculation (from RocketMinipoolQueue contract)
@@ -52,12 +48,6 @@ pub struct RocketPoolState {
     pub deposit_assign_maximum: U256,
     /// The base minimum number of minipools to try to assign per deposit
     pub deposit_assign_socialised_maximum: U256,
-    /// Minipool queue indices for full deposits (legacy)
-    pub queue_full_start: U256,
-    pub queue_full_end: U256,
-    /// Minipool queue indices for half deposits (legacy)
-    pub queue_half_start: U256,
-    pub queue_half_end: U256,
     /// Minipool queue indices for variable deposits
     pub queue_variable_start: U256,
     pub queue_variable_end: U256,
@@ -77,10 +67,6 @@ impl RocketPoolState {
         deposit_assigning_enabled: bool,
         deposit_assign_maximum: U256,
         deposit_assign_socialised_maximum: U256,
-        queue_full_start: U256,
-        queue_full_end: U256,
-        queue_half_start: U256,
-        queue_half_end: U256,
         queue_variable_start: U256,
         queue_variable_end: U256,
     ) -> Self {
@@ -96,10 +82,6 @@ impl RocketPoolState {
             deposit_assigning_enabled,
             deposit_assign_maximum,
             deposit_assign_socialised_maximum,
-            queue_full_start,
-            queue_full_end,
-            queue_half_start,
-            queue_half_end,
             queue_variable_start,
             queue_variable_end,
         }
@@ -148,22 +130,22 @@ impl RocketPoolState {
 
     /// Calculates the total effective capacity of the minipool queues.
     ///
-    /// Formula from RocketMinipoolQueue.getEffectiveCapacity():
+    /// The full formula from RocketMinipoolQueue.getEffectiveCapacity():
     /// full_queue_length * FULL_DEPOSIT_USER_AMOUNT
     /// + half_queue_length * HALF_DEPOSIT_USER_AMOUNT
     /// + variable_queue_length * VARIABLE_DEPOSIT_AMOUNT
+    ///
+    /// However, since RocketPool v1.2, the full and half queues are empty and can no longer be
+    /// expanded, which means only the variable queue contributes to effective capacity.
+    /// If this assumption ever changes, there is a check on the indexer side that will fail loudly.
     fn get_effective_capacity(&self) -> Result<U256, SimulationError> {
-        let full_length = Self::get_queue_length(self.queue_full_start, self.queue_full_end);
-        let half_length = Self::get_queue_length(self.queue_half_start, self.queue_half_end);
         let variable_length =
             Self::get_queue_length(self.queue_variable_start, self.queue_variable_end);
 
-        let full_capacity = safe_mul_u256(full_length, U256::from(FULL_DEPOSIT_USER_AMOUNT))?;
-        let half_capacity = safe_mul_u256(half_length, U256::from(HALF_DEPOSIT_USER_AMOUNT))?;
         let variable_capacity =
             safe_mul_u256(variable_length, U256::from(VARIABLE_DEPOSIT_AMOUNT))?;
 
-        safe_add_u256(safe_add_u256(full_capacity, half_capacity)?, variable_capacity)
+        Ok(variable_capacity)
     }
 
     /// Returns the maximum deposit capacity considering both the base pool size
@@ -198,13 +180,6 @@ impl RocketPoolState {
         safe_add_u256(self.reth_contract_liquidity, deposit_pool_excess)
     }
 
-    /// Returns true if there are any legacy minipools in the queue (full or half queues non-empty).
-    fn contains_legacy(&self) -> bool {
-        let full_length = Self::get_queue_length(self.queue_full_start, self.queue_full_end);
-        let half_length = Self::get_queue_length(self.queue_half_start, self.queue_half_end);
-        full_length + half_length > U256::ZERO
-    }
-
     /// Calculates the number of minipools to dequeue and the resulting ETH to assign given a
     /// deposit. Returns (minipools_dequeued, eth_assigned) or panics for legacy queue.
     ///
@@ -224,15 +199,11 @@ impl RocketPoolState {
             return Ok((U256::ZERO, U256::ZERO));
         }
 
-        // The simulation does not support legacy minipool queues (full/half) assignments.
-        // This decision is made to limit unnecessary complexity in the simulation logic as
-        // since the V1.2 upgrade, minipools can no longer be added to legacy queues,
-        // and at the time of the upgrade, legacy queues were already empty.
-        if self.contains_legacy() {
-            return Err(SimulationError::FatalError(
-                "Legacy minipool queue (full/half) contains items - not implemented".to_string(),
-            ));
-        }
+        // The assignment logic in RocketPool has both legacy (full/half) and variable queue
+        // handling. However since the V1.2 upgrade minipools can no longer be added to legacy
+        // queues, and since at the time of the upgrade legacy queues were already empty, we can
+        // assume that the legacy deposit assignment logic will never be called.
+        // If this assumption changes in the future, the indexer side has checks to fail loudly.
 
         let variable_deposit = U256::from(VARIABLE_DEPOSIT_AMOUNT);
 
@@ -449,22 +420,6 @@ impl ProtocolSim for RocketPoolState {
             .get("deposit_assign_socialised_maximum")
             .map_or(self.deposit_assign_socialised_maximum, U256::from_bytes);
 
-        self.queue_full_start = delta
-            .updated_attributes
-            .get("queue_full_start")
-            .map_or(self.queue_full_start, U256::from_bytes);
-        self.queue_full_end = delta
-            .updated_attributes
-            .get("queue_full_end")
-            .map_or(self.queue_full_end, U256::from_bytes);
-        self.queue_half_start = delta
-            .updated_attributes
-            .get("queue_half_start")
-            .map_or(self.queue_half_start, U256::from_bytes);
-        self.queue_half_end = delta
-            .updated_attributes
-            .get("queue_half_end")
-            .map_or(self.queue_half_end, U256::from_bytes);
         self.queue_variable_start = delta
             .updated_attributes
             .get("queue_variable_start")
@@ -542,10 +497,6 @@ mod tests {
             false,                                  // deposit_assigning_enabled
             U256::ZERO,                             // deposit_assign_maximum
             U256::ZERO,                             // deposit_assign_socialised_maximum
-            U256::ZERO,                             // queue_full_start
-            U256::ZERO,                             // queue_full_end
-            U256::ZERO,                             // queue_half_start
-            U256::ZERO,                             // queue_half_end
             U256::ZERO,                             // queue_variable_start
             U256::ZERO,                             // queue_variable_end
         )
@@ -600,34 +551,10 @@ mod tests {
     }
 
     #[test]
-    fn test_effective_capacity_full_queue() {
-        let mut state = create_state();
-        state.queue_full_end = U256::from(2); // 2 * 16 ETH = 32 ETH
-        assert_eq!(state.get_effective_capacity().unwrap(), U256::from(32e18));
-    }
-
-    #[test]
-    fn test_effective_capacity_half_queue() {
-        let mut state = create_state();
-        state.queue_half_end = U256::from(3); // 3 * 16 ETH = 48 ETH
-        assert_eq!(state.get_effective_capacity().unwrap(), U256::from(48e18));
-    }
-
-    #[test]
     fn test_effective_capacity_variable_queue() {
         let mut state = create_state();
         state.queue_variable_end = U256::from(2); // 2 * 31 ETH = 62 ETH
         assert_eq!(state.get_effective_capacity().unwrap(), U256::from(62e18));
-    }
-
-    #[test]
-    fn test_effective_capacity_combined() {
-        let mut state = create_state();
-        state.queue_full_end = U256::from(2); // 32 ETH
-        state.queue_half_end = U256::from(3); // 48 ETH
-        state.queue_variable_end = U256::from(1); // 31 ETH
-                                                  // Total: 111 ETH
-        assert_eq!(state.get_effective_capacity().unwrap(), U256::from(111e18));
     }
 
     // ============ Max Deposit Capacity Tests ============
@@ -702,7 +629,6 @@ mod tests {
         let attributes: HashMap<String, Bytes> = [
             ("deposit_assigning_enabled", U256::from(1u64)),
             ("queue_variable_end", U256::from(5u64)),
-            ("queue_full_end", U256::from(3u64)),
         ]
         .into_iter()
         .map(|(k, v)| (k.to_string(), Bytes::from(v.to_be_bytes_vec())))
@@ -720,7 +646,6 @@ mod tests {
 
         assert!(state.deposit_assigning_enabled);
         assert_eq!(state.queue_variable_end, U256::from(5u64));
-        assert_eq!(state.queue_full_end, U256::from(3u64));
     }
 
     // ============ Spot Price Tests ============
@@ -759,10 +684,6 @@ mod tests {
             true,                                                      // deposit_assigning_enabled
             U256::from_str_radix("5a", 16).unwrap(),                   // deposit_assign_maximum
             U256::from_str_radix("2", 16).unwrap(), // deposit_assign_socialised_maximum
-            U256::from_str_radix("1bf", 16).unwrap(), // queue_full_start (empty)
-            U256::from_str_radix("1bf", 16).unwrap(), // queue_full_end
-            U256::from_str_radix("3533", 16).unwrap(), // queue_half_start (empty)
-            U256::from_str_radix("3533", 16).unwrap(), // queue_half_end
             U256::from_str_radix("6d45", 16).unwrap(), // queue_variable_start
             U256::from_str_radix("6de3", 16).unwrap(), // queue_variable_end
         )
@@ -1246,21 +1167,6 @@ mod tests {
     }
 
     #[test]
-    fn test_assign_deposits_legacy_queue_error() {
-        let mut state = create_state();
-        state.deposit_assigning_enabled = true;
-        state.queue_full_end = U256::from(1); // Legacy queue has items
-
-        let res = state.get_amount_out(
-            BigUint::from(10_000_000_000_000_000_000u128),
-            &eth_token(),
-            &reth_token(),
-        );
-
-        assert!(matches!(res, Err(SimulationError::FatalError(_))));
-    }
-
-    #[test]
     fn test_assign_deposits_empty_queue_no_change() {
         let mut state = create_state();
         state.deposit_assigning_enabled = true;
@@ -1308,10 +1214,6 @@ mod tests {
             true,                                                      // deposit_assigning_enabled
             U256::from_str_radix("5a", 16).unwrap(),                   // deposit_assign_maximum
             U256::from_str_radix("2", 16).unwrap(), // deposit_assign_socialised_maximum
-            U256::from_str_radix("1bf", 16).unwrap(), // queue_full_start (empty: start == end)
-            U256::from_str_radix("1bf", 16).unwrap(), // queue_full_end
-            U256::from_str_radix("3533", 16).unwrap(), // queue_half_start (empty: start == end)
-            U256::from_str_radix("3533", 16).unwrap(), // queue_half_end
             U256::from_str_radix("6d43", 16).unwrap(), // queue_variable_start
             U256::from_str_radix("6dde", 16).unwrap(), // queue_variable_end
         );
@@ -1354,10 +1256,6 @@ mod tests {
             new_state.deposit_assign_socialised_maximum,
             state.deposit_assign_socialised_maximum
         );
-        assert_eq!(new_state.queue_full_start, state.queue_full_start);
-        assert_eq!(new_state.queue_full_end, state.queue_full_end);
-        assert_eq!(new_state.queue_half_start, state.queue_half_start);
-        assert_eq!(new_state.queue_half_end, state.queue_half_end);
         assert_eq!(new_state.queue_variable_end, state.queue_variable_end);
     }
 
@@ -1378,10 +1276,6 @@ mod tests {
             true,                                                      // deposit_assigning_enabled
             U256::from_str_radix("5a", 16).unwrap(),                   // deposit_assign_maximum
             U256::from_str_radix("2", 16).unwrap(), // deposit_assign_socialised_maximum
-            U256::from_str_radix("1bf", 16).unwrap(), // queue_full_start (empty)
-            U256::from_str_radix("1bf", 16).unwrap(), // queue_full_end
-            U256::from_str_radix("3533", 16).unwrap(), // queue_half_start (empty)
-            U256::from_str_radix("3533", 16).unwrap(), // queue_half_end
             U256::from_str_radix("6d34", 16).unwrap(), // queue_variable_start
             U256::from_str_radix("6dd0", 16).unwrap(), // queue_variable_end
         );

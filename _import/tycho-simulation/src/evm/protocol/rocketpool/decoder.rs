@@ -117,38 +117,6 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketPoolState {
                 )
             })?;
 
-        let queue_full_start = snapshot
-            .state
-            .attributes
-            .get("queue_full_start")
-            .map(U256::from_bytes)
-            .ok_or_else(|| {
-                InvalidSnapshotError::MissingAttribute("queue_full_start".to_string())
-            })?;
-
-        let queue_full_end = snapshot
-            .state
-            .attributes
-            .get("queue_full_end")
-            .map(U256::from_bytes)
-            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("queue_full_end".to_string()))?;
-
-        let queue_half_start = snapshot
-            .state
-            .attributes
-            .get("queue_half_start")
-            .map(U256::from_bytes)
-            .ok_or_else(|| {
-                InvalidSnapshotError::MissingAttribute("queue_half_start".to_string())
-            })?;
-
-        let queue_half_end = snapshot
-            .state
-            .attributes
-            .get("queue_half_end")
-            .map(U256::from_bytes)
-            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("queue_half_end".to_string()))?;
-
         let queue_variable_start = snapshot
             .state
             .attributes
@@ -179,10 +147,6 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketPoolState {
             deposit_assigning_enabled,
             deposit_assign_maximum,
             deposit_assign_socialised_maximum,
-            queue_full_start,
-            queue_full_end,
-            queue_half_start,
-            queue_half_end,
             queue_variable_start,
             queue_variable_end,
         ))
@@ -260,19 +224,6 @@ mod tests {
                         Bytes::from(U256::from(2u64).to_be_bytes_vec()),
                     ),
                     (
-                        "queue_full_start".to_string(),
-                        Bytes::from(U256::from(5u64).to_be_bytes_vec()),
-                    ),
-                    (
-                        "queue_full_end".to_string(),
-                        Bytes::from(U256::from(10u64).to_be_bytes_vec()),
-                    ),
-                    (
-                        "queue_half_start".to_string(),
-                        Bytes::from(U256::from(0u64).to_be_bytes_vec()),
-                    ),
-                    ("queue_half_end".to_string(), Bytes::from(U256::from(3u64).to_be_bytes_vec())),
-                    (
                         "queue_variable_start".to_string(),
                         Bytes::from(U256::from(100u64).to_be_bytes_vec()),
                     ),
@@ -312,10 +263,6 @@ mod tests {
         assert!(state.deposit_assigning_enabled);
         assert_eq!(state.min_deposit_amount, U256::from(10_000_000_000_000_000u128));
         assert_eq!(state.max_deposit_pool_size, U256::from(5_000_000_000_000_000_000_000u128));
-        assert_eq!(state.queue_full_start, U256::from(5u64));
-        assert_eq!(state.queue_full_end, U256::from(10u64));
-        assert_eq!(state.queue_half_start, U256::from(0u64));
-        assert_eq!(state.queue_half_end, U256::from(3u64));
         assert_eq!(state.queue_variable_start, U256::from(100u64));
         assert_eq!(state.queue_variable_end, U256::from(105u64));
     }
@@ -414,10 +361,6 @@ mod tests {
     #[case::missing_max_deposit_pool_size("max_deposit_pool_size")]
     #[case::missing_deposit_assign_maximum("deposit_assign_maximum")]
     #[case::missing_deposit_assign_socialised_maximum("deposit_assign_socialised_maximum")]
-    #[case::missing_queue_full_start("queue_full_start")]
-    #[case::missing_queue_full_end("queue_full_end")]
-    #[case::missing_queue_half_start("queue_half_start")]
-    #[case::missing_queue_half_end("queue_half_end")]
     #[case::missing_queue_variable_start("queue_variable_start")]
     #[case::missing_queue_variable_end("queue_variable_end")]
     async fn test_rocketpool_try_from_missing_attribute(#[case] missing_attribute: &str) {
