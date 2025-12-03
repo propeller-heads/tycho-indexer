@@ -449,3 +449,465 @@ impl ProtocolSim for LidoState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashSet, str::FromStr};
+
+    use num_bigint::BigUint;
+    use rstest::rstest;
+    use tycho_common::{
+        hex_bytes::Bytes,
+        models::{token::Token, Chain},
+    };
+
+    use super::*;
+
+    fn lido_state_steth() -> LidoState {
+        let bytes = hex::decode("00000000000000000000000000000000000000000005dbe7785e70cc10d03d36")
+            .unwrap();
+        let total_shares_start = BigUint::from_bytes_be(&bytes);
+
+        let bytes = hex::decode("0000000000000000000000000000000000000000000000a34daa0959f0fd43c7")
+            .unwrap();
+        let total_pooled_eth_start = BigUint::from_bytes_be(&bytes);
+
+        let bytes = hex::decode("1fc3842bd1f071c00000").unwrap();
+        let staking_limit = BigUint::from_bytes_be(&bytes);
+
+        LidoState {
+            pool_type: LidoPoolType::StEth,
+            total_shares: total_shares_start.clone(),
+            total_pooled_eth: total_pooled_eth_start.clone(),
+            total_wrapped_st_eth: None,
+            id: ST_ETH_ADDRESS_PROXY.into(),
+            native_address: ETH_ADDRESS.into(),
+            stake_limits_state: StakeLimitState {
+                staking_status: crate::evm::protocol::lido::state::StakingStatus::Limited,
+                staking_limit,
+            },
+        }
+    }
+
+    fn lido_state_wsteth() -> LidoState {
+        let bytes = hex::decode("00000000000000000000000000000000000000000005dbe7785e70cc10d03d36")
+            .unwrap();
+        let total_shares_start = BigUint::from_bytes_be(&bytes);
+
+        let bytes = hex::decode("0000000000000000000000000000000000000000000000a34daa0959f0fd43c7")
+            .unwrap();
+        let total_pooled_eth_start = BigUint::from_bytes_be(&bytes);
+
+        let bytes = hex::decode("00000000000000000000000000000000000000000002bb67ec3aae08e0719f23")
+            .unwrap();
+        let total_wsteth_start = BigUint::from_bytes_be(&bytes);
+
+        LidoState {
+            pool_type: LidoPoolType::WStEth,
+            total_shares: total_shares_start,
+            total_pooled_eth: total_pooled_eth_start.clone(),
+            total_wrapped_st_eth: Some(total_wsteth_start),
+            id: ST_ETH_ADDRESS_PROXY.into(),
+            native_address: ETH_ADDRESS.into(),
+            stake_limits_state: StakeLimitState {
+                staking_status: crate::evm::protocol::lido::state::StakingStatus::Limited,
+                staking_limit: BigUint::zero(),
+            },
+        }
+    }
+
+    fn bytes_st_eth() -> Bytes {
+        Bytes::from(ST_ETH_ADDRESS_PROXY)
+    }
+
+    fn bytes_wst_eth() -> Bytes {
+        Bytes::from(WST_ETH_ADDRESS)
+    }
+
+    fn bytes_eth() -> Bytes {
+        Bytes::from(ETH_ADDRESS)
+    }
+
+    fn token_st_eth() -> Token {
+        Token::new(
+            &Bytes::from_str(ST_ETH_ADDRESS_PROXY).unwrap(),
+            "stETH",
+            18,
+            0,
+            &[Some(44000)],
+            Chain::Ethereum,
+            10,
+        )
+    }
+
+    fn token_wst_eth() -> Token {
+        Token::new(
+            &Bytes::from_str(WST_ETH_ADDRESS).unwrap(),
+            "wstETH",
+            18,
+            0,
+            &[Some(44000)],
+            Chain::Ethereum,
+            10,
+        )
+    }
+
+    fn token_eth() -> Token {
+        Token::new(
+            &Bytes::from_str(ETH_ADDRESS).unwrap(),
+            "ETH",
+            18,
+            0,
+            &[Some(44000)],
+            Chain::Ethereum,
+            100,
+        )
+    }
+
+    #[test]
+    // this is failing, coz the the total pooled eth is not an actual value, it is only one part of
+    // that value; so when that is correct, the test should be passing
+    fn test_lido_get_amount_out() {
+        // eth_before = 0x0000000000000000000000000000000000000000000000a34daa0959f0fd43c7
+        // eth_after = 0x0000000000000000000000000000000000000000000000a35b8ac00d986143c7
+
+        // shares_before = 0x00000000000000000000000000000000000000000005dbe7785e70cc10d03d36
+        // shares_after = 0x00000000000000000000000000000000000000000005dbe783bca067a8ff38f4
+
+        // tx = 0xbc7fe652e6b4f10c1410cc501a198a3862ab517a32a377c2beda3c665426a5f4
+        let token_eth = token_eth();
+        let token_st_eth = token_st_eth();
+        let state = lido_state_steth();
+
+        let amount_in = BigUint::from_str("1000000000000000000").unwrap();
+        let res = state
+            .get_amount_out(amount_in.clone(), &token_eth, &token_st_eth)
+            .unwrap();
+
+        let exp = BigUint::from_str("999999999999999998").unwrap();
+        let total_shares_after = BigUint::from_str("7083098048341106749290740").unwrap();
+        let total_pooled_eth_after = BigUint::from_str("3013415579783518045127").unwrap();
+
+        assert_eq!(res.amount, exp);
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<LidoState>()
+            .unwrap();
+        assert_eq!(new_state.total_shares, total_shares_after);
+        assert_eq!(new_state.total_pooled_eth, total_pooled_eth_after);
+    }
+
+    #[test]
+    // this is failing, coz the the total pooled eth is not an actual value, it is only one part of
+    // that value; so when that is correct, the test should be passing
+    fn test_lido_wrapping_get_amount_out() {
+        // wsteth_before = 0x00000000000000000000000000000000000000000002bb67ec3aae08e0719f23
+        // wsteth_after = 0x00000000000000000000000000000000000000000002bb67fd446cc1e48b099a
+        // tx = 0x3eaf26130aaffa659201fa18a3141916798ac2d2cf58f89e7d658c69eb3a0061
+        let token_st_eth = token_st_eth();
+        let token_wst_eth = token_wst_eth();
+        let state = lido_state_wsteth();
+
+        let amount_in = BigUint::from_str("149878566479312595").unwrap();
+        let res = state
+            .get_amount_out(amount_in.clone(), &token_st_eth, &token_wst_eth)
+            .unwrap();
+        let exp = BigUint::from_str("3302852435996644119087514").unwrap();
+        assert_eq!(res.amount, exp);
+
+        let total_wsteth_after = BigUint::from_str("3302852435996644119087514").unwrap();
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<LidoState>()
+            .unwrap();
+        assert_eq!(new_state.total_wrapped_st_eth, Some(total_wsteth_after));
+    }
+
+    #[test]
+    // this is failing, coz the the total pooled eth is not an actual value, it is only one part of
+    // that value; so when that is correct, the test should be passing
+    fn test_lido_unwrapping_get_amount_out() {
+        // wsteth_before = 0x00000000000000000000000000000000000000000002ba80bcaa96c096840abe
+        // wsteth_after = 0x00000000000000000000000000000000000000000002ba80bbfb384494e916ce
+        // tx = 0x18fb38d24485d98fbc08968a124b6db5276c9ecf09a93de83ad96ce61bd56c6c
+        let token_st_eth = token_st_eth();
+        let token_wst_eth = token_wst_eth();
+        let mut state = lido_state_wsteth();
+
+        let bytes = hex::decode("00000000000000000000000000000000000000000002ba80bcaa96c096840abe")
+            .unwrap();
+        let total_wsteth_start = BigUint::from_bytes_be(&bytes);
+        state.total_wrapped_st_eth = Some(total_wsteth_start);
+
+        let amount_in = BigUint::from_str("0049362007620252656").unwrap();
+        let res = state
+            .get_amount_out(amount_in.clone(), &token_st_eth, &token_wst_eth)
+            .unwrap();
+        let exp = BigUint::from_str("0060239130056911017").unwrap();
+        assert_eq!(res.amount, exp);
+
+        let bytes = hex::decode("00000000000000000000000000000000000000000002ba80bbfb384494e916ce")
+            .unwrap();
+        let total_wsteth_after = BigUint::from_bytes_be(&bytes);
+
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<LidoState>()
+            .unwrap();
+        assert_eq!(new_state.total_wrapped_st_eth, Some(total_wsteth_after));
+    }
+
+    #[test]
+    fn test_lido_spot_price() {
+        let token_st_eth = token_st_eth();
+        let token_wst_eth = token_wst_eth();
+        let token_eth = token_eth();
+
+        let st_state = lido_state_steth();
+        let wst_state = lido_state_wsteth();
+
+        let res = st_state
+            .spot_price(&token_eth, &token_st_eth)
+            .unwrap();
+        let exp = 1.0;
+        assert_eq!(res, exp);
+
+        let res = st_state.spot_price(&token_st_eth, &token_wst_eth);
+        assert!(res.is_err());
+
+        let res = wst_state
+            .spot_price(&token_st_eth, &token_wst_eth)
+            .unwrap();
+        assert_eq!(res, 2351.0);
+
+        let res = wst_state
+            .spot_price(&token_wst_eth, &token_st_eth)
+            .unwrap();
+        assert_eq!(res, 0.0);
+
+        let res = wst_state.spot_price(&token_eth, &token_st_eth);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_lido_get_limits() {
+        let token_st_eth = bytes_st_eth();
+        let token_wst_eth = bytes_wst_eth();
+        let token_eth = bytes_eth();
+
+        let st_state = lido_state_steth();
+        let wst_state = lido_state_wsteth();
+
+        let res = st_state
+            .get_limits(token_eth.clone(), token_st_eth.clone())
+            .unwrap();
+        let exp = (BigUint::zero(), BigUint::zero());
+        assert_eq!(res, exp);
+
+        let res = st_state
+            .get_limits(token_st_eth.clone(), token_eth.clone())
+            .unwrap();
+        let exp = (
+            st_state
+                .stake_limits_state
+                .staking_limit
+                .clone(),
+            st_state
+                .stake_limits_state
+                .staking_limit
+                .clone(),
+        );
+        assert_eq!(res, exp);
+
+        let res = st_state.get_limits(token_wst_eth.clone(), token_eth.clone());
+        assert!(res.is_err());
+
+        // add correct vals here
+
+        let res = wst_state
+            .get_limits(token_st_eth.clone(), token_wst_eth.clone())
+            .unwrap();
+        let exp = (
+            BigUint::from_str("3780246020922010364714515").unwrap(),
+            BigUint::from_str("3780246020922010364714515").unwrap(),
+        );
+
+        assert_eq!(res, exp);
+
+        let res = wst_state
+            .get_limits(token_st_eth.clone(), token_wst_eth.clone())
+            .unwrap();
+        let exp = (
+            BigUint::from_str("3302851208274568836914979").unwrap(),
+            BigUint::from_str("3302851208274568836914979").unwrap(),
+        );
+
+        assert_eq!(res, exp);
+
+        let res = wst_state.get_limits(token_wst_eth.clone(), token_eth.clone());
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_lido_st_delta_transition() {
+        let mut st_state = lido_state_steth();
+
+        let total_shares_after =
+            "0x00000000000000000000000000000000000000000005d9d75ae42b4ba9c04d1a";
+        let staking_status_after = "0x4c696d69746564";
+        let staking_limit_after = "0x1fc3842bd1f071c00000";
+
+        let mut updated_attributes: HashMap<String, Bytes> = HashMap::new();
+        updated_attributes.insert("total_shares".to_owned(), Bytes::from(total_shares_after));
+        updated_attributes.insert("staking_status".to_owned(), Bytes::from(staking_status_after));
+        updated_attributes.insert("staking_limit".to_owned(), Bytes::from(staking_limit_after));
+
+        let staking_state_delta = ProtocolStateDelta {
+            component_id: ST_ETH_ADDRESS_PROXY.to_owned(),
+            updated_attributes,
+            deleted_attributes: HashSet::new(),
+        };
+
+        let balances =
+            Balances { component_balances: HashMap::new(), account_balances: HashMap::new() }; // add balances here
+
+        st_state
+            .delta_transition(staking_state_delta.clone(), &HashMap::new(), &balances)
+            .unwrap();
+
+        let exp = LidoState {
+            pool_type: LidoPoolType::StEth,
+            total_shares: BigUint::from_bytes_be(
+                &hex::decode("00000000000000000000000000000000000000000005d9d75ae42b4ba9c04d1a")
+                    .unwrap(),
+            ),
+            total_pooled_eth: st_state.total_pooled_eth.clone(),
+            total_wrapped_st_eth: None,
+            id: ST_ETH_ADDRESS_PROXY.into(),
+            native_address: ETH_ADDRESS.into(),
+            stake_limits_state: StakeLimitState {
+                staking_status: crate::evm::protocol::lido::state::StakingStatus::Limited,
+                staking_limit: BigUint::from_bytes_be(
+                    &hex::decode("1fc3842bd1f071c00000").unwrap(),
+                ),
+            },
+        };
+        assert_eq!(st_state, exp);
+    }
+
+    #[rstest]
+    #[case::missing_total_shares("total_shares")]
+    #[case::missing_staking_status("staking_status")]
+    #[case::missing_staking_limit("staking_limit")]
+    fn test_lido_st_delta_transition_missing_arg(#[case] missing_attribute: &str) {
+        let mut st_state = lido_state_steth();
+
+        let total_shares_after =
+            "0x00000000000000000000000000000000000000000005d9d75ae42b4ba9c04d1a";
+        let staking_status_after = "0x4c696d69746564";
+        let staking_limit_after = "0x1fc3842bd1f071c00000";
+
+        let mut updated_attributes: HashMap<String, Bytes> = HashMap::new();
+        updated_attributes.insert("total_shares".to_owned(), Bytes::from(total_shares_after));
+        updated_attributes.insert("staking_status".to_owned(), Bytes::from(staking_status_after));
+        updated_attributes.insert("staking_limit".to_owned(), Bytes::from(staking_limit_after));
+
+        let mut staking_state_delta = ProtocolStateDelta {
+            component_id: ST_ETH_ADDRESS_PROXY.to_owned(),
+            updated_attributes,
+            deleted_attributes: HashSet::new(),
+        };
+
+        let balances =
+            Balances { component_balances: HashMap::new(), account_balances: HashMap::new() }; // add balances here
+
+        staking_state_delta
+            .updated_attributes
+            .remove(missing_attribute);
+
+        assert!(st_state
+            .delta_transition(staking_state_delta.clone(), &HashMap::new(), &balances)
+            .is_err());
+    }
+
+    #[test]
+    fn test_lido_wst_delta_transition() {
+        let mut wst_state = lido_state_wsteth();
+
+        let total_shares_after =
+            "0x00000000000000000000000000000000000000000005d9d75ae42b4ba9c04d1a";
+        let total_ws_eth_after =
+            "0x00000000000000000000000000000000000000000002ba6f7b9af3c7a7b749e2";
+
+        let mut updated_attributes: HashMap<String, Bytes> = HashMap::new();
+        updated_attributes.insert("total_shares".to_owned(), Bytes::from(total_shares_after));
+        updated_attributes.insert("total_wstETH".to_owned(), Bytes::from(total_ws_eth_after));
+
+        let staking_state_delta = ProtocolStateDelta {
+            component_id: WST_ETH_ADDRESS.to_owned(),
+            updated_attributes,
+            deleted_attributes: HashSet::new(),
+        };
+
+        let balances =
+            Balances { component_balances: HashMap::new(), account_balances: HashMap::new() }; // add balances here for toal pooled eth
+
+        wst_state
+            .delta_transition(staking_state_delta, &HashMap::new(), &balances)
+            .unwrap();
+
+        let exp = LidoState {
+            pool_type: LidoPoolType::WStEth,
+            total_shares: BigUint::from_bytes_be(
+                &hex::decode("00000000000000000000000000000000000000000005d9d75ae42b4ba9c04d1a")
+                    .unwrap(),
+            ),
+            total_pooled_eth: wst_state.total_pooled_eth.clone(),
+            total_wrapped_st_eth: Some(BigUint::from_bytes_be(
+                &hex::decode("00000000000000000000000000000000000000000002ba6f7b9af3c7a7b749e2")
+                    .unwrap(),
+            )),
+            id: ST_ETH_ADDRESS_PROXY.into(),
+            native_address: ETH_ADDRESS.into(),
+            stake_limits_state: wst_state.stake_limits_state.clone(),
+        };
+
+        assert_eq!(wst_state, exp);
+    }
+
+    #[rstest]
+    #[case::missing_total_shares("total_shares")]
+    #[case::missing_total_ws_eth("total_wstETH")]
+    fn test_lido_wst_delta_transition_missing_arg(#[case] missing_attribute: &str) {
+        let mut wst_state = lido_state_wsteth();
+
+        let total_shares_after =
+            "0x00000000000000000000000000000000000000000005d9d75ae42b4ba9c04d1a";
+        let total_ws_eth_after =
+            "0x00000000000000000000000000000000000000000002ba6f7b9af3c7a7b749e2";
+
+        let mut updated_attributes: HashMap<String, Bytes> = HashMap::new();
+        updated_attributes.insert("total_shares".to_owned(), Bytes::from(total_shares_after));
+        updated_attributes.insert("total_wstETH".to_owned(), Bytes::from(total_ws_eth_after));
+
+        let mut staking_state_delta = ProtocolStateDelta {
+            component_id: WST_ETH_ADDRESS.to_owned(),
+            updated_attributes,
+            deleted_attributes: HashSet::new(),
+        };
+
+        let balances =
+            Balances { component_balances: HashMap::new(), account_balances: HashMap::new() }; // add balances here for toal pooled eth
+
+        staking_state_delta
+            .updated_attributes
+            .remove(missing_attribute);
+
+        assert!(wst_state
+            .delta_transition(staking_state_delta.clone(), &HashMap::new(), &balances)
+            .is_err());
+    }
+}
