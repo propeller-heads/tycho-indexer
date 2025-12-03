@@ -30,7 +30,7 @@ fn queue_capacity() -> U256 {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct RocketPoolState {
+pub struct RocketpoolState {
     pub reth_supply: U256,
     pub total_eth: U256,
     /// ETH available in the deposit pool contract
@@ -53,7 +53,7 @@ pub struct RocketPoolState {
     pub queue_variable_end: U256,
 }
 
-impl RocketPoolState {
+impl RocketpoolState {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         reth_supply: U256,
@@ -110,7 +110,7 @@ impl RocketPoolState {
     fn assert_deposits_enabled(&self) -> Result<(), SimulationError> {
         if !self.deposits_enabled {
             Err(SimulationError::RecoverableError(
-                "Deposits are currently disabled in RocketPool".to_string(),
+                "Deposits are currently disabled in Rocketpool".to_string(),
             ))
         } else {
             Ok(())
@@ -135,7 +135,7 @@ impl RocketPoolState {
     /// + half_queue_length * HALF_DEPOSIT_USER_AMOUNT
     /// + variable_queue_length * VARIABLE_DEPOSIT_AMOUNT
     ///
-    /// However, since RocketPool v1.2, the full and half queues are empty and can no longer be
+    /// However, since Rocketpool v1.2, the full and half queues are empty and can no longer be
     /// expanded, which means only the variable queue contributes to effective capacity.
     /// If this assumption ever changes, there is a check on the indexer side that will fail loudly.
     fn get_effective_capacity(&self) -> Result<U256, SimulationError> {
@@ -199,7 +199,7 @@ impl RocketPoolState {
             return Ok((U256::ZERO, U256::ZERO));
         }
 
-        // The assignment logic in RocketPool has both legacy (full/half) and variable queue
+        // The assignment logic in Rocketpool has both legacy (full/half) and variable queue
         // handling. However since the V1.2 upgrade minipools can no longer be added to legacy
         // queues, and since at the time of the upgrade legacy queues were already empty, we can
         // assume that the legacy deposit assignment logic will never be called.
@@ -228,13 +228,13 @@ impl RocketPoolState {
     }
 }
 
-impl ProtocolSim for RocketPoolState {
+impl ProtocolSim for RocketpoolState {
     fn fee(&self) -> f64 {
-        unimplemented!("RocketPool has asymmetric fees; use spot_price or get_amount_out instead")
+        unimplemented!("Rocketpool has asymmetric fees; use spot_price or get_amount_out instead")
     }
 
     fn spot_price(&self, base: &Token, _quote: &Token) -> Result<f64, SimulationError> {
-        let is_depositing_eth = RocketPoolState::is_depositing_eth(&base.address);
+        let is_depositing_eth = RocketpoolState::is_depositing_eth(&base.address);
         // As the protocol has no slippage, we can use a fixed amount for spot price calculation
         let amount = U256::from(1e18);
 
@@ -258,7 +258,7 @@ impl ProtocolSim for RocketPoolState {
         _token_out: &Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
         let amount_in = biguint_to_u256(&amount_in);
-        let is_depositing_eth = RocketPoolState::is_depositing_eth(&token_in.address);
+        let is_depositing_eth = RocketpoolState::is_depositing_eth(&token_in.address);
 
         let amount_out = if is_depositing_eth {
             self.assert_deposits_enabled()?;
@@ -472,7 +472,7 @@ mod tests {
 
     use super::*;
 
-    /// Helper function to create a RocketPoolState with easy-to-compute defaults for testing
+    /// Helper function to create a RocketpoolState with easy-to-compute defaults for testing
     /// Mutate fields for specific tests.
     /// - Exchange rate: 1 rETH = 2 ETH (100 rETH backed by 200 ETH)
     /// - Deposit fee: 40%
@@ -480,8 +480,8 @@ mod tests {
     /// - rETH contract liquidity: 0 ETH
     /// - Max pool size: 1000 ETH
     /// - Assign deposits enabled: false
-    fn create_state() -> RocketPoolState {
-        RocketPoolState::new(
+    fn create_state() -> RocketpoolState {
+        RocketpoolState::new(
             U256::from(100e18),                     // reth_supply: 100 rETH
             U256::from(200e18),                     // total_eth: 200 ETH (1 rETH = 2 ETH)
             U256::from(50e18),                      // deposit_contract_balance: 50 ETH
@@ -518,13 +518,13 @@ mod tests {
 
     #[test]
     fn test_queue_length_normal() {
-        let length = RocketPoolState::get_queue_length(U256::from(10), U256::from(15));
+        let length = RocketpoolState::get_queue_length(U256::from(10), U256::from(15));
         assert_eq!(length, U256::from(5));
     }
 
     #[test]
     fn test_queue_length_empty() {
-        let length = RocketPoolState::get_queue_length(U256::from(10), U256::from(10));
+        let length = RocketpoolState::get_queue_length(U256::from(10), U256::from(10));
         assert_eq!(length, U256::ZERO);
     }
 
@@ -533,7 +533,7 @@ mod tests {
         let capacity = queue_capacity();
         let start = capacity - U256::from(5);
         let end = U256::from(3);
-        let length = RocketPoolState::get_queue_length(start, end);
+        let length = RocketpoolState::get_queue_length(start, end);
         // 3 + 2^255 - (2^255 - 5) = 8
         assert_eq!(length, U256::from(8));
     }
@@ -603,7 +603,7 @@ mod tests {
         .collect();
 
         let delta = ProtocolStateDelta {
-            component_id: "RocketPool".to_owned(),
+            component_id: "Rocketpool".to_owned(),
             updated_attributes: attributes,
             deleted_attributes: HashSet::new(),
         };
@@ -631,7 +631,7 @@ mod tests {
         .collect();
 
         let delta = ProtocolStateDelta {
-            component_id: "RocketPool".to_owned(),
+            component_id: "Rocketpool".to_owned(),
             updated_attributes: attributes,
             deleted_attributes: HashSet::new(),
         };
@@ -666,9 +666,9 @@ mod tests {
         assert_ulps_eq!(price, 2.0);
     }
 
-    /// Creates RocketPoolState from real on-chain data at block 23929406.
-    fn create_state_at_block_23929406() -> RocketPoolState {
-        RocketPoolState::new(
+    /// Creates RocketpoolState from real on-chain data at block 23929406.
+    fn create_state_at_block_23929406() -> RocketpoolState {
+        RocketpoolState::new(
             U256::from_str_radix("4df2cf698437b72b8937", 16).unwrap(), // reth_supply
             U256::from_str_radix("59c8a9cb90db4a5aa85e", 16).unwrap(), // total_eth
             U256::from_str_radix("11e245d1725f73941", 16).unwrap(),    // deposit_contract_balance
@@ -792,7 +792,7 @@ mod tests {
         let new_state = res
             .new_state
             .as_any()
-            .downcast_ref::<RocketPoolState>()
+            .downcast_ref::<RocketpoolState>()
             .unwrap();
         // liquidity: 50 + 10 = 60
         assert_eq!(new_state.deposit_contract_balance, U256::from(60e18));
@@ -824,7 +824,7 @@ mod tests {
         let new_state = res
             .new_state
             .as_any()
-            .downcast_ref::<RocketPoolState>()
+            .downcast_ref::<RocketpoolState>()
             .unwrap();
         // liquidity: 990 + 20 = 1010
         assert_eq!(new_state.deposit_contract_balance, U256::from(1010e18));
@@ -851,7 +851,7 @@ mod tests {
         let new_state = res
             .new_state
             .as_any()
-            .downcast_ref::<RocketPoolState>()
+            .downcast_ref::<RocketpoolState>()
             .unwrap();
         // liquidity: 50 - 20 = 30
         assert_eq!(new_state.deposit_contract_balance, U256::from(30e18));
@@ -1006,7 +1006,7 @@ mod tests {
         let new_state = res
             .new_state
             .as_any()
-            .downcast_ref::<RocketPoolState>()
+            .downcast_ref::<RocketpoolState>()
             .unwrap();
 
         // reth_contract_liquidity drained to 0
@@ -1061,7 +1061,7 @@ mod tests {
         let new_state = res
             .new_state
             .as_any()
-            .downcast_ref::<RocketPoolState>()
+            .downcast_ref::<RocketpoolState>()
             .unwrap();
 
         assert_eq!(new_state.deposit_contract_balance, U256::from(38e18));
@@ -1092,7 +1092,7 @@ mod tests {
         let new_state = res
             .new_state
             .as_any()
-            .downcast_ref::<RocketPoolState>()
+            .downcast_ref::<RocketpoolState>()
             .unwrap();
 
         assert_eq!(new_state.deposit_contract_balance, U256::from(100e18));
@@ -1123,7 +1123,7 @@ mod tests {
         let new_state = res
             .new_state
             .as_any()
-            .downcast_ref::<RocketPoolState>()
+            .downcast_ref::<RocketpoolState>()
             .unwrap();
 
         assert_eq!(new_state.deposit_contract_balance, U256::from(131e18));
@@ -1155,7 +1155,7 @@ mod tests {
         let new_state = res
             .new_state
             .as_any()
-            .downcast_ref::<RocketPoolState>()
+            .downcast_ref::<RocketpoolState>()
             .unwrap();
 
         assert_eq!(new_state.deposit_contract_balance, U256::from(10e18));
@@ -1182,7 +1182,7 @@ mod tests {
         let new_state = res
             .new_state
             .as_any()
-            .downcast_ref::<RocketPoolState>()
+            .downcast_ref::<RocketpoolState>()
             .unwrap();
 
         // liquidity: 50 + 10 = 60 (no withdrawal)
@@ -1192,13 +1192,13 @@ mod tests {
 
     // ============ Live Transaction Tests ============
 
-    /// Test against real transaction deposit on RocketPool
+    /// Test against real transaction deposit on Rocketpool
     /// 0x6213b6c235c52d2132711c18a1c66934832722fd71c098e843bc792ecdbd11b3 where user deposited
     /// exactly 4.5 ETH and received 3.905847020555141679 rETH 1 minipool was assigned (31 ETH
     /// withdrawn from pool)
     #[test]
     fn test_live_deposit_tx_6213b6c2() {
-        let state = RocketPoolState::new(
+        let state = RocketpoolState::new(
             U256::from_str_radix("4ec08ba071647b927594", 16).unwrap(), // reth_supply
             U256::from_str_radix("5aafbb189fbbc1704662", 16).unwrap(), // total_eth
             U256::from_str_radix("17a651238b0dbf892", 16).unwrap(),    // deposit_contract_balance
@@ -1228,7 +1228,7 @@ mod tests {
         let new_state = res
             .new_state
             .as_any()
-            .downcast_ref::<RocketPoolState>()
+            .downcast_ref::<RocketpoolState>()
             .unwrap();
 
         // Expected final balance to reduce by 31 ETH (1 minipool assigned)
@@ -1256,11 +1256,11 @@ mod tests {
     }
 
     /// Test against real withdrawal (burn) transaction on
-    /// RocketPool0xf0f615f5dcf40d6ba1168da654a9ea8a0e855e489a34f4ffc3c7d2ad165f0bd6 where user
+    /// Rocketpool0xf0f615f5dcf40d6ba1168da654a9ea8a0e855e489a34f4ffc3c7d2ad165f0bd6 where user
     /// burned 20.873689741238146923 rETH and received 24.000828571949999998 ETH
     #[test]
     fn test_live_withdraw_tx_block_23736567() {
-        let state = RocketPoolState::new(
+        let state = RocketpoolState::new(
             U256::from_str_radix("516052628fbe875ffff0", 16).unwrap(), // reth_supply
             U256::from_str_radix("5d9143622860d8bdacea", 16).unwrap(), // total_eth
             U256::from_str_radix("1686dc9300da8004d", 16).unwrap(),    // deposit_contract_balance
@@ -1290,7 +1290,7 @@ mod tests {
         let new_state = res
             .new_state
             .as_any()
-            .downcast_ref::<RocketPoolState>()
+            .downcast_ref::<RocketpoolState>()
             .unwrap();
 
         // Verify liquidity was updated correctly

@@ -5,16 +5,16 @@ use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
 use tycho_common::{models::token::Token, Bytes};
 use tycho_ethereum::BytesCodec;
 
-use super::state::RocketPoolState;
+use super::state::RocketpoolState;
 use crate::protocol::{
     errors::InvalidSnapshotError,
     models::{DecoderContext, TryFromWithBlock},
 };
 
-impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketPoolState {
+impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketpoolState {
     type Error = InvalidSnapshotError;
 
-    /// Decodes a `ComponentWithState` into a `RocketPoolState`. Errors with a
+    /// Decodes a `ComponentWithState` into a `RocketpoolState`. Errors with a
     /// `InvalidSnapshotError` if any required attribute is missing.
     async fn try_from_with_header(
         snapshot: ComponentWithState,
@@ -135,7 +135,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketPoolState {
                 InvalidSnapshotError::MissingAttribute("queue_variable_end".to_string())
             })?;
 
-        Ok(RocketPoolState::new(
+        Ok(RocketpoolState::new(
             reth_supply,
             total_eth,
             deposit_contract_balance,
@@ -162,7 +162,7 @@ mod tests {
     use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
     use tycho_common::{dto::ResponseProtocolState, Bytes};
 
-    use super::super::state::RocketPoolState;
+    use super::super::state::RocketpoolState;
     use crate::protocol::{
         errors::InvalidSnapshotError,
         models::{DecoderContext, TryFromWithBlock},
@@ -181,7 +181,7 @@ mod tests {
     fn create_test_snapshot() -> ComponentWithState {
         ComponentWithState {
             state: ResponseProtocolState {
-                component_id: "RocketPool".to_owned(),
+                component_id: "Rocketpool".to_owned(),
                 attributes: HashMap::from([
                     (
                         "total_eth".to_string(),
@@ -244,7 +244,7 @@ mod tests {
     async fn test_rocketpool_try_from() {
         let snapshot = create_test_snapshot();
 
-        let result = RocketPoolState::try_from_with_header(
+        let result = RocketpoolState::try_from_with_header(
             snapshot,
             header(),
             &HashMap::new(),
@@ -273,7 +273,7 @@ mod tests {
 
         let snapshot = ComponentWithState {
             state: ResponseProtocolState {
-                component_id: "RocketPool".to_owned(),
+                component_id: "Rocketpool".to_owned(),
                 attributes: HashMap::from([
                     ("total_eth".to_string(), Bytes::from(U256::from(100u64).to_be_bytes_vec())),
                     ("reth_supply".to_string(), Bytes::from(U256::from(100u64).to_be_bytes_vec())),
@@ -333,7 +333,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = RocketPoolState::try_from_with_header(
+        let result = RocketpoolState::try_from_with_header(
             snapshot,
             header(),
             &HashMap::new(),
@@ -401,7 +401,7 @@ mod tests {
 
         let snapshot = ComponentWithState {
             state: ResponseProtocolState {
-                component_id: "RocketPool".to_owned(),
+                component_id: "Rocketpool".to_owned(),
                 attributes,
                 balances: HashMap::from([(
                     eth_address,
@@ -413,7 +413,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = RocketPoolState::try_from_with_header(
+        let result = RocketpoolState::try_from_with_header(
             snapshot,
             header(),
             &HashMap::new(),
