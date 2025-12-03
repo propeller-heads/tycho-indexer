@@ -11,7 +11,11 @@ pub const ROCKET_STORAGE_ADDRESS: [u8; 20] = hex!("1d8f8f00cfa6758d7bE7833668478
 
 pub const ROCKET_DAO_MINIPOOL_QUEUE_ADDRESS: [u8; 20] =
     hex!("9e966733e3E9BFA56aF95f762921859417cF6FaA");
-pub const ROCKET_NETWORK_BALANCES_ADDRESS: [u8; 20] =
+/// Rocket Network Balances was upgraded to v2 at the same block as Rocket Pool Deposit v1.2 upgrade
+pub const ROCKET_NETWORK_BALANCES_ADDRESS_V2: [u8; 20] =
+    hex!("07FCaBCbe4ff0d80c2b1eb42855C0131b6cba2F4");
+/// Rocket Network Balances was upgraded to v3 at the same block 20107789
+pub const ROCKET_NETWORK_BALANCES_ADDRESS_V3: [u8; 20] =
     hex!("6Cc65bF618F55ce2433f9D8d827Fc44117D81399");
 pub const ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS: [u8; 20] =
     hex!("2D627A50Dc1C4EDa73E42858E8460b0eCF300b25");

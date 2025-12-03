@@ -1,7 +1,7 @@
 use crate::{
     abi::{
         rocket_dao_protocol_proposal, rocket_deposit_pool, rocket_minipool_queue,
-        rocket_network_balances, rocket_token_reth,
+        rocket_network_balances_v2, rocket_network_balances_v3, rocket_token_reth,
     },
     constants::{
         ALL_STORAGE_SLOTS, DEPOSITS_ENABLED_SLOT, DEPOSIT_ASSIGN_ENABLED_SLOT,
@@ -10,8 +10,8 @@ use crate::{
         QUEUE_KEY_HALF, QUEUE_KEY_VARIABLE, QUEUE_VARIABLE_END_SLOT, QUEUE_VARIABLE_START_SLOT,
         RETH_ADDRESS, ROCKET_DAO_MINIPOOL_QUEUE_ADDRESS, ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS,
         ROCKET_DEPOSIT_POOL_ADDRESS_V1_2, ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT,
-        ROCKET_NETWORK_BALANCES_ADDRESS, ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS,
-        ROCKET_VAULT_ADDRESS,
+        ROCKET_NETWORK_BALANCES_ADDRESS_V2, ROCKET_NETWORK_BALANCES_ADDRESS_V3,
+        ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS, ROCKET_VAULT_ADDRESS,
     },
     utils::{get_changed_attributes, hex_to_bytes},
 };
@@ -230,53 +230,54 @@ fn update_network_balance(
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
     for log in block.logs() {
-        // If the log is not from the Rocket Network Balances contract, skip it.
-        if log.log.address != ROCKET_NETWORK_BALANCES_ADDRESS {
-            continue;
-        }
+        // Extract total_eth and reth_supply from the appropriate BalancesUpdated event version
+        let balance_update = if log.log.address == ROCKET_NETWORK_BALANCES_ADDRESS_V2 {
+            rocket_network_balances_v2::events::BalancesUpdated::match_and_decode(log)
+                .map(|event| (event.total_eth, event.reth_supply))
+        } else if log.log.address == ROCKET_NETWORK_BALANCES_ADDRESS_V3 {
+            rocket_network_balances_v3::events::BalancesUpdated::match_and_decode(log)
+                .map(|event| (event.total_eth, event.reth_supply))
+        } else {
+            None
+        };
 
-        if let Some(balance_update) =
-            rocket_network_balances::events::BalancesUpdated::match_and_decode(log)
-        {
-            let tx = log.receipt.transaction;
+        let (total_eth, reth_supply) = match balance_update {
+            Some(values) => values,
+            None => continue,
+        };
 
-            let builder = transaction_changes
-                .entry(tx.index as u64)
-                .or_insert_with(|| TransactionChangesBuilder::new(&(tx.into())));
+        let tx = log.receipt.transaction;
 
-            let eth_bc = BalanceChange {
-                token: ETH_ADDRESS.to_vec(),
-                balance: balance_update
-                    .total_eth
-                    .to_signed_bytes_be(),
-                component_id: ROCKET_POOL_COMPONENT_ID
-                    .as_bytes()
-                    .to_vec(),
-            };
+        let builder = transaction_changes
+            .entry(tx.index as u64)
+            .or_insert_with(|| TransactionChangesBuilder::new(&(tx.into())));
 
-            let attributes = vec![
-                Attribute {
-                    name: "reth_supply".to_string(),
-                    value: balance_update
-                        .reth_supply
-                        .to_signed_bytes_be(),
-                    change: ChangeType::Update.into(),
-                },
-                Attribute {
-                    name: "total_eth".to_string(),
-                    value: balance_update
-                        .total_eth
-                        .to_signed_bytes_be(),
-                    change: ChangeType::Update.into(),
-                },
-            ];
+        let eth_bc = BalanceChange {
+            token: ETH_ADDRESS.to_vec(),
+            balance: total_eth.to_signed_bytes_be(),
+            component_id: ROCKET_POOL_COMPONENT_ID
+                .as_bytes()
+                .to_vec(),
+        };
 
-            builder.add_balance_change(&eth_bc);
-            builder.add_entity_change(&EntityChanges {
-                component_id: ROCKET_POOL_COMPONENT_ID.to_owned(),
-                attributes,
-            });
-        }
+        let attributes = vec![
+            Attribute {
+                name: "reth_supply".to_string(),
+                value: reth_supply.to_signed_bytes_be(),
+                change: ChangeType::Update.into(),
+            },
+            Attribute {
+                name: "total_eth".to_string(),
+                value: total_eth.to_signed_bytes_be(),
+                change: ChangeType::Update.into(),
+            },
+        ];
+
+        builder.add_balance_change(&eth_bc);
+        builder.add_entity_change(&EntityChanges {
+            component_id: ROCKET_POOL_COMPONENT_ID.to_owned(),
+            attributes,
+        });
     }
 }
 
