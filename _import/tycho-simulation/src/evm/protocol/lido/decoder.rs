@@ -130,11 +130,25 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoState {
             (StakingStatus::Limited, &Bytes::from(vec![0; 32]))
         };
 
+        let total_wrapped_st_eth = if pool_type == LidoPoolType::StEth {
+            None
+        } else {
+            Some(BigUint::from_bytes_be(
+                snapshot
+                    .state
+                    .attributes
+                    .get("total_wstETH")
+                    .ok_or(InvalidSnapshotError::MissingAttribute(
+                        "Total pooled eth field is missing".to_owned(),
+                    ))?,
+            ))
+        };
+
         Ok(Self {
             pool_type,
             total_shares: BigUint::from_bytes_be(total_shares),
             total_pooled_eth: BigUint::from_bytes_be(total_pooled_eth),
-            total_wrapped_st_eth: None,
+            total_wrapped_st_eth,
             id: id.into(),
             native_address: ETH_ADDRESS.into(),
             stake_limits_state: StakeLimitState {
