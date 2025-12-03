@@ -17,6 +17,7 @@ use tycho_common::{
 
 use super::hooks::utils::{has_permission, HookOptions};
 use crate::evm::protocol::{
+    clmm::protocol::clmm_swap_to_price,
     safe_math::{safe_add_u256, safe_sub_u256},
     u256_num::u256_to_biguint,
     uniswap_v4::hooks::{
@@ -29,9 +30,7 @@ use crate::evm::protocol::{
     utils::uniswap::{
         i24_be_bytes_to_i32, liquidity_math, lp_fee,
         lp_fee::is_dynamic,
-        sqrt_price_math::{
-            get_amount0_delta, get_amount1_delta, get_sqrt_price_limit, sqrt_price_q96_to_f64,
-        },
+        sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
         swap_math,
         tick_list::{TickInfo, TickList, TickListErrorKind},
         tick_math::{
@@ -42,9 +41,6 @@ use crate::evm::protocol::{
     },
     vm::constants::EXTERNAL_ACCOUNT,
 };
-
-// U160_MAX = 2^160 - 1, used for "infinite" swap amounts in swap_to_price
-const U160_MAX: U256 = U256::from_limbs([u64::MAX, u64::MAX, u64::MAX >> 32, 0]); // 2^160 - 1
 
 #[derive(Clone)]
 pub struct UniswapV4State {
@@ -865,69 +861,23 @@ impl ProtocolSim for UniswapV4State {
             return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
         }
 
-        // Calculate sqrt_price_limit from target_price
-        // For V4, we need to consider the total fee (protocol + LP fee)
+        // Calculate total fee (protocol + LP fee) for V4
         let zero_for_one = token_in < token_out;
         let fee_pips = self
             .fees
             .calculate_swap_fees_pips(zero_for_one, None);
 
-        let sqrt_price_limit =
-            get_sqrt_price_limit(token_in, token_out, &target_price, U256::from(fee_pips))?;
-
-        // Validate price limit is compatible with swap direction
-        if zero_for_one && sqrt_price_limit >= self.sqrt_price {
-            return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
-        }
-        if !zero_for_one && sqrt_price_limit <= self.sqrt_price {
-            return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
-        }
-
-        // Use U160_MAX as "infinite" amount to find maximum available liquidity
-        // NOTE: V4 uses NEGATIVE amounts for exact input (opposite of V3)
-        let amount_specified = I256::checked_from_sign_and_abs(Sign::Negative, U160_MAX)
-            .ok_or_else(|| {
-                SimulationError::InvalidInput("I256 overflow: U160_MAX".to_string(), None)
-            })?;
-
-        // Call swap with price limit and no LP fee override
-        let result = self.swap(zero_for_one, amount_specified, Some(sqrt_price_limit), None)?;
-
-        // Calculate amount_in from amount consumed: amount_in = amount_specified - amount_remaining
-        let amount_in = (result.amount_specified - result.amount_remaining)
-            .abs()
-            .into_raw();
-
-        if amount_in == U256::ZERO {
-            return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
-        }
-
-        // Use the accumulated amount_calculated for output
-        let amount_out = result
-            .amount_calculated
-            .abs()
-            .into_raw();
-
-        // Validate that the executed price doesn't exceed the target price
-        // executed_price = amount_in / amount_out (token_in per token_out)
-        // target_price is token_out/token_in, so we need: amount_in/amount_out <=
-        // denominator/numerator Which gives: amount_in * numerator <= amount_out *
-        // denominator
-        if u256_to_biguint(amount_in) * &target_price.numerator >
-            u256_to_biguint(amount_out) * &target_price.denominator
-        {
-            trace!(
-                "Executed price exceeds target price. amount_in={}, amount_out={}, \
-                    target_price=({}/{})",
-                amount_in,
-                amount_out,
-                target_price.numerator,
-                target_price.denominator
-            );
-            return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
-        }
-
-        Ok(Trade::new(u256_to_biguint(amount_in), u256_to_biguint(amount_out)))
+        clmm_swap_to_price(
+            self.sqrt_price,
+            token_in,
+            token_out,
+            &target_price,
+            fee_pips,
+            Sign::Negative, // V4 uses negative for exact input
+            |zero_for_one, amount_specified, sqrt_price_limit| {
+                self.swap(zero_for_one, amount_specified, Some(sqrt_price_limit), None)
+            },
+        )
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {
