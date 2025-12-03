@@ -163,6 +163,7 @@ mod tests {
     use crate::{
         evm::protocol::lido::state::{
             LidoPoolType, LidoState, StakeLimitState, ETH_ADDRESS, ST_ETH_ADDRESS_PROXY,
+            WST_ETH_ADDRESS,
         },
         protocol::{
             errors::InvalidSnapshotError,
@@ -181,7 +182,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_lido_try_from() {
+    async fn test_lido_steth_try_from() {
         let pc = ProtocolComponent {
             id: ST_ETH_ADDRESS_PROXY.to_string(),
             protocol_system: "protocol_system".to_owned(),
@@ -293,5 +294,117 @@ mod tests {
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), InvalidSnapshotError::MissingAttribute(_)));
+    }
+
+    #[tokio::test]
+    async fn test_lido_wst_eth_try_from() {
+        let pc = ProtocolComponent {
+            id: WST_ETH_ADDRESS.to_string(),
+            protocol_system: "protocol_system".to_owned(),
+            protocol_type_name: "protocol_type_name".to_owned(),
+            chain: Chain::Ethereum,
+            tokens: vec![],
+            contract_ids: vec![],
+            static_attributes: HashMap::new(),
+            change: ChangeType::Creation,
+            creation_tx: Bytes::from(vec![0; 32]),
+            created_at: NaiveDateTime::default(),
+        };
+
+        let snapshot = ComponentWithState {
+            state: ResponseProtocolState {
+                component_id: ST_ETH_ADDRESS_PROXY.to_owned(),
+                attributes: HashMap::from([
+                    ("total_shares".to_string(), Bytes::from(vec![0; 32])),
+                    ("total_pooled_eth".to_string(), Bytes::from(vec![0; 32])),
+                    ("total_wstETH".to_string(), Bytes::from(vec![0; 32])),
+                ]),
+                balances: HashMap::new(),
+            },
+            component: pc,
+            component_tvl: None,
+            entrypoints: Vec::new(),
+        };
+
+        let decoder_context = DecoderContext::new();
+
+        let result = LidoState::try_from_with_header(
+            snapshot,
+            header(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &decoder_context,
+        )
+        .await;
+
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            LidoState {
+                pool_type: LidoPoolType::WStEth,
+                total_shares: BigUint::zero(),
+                total_pooled_eth: BigUint::zero(),
+                total_wrapped_st_eth: Some(BigUint::zero()),
+                id: WST_ETH_ADDRESS.into(),
+                native_address: ETH_ADDRESS.into(),
+                stake_limits_state: StakeLimitState {
+                    staking_status: crate::evm::protocol::lido::state::StakingStatus::Limited,
+                    staking_limit: BigUint::zero(),
+                }
+            }
+        );
+    }
+
+    #[tokio::test]
+    #[rstest]
+    #[case::missing_reserve0("total_shares")]
+    #[case::missing_reserve1("total_pooled_eth")]
+    #[case::missing_reserve0("total_wstETH")]
+
+    async fn test_lido_wst_try_from_missing_attribute(#[case] missing_attribute: &str) {
+        let pc = ProtocolComponent {
+            id: WST_ETH_ADDRESS.to_string(),
+            protocol_system: "protocol_system".to_owned(),
+            protocol_type_name: "protocol_type_name".to_owned(),
+            chain: Chain::Ethereum,
+            tokens: vec![],
+            contract_ids: vec![],
+            static_attributes: HashMap::new(),
+            change: ChangeType::Creation,
+            creation_tx: Bytes::from(vec![0; 32]),
+            created_at: NaiveDateTime::default(),
+        };
+
+        let mut snapshot = ComponentWithState {
+            state: ResponseProtocolState {
+                component_id: ST_ETH_ADDRESS_PROXY.to_owned(),
+                attributes: HashMap::from([
+                    ("total_shares".to_string(), Bytes::from(vec![0; 32])),
+                    ("total_pooled_eth".to_string(), Bytes::from(vec![0; 32])),
+                    ("total_wstETH".to_string(), Bytes::from(vec![0; 32])),
+                ]),
+                balances: HashMap::new(),
+            },
+            component: pc,
+            component_tvl: None,
+            entrypoints: Vec::new(),
+        };
+        snapshot
+            .state
+            .attributes
+            .remove(missing_attribute);
+
+        let decoder_context = DecoderContext::new();
+
+        let result = LidoState::try_from_with_header(
+            snapshot,
+            header(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &decoder_context,
+        )
+        .await;
+
+        assert!(result.is_err());
     }
 }
