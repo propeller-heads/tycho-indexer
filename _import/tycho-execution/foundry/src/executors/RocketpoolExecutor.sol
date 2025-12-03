@@ -24,10 +24,6 @@ contract RocketpoolExecutor is IExecutor, RestrictTransferFrom {
         uint256 givenAmount,
         bytes calldata data
     ) external payable returns (uint256 calculatedAmount) {
-        if (data.length != 22) {
-            revert RocketpoolExecutor__InvalidDataLength();
-        }
-
         (
             bool isDeposit,
             TransferType transferType,
@@ -66,6 +62,10 @@ contract RocketpoolExecutor is IExecutor, RestrictTransferFrom {
     pure
     returns (bool isDeposit, TransferType transferType, address receiver)
     {
+        if (data.length != 22) {
+            revert RocketpoolExecutor__InvalidDataLength();
+        }
+
         isDeposit = uint8(data[0]) == 1;
         transferType = TransferType(uint8(data[1]));
         receiver = address(bytes20(data[2 : 22]));

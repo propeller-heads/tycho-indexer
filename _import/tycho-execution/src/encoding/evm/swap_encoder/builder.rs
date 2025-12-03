@@ -7,7 +7,8 @@ use crate::encoding::{
     evm::swap_encoder::swap_encoders::{
         BalancerV2SwapEncoder, BalancerV3SwapEncoder, BebopSwapEncoder, CurveSwapEncoder,
         EkuboSwapEncoder, FluidV1SwapEncoder, HashflowSwapEncoder, MaverickV2SwapEncoder,
-        SlipstreamsSwapEncoder, UniswapV2SwapEncoder, UniswapV3SwapEncoder, UniswapV4SwapEncoder,
+        RocketpoolSwapEncoder, SlipstreamsSwapEncoder, UniswapV2SwapEncoder, UniswapV3SwapEncoder,
+        UniswapV4SwapEncoder,
     },
     swap_encoder::SwapEncoder,
 };
@@ -107,6 +108,11 @@ impl SwapEncoderBuilder {
                 self.config,
             )?)),
             "aerodrome_slipstreams" => Ok(Box::new(SlipstreamsSwapEncoder::new(
+                self.executor_address,
+                self.chain,
+                self.config,
+            )?)),
+            "rocketpool" => Ok(Box::new(RocketpoolSwapEncoder::new(
                 self.executor_address,
                 self.chain,
                 self.config,
