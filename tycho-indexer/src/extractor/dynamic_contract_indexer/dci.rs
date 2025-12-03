@@ -919,7 +919,7 @@ where
                 }
             }
             Err(e) => {
-                warn!("Failed to load protocol states for pause check: {e:?}");
+                warn!("Failed to load protocol states from storage to populate paused components cache: {e:?}");
             }
         }
 
@@ -1053,6 +1053,8 @@ where
     ///
     /// Scans state updates in the block for "paused" attribute changes:
     /// - Components with "paused" attribute set to `[1]` (SDK pause) are marked as paused
+    /// - Components with "paused" attribute set to `[0]` (SDK legacy unpaused) are marked as
+    ///   unpaused
     /// - Components with "paused" in `deleted_attributes` are marked as unpaused
     ///
     /// Uses a HashMap to track the last pause state for each component, ensuring

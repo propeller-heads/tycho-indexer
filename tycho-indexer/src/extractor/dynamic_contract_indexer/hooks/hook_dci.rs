@@ -197,8 +197,7 @@ where
                     }
                 }
                 Err(e) => {
-                    warn!("Failed to load protocol states for pause check: {e:?}");
-                    // Continue initialization - pausing is not critical
+                    warn!("Failed to load protocol states from storage to populate paused components cache: {e:?}");
                 }
             }
         }
@@ -655,7 +654,8 @@ where
     ///
     /// Returns a tuple of (sdk_paused, sdk_unpaused) component IDs.
     /// A component is SDK-paused when it has a "paused" attribute with value 0x01.
-    /// A component is SDK-unpaused when the "paused" attribute is deleted.
+    /// A component is SDK-unpaused when the "paused" attribute is deleted or, on legacy SDK
+    /// packages if an attribute is set as 0x00.
     ///
     /// Uses a HashMap to track the last pause state for each component, ensuring
     /// correct ordering when a component changes state multiple times in a block.
