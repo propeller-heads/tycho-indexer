@@ -195,8 +195,8 @@ impl RocketPoolState {
         full_length + half_length > U256::ZERO
     }
 
-    /// Calculates the number of minipools to dequeue and the resulting ETH to withdraw given a
-    /// deposit. Returns (minipools_dequeued, eth_withdrawn) or panics for legacy queue.
+    /// Calculates the number of minipools to dequeue and the resulting ETH to assign given a
+    /// deposit. Returns (minipools_dequeued, eth_assigned) or panics for legacy queue.
     ///
     /// This method assumes deposit has already been added to liquidity.
     ///
@@ -205,7 +205,7 @@ impl RocketPoolState {
     /// - totalEthCount = new_liquidity / variableDepositAmount
     /// - assignments = socialisedMax + scalingCount
     /// - assignments = min(assignments, totalEthCount, maxAssignments, variable_queue_length)
-    /// - eth_withdrawn = assignments * variableDepositAmount
+    /// - eth_assigned = assignments * variableDepositAmount
     fn calculate_assign_deposits(
         &self,
         deposit_amount: U256,
@@ -248,9 +248,9 @@ impl RocketPoolState {
             assignments = variable_queue_length;
         }
 
-        let eth_withdrawn = safe_mul_u256(assignments, variable_deposit)?;
+        let eth_assigned = safe_mul_u256(assignments, variable_deposit)?;
 
-        Ok((assignments, eth_withdrawn))
+        Ok((assignments, eth_assigned))
     }
 }
 
@@ -331,9 +331,9 @@ impl ProtocolSim for RocketPoolState {
             new_state.liquidity = safe_add_u256(new_state.liquidity, amount_in)?;
 
             // Process assign deposits - dequeue minipools and withdraw ETH from vault
-            let (assignments, eth_withdrawn) = new_state.calculate_assign_deposits(amount_in)?;
+            let (assignments, eth_assigned) = new_state.calculate_assign_deposits(amount_in)?;
             if assignments > U256::ZERO {
-                new_state.liquidity = safe_sub_u256(new_state.liquidity, eth_withdrawn)?;
+                new_state.liquidity = safe_sub_u256(new_state.liquidity, eth_assigned)?;
                 new_state.queue_variable_start =
                     safe_add_u256(new_state.queue_variable_start, assignments)?;
             }
@@ -1010,7 +1010,7 @@ mod tests {
         // totalEthCount = (100 + 62) / 31 = 5
         // assignments = socialised(2) + scaling(2) = 4
         // capped at min(4, 5, 10, 5) = 4
-        // eth_withdrawn = 4 * 31 = 124 ETH
+        // eth_assigned = 4 * 31 = 124 ETH
         // new_liquidity = 100 + 62 - 124 = 38 ETH
         let res = state
             .get_amount_out(
@@ -1041,7 +1041,7 @@ mod tests {
 
         // Deposit 62 ETH
         // assignments = 5 + 2 = 7, but capped at queue length of 2
-        // eth_withdrawn = 2 * 31 = 62 ETH
+        // eth_assigned = 2 * 31 = 62 ETH
         // new_liquidity = 100 + 62 - 62 = 100 ETH
         let res = state
             .get_amount_out(
@@ -1072,7 +1072,7 @@ mod tests {
 
         // Deposit 62 ETH
         // assignments = 5 + 2 = 7, but capped at max of 1
-        // eth_withdrawn = 1 * 31 = 31 ETH
+        // eth_assigned = 1 * 31 = 31 ETH
         // new_liquidity = 100 + 62 - 31 = 131 ETH
         let res = state
             .get_amount_out(
@@ -1104,7 +1104,7 @@ mod tests {
         // Deposit 31 ETH
         // totalEthCount = (10 + 31) / 31 = 1
         // assignments = 5 + 1 = 6, but capped at totalEthCount of 1
-        // eth_withdrawn = 1 * 31 = 31 ETH
+        // eth_assigned = 1 * 31 = 31 ETH
         // new_liquidity = 10 + 31 - 31 = 10 ETH
         let res = state
             .get_amount_out(
