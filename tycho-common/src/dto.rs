@@ -876,7 +876,9 @@ pub struct StateRequestBody {
 }
 
 // When INCREASING these limits, please read the warning in the macro definition.
-impl_pagination_limits!(StateRequestBody, compressed = 1200, uncompressed = 100);
+// TODO: Revert to higher limits once we are ready to redeploy servers.
+// impl_pagination_limits!(StateRequestBody, compressed = 1200, uncompressed = 100);
+impl_pagination_limits!(StateRequestBody, compressed = 100, uncompressed = 100);
 
 impl StateRequestBody {
     pub fn new(
@@ -1171,7 +1173,9 @@ pub struct TokensRequestBody {
 }
 
 // When INCREASING these limits, please read the warning in the macro definition.
-impl_pagination_limits!(TokensRequestBody, compressed = 12900, uncompressed = 3000);
+// TODO: Revert to higher limits once we are ready to redeploy servers.
+// impl_pagination_limits!(TokensRequestBody, compressed = 12900, uncompressed = 3000);
+impl_pagination_limits!(TokensRequestBody, compressed = 3000, uncompressed = 3000);
 
 /// Response from Tycho server for a tokens request.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash, DeepSizeOf)]
@@ -1252,7 +1256,9 @@ pub struct ProtocolComponentsRequestBody {
 }
 
 // When INCREASING these limits, please read the warning in the macro definition.
-impl_pagination_limits!(ProtocolComponentsRequestBody, compressed = 2550, uncompressed = 500);
+// TODO: Revert to higher limits once we are ready to redeploy servers.
+// impl_pagination_limits!(ProtocolComponentsRequestBody, compressed = 2550, uncompressed = 500);
+impl_pagination_limits!(ProtocolComponentsRequestBody, compressed = 500, uncompressed = 500);
 
 // Implement PartialEq where tvl is considered equal if the difference is less than 1e-6
 impl PartialEq for ProtocolComponentsRequestBody {
@@ -1439,7 +1445,9 @@ pub struct ProtocolStateRequestBody {
 }
 
 // When INCREASING these limits, please read the warning in the macro definition.
-impl_pagination_limits!(ProtocolStateRequestBody, compressed = 360, uncompressed = 100);
+// TODO: Revert to higher limits once we are ready to redeploy servers.
+// impl_pagination_limits!(ProtocolStateRequestBody, compressed = 360, uncompressed = 100);
+impl_pagination_limits!(ProtocolStateRequestBody, compressed = 100, uncompressed = 100);
 
 impl ProtocolStateRequestBody {
     pub fn id_filtered<I, T>(ids: I) -> Self
