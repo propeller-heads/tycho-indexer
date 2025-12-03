@@ -33,7 +33,7 @@ pub(crate) const ALL_STORAGE_SLOTS: [StorageLocation; 10] = [
 
 // ----------- Contract: Rocket Vault -----------
 pub(crate) const ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT: StorageLocation = StorageLocation {
-    name: "deposit_contract_liquidity",
+    name: "deposit_contract_balance",
     slot: hex!("00ab4654686e0d7a1f921cc85a932fd8efbc8a1f247b51fa6bca2f7a3976a5bb"),
     offset: 0,
     number_of_bytes: 32,
