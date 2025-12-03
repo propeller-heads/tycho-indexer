@@ -287,6 +287,7 @@ impl ProtocolSim for RocketPoolState {
         Ok(res)
     }
 
+    #[allow(clippy::collapsible_else_if)]
     fn get_amount_out(
         &self,
         amount_in: BigUint,
