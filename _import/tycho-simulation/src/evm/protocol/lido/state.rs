@@ -1,4 +1,4 @@
-use std::{any::Any, collections::HashMap};
+use std::{any::Any, collections::HashMap, str::FromStr};
 
 use num_bigint::BigUint;
 use num_traits::{ToPrimitive, Zero};
@@ -212,14 +212,6 @@ impl LidoState {
         &mut self,
         delta: ProtocolStateDelta,
     ) -> Result<(), TransitionError<String>> {
-        self.total_pooled_eth = BigUint::from_bytes_be(
-            delta
-                .updated_attributes
-                .get("total_pooled_eth")
-                .ok_or(TransitionError::MissingAttribute(
-                    "total_pooled_eth field is missing".to_owned(),
-                ))?,
-        );
         self.total_shares = BigUint::from_bytes_be(
             delta
                 .updated_attributes
@@ -265,16 +257,18 @@ impl LidoState {
         Ok(())
     }
 
+    fn st_eth_balance_transition(&mut self, balances: &HashMap<Bytes, Bytes>) {
+        for (token, balance) in balances.iter() {
+            if token == &Bytes::from_str(ETH_ADDRESS).unwrap() {
+                self.total_pooled_eth = BigUint::from_bytes_be(balance)
+            }
+        }
+    }
+
     fn wst_eth_delta_transition(
         &mut self,
         delta: ProtocolStateDelta,
     ) -> Result<(), TransitionError<String>> {
-        self.total_pooled_eth = BigUint::from_bytes_be(
-            delta
-                .updated_attributes
-                .get("total_pooled_eth")
-                .unwrap(),
-        );
         self.total_shares = BigUint::from_bytes_be(
             delta
                 .updated_attributes
@@ -293,6 +287,14 @@ impl LidoState {
         ));
 
         Ok(())
+    }
+
+    fn wst_eth_balance_transition(&mut self, balances: &HashMap<Bytes, Bytes>) {
+        for (token, balance) in balances.iter() {
+            if token == &Bytes::from_str(ST_ETH_ADDRESS_PROXY).unwrap() {
+                self.total_pooled_eth = BigUint::from_bytes_be(balance)
+            }
+        }
     }
 }
 
@@ -415,8 +417,21 @@ impl ProtocolSim for LidoState {
         &mut self,
         delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
-        _balances: &Balances,
+        balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
+        for (component_id, balances) in balances.component_balances.iter() {
+            if component_id == ST_ETH_ADDRESS_PROXY {
+                self.st_eth_balance_transition(balances)
+            } else if component_id == WST_ETH_ADDRESS {
+                self.wst_eth_balance_transition(balances)
+            } else {
+                return Err(TransitionError::DecodeError(format!(
+                    "Invalid component id or wrong pool type: {:?}",
+                    component_id,
+                )))
+            }
+        }
+
         if delta.component_id == ST_ETH_ADDRESS_PROXY {
             self.st_eth_delta_transition(delta)
         } else if delta.component_id == WST_ETH_ADDRESS {
