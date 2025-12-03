@@ -74,7 +74,7 @@ fn handle_sync(
     for tx in block.transactions() {
         for call in tx.calls.iter() {
             if call.state_reverted {
-                continue
+                continue;
             }
             let builder = transaction_changes
                 .entry(tx.index)
@@ -90,7 +90,7 @@ fn handle_sync(
             } else if call.call_type == CallType::Delegate as i32 {
                 staking_entity_changes(call, builder)?;
             } else {
-                continue
+                continue;
             };
         }
     }
@@ -135,21 +135,31 @@ fn st_eth_entity_changes(call: &Call, builder: &mut TransactionChangesBuilder) -
                     storage_change.new_value.clone(),
                 )],
             });
-        } else if storage_change.key == STORAGE_SLOT_POOLED_ETH {
-            let attr = create_entity_change("total_pooled_eth", storage_change.new_value.clone());
+            // wstETH component needs to track total shares too for simulation
             builder.add_entity_change(&EntityChanges {
-                component_id: ST_ETH_ADDRESS_PROXY_COMPONENT_ID.to_owned(),
-                attributes: vec![attr.clone()],
+                component_id: WST_ETH_ADDRESS_COMPONENT_ID.to_owned(),
+                attributes: vec![create_entity_change(
+                    "total_shares",
+                    storage_change.new_value.clone(),
+                )],
             });
-
+        } else if storage_change.key == STORAGE_SLOT_POOLED_ETH {
             let balance = BigInt::from_unsigned_bytes_be(&storage_change.new_value)
                 .to_bytes_be()
                 .1;
 
             builder.add_balance_change(&BalanceChange {
                 token: ETH_ADDRESS.to_vec(),
-                balance,
+                balance: balance.clone(),
                 component_id: ST_ETH_ADDRESS_PROXY_COMPONENT_ID
+                    .as_bytes()
+                    .to_vec(),
+            });
+            // The balance of the wstETH component is the same as the stETH one.
+            builder.add_balance_change(&BalanceChange {
+                token: ST_ETH_ADDRESS_PROXY.to_vec(),
+                balance,
+                component_id: WST_ETH_ADDRESS_COMPONENT_ID
                     .as_bytes()
                     .to_vec(),
             });
