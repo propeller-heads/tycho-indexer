@@ -25,7 +25,7 @@ pub(crate) const ALL_STORAGE_SLOTS: [StorageLocation; 10] = [
     DEPOSIT_ASSIGN_MAXIMUM_SLOT,
     DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT,
     MIN_DEPOSIT_AMOUNT_SLOT,
-    MAX_DEPOSIT_AMOUNT_SLOT,
+    MAX_DEPOSIT_POOL_SIZE_SLOT,
     DEPOSIT_FEE_SLOT,
     QUEUE_VARIABLE_START_SLOT,
     QUEUE_VARIABLE_END_SLOT,
@@ -73,8 +73,8 @@ pub(crate) const MIN_DEPOSIT_AMOUNT_SLOT: StorageLocation = StorageLocation {
     signed: false,
 };
 
-pub(crate) const MAX_DEPOSIT_AMOUNT_SLOT: StorageLocation = StorageLocation {
-    name: "max_deposit_amount",
+pub(crate) const MAX_DEPOSIT_POOL_SIZE_SLOT: StorageLocation = StorageLocation {
+    name: "maximum_deposit_pool_size",
     slot: hex!("efeb8d9f341f931c14ed8c1156bdb235390b183f1b94f522d4d72c5d24779598"),
     offset: 0,
     number_of_bytes: 32,
