@@ -90,7 +90,7 @@ pub(crate) const DEPOSIT_FEE_SLOT: StorageLocation = StorageLocation {
 };
 
 pub(crate) const DEPOSIT_ASSIGN_ENABLED_SLOT: StorageLocation = StorageLocation {
-    name: "deposit_assign_enabled",
+    name: "deposit_assigning_enabled",
     slot: hex!("3c4ef260cb76105ef0fda3d75cf7af776accf2a871c39fd5530453efa532aba4"),
     offset: 0,
     number_of_bytes: 1,
