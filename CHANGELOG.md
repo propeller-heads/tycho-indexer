@@ -1,3 +1,5 @@
+## [0.119.1](https://github.com/propeller-heads/tycho-indexer/compare/0.119.0...0.119.1) (2025-12-03)
+
 ## [0.119.0](https://github.com/propeller-heads/tycho-indexer/compare/0.118.1...0.119.0) (2025-12-02)
 
 
