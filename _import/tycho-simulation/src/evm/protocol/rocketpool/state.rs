@@ -1291,11 +1291,9 @@ mod tests {
     // ============ Live Transaction Tests ============
 
     /// Test against real transaction deposit on RocketPool
-    /// 0x6213b6c235c52d2132711c18a1c66934832722fd71c098e843bc792ecdbd11b3 User deposited
+    /// 0x6213b6c235c52d2132711c18a1c66934832722fd71c098e843bc792ecdbd11b3 where user deposited
     /// exactly 4.5 ETH and received 3.905847020555141679 rETH 1 minipool was assigned (31 ETH
     /// withdrawn from pool)
-    /// Note that as there were no excess withdrawals from the pool, we can not check the other
-    /// direction
     #[test]
     fn test_live_deposit_tx_6213b6c2() {
         let state = RocketPoolState::new(
@@ -1360,6 +1358,59 @@ mod tests {
         assert_eq!(new_state.queue_full_end, state.queue_full_end);
         assert_eq!(new_state.queue_half_start, state.queue_half_start);
         assert_eq!(new_state.queue_half_end, state.queue_half_end);
+        assert_eq!(new_state.queue_variable_end, state.queue_variable_end);
+    }
+
+    /// Test against real withdrawal (burn) transaction on
+    /// RocketPool0xf0f615f5dcf40d6ba1168da654a9ea8a0e855e489a34f4ffc3c7d2ad165f0bd6 where user
+    /// burned 20.873689741238146923 rETH and received 24.000828571949999998 ETH
+    #[test]
+    fn test_live_withdraw_tx_block_23736567() {
+        let state = RocketPoolState::new(
+            U256::from_str_radix("516052628fbe875ffff0", 16).unwrap(), // reth_supply
+            U256::from_str_radix("5d9143622860d8bdacea", 16).unwrap(), // total_eth
+            U256::from_str_radix("1686dc9300da8004d", 16).unwrap(),    // deposit_contract_balance
+            U256::from_str_radix("14d141273efab8a43", 16).unwrap(),    // reth_contract_liquidity
+            U256::from_str_radix("1c6bf52634000", 16).unwrap(),        // deposit_fee (0.05%)
+            true,                                                      // deposits_enabled
+            U256::from_str_radix("2386f26fc10000", 16).unwrap(),       // minimum_deposit
+            U256::from_str_radix("3cfc82e37e9a7400000", 16).unwrap(),  // maximum_deposit_pool_size
+            true,                                                      // assign_deposits_enabled
+            U256::from_str_radix("5a", 16).unwrap(),                   // deposit_assign_maximum
+            U256::from_str_radix("2", 16).unwrap(), // deposit_assign_socialised_maximum
+            U256::from_str_radix("1bf", 16).unwrap(), // queue_full_start (empty)
+            U256::from_str_radix("1bf", 16).unwrap(), // queue_full_end
+            U256::from_str_radix("3533", 16).unwrap(), // queue_half_start (empty)
+            U256::from_str_radix("3533", 16).unwrap(), // queue_half_end
+            U256::from_str_radix("6d34", 16).unwrap(), // queue_variable_start
+            U256::from_str_radix("6dd0", 16).unwrap(), // queue_variable_end
+        );
+
+        // User burned exactly 20873689741238146923 rETH
+        let burn_amount = BigUint::from(20_873_689_741_238_146_923u128);
+
+        let res = state
+            .get_amount_out(burn_amount, &reth_token(), &eth_token())
+            .unwrap();
+
+        // Expected ETH out: 24000828571949999998 wei
+        let expected_eth_out = BigUint::from(24_000_828_571_949_999_998u128);
+        assert_eq!(res.amount, expected_eth_out);
+
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketPoolState>()
+            .unwrap();
+
+        // Verify liquidity was updated correctly
+        let expected_liquidity = U256::from_str_radix("74d8b62c5", 16).unwrap();
+        assert_eq!(new_state.reth_contract_liquidity, expected_liquidity);
+
+        // Other state variables unchanged
+        assert_eq!(new_state.total_eth, state.total_eth);
+        assert_eq!(new_state.reth_supply, state.reth_supply);
+        assert_eq!(new_state.queue_variable_start, state.queue_variable_start);
         assert_eq!(new_state.queue_variable_end, state.queue_variable_end);
     }
 }
