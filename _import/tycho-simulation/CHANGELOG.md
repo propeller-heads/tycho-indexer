@@ -1,3 +1,18 @@
+## [0.209.1](https://github.com/propeller-heads/tycho-simulation/compare/0.209.0...0.209.1) (2025-12-02)
+
+
+### Bug Fixes
+
+* decode from error message instead of name ([b863df0](https://github.com/propeller-heads/tycho-simulation/commit/b863df02e12749bd709e84947414049d1a15125f))
+
+## [0.209.0](https://github.com/propeller-heads/tycho-simulation/compare/0.208.3...0.209.0) (2025-12-02)
+
+
+### Features
+
+* Add  swaps_to_price and querry_supply methods to UniswapV3State ([8f4d199](https://github.com/propeller-heads/tycho-simulation/commit/8f4d1999f81c3a0c81fefbef8847ee8d04573ded))
+* improve get_sqrt_price_q96 with faster sqrt calculation ([5ea8ace](https://github.com/propeller-heads/tycho-simulation/commit/5ea8ace4f22da209e6a2617d018b1e9da4b4efbe))
+
 ## [0.208.3](https://github.com/propeller-heads/tycho-simulation/compare/0.208.2...0.208.3) (2025-12-02)
 
 
