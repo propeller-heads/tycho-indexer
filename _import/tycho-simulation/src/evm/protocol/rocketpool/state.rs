@@ -17,7 +17,7 @@ use crate::evm::protocol::{
     rocketpool::ETH_ADDRESS,
     safe_math::{safe_add_u256, safe_mul_u256, safe_sub_u256},
     u256_num::{biguint_to_u256, u256_to_biguint, u256_to_f64},
-    utils::uniswap::solidity_math::mul_div,
+    utils::solidity_math::mul_div,
 };
 
 const DEPOSIT_FEE_BASE: u128 = 1_000_000_000_000_000_000; // 1e18
