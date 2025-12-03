@@ -1300,6 +1300,17 @@ mod tests {
         // Other state variables unchanged
         assert_eq!(new_state.total_eth, state.total_eth);
         assert_eq!(new_state.reth_supply, state.reth_supply);
+        assert_eq!(new_state.deposit_contract_balance, state.deposit_contract_balance);
+        assert_eq!(new_state.deposit_fee, state.deposit_fee);
+        assert_eq!(new_state.deposits_enabled, state.deposits_enabled);
+        assert_eq!(new_state.min_deposit_amount, state.min_deposit_amount);
+        assert_eq!(new_state.max_deposit_pool_size, state.max_deposit_pool_size);
+        assert_eq!(new_state.deposit_assigning_enabled, state.deposit_assigning_enabled);
+        assert_eq!(new_state.deposit_assign_maximum, state.deposit_assign_maximum);
+        assert_eq!(
+            new_state.deposit_assign_socialised_maximum,
+            state.deposit_assign_socialised_maximum
+        );
         assert_eq!(new_state.queue_variable_start, state.queue_variable_start);
         assert_eq!(new_state.queue_variable_end, state.queue_variable_end);
     }
