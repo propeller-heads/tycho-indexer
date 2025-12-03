@@ -20,8 +20,8 @@ use crate::evm::protocol::{
     safe_math::{safe_add_u256, safe_sub_u256},
     u256_num::u256_to_biguint,
     utils::uniswap::{
+        i24_be_bytes_to_i32, liquidity_math,
         sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
-        },
         swap_math,
         tick_list::{TickInfo, TickList, TickListErrorKind},
         tick_math::{
@@ -531,9 +531,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        evm::protocol::{
-            u256_num::biguint_to_u256, utils::uniswap::sqrt_price_math::get_sqrt_price_q96,
-        },
+        evm::protocol::utils::uniswap::sqrt_price_math::get_sqrt_price_q96,
         protocol::models::{DecoderContext, TryFromWithBlock},
     };
 
@@ -903,7 +901,15 @@ mod tests {
 
     #[test]
     fn test_swap_to_price_basic() {
-        let pool = create_basic_test_pool();
+        // Create pool with Medium fee (0.3%) to match V4's basic test
+        let liquidity = 100_000_000_000_000_000_000u128;
+        let sqrt_price = get_sqrt_price_q96(U256::from(20_000_000u64), U256::from(10_000_000u64))
+            .expect("Failed to calculate sqrt price");
+        let tick = get_tick_at_sqrt_ratio(sqrt_price).expect("Failed to calculate tick");
+        let ticks = vec![TickInfo::new(0, 0).unwrap(), TickInfo::new(46080, 0).unwrap()];
+
+        let pool = UniswapV3State::new(liquidity, sqrt_price, FeeAmount::Medium, tick, ticks)
+            .expect("Failed to create pool");
 
         // Token X has lower address (0x01), Y has higher address (0x02)
         let token_x = Token::new(
@@ -933,30 +939,15 @@ mod tests {
         let trade = pool
             .swap_to_price(&token_x.address, &token_y.address, target_price.clone())
             .expect("swap_to_price failed");
-        let pool_y_supply = trade.amount_out;
 
-        let expected = 666_654_216_061_393_561u64
-            .to_biguint()
-            .unwrap();
+        // Should match V4's output exactly with same fees (0.3%)
+        let expected_amount_in =
+            BigUint::from_str("246739021727519745").expect("Failed to parse expected amount_in");
+        let expected_amount_out =
+            BigUint::from_str("490291909043340795").expect("Failed to parse expected amount_out");
 
-        assert_eq!(
-            pool_y_supply, expected,
-            "Pool Y supply mismatch: got {}, expected {}",
-            pool_y_supply, expected
-        );
-
-        // Verify that we can swap this amount at the given price
-        let amount_in_x = &pool_y_supply * target_price.numerator / target_price.denominator;
-        let amount_in_x_i256 =
-            I256::checked_from_sign_and_abs(Sign::Positive, biguint_to_u256(&amount_in_x)).unwrap();
-        let result = pool
-            .swap(true, amount_in_x_i256, None)
-            .unwrap();
-        let actual_amount = result
-            .amount_calculated
-            .abs()
-            .into_raw();
-        assert!(actual_amount > biguint_to_u256(&pool_y_supply));
+        assert_eq!(trade.amount_in, expected_amount_in, "amount_in should match expected value");
+        assert_eq!(trade.amount_out, expected_amount_out, "amount_out should match expected value");
     }
 
     #[test]
@@ -1165,6 +1156,56 @@ mod tests {
         assert_eq!(
             trade.amount_out, expected_amount_out,
             "Expected amount out when price covers fees"
+        );
+    }
+
+    #[test]
+    fn test_swap_to_price_matches_get_amount_out() {
+        // Validates that swap_to_price amounts can be used with get_amount_out
+        let liquidity = 100_000_000_000_000_000_000u128;
+        let sqrt_price = get_sqrt_price_q96(U256::from(20_000_000u64), U256::from(10_000_000u64))
+            .expect("Failed to calculate sqrt price");
+        let tick = get_tick_at_sqrt_ratio(sqrt_price).expect("Failed to calculate tick");
+
+        let ticks = vec![TickInfo::new(0, 0).unwrap(), TickInfo::new(46080, 0).unwrap()];
+
+        let pool = UniswapV3State::new(liquidity, sqrt_price, FeeAmount::Medium, tick, ticks)
+            .expect("Failed to create pool");
+
+        let token_x_addr = Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap();
+        let token_y_addr = Bytes::from_str("0x0000000000000000000000000000000000000002").unwrap();
+
+        let token_x = Token::new(&token_x_addr, "X", 18, 0, &[], Chain::Ethereum, 1);
+        let token_y = Token::new(&token_y_addr, "Y", 18, 0, &[], Chain::Ethereum, 1);
+
+        // Get the trade from swap_to_price
+        let target_price = Price::new(BigUint::from(2_000_000u64), BigUint::from(1_010_000u64));
+        let trade = pool
+            .swap_to_price(&token_x_addr, &token_y_addr, target_price)
+            .expect("swap_to_price failed");
+        assert!(trade.amount_in > BigUint::ZERO, "Amount in should be positive");
+
+        // Use the amount_in from swap_to_price with get_amount_out
+        let result = pool
+            .get_amount_out(trade.amount_in.clone(), &token_x, &token_y)
+            .expect("get_amount_out failed");
+
+        // The amount_out from get_amount_out should be close to swap_to_price's amount_out
+        // Allow for small rounding differences
+        let diff = if result.amount > trade.amount_out {
+            &result.amount - &trade.amount_out
+        } else {
+            &trade.amount_out - &result.amount
+        };
+
+        // Difference should be less than 0.01% of the amount_out
+        let max_diff = &trade.amount_out / 10000u32;
+        assert!(
+            diff <= max_diff,
+            "get_amount_out result {} should be close to swap_to_price amount_out {}, diff: {}",
+            result.amount,
+            trade.amount_out,
+            diff
         );
     }
 }
