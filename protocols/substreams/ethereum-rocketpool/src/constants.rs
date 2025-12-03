@@ -74,7 +74,7 @@ pub(crate) const MIN_DEPOSIT_AMOUNT_SLOT: StorageLocation = StorageLocation {
 };
 
 pub(crate) const MAX_DEPOSIT_POOL_SIZE_SLOT: StorageLocation = StorageLocation {
-    name: "maximum_deposit_pool_size",
+    name: "max_deposit_pool_size",
     slot: hex!("efeb8d9f341f931c14ed8c1156bdb235390b183f1b94f522d4d72c5d24779598"),
     offset: 0,
     number_of_bytes: 32,
