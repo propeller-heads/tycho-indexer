@@ -182,7 +182,7 @@ fn update_deposit_liquidity(
 /// fetches the updated native ETH balance from the transaction's balance changes.
 ///
 /// The reason we do not use the event parameters directly is that they only contain the delta
-/// change, and would force us to start indexing from the very beginning of the protocol.
+/// change, and would force us to start indexing from the token creation.
 fn update_reth_liquidity(
     block: &eth::v2::Block,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
@@ -334,7 +334,7 @@ fn update_protocol_settings(
 ///
 /// Note that since the V1.2 Deposit Pool deployment, only the variable queue can receive new
 /// minipools (Enqueued), and as there were no minipools in the full or half queues at that time,
-/// we do not expect any enqueue events for those queues.
+/// we do not expect any events for those legacy queues.
 fn update_minipool_queue_sizes(
     block: &eth::v2::Block,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
@@ -395,7 +395,7 @@ fn assert_variable_queue_id(queue_id: [u8; 32]) -> Result<()> {
         QUEUE_KEY_HALF => {
             Err(anyhow::anyhow!("Half queue is not supported since Deposit Pool V1.2"))
         }
-        _ => Err(anyhow::anyhow!("Unknown queue_id for enqueue: 0x{}", hex::encode(queue_id))),
+        _ => Err(anyhow::anyhow!("Unknown queue_id: 0x{}", hex::encode(queue_id))),
     }
 }
 
