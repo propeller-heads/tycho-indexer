@@ -508,6 +508,7 @@ mod tests {
 
     use approx::assert_ulps_eq;
     use num_bigint::BigUint;
+    use num_traits::ToPrimitive;
     use tycho_common::{
         dto::ProtocolStateDelta,
         hex_bytes::Bytes,
@@ -742,6 +743,63 @@ mod tests {
             .spot_price(&reth_token(), &eth_token())
             .unwrap();
         assert_ulps_eq!(price, 2.0);
+    }
+
+    /// Creates RocketPoolState from real on-chain data at block 23929406.
+    fn create_state_at_block_23929406() -> RocketPoolState {
+        RocketPoolState::new(
+            U256::from_str_radix("4df2cf698437b72b8937", 16).unwrap(), // reth_supply
+            U256::from_str_radix("59c8a9cb90db4a5aa85e", 16).unwrap(), // total_eth
+            U256::from_str_radix("11e245d1725f73941", 16).unwrap(),    // deposit_contract_balance
+            U256::from_str_radix("b6e43509", 16).unwrap(),             // reth_contract_liquidity
+            U256::from_str_radix("1c6bf52634000", 16).unwrap(),        // deposit_fee (0.05%)
+            true,                                                      // deposits_enabled
+            U256::from_str_radix("2386f26fc10000", 16).unwrap(),       // minimum_deposit
+            U256::from_str_radix("3cfc82e37e9a7400000", 16).unwrap(),  // maximum_deposit_pool_size
+            true,                                                      // assign_deposits_enabled
+            U256::from_str_radix("5a", 16).unwrap(),                   // deposit_assign_maximum
+            U256::from_str_radix("2", 16).unwrap(), // deposit_assign_socialised_maximum
+            U256::from_str_radix("1bf", 16).unwrap(), // queue_full_start (empty)
+            U256::from_str_radix("1bf", 16).unwrap(), // queue_full_end
+            U256::from_str_radix("3533", 16).unwrap(), // queue_half_start (empty)
+            U256::from_str_radix("3533", 16).unwrap(), // queue_half_end
+            U256::from_str_radix("6d45", 16).unwrap(), // queue_variable_start
+            U256::from_str_radix("6de3", 16).unwrap(), // queue_variable_end
+        )
+    }
+
+    /// Test spot price against real getEthValue(1e18) result at block 23929406
+    /// rETH -> ETH: 1151835724202334991 wei per rETH
+    #[test]
+    fn test_live_spot_price_reth_to_eth_23929406() {
+        let state = create_state_at_block_23929406();
+
+        let price = state
+            .spot_price(&reth_token(), &eth_token())
+            .unwrap();
+
+        // Expected: 1151835724202334991 / 1e18 = 1.151835724202334991
+        let expected = 1.151835724202335;
+        assert_ulps_eq!(price, expected, max_ulps = 10);
+    }
+
+    /// Test spot price against real getRethValue(1e18) result at block 23929406
+    /// ETH -> rETH: 868179358382477931 wei per ETH
+    #[test]
+    fn test_live_spot_price_eth_to_reth_23929406() {
+        let state = create_state_at_block_23929406();
+
+        // Calculate expected price considering deposit fee
+        let price = state
+            .spot_price(&eth_token(), &reth_token())
+            .unwrap();
+
+        // Expected is calculated without fee: 868179358382477931 / 1e18 = 0.868179358382477931
+        let expected_without_fee = 0.868179358382478;
+        let fee = state.deposit_fee.to_f64().unwrap() / DEPOSIT_FEE_BASE as f64;
+        let expected = expected_without_fee * (1.0 - fee);
+
+        assert_ulps_eq!(price, expected, max_ulps = 10);
     }
 
     #[test]
