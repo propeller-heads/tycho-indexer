@@ -37,7 +37,10 @@ fn queue_capacity() -> U256 {
 pub struct RocketPoolState {
     pub reth_supply: U256,
     pub total_eth: U256,
-    pub liquidity: U256,
+    /// ETH available in the deposit pool contract
+    pub deposit_contract_balance: U256,
+    /// ETH available in the rETH contract
+    pub reth_contract_liquidity: U256,
     /// Deposit fee as %, scaled by DEPOSIT_FEE_BASE, such as 5000000000000000 represents 0.5% fee.
     pub deposit_fee: U256,
     pub deposits_enabled: bool,
@@ -65,7 +68,8 @@ impl RocketPoolState {
     pub fn new(
         reth_supply: U256,
         total_eth: U256,
-        liquidity: U256,
+        deposit_contract_balance: U256,
+        reth_contract_liquidity: U256,
         deposit_fee: U256,
         deposits_enabled: bool,
         minimum_deposit: U256,
@@ -83,7 +87,8 @@ impl RocketPoolState {
         Self {
             reth_supply,
             total_eth,
-            liquidity,
+            deposit_contract_balance,
+            reth_contract_liquidity,
             deposit_fee,
             deposits_enabled,
             minimum_deposit,
@@ -173,19 +178,25 @@ impl RocketPoolState {
         }
     }
 
-    /// Returns the excess balance available for withdrawals.
-    /// This is the liquidity in excess of what's needed for the minipool queue.
+    /// Returns the excess balance available for withdrawals from the deposit pool.
     ///
     /// Formula from RocketDepositPool.getExcessBalance():
     /// if minipoolCapacity >= balance: return 0
     /// else: return balance - minipoolCapacity
-    fn get_excess_balance(&self) -> Result<U256, SimulationError> {
+    fn get_deposit_pool_excess_balance(&self) -> Result<U256, SimulationError> {
         let minipool_capacity = self.get_effective_capacity()?;
-        if minipool_capacity >= self.liquidity {
+        if minipool_capacity >= self.deposit_contract_balance {
             Ok(U256::ZERO)
         } else {
-            safe_sub_u256(self.liquidity, minipool_capacity)
+            safe_sub_u256(self.deposit_contract_balance, minipool_capacity)
         }
+    }
+
+    /// Returns total available liquidity for withdrawals.
+    /// This is the sum of reth_contract_liquidity and the deposit pool excess balance.
+    fn get_total_available_for_withdrawal(&self) -> Result<U256, SimulationError> {
+        let deposit_pool_excess = self.get_deposit_pool_excess_balance()?;
+        safe_add_u256(self.reth_contract_liquidity, deposit_pool_excess)
     }
 
     /// Returns true if there are any legacy minipools in the queue (full or half queues non-empty).
@@ -198,11 +209,11 @@ impl RocketPoolState {
     /// Calculates the number of minipools to dequeue and the resulting ETH to assign given a
     /// deposit. Returns (minipools_dequeued, eth_assigned) or panics for legacy queue.
     ///
-    /// This method assumes deposit has already been added to liquidity.
+    /// This method assumes deposit has already been added to deposit_contract_balance.
     ///
     /// Logic from _assignDepositsNew:
     /// - scalingCount = deposit_amount / variableDepositAmount
-    /// - totalEthCount = new_liquidity / variableDepositAmount
+    /// - totalEthCount = new_balance / variableDepositAmount
     /// - assignments = socialisedMax + scalingCount
     /// - assignments = min(assignments, totalEthCount, maxAssignments, variable_queue_length)
     /// - eth_assigned = assignments * variableDepositAmount
@@ -228,7 +239,7 @@ impl RocketPoolState {
 
         // Calculate assignments
         let scaling_count = deposit_amount / variable_deposit;
-        let total_eth_count = self.liquidity / variable_deposit;
+        let total_eth_count = self.deposit_contract_balance / variable_deposit;
         let mut assignments = self.deposit_assign_socialised_maximum + scaling_count;
 
         // Cap at total ETH available
@@ -298,7 +309,7 @@ impl ProtocolSim for RocketPoolState {
                 ));
             }
 
-            let capacity_needed = safe_add_u256(self.liquidity, amount_in)?;
+            let capacity_needed = safe_add_u256(self.deposit_contract_balance, amount_in)?;
             let max_capacity = self.get_max_deposit_capacity()?;
             if capacity_needed > max_capacity {
                 return Err(SimulationError::InvalidInput(
@@ -314,11 +325,11 @@ impl ProtocolSim for RocketPoolState {
         } else {
             let eth_out = self.get_eth_value(amount_in)?;
 
-            let excess_balance = self.get_excess_balance()?;
-            if eth_out > excess_balance {
+            let total_available = self.get_total_available_for_withdrawal()?;
+            if eth_out > total_available {
                 return Err(SimulationError::RecoverableError(format!(
-                    "Withdrawal {} exceeds excess balance {} (liquidity reserved for minipool queue)",
-                    eth_out, excess_balance
+                    "Withdrawal {} exceeds available liquidity {}",
+                    eth_out, total_available
                 )));
             }
 
@@ -328,17 +339,30 @@ impl ProtocolSim for RocketPoolState {
         let mut new_state = self.clone();
         // Note: total_eth and reth_supply are not updated as they are managed by an oracle.
         if is_depositing_eth {
-            new_state.liquidity = safe_add_u256(new_state.liquidity, amount_in)?;
+            new_state.deposit_contract_balance =
+                safe_add_u256(new_state.deposit_contract_balance, amount_in)?;
 
             // Process assign deposits - dequeue minipools and withdraw ETH from vault
             let (assignments, eth_assigned) = new_state.calculate_assign_deposits(amount_in)?;
             if assignments > U256::ZERO {
-                new_state.liquidity = safe_sub_u256(new_state.liquidity, eth_assigned)?;
+                new_state.deposit_contract_balance =
+                    safe_sub_u256(new_state.deposit_contract_balance, eth_assigned)?;
                 new_state.queue_variable_start =
                     safe_add_u256(new_state.queue_variable_start, assignments)?;
             }
         } else {
-            new_state.liquidity = safe_sub_u256(new_state.liquidity, amount_out)?;
+            if amount_out <= new_state.reth_contract_liquidity {
+                // If there is sufficient liquidity in rETH contract, withdraw directly
+                new_state.reth_contract_liquidity =
+                    safe_sub_u256(new_state.reth_contract_liquidity, amount_out)?;
+            } else {
+                // Otherwise, use liquidity from the deposit pool contract
+                let needed_from_deposit_pool =
+                    safe_sub_u256(amount_out, new_state.reth_contract_liquidity)?;
+                new_state.deposit_contract_balance =
+                    safe_sub_u256(new_state.deposit_contract_balance, needed_from_deposit_pool)?;
+                new_state.reth_contract_liquidity = U256::ZERO;
+            }
         };
 
         let gas_used = if is_depositing_eth { 209_000u32 } else { 134_000u32 };
@@ -359,14 +383,14 @@ impl ProtocolSim for RocketPoolState {
 
         if is_depositing_eth {
             // ETH -> rETH: max sell = maxDepositPoolSize +
-            // + effectiveCapacity (if assignDepositsEnabled) - liquidity
+            // + effectiveCapacity (if assignDepositsEnabled) - deposit_contract_balance
             let max_capacity = self.get_max_deposit_capacity()?;
-            let max_eth_sell = safe_sub_u256(max_capacity, self.liquidity)?;
+            let max_eth_sell = safe_sub_u256(max_capacity, self.deposit_contract_balance)?;
             let max_reth_buy = self.get_reth_value(max_eth_sell)?;
             Ok((u256_to_biguint(max_eth_sell), u256_to_biguint(max_reth_buy)))
         } else {
-            // rETH -> ETH: max buy = excess balance (liquidity - minipool queue capacity)
-            let max_eth_buy = self.get_excess_balance()?;
+            // rETH -> ETH: max buy = total available for withdrawal
+            let max_eth_buy = self.get_total_available_for_withdrawal()?;
             let max_reth_sell = mul_div(max_eth_buy, self.reth_supply, self.total_eth)?;
             Ok((u256_to_biguint(max_reth_sell), u256_to_biguint(max_eth_buy)))
         }
@@ -387,10 +411,14 @@ impl ProtocolSim for RocketPoolState {
             .get("reth_supply")
             .map_or(self.reth_supply, U256::from_bytes);
 
-        self.liquidity = delta
+        self.deposit_contract_balance = delta
             .updated_attributes
-            .get("liquidity")
-            .map_or(self.liquidity, U256::from_bytes);
+            .get("deposit_contract_balance")
+            .map_or(self.deposit_contract_balance, U256::from_bytes);
+        self.reth_contract_liquidity = delta
+            .updated_attributes
+            .get("reth_contract_liquidity")
+            .map_or(self.reth_contract_liquidity, U256::from_bytes);
 
         self.deposits_enabled = delta
             .updated_attributes
@@ -496,14 +524,16 @@ mod tests {
     /// Mutate fields for specific tests.
     /// - Exchange rate: 1 rETH = 2 ETH (100 rETH backed by 200 ETH)
     /// - Deposit fee: 40%
-    /// - Liquidity: 50 ETH
+    /// - Deposit contract balance: 50 ETH
+    /// - rETH contract liquidity: 0 ETH
     /// - Max pool size: 1000 ETH
     /// - Assign deposits enabled: false
     fn create_state() -> RocketPoolState {
         RocketPoolState::new(
             U256::from(100e18),                     // reth_supply: 100 rETH
             U256::from(200e18),                     // total_eth: 200 ETH (1 rETH = 2 ETH)
-            U256::from(50e18),                      // liquidity: 50 ETH
+            U256::from(50e18),                      // deposit_contract_balance: 50 ETH
+            U256::ZERO,                             // reth_contract_liquidity: 0 ETH
             U256::from(400_000_000_000_000_000u64), // deposit_fee: 40% (0.4e18)
             true,                                   // deposits_enabled
             U256::ZERO,                             // minimum_deposit
@@ -641,7 +671,8 @@ mod tests {
         let attributes: HashMap<String, Bytes> = [
             ("total_eth", U256::from(300u64)),
             ("reth_supply", U256::from(150u64)),
-            ("liquidity", U256::from(100u64)),
+            ("deposit_contract_balance", U256::from(100u64)),
+            ("reth_contract_liquidity", U256::from(20u64)),
         ]
         .into_iter()
         .map(|(k, v)| (k.to_string(), Bytes::from(v.to_be_bytes_vec())))
@@ -659,7 +690,8 @@ mod tests {
 
         assert_eq!(state.total_eth, U256::from(300u64));
         assert_eq!(state.reth_supply, U256::from(150u64));
-        assert_eq!(state.liquidity, U256::from(100u64));
+        assert_eq!(state.deposit_contract_balance, U256::from(100u64));
+        assert_eq!(state.reth_contract_liquidity, U256::from(20u64));
     }
 
     #[test]
@@ -788,7 +820,7 @@ mod tests {
             .downcast_ref::<RocketPoolState>()
             .unwrap();
         // liquidity: 50 + 10 = 60
-        assert_eq!(new_state.liquidity, U256::from(60e18));
+        assert_eq!(new_state.deposit_contract_balance, U256::from(60e18));
         // total_eth and reth_supply unchanged (managed by oracle)
         assert_eq!(new_state.total_eth, U256::from(200e18));
         assert_eq!(new_state.reth_supply, U256::from(100e18));
@@ -797,7 +829,7 @@ mod tests {
     #[test]
     fn test_deposit_within_extended_capacity() {
         let mut state = create_state();
-        state.liquidity = U256::from(990e18);
+        state.deposit_contract_balance = U256::from(990e18);
         state.maximum_deposit_pool_size = U256::from(1000e18);
         state.assign_deposits_enabled = true;
         state.queue_variable_end = U256::from(1); // 31 ETH extra
@@ -820,7 +852,7 @@ mod tests {
             .downcast_ref::<RocketPoolState>()
             .unwrap();
         // liquidity: 990 + 20 = 1010
-        assert_eq!(new_state.liquidity, U256::from(1010e18));
+        assert_eq!(new_state.deposit_contract_balance, U256::from(1010e18));
         // total_eth and reth_supply unchanged (managed by oracle)
         assert_eq!(new_state.total_eth, U256::from(200e18));
         assert_eq!(new_state.reth_supply, U256::from(100e18));
@@ -847,7 +879,7 @@ mod tests {
             .downcast_ref::<RocketPoolState>()
             .unwrap();
         // liquidity: 50 - 20 = 30
-        assert_eq!(new_state.liquidity, U256::from(30e18));
+        assert_eq!(new_state.deposit_contract_balance, U256::from(30e18));
         // total_eth and reth_supply unchanged (managed by oracle)
         assert_eq!(new_state.total_eth, U256::from(200e18));
         assert_eq!(new_state.reth_supply, U256::from(100e18));
@@ -889,7 +921,7 @@ mod tests {
     #[test]
     fn test_deposit_queue_ignored_when_disabled() {
         let mut state = create_state();
-        state.liquidity = U256::from(990e18);
+        state.deposit_contract_balance = U256::from(990e18);
         state.maximum_deposit_pool_size = U256::from(1000e18);
         state.assign_deposits_enabled = false;
         state.queue_variable_end = U256::from(10); // Would add 310 ETH if enabled
@@ -906,7 +938,7 @@ mod tests {
     #[test]
     fn test_deposit_exceeds_extended_capacity() {
         let mut state = create_state();
-        state.liquidity = U256::from(990e18);
+        state.deposit_contract_balance = U256::from(990e18);
         state.maximum_deposit_pool_size = U256::from(1000e18);
         state.assign_deposits_enabled = true;
         state.queue_variable_end = U256::from(1); // 31 ETH extra, max = 1031
@@ -936,7 +968,7 @@ mod tests {
     #[test]
     fn test_withdrawal_limited_by_minipool_queue() {
         let mut state = create_state();
-        state.liquidity = U256::from(100e18);
+        state.deposit_contract_balance = U256::from(100e18);
         // Queue has 2 variable minipools = 62 ETH capacity
         state.queue_variable_end = U256::from(2);
         // excess_balance = 100 - 62 = 38 ETH
@@ -963,7 +995,7 @@ mod tests {
     #[test]
     fn test_withdrawal_zero_excess_balance() {
         let mut state = create_state();
-        state.liquidity = U256::from(62e18);
+        state.deposit_contract_balance = U256::from(62e18);
         // Queue has 2 variable minipools = 62 ETH capacity
         state.queue_variable_end = U256::from(2);
         // excess_balance = 62 - 62 = 0 ETH
@@ -978,9 +1010,40 @@ mod tests {
     }
 
     #[test]
+    fn test_withdrawal_uses_both_pools() {
+        let mut state = create_state();
+        state.reth_contract_liquidity = U256::from(10e18);
+        state.deposit_contract_balance = U256::from(50e18);
+        // No queue, so full 50 ETH is excess balance
+        // Total available: 10 + 50 = 60 ETH
+
+        // Withdraw 15 rETH = 30 ETH (more than reth_contract_liquidity of 10 ETH)
+        let res = state
+            .get_amount_out(
+                BigUint::from(15_000_000_000_000_000_000u128),
+                &reth_token(),
+                &eth_token(),
+            )
+            .unwrap();
+
+        assert_eq!(res.amount, BigUint::from(30_000_000_000_000_000_000u128));
+
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketPoolState>()
+            .unwrap();
+
+        // reth_contract_liquidity drained to 0
+        assert_eq!(new_state.reth_contract_liquidity, U256::ZERO);
+        // deposit_contract_balance: 50 - (30 - 10) = 30 ETH
+        assert_eq!(new_state.deposit_contract_balance, U256::from(30e18));
+    }
+
+    #[test]
     fn test_limits_withdrawal_with_queue() {
         let mut state = create_state();
-        state.liquidity = U256::from(100e18);
+        state.deposit_contract_balance = U256::from(100e18);
         // Queue has 2 variable minipools = 62 ETH capacity
         state.queue_variable_end = U256::from(2);
 
@@ -999,7 +1062,7 @@ mod tests {
     #[test]
     fn test_assign_deposits_dequeues_minipools() {
         let mut state = create_state();
-        state.liquidity = U256::from(100e18);
+        state.deposit_contract_balance = U256::from(100e18);
         state.assign_deposits_enabled = true;
         state.deposit_assign_maximum = U256::from(10u64);
         state.deposit_assign_socialised_maximum = U256::from(2u64);
@@ -1026,14 +1089,14 @@ mod tests {
             .downcast_ref::<RocketPoolState>()
             .unwrap();
 
-        assert_eq!(new_state.liquidity, U256::from(38e18));
+        assert_eq!(new_state.deposit_contract_balance, U256::from(38e18));
         assert_eq!(new_state.queue_variable_start, U256::from(4u64));
     }
 
     #[test]
     fn test_assign_deposits_capped_by_queue_length() {
         let mut state = create_state();
-        state.liquidity = U256::from(100e18);
+        state.deposit_contract_balance = U256::from(100e18);
         state.assign_deposits_enabled = true;
         state.deposit_assign_maximum = U256::from(10u64);
         state.deposit_assign_socialised_maximum = U256::from(5u64);
@@ -1057,14 +1120,14 @@ mod tests {
             .downcast_ref::<RocketPoolState>()
             .unwrap();
 
-        assert_eq!(new_state.liquidity, U256::from(100e18));
+        assert_eq!(new_state.deposit_contract_balance, U256::from(100e18));
         assert_eq!(new_state.queue_variable_start, U256::from(2u64));
     }
 
     #[test]
     fn test_assign_deposits_capped_by_max_assignments() {
         let mut state = create_state();
-        state.liquidity = U256::from(100e18);
+        state.deposit_contract_balance = U256::from(100e18);
         state.assign_deposits_enabled = true;
         state.deposit_assign_maximum = U256::from(1u64); // Only 1 assignment allowed
         state.deposit_assign_socialised_maximum = U256::from(5u64);
@@ -1088,14 +1151,14 @@ mod tests {
             .downcast_ref::<RocketPoolState>()
             .unwrap();
 
-        assert_eq!(new_state.liquidity, U256::from(131e18));
+        assert_eq!(new_state.deposit_contract_balance, U256::from(131e18));
         assert_eq!(new_state.queue_variable_start, U256::from(1u64));
     }
 
     #[test]
     fn test_assign_deposits_capped_by_total_eth() {
         let mut state = create_state();
-        state.liquidity = U256::from(10e18); // Low liquidity
+        state.deposit_contract_balance = U256::from(10e18); // Low liquidity
         state.assign_deposits_enabled = true;
         state.deposit_assign_maximum = U256::from(10u64);
         state.deposit_assign_socialised_maximum = U256::from(5u64);
@@ -1120,7 +1183,7 @@ mod tests {
             .downcast_ref::<RocketPoolState>()
             .unwrap();
 
-        assert_eq!(new_state.liquidity, U256::from(10e18));
+        assert_eq!(new_state.deposit_contract_balance, U256::from(10e18));
         assert_eq!(new_state.queue_variable_start, U256::from(1u64));
     }
 
@@ -1163,7 +1226,7 @@ mod tests {
             .unwrap();
 
         // liquidity: 50 + 10 = 60 (no withdrawal)
-        assert_eq!(new_state.liquidity, U256::from(60e18));
+        assert_eq!(new_state.deposit_contract_balance, U256::from(60e18));
         assert_eq!(new_state.queue_variable_start, U256::ZERO);
     }
 
@@ -1180,7 +1243,8 @@ mod tests {
         let state = RocketPoolState::new(
             U256::from_str_radix("4ec08ba071647b927594", 16).unwrap(), // reth_supply
             U256::from_str_radix("5aafbb189fbbc1704662", 16).unwrap(), // total_eth
-            U256::from_str_radix("17a651238b0dbf892", 16).unwrap(),    // liquidity
+            U256::from_str_radix("17a651238b0dbf892", 16).unwrap(),    // deposit_contract_balance
+            U256::from(781003199),                                     // reth_contract_liquidity
             U256::from_str_radix("1c6bf52634000", 16).unwrap(),        // deposit_fee (0.05%)
             true,                                                      // deposits_enabled
             U256::from_str_radix("2386f26fc10000", 16).unwrap(),       // minimum_deposit
@@ -1213,9 +1277,9 @@ mod tests {
             .downcast_ref::<RocketPoolState>()
             .unwrap();
 
-        // Expected final liquidity to reduce by 31 ETH (1 minipool assigned)
-        let expected_liquidity = U256::from_str_radix("0aa2289fdd01f892", 16).unwrap();
-        assert_eq!(new_state.liquidity, expected_liquidity);
+        // Expected final balance to reduce by 31 ETH (1 minipool assigned)
+        let expected_balance = U256::from_str_radix("0aa2289fdd01f892", 16).unwrap();
+        assert_eq!(new_state.deposit_contract_balance, expected_balance);
 
         // Expected queue_variable_start to advance by 1 (1 minipool assigned)
         let expected_queue_start = U256::from_str_radix("6d44", 16).unwrap();

@@ -36,12 +36,23 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketPoolState {
             .map(U256::from_bytes)
             .ok_or_else(|| InvalidSnapshotError::MissingAttribute("reth_supply".to_string()))?;
 
-        let liquidity = snapshot
+        let deposit_contract_balance = snapshot
             .state
             .attributes
-            .get("liquidity")
+            .get("deposit_contract_balance")
             .map(U256::from_bytes)
-            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("liquidity".to_string()))?;
+            .ok_or_else(|| {
+                InvalidSnapshotError::MissingAttribute("deposit_contract_balance".to_string())
+            })?;
+
+        let reth_contract_liquidity = snapshot
+            .state
+            .attributes
+            .get("reth_contract_liquidity")
+            .map(U256::from_bytes)
+            .ok_or_else(|| {
+                InvalidSnapshotError::MissingAttribute("reth_contract_liquidity".to_string())
+            })?;
 
         let deposits_enabled = snapshot
             .state
@@ -157,7 +168,8 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketPoolState {
         Ok(RocketPoolState::new(
             reth_supply,
             total_eth,
-            liquidity,
+            deposit_contract_balance,
+            reth_contract_liquidity,
             deposit_fee,
             deposits_enabled,
             minimum_deposit,
@@ -214,9 +226,13 @@ mod tests {
                         Bytes::from(U256::from(95_000_000_000_000_000_000u128).to_be_bytes_vec()),
                     ),
                     (
-                        "liquidity".to_string(),
+                        "deposit_contract_balance".to_string(),
                         Bytes::from(U256::from(50_000_000_000_000_000_000u128).to_be_bytes_vec()),
-                    ), // 50 ETH liquidity
+                    ), // 50 ETH in deposit contract
+                    (
+                        "reth_contract_liquidity".to_string(),
+                        Bytes::from(U256::from(10_000_000_000_000_000_000u128).to_be_bytes_vec()),
+                    ), // 10 ETH in rETH contract
                     ("deposits_enabled".to_string(), Bytes::from(vec![0x01])),
                     ("assign_deposits_enabled".to_string(), Bytes::from(vec![0x01])),
                     (
@@ -288,7 +304,8 @@ mod tests {
         let state = result.unwrap();
         assert_eq!(state.total_eth, U256::from(100_000_000_000_000_000_000u128));
         assert_eq!(state.reth_supply, U256::from(95_000_000_000_000_000_000u128));
-        assert_eq!(state.liquidity, U256::from(50_000_000_000_000_000_000u128));
+        assert_eq!(state.deposit_contract_balance, U256::from(50_000_000_000_000_000_000u128));
+        assert_eq!(state.reth_contract_liquidity, U256::from(10_000_000_000_000_000_000u128));
         assert!(state.deposits_enabled);
         assert!(state.assign_deposits_enabled);
         assert_eq!(state.minimum_deposit, U256::from(10_000_000_000_000_000u128));
@@ -311,7 +328,14 @@ mod tests {
                 attributes: HashMap::from([
                     ("total_eth".to_string(), Bytes::from(U256::from(100u64).to_be_bytes_vec())),
                     ("reth_supply".to_string(), Bytes::from(U256::from(100u64).to_be_bytes_vec())),
-                    ("liquidity".to_string(), Bytes::from(U256::from(50u64).to_be_bytes_vec())),
+                    (
+                        "deposit_contract_balance".to_string(),
+                        Bytes::from(U256::from(50u64).to_be_bytes_vec()),
+                    ),
+                    (
+                        "reth_contract_liquidity".to_string(),
+                        Bytes::from(U256::from(10u64).to_be_bytes_vec()),
+                    ),
                     ("deposits_enabled".to_string(), Bytes::from(vec![0x00])), // disabled
                     ("assign_deposits_enabled".to_string(), Bytes::from(vec![0x00])), // disabled
                     ("deposit_fee".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
@@ -379,7 +403,8 @@ mod tests {
     #[rstest]
     #[case::missing_total_eth("total_eth")]
     #[case::missing_reth_supply("reth_supply")]
-    #[case::missing_liquidity("liquidity")]
+    #[case::missing_deposit_contract_balance("deposit_contract_balance")]
+    #[case::missing_reth_contract_liquidity("reth_contract_liquidity")]
     #[case::missing_deposits_enabled("deposits_enabled")]
     #[case::missing_assign_deposits_enabled("assign_deposits_enabled")]
     #[case::missing_deposit_fee("deposit_fee")]
@@ -399,7 +424,14 @@ mod tests {
         let mut attributes = HashMap::from([
             ("total_eth".to_string(), Bytes::from(U256::from(100u64).to_be_bytes_vec())),
             ("reth_supply".to_string(), Bytes::from(U256::from(100u64).to_be_bytes_vec())),
-            ("liquidity".to_string(), Bytes::from(U256::from(50u64).to_be_bytes_vec())),
+            (
+                "deposit_contract_balance".to_string(),
+                Bytes::from(U256::from(50u64).to_be_bytes_vec()),
+            ),
+            (
+                "reth_contract_liquidity".to_string(),
+                Bytes::from(U256::from(10u64).to_be_bytes_vec()),
+            ),
             ("deposits_enabled".to_string(), Bytes::from(vec![0x01])),
             ("assign_deposits_enabled".to_string(), Bytes::from(vec![0x01])),
             ("deposit_fee".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
