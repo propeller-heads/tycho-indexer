@@ -88,13 +88,13 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketPoolState {
                 InvalidSnapshotError::MissingAttribute("min_deposit_amount".to_string())
             })?;
 
-        let maximum_deposit_pool_size = snapshot
+        let max_deposit_pool_size = snapshot
             .state
             .attributes
-            .get("maximum_deposit_pool_size")
+            .get("max_deposit_pool_size")
             .map(U256::from_bytes)
             .ok_or_else(|| {
-                InvalidSnapshotError::MissingAttribute("maximum_deposit_pool_size".to_string())
+                InvalidSnapshotError::MissingAttribute("max_deposit_pool_size".to_string())
             })?;
 
         let deposit_assign_maximum = snapshot
@@ -175,7 +175,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketPoolState {
             deposit_fee,
             deposits_enabled,
             min_deposit_amount,
-            maximum_deposit_pool_size,
+            max_deposit_pool_size,
             deposit_assigning_enabled,
             deposit_assign_maximum,
             deposit_assign_socialised_maximum,
@@ -246,7 +246,7 @@ mod tests {
                         Bytes::from(U256::from(10_000_000_000_000_000u128).to_be_bytes_vec()),
                     ), // 0.01 ETH
                     (
-                        "maximum_deposit_pool_size".to_string(),
+                        "max_deposit_pool_size".to_string(),
                         Bytes::from(
                             U256::from(5_000_000_000_000_000_000_000u128).to_be_bytes_vec(),
                         ),
@@ -311,7 +311,7 @@ mod tests {
         assert!(state.deposits_enabled);
         assert!(state.deposit_assigning_enabled);
         assert_eq!(state.min_deposit_amount, U256::from(10_000_000_000_000_000u128));
-        assert_eq!(state.maximum_deposit_pool_size, U256::from(5_000_000_000_000_000_000_000u128));
+        assert_eq!(state.max_deposit_pool_size, U256::from(5_000_000_000_000_000_000_000u128));
         assert_eq!(state.queue_full_start, U256::from(5u64));
         assert_eq!(state.queue_full_end, U256::from(10u64));
         assert_eq!(state.queue_half_start, U256::from(0u64));
@@ -346,7 +346,7 @@ mod tests {
                         Bytes::from(U256::from(0u64).to_be_bytes_vec()),
                     ),
                     (
-                        "maximum_deposit_pool_size".to_string(),
+                        "max_deposit_pool_size".to_string(),
                         Bytes::from(U256::from(1000u64).to_be_bytes_vec()),
                     ),
                     (
@@ -411,7 +411,7 @@ mod tests {
     #[case::missing_deposit_assigning_enabled("deposit_assigning_enabled")]
     #[case::missing_deposit_fee("deposit_fee")]
     #[case::missing_min_deposit_amount("min_deposit_amount")]
-    #[case::missing_maximum_deposit_pool_size("maximum_deposit_pool_size")]
+    #[case::missing_max_deposit_pool_size("max_deposit_pool_size")]
     #[case::missing_deposit_assign_maximum("deposit_assign_maximum")]
     #[case::missing_deposit_assign_socialised_maximum("deposit_assign_socialised_maximum")]
     #[case::missing_queue_full_start("queue_full_start")]
@@ -439,7 +439,7 @@ mod tests {
             ("deposit_fee".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
             ("min_deposit_amount".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
             (
-                "maximum_deposit_pool_size".to_string(),
+                "max_deposit_pool_size".to_string(),
                 Bytes::from(U256::from(1000u64).to_be_bytes_vec()),
             ),
             ("deposit_assign_maximum".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),

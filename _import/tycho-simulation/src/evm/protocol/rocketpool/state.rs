@@ -45,7 +45,7 @@ pub struct RocketPoolState {
     pub deposit_fee: U256,
     pub deposits_enabled: bool,
     pub min_deposit_amount: U256,
-    pub maximum_deposit_pool_size: U256,
+    pub max_deposit_pool_size: U256,
     /// Whether assigning deposits is enabled (allows using minipool queue capacity)
     pub deposit_assigning_enabled: bool,
     /// Maximum number of minipool assignments per deposit
@@ -73,7 +73,7 @@ impl RocketPoolState {
         deposit_fee: U256,
         deposits_enabled: bool,
         min_deposit_amount: U256,
-        maximum_deposit_pool_size: U256,
+        max_deposit_pool_size: U256,
         deposit_assigning_enabled: bool,
         deposit_assign_maximum: U256,
         deposit_assign_socialised_maximum: U256,
@@ -92,7 +92,7 @@ impl RocketPoolState {
             deposit_fee,
             deposits_enabled,
             min_deposit_amount,
-            maximum_deposit_pool_size,
+            max_deposit_pool_size,
             deposit_assigning_enabled,
             deposit_assign_maximum,
             deposit_assign_socialised_maximum,
@@ -171,9 +171,9 @@ impl RocketPoolState {
     fn get_max_deposit_capacity(&self) -> Result<U256, SimulationError> {
         if self.deposit_assigning_enabled {
             let effective_capacity = self.get_effective_capacity()?;
-            safe_add_u256(self.maximum_deposit_pool_size, effective_capacity)
+            safe_add_u256(self.max_deposit_pool_size, effective_capacity)
         } else {
-            Ok(self.maximum_deposit_pool_size)
+            Ok(self.max_deposit_pool_size)
         }
     }
 
@@ -436,10 +436,10 @@ impl ProtocolSim for RocketPoolState {
             .updated_attributes
             .get("min_deposit_amount")
             .map_or(self.min_deposit_amount, U256::from_bytes);
-        self.maximum_deposit_pool_size = delta
+        self.max_deposit_pool_size = delta
             .updated_attributes
-            .get("maximum_deposit_pool_size")
-            .map_or(self.maximum_deposit_pool_size, U256::from_bytes);
+            .get("max_deposit_pool_size")
+            .map_or(self.max_deposit_pool_size, U256::from_bytes);
         self.deposit_assign_maximum = delta
             .updated_attributes
             .get("deposit_assign_maximum")
@@ -538,7 +538,7 @@ mod tests {
             U256::from(400_000_000_000_000_000u64), // deposit_fee: 40% (0.4e18)
             true,                                   // deposits_enabled
             U256::ZERO,                             // min_deposit_amount
-            U256::from(1000e18),                    // maximum_deposit_pool_size: 1000 ETH
+            U256::from(1000e18),                    // max_deposit_pool_size: 1000 ETH
             false,                                  // deposit_assigning_enabled
             U256::ZERO,                             // deposit_assign_maximum
             U256::ZERO,                             // deposit_assign_socialised_maximum
@@ -755,7 +755,7 @@ mod tests {
             U256::from_str_radix("1c6bf52634000", 16).unwrap(),        // deposit_fee (0.05%)
             true,                                                      // deposits_enabled
             U256::from_str_radix("2386f26fc10000", 16).unwrap(),       // min_deposit_amount
-            U256::from_str_radix("3cfc82e37e9a7400000", 16).unwrap(),  // maximum_deposit_pool_size
+            U256::from_str_radix("3cfc82e37e9a7400000", 16).unwrap(),  // max_deposit_pool_size
             true,                                                      // deposit_assigning_enabled
             U256::from_str_radix("5a", 16).unwrap(),                   // deposit_assign_maximum
             U256::from_str_radix("2", 16).unwrap(), // deposit_assign_socialised_maximum
@@ -842,7 +842,7 @@ mod tests {
     #[test]
     fn test_limits_with_extended_capacity() {
         let mut state = create_state();
-        state.maximum_deposit_pool_size = U256::from(100e18);
+        state.max_deposit_pool_size = U256::from(100e18);
         state.deposit_assigning_enabled = true;
         state.queue_variable_end = U256::from(2); // 62 ETH extra
 
@@ -888,7 +888,7 @@ mod tests {
     fn test_deposit_within_extended_capacity() {
         let mut state = create_state();
         state.deposit_contract_balance = U256::from(990e18);
-        state.maximum_deposit_pool_size = U256::from(1000e18);
+        state.max_deposit_pool_size = U256::from(1000e18);
         state.deposit_assigning_enabled = true;
         state.queue_variable_end = U256::from(1); // 31 ETH extra
 
@@ -966,7 +966,7 @@ mod tests {
     #[test]
     fn test_deposit_exceeds_max_pool() {
         let mut state = create_state();
-        state.maximum_deposit_pool_size = U256::from(60e18); // Only 10 ETH room
+        state.max_deposit_pool_size = U256::from(60e18); // Only 10 ETH room
 
         let res = state.get_amount_out(
             BigUint::from(20_000_000_000_000_000_000u128),
@@ -980,7 +980,7 @@ mod tests {
     fn test_deposit_queue_ignored_when_disabled() {
         let mut state = create_state();
         state.deposit_contract_balance = U256::from(990e18);
-        state.maximum_deposit_pool_size = U256::from(1000e18);
+        state.max_deposit_pool_size = U256::from(1000e18);
         state.deposit_assigning_enabled = false;
         state.queue_variable_end = U256::from(10); // Would add 310 ETH if enabled
 
@@ -997,7 +997,7 @@ mod tests {
     fn test_deposit_exceeds_extended_capacity() {
         let mut state = create_state();
         state.deposit_contract_balance = U256::from(990e18);
-        state.maximum_deposit_pool_size = U256::from(1000e18);
+        state.max_deposit_pool_size = U256::from(1000e18);
         state.deposit_assigning_enabled = true;
         state.queue_variable_end = U256::from(1); // 31 ETH extra, max = 1031
 
@@ -1304,7 +1304,7 @@ mod tests {
             U256::from_str_radix("1c6bf52634000", 16).unwrap(),        // deposit_fee (0.05%)
             true,                                                      // deposits_enabled
             U256::from_str_radix("2386f26fc10000", 16).unwrap(),       // min_deposit_amount
-            U256::from_str_radix("3cfc82e37e9a7400000", 16).unwrap(),  // maximum_deposit_pool_size
+            U256::from_str_radix("3cfc82e37e9a7400000", 16).unwrap(),  // max_deposit_pool_size
             true,                                                      // deposit_assigning_enabled
             U256::from_str_radix("5a", 16).unwrap(),                   // deposit_assign_maximum
             U256::from_str_radix("2", 16).unwrap(), // deposit_assign_socialised_maximum
@@ -1347,7 +1347,7 @@ mod tests {
         assert_eq!(new_state.deposit_fee, state.deposit_fee);
         assert_eq!(new_state.deposits_enabled, state.deposits_enabled);
         assert_eq!(new_state.min_deposit_amount, state.min_deposit_amount);
-        assert_eq!(new_state.maximum_deposit_pool_size, state.maximum_deposit_pool_size);
+        assert_eq!(new_state.max_deposit_pool_size, state.max_deposit_pool_size);
         assert_eq!(new_state.deposit_assigning_enabled, state.deposit_assigning_enabled);
         assert_eq!(new_state.deposit_assign_maximum, state.deposit_assign_maximum);
         assert_eq!(
@@ -1374,7 +1374,7 @@ mod tests {
             U256::from_str_radix("1c6bf52634000", 16).unwrap(),        // deposit_fee (0.05%)
             true,                                                      // deposits_enabled
             U256::from_str_radix("2386f26fc10000", 16).unwrap(),       // min_deposit_amount
-            U256::from_str_radix("3cfc82e37e9a7400000", 16).unwrap(),  // maximum_deposit_pool_size
+            U256::from_str_radix("3cfc82e37e9a7400000", 16).unwrap(),  // max_deposit_pool_size
             true,                                                      // deposit_assigning_enabled
             U256::from_str_radix("5a", 16).unwrap(),                   // deposit_assign_maximum
             U256::from_str_radix("2", 16).unwrap(), // deposit_assign_socialised_maximum
