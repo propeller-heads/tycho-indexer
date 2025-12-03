@@ -667,15 +667,21 @@ where
 
         for tx in &block_changes.txs_with_update {
             for (component_id, state_delta) in &tx.state_updates {
+                // Check for SDK pause/unpause via "paused" attribute value
                 if let Some(paused_value) = state_delta
                     .updated_attributes
                     .get(PausingReason::ATTRIBUTE_NAME)
                 {
                     if PausingReason::is_sdk_paused_bytes(paused_value.as_ref()) {
+                        // SDK pause: "paused" attribute set to [0x1]
                         pause_states.insert(component_id.clone(), true);
+                    } else if paused_value.is_zero() || paused_value.is_empty() {
+                        // SDK unpause via setting to 0x0 (backwards compatibility)
+                        pause_states.insert(component_id.clone(), false);
                     }
                 }
 
+                // Check for unpause: "paused" attribute deleted
                 if state_delta
                     .deleted_attributes
                     .contains(PausingReason::ATTRIBUTE_NAME)
@@ -2776,6 +2782,143 @@ mod tests {
                 updated_attributes: HashMap::new(),
                 deleted_attributes,
             },
+        );
+
+        let block_changes = BlockChanges::new(
+            "test".to_string(),
+            Chain::Ethereum,
+            get_test_block(1),
+            1,
+            false,
+            vec![TxWithChanges {
+                tx: get_test_transaction(1),
+                state_updates,
+                ..Default::default()
+            }],
+            Vec::new(),
+        );
+
+        let (paused, unpaused) = hook_dci.extract_sdk_pause_updates(&block_changes);
+
+        assert!(paused.is_empty());
+        assert_eq!(unpaused.len(), 1);
+        assert!(unpaused.contains("component_1"));
+    }
+
+    #[tokio::test]
+    async fn test_extract_sdk_pause_updates_unpaused_via_zero_value() {
+        use tycho_common::models::protocol::ProtocolComponentStateDelta;
+
+        use crate::extractor::dynamic_contract_indexer::PausingReason;
+
+        let gateway = get_mock_gateway();
+        let account_extractor = MockAccountExtractor::new();
+        let entrypoint_tracer = MockEntryPointTracer::new();
+
+        let inner_dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        let metadata_orchestrator = BlockMetadataOrchestrator::new(
+            MetadataGeneratorRegistry::new(),
+            MetadataResponseParserRegistry::new(),
+            ProviderRegistry::new(),
+        );
+
+        let hook_orchestrator_registry = HookOrchestratorRegistry::new();
+        let gateway2 = MockGateway::new();
+
+        let hook_dci = UniswapV4HookDCI::new(
+            inner_dci,
+            metadata_orchestrator,
+            hook_orchestrator_registry,
+            gateway2,
+            Chain::Ethereum,
+            2,
+            3,
+        );
+
+        // Create block changes with a component being unpaused via setting paused to 0x00
+        // (compatibility mode for SDK)
+        let mut state_updates = HashMap::new();
+        let mut updated_attributes = HashMap::new();
+        updated_attributes
+            .insert(PausingReason::ATTRIBUTE_NAME.to_string(), Bytes::from(vec![0u8]));
+        state_updates.insert(
+            "component_1".to_string(),
+            ProtocolComponentStateDelta::new("component_1", updated_attributes, HashSet::new()),
+        );
+
+        let block_changes = BlockChanges::new(
+            "test".to_string(),
+            Chain::Ethereum,
+            get_test_block(1),
+            1,
+            false,
+            vec![TxWithChanges {
+                tx: get_test_transaction(1),
+                state_updates,
+                ..Default::default()
+            }],
+            Vec::new(),
+        );
+
+        let (paused, unpaused) = hook_dci.extract_sdk_pause_updates(&block_changes);
+
+        assert!(paused.is_empty());
+        assert_eq!(unpaused.len(), 1);
+        assert!(unpaused.contains("component_1"));
+    }
+
+    #[tokio::test]
+    async fn test_extract_sdk_pause_updates_unpaused_via_empty_value() {
+        use tycho_common::models::protocol::ProtocolComponentStateDelta;
+
+        use crate::extractor::dynamic_contract_indexer::PausingReason;
+
+        let gateway = get_mock_gateway();
+        let account_extractor = MockAccountExtractor::new();
+        let entrypoint_tracer = MockEntryPointTracer::new();
+
+        let inner_dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        let metadata_orchestrator = BlockMetadataOrchestrator::new(
+            MetadataGeneratorRegistry::new(),
+            MetadataResponseParserRegistry::new(),
+            ProviderRegistry::new(),
+        );
+
+        let hook_orchestrator_registry = HookOrchestratorRegistry::new();
+        let gateway2 = MockGateway::new();
+
+        let hook_dci = UniswapV4HookDCI::new(
+            inner_dci,
+            metadata_orchestrator,
+            hook_orchestrator_registry,
+            gateway2,
+            Chain::Ethereum,
+            2,
+            3,
+        );
+
+        // Create block changes with a component being unpaused via setting paused to empty
+        // (compatibility mode for SDK)
+        let mut state_updates = HashMap::new();
+        let mut updated_attributes = HashMap::new();
+        updated_attributes.insert(PausingReason::ATTRIBUTE_NAME.to_string(), Bytes::from(vec![]));
+        state_updates.insert(
+            "component_1".to_string(),
+            ProtocolComponentStateDelta::new("component_1", updated_attributes, HashSet::new()),
         );
 
         let block_changes = BlockChanges::new(

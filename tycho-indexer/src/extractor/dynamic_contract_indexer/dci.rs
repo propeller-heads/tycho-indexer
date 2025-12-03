@@ -1067,13 +1067,17 @@ where
 
         for tx in txs_with_update {
             for (component_id, state_delta) in tx.state_updates.iter() {
-                // Check for SDK pause: "paused" attribute set to [1]
+                // Check for SDK pause/unpause via "paused" attribute value
                 if let Some(paused_value) = state_delta
                     .updated_attributes
                     .get(PausingReason::ATTRIBUTE_NAME)
                 {
                     if PausingReason::is_sdk_paused_bytes(paused_value.as_ref()) {
+                        // SDK pause: "paused" attribute set to [0x1]
                         pause_states.insert(component_id.clone(), true);
+                    } else if paused_value.is_zero() || paused_value.is_empty() {
+                        // SDK unpause via setting to 0x0 (for backwards compatibility)
+                        pause_states.insert(component_id.clone(), false);
                     }
                 }
 
@@ -4463,6 +4467,60 @@ mod tests {
                 updated_attributes: HashMap::new(),
                 deleted_attributes,
             },
+        );
+
+        let tx_with_changes = TxWithChanges { tx, state_updates, ..Default::default() };
+
+        let (paused, unpaused) = DynamicContractIndexer::<
+            MockAccountExtractor,
+            MockEntryPointTracer,
+            MockGateway,
+        >::extract_sdk_pause_updates(&[tx_with_changes]);
+
+        assert!(paused.is_empty());
+        assert_eq!(unpaused.len(), 1);
+        assert!(unpaused.contains("component_1"));
+    }
+
+    #[test]
+    fn test_extract_sdk_pause_updates_unpaused_via_zero_value() {
+        // Create block changes with a component being unpaused via setting paused to 0x00
+        // (compatibility mode for SDK)
+        let tx = get_transaction(1);
+        let mut state_updates = HashMap::new();
+        let mut updated_attributes = HashMap::new();
+        updated_attributes.insert("paused".to_string(), Bytes::from(vec![0u8]));
+
+        state_updates.insert(
+            "component_1".to_string(),
+            ProtocolComponentStateDelta::new("component_1", updated_attributes, HashSet::new()),
+        );
+
+        let tx_with_changes = TxWithChanges { tx, state_updates, ..Default::default() };
+
+        let (paused, unpaused) = DynamicContractIndexer::<
+            MockAccountExtractor,
+            MockEntryPointTracer,
+            MockGateway,
+        >::extract_sdk_pause_updates(&[tx_with_changes]);
+
+        assert!(paused.is_empty());
+        assert_eq!(unpaused.len(), 1);
+        assert!(unpaused.contains("component_1"));
+    }
+
+    #[test]
+    fn test_extract_sdk_pause_updates_unpaused_via_empty_value() {
+        // Create block changes with a component being unpaused via setting paused to empty
+        // (compatibility mode for SDK)
+        let tx = get_transaction(1);
+        let mut state_updates = HashMap::new();
+        let mut updated_attributes = HashMap::new();
+        updated_attributes.insert("paused".to_string(), Bytes::from(vec![]));
+
+        state_updates.insert(
+            "component_1".to_string(),
+            ProtocolComponentStateDelta::new("component_1", updated_attributes, HashSet::new()),
         );
 
         let tx_with_changes = TxWithChanges { tx, state_updates, ..Default::default() };
