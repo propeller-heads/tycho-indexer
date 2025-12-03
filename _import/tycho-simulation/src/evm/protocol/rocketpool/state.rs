@@ -336,6 +336,9 @@ impl ProtocolSim for RocketPoolState {
             }
         };
 
+        // The ETH withdrawal gas estimation assumes a best case scenario when there is sufficient
+        // liquidity in the rETH contract. Note that there has never been a situation during a
+        // withdrawal when this was not the case, hence the simplified gas estimation.
         let gas_used = if is_depositing_eth { 209_000u32 } else { 134_000u32 };
 
         Ok(GetAmountOutResult::new(
