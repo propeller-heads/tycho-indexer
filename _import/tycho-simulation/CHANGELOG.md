@@ -1,3 +1,15 @@
+## [0.210.0](https://github.com/propeller-heads/tycho-simulation/compare/0.209.1...0.210.0) (2025-12-03)
+
+
+### Features
+
+* implement swap_to_price method for PancakeswapV2State ([a29b49e](https://github.com/propeller-heads/tycho-simulation/commit/a29b49e11d733dcff459968d2054adf0cb9628fa))
+
+
+### Bug Fixes
+
+* adjust pancake v2 fee and fix tests ([bbf2dfd](https://github.com/propeller-heads/tycho-simulation/commit/bbf2dfd2eb2c9a6c4cb0fafb3c3197ba8e45ee44))
+
 ## [0.209.1](https://github.com/propeller-heads/tycho-simulation/compare/0.209.0...0.209.1) (2025-12-02)
 
 
