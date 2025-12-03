@@ -210,7 +210,7 @@ fn update_reth_liquidity(
             .flat_map(|call| call.balance_changes.iter())
             .filter(|bc| bc.address == RETH_ADDRESS)
             .filter_map(|bc| bc.new_value.as_ref())
-            .last();
+            .next_back();
 
         if let Some(reth_balance) = reth_balance {
             let attributes = vec![Attribute {
