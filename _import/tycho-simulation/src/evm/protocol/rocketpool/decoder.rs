@@ -63,13 +63,13 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketPoolState {
                 InvalidSnapshotError::MissingAttribute("deposits_enabled".to_string())
             })?;
 
-        let assign_deposits_enabled = snapshot
+        let deposit_assigning_enabled = snapshot
             .state
             .attributes
-            .get("assign_deposits_enabled")
+            .get("deposit_assigning_enabled")
             .map(|val| !U256::from_bytes(val).is_zero())
             .ok_or_else(|| {
-                InvalidSnapshotError::MissingAttribute("assign_deposits_enabled".to_string())
+                InvalidSnapshotError::MissingAttribute("deposit_assigning_enabled".to_string())
             })?;
 
         let deposit_fee = snapshot
@@ -174,7 +174,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketPoolState {
             deposits_enabled,
             minimum_deposit,
             maximum_deposit_pool_size,
-            assign_deposits_enabled,
+            deposit_assigning_enabled,
             deposit_assign_maximum,
             deposit_assign_socialised_maximum,
             queue_full_start,
@@ -234,7 +234,7 @@ mod tests {
                         Bytes::from(U256::from(10_000_000_000_000_000_000u128).to_be_bytes_vec()),
                     ), // 10 ETH in rETH contract
                     ("deposits_enabled".to_string(), Bytes::from(vec![0x01])),
-                    ("assign_deposits_enabled".to_string(), Bytes::from(vec![0x01])),
+                    ("deposit_assigning_enabled".to_string(), Bytes::from(vec![0x01])),
                     (
                         "deposit_fee".to_string(),
                         Bytes::from(U256::from(5_000_000_000_000_000u128).to_be_bytes_vec()),
@@ -307,7 +307,7 @@ mod tests {
         assert_eq!(state.deposit_contract_balance, U256::from(50_000_000_000_000_000_000u128));
         assert_eq!(state.reth_contract_liquidity, U256::from(10_000_000_000_000_000_000u128));
         assert!(state.deposits_enabled);
-        assert!(state.assign_deposits_enabled);
+        assert!(state.deposit_assigning_enabled);
         assert_eq!(state.minimum_deposit, U256::from(10_000_000_000_000_000u128));
         assert_eq!(state.maximum_deposit_pool_size, U256::from(5_000_000_000_000_000_000_000u128));
         assert_eq!(state.queue_full_start, U256::from(5u64));
@@ -337,7 +337,7 @@ mod tests {
                         Bytes::from(U256::from(10u64).to_be_bytes_vec()),
                     ),
                     ("deposits_enabled".to_string(), Bytes::from(vec![0x00])), // disabled
-                    ("assign_deposits_enabled".to_string(), Bytes::from(vec![0x00])), // disabled
+                    ("deposit_assigning_enabled".to_string(), Bytes::from(vec![0x00])), // disabled
                     ("deposit_fee".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
                     (
                         "minimum_deposit".to_string(),
@@ -396,7 +396,7 @@ mod tests {
         assert!(result.is_ok());
         let state = result.unwrap();
         assert!(!state.deposits_enabled);
-        assert!(!state.assign_deposits_enabled);
+        assert!(!state.deposit_assigning_enabled);
     }
 
     #[tokio::test]
@@ -406,7 +406,7 @@ mod tests {
     #[case::missing_deposit_contract_balance("deposit_contract_balance")]
     #[case::missing_reth_contract_liquidity("reth_contract_liquidity")]
     #[case::missing_deposits_enabled("deposits_enabled")]
-    #[case::missing_assign_deposits_enabled("assign_deposits_enabled")]
+    #[case::missing_deposit_assigning_enabled("deposit_assigning_enabled")]
     #[case::missing_deposit_fee("deposit_fee")]
     #[case::missing_minimum_deposit("minimum_deposit")]
     #[case::missing_maximum_deposit_pool_size("maximum_deposit_pool_size")]
@@ -433,7 +433,7 @@ mod tests {
                 Bytes::from(U256::from(10u64).to_be_bytes_vec()),
             ),
             ("deposits_enabled".to_string(), Bytes::from(vec![0x01])),
-            ("assign_deposits_enabled".to_string(), Bytes::from(vec![0x01])),
+            ("deposit_assigning_enabled".to_string(), Bytes::from(vec![0x01])),
             ("deposit_fee".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
             ("minimum_deposit".to_string(), Bytes::from(U256::from(0u64).to_be_bytes_vec())),
             (

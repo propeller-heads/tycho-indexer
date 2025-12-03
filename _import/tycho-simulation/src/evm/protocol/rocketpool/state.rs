@@ -46,8 +46,8 @@ pub struct RocketPoolState {
     pub deposits_enabled: bool,
     pub minimum_deposit: U256,
     pub maximum_deposit_pool_size: U256,
-    /// Whether assign deposits is enabled (allows using minipool queue capacity)
-    pub assign_deposits_enabled: bool,
+    /// Whether assigning deposits is enabled (allows using minipool queue capacity)
+    pub deposit_assigning_enabled: bool,
     /// Maximum number of minipool assignments per deposit
     pub deposit_assign_maximum: U256,
     /// The base minimum number of minipools to try to assign per deposit
@@ -74,7 +74,7 @@ impl RocketPoolState {
         deposits_enabled: bool,
         minimum_deposit: U256,
         maximum_deposit_pool_size: U256,
-        assign_deposits_enabled: bool,
+        deposit_assigning_enabled: bool,
         deposit_assign_maximum: U256,
         deposit_assign_socialised_maximum: U256,
         queue_full_start: U256,
@@ -93,7 +93,7 @@ impl RocketPoolState {
             deposits_enabled,
             minimum_deposit,
             maximum_deposit_pool_size,
-            assign_deposits_enabled,
+            deposit_assigning_enabled,
             deposit_assign_maximum,
             deposit_assign_socialised_maximum,
             queue_full_start,
@@ -147,7 +147,6 @@ impl RocketPoolState {
     }
 
     /// Calculates the total effective capacity of the minipool queues.
-    /// This is used to extend the deposit limit when assign_deposits_enabled is true.
     ///
     /// Formula from RocketMinipoolQueue.getEffectiveCapacity():
     /// full_queue_length * FULL_DEPOSIT_USER_AMOUNT
@@ -168,9 +167,9 @@ impl RocketPoolState {
     }
 
     /// Returns the maximum deposit capacity considering both the base pool size
-    /// and the minipool queue effective capacity (if assign_deposits_enabled).
+    /// and the minipool queue effective capacity (if deposit_assigning_enabled).
     fn get_max_deposit_capacity(&self) -> Result<U256, SimulationError> {
-        if self.assign_deposits_enabled {
+        if self.deposit_assigning_enabled {
             let effective_capacity = self.get_effective_capacity()?;
             safe_add_u256(self.maximum_deposit_pool_size, effective_capacity)
         } else {
@@ -221,7 +220,7 @@ impl RocketPoolState {
         &self,
         deposit_amount: U256,
     ) -> Result<(U256, U256), SimulationError> {
-        if !self.assign_deposits_enabled {
+        if !self.deposit_assigning_enabled {
             return Ok((U256::ZERO, U256::ZERO));
         }
 
@@ -425,10 +424,10 @@ impl ProtocolSim for RocketPoolState {
             .updated_attributes
             .get("deposits_enabled")
             .map_or(self.deposits_enabled, |val| !U256::from_bytes(val).is_zero());
-        self.assign_deposits_enabled = delta
+        self.deposit_assigning_enabled = delta
             .updated_attributes
-            .get("assign_deposits_enabled")
-            .map_or(self.assign_deposits_enabled, |val| !U256::from_bytes(val).is_zero());
+            .get("deposit_assigning_enabled")
+            .map_or(self.deposit_assigning_enabled, |val| !U256::from_bytes(val).is_zero());
         self.deposit_fee = delta
             .updated_attributes
             .get("deposit_fee")
@@ -540,7 +539,7 @@ mod tests {
             true,                                   // deposits_enabled
             U256::ZERO,                             // minimum_deposit
             U256::from(1000e18),                    // maximum_deposit_pool_size: 1000 ETH
-            false,                                  // assign_deposits_enabled
+            false,                                  // deposit_assigning_enabled
             U256::ZERO,                             // deposit_assign_maximum
             U256::ZERO,                             // deposit_assign_socialised_maximum
             U256::ZERO,                             // queue_full_start
@@ -645,7 +644,7 @@ mod tests {
     #[test]
     fn test_max_capacity_assign_enabled_empty_queue() {
         let mut state = create_state();
-        state.assign_deposits_enabled = true;
+        state.deposit_assigning_enabled = true;
         let max = state
             .get_max_deposit_capacity()
             .unwrap();
@@ -655,7 +654,7 @@ mod tests {
     #[test]
     fn test_max_capacity_assign_enabled_with_queue() {
         let mut state = create_state();
-        state.assign_deposits_enabled = true;
+        state.deposit_assigning_enabled = true;
         state.queue_variable_end = U256::from(10); // 310 ETH extra
         let max = state
             .get_max_deposit_capacity()
@@ -701,7 +700,7 @@ mod tests {
         let mut state = create_state();
 
         let attributes: HashMap<String, Bytes> = [
-            ("assign_deposits_enabled", U256::from(1u64)),
+            ("deposit_assigning_enabled", U256::from(1u64)),
             ("queue_variable_end", U256::from(5u64)),
             ("queue_full_end", U256::from(3u64)),
         ]
@@ -719,7 +718,7 @@ mod tests {
             .delta_transition(delta, &HashMap::new(), &Balances::default())
             .unwrap();
 
-        assert!(state.assign_deposits_enabled);
+        assert!(state.deposit_assigning_enabled);
         assert_eq!(state.queue_variable_end, U256::from(5u64));
         assert_eq!(state.queue_full_end, U256::from(3u64));
     }
@@ -757,7 +756,7 @@ mod tests {
             true,                                                      // deposits_enabled
             U256::from_str_radix("2386f26fc10000", 16).unwrap(),       // minimum_deposit
             U256::from_str_radix("3cfc82e37e9a7400000", 16).unwrap(),  // maximum_deposit_pool_size
-            true,                                                      // assign_deposits_enabled
+            true,                                                      // deposit_assigning_enabled
             U256::from_str_radix("5a", 16).unwrap(),                   // deposit_assign_maximum
             U256::from_str_radix("2", 16).unwrap(), // deposit_assign_socialised_maximum
             U256::from_str_radix("1bf", 16).unwrap(), // queue_full_start (empty)
@@ -844,7 +843,7 @@ mod tests {
     fn test_limits_with_extended_capacity() {
         let mut state = create_state();
         state.maximum_deposit_pool_size = U256::from(100e18);
-        state.assign_deposits_enabled = true;
+        state.deposit_assigning_enabled = true;
         state.queue_variable_end = U256::from(2); // 62 ETH extra
 
         let (max_sell, _) = state
@@ -890,7 +889,7 @@ mod tests {
         let mut state = create_state();
         state.deposit_contract_balance = U256::from(990e18);
         state.maximum_deposit_pool_size = U256::from(1000e18);
-        state.assign_deposits_enabled = true;
+        state.deposit_assigning_enabled = true;
         state.queue_variable_end = U256::from(1); // 31 ETH extra
 
         // Deposit 20 ETH: 990 + 20 = 1010 > 1000 base, but <= 1031 extended
@@ -982,7 +981,7 @@ mod tests {
         let mut state = create_state();
         state.deposit_contract_balance = U256::from(990e18);
         state.maximum_deposit_pool_size = U256::from(1000e18);
-        state.assign_deposits_enabled = false;
+        state.deposit_assigning_enabled = false;
         state.queue_variable_end = U256::from(10); // Would add 310 ETH if enabled
 
         // Deposit 20 ETH: 990 + 20 = 1010 > 1000 (queue ignored)
@@ -999,7 +998,7 @@ mod tests {
         let mut state = create_state();
         state.deposit_contract_balance = U256::from(990e18);
         state.maximum_deposit_pool_size = U256::from(1000e18);
-        state.assign_deposits_enabled = true;
+        state.deposit_assigning_enabled = true;
         state.queue_variable_end = U256::from(1); // 31 ETH extra, max = 1031
 
         // Deposit 50 ETH: 990 + 50 = 1040 > 1031
@@ -1122,7 +1121,7 @@ mod tests {
     fn test_assign_deposits_dequeues_minipools() {
         let mut state = create_state();
         state.deposit_contract_balance = U256::from(100e18);
-        state.assign_deposits_enabled = true;
+        state.deposit_assigning_enabled = true;
         state.deposit_assign_maximum = U256::from(10u64);
         state.deposit_assign_socialised_maximum = U256::from(2u64);
         state.queue_variable_end = U256::from(5); // 5 minipools in queue
@@ -1156,7 +1155,7 @@ mod tests {
     fn test_assign_deposits_capped_by_queue_length() {
         let mut state = create_state();
         state.deposit_contract_balance = U256::from(100e18);
-        state.assign_deposits_enabled = true;
+        state.deposit_assigning_enabled = true;
         state.deposit_assign_maximum = U256::from(10u64);
         state.deposit_assign_socialised_maximum = U256::from(5u64);
         state.queue_variable_end = U256::from(2); // Only 2 minipools in queue
@@ -1187,7 +1186,7 @@ mod tests {
     fn test_assign_deposits_capped_by_max_assignments() {
         let mut state = create_state();
         state.deposit_contract_balance = U256::from(100e18);
-        state.assign_deposits_enabled = true;
+        state.deposit_assigning_enabled = true;
         state.deposit_assign_maximum = U256::from(1u64); // Only 1 assignment allowed
         state.deposit_assign_socialised_maximum = U256::from(5u64);
         state.queue_variable_end = U256::from(10);
@@ -1218,7 +1217,7 @@ mod tests {
     fn test_assign_deposits_capped_by_total_eth() {
         let mut state = create_state();
         state.deposit_contract_balance = U256::from(10e18); // Low liquidity
-        state.assign_deposits_enabled = true;
+        state.deposit_assigning_enabled = true;
         state.deposit_assign_maximum = U256::from(10u64);
         state.deposit_assign_socialised_maximum = U256::from(5u64);
         state.queue_variable_end = U256::from(10);
@@ -1249,7 +1248,7 @@ mod tests {
     #[test]
     fn test_assign_deposits_legacy_queue_error() {
         let mut state = create_state();
-        state.assign_deposits_enabled = true;
+        state.deposit_assigning_enabled = true;
         state.queue_full_end = U256::from(1); // Legacy queue has items
 
         let res = state.get_amount_out(
@@ -1264,7 +1263,7 @@ mod tests {
     #[test]
     fn test_assign_deposits_empty_queue_no_change() {
         let mut state = create_state();
-        state.assign_deposits_enabled = true;
+        state.deposit_assigning_enabled = true;
         state.deposit_assign_maximum = U256::from(10u64);
         state.deposit_assign_socialised_maximum = U256::from(2u64);
         // queue_variable_end = 0, so queue is empty
@@ -1306,7 +1305,7 @@ mod tests {
             true,                                                      // deposits_enabled
             U256::from_str_radix("2386f26fc10000", 16).unwrap(),       // minimum_deposit
             U256::from_str_radix("3cfc82e37e9a7400000", 16).unwrap(),  // maximum_deposit_pool_size
-            true,                                                      // assign_deposits_enabled
+            true,                                                      // deposit_assigning_enabled
             U256::from_str_radix("5a", 16).unwrap(),                   // deposit_assign_maximum
             U256::from_str_radix("2", 16).unwrap(), // deposit_assign_socialised_maximum
             U256::from_str_radix("1bf", 16).unwrap(), // queue_full_start (empty: start == end)
@@ -1349,7 +1348,7 @@ mod tests {
         assert_eq!(new_state.deposits_enabled, state.deposits_enabled);
         assert_eq!(new_state.minimum_deposit, state.minimum_deposit);
         assert_eq!(new_state.maximum_deposit_pool_size, state.maximum_deposit_pool_size);
-        assert_eq!(new_state.assign_deposits_enabled, state.assign_deposits_enabled);
+        assert_eq!(new_state.deposit_assigning_enabled, state.deposit_assigning_enabled);
         assert_eq!(new_state.deposit_assign_maximum, state.deposit_assign_maximum);
         assert_eq!(
             new_state.deposit_assign_socialised_maximum,
@@ -1376,7 +1375,7 @@ mod tests {
             true,                                                      // deposits_enabled
             U256::from_str_radix("2386f26fc10000", 16).unwrap(),       // minimum_deposit
             U256::from_str_radix("3cfc82e37e9a7400000", 16).unwrap(),  // maximum_deposit_pool_size
-            true,                                                      // assign_deposits_enabled
+            true,                                                      // deposit_assigning_enabled
             U256::from_str_radix("5a", 16).unwrap(),                   // deposit_assign_maximum
             U256::from_str_radix("2", 16).unwrap(), // deposit_assign_socialised_maximum
             U256::from_str_radix("1bf", 16).unwrap(), // queue_full_start (empty)
