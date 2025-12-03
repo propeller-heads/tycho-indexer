@@ -5,14 +5,14 @@ protocol_type_names:
 skip_balance_check: true # Rocket Deposit Pool components do not hold user funds directly
 tests:
   - name: test_pool_creation
-    start_block: 17002370 # RocketDepositPool_V1_2 deployed
-    stop_block: 17002380
+    start_block: 17069898 # Rocket Deposit Pool was upgraded to V1.2
+    stop_block: 17069999
     expected_components:
       - id: "0xdd3f50f8a6cafbe9b31a427582963f465e745af8"
         tokens:
           - "0xae78736Cd615f374D3085123A210448E74Fc6393"
           - "0x0000000000000000000000000000000000000000"
         static_attributes: { }
-        creation_tx: "0x5e295b96fc254f11b639409558a7e3d3ca2c219286427302cb8bdeeb014f9be9"
+        creation_tx: "0x4c876667e3404c9934a1bb887d4d794fd7deb2b4f56762ae4a0ba633236d666b" # First tx at block 17069898
         skip_simulation: false
         skip_execution: true # Currently we do not have this implemented

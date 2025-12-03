@@ -1,6 +1,4 @@
-use crate::constants::{
-    ETH_ADDRESS, RETH_ADDRESS, ROCKET_DEPOSIT_POOL_ADDRESS_V1_2, ROCKET_POOL_COMPONENT_ID,
-};
+use crate::constants::{ETH_ADDRESS, RETH_ADDRESS, ROCKET_POOL_COMPONENT_ID};
 use anyhow::Result;
 use substreams_ethereum::pb::eth;
 use tycho_substreams::models::{
@@ -21,14 +19,10 @@ fn map_protocol_components(
         return Ok(BlockTransactionProtocolComponents { tx_components: vec![] });
     }
 
+    // We assume that the first transaction in the block is the Rocket Deposit Pool creation
     let tx = block
         .transactions()
-        .find(|tx| {
-            tx.calls
-                .iter()
-                .flat_map(|call| &call.account_creations)
-                .any(|account| account.account == ROCKET_DEPOSIT_POOL_ADDRESS_V1_2)
-        })
+        .next()
         .ok_or(anyhow::anyhow!("No transaction found for Rocket Deposit Pool"))?;
 
     let component = ProtocolComponent::new(ROCKET_POOL_COMPONENT_ID)
