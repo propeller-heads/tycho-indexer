@@ -209,25 +209,18 @@ impl RocketPoolState {
 
         // Calculate assignments
         let scaling_count = deposit_amount / variable_deposit;
-        let total_eth_count = self.deposit_contract_balance / variable_deposit;
-        let mut assignments = self.deposit_assign_socialised_maximum + scaling_count;
+        let desired_assignments = self.deposit_assign_socialised_maximum + scaling_count;
 
-        // Cap at total ETH available
-        if assignments > total_eth_count {
-            assignments = total_eth_count;
-        }
-
-        // Cap at max assignments
-        if assignments > self.deposit_assign_maximum {
-            assignments = self.deposit_assign_maximum;
-        }
-
-        // Cap at available queue length
-        let variable_queue_length =
+        let eth_cap_assignments = self.deposit_contract_balance / variable_deposit;
+        let settings_cap_assignments = self.deposit_assign_maximum;
+        let queue_cap_assignments =
             Self::get_queue_length(self.queue_variable_start, self.queue_variable_end);
-        if assignments > variable_queue_length {
-            assignments = variable_queue_length;
-        }
+
+        // Capped by available balance, max assignment setting and available queue capacity
+        let assignments = desired_assignments
+            .min(eth_cap_assignments)
+            .min(settings_cap_assignments)
+            .min(queue_cap_assignments);
 
         let eth_assigned = safe_mul_u256(assignments, variable_deposit)?;
 
