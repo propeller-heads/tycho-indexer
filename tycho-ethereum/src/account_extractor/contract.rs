@@ -448,11 +448,11 @@ impl EVMBatchAccountExtractor {
 
                     // Add delay between batches to respect rate limits (250 requests/second)
                     // Calculate delay based on batch size to stay under the limit
-                    // Rate limit: 250 req/s, so delay = 1000ms / (250 / batch_size) = 1000 * batch_size / 250
-                    // Account for parallel storage fetches:
-                    // Using 2.5x multiplier to be safe: delay = 2500 * batch_size / 250
+                    // Rate limit: 500 req/s, so delay = 1000ms / (500 / batch_size) = 1000 *
+                    // batch_size / 500 Account for parallel storage fetches:
+                    // Using 2x multiplier to be safe: delay = 2000 * batch_size / 500
                     if batch_idx + 1 < total_batches {
-                        let delay_ms = (2000 * max_batch_size) / 250;
+                        let delay_ms = (2000 * max_batch_size) / 500;
                         tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms as u64))
                             .await;
                     }
