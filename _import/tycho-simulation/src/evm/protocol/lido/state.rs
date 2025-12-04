@@ -478,12 +478,11 @@ mod tests {
     use super::*;
 
     fn lido_state_steth() -> LidoState {
-        let bytes = hex::decode("00000000000000000000000000000000000000000005dbe7785e70cc10d03d36")
+        let bytes = hex::decode("00000000000000000000000000000000000000000005dc41ec2e3ba19cf3ea6d")
             .unwrap();
         let total_shares_start = BigUint::from_bytes_be(&bytes);
 
-        let bytes = hex::decode("0000000000000000000000000000000000000000000000a34daa0959f0fd43c7")
-            .unwrap();
+        let bytes = hex::decode("072409d75ebf50c5534125").unwrap();
         let total_pooled_eth_start = BigUint::from_bytes_be(&bytes);
 
         let bytes = hex::decode("1fc3842bd1f071c00000").unwrap();
@@ -504,15 +503,14 @@ mod tests {
     }
 
     fn lido_state_wsteth() -> LidoState {
-        let bytes = hex::decode("00000000000000000000000000000000000000000005dbe7785e70cc10d03d36")
+        let bytes = hex::decode("00000000000000000000000000000000000000000005dc41ec2e3ba19cf3ea6d")
             .unwrap();
         let total_shares_start = BigUint::from_bytes_be(&bytes);
 
-        let bytes = hex::decode("0000000000000000000000000000000000000000000000a34daa0959f0fd43c7")
-            .unwrap();
+        let bytes = hex::decode("072409d75ebf50c5534125").unwrap();
         let total_pooled_eth_start = BigUint::from_bytes_be(&bytes);
 
-        let bytes = hex::decode("00000000000000000000000000000000000000000002bb67ec3aae08e0719f23")
+        let bytes = hex::decode("00000000000000000000000000000000000000000002be110f2a220611513da6")
             .unwrap();
         let total_wsteth_start = BigUint::from_bytes_be(&bytes);
 
@@ -582,27 +580,33 @@ mod tests {
     // this is failing, coz the the total pooled eth is not an actual value, it is only one part of
     // that value; so when that is correct, the test should be passing
     fn test_lido_get_amount_out() {
-        // eth_before = 0x0000000000000000000000000000000000000000000000a34daa0959f0fd43c7
-        // eth_after = 0x0000000000000000000000000000000000000000000000a35b8ac00d986143c7
+        // staking_status 0x4c696d69746564
+        // staking_limit 0x1fc3842bd1f071c00000
 
-        // shares_before = 0x00000000000000000000000000000000000000000005dbe7785e70cc10d03d36
-        // shares_after = 0x00000000000000000000000000000000000000000005dbe783bca067a8ff38f4
-
-        // tx = 0xbc7fe652e6b4f10c1410cc501a198a3862ab517a32a377c2beda3c665426a5f4
+        //new data:
+        // total pooled eth: 0x072409d75ebf50c5534125, 8632667470434094430765349
+        // total shares: 0x00000000000000000000000000000000000000000005dc41ec2e3ba19cf3ea6d
+        // tx 0x1953b525c8640c2709e984ebc28bb1f2180dd72759bb2aac7413e94b602b0d53
+        // total_shares_after: 0x00000000000000000000000000000000000000000005dc41ec487a31b7865d5e
+        // total pooled eth after: 0x072409d77eb9c55db21616
         let token_eth = token_eth();
         let token_st_eth = token_st_eth();
         let state = lido_state_steth();
 
-        let amount_in = BigUint::from_str("1000000000000000000").unwrap();
+        let amount_in = BigUint::from_str("0009001102957532401").unwrap();
         let res = state
             .get_amount_out(amount_in.clone(), &token_eth, &token_st_eth)
             .unwrap();
 
-        let exp = BigUint::from_str("999999999999999998").unwrap();
-        let total_shares_after = BigUint::from_str("7083098048341106749290740").unwrap();
-        let total_pooled_eth_after = BigUint::from_str("3013415579783518045127").unwrap();
-
+        let exp = BigUint::from_str("9001102957532401").unwrap(); // diff in total pooled eth; rounding error
         assert_eq!(res.amount, exp);
+
+        let total_shares_after = from_hex_str_to_biguint(
+            "00000000000000000000000000000000000000000005dc41ec487a31b7865d5e",
+        );
+
+        let total_pooled_eth_after = from_hex_str_to_biguint("072409d77eb9c55db21616");
+
         let new_state = res
             .new_state
             .as_any()
@@ -613,64 +617,88 @@ mod tests {
     }
 
     #[test]
-    // this is failing, coz the the total pooled eth is not an actual value, it is only one part of
-    // that value; so when that is correct, the test should be passing
     fn test_lido_wrapping_get_amount_out() {
-        // wsteth_before = 0x00000000000000000000000000000000000000000002bb67ec3aae08e0719f23
-        // wsteth_after = 0x00000000000000000000000000000000000000000002bb67fd446cc1e48b099a
-        // tx = 0x3eaf26130aaffa659201fa18a3141916798ac2d2cf58f89e7d658c69eb3a0061
+        // total pooled eth: 072409d88cbb5e48a01616
+        // total shares: 00000000000000000000000000000000000000000005dc41ed2611c5fd46f034
+        // tx 0xce9418dd0e74cdf738362bee9428da73c047049c34f28ff8a18b19f047c27c53
+        // ws eth before 00000000000000000000000000000000000000000002be10e0f61dc56f6f85dc
+        // ws eth after 00000000000000000000000000000000000000000002be11ccda98eef241c759
+
         let token_st_eth = token_st_eth();
         let token_wst_eth = token_wst_eth();
-        let state = lido_state_wsteth();
+        let mut state = lido_state_wsteth();
 
-        let amount_in = BigUint::from_str("149878566479312595").unwrap();
+        let total_wsteth_start = from_hex_str_to_biguint(
+            "00000000000000000000000000000000000000000002be10e0f61dc56f6f85dc",
+        );
+        state.total_wrapped_st_eth = Some(total_wsteth_start);
+
+        let total_pooled_eth = from_hex_str_to_biguint("072409d88cbb5e48a01616");
+        state.total_pooled_eth = total_pooled_eth;
+
+        let total_shares = from_hex_str_to_biguint(
+            "00000000000000000000000000000000000000000005dc41ed2611c5fd46f034",
+        );
+        state.total_shares = total_shares;
+
+        let amount_in = BigUint::from_str("20711588703656141053").unwrap();
         let res = state
             .get_amount_out(amount_in.clone(), &token_st_eth, &token_wst_eth)
             .unwrap();
-        let exp = BigUint::from_str("3302852435996644119087514").unwrap();
+        let exp = BigUint::from_str("16997846311821787517").unwrap();
         assert_eq!(res.amount, exp);
 
-        let total_wsteth_after = BigUint::from_str("3302852435996644119087514").unwrap();
+        let total_wsteth_after = from_hex_str_to_biguint(
+            "00000000000000000000000000000000000000000002be11ccda98eef241c759",
+        );
         let new_state = res
             .new_state
             .as_any()
             .downcast_ref::<LidoState>()
             .unwrap();
         assert_eq!(new_state.total_wrapped_st_eth, Some(total_wsteth_after));
+
+        assert!(state
+            .get_amount_out(BigUint::zero(), &token_st_eth, &token_wst_eth)
+            .is_err());
     }
 
     #[test]
-    // this is failing, coz the the total pooled eth is not an actual value, it is only one part of
-    // that value; so when that is correct, the test should be passing
+
     fn test_lido_unwrapping_get_amount_out() {
-        // wsteth_before = 0x00000000000000000000000000000000000000000002ba80bcaa96c096840abe
-        // wsteth_after = 0x00000000000000000000000000000000000000000002ba80bbfb384494e916ce
-        // tx = 0x18fb38d24485d98fbc08968a124b6db5276c9ecf09a93de83ad96ce61bd56c6c
+        //new data
+        // total pooled eth: 0x072409d75ebf50c5534125, 8632667470434094430765349
+        // total shares: 0x00000000000000000000000000000000000000000005dc41ec2e3ba19cf3ea6d
+        // tx 0xa49316d76b7cf2ba9f81c7b84868faaa6306eef5a15f194f55b3675bce89367a
+        // ws eth after 0x00000000000000000000000000000000000000000002be10e0f61dc56f6f85dc
+        // ws eth before 0x00000000000000000000000000000000000000000002be110f2a220611513da6
+
         let token_st_eth = token_st_eth();
         let token_wst_eth = token_wst_eth();
         let mut state = lido_state_wsteth();
 
-        let bytes = hex::decode("00000000000000000000000000000000000000000002ba80bcaa96c096840abe")
-            .unwrap();
-        let total_wsteth_start = BigUint::from_bytes_be(&bytes);
+        let total_wsteth_start = from_hex_str_to_biguint(
+            "00000000000000000000000000000000000000000002be110f2a220611513da6",
+        );
         state.total_wrapped_st_eth = Some(total_wsteth_start);
 
-        let amount_in = BigUint::from_str("0049362007620252656").unwrap();
+        let amount_in = BigUint::from_str("3329290700173981642").unwrap();
         let res = state
-            .get_amount_out(amount_in.clone(), &token_st_eth, &token_wst_eth)
+            .get_amount_out(amount_in.clone(), &token_wst_eth, &token_st_eth)
             .unwrap();
-        let exp = BigUint::from_str("0060239130056911017").unwrap();
+        let exp = BigUint::from_str("4056684499432944068").unwrap();
         assert_eq!(res.amount, exp);
 
-        let bytes = hex::decode("00000000000000000000000000000000000000000002ba80bbfb384494e916ce")
-            .unwrap();
-        let total_wsteth_after = BigUint::from_bytes_be(&bytes);
+        let total_wsteth_after = from_hex_str_to_biguint(
+            "00000000000000000000000000000000000000000002be10e0f61dc56f6f85dc",
+        );
 
         let new_state = res
             .new_state
             .as_any()
             .downcast_ref::<LidoState>()
             .unwrap();
+
         assert_eq!(new_state.total_wrapped_st_eth, Some(total_wsteth_after));
     }
 
@@ -695,12 +723,12 @@ mod tests {
         let res = wst_state
             .spot_price(&token_st_eth, &token_wst_eth)
             .unwrap();
-        assert_eq!(res, 2351.0);
+        assert_eq!(res, 0.8206925386086495);
 
         let res = wst_state
             .spot_price(&token_wst_eth, &token_st_eth)
             .unwrap();
-        assert_eq!(res, 0.0);
+        assert_eq!(res, 1.2184831139019945);
 
         let res = wst_state.spot_price(&token_eth, &token_st_eth);
         assert!(res.is_err());
