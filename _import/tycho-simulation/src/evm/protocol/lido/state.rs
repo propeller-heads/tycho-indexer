@@ -86,14 +86,11 @@ impl LidoState {
                 total_wrapped_st_eth: None,
                 id: self.id.clone(),
                 native_address: self.native_address.clone(),
-                stake_limits_state: self.stake_limits_state.clone(), /* this has to
-                                                                      * be
-                                                                      * updated I think */
+                stake_limits_state: self.stake_limits_state.clone(),
             }),
         }
     }
 
-    // amount in in eth, not in stETH
     fn wrap_steth(&self, amount_in: BigUint) -> Result<GetAmountOutResult, SimulationError> {
         if amount_in.is_zero() {
             return Err(SimulationError::InvalidInput("Cannot wrap 0 stETH ".to_string(), None))
@@ -119,7 +116,6 @@ impl LidoState {
         })
     }
 
-    // amount in is shares
     fn unwrap_steth(&self, amount_in: BigUint) -> Result<GetAmountOutResult, SimulationError> {
         if amount_in.is_zero() {
             return Err(SimulationError::InvalidInput("Cannot unwrap 0 wstETH ".to_string(), None))
@@ -304,10 +300,6 @@ impl ProtocolSim for LidoState {
         // there is no fee when swapping
         0.0
     }
-
-    // price_stETH_per_wstETH = totalPooledEther / totalShares
-    // price_ETH_per_wstETH   = totalPooledEther / totalShares
-    // price_stETH_per_share = totalPooledEther / totalShares
 
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
         match self.pool_type {
@@ -578,10 +570,6 @@ mod tests {
     // this is failing, coz the the total pooled eth is not an actual value, it is only one part of
     // that value; so when that is correct, the test should be passing
     fn test_lido_get_amount_out() {
-        // staking_status 0x4c696d69746564
-        // staking_limit 0x1fc3842bd1f071c00000
-
-        //new data:
         // total pooled eth: 0x072409d75ebf50c5534125, 8632667470434094430765349
         // total shares: 0x00000000000000000000000000000000000000000005dc41ec2e3ba19cf3ea6d
         // tx 0x1953b525c8640c2709e984ebc28bb1f2180dd72759bb2aac7413e94b602b0d53

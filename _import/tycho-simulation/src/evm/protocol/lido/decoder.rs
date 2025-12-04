@@ -18,8 +18,7 @@ use crate::{
 impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoState {
     type Error = InvalidSnapshotError;
 
-    /// Decodes a `ComponentWithState` into a `UniswapV2State`. Errors with a `InvalidSnapshotError`
-    /// if either reserve0 or reserve1 attributes are missing.
+    /// Decodes a `ComponentWithState` into a `LidoState`. Errors with a `InvalidSnapshotError`
     async fn try_from_with_header(
         snapshot: ComponentWithState,
         _block: BlockHeader,
@@ -27,7 +26,6 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoState {
         _all_tokens: &HashMap<Bytes, Token>,
         _decoder_context: &DecoderContext,
     ) -> Result<Self, Self::Error> {
-        dbg!();
         let (pool_type, id) = match snapshot.component.id.as_str() {
             ST_ETH_ADDRESS_PROXY => (LidoPoolType::StEth, ST_ETH_ADDRESS_PROXY),
             WST_ETH_ADDRESS => (LidoPoolType::WStEth, WST_ETH_ADDRESS),
@@ -38,7 +36,6 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoState {
                 )))
             }
         };
-        dbg!();
 
         // let total_shares = if pool_type == LidoPoolType::StEth {
         //     snapshot
@@ -63,8 +60,6 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoState {
                 "Total shares field is missing".to_owned(),
             ))?;
 
-        dbg!();
-
         // let total_pooled_eth = if pool_type == LidoPoolType::StEth {
         //     snapshot
         //         .state
@@ -88,7 +83,6 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoState {
                 "Total pooled eth field is missing".to_owned(),
             ))?;
 
-        dbg!();
         let (staking_status_parsed, staking_limit) = if pool_type == LidoPoolType::StEth {
             let staking_status = snapshot
                 .state
@@ -97,10 +91,9 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoState {
                 .ok_or(InvalidSnapshotError::MissingAttribute(
                     "Staking_status field is missing".to_owned(),
                 ))?;
-            dbg!();
+
             let staking_status_parsed =
                 if let Ok(status_as_str) = std::str::from_utf8(staking_status) {
-                    dbg!(&status_as_str);
                     match status_as_str {
                         "Limited" => StakingStatus::Limited,
                         "Paused" => StakingStatus::Paused,
@@ -112,12 +105,11 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoState {
                         }
                     }
                 } else {
-                    dbg!();
                     return Err(InvalidSnapshotError::ValueError(
                         "status_as_str cannot be parsed".to_owned(),
                     ))
                 };
-            dbg!();
+
             let staking_limit = snapshot
                 .state
                 .attributes
@@ -173,7 +165,6 @@ mod tests {
         Bytes,
     };
 
-    // use super::super::state::UniswapV2State;
     use crate::{
         evm::protocol::lido::state::{
             LidoPoolType, LidoState, StakeLimitState, ETH_ADDRESS, ST_ETH_ADDRESS_PROXY,
@@ -257,10 +248,10 @@ mod tests {
 
     #[tokio::test]
     #[rstest]
-    #[case::missing_reserve0("total_shares")]
-    #[case::missing_reserve1("total_pooled_eth")]
-    #[case::missing_reserve0("staking_status")]
-    #[case::missing_reserve1("staking_limit")]
+    #[case::missing_total_shares("total_shares")]
+    #[case::missing_total_pooled_eth("total_pooled_eth")]
+    #[case::missing_staking_status("staking_status")]
+    #[case::missing_staking_limit("staking_limit")]
     async fn test_lido_try_from_missing_attribute(#[case] missing_attribute: &str) {
         let pc = ProtocolComponent {
             id: ST_ETH_ADDRESS_PROXY.to_string(),
@@ -371,10 +362,9 @@ mod tests {
 
     #[tokio::test]
     #[rstest]
-    #[case::missing_reserve0("total_shares")]
-    #[case::missing_reserve1("total_pooled_eth")]
-    #[case::missing_reserve0("total_wstETH")]
-
+    #[case::missing_total_shares("total_shares")]
+    #[case::missing_total_pooled_eth("total_pooled_eth")]
+    #[case::missing_total_wst_eth("total_wstETH")]
     async fn test_lido_wst_try_from_missing_attribute(#[case] missing_attribute: &str) {
         let pc = ProtocolComponent {
             id: WST_ETH_ADDRESS.to_string(),
