@@ -37,21 +37,6 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoState {
             }
         };
 
-        // let total_shares = if pool_type == LidoPoolType::StEth {
-        //     snapshot
-        //         .state
-        //         .attributes
-        //         .get("total_shares")
-        //         .ok_or(InvalidSnapshotError::MissingAttribute(
-        //             "Total shares field is missing".to_owned(),
-        //         ))?
-        // } else {
-        //     return Err(InvalidSnapshotError::ValueError(format!(
-        //         "Unknown total_shares: {:?}",
-        //         snapshot.component.id
-        //     )))
-        // };
-
         let total_shares = snapshot
             .state
             .attributes
