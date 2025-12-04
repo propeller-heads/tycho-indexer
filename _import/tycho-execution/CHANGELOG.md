@@ -1,3 +1,10 @@
+## [0.139.1](https://github.com/propeller-heads/tycho-execution/compare/0.139.0...0.139.1) (2025-12-04)
+
+
+### Bug Fixes
+
+* **angstrom:** Block in place getting attestations ([b5aa6f4](https://github.com/propeller-heads/tycho-execution/commit/b5aa6f4f587be55e9730745527c1944676a78ef4))
+
 ## [0.139.0](https://github.com/propeller-heads/tycho-execution/compare/0.138.0...0.139.0) (2025-12-04)
 
 
