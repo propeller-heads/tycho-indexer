@@ -402,6 +402,46 @@ pub fn calculate_executor_storage_slot(key: Address) -> FixedBytes<32> {
     keccak256(buf)
 }
 
+/// Sets up Angstrom-specific storage overwrites for simulation.
+///
+/// This function creates storage overwrites specifically for Angstrom hooks to ensure
+/// proper simulation behavior. It sets the _lastBlockUpdated storage parameter to
+/// unlock the pool in the simulator.
+///
+/// # Arguments
+/// * `angstrom_address` - The address of the Angstrom hook contract
+///   (0x0000000AA8c2Fb9b232F78D2B286dC2aE53BfAD4)
+/// * `current_block_number` - The current block number to set as _lastBlockUpdated
+///
+/// # Returns
+/// A HashMap containing account overwrites for the Angstrom contract.
+/// The override includes:
+///   - Storage slot 3, offset 0, bytes 8: Sets _lastBlockUpdated to current block number
+pub fn setup_angstrom_overwrites(
+    angstrom_address: Address,
+    current_block_number: u64,
+) -> AddressHashMap<AccountOverride> {
+    let mut overwrites = AddressHashMap::default();
+
+    // Angstrom storage slot 3, offset 0, 8 bytes for _lastBlockUpdated
+    let storage_slot = alloy::primitives::B256::from([
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 3,
+    ]);
+
+    // Set the current block number in the first 8 bytes (big-endian)
+    let mut storage_value = [0u8; 32];
+    storage_value[24..32].copy_from_slice(&current_block_number.to_be_bytes());
+    let storage_value_b256 = alloy::primitives::B256::from(storage_value);
+
+    overwrites.insert(
+        angstrom_address,
+        AccountOverride::default().with_state_diff(vec![(storage_slot, storage_value_b256)]),
+    );
+
+    overwrites
+}
+
 /// Sets up state overwrites for the Tycho router and its associated executor.
 ///
 /// This function prepares the router for execution simulation by applying bytecode overwrites
