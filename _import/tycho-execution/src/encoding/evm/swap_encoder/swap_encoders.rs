@@ -2438,7 +2438,7 @@ mod tests {
                     "14Cf6D2Fe3E1B326114b07d22A6F6bb59e346c67",
                     // receiver
                     "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
-                    // transfer true
+                    // transfer type
                     "01",
                 ))
                 .to_lowercase()
