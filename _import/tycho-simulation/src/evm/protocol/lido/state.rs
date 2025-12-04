@@ -146,8 +146,8 @@ impl LidoState {
 
     fn st_eth_limits(
         &self,
-        buy_token: Bytes,
         sell_token: Bytes,
+        buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
         if buy_token == Bytes::from(ST_ETH_ADDRESS_PROXY) && sell_token == Bytes::from(ETH_ADDRESS)
         {
@@ -170,8 +170,8 @@ impl LidoState {
 
     fn wst_eth_limits(
         &self,
-        buy_token: Bytes,
         sell_token: Bytes,
+        buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
         if buy_token == Bytes::from(ST_ETH_ADDRESS_PROXY) &&
             sell_token == Bytes::from(WST_ETH_ADDRESS)
@@ -391,16 +391,16 @@ impl ProtocolSim for LidoState {
 
     fn get_limits(
         &self,
-        buy_token: Bytes,
         sell_token: Bytes,
+        buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
         // If it's the stETH type:
         //   - and the buy token is ETH, the limits are 0
         //   - sell token is ETH: use the StakeLimitState
         // If it's wstETH: rely on the total supply (I think)
         match self.pool_type {
-            LidoPoolType::StEth => self.st_eth_limits(buy_token, sell_token),
-            LidoPoolType::WStEth => self.wst_eth_limits(buy_token, sell_token),
+            LidoPoolType::StEth => self.st_eth_limits(sell_token, buy_token),
+            LidoPoolType::WStEth => self.wst_eth_limits(sell_token, buy_token),
         }
     }
 
@@ -732,46 +732,47 @@ mod tests {
         let res = st_state
             .get_limits(token_eth.clone(), token_st_eth.clone())
             .unwrap();
-        let exp = (BigUint::zero(), BigUint::zero());
+        let exp = (
+            st_state
+                .stake_limits_state
+                .staking_limit
+                .clone(),
+            st_state
+                .stake_limits_state
+                .staking_limit
+                .clone(),
+        );
         assert_eq!(res, exp);
 
         let res = st_state
             .get_limits(token_st_eth.clone(), token_eth.clone())
             .unwrap();
-        let exp = (
-            st_state
-                .stake_limits_state
-                .staking_limit
-                .clone(),
-            st_state
-                .stake_limits_state
-                .staking_limit
-                .clone(),
-        );
+        let exp = (BigUint::zero(), BigUint::zero());
         assert_eq!(res, exp);
 
         let res = st_state.get_limits(token_wst_eth.clone(), token_eth.clone());
         assert!(res.is_err());
 
-        // add correct vals here
-
         let res = wst_state
             .get_limits(token_st_eth.clone(), token_wst_eth.clone())
             .unwrap();
-        let exp = (
-            BigUint::from_str("3780246020922010364714515").unwrap(),
-            BigUint::from_str("3780246020922010364714515").unwrap(),
-        );
+        let allowed_to_wrap = wst_state.total_shares.clone() -
+            wst_state
+                .total_wrapped_st_eth
+                .clone()
+                .unwrap();
+        let exp = (allowed_to_wrap.clone(), allowed_to_wrap);
 
         assert_eq!(res, exp);
 
         let res = wst_state
-            .get_limits(token_st_eth.clone(), token_wst_eth.clone())
+            .get_limits(token_wst_eth.clone(), token_st_eth.clone())
             .unwrap();
-        let exp = (
-            BigUint::from_str("3302851208274568836914979").unwrap(),
-            BigUint::from_str("3302851208274568836914979").unwrap(),
-        );
+        let total_wrapped = wst_state
+            .total_wrapped_st_eth
+            .clone()
+            .unwrap();
+        let exp = (total_wrapped.clone(), total_wrapped);
 
         assert_eq!(res, exp);
 
