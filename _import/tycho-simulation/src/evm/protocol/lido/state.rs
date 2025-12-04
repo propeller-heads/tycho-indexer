@@ -483,15 +483,11 @@ mod tests {
     }
 
     fn lido_state_steth() -> LidoState {
-        let bytes = hex::decode("00000000000000000000000000000000000000000005dc41ec2e3ba19cf3ea6d")
-            .unwrap();
-        let total_shares_start = BigUint::from_bytes_be(&bytes);
-
-        let bytes = hex::decode("072409d75ebf50c5534125").unwrap();
-        let total_pooled_eth_start = BigUint::from_bytes_be(&bytes);
-
-        let bytes = hex::decode("1fc3842bd1f071c00000").unwrap();
-        let staking_limit = BigUint::from_bytes_be(&bytes);
+        let total_shares_start = from_hex_str_to_biguint(
+            "00000000000000000000000000000000000000000005dc41ec2e3ba19cf3ea6d",
+        );
+        let total_pooled_eth_start = from_hex_str_to_biguint("072409d75ebf50c5534125");
+        let staking_limit = from_hex_str_to_biguint("1fc3842bd1f071c00000");
 
         LidoState {
             pool_type: LidoPoolType::StEth,
@@ -508,16 +504,13 @@ mod tests {
     }
 
     fn lido_state_wsteth() -> LidoState {
-        let bytes = hex::decode("00000000000000000000000000000000000000000005dc41ec2e3ba19cf3ea6d")
-            .unwrap();
-        let total_shares_start = BigUint::from_bytes_be(&bytes);
-
-        let bytes = hex::decode("072409d75ebf50c5534125").unwrap();
-        let total_pooled_eth_start = BigUint::from_bytes_be(&bytes);
-
-        let bytes = hex::decode("00000000000000000000000000000000000000000002be110f2a220611513da6")
-            .unwrap();
-        let total_wsteth_start = BigUint::from_bytes_be(&bytes);
+        let total_shares_start = from_hex_str_to_biguint(
+            "00000000000000000000000000000000000000000005dc41ec2e3ba19cf3ea6d",
+        );
+        let total_pooled_eth_start = from_hex_str_to_biguint("072409d75ebf50c5534125");
+        let total_wsteth_start = from_hex_str_to_biguint(
+            "00000000000000000000000000000000000000000002be110f2a220611513da6",
+        );
 
         LidoState {
             pool_type: LidoPoolType::WStEth,
