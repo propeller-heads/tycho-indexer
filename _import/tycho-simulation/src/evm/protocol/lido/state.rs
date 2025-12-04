@@ -477,6 +477,11 @@ mod tests {
 
     use super::*;
 
+    fn from_hex_str_to_biguint(input: &str) -> BigUint {
+        let bytes = hex::decode(input).unwrap();
+        BigUint::from_bytes_be(&bytes)
+    }
+
     fn lido_state_steth() -> LidoState {
         let bytes = hex::decode("00000000000000000000000000000000000000000005dc41ec2e3ba19cf3ea6d")
             .unwrap();
