@@ -2770,8 +2770,8 @@ mod tests {
             let swap =
                 SwapBuilder::new(rocketpool_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
-                // The receiver was generated with `makeAddr("bob") using forge`
-                receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
+                // The receiver was generated with `makeAddr("bob*") using forge`
+                receiver: Bytes::from("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de"),
                 exact_out: false,
                 router_address: Some(Bytes::default()),
                 group_token_in: token_in.clone(),
@@ -2799,7 +2799,7 @@ mod tests {
                     // transfer type
                     "01",
                     // receiver
-                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
+                    "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
                 ))
                 .to_lowercase()
             );
