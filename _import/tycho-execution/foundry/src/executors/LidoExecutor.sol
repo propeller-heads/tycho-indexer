@@ -54,8 +54,11 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
     function swap(
         uint256 givenAmount,
         bytes calldata data //abi packed encoded
-    ) external payable returns (uint256 calculatedAmount) {
-        IERC20 tokenIn;
+    )
+        external
+        payable
+        returns (uint256 calculatedAmount)
+    {
         address target;
         address receiver;
         TransferType transferType;
@@ -64,31 +67,50 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
 
         (receiver, transferType, pool, direction) = _decodeData(data);
 
-        _transfer(target, transferType, address(tokenIn), givenAmount);
+        if (pool == LidoPoolType.stETH && direction == LidoPoolDirection.Stake)
+        {
+            // stETH staking: ETH -> stETH
+            // stETH is a rebasing token where balances are calculated from shares
+            // Measure actual balance changes to account for rounding in share conversions
+            uint256 balanceBefore = IERC20(st_eth).balanceOf(address(this));
+            uint256 shares =
+                LidoPool(st_eth).submit{value: givenAmount}(receiver); // TODO: passing receiver here is unnecessary
+            uint256 balanceAfter = IERC20(st_eth).balanceOf(address(this));
+            calculatedAmount = balanceAfter - balanceBefore;
 
-        if (
-            pool == LidoPoolType.stETH && direction == LidoPoolDirection.Stake
-        ) {
-            //steth, eth -> steth
-            LidoPool(st_eth).submit{value: givenAmount}(receiver);
+            // submit() sends stETH to this contract, transfer to receiver if needed
+            if (receiver != address(this)) {
+                uint256 receiverBalanceBefore =
+                    IERC20(st_eth).balanceOf(receiver);
+                IERC20(st_eth).safeTransfer(receiver, calculatedAmount);
+                uint256 receiverBalanceAfter =
+                    IERC20(st_eth).balanceOf(receiver);
+                // Update calculatedAmount to reflect actual tokens received after transfer
+                // (accounts for additional rounding during transfer)
+                calculatedAmount = receiverBalanceAfter - receiverBalanceBefore;
+            }
         } else if (
             pool == LidoPoolType.wstETH && direction == LidoPoolDirection.Wrap
         ) {
-            //steth, steth -> wsteth
-            LidoWrappedPool(wst_eth).wrap(givenAmount);
+            //wsteth, steth -> wsteth
+            _transfer(target, transferType, st_eth, givenAmount);
+            calculatedAmount = LidoWrappedPool(wst_eth).wrap(givenAmount);
+            if (receiver != address(this)) {
+                uint256 receiverBalanceBefore =
+                    IERC20(st_eth).balanceOf(receiver);
+                IERC20(wst_eth).safeTransfer(receiver, calculatedAmount);
+            }
         } else if (
             pool == LidoPoolType.wstETH && direction == LidoPoolDirection.Unwrap
         ) {
             //wsteth, wsteth -> steth
-            LidoWrappedPool(wst_eth).unwrap(givenAmount);
+            calculatedAmount = LidoWrappedPool(wst_eth).unwrap(givenAmount);
         } else {
             revert LidoExecutor__InvalidSwapDirection();
         }
     }
 
-    function _decodeData(
-        bytes calldata data
-    )
+    function _decodeData(bytes calldata data)
         internal
         pure
         returns (

@@ -14,16 +14,14 @@ contract LidoExecutorExposed is LidoExecutor {
         address _permit2
     ) LidoExecutor(_st_eth_address, _wst_eth_address, _permit2) {}
 
-    function decodeParams(
-        bytes calldata data
-    )
+    function decodeParams(bytes calldata data)
         external
         pure
         returns (
             address receiver,
             TransferType transferType,
-            bool pool,
-            bool direction
+            LidoPoolType pool,
+            LidoPoolDirection direction
         )
     {
         return _decodeData(data);
@@ -38,11 +36,8 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
     function setUp() public {
         uint256 forkBlock = 23934489; //change for a newer block
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        LidoExposed = new LidoExecutorExposed(
-            STETH_ADDR,
-            WSTETH_ADDR,
-            PERMIT2_ADDRESS
-        );
+        LidoExposed =
+            new LidoExecutorExposed(STETH_ADDR, WSTETH_ADDR, PERMIT2_ADDRESS);
     }
 
     // function testDecodeParams() public view {
@@ -102,37 +97,50 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
     function testStaking() public {
         uint256 amountIn = 1 ether;
+        uint256 expectedAmountOut = 999999999999999998;
 
         bytes memory protocolData = abi.encodePacked(
             BOB,
             RestrictTransferFrom.TransferType.None,
-            true,
-            true
+            LidoPoolType.stETH,
+            LidoPoolDirection.Stake
         );
 
+        deal(BOB, amountIn);
+        vm.prank(BOB);
+        uint256 calculatedAmount =
+            LidoExposed.swap{value: amountIn}(amountIn, protocolData);
+
+        uint256 finalBalance = IERC20(STETH_ADDR).balanceOf(BOB);
+        assertEq(calculatedAmount, finalBalance);
+        assertEq(finalBalance, expectedAmountOut);
+    }
+
+    function testWrapping() public {
+        uint256 amountIn = 1 ether;
+        uint256 expectedAmountOut = 819085003283072217;
+
+        // Need to mint STETH before, just dealing won't work because stETH does some internal accounting
         deal(address(LidoExposed), amountIn);
-        LidoExposed.swap{value: amountIn}(amountIn, protocolData);
+        vm.startPrank(address(LidoExposed));
+        LidoPool(STETH_ADDR).submit{value: amountIn}(address(LidoExposed));
+        uint256 stETHAmount = IERC20(STETH_ADDR).balanceOf(address(LidoExposed));
 
-        uint256 finalBalance = IERC20(STETH_ADDR).balanceOf(
-            address(LidoExposed)
-        );
-        // assertGe(finalBalance, amountIn);
-
-        bytes memory protocolData2 = abi.encodePacked(
+        bytes memory protocolData = abi.encodePacked(
             BOB,
             RestrictTransferFrom.TransferType.None,
-            false,
-            true
+            LidoPoolType.wstETH,
+            LidoPoolDirection.Wrap
         );
 
-        // deal(STETH_ADDR, address(LidoExposed), amountIn);
-        IERC20(STETH_ADDR).approve(WSTETH_ADDR, type(uint256).max);
+        IERC20(STETH_ADDR).approve(WSTETH_ADDR, amountIn*2);
 
-        LidoExposed.swap(finalBalance, protocolData2);
+        uint256 amountOut = LidoExposed.swap(stETHAmount, protocolData);
 
-        uint256 finalfinalBalance = IERC20(WSTETH_ADDR).balanceOf(
-            address(LidoExposed)
-        );
-        assertGe(finalfinalBalance, finalBalance);
+        uint256 finalBalance =
+            IERC20(WSTETH_ADDR).balanceOf(BOB);
+        assertEq(amountOut, expectedAmountOut);
+        assertEq(finalBalance, expectedAmountOut);
+        vm.stopPrank();
     }
 }
