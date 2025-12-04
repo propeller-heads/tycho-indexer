@@ -23,21 +23,36 @@ network: mainnet
 modules:
   - name: map_protocol_components
     kind: map
-    initialBlock: &start_block 23740315
+    initialBlock: &start_block 23939449
     inputs:
       - params: string
       - source: sf.ethereum.type.v2.Block
     output:
       type: proto:tycho.evm.v1.BlockTransactionProtocolComponents
-    
+
+  - name: store_storage_variables
+    kind: store
+    initialBlock: *start_block
+    updatePolicy: set
+    valueType: bigint
+    inputs:
+      - params: string
+      - source: sf.ethereum.type.v2.Block
+
   - name: map_protocol_changes
     kind: map
     initialBlock: *start_block
     inputs:
+      - params: string
       - source: sf.ethereum.type.v2.Block
       - map: map_protocol_components
+      - store: store_storage_variables
+        mode: deltas
+      - store: store_storage_variables
     output:
       type: proto:tycho.evm.v1.BlockChanges
 
 params:
   map_protocol_components: *start_block
+  store_storage_variables: *start_block
+  map_protocol_changes: *start_block

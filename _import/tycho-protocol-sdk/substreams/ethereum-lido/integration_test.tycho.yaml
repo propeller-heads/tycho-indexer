@@ -7,21 +7,21 @@ module_name: "map_protocol_changes"
 skip_balance_check: true
 tests:
   - name: test_pool_creation
-    start_block: 23740315
-    stop_block: 23740321
+    start_block: 23939449
+    stop_block: 23939470
     # A list of expected component indexed in the block range. Each component must match perfectly the `ProtocolComponent` indexed by your subtreams module.
     expected_components:
       - id: "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"
         tokens:
           - "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"
           - "0x0000000000000000000000000000000000000000"
-        creation_tx: "0x777926fa97f29d8dc1e3bdc2d9a19beffa9ef011206bc2f8ca453d699bad0e5e"
+        creation_tx: "0xacb290c64c4e704b2b2957fc3e03db38d6e20e9631f2cdd70840eb4280fb68d7"
         skip_simulation: true  # Temporary until there is simulation
         skip_execution: true
       - id: "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
         tokens:
           - "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"
           - "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"
-        creation_tx: "0x777926fa97f29d8dc1e3bdc2d9a19beffa9ef011206bc2f8ca453d699bad0e5e"
+        creation_tx: "0xacb290c64c4e704b2b2957fc3e03db38d6e20e9631f2cdd70840eb4280fb68d7"
         skip_simulation: true # Temporary until there is simulation
         skip_execution: true

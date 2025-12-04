@@ -2117,7 +2117,7 @@ dependencies = [
  "bitflags 2.9.4",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.10.5",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -4668,7 +4668,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.0",
+ "socket2 0.5.10",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -4886,7 +4886,7 @@ checksum = "4b0f83760fb341a774ed326568e19f5a863af4a952def8c39f9ab92fd95b88e5"
 dependencies = [
  "arbitrary",
  "equivalent",
- "hashbrown 0.16.0",
+ "hashbrown 0.15.5",
  "serde",
  "serde_core",
 ]
@@ -6511,7 +6511,7 @@ dependencies = [
  "tokio-retry2",
  "tracing",
  "tracing-subscriber 0.3.20",
- "tycho-execution 0.137.0",
+ "tycho-execution",
  "tycho-simulation",
  "tycho-test",
 ]
@@ -6561,7 +6561,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.6.0",
+ "socket2 0.5.10",
  "thiserror 2.0.16",
  "tokio",
  "tracing",
@@ -6598,7 +6598,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.0",
+ "socket2 0.5.10",
  "tracing",
  "windows-sys 0.60.2",
 ]
@@ -8230,9 +8230,9 @@ dependencies = [
 
 [[package]]
 name = "svm-rs"
-version = "0.5.19"
+version = "0.5.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11f15cc0fb280301739995e3b9f0f0dde3aecb876814f4768689f9138570cd3b"
+checksum = "909e8ff825120cd2b34ceb236ab72e2a7f74b1d3a86c247936c8ff7a80c5d408"
 dependencies = [
  "const-hex",
  "dirs",
@@ -8249,9 +8249,9 @@ dependencies = [
 
 [[package]]
 name = "svm-rs-builds"
-version = "0.5.19"
+version = "0.5.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31affc47068aeef445accc5c3d5f7fd24f9072cae0a651cef564239003c94ff8"
+checksum = "c1ebe77b200f965e8dbec3ef1d8337e974179ca1ecaa9fc28f67288d6b438159"
 dependencies = [
  "const-hex",
  "semver 1.0.27",
@@ -9040,9 +9040,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.113.0"
+version = "0.119.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c18c82029584513e4419149601fc4adef2138ad2c32dfaa1952e44aabeea0c9e"
+checksum = "4ba14053f53cff7201b273c06c6c0fd870ffcbca3016f57f3523e4b535ffe7c0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9070,9 +9070,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-common"
-version = "0.113.0"
+version = "0.119.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a5dc8a59ffcf22844d9ed2a6e6707a910f623ab20cd3760da0c3731620b092f"
+checksum = "1a5637e794523a26251248e9ef006ba8d456487b944ae367f6a74456edb965ea"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9096,15 +9096,16 @@ dependencies = [
 
 [[package]]
 name = "tycho-ethereum"
-version = "0.113.0"
+version = "0.119.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f7204878fc91128b34e8aee9d5e7a9be91bbf43f60958e71ebd00c26db77f08"
+checksum = "725ea193448a45cc08f21a501e97f88dd3f4111a4d6a2cbc7a4c8eb66fcc5d2d"
 dependencies = [
  "alloy",
  "async-trait",
  "chrono",
  "futures 0.3.31",
  "rand 0.8.5",
+ "serde",
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
@@ -9115,31 +9116,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.135.0"
+version = "0.139.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "012ff349538aeee6b3a132dce156eab5048629f206fec484ad6bd82e48fa4c9a"
-dependencies = [
- "alloy",
- "chrono",
- "clap",
- "dotenv",
- "hex",
- "lazy_static",
- "num-bigint",
- "num-traits",
- "once_cell",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tycho-common",
-]
-
-[[package]]
-name = "tycho-execution"
-version = "0.137.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "504c7a9078857754b9a6bb10fbffd5606e06e775f1881123801f559874153998"
+checksum = "36b57bdfca03f613367231e732cd57ba0e86e5c411c126febedd1a950d341d89"
 dependencies = [
  "alloy",
  "chrono",
@@ -9160,8 +9139,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.202.2"
-source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.202.2#e16d2609055353c77cc9019e756e08bdeeaef3d2"
+version = "0.211.1"
+source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.211.1#6660923fcc2b10d31632830d34212c1b3ad5d46e"
 dependencies = [
  "alloy",
  "async-stream",
@@ -9205,16 +9184,18 @@ dependencies = [
 
 [[package]]
 name = "tycho-test"
-version = "0.202.2"
-source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.202.2#e16d2609055353c77cc9019e756e08bdeeaef3d2"
+version = "0.211.1"
+source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.211.1#6660923fcc2b10d31632830d34212c1b3ad5d46e"
 dependencies = [
  "actix-web",
  "alloy",
  "alloy-chains",
  "alloy-rpc-types-trace",
+ "async-trait",
  "colored",
  "dotenv",
  "futures 0.3.31",
+ "hex",
  "itertools 0.10.5",
  "lru 0.16.2",
  "metrics",
@@ -9233,7 +9214,7 @@ dependencies = [
  "tycho-client",
  "tycho-common",
  "tycho-ethereum",
- "tycho-execution 0.135.0",
+ "tycho-execution",
  "tycho-simulation",
  "urlencoding",
 ]
