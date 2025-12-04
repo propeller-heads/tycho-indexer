@@ -644,7 +644,7 @@ fn test_uniswap_v3_bebop() {
         .unwrap()[0]
         .clone();
 
-    let calldata = encode_tycho_router_call(
+    let _calldata = encode_tycho_router_call(
         eth_chain().id(),
         encoded_solution,
         &solution,
@@ -655,8 +655,11 @@ fn test_uniswap_v3_bebop() {
     .unwrap()
     .data;
 
-    let hex_calldata = encode(&calldata);
-    write_calldata_to_file("test_uniswap_v3_bebop", hex_calldata.as_str());
+    // This test isn't writing to `calldata.txt` anymore because we the Bob address changed and this
+    // changes the Bebop signature as well.
+
+    // let hex_calldata = encode(&calldata);
+    // write_calldata_to_file("test_uniswap_v3_bebop", hex_calldata.as_str());
 }
 
 #[test]
