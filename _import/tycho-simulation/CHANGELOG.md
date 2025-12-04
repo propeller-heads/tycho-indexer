@@ -1,3 +1,10 @@
+## [0.211.1](https://github.com/propeller-heads/tycho-simulation/compare/0.211.0...0.211.1) (2025-12-04)
+
+
+### Bug Fixes
+
+* update dependencies for svm-rs and svm-rs-builds to resolve build issues ([6ac0804](https://github.com/propeller-heads/tycho-simulation/commit/6ac0804d26b99d2efdbf3918c94cd0c01bca4b6b))
+
 ## [0.211.0](https://github.com/propeller-heads/tycho-simulation/compare/0.210.0...0.211.0) (2025-12-04)
 
 
