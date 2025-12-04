@@ -98,7 +98,7 @@ impl LidoState {
         if amount_in.is_zero() {
             return Err(SimulationError::InvalidInput("Cannot wrap 0 stETH ".to_string(), None))
         }
-        let amount_out = amount_in * (self.total_shares.clone() / self.total_pooled_eth.clone());
+        let amount_out = amount_in * self.total_shares.clone() / self.total_pooled_eth.clone();
         Ok(GetAmountOutResult {
             amount: amount_out.clone(),
             gas: BigUint::from(DEFAULT_GAS),
@@ -125,7 +125,8 @@ impl LidoState {
             return Err(SimulationError::InvalidInput("Cannot unwrap 0 wstETH ".to_string(), None))
         }
 
-        let amount_out = amount_in * self.total_pooled_eth.clone() / self.total_shares.clone();
+        let amount_out =
+            amount_in.clone() * self.total_pooled_eth.clone() / self.total_shares.clone();
 
         Ok(GetAmountOutResult {
             amount: amount_out.clone(),
@@ -138,7 +139,7 @@ impl LidoState {
                     self.total_wrapped_st_eth
                         .clone()
                         .unwrap() -
-                        amount_out,
+                        amount_in,
                 ),
                 id: self.id.clone(),
                 native_address: self.native_address.clone(),
@@ -329,15 +330,13 @@ impl ProtocolSim for LidoState {
                 if base.address == Bytes::from(ST_ETH_ADDRESS_PROXY) &&
                     quote.address == Bytes::from(WST_ETH_ADDRESS)
                 {
-                    Ok((self.total_shares.clone() / self.total_pooled_eth.clone())
-                        .to_f64()
-                        .unwrap())
+                    Ok(self.total_shares.to_f64().unwrap() /
+                        self.total_pooled_eth.to_f64().unwrap())
                 } else if base.address == Bytes::from(WST_ETH_ADDRESS) &&
                     quote.address == Bytes::from(ST_ETH_ADDRESS_PROXY)
                 {
-                    Ok((self.total_pooled_eth.clone() / self.total_shares.clone())
-                        .to_f64()
-                        .unwrap())
+                    Ok(self.total_pooled_eth.to_f64().unwrap() /
+                        self.total_shares.to_f64().unwrap())
                 } else {
                     Err(SimulationError::InvalidInput(
                         format!(
