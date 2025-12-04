@@ -2098,7 +2098,7 @@ mod tests {
                 SwapBuilder::new(curve_tri_pool, token_in.clone(), token_out.clone()).build();
 
             let encoding_context = EncodingContext {
-                // The receiver was generated with `makeAddr("bob") using forge`
+                // The receiver was generated with `makeAddr("bob*") using forge`
                 receiver: Bytes::from("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de"),
                 exact_out: false,
                 router_address: None,
