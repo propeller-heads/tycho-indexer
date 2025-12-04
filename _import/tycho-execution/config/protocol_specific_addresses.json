@@ -15,6 +15,10 @@
     },
     "rfq:hashflow": {
       "hashflow_router_address": "0x55084eE0fEf03f14a305cd24286359A35D735151"
+    },
+    "lido": {
+      "st_eth_address": "",
+      "wst_eth_address": ""
     }
   },
   "base": {

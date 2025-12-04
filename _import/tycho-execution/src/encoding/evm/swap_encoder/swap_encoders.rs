@@ -1365,6 +1365,85 @@ impl SwapEncoder for ERC4626SwapEncoder {
     }
 }
 
+/// Encodes a swap on a Lido pool through the given executor address.
+///
+/// # Fields
+/// * `executor_address` - The address of the executor contract that will perform the swap.
+#[derive(Clone)]
+pub struct LidoSwapEncoder {
+    executor_address: Bytes,
+    st_eth_address: Bytes,
+    wst_eth_address: Bytes,
+    eth_address: Bytes,
+}
+
+#[repr(u8)]
+enum LidoPool {
+    StETH = 1,
+    WStETH = 0,
+}
+
+#[repr(u8)]
+enum LidoPoolDirection {
+    Stake = 0,
+    Wrap = 1,
+    Unwrap = 2,
+}
+
+impl LidoSwapEncoder {}
+
+impl SwapEncoder for LidoSwapEncoder {
+    fn new(
+        executor_address: Bytes,
+        chain: Chain,
+        _config: Option<HashMap<String, String>>,
+    ) -> Result<Self, EncodingError> {
+        Ok(Self {
+            executor_address,
+            st_eth_address: Bytes::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84"),
+            wst_eth_address: Bytes::from("0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"),
+            eth_address: chain.native_token().address,
+        })
+    }
+
+    fn encode_swap(
+        &self,
+        swap: &Swap,
+        encoding_context: &EncodingContext,
+    ) -> Result<Vec<u8>, EncodingError> {
+        let (pool, direction) = if swap.token_in == self.eth_address &&
+            swap.token_out == self.st_eth_address
+        {
+            (LidoPool::StETH, LidoPoolDirection::Stake)
+        } else if swap.token_in == self.st_eth_address && swap.token_out == self.wst_eth_address {
+            (LidoPool::WStETH, LidoPoolDirection::Wrap)
+        } else if swap.token_in == self.wst_eth_address && swap.token_out == self.st_eth_address {
+            (LidoPool::WStETH, LidoPoolDirection::Unwrap)
+        } else {
+            return Err(EncodingError::InvalidInput("Combination not allowed".to_owned()))
+        };
+
+        // Token in address is always needed to perform a manual transfer from the router,
+        // since no optimizations are performed that send from one pool to the next
+        let args = (
+            bytes_to_address(&encoding_context.receiver)?,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
+            (pool as u8).to_be_bytes(),
+            (direction as u8).to_be_bytes(),
+        );
+
+        Ok(args.abi_encode_packed())
+    }
+
+    fn executor_address(&self) -> &Bytes {
+        &self.executor_address
+    }
+
+    fn clone_box(&self) -> Box<dyn SwapEncoder> {
+        Box::new(self.clone())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
