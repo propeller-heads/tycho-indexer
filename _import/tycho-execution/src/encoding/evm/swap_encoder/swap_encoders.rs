@@ -292,7 +292,8 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         let is_angstrom_hook = **hook_address == *self.angstrom_hook_address;
         let hook_data = if is_angstrom_hook {
             // Angstrom hook - obtain hook data from API
-            let attestations = Self::fetch_angstrom_attestations()?;
+            // Use block_in_place to avoid runtime dropping issues when called from async context
+            let attestations = tokio::task::block_in_place(|| Self::fetch_angstrom_attestations())?;
             Self::encode_angstrom_attestations(&attestations)?
         } else {
             // Regular hook - use user_data as normal
