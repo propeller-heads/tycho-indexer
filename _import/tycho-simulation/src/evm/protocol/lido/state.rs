@@ -800,8 +800,19 @@ mod tests {
             deleted_attributes: HashSet::new(),
         };
 
-        let balances =
-            Balances { component_balances: HashMap::new(), account_balances: HashMap::new() }; // add balances here
+        let mut component_balances = HashMap::new();
+        let mut component_balances_inner = HashMap::new();
+        component_balances_inner.insert(
+            Bytes::from_str(ETH_ADDRESS).unwrap(),
+            Bytes::from_str("0x072409d88cbb5e48a01616").unwrap(),
+        );
+        component_balances.insert(
+            "0x307861653761623936353230646533613138653565313131623565616162303935333132643766653834"
+                .to_owned(),
+            component_balances_inner,
+        );
+
+        let balances = Balances { component_balances, account_balances: HashMap::new() };
 
         st_state
             .delta_transition(staking_state_delta.clone(), &HashMap::new(), &balances)
@@ -813,7 +824,7 @@ mod tests {
                 &hex::decode("00000000000000000000000000000000000000000005d9d75ae42b4ba9c04d1a")
                     .unwrap(),
             ),
-            total_pooled_eth: st_state.total_pooled_eth.clone(),
+            total_pooled_eth: from_hex_str_to_biguint("072409d88cbb5e48a01616"),
             total_wrapped_st_eth: None,
             id: ST_ETH_ADDRESS_PROXY.into(),
             native_address: ETH_ADDRESS.into(),
@@ -851,7 +862,7 @@ mod tests {
         };
 
         let balances =
-            Balances { component_balances: HashMap::new(), account_balances: HashMap::new() }; // add balances here
+            Balances { component_balances: HashMap::new(), account_balances: HashMap::new() };
 
         staking_state_delta
             .updated_attributes
@@ -881,8 +892,16 @@ mod tests {
             deleted_attributes: HashSet::new(),
         };
 
-        let balances =
-            Balances { component_balances: HashMap::new(), account_balances: HashMap::new() }; // add balances here for toal pooled eth
+        let mut component_balances = HashMap::new();
+        let mut component_balances_inner = HashMap::new();
+        component_balances_inner.insert(
+            Bytes::from_str(ST_ETH_ADDRESS_PROXY).unwrap(),
+            Bytes::from_str("0x072409d88cbb5e48a01616").unwrap(),
+        );
+        component_balances
+            .insert(WST_ETH_ADDRESS_BALANCE_COMP_ID.to_owned(), component_balances_inner);
+
+        let balances = Balances { component_balances, account_balances: HashMap::new() };
 
         wst_state
             .delta_transition(staking_state_delta, &HashMap::new(), &balances)
@@ -894,7 +913,7 @@ mod tests {
                 &hex::decode("00000000000000000000000000000000000000000005d9d75ae42b4ba9c04d1a")
                     .unwrap(),
             ),
-            total_pooled_eth: wst_state.total_pooled_eth.clone(),
+            total_pooled_eth: from_hex_str_to_biguint("072409d88cbb5e48a01616"),
             total_wrapped_st_eth: Some(BigUint::from_bytes_be(
                 &hex::decode("00000000000000000000000000000000000000000002ba6f7b9af3c7a7b749e2")
                     .unwrap(),
@@ -929,7 +948,7 @@ mod tests {
         };
 
         let balances =
-            Balances { component_balances: HashMap::new(), account_balances: HashMap::new() }; // add balances here for toal pooled eth
+            Balances { component_balances: HashMap::new(), account_balances: HashMap::new() };
 
         staking_state_delta
             .updated_attributes
