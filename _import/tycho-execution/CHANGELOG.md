@@ -1,3 +1,10 @@
+## [0.139.0](https://github.com/propeller-heads/tycho-execution/compare/0.138.0...0.139.0) (2025-12-04)
+
+
+### Features
+
+* New UniswapV4 hooks address ([dc7427b](https://github.com/propeller-heads/tycho-execution/commit/dc7427b23bc9f3e24bd207a052f5b1ae0434cab4))
+
 ## [0.138.0](https://github.com/propeller-heads/tycho-execution/compare/0.137.1...0.138.0) (2025-12-02)
 
 
