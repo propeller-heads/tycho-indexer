@@ -1,6 +1,5 @@
 use std::{collections::HashMap, str::FromStr};
 
-use alloy::primitives::{Address, U256};
 use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
 use tycho_common::{models::token::Token, Bytes};
 
@@ -55,19 +54,6 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for ERC4626State {
                     "Missing share_token in state: {pool_address}"
                 ))
             })?;
-        let component_balances = snapshot
-            .state
-            .balances
-            .iter()
-            .map(|(k, v)| (Address::from_slice(k), U256::from_be_slice(v)))
-            .collect::<HashMap<_, _>>();
-        let pool_total_supply = component_balances
-            .get(&Address::from_slice(&pool_address))
-            .ok_or_else(|| {
-                InvalidSnapshotError::ValueError(format!(
-                    "Missing pool_address in state: {pool_address}"
-                ))
-            })?;
         let engine = create_engine(
             SHARED_TYCHO_DB.clone(),
             decoder_context
@@ -76,13 +62,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for ERC4626State {
         )
         .expect("Failed to create engine");
 
-        let erc4626_state = vm::decode_from_vm(
-            &pool_address,
-            asset_token,
-            share_token,
-            *pool_total_supply,
-            engine,
-        )?;
+        let erc4626_state = vm::decode_from_vm(&pool_address, asset_token, share_token, engine)?;
         Ok(erc4626_state)
     }
 }

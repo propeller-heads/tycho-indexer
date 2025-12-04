@@ -151,28 +151,13 @@ impl ProtocolSim for ERC4626State {
         &mut self,
         _delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
-        balances: &Balances,
+        _balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
         let engine =
             create_engine(SHARED_TYCHO_DB.clone(), false).expect("Failed to create engine");
 
-        let pool_total_supply = balances
-            .component_balances
-            .get(&self.pool_address.to_string())
-            .and_then(|pool_balances| {
-                pool_balances
-                    .get(&self.share_token.address)
-                    .map(|bytes| U256::from_be_slice(bytes))
-            })
-            .unwrap_or(self.max_redeem);
-
-        let state = vm::decode_from_vm(
-            &self.pool_address,
-            &self.asset_token,
-            &self.share_token,
-            pool_total_supply,
-            engine,
-        )?;
+        let state =
+            vm::decode_from_vm(&self.pool_address, &self.asset_token, &self.share_token, engine)?;
         trace!(?state, "Calling delta transition for {}", &self.pool_address);
 
         self.asset_price = state.asset_price;

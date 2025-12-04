@@ -29,19 +29,28 @@ sol! {
     function convertToAssets(uint256 shares) public returns (uint256);
     function maxDeposit(address caller) external returns (uint256);
     function maxWithdraw(address caller) external returns (uint256);
+    function totalSupply() external view returns (uint256);
 }
 
 pub fn decode_from_vm<D: EngineDatabaseInterface + Clone + Debug>(
     pool: &Address,
     asset_token: &Token,
     share_token: &Token,
-    pool_total_supply: U256,
     vm_engine: SimulationEngine<D>,
 ) -> Result<ERC4626State, SimulationError>
 where
     <D as DatabaseRef>::Error: Debug,
     <D as EngineDatabaseInterface>::Error: Debug,
 {
+    let total_supply = simulate_and_decode_call(
+        &vm_engine,
+        pool,
+        AlloyAddress::ZERO,
+        totalSupplyCall {},
+        None,
+        "totalSupply",
+    )?;
+
     let share_price = simulate_and_decode_call(
         &vm_engine,
         pool,
@@ -104,7 +113,7 @@ where
         asset_price,
         share_price,
         max_deposit,
-        pool_total_supply,
+        total_supply,
     ))
 }
 
@@ -147,7 +156,6 @@ where
 mod test {
     use std::str::FromStr;
 
-    use alloy::primitives::U256;
     use tycho_client::feed::BlockHeader;
     use tycho_common::{
         models::{token::Token, Chain},
@@ -202,7 +210,6 @@ mod test {
             &Bytes::from("0x28B3a8fb53B741A8Fd78c0fb9A6B2393d896a43d"),
             &usdc,
             &sp_usdc,
-            U256::from(1000000),
             vm,
         )
         .expect("decoding failed");
