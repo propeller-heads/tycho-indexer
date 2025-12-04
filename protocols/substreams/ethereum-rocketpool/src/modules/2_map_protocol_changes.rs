@@ -335,10 +335,6 @@ fn update_protocol_settings(
 /// - MinipoolEnqueued: updates the end slot for the variable queue
 /// - MinipoolDequeued: updates the start slot for the variable queue
 /// - MinipoolRemoved: updates the end slot for the variable queue
-///
-/// Note that since the V1.2 Deposit Pool deployment, only the variable queue can receive new
-/// minipools (Enqueued), and as there were no minipools in the full or half queues at that time,
-/// we do not expect any events for those legacy queues.
 fn update_minipool_queue_sizes(
     block: &eth::v2::Block,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
@@ -391,6 +387,13 @@ fn update_minipool_queue_sizes(
 }
 
 /// Asserts that the provided queue_id corresponds to the variable queue.
+///
+/// Since the Deposit Pool V1.2 upgrade, the full and half queues can no longer receive minipools,
+/// and as they were empty at the time of the upgrade, they became idle and should never trigger any
+/// events. These error cases are thus defensive checks that should be unreachable in practice. Even
+/// if Rocket Pool upgrades to a new queue contract with different queue types, the
+/// ROCKET_DAO_MINIPOOL_QUEUE_ADDRESS would need to be explicitly updated as otherwise we'd filter
+/// out those events entirely.
 fn assert_variable_queue_id(queue_id: [u8; 32]) -> Result<()> {
     match queue_id {
         QUEUE_KEY_VARIABLE => Ok(()),
