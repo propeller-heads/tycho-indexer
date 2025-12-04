@@ -655,7 +655,7 @@ fn test_uniswap_v3_bebop() {
     .unwrap()
     .data;
 
-    // This test isn't writing to `calldata.txt` anymore because we the Bob address changed and this
+    // This test isn't writing to `calldata.txt` anymore because the Bob's address changed and this
     // changes the Bebop signature as well.
 
     // let hex_calldata = encode(&calldata);
