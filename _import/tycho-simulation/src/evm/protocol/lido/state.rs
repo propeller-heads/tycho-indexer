@@ -806,11 +806,7 @@ mod tests {
             Bytes::from_str(ETH_ADDRESS).unwrap(),
             Bytes::from_str("0x072409d88cbb5e48a01616").unwrap(),
         );
-        component_balances.insert(
-            "0x307861653761623936353230646533613138653565313131623565616162303935333132643766653834"
-                .to_owned(),
-            component_balances_inner,
-        );
+        component_balances.insert(ST_ETH_ADDRESS_PROXY.to_owned(), component_balances_inner);
 
         let balances = Balances { component_balances, account_balances: HashMap::new() };
 
@@ -898,8 +894,7 @@ mod tests {
             Bytes::from_str(ST_ETH_ADDRESS_PROXY).unwrap(),
             Bytes::from_str("0x072409d88cbb5e48a01616").unwrap(),
         );
-        component_balances
-            .insert(WST_ETH_ADDRESS_BALANCE_COMP_ID.to_owned(), component_balances_inner);
+        component_balances.insert(WST_ETH_ADDRESS.to_owned(), component_balances_inner);
 
         let balances = Balances { component_balances, account_balances: HashMap::new() };
 
