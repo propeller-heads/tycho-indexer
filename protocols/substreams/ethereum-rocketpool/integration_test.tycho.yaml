@@ -13,6 +13,6 @@ tests:
           - "0xae78736Cd615f374D3085123A210448E74Fc6393"
           - "0x0000000000000000000000000000000000000000"
         static_attributes: { }
-        creation_tx: "0x4c876667e3404c9934a1bb887d4d794fd7deb2b4f56762ae4a0ba633236d666b" # First tx at block 17069898
+        creation_tx: "0x78adcfc97632d86ea9dbfadcbabbf6257baf1893b81e8d1cd69d09ec1c8ef3b4" # Rocket Pool Deposit Pool V1.2 Upgrade Tx
         skip_simulation: false
         skip_execution: true # Currently we do not have this implemented
