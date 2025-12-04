@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
 use num_bigint::BigUint;
 use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
@@ -45,28 +45,27 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoState {
                 "Total shares field is missing".to_owned(),
             ))?;
 
-        // let total_pooled_eth = if pool_type == LidoPoolType::StEth {
-        //     snapshot
-        //         .state
-        //         .attributes
-        //         .get("total_pooled_eth")
-        //         .ok_or(InvalidSnapshotError::MissingAttribute(
-        //             "Total shares field is missing".to_owned(),
-        //         ))?
-        // } else {
-        //     return Err(InvalidSnapshotError::ValueError(format!(
-        //         "Unknown total_shares: {:?}",
-        //         snapshot.component.id
-        //     )))
-        // };
-
-        let total_pooled_eth = snapshot
+        let total_pooled_eth = if pool_type == LidoPoolType::StEth {
+            snapshot
+                .state
+                .balances
+                .get(&Bytes::from_str(ETH_ADDRESS).unwrap())
+                .ok_or(InvalidSnapshotError::MissingAttribute(
+                    "Total shares field is missing".to_owned(),
+                ))?
+        } else if pool_type == LidoPoolType::WStEth {
+            snapshot
             .state
-            .attributes
-            .get("total_pooled_eth")
+                .balances
+                .get(&Bytes::from_str(ST_ETH_ADDRESS_PROXY).unwrap())
             .ok_or(InvalidSnapshotError::MissingAttribute(
-                "Total pooled eth field is missing".to_owned(),
-            ))?;
+                    "Total shares field is missing".to_owned(),
+                ))?
+        } else {
+            return Err(InvalidSnapshotError::ValueError(
+                "Could not get total pooled eth: {:?}".to_owned(),
+            ))
+        };
 
         let (staking_status_parsed, staking_limit) = if pool_type == LidoPoolType::StEth {
             let staking_status = snapshot
@@ -138,7 +137,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoState {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::{collections::HashMap, str::FromStr};
 
     use chrono::NaiveDateTime;
     use num_bigint::BigUint;
@@ -191,11 +190,13 @@ mod tests {
                 component_id: ST_ETH_ADDRESS_PROXY.to_owned(),
                 attributes: HashMap::from([
                     ("total_shares".to_string(), Bytes::from(vec![0; 32])),
-                    ("total_pooled_eth".to_string(), Bytes::from(vec![0; 32])),
                     ("staking_status".to_string(), "Limited".as_bytes().to_vec().into()),
                     ("staking_limit".to_string(), Bytes::from(vec![0; 32])),
                 ]),
-                balances: HashMap::new(),
+                balances: HashMap::from([(
+                    Bytes::from_str(ETH_ADDRESS).unwrap(),
+                    Bytes::from(vec![0; 32]),
+                )]),
             },
             component: pc,
             component_tvl: None,
@@ -234,7 +235,6 @@ mod tests {
     #[tokio::test]
     #[rstest]
     #[case::missing_total_shares("total_shares")]
-    #[case::missing_total_pooled_eth("total_pooled_eth")]
     #[case::missing_staking_status("staking_status")]
     #[case::missing_staking_limit("staking_limit")]
     async fn test_lido_try_from_missing_attribute(#[case] missing_attribute: &str) {
@@ -256,11 +256,13 @@ mod tests {
                 component_id: ST_ETH_ADDRESS_PROXY.to_owned(),
                 attributes: HashMap::from([
                     ("total_shares".to_string(), Bytes::from(vec![0; 32])),
-                    ("total_pooled_eth".to_string(), Bytes::from(vec![0; 32])),
                     ("staking_status".to_string(), "Limited".as_bytes().to_vec().into()),
                     ("staking_limit".to_string(), Bytes::from(vec![0; 32])),
                 ]),
-                balances: HashMap::new(),
+                balances: HashMap::from([(
+                    Bytes::from_str(ETH_ADDRESS).unwrap(),
+                    Bytes::from(vec![0; 32]),
+                )]),
             },
             component: pc,
             component_tvl: None,
@@ -306,10 +308,12 @@ mod tests {
                 component_id: ST_ETH_ADDRESS_PROXY.to_owned(),
                 attributes: HashMap::from([
                     ("total_shares".to_string(), Bytes::from(vec![0; 32])),
-                    ("total_pooled_eth".to_string(), Bytes::from(vec![0; 32])),
                     ("total_wstETH".to_string(), Bytes::from(vec![0; 32])),
                 ]),
-                balances: HashMap::new(),
+                balances: HashMap::from([(
+                    Bytes::from_str(ST_ETH_ADDRESS_PROXY).unwrap(),
+                    Bytes::from(vec![0; 32]),
+                )]),
             },
             component: pc,
             component_tvl: None,
@@ -348,7 +352,6 @@ mod tests {
     #[tokio::test]
     #[rstest]
     #[case::missing_total_shares("total_shares")]
-    #[case::missing_total_pooled_eth("total_pooled_eth")]
     #[case::missing_total_wst_eth("total_wstETH")]
     async fn test_lido_wst_try_from_missing_attribute(#[case] missing_attribute: &str) {
         let pc = ProtocolComponent {
@@ -369,10 +372,12 @@ mod tests {
                 component_id: ST_ETH_ADDRESS_PROXY.to_owned(),
                 attributes: HashMap::from([
                     ("total_shares".to_string(), Bytes::from(vec![0; 32])),
-                    ("total_pooled_eth".to_string(), Bytes::from(vec![0; 32])),
                     ("total_wstETH".to_string(), Bytes::from(vec![0; 32])),
                 ]),
-                balances: HashMap::new(),
+                balances: HashMap::from([(
+                    Bytes::from_str(ST_ETH_ADDRESS_PROXY).unwrap(),
+                    Bytes::from(vec![0; 32]),
+                )]),
             },
             component: pc,
             component_tvl: None,
