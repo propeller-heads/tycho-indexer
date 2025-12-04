@@ -12,6 +12,11 @@ use tycho_common::{
     Bytes,
 };
 
+use crate::evm::protocol::{
+    safe_math::{safe_div_u256, safe_mul_u256},
+    u256_num::{biguint_to_u256, u256_to_biguint},
+};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LidoPoolType {
     StEth,
@@ -74,14 +79,22 @@ impl LidoState {
     fn steth_swap(&self, amount_in: BigUint) -> GetAmountOutResult {
         let total_pooled_eth = self.total_pooled_eth.clone();
         let total_shares = self.total_shares.clone();
-        let shares = amount_in.clone() * total_shares.clone() / total_pooled_eth.clone();
-        let amount_out = shares.clone() * total_pooled_eth.clone() / total_shares.clone();
+        let shares = safe_div_u256(
+            safe_mul_u256(biguint_to_u256(&amount_in), biguint_to_u256(&total_shares)).unwrap(),
+            biguint_to_u256(&total_pooled_eth),
+        )
+        .unwrap();
+        let amount_out = safe_div_u256(
+            safe_mul_u256(shares, biguint_to_u256(&total_pooled_eth)).unwrap(),
+            biguint_to_u256(&total_shares),
+        )
+        .unwrap();
         GetAmountOutResult {
-            amount: amount_out,
+            amount: u256_to_biguint(amount_out),
             gas: BigUint::from(DEFAULT_GAS),
             new_state: Box::new(Self {
                 pool_type: self.pool_type.clone(),
-                total_shares: self.total_shares.clone() + shares,
+                total_shares: self.total_shares.clone() + u256_to_biguint(shares),
                 total_pooled_eth: self.total_pooled_eth.clone() + amount_in,
                 total_wrapped_st_eth: None,
                 id: self.id.clone(),
