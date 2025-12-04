@@ -1,3 +1,19 @@
+## [0.211.0](https://github.com/propeller-heads/tycho-simulation/compare/0.210.0...0.211.0) (2025-12-04)
+
+
+### Features
+
+* add deposit assignment logic and new attributes to RocketPoolState ([110320d](https://github.com/propeller-heads/tycho-simulation/commit/110320d263217cc255d77f8f01d89689e2aa3c18))
+* add to RocketPoolState additional queue attributes and deposit assignment logic ([17ced17](https://github.com/propeller-heads/tycho-simulation/commit/17ced17adc22c7f25be0d746ea4e7e5696344978))
+* implement RocketPoolState with decoding logic and state management ([cb87b63](https://github.com/propeller-heads/tycho-simulation/commit/cb87b63b281c492e36ed2d1cdce80666ea9cfc4d))
+
+
+### Bug Fixes
+
+* add additional queue attributes to decoder tests ([520f27b](https://github.com/propeller-heads/tycho-simulation/commit/520f27bf4131c32942887b5305484a51bcb88e5b))
+* implement excess balance calculation and related withdrawal limits in RocketPoolState ([6127c06](https://github.com/propeller-heads/tycho-simulation/commit/6127c0641154c44b1edf53b0d4efd03146c0d4b3))
+* replace hardcoded ETH address with constant reference ([580144a](https://github.com/propeller-heads/tycho-simulation/commit/580144a4d16f36b30420265073a0ac910b5a91f0))
+
 ## [0.210.0](https://github.com/propeller-heads/tycho-simulation/compare/0.209.1...0.210.0) (2025-12-03)
 
 
