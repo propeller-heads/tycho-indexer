@@ -1,3 +1,10 @@
+## [0.139.2](https://github.com/propeller-heads/tycho-execution/compare/0.139.1...0.139.2) (2025-12-04)
+
+
+### Bug Fixes
+
+* Change encoding tests to use bob* instead of bob address ([fab8923](https://github.com/propeller-heads/tycho-execution/commit/fab892344385e51ddc87a4300d1fa6bb7329d45d))
+
 ## [0.139.1](https://github.com/propeller-heads/tycho-execution/compare/0.139.0...0.139.1) (2025-12-04)
 
 
