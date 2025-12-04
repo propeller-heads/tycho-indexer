@@ -1288,7 +1288,7 @@ mod tests {
             let token_out = Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f");
             let swap = SwapBuilder::new(usv2_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
-                receiver: Bytes::from("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e"), // BOB
+                receiver: Bytes::from("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de"), // BOB*
                 exact_out: false,
                 router_address: Some(Bytes::zero(20)),
                 group_token_in: token_in.clone(),
@@ -1314,7 +1314,7 @@ mod tests {
                     // component id
                     "a478c2975ab1ea89e8196811f51a7b7ade33eb11",
                     // receiver
-                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
+                    "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
                     // zero for one
                     "00",
                     // transfer type Transfer
@@ -1401,8 +1401,8 @@ mod tests {
             let token_out = Bytes::from("0xba100000625a3754423978a60c9317c58a424e3D");
             let swap = SwapBuilder::new(balancer_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
-                // The receiver was generated with `makeAddr("bob") using forge`
-                receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
+                // The receiver was generated with `makeAddr("bob*") using forge`
+                receiver: Bytes::from("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de"),
                 exact_out: false,
                 router_address: Some(Bytes::zero(20)),
                 group_token_in: token_in.clone(),
@@ -1434,7 +1434,7 @@ mod tests {
                     // pool id
                     "5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014",
                     // receiver
-                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
+                    "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
                     // approval needed
                     "01",
                     // transfer type None
@@ -2099,8 +2099,8 @@ mod tests {
                 SwapBuilder::new(curve_tri_pool, token_in.clone(), token_out.clone()).build();
 
             let encoding_context = EncodingContext {
-                // The receiver was generated with `makeAddr("bob") using forge`
-                receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
+                // The receiver was generated with `makeAddr("bob*") using forge`
+                receiver: Bytes::from("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de"),
                 exact_out: false,
                 router_address: None,
                 group_token_in: token_in.clone(),
@@ -2139,7 +2139,7 @@ mod tests {
                     // transfer type None
                     "02",
                     // receiver,
-                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
+                    "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
                 ))
             );
         }
@@ -2166,8 +2166,8 @@ mod tests {
             let token_out = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3");
             let swap = SwapBuilder::new(curve_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
-                // The receiver was generated with `makeAddr("bob") using forge`
-                receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
+                // The receiver was generated with `makeAddr("bob*") using forge`
+                receiver: Bytes::from("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de"),
                 exact_out: false,
                 router_address: None,
                 group_token_in: token_in.clone(),
@@ -2206,7 +2206,7 @@ mod tests {
                     // transfer type None
                     "02",
                     // receiver
-                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
+                    "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
                 ))
             );
         }
@@ -2234,8 +2234,8 @@ mod tests {
             let token_out = Bytes::from("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84");
             let swap = SwapBuilder::new(curve_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
-                // The receiver was generated with `makeAddr("bob") using forge`
-                receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
+                // The receiver was generated with `makeAddr("bob*") using forge`
+                receiver: Bytes::from("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de"),
                 exact_out: false,
                 router_address: None,
                 group_token_in: token_in.clone(),
@@ -2283,7 +2283,7 @@ mod tests {
                     // transfer type None
                     "02",
                     // receiver
-                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
+                    "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
                 ))
             );
         }
@@ -2303,8 +2303,8 @@ mod tests {
             let token_out = Bytes::from("0xc71ea051a5f82c67adcf634c36ffe6334793d24c");
             let swap = SwapBuilder::new(balancer_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
-                // The receiver was generated with `makeAddr("bob") using forge`
-                receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
+                // The receiver was generated with `makeAddr("bob*") using forge`
+                receiver: Bytes::from("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de"),
                 exact_out: false,
                 router_address: Some(Bytes::zero(20)),
                 group_token_in: token_in.clone(),
@@ -2335,7 +2335,7 @@ mod tests {
                     // transfer type None
                     "01",
                     // receiver
-                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
+                    "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
                 ))
             );
             write_calldata_to_file("test_encode_balancer_v3", hex_swap.as_str());
@@ -2356,8 +2356,8 @@ mod tests {
             let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
             let swap = SwapBuilder::new(maverick_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
-                // The receiver was generated with `makeAddr("bob") using forge`
-                receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
+                // The receiver was generated with `makeAddr("bob*") using forge`
+                receiver: Bytes::from("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de"),
                 exact_out: false,
                 router_address: Some(Bytes::default()),
                 group_token_in: token_in.clone(),
@@ -2385,7 +2385,7 @@ mod tests {
                     // pool
                     "14Cf6D2Fe3E1B326114b07d22A6F6bb59e346c67",
                     // receiver
-                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
+                    "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
                     // transfer true
                     "01",
                 ))
@@ -2663,8 +2663,8 @@ mod tests {
             let token_out = Bytes::from("0xdac17f958d2ee523a2206206994597c13d831ec7");
             let swap = SwapBuilder::new(fluid_dex, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
-                // The receiver was generated with `makeAddr("bob") using forge`
-                receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
+                // The receiver was generated with `makeAddr("bob*") using forge`
+                receiver: Bytes::from("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de"),
                 exact_out: false,
                 router_address: Some(Bytes::default()),
                 group_token_in: token_in.clone(),
@@ -2692,7 +2692,7 @@ mod tests {
                     // zero2one
                     "01",
                     // receiver
-                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
+                    "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
                     // transferFrom
                     "00",
                     // isNativeSell
