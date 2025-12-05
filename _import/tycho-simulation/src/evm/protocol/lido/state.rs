@@ -593,8 +593,6 @@ mod tests {
     }
 
     #[test]
-    // this is failing, coz the the total pooled eth is not an actual value, it is only one part of
-    // that value; so when that is correct, the test should be passing
     fn test_lido_get_amount_out() {
         // total pooled eth: 0x072409d75ebf50c5534125, 8632667470434094430765349
         // total shares: 0x00000000000000000000000000000000000000000005dc41ec2e3ba19cf3ea6d
