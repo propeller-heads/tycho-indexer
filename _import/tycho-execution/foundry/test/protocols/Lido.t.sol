@@ -36,64 +36,47 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
     function setUp() public {
         uint256 forkBlock = 23934489; //change for a newer block
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        LidoExposed =
-            new LidoExecutorExposed(STETH_ADDR, WSTETH_ADDR, PERMIT2_ADDRESS);
+        LidoExposed = new LidoExecutorExposed(
+            STETH_ADDR,
+            WSTETH_ADDR,
+            PERMIT2_ADDRESS
+        );
     }
 
-    // function testDecodeParams() public view {
-    //     bytes memory params = abi.encodePacked(
-    //         WETH_ADDR,
-    //         address(2),
-    //         address(3),
-    //         false,
-    //         RestrictTransferFrom.TransferType.Transfer
-    //     );
+    function testDecodeParams() public view {
+        bytes memory params = abi.encodePacked(
+            BOB,
+            RestrictTransferFrom.TransferType.None,
+            LidoPoolType.stETH,
+            LidoPoolDirection.Stake
+        );
 
-    //     (
-    //         IERC20 tokenIn,
-    //         address target,
-    //         address receiver,
-    //         bool zeroForOne,
-    //         RestrictTransferFrom.TransferType transferType
-    //     ) = uniswapV2Exposed.decodeParams(params);
+        (
+            address receiver,
+            RestrictTransferFrom.TransferType transferType,
+            LidoPoolType pool,
+            LidoPoolDirection direction
+        ) = LidoExposed.decodeParams(params);
 
-    //     assertEq(address(tokenIn), WETH_ADDR);
-    //     assertEq(target, address(2));
-    //     assertEq(receiver, address(3));
-    //     assertEq(zeroForOne, false);
-    //     assertEq(
-    //         uint8(transferType),
-    //         uint8(RestrictTransferFrom.TransferType.Transfer)
-    //     );
-    // }
+        assertEq(receiver, BOB);
+        assertEq(
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.None)
+        );
+        assertEq(uint8(pool), uint8(LidoPoolType.stETH));
+        assertEq(uint8(direction), uint8(LidoPoolDirection.Stake));
+    }
 
-    // function testDecodeParamsInvalidDataLength() public {
-    //     bytes memory invalidParams = abi.encodePacked(
-    //         WETH_ADDR,
-    //         address(2),
-    //         address(3)
-    //     );
+    function testDecodeParamsInvalidDataLength() public {
+        bytes memory invalidParams = abi.encodePacked(
+            BOB,
+            RestrictTransferFrom.TransferType.None,
+            LidoPoolType.stETH
+        );
 
-    //     vm.expectRevert(UniswapV2Executor__InvalidDataLength.selector);
-    //     uniswapV2Exposed.decodeParams(invalidParams);
-    // }
-
-    // function testWrapping() public {
-    //     uint256 amountIn = 1 ether;
-
-    //     bytes memory protocolData = abi.encodePacked(
-    //         BOB,
-    //         RestrictTransferFrom.TransferType.None,
-    //         false,
-    //         true
-    //     );
-
-    //     deal(STETH_ADDR, address(LidoExposed), amountIn);
-    //     LidoExposed.swap(amountIn, protocolData);
-
-    //     uint256 finalBalance = IERC20(WSTETH_ADDR).balanceOf(BOB);
-    //     assertGe(finalBalance, amountIn);
-    // }
+        vm.expectRevert(LidoExecutor__InvalidDataLength.selector);
+        LidoExposed.decodeParams(invalidParams);
+    }
 
     function testStaking() public {
         uint256 amountIn = 1 ether;
