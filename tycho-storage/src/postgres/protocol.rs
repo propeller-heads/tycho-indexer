@@ -765,24 +765,16 @@ impl PostgresGateway {
             .collect::<Vec<_>>();
 
         let txns: HashMap<TxHash, (i64, i64, NaiveDateTime)> =
-            orm::Transaction::ids_and_ts_by_hash(
-                new.iter()
-                    .filter_map(|u| u.tx.as_ref())
-                    .collect::<Vec<&TxHash>>()
-                    .as_slice(),
-                conn,
-            )
-            .await
-            .map_err(PostgresError::from)?
-            .into_iter()
-            .map(|(id, hash, index, ts)| (hash, (id, index, ts)))
-            .collect();
+            orm::Transaction::ids_and_ts_by_hash(new.iter().filter_map(|u| u.tx.as_ref()), conn)
+                .await
+                .map_err(PostgresError::from)?
+                .into_iter()
+                .map(|(id, hash, index, ts)| (hash, (id, index, ts)))
+                .collect();
 
         let components: HashMap<String, i64> = orm::ProtocolComponent::ids_by_external_ids(
             new.iter()
-                .map(|state| state.component_id.as_str())
-                .collect::<Vec<&str>>()
-                .as_slice(),
+                .map(|state| state.component_id.as_str()),
             chain_db_id,
             conn,
         )
@@ -1084,7 +1076,7 @@ impl PostgresGateway {
     ) -> Result<(), StorageError> {
         trace!(addresses=?tokens.iter().map(|t| &t.address).collect::<Vec<_>>(), "Updating tokens");
         let address_to_db_id = {
-            let token_addresses: Vec<Address> = tokens
+            let token_addresses: HashSet<Address> = tokens
                 .iter()
                 .map(|t| t.address.clone())
                 .collect();
@@ -1135,7 +1127,7 @@ impl PostgresGateway {
         use super::schema::{account::dsl::*, token::dsl::*};
 
         let chain_db_id = self.get_chain_id(chain)?;
-        let token_addresses: Vec<Address> = component_balances
+        let token_addresses: HashSet<Address> = component_balances
             .iter()
             .map(|component_balance| component_balance.token.clone())
             .collect();
@@ -1149,31 +1141,32 @@ impl PostgresGateway {
             .into_iter()
             .collect();
 
-        let modify_txs = component_balances
+        let modify_txs: HashSet<TxHash> = component_balances
             .iter()
             .map(|component_balance| component_balance.modify_tx.clone())
-            .collect::<Vec<TxHash>>();
-        let txn_hashes = modify_txs.iter().collect::<Vec<_>>();
+            .collect();
+
         let transaction_ids_and_ts: HashMap<TxHash, (i64, i64, NaiveDateTime)> =
-            orm::Transaction::ids_and_ts_by_hash(txn_hashes.as_ref(), conn)
+            orm::Transaction::ids_and_ts_by_hash(modify_txs.iter(), conn)
                 .await
                 .map_err(PostgresError::from)?
                 .into_iter()
                 .map(|(db_id, hash, index, ts)| (hash, (db_id, index, ts)))
                 .collect();
 
-        let external_ids: Vec<&str> = component_balances
-            .iter()
-            .map(|component_balance| component_balance.component_id.as_str())
-            .collect();
-
         let protocol_component_ids: HashMap<String, i64> =
-            orm::ProtocolComponent::ids_by_external_ids(&external_ids, chain_db_id, conn)
-                .await
-                .map_err(PostgresError::from)?
-                .into_iter()
-                .map(|(component_id, external_id)| (external_id, component_id))
-                .collect();
+            orm::ProtocolComponent::ids_by_external_ids(
+                component_balances
+                    .iter()
+                    .map(|component_balance| component_balance.component_id.as_str()),
+                chain_db_id,
+                conn,
+            )
+            .await
+            .map_err(PostgresError::from)?
+            .into_iter()
+            .map(|(component_id, external_id)| (external_id, component_id))
+            .collect();
 
         let mut new_component_balances = Vec::new();
         for component_balance in component_balances.iter() {
@@ -1682,17 +1675,16 @@ impl PostgresGateway {
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
         let chain_id = self.get_chain_id(chain)?;
-        let external_ids = tvl_values
-            .keys()
-            .map(|s| s.as_str())
-            .collect::<Vec<_>>();
-        let external_db_id_map =
-            orm::ProtocolComponent::ids_by_external_ids(&external_ids, chain_id, conn)
-                .await
-                .map_err(PostgresError::from)?
-                .into_iter()
-                .map(|(a, b)| (b, a))
-                .collect::<HashMap<_, _>>();
+        let external_db_id_map = orm::ProtocolComponent::ids_by_external_ids(
+            tvl_values.keys().map(|s| s.as_str()),
+            chain_id,
+            conn,
+        )
+        .await
+        .map_err(PostgresError::from)?
+        .into_iter()
+        .map(|(a, b)| (b, a))
+        .collect::<HashMap<_, _>>();
 
         let upsert_map: HashMap<_, _> = tvl_values
             .iter()

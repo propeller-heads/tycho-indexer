@@ -252,8 +252,13 @@ impl Transaction {
     ) -> Result<HashMap<TxHash, i64>, StorageError> {
         use super::schema::transaction::dsl::*;
 
+        let unique_hashes: HashSet<&TxHash> = hashes.iter().collect();
+        if unique_hashes.is_empty() {
+            return Ok(HashMap::new());
+        }
+
         transaction
-            .filter(hash.eq_any(hashes))
+            .filter(hash.eq_any(unique_hashes))
             .select((hash, id))
             .load::<(TxHash, i64)>(conn)
             .await
@@ -263,12 +268,16 @@ impl Transaction {
 
     // fetches the transaction id, hash, index and block timestamp for a given set of hashes
     pub async fn ids_and_ts_by_hash(
-        hashes: &[&TxHash],
+        hashes: impl Iterator<Item = &TxHash>,
         conn: &mut AsyncPgConnection,
     ) -> QueryResult<Vec<(i64, Bytes, i64, NaiveDateTime)>> {
+        let unique_hashes: HashSet<&TxHash> = hashes.collect();
+        if unique_hashes.is_empty() {
+            return Ok(vec![]);
+        }
         transaction::table
             .inner_join(block::table)
-            .filter(transaction::hash.eq_any(hashes))
+            .filter(transaction::hash.eq_any(unique_hashes))
             .select((transaction::id, transaction::hash, transaction::index, block::ts))
             .get_results::<(i64, Bytes, i64, NaiveDateTime)>(conn)
             .await
@@ -588,12 +597,16 @@ impl NewProtocolComponent {
 
 impl ProtocolComponent {
     pub async fn ids_by_external_ids(
-        external_ids: &[&str],
+        external_ids: impl Iterator<Item = &str>,
         chain_db_id: i64,
         conn: &mut AsyncPgConnection,
     ) -> QueryResult<Vec<(i64, String)>> {
+        let unique_ids: HashSet<&str> = external_ids.collect();
+        if unique_ids.is_empty() {
+            return Ok(vec![]);
+        }
         protocol_component::table
-            .filter(protocol_component::external_id.eq_any(external_ids))
+            .filter(protocol_component::external_id.eq_any(unique_ids))
             .filter(protocol_component::chain_id.eq(chain_db_id))
             .select((protocol_component::id, protocol_component::external_id))
             .get_results::<(i64, String)>(conn)
@@ -1228,12 +1241,16 @@ impl Account {
 
     /// retrieves account ids by addresses
     pub async fn ids_by_addresses(
-        addresses: &[&Address],
+        addresses: impl Iterator<Item = &Address>,
         chain_db_id: i64,
         conn: &mut AsyncPgConnection,
     ) -> QueryResult<Vec<(i64, Address)>> {
+        let unique_addresses: HashSet<&Address> = addresses.collect();
+        if unique_addresses.is_empty() {
+            return Ok(vec![]);
+        }
         account::table
-            .filter(account::address.eq_any(addresses))
+            .filter(account::address.eq_any(unique_addresses))
             .filter(account::chain_id.eq(chain_db_id))
             .select((account::id, account::address))
             .get_results::<(i64, Address)>(conn)
@@ -1244,8 +1261,12 @@ impl Account {
         ids: impl Iterator<Item = &i64>,
         conn: &mut AsyncPgConnection,
     ) -> QueryResult<Vec<(i64, Address)>> {
+        let unique_ids: HashSet<&i64> = ids.collect();
+        if unique_ids.is_empty() {
+            return Ok(vec![]);
+        }
         account::table
-            .filter(account::id.eq_any(ids))
+            .filter(account::id.eq_any(unique_ids))
             .select((account::id, account::address))
             .get_results::<(i64, Address)>(conn)
             .await
