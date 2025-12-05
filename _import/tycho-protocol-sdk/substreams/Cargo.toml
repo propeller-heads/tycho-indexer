@@ -21,6 +21,7 @@ members = [
     "ethereum-lido",
     "ethereum-balancer-v3",
     "base-aerodrome-slipstreams",
+    "ethereum-erc4626",
 ]
 resolver = "2"
 

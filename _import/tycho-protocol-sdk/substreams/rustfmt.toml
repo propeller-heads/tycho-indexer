@@ -23,4 +23,5 @@ ignore = [
     "ethereum-maverick-v2/src/abi",
     "ethereum-balancer-v3/src/abi",
     "base-aerodrome-slipstreams/src/abi",
+    "ethereum-erc4626/src/abi",
 ]
