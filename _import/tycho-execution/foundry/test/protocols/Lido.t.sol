@@ -114,6 +114,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 finalBalance = IERC20(STETH_ADDR).balanceOf(BOB);
         assertEq(calculatedAmount, finalBalance);
         assertEq(finalBalance, expectedAmountOut);
+        assertEq(BOB.balance, 0);
     }
 
     function testWrapping() public {
@@ -133,14 +134,37 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
             LidoPoolDirection.Wrap
         );
 
-        IERC20(STETH_ADDR).approve(WSTETH_ADDR, amountIn*2);
+        IERC20(STETH_ADDR).approve(WSTETH_ADDR, amountIn * 2);
 
         uint256 amountOut = LidoExposed.swap(stETHAmount, protocolData);
 
-        uint256 finalBalance =
-            IERC20(WSTETH_ADDR).balanceOf(BOB);
+        uint256 finalBalance = IERC20(WSTETH_ADDR).balanceOf(BOB);
         assertEq(amountOut, expectedAmountOut);
         assertEq(finalBalance, expectedAmountOut);
+        // there is 1 wei left in the contract
+        assertEq(IERC20(STETH_ADDR).balanceOf(address(LidoExposed)), 1);
+
+    vm.stopPrank();
+    }
+
+    function testUnwrapping() public {
+        uint256 amountIn = 1 ether;
+        uint256 expectedAmountOut = 1220874507519708969;
+
+        deal(WSTETH_ADDR, address(LidoExposed), amountIn);
+        bytes memory protocolData = abi.encodePacked(
+            BOB,
+            RestrictTransferFrom.TransferType.None,
+            LidoPoolType.wstETH,
+            LidoPoolDirection.Unwrap
+        );
+        vm.startPrank(address(LidoExposed));
+        uint256 amountOut = LidoExposed.swap(amountIn, protocolData);
+
+        uint256 finalBalance = IERC20(STETH_ADDR).balanceOf(BOB);
+        assertEq(amountOut, expectedAmountOut);
+        assertEq(finalBalance, expectedAmountOut);
+        assertEq(IERC20(WSTETH_ADDR).balanceOf(address(LidoExposed)), 0);
         vm.stopPrank();
     }
 }
