@@ -1,3 +1,10 @@
+## [0.140.0](https://github.com/propeller-heads/tycho-execution/compare/0.139.2...0.140.0) (2025-12-05)
+
+
+### Features
+
+* Don't revert in Executor if attestation not found ([85b0646](https://github.com/propeller-heads/tycho-execution/commit/85b064623a7d06b42fcda066d267829871fa58e0))
+
 ## [0.139.2](https://github.com/propeller-heads/tycho-execution/compare/0.139.1...0.139.2) (2025-12-04)
 
 
