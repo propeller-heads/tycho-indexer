@@ -14,7 +14,7 @@ use tycho_common::{
 
 use crate::evm::protocol::{
     safe_math::{safe_div_u256, safe_mul_u256},
-    u256_num::{biguint_to_u256, u256_to_biguint},
+    u256_num::{biguint_to_u256, u256_to_biguint, u256_to_f64},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -320,7 +320,13 @@ impl ProtocolSim for LidoState {
                 if base.address == Bytes::from(ETH_ADDRESS) &&
                     quote.address == Bytes::from(ST_ETH_ADDRESS_PROXY)
                 {
-                    Ok(1.0)
+                    let total_shares_f64 =
+                        u256_to_f64(biguint_to_u256(&self.total_shares)).unwrap();
+                    let total_pooled_eth_f64 =
+                        u256_to_f64(biguint_to_u256(&self.total_pooled_eth)).unwrap();
+
+                    Ok(total_pooled_eth_f64 / total_shares_f64 * total_shares_f64 /
+                        total_pooled_eth_f64)
                 } else {
                     Err(SimulationError::InvalidInput(
                         format!(
@@ -713,7 +719,7 @@ mod tests {
         let res = st_state
             .spot_price(&token_eth, &token_st_eth)
             .unwrap();
-        let exp = 1.0;
+        let exp = 1.0000000000000002;
         assert_eq!(res, exp);
 
         let res = st_state.spot_price(&token_st_eth, &token_wst_eth);
