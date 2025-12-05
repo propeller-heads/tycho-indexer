@@ -56,7 +56,7 @@ use tycho_indexer::{
             ProtocolTypeConfig,
         },
         token_analysis_cron::analyze_tokens,
-        ExtractionError, RPCRetryConfig,
+        ExtractionError,
     },
     services::ServicesBuilder,
 };
@@ -324,9 +324,7 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
 async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
     create_tracing_subscriber();
 
-    // TODO: configure RPC client with the retry config from global_args
-    let rpc_client = EthereumRpcClient::new(&global_args.rpc.url)
-        .map_err(|e| ExtractionError::Setup(format!("Failed to create RPC client: {e}")))?;
+    let rpc_client = global_args.rpc.build_client()?;
 
     let direct_gw = GatewayBuilder::new(&global_args.database_url)
         .set_chains(&[Chain::Ethereum]) // TODO: handle multichain
@@ -339,13 +337,12 @@ async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
         ExtractionError::Setup("AUTH_API_KEY environment variable is not set".to_string())
     })?;
 
-    let (server_handle, server_task) =
-        ServicesBuilder::new(direct_gw.clone(), rpc_client.clone(), api_key)
-            .prefix(&global_args.server_version_prefix)
-            .bind(&global_args.server_ip)
-            .port(global_args.server_port)
-            .min_tvl(global_args.rpc.min_tvl)
-            .run()?;
+    let (server_handle, server_task) = ServicesBuilder::new(direct_gw.clone(), rpc_client, api_key)
+        .prefix(&global_args.server_version_prefix)
+        .bind(&global_args.server_ip)
+        .port(global_args.server_port)
+        .min_tvl(global_args.rpc.min_tvl)
+        .run()?;
     info!(server_url, "Http and Ws server started");
     let shutdown_task = tokio::spawn(shutdown_handler(server_handle, vec![], None));
     let (res, _, _) = select_all([server_task, shutdown_task]).await;
@@ -361,9 +358,7 @@ async fn create_indexing_tasks(
     extractors_config: ExtractorConfigs,
     extraction_runtime: Option<&Handle>,
 ) -> Result<(ExtractionTasks, ServerTasks), ExtractionError> {
-    //  TODO: configure RPC client with the retry config from global_args
-    let rpc_client = EthereumRpcClient::new(&global_args.rpc.url)
-        .map_err(|e| ExtractionError::Setup(format!("Failed to create RPC client: {e}")))?;
+    let rpc_client = global_args.rpc.build_client()?;
 
     let block_number = rpc_client
         .get_block_number()
@@ -391,11 +386,9 @@ async fn create_indexing_tasks(
             .expect("No chain provided"), //TODO: handle multichain?
     );
 
-    let rpc_config: RPCRetryConfig = global_args.rpc.clone().into();
-
     let (runners, extractor_handles): (Vec<_>, Vec<_>) =
         // TODO: accept substreams configuration from cli.
-        build_all_extractors(&extractors_config, chain_state, chains, &global_args.endpoint_url, global_args.s3_bucket.as_deref(), &substreams_args.substreams_api_token, &cached_gw, global_args.database_insert_batch_size, &token_processor, &rpc_config, &rpc_client, extraction_runtime)
+        build_all_extractors(&extractors_config, chain_state, chains, &global_args.endpoint_url, global_args.s3_bucket.as_deref(), &substreams_args.substreams_api_token, &cached_gw, global_args.database_insert_batch_size, &token_processor, &rpc_client, extraction_runtime)
             .await
             .map_err(|e| ExtractionError::Setup(format!("Failed to create extractors: {e}")))?
             .into_iter()
@@ -437,7 +430,6 @@ async fn build_all_extractors(
     cached_gw: &CachedGateway,
     database_insert_batch_size: usize,
     token_pre_processor: &EthereumTokenPreProcessor,
-    rpc_config: &RPCRetryConfig,
     rpc_client: &EthereumRpcClient,
     runtime: Option<&tokio::runtime::Handle>,
 ) -> Result<Vec<(ExtractorRunner, ExtractorHandle)>, ExtractionError> {
@@ -471,7 +463,6 @@ async fn build_all_extractors(
 
         let (runner, handle) =
             ExtractorBuilder::new(extractor_config, endpoint_url, s3_bucket, substreams_api_token)
-                .rpc_retry_config(rpc_config.clone())
                 .database_insert_batch_size(database_insert_batch_size)
                 .build(chain_state, cached_gw, token_pre_processor, &protocol_cache, rpc_client)
                 .await?
@@ -630,9 +621,7 @@ async fn run_analyze_tokens(
     global_args: GlobalArgs,
     analyzer_args: AnalyzeTokenArgs,
 ) -> Result<(), anyhow::Error> {
-    // TODO: configure RPC client with the retry config from global_args
-    let rpc_client = EthereumRpcClient::new(&global_args.rpc.url)
-        .map_err(|e| anyhow!("Failed to create RPC client: {e}"))?;
+    let rpc_client = global_args.rpc.build_client()?;
 
     create_tracing_subscriber();
     let (cached_gw, gw_writer_thread) = GatewayBuilder::new(&global_args.database_url)

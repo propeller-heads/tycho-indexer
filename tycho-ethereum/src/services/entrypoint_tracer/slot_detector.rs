@@ -94,9 +94,10 @@ pub trait SlotDetectionStrategy: Send + Sync {
     fn encode_calldata(params: &Self::Params) -> Bytes;
 }
 
-/// Generic slot detector that handles RPC communication and slot detection with a configurable
-/// strategy. This struct eliminates code duplication between balance and allowance detectors.
+/// Generic slot detector that handles RPC communication and slot detection.
+/// The specific strategy (balance, allowance, etc.) is defined by the generic parameter `S`.
 pub struct SlotDetector<S: SlotDetectionStrategy> {
+    max_token_batch_size: usize,
     rpc: EthereumRpcClient,
     cache: ThreadSafeCache<S::CacheKey, (Address, Bytes)>,
 }
@@ -105,7 +106,17 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
     /// Create a new SlotDetector with the given configuration and strategy
     pub fn new(rpc: &EthereumRpcClient) -> Self {
         // Create HTTP client with connection pooling and reasonable timeouts
-        Self { rpc: rpc.clone(), cache: Arc::new(std::sync::RwLock::new(HashMap::new())) }
+        Self {
+            max_token_batch_size: 10,
+            rpc: rpc.clone(),
+            cache: Arc::new(std::sync::RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// With `max_token_batch_size` limit of processing tokens per batch
+    pub fn with_max_token_batch_size(mut self, max_token_batch_size: usize) -> Self {
+        self.max_token_batch_size = max_token_batch_size;
+        self
     }
 
     /// Detect slots for tokens using batched requests (debug_traceCall + eth_call per token)
@@ -187,6 +198,30 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
         }
 
         final_results
+    }
+
+    /// Detect slots for multiple tokens in chunks
+    pub async fn detect_slots_chunked(
+        &self,
+        tokens: &[Address],
+        params: &S::Params,
+        block_hash: &BlockHash,
+    ) -> HashMap<Address, Result<(Address, Bytes), SlotDetectorError>> {
+        let mut all_results = HashMap::new();
+
+        for (chunk_idx, chunk) in tokens
+            .chunks(self.max_token_batch_size)
+            .enumerate()
+        {
+            debug!("Processing chunk {} with {} tokens", chunk_idx, chunk.len());
+
+            let chunk_results = self
+                .detect_token_slots(chunk, params, block_hash)
+                .await;
+            all_results.extend(chunk_results);
+        }
+
+        all_results
     }
 
     /// Create batch request data for all tokens (2 requests per token).

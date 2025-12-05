@@ -1,5 +1,8 @@
 use std::{
-    collections::{BTreeMap, HashMap}, default::Default, iter::IntoIterator, time::Duration,
+    collections::{BTreeMap, HashMap},
+    default::Default,
+    iter::IntoIterator,
+    time::Duration,
 };
 
 use alloy::{
@@ -17,60 +20,46 @@ use alloy::{
     },
     transports::{http::reqwest, RpcError, TransportErrorKind, TransportResult},
 };
-use backoff::{backoff::Backoff, ExponentialBackoff};
+use backoff::backoff::Backoff;
 use futures::future::join_all;
-use serde_json::{json, Value};
 use serde::Deserialize;
+use serde_json::{json, Value};
 use tracing::{debug, info, trace};
 use tycho_common::Bytes;
 
 use crate::{RPCError, RequestError};
 
+pub mod config;
 pub mod errors;
-pub mod retry;
+mod retry;
 
 use crate::{
-    rpc::retry::{has_custom_retry_code, RetryableError, WithMaxAttemptsBackoff},
+    rpc::{
+        config::{RPCBatchingConfig, RPCRetryConfig},
+        retry::{has_custom_retry_code, RetryPolicy, RetryableError},
+    },
     services::entrypoint_tracer::slot_detector::{
         SlotDetectorSlotTestRequest, SlotDetectorValueRequest,
     },
 };
 
-// TODO: Optimize these configurable for preventing rate limiting.
-// TODO: Handle rate limiting / individual connection failures & retries
-#[derive(Clone, Debug)]
-pub struct BatchingConfig {
-    /// Maximum number of general (e.g., code) requests per batch.
-    pub max_batch_size: usize,
-    pub max_storage_slot_batch_size: usize,
-}
-
-impl Default for BatchingConfig {
-    fn default() -> Self {
-        let max_storage_slot_batch_size =
-            std::env::var("TYCHO_BATCH_ACCOUNT_EXTRACTOR_STORAGE_MAX_BATCH_SIZE")
-                .unwrap_or_else(|_| "1000".to_string())
-                .parse::<usize>()
-                .unwrap_or(1000);
-
-        Self { max_batch_size: 50, max_storage_slot_batch_size }
-    }
-}
-
-// TODO: Consider adding rate limiting and retry logic for all RPC requests.
-// TODO: Consider adding fallback for batching requests to non-batched version on failure.
 /// This struct wraps the ReqwestClient and provides Ethereum-specific RPC methods
-/// with optional batching support and automatic retry logic.
+/// with default batching support and retry logic.
 /// It is cheap to clone, as the `inner` internally uses an Arc for the ReqwestClient.
 #[derive(Clone, Debug)]
 pub struct EthereumRpcClient {
     inner: ReqwestClient,
-    batching: Option<BatchingConfig>,
-    retry_policy: WithMaxAttemptsBackoff<ExponentialBackoff>,
+    batching: RPCBatchingConfig,
+    retry_policy: RetryPolicy,
     url: String,
 }
 
 impl EthereumRpcClient {
+    /// Creates a new EthereumRpcClient with the given RPC URL.
+    /// Uses default batching and retry configurations.
+    ///
+    /// Batching: enabled with defaults (max batch size 50, max storage slot batch size 1000).
+    /// Retry: enabled with defaults (max retries 3, initial backoff 100ms, max backoff 5000ms).
     pub fn new(rpc_url: &str) -> Result<Self, RPCError> {
         let url = rpc_url
             .parse()
@@ -87,8 +76,8 @@ impl EthereumRpcClient {
 
         let rpc = ClientBuilder::default().http_with_client(http_client, url);
 
-        let batching = Some(BatchingConfig::default());
-        let retry_policy = WithMaxAttemptsBackoff::default();
+        let batching = RPCBatchingConfig::default();
+        let retry_policy = RPCRetryConfig::default().into();
 
         Ok(Self { inner: rpc, batching, retry_policy, url: rpc_url.to_string() })
     }
@@ -97,15 +86,18 @@ impl EthereumRpcClient {
         &self.url
     }
 
-    pub fn with_batching(self, batching: Option<BatchingConfig>) -> Self {
-        Self { inner: self.inner, batching, retry_policy: self.retry_policy, url: self.url }
+    pub fn get_retry_config(&self) -> RPCRetryConfig {
+        (&self.retry_policy).into()
     }
 
-    pub fn with_retry_policy(
-        self,
-        retry_policy: WithMaxAttemptsBackoff<ExponentialBackoff>,
-    ) -> Self {
-        Self { inner: self.inner, batching: self.batching, retry_policy, url: self.url }
+    pub fn with_batching(mut self, batching_config: RPCBatchingConfig) -> Self {
+        self.batching = batching_config;
+        self
+    }
+
+    pub fn with_retry(mut self, retry_config: RPCRetryConfig) -> Self {
+        self.retry_policy = retry_config.into();
+        self
     }
 
     pub async fn get_block_number(&self) -> Result<u64, RPCError> {
@@ -226,7 +218,8 @@ impl EthereumRpcClient {
         );
 
         // Use the wrapper type to handle nodes that return null instead of {} for empty storage
-        let wrapper: StorageRangeResultWrapper = self.retry_policy
+        let wrapper: StorageRangeResultWrapper = self
+            .retry_policy
             .retry_request(|| async {
                 self.inner
                     .request("debug_storageRangeAt", params)
@@ -296,7 +289,7 @@ impl EthereumRpcClient {
         block_id: BlockNumberOrTag,
         addresses: &[Address],
     ) -> Result<HashMap<Address, (Bytes, U256)>, RPCError> {
-        if self.batching.is_some() {
+        if self.batching.supported {
             self.batch_fetch_accounts_code_and_balance(block_id, addresses)
                 .await
         } else {
@@ -310,23 +303,22 @@ impl EthereumRpcClient {
         block_id: BlockNumberOrTag,
         addresses: &[Address],
     ) -> Result<HashMap<Address, (Bytes, U256)>, RPCError> {
-        let batching = self
-            .batching
-            .as_ref()
-            .ok_or(RPCError::SetupError(
-                "BatchingConfig is required for batch operations".to_string(),
-            ))?;
+        if !self.batching.supported {
+            return Err(RPCError::SetupError(
+                "RPC Batching Configuration indicates batching is not supported".to_string(),
+            ));
+        }
 
         debug!(
-            chunk_size = batching.max_batch_size,
-            total_chunks = addresses.len() / batching.max_batch_size + 1,
+            chunk_size = self.batching.max_batch_size,
+            total_chunks = addresses.len() / self.batching.max_batch_size + 1,
             block_id = block_id.to_string(),
             "Preparing batch request for account code and balance"
         );
 
         let mut result = HashMap::with_capacity(addresses.len());
 
-        let chunk_size = batching.max_batch_size / 2; // we make 2 requests in a batch call: code + balance
+        let chunk_size = self.batching.max_batch_size / 2; // we make 2 requests in a batch call: code + balance
         if chunk_size == 0 {
             return Err(RPCError::SetupError(
                 "BatchingConfig max_batch_size must be at least 2".to_string(),
@@ -402,7 +394,7 @@ impl EthereumRpcClient {
         address: Address,
         slots: &[B256],
     ) -> Result<HashMap<B256, Option<B256>>, RPCError> {
-        if self.batching.is_some() {
+        if self.batching.supported {
             self.batch_get_selected_storage(block_id, address, slots)
                 .await
         } else {
@@ -449,16 +441,17 @@ impl EthereumRpcClient {
         address: Address,
         slots: &[B256],
     ) -> Result<HashMap<B256, Option<B256>>, RPCError> {
-        let batching = self
-            .batching
-            .as_ref()
-            .ok_or(RPCError::SetupError(
-                "BatchingConfig is required for batch operations".to_string(),
-            ))?;
+        if !self.batching.supported {
+            return Err(RPCError::SetupError(
+                "RPC Batching Configuration indicates batching is not supported".to_string(),
+            ));
+        }
 
         let mut result = HashMap::with_capacity(slots.len());
 
-        let chunk_size = batching.max_storage_slot_batch_size; // we make 1 request in a batch call
+        let chunk_size = self
+            .batching
+            .max_storage_slot_batch_size; // we make 1 request in a batch call
 
         // perf: consider running multiple batches in parallel using map of futures
         for slot_batch in slots.chunks(chunk_size) {
@@ -567,14 +560,13 @@ impl EthereumRpcClient {
         access_list_params: &Value,
         trace_call_params: &Value,
     ) -> Result<(AccessListResult, GethTrace), RPCError> {
-        let batching = self
-            .batching
-            .as_ref()
-            .ok_or(RPCError::SetupError(
-                "BatchingConfig is required for batch operations".to_string(),
-            ))?;
+        if !self.batching.supported {
+            return Err(RPCError::SetupError(
+                "RPC Batching Configuration indicates batching is not supported".to_string(),
+            ));
+        }
 
-        if batching.max_batch_size < 2 {
+        if self.batching.max_batch_size < 2 {
             return Err(RPCError::SetupError(
                 "BatchingConfig max_batch_size must be at least 2".to_string(),
             ));
@@ -622,14 +614,13 @@ impl EthereumRpcClient {
         calldata: &Bytes,
         block_hash: &B256,
     ) -> Result<Vec<(GethTrace, U256)>, RPCError> {
-        let batching = self
-            .batching
-            .as_ref()
-            .ok_or(RPCError::SetupError(
-                "BatchingConfig is required for batch operations".to_string(),
-            ))?;
+        if !self.batching.supported {
+            return Err(RPCError::SetupError(
+                "RPC Batching Configuration indicates batching is not supported".to_string(),
+            ));
+        }
 
-        let chunk_size = batching.max_batch_size / 2; // we make 2 requests in a batch call: trace + eth_call
+        let chunk_size = self.batching.max_batch_size / 2; // we make 2 requests in a batch call: trace + eth_call
         if chunk_size == 0 {
             return Err(RPCError::SetupError(
                 "BatchingConfig max_batch_size must be at least 2".to_string(),
@@ -705,14 +696,13 @@ impl EthereumRpcClient {
         calldata: &Bytes,
         block_hash: &B256,
     ) -> Result<Vec<TransportResult<Value>>, RPCError> {
-        let batching = self
-            .batching
-            .as_ref()
-            .ok_or(RPCError::SetupError(
-                "BatchingConfig is required for batch operations".to_string(),
-            ))?;
+        if !self.batching.supported {
+            return Err(RPCError::SetupError(
+                "RPC Batching Configuration indicates batching is not supported".to_string(),
+            ));
+        }
 
-        let chunk_size = batching.max_batch_size; // we make 1 request per test
+        let chunk_size = self.batching.max_batch_size; // we make 1 request per test
         let mut result = Vec::with_capacity(requests.len());
 
         for chunk_requests in requests.chunks(chunk_size) {
@@ -838,7 +828,7 @@ mod tests {
     use super::*;
     use crate::{
         erc20::balanceOfCall,
-        rpc::retry::{tests::MOCK_RETRY_POLICY_MAX_ATTEMPTS, WithMaxAttemptsBackoff},
+        rpc::retry::tests::MOCK_RETRY_POLICY_MAX_ATTEMPTS,
         services::entrypoint_tracer::slot_detector::{
             SlotDetectorSlotTestRequest, SlotDetectorValueRequest,
         },
@@ -853,12 +843,16 @@ mod tests {
     // Local extension methods specific to account extractor tests
     impl TestFixture {
         pub(crate) fn create_rpc_client(&self, batching: bool) -> EthereumRpcClient {
-            let batching = if batching { Some(BatchingConfig::default()) } else { None };
-            // We use higher max attempts for RPC testing to ensure that we can wait long enough in
-            // case we are being rate limited for the limit to be reset.
-            let retry_policy = WithMaxAttemptsBackoff::default().with_max_retries(7);
+            let batching = RPCBatchingConfig { supported: batching, ..Default::default() };
+            // We use 10 retries for tests to potential rate limiting issues.
+            let retry_policy = RPCRetryConfig { max_retries: 10, ..Default::default() }.into();
 
-            EthereumRpcClient { inner: self.inner_rpc.clone(), batching, retry_policy, url: self.url.clone() }
+            EthereumRpcClient {
+                inner: self.inner_rpc.clone(),
+                batching,
+                retry_policy,
+                url: self.url.clone(),
+            }
         }
     }
 
@@ -880,6 +874,38 @@ mod tests {
         assert!(result.is_err());
 
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_retry_config() {
+        // Test default config
+        let client =
+            EthereumRpcClient::new("https://example.com").expect("Failed to create client");
+        let config = client.get_retry_config();
+
+        assert_eq!(config.max_retries, 3, "Default max_retries should be 3");
+        assert_eq!(config.initial_backoff_ms, 100, "Default initial_backoff_ms should be 100");
+        assert_eq!(config.max_backoff_ms, 5000, "Default max_backoff_ms should be 5000");
+
+        // Test custom config roundtrip
+        let custom_config =
+            RPCRetryConfig { max_retries: 7, initial_backoff_ms: 200, max_backoff_ms: 10000 };
+
+        let client_with_custom = client.with_retry(custom_config.clone());
+        let retrieved_config = client_with_custom.get_retry_config();
+
+        assert_eq!(
+            retrieved_config.max_retries, custom_config.max_retries,
+            "Custom max_retries should be preserved"
+        );
+        assert_eq!(
+            retrieved_config.initial_backoff_ms, custom_config.initial_backoff_ms,
+            "Custom initial_backoff_ms should be preserved"
+        );
+        assert_eq!(
+            retrieved_config.max_backoff_ms, custom_config.max_backoff_ms,
+            "Custom max_backoff_ms should be preserved"
+        );
     }
 
     #[tokio::test]
@@ -1290,7 +1316,7 @@ mod tests {
         let fixture = TestFixture::new();
         let client = fixture
             .create_rpc_client(true)
-            .with_batching(Some(BatchingConfig { max_batch_size: 10, ..Default::default() }));
+            .with_batching(RPCBatchingConfig { max_batch_size: 10, ..Default::default() });
 
         let weth = parse_address(WETH_STR);
         let usdc = parse_address(USDC_STR);
@@ -1364,7 +1390,7 @@ mod tests {
         let fixture = TestFixture::new();
         let client = fixture
             .create_rpc_client(true)
-            .with_batching(Some(BatchingConfig { max_batch_size: 2, ..Default::default() }));
+            .with_batching(RPCBatchingConfig { max_batch_size: 2, ..Default::default() });
 
         // Using verified test case data with real balance slots for USDT, WETH, and USDC
         let usdt = parse_address(USDT_STR);
@@ -1466,7 +1492,7 @@ mod tests {
 
         let rpc_client = EthereumRpcClient::new(&server.url())
             .expect("Failed to create EthereumRpcClient")
-            .with_retry_policy(policy);
+            .with_retry((&policy).into());
 
         let batch_request = vec![
             SlotDetectorSlotTestRequest {

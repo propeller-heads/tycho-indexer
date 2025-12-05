@@ -71,7 +71,7 @@ impl BalanceSlotDetector for EVMBalanceSlotDetector {
         }
 
         let results = self
-            .detect_token_slots(&filtered_tokens, &holder, &block_hash)
+            .detect_slots_chunked(&filtered_tokens, &holder, &block_hash)
             .await;
 
         info!("Balance slot detection completed. Found results for {} tokens", results.len());
@@ -100,7 +100,7 @@ mod tests {
 
             let rpc = fixture.create_rpc_client(true);
 
-            EVMBalanceSlotDetector::new(&rpc)
+            EVMBalanceSlotDetector::new(&rpc).with_max_token_batch_size(5)
         }
     }
 

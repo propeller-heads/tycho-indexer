@@ -1,7 +1,8 @@
 use clap::{Args, Parser, Subcommand};
 use tycho_common::{models::Chain, Bytes};
+use tycho_ethereum::rpc::{config::RPCRetryConfig, EthereumRpcClient};
 
-use crate::extractor::RPCRetryConfig;
+use crate::extractor::ExtractionError;
 
 /// Tycho Indexer using Substreams
 ///
@@ -105,13 +106,14 @@ pub struct RPCArgs {
     pub min_tvl: Option<f64>,
 }
 
-impl From<RPCArgs> for RPCRetryConfig {
-    fn from(args: RPCArgs) -> Self {
-        Self {
-            max_retries: args.max_retries,
-            initial_backoff_ms: args.initial_backoff_ms,
-            max_backoff_ms: args.max_backoff_ms,
-        }
+impl RPCArgs {
+    pub fn build_client(&self) -> Result<EthereumRpcClient, ExtractionError> {
+        let retry_config =
+            RPCRetryConfig::new(self.max_retries, self.initial_backoff_ms, self.max_backoff_ms);
+
+        EthereumRpcClient::new(&self.url)
+            .map_err(|e| ExtractionError::Setup(format!("Failed to create RPC client: {e}")))
+            .map(|client| client.with_retry(retry_config))
     }
 }
 
@@ -368,7 +370,7 @@ mod cli_tests {
     }
 
     #[test]
-    fn test_rpc_args_conversion_to_config() {
+    fn test_rpc_args_conversion_to_rpc() {
         // Test conversion from RPCArgs (CLI) to RPCConfig (domain)
         let rpc_args = RPCArgs {
             url: "https://eth.example.com".to_string(),
@@ -378,10 +380,12 @@ mod cli_tests {
             min_tvl: None,
         };
 
-        let rpc_config: RPCRetryConfig = rpc_args.into();
+        let rpc_client = rpc_args.build_client().unwrap();
 
+        let rpc_config = rpc_client.get_retry_config();
         assert_eq!(rpc_config.max_retries, 7);
         assert_eq!(rpc_config.initial_backoff_ms, 250);
         assert_eq!(rpc_config.max_backoff_ms, 8000);
+        assert_eq!(rpc_client.get_url(), "https://eth.example.com");
     }
 }
