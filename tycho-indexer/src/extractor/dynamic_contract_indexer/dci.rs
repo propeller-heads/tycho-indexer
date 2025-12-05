@@ -22,9 +22,8 @@ use tycho_common::{
     traits::{AccountExtractor, EntryPointTracer, StorageSnapshotRequest},
 };
 
-use super::cache::DCICache;
+use super::{cache::DCICache, pausing::PausingReason};
 use crate::extractor::{
-    dynamic_contract_indexer::PausingReason,
     models::{
         insert_state_attribute_deletion, insert_state_attribute_update, BlockChanges,
         TxWithContractChanges,
@@ -300,37 +299,33 @@ where
             .cache
             .paused_components
             .iter()
-            .filter(|(_, opt)| {
+            .filter_map(|(cid, opt)| {
                 opt.as_ref()
                     .is_some_and(|r| r.is_sdk_paused())
+                    .then(|| cid.clone())
             })
-            .map(|(cid, _)| cid.clone())
             .collect();
 
         if !sdk_paused_components.is_empty() {
-            // Collect tracing params from paused components
-            let paused_tracing_params: HashSet<_> = sdk_paused_components
-                .iter()
-                .flat_map(|cid| {
-                    self.cache
-                        .component_id_to_entrypoint_params
-                        .get(cid)
-                        .cloned()
-                        .unwrap_or_default()
-                })
-                .collect();
+            let mut paused_tracing_params: HashSet<EntryPointWithTracingParams> = HashSet::new();
+            let mut non_paused_params: HashSet<EntryPointWithTracingParams> = HashSet::new();
 
-            // For each paused entrypoint, check if any non-paused component uses it
+            for (cid, eps) in self
+                .cache
+                .component_id_to_entrypoint_params
+                .iter()
+            {
+                if sdk_paused_components.contains(cid) {
+                    paused_tracing_params.extend(eps.iter().cloned());
+                } else {
+                    non_paused_params.extend(eps.iter().cloned());
+                }
+            }
+
+            // Params to skip are those exclusively from paused components (not used by non-paused)
             let tracing_params_to_skip: HashSet<_> = paused_tracing_params
                 .into_iter()
-                .filter(|ep| {
-                    // Check if any non-paused component has this entrypoint
-                    !self
-                        .cache
-                        .component_id_to_entrypoint_params
-                        .iter()
-                        .any(|(cid, eps)| !sdk_paused_components.contains(cid) && eps.contains(ep))
-                })
+                .filter(|ep| !non_paused_params.contains(ep))
                 .collect();
 
             if !tracing_params_to_skip.is_empty() {
@@ -905,11 +900,21 @@ where
                         .attributes
                         .get(PausingReason::ATTRIBUTE_NAME)
                     {
-                        if let Some(reason) = PausingReason::from_bytes(paused_bytes) {
-                            self.cache
-                                .paused_components
-                                .insert_permanent(state.component_id.clone(), Some(reason));
-                            paused_count += 1;
+                        match PausingReason::try_from_bytes(paused_bytes) {
+                            Ok(reason) => {
+                                self.cache
+                                    .paused_components
+                                    .insert_permanent(state.component_id.clone(), Some(reason));
+                                paused_count += 1;
+                            }
+                            Err(e) => {
+                                warn!(
+                                    component_id = %state.component_id,
+                                    paused_bytes = ?paused_bytes.as_ref(),
+                                    error = %e,
+                                    "Component has invalid 'paused' attribute value"
+                                );
+                            }
                         }
                     }
                 }
@@ -1060,6 +1065,11 @@ where
     /// Uses a HashMap to track the last pause state for each component, ensuring
     /// correct ordering when a component changes state multiple times in a block.
     ///
+    /// # Assumptions
+    /// This function assumes that `txs_with_update` is sorted by transaction execution order
+    /// within the block. The last update for a given component in the slice determines its
+    /// final pause state.
+    ///
     /// # Returns
     /// A tuple of (paused_components, unpaused_components) as HashSets of ComponentId.
     fn extract_sdk_pause_updates(
@@ -1093,18 +1103,17 @@ where
             }
         }
 
-        let paused = pause_states
-            .iter()
-            .filter(|&(_, &v)| v)
-            .map(|(k, _)| k.clone())
-            .collect();
-        let unpaused = pause_states
-            .iter()
-            .filter(|&(_, &v)| !v)
-            .map(|(k, _)| k.clone())
-            .collect();
-
-        (paused, unpaused)
+        pause_states.into_iter().fold(
+            (HashSet::new(), HashSet::new()),
+            |(mut paused, mut unpaused), (component_id, is_paused)| {
+                if is_paused {
+                    paused.insert(component_id);
+                } else {
+                    unpaused.insert(component_id);
+                }
+                (paused, unpaused)
+            },
+        )
     }
 
     /// Check if an address should skip full storage indexing

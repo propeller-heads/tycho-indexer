@@ -12,7 +12,7 @@ use tycho_common::models::{
     Address, BlockHash, ComponentId, EntryPointId, StoreKey,
 };
 
-use super::{hooks::hook_dci::ComponentProcessingState, PausingReason};
+use super::{hooks::hook_dci::ComponentProcessingState, pausing::PausingReason};
 
 /// A unique identifier for a storage location, consisting of an address and a storage key.
 type StorageLocation = (Address, StoreKey);
@@ -241,6 +241,11 @@ pub(super) struct HooksDCICache {
     /// `Some(reason)` indicates the component is paused with that reason.
     /// `None` indicates the component was unpaused (paused attribute deleted).
     /// When a component is SDK-paused (reason = Substreams), HooksDCI should skip processing.
+    ///
+    /// NOTE: This is intentionally separate from DCI's `paused_components` to avoid creating a
+    /// dependency on the DCI's cache, and keep the cache management independent.
+    /// This can be refactored to have a centralized cache, but that would ideally require a
+    /// centralized cache-management layer.
     pub(super) paused_components: VersionedCache<ComponentId, Option<PausingReason>>,
 }
 
@@ -459,23 +464,19 @@ where
     /// Keys that appear in multiple layers will only be returned once with their most recent value
     /// (from the latest pending layer, or permanent if not in pending).
     pub(super) fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
-        // Collect all keys and their latest values
-        let mut seen: std::collections::HashSet<&K> = std::collections::HashSet::new();
-        let mut result: Vec<(&K, &V)> = Vec::new();
+        // Start with permanent layer, then overwrite with pending layers (oldest to newest)
+        // This ensures the latest value is always kept for each key
+        let mut result: HashMap<&K, &V> = HashMap::new();
 
-        // Process pending layers from newest to oldest
-        for layer in self.pending.iter().rev() {
-            for (k, v) in layer.data.iter() {
-                if seen.insert(k) {
-                    result.push((k, v));
-                }
-            }
+        // Process permanent layer first
+        for (k, v) in self.permanent.iter() {
+            result.insert(k, v);
         }
 
-        // Process permanent layer
-        for (k, v) in self.permanent.iter() {
-            if seen.insert(k) {
-                result.push((k, v));
+        // Process pending layers from oldest to newest, overwriting with newer values
+        for layer in self.pending.iter() {
+            for (k, v) in layer.data.iter() {
+                result.insert(k, v);
             }
         }
 

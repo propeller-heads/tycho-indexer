@@ -39,14 +39,14 @@ impl PausingReason {
 
     /// Attempts to parse a pausing reason from a byte slice (typically from state attributes).
     ///
-    /// Returns `Some(PausingReason)` if the bytes represent a valid pausing reason,
-    /// `None` otherwise.
-    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+    /// Returns `Ok(PausingReason)` if the bytes represent a valid pausing reason,
+    /// or an error with details suitable for logging.
+    pub fn try_from_bytes(bytes: &[u8]) -> Result<Self, PausingReasonError> {
         if bytes.is_empty() {
-            return None;
+            return Err(PausingReasonError::EmptyBytes);
         }
         // The pausing reason is stored as a single byte
-        Self::try_from(bytes[0]).ok()
+        Self::try_from(bytes[0])
     }
 
     /// Checks if the given bytes represent an SDK pause (reason 0x01).
@@ -54,7 +54,9 @@ impl PausingReason {
     /// This is a convenience method for quickly checking if a component should be skipped.
     #[inline]
     pub fn is_sdk_paused_bytes(bytes: &[u8]) -> bool {
-        Self::from_bytes(bytes).is_some_and(|r| r.is_sdk_paused())
+        Self::try_from_bytes(bytes)
+            .ok()
+            .is_some_and(|r| r.is_sdk_paused())
     }
 }
 
@@ -85,9 +87,11 @@ impl From<PausingReason> for tycho_common::Bytes {
 
 /// Error type for invalid pausing reasons.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum PausingReasonError {
+pub(crate) enum PausingReasonError {
     #[error("Invalid pausing reason: {0}")]
     InvalidReason(u8),
+    #[error("Empty bytes for pausing reason")]
+    EmptyBytes,
 }
 
 #[cfg(test)]
@@ -120,18 +124,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case::substreams(&[1], Some(PausingReason::Substreams))]
-    #[case::tracing_error(&[2], Some(PausingReason::TracingError))]
-    #[case::metadata_error(&[3], Some(PausingReason::MetadataError))]
-    #[case::empty(&[], None)]
-    #[case::invalid_zero(&[0], None)]
-    #[case::invalid_four(&[4], None)]
-    #[case::multi_byte_uses_first(&[1, 2, 3], Some(PausingReason::Substreams))]
-    fn test_pausing_reason_from_bytes(
+    #[case::substreams(&[1], Ok(PausingReason::Substreams))]
+    #[case::tracing_error(&[2], Ok(PausingReason::TracingError))]
+    #[case::metadata_error(&[3], Ok(PausingReason::MetadataError))]
+    #[case::empty(&[], Err(PausingReasonError::EmptyBytes))]
+    #[case::invalid_zero(&[0], Err(PausingReasonError::InvalidReason(0)))]
+    #[case::invalid_four(&[4], Err(PausingReasonError::InvalidReason(4)))]
+    #[case::multi_byte_uses_first(&[1, 2, 3], Ok(PausingReason::Substreams))]
+    fn test_pausing_reason_try_from_bytes(
         #[case] input: &[u8],
-        #[case] expected: Option<PausingReason>,
+        #[case] expected: Result<PausingReason, PausingReasonError>,
     ) {
-        assert_eq!(PausingReason::from_bytes(input), expected);
+        assert_eq!(PausingReason::try_from_bytes(input), expected);
     }
 
     #[rstest]
@@ -167,7 +171,7 @@ mod tests {
     #[case::metadata_error(PausingReason::MetadataError)]
     fn test_roundtrip_conversion(#[case] reason: PausingReason) {
         let bytes: Bytes = reason.into();
-        let decoded = PausingReason::from_bytes(bytes.as_ref());
-        assert_eq!(decoded, Some(reason));
+        let decoded = PausingReason::try_from_bytes(bytes.as_ref());
+        assert_eq!(decoded, Ok(reason));
     }
 }

@@ -29,7 +29,7 @@ use crate::extractor::{
             hook_permissions_detector::HookPermissionsDetector,
             metadata_orchestrator::BlockMetadataOrchestrator,
         },
-        PausingReason,
+        pausing::PausingReason,
     },
     models::{insert_state_attribute_update, BlockChanges},
     ExtractionError, ExtractorExtension,
@@ -183,11 +183,21 @@ where
                             .attributes
                             .get(PausingReason::ATTRIBUTE_NAME)
                         {
-                            if let Some(reason) = PausingReason::from_bytes(paused_bytes) {
-                                self.cache
-                                    .paused_components
-                                    .insert_permanent(state.component_id.clone(), Some(reason));
-                                paused_count += 1;
+                            match PausingReason::try_from_bytes(paused_bytes) {
+                                Ok(reason) => {
+                                    self.cache
+                                        .paused_components
+                                        .insert_permanent(state.component_id.clone(), Some(reason));
+                                    paused_count += 1;
+                                }
+                                Err(e) => {
+                                    warn!(
+                                        component_id = %state.component_id,
+                                        paused_bytes = ?paused_bytes.as_ref(),
+                                        error = %e,
+                                        "Component has invalid 'paused' attribute value"
+                                    );
+                                }
                             }
                         }
                     }
@@ -659,6 +669,11 @@ where
     ///
     /// Uses a HashMap to track the last pause state for each component, ensuring
     /// correct ordering when a component changes state multiple times in a block.
+    ///
+    /// # Assumptions
+    /// This function assumes that transactions in `block_changes.txs_with_update` are sorted
+    /// by execution order within the block. The last update for a given component determines
+    /// its final pause state.
     fn extract_sdk_pause_updates(
         &self,
         block_changes: &BlockChanges,
@@ -691,18 +706,17 @@ where
             }
         }
 
-        let sdk_paused = pause_states
-            .iter()
-            .filter(|&(_, &v)| v)
-            .map(|(k, _)| k.clone())
-            .collect();
-        let sdk_unpaused = pause_states
-            .iter()
-            .filter(|&(_, &v)| !v)
-            .map(|(k, _)| k.clone())
-            .collect();
-
-        (sdk_paused, sdk_unpaused)
+        pause_states.into_iter().fold(
+            (HashSet::new(), HashSet::new()),
+            |(mut paused, mut unpaused), (component_id, is_paused)| {
+                if is_paused {
+                    paused.insert(component_id);
+                } else {
+                    unpaused.insert(component_id);
+                }
+                (paused, unpaused)
+            },
+        )
     }
 
     /// Updates the paused_components cache with pause/unpause changes.
@@ -2670,7 +2684,7 @@ mod tests {
     async fn test_extract_sdk_pause_updates_paused() {
         use tycho_common::models::protocol::ProtocolComponentStateDelta;
 
-        use crate::extractor::dynamic_contract_indexer::PausingReason;
+        use crate::extractor::dynamic_contract_indexer::pausing::PausingReason;
 
         let gateway = get_mock_gateway();
         let account_extractor = MockAccountExtractor::new();
@@ -2738,7 +2752,7 @@ mod tests {
     async fn test_extract_sdk_pause_updates_unpaused() {
         use tycho_common::models::protocol::ProtocolComponentStateDelta;
 
-        use crate::extractor::dynamic_contract_indexer::PausingReason;
+        use crate::extractor::dynamic_contract_indexer::pausing::PausingReason;
 
         let gateway = get_mock_gateway();
         let account_extractor = MockAccountExtractor::new();
@@ -2809,7 +2823,7 @@ mod tests {
     async fn test_extract_sdk_pause_updates_unpaused_via_zero_value() {
         use tycho_common::models::protocol::ProtocolComponentStateDelta;
 
-        use crate::extractor::dynamic_contract_indexer::PausingReason;
+        use crate::extractor::dynamic_contract_indexer::pausing::PausingReason;
 
         let gateway = get_mock_gateway();
         let account_extractor = MockAccountExtractor::new();
@@ -2878,7 +2892,7 @@ mod tests {
     async fn test_extract_sdk_pause_updates_unpaused_via_empty_value() {
         use tycho_common::models::protocol::ProtocolComponentStateDelta;
 
-        use crate::extractor::dynamic_contract_indexer::PausingReason;
+        use crate::extractor::dynamic_contract_indexer::pausing::PausingReason;
 
         let gateway = get_mock_gateway();
         let account_extractor = MockAccountExtractor::new();
@@ -2946,7 +2960,7 @@ mod tests {
     async fn test_extract_sdk_pause_updates_ignores_non_sdk_pause_reasons() {
         use tycho_common::models::protocol::ProtocolComponentStateDelta;
 
-        use crate::extractor::dynamic_contract_indexer::PausingReason;
+        use crate::extractor::dynamic_contract_indexer::pausing::PausingReason;
 
         let gateway = get_mock_gateway();
         let account_extractor = MockAccountExtractor::new();
