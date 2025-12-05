@@ -408,7 +408,7 @@ impl WsDeltasClient {
             uri,
             auth_key: auth_key.map(|s| s.to_string()),
             inner: Arc::new(Mutex::new(None)),
-            ws_buffer_size: 1024,
+            ws_buffer_size: 5000,
             subscription_buffer_size: 128,
             conn_notify: Arc::new(Notify::new()),
             max_reconnects: 5,
