@@ -1379,8 +1379,8 @@ pub struct LidoSwapEncoder {
 
 #[repr(u8)]
 enum LidoPool {
-    StETH = 1,
-    WStETH = 0,
+    StETH = 0,
+    WStETH = 1,
 }
 
 #[repr(u8)]
