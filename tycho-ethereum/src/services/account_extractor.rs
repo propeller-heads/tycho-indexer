@@ -15,8 +15,10 @@ use tycho_common::{
 };
 
 use crate::{
-    errors::{RPCError, RequestError},
-    rpc::EthereumRpcClient,
+    rpc::{
+        errors::{RPCError, RequestError},
+        EthereumRpcClient,
+    },
     BytesCodec,
 };
 
@@ -67,8 +69,6 @@ impl AccountExtractor for EVMAccountExtractor {
         block: &Block,
         requests: &[StorageSnapshotRequest],
     ) -> Result<HashMap<Bytes, AccountDelta>, Self::Error> {
-        let batching_supported = self.rpc.batching.is_some();
-
         let block_id = BlockNumberOrTag::Number(block.number);
         let block_hash = B256::from_slice(&block.hash);
 
@@ -89,17 +89,9 @@ impl AccountExtractor for EVMAccountExtractor {
             .collect();
 
         // Create a future for code and balance retrieval
-        let codes_and_balances_fut = async {
-            if batching_supported {
-                self.rpc
-                    .batch_fetch_accounts_code_and_balance(block_id, &alloy_addresses)
-                    .await
-            } else {
-                self.rpc
-                    .non_batch_fetch_accounts_code_and_balance(block_id, &alloy_addresses)
-                    .await
-            }
-        };
+        let codes_and_balances_fut = self
+            .rpc
+            .fetch_accounts_code_and_balance(block_id, &alloy_addresses);
 
         // Create futures for storage retrieval
         let storage_futs = unique_requests
@@ -114,15 +106,9 @@ impl AccountExtractor for EVMAccountExtractor {
                             .map(B256::from_bytes)
                             .collect::<Vec<_>>();
 
-                        if batching_supported {
-                            self.rpc
-                                .batch_get_selected_storage(block_id, address, &slots)
-                                .await
-                        } else {
-                            self.rpc
-                                .non_batch_get_selected_storage(block_id, address, &slots)
-                                .await
-                        }
+                        self.rpc
+                            .get_selected_storage(block_id, address, &slots)
+                            .await
                     } else {
                         self.rpc
                             .get_storage_range(address, block_hash)
