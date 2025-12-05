@@ -117,7 +117,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
             LidoPoolDirection.Wrap
         );
 
-        IERC20(STETH_ADDR).approve(WSTETH_ADDR, amountIn * 2);
+        IERC20(STETH_ADDR).approve(WSTETH_ADDR, amountIn);
 
         uint256 amountOut = LidoExposed.swap(stETHAmount, protocolData);
 

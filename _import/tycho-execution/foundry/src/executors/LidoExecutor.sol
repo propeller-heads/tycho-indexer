@@ -72,7 +72,9 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
             // stETH is a rebasing token where balances are calculated from shares
             // Measure actual balance changes to account for rounding in share conversions
             uint256 balanceBefore = IERC20(st_eth).balanceOf(address(this));
+
             LidoPool(st_eth).submit{value: givenAmount}(receiver); // TODO: passing receiver here is unnecessary
+
             uint256 balanceAfter = IERC20(st_eth).balanceOf(address(this));
             calculatedAmount = balanceAfter - balanceBefore;
 
@@ -80,7 +82,9 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
             if (receiver != address(this)) {
                 uint256 receiverBalanceBefore =
                     IERC20(st_eth).balanceOf(receiver);
+
                 IERC20(st_eth).safeTransfer(receiver, calculatedAmount);
+
                 uint256 receiverBalanceAfter =
                     IERC20(st_eth).balanceOf(receiver);
                 // Update calculatedAmount to reflect actual tokens received after transfer
@@ -92,7 +96,12 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
         ) {
             //wsteth, steth -> wsteth
             _transfer(address(this), transferType, st_eth, givenAmount);
+
+            if (approvalNeeded) {
+                IERC20(st_eth).forceApprove(wst_eth, type(uint256).max -1 );
+            }
             calculatedAmount = LidoWrappedPool(wst_eth).wrap(givenAmount);
+
             if (receiver != address(this)) {
                 IERC20(wst_eth).safeTransfer(receiver, calculatedAmount);
             }

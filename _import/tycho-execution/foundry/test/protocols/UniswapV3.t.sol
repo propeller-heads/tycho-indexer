@@ -221,7 +221,7 @@ contract UniswapV3ExecutorTest is
     }
 }
 
-contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
+contract TychoRouterForUniswapV3Test is TychoRouterTestSetup {
     function testSingleSwapUSV3Permit2() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V3 using Permit2
         // Tests entire USV3 flow including callback
