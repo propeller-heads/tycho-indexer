@@ -35,8 +35,7 @@ contract RocketpoolExecutorExposed is RocketpoolExecutor {
 contract RocketpoolExecutorTest is TestUtils, Constants {
     RocketpoolExecutorExposed rocketpoolExecutor;
 
-    IRocketTokenRETH constant RETH =
-        IRocketTokenRETH(0xae78736Cd615f374D3085123A210448E74Fc6393);
+    IRocketTokenRETH constant RETH = IRocketTokenRETH(RETH_ADDR);
 
     modifier setUpFork(uint256 blockNumber) {
         vm.createSelectFork(vm.rpcUrl("mainnet"), blockNumber);
@@ -195,8 +194,7 @@ contract TychoRouterForRocketpoolTest is TychoRouterTestSetup {
     }
 
     function testSingleSwap() public {
-        IRocketTokenRETH RETH =
-            IRocketTokenRETH(0xae78736Cd615f374D3085123A210448E74Fc6393);
+        IRocketTokenRETH RETH = IRocketTokenRETH(RETH_ADDR);
 
         uint256 amountIn = 4.5e18;
         bytes memory callData =
