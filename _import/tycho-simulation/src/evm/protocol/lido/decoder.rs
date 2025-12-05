@@ -55,10 +55,10 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoState {
                 ))?
         } else if pool_type == LidoPoolType::WStEth {
             snapshot
-            .state
+                .state
                 .balances
                 .get(&Bytes::from_str(ST_ETH_ADDRESS_PROXY).unwrap())
-            .ok_or(InvalidSnapshotError::MissingAttribute(
+                .ok_or(InvalidSnapshotError::MissingAttribute(
                     "Total shares field is missing".to_owned(),
                 ))?
         } else {

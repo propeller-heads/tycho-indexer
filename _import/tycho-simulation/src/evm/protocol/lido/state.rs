@@ -1,7 +1,7 @@
-use std::{any::Any, collections::HashMap, str::FromStr};
+use std::{any::Any, collections::HashMap};
 
 use num_bigint::BigUint;
-use num_traits::{ToPrimitive, Zero};
+use num_traits::Zero;
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -72,24 +72,22 @@ pub struct LidoState {
     pub total_wrapped_st_eth: Option<BigUint>,
     pub id: Bytes,
     pub native_address: Bytes,
-    pub stake_limits_state: StakeLimitState, //only needed for steth
+    pub stake_limits_state: StakeLimitState,
 }
 
 impl LidoState {
-    fn steth_swap(&self, amount_in: BigUint) -> GetAmountOutResult {
-        let total_pooled_eth = self.total_pooled_eth.clone();
-        let total_shares = self.total_shares.clone();
+    fn steth_swap(&self, amount_in: BigUint) -> Result<GetAmountOutResult, SimulationError> {
         let shares = safe_div_u256(
-            safe_mul_u256(biguint_to_u256(&amount_in), biguint_to_u256(&total_shares)).unwrap(),
-            biguint_to_u256(&total_pooled_eth),
-        )
-        .unwrap();
+            safe_mul_u256(biguint_to_u256(&amount_in), biguint_to_u256(&self.total_shares))?,
+            biguint_to_u256(&self.total_pooled_eth),
+        )?;
+
         let amount_out = safe_div_u256(
-            safe_mul_u256(shares, biguint_to_u256(&total_pooled_eth)).unwrap(),
-            biguint_to_u256(&total_shares),
-        )
-        .unwrap();
-        GetAmountOutResult {
+            safe_mul_u256(shares, biguint_to_u256(&self.total_pooled_eth))?,
+            biguint_to_u256(&self.total_shares),
+        )?;
+
+        Ok(GetAmountOutResult {
             amount: u256_to_biguint(amount_out),
             gas: BigUint::from(DEFAULT_GAS),
             new_state: Box::new(Self {
@@ -101,14 +99,21 @@ impl LidoState {
                 native_address: self.native_address.clone(),
                 stake_limits_state: self.stake_limits_state.clone(),
             }),
-        }
+        })
     }
 
     fn wrap_steth(&self, amount_in: BigUint) -> Result<GetAmountOutResult, SimulationError> {
         if amount_in.is_zero() {
             return Err(SimulationError::InvalidInput("Cannot wrap 0 stETH ".to_string(), None))
         }
-        let amount_out = amount_in * self.total_shares.clone() / self.total_pooled_eth.clone();
+        let amount_out = &amount_in * &self.total_shares / &self.total_pooled_eth;
+
+        let new_total_wrapped_st_eth = self
+            .total_wrapped_st_eth
+            .as_ref()
+            .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool") +
+            &amount_out;
+
         Ok(GetAmountOutResult {
             amount: amount_out.clone(),
             gas: BigUint::from(DEFAULT_GAS),
@@ -116,12 +121,7 @@ impl LidoState {
                 pool_type: self.pool_type.clone(),
                 total_shares: self.total_shares.clone(),
                 total_pooled_eth: self.total_pooled_eth.clone(),
-                total_wrapped_st_eth: Some(
-                    self.total_wrapped_st_eth
-                        .clone()
-                        .unwrap() +
-                        amount_out,
-                ),
+                total_wrapped_st_eth: Some(new_total_wrapped_st_eth),
                 id: self.id.clone(),
                 native_address: self.native_address.clone(),
                 stake_limits_state: self.stake_limits_state.clone(),
@@ -134,8 +134,13 @@ impl LidoState {
             return Err(SimulationError::InvalidInput("Cannot unwrap 0 wstETH ".to_string(), None))
         }
 
-        let amount_out =
-            amount_in.clone() * self.total_pooled_eth.clone() / self.total_shares.clone();
+        let amount_out = &amount_in * &self.total_pooled_eth / &self.total_shares;
+
+        let new_total_wrapped_st_eth = self
+            .total_wrapped_st_eth
+            .as_ref()
+            .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool") -
+            &amount_in;
 
         Ok(GetAmountOutResult {
             amount: amount_out.clone(),
@@ -144,12 +149,7 @@ impl LidoState {
                 pool_type: self.pool_type.clone(),
                 total_shares: self.total_shares.clone(),
                 total_pooled_eth: self.total_pooled_eth.clone(),
-                total_wrapped_st_eth: Some(
-                    self.total_wrapped_st_eth
-                        .clone()
-                        .unwrap() -
-                        amount_in,
-                ),
+                total_wrapped_st_eth: Some(new_total_wrapped_st_eth),
                 id: self.id.clone(),
                 native_address: self.native_address.clone(),
                 stake_limits_state: self.stake_limits_state.clone(),
@@ -193,19 +193,21 @@ impl LidoState {
             Ok((
                 self.total_wrapped_st_eth
                     .clone()
-                    .unwrap(),
+                    .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool"),
                 self.total_wrapped_st_eth
                     .clone()
-                    .unwrap(),
+                    .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool"),
             ))
         } else if buy_token == Bytes::from(WST_ETH_ADDRESS) &&
             sell_token == Bytes::from(ST_ETH_ADDRESS_PROXY)
         {
             // total_shares - wstETH
-            let limit_for_wrapping = self.total_shares.clone() -
+
+            let limit_for_wrapping = &self.total_shares -
                 self.total_wrapped_st_eth
-                    .clone()
-                    .unwrap();
+                    .as_ref()
+                    .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool");
+
             Ok((limit_for_wrapping.clone(), limit_for_wrapping))
         } else {
             Err(SimulationError::InvalidInput(
@@ -269,7 +271,7 @@ impl LidoState {
 
     fn st_eth_balance_transition(&mut self, balances: &HashMap<Bytes, Bytes>) {
         for (token, balance) in balances.iter() {
-            if token == &Bytes::from_str(ETH_ADDRESS).unwrap() {
+            if token == &Bytes::from(ETH_ADDRESS) {
                 self.total_pooled_eth = BigUint::from_bytes_be(balance)
             }
         }
@@ -301,7 +303,7 @@ impl LidoState {
 
     fn wst_eth_balance_transition(&mut self, balances: &HashMap<Bytes, Bytes>) {
         for (token, balance) in balances.iter() {
-            if token == &Bytes::from_str(ST_ETH_ADDRESS_PROXY).unwrap() {
+            if token == &Bytes::from(ST_ETH_ADDRESS_PROXY) {
                 self.total_pooled_eth = BigUint::from_bytes_be(balance)
             }
         }
@@ -320,10 +322,9 @@ impl ProtocolSim for LidoState {
                 if base.address == Bytes::from(ETH_ADDRESS) &&
                     quote.address == Bytes::from(ST_ETH_ADDRESS_PROXY)
                 {
-                    let total_shares_f64 =
-                        u256_to_f64(biguint_to_u256(&self.total_shares)).unwrap();
+                    let total_shares_f64 = u256_to_f64(biguint_to_u256(&self.total_shares))?;
                     let total_pooled_eth_f64 =
-                        u256_to_f64(biguint_to_u256(&self.total_pooled_eth)).unwrap();
+                        u256_to_f64(biguint_to_u256(&self.total_pooled_eth))?;
 
                     Ok(total_pooled_eth_f64 / total_shares_f64 * total_shares_f64 /
                         total_pooled_eth_f64)
@@ -341,13 +342,19 @@ impl ProtocolSim for LidoState {
                 if base.address == Bytes::from(ST_ETH_ADDRESS_PROXY) &&
                     quote.address == Bytes::from(WST_ETH_ADDRESS)
                 {
-                    Ok(self.total_shares.to_f64().unwrap() /
-                        self.total_pooled_eth.to_f64().unwrap())
+                    let total_shares_f64 = u256_to_f64(biguint_to_u256(&self.total_shares))?;
+                    let total_pooled_eth_f64 =
+                        u256_to_f64(biguint_to_u256(&self.total_pooled_eth))?;
+
+                    Ok(total_shares_f64 / total_pooled_eth_f64)
                 } else if base.address == Bytes::from(WST_ETH_ADDRESS) &&
                     quote.address == Bytes::from(ST_ETH_ADDRESS_PROXY)
                 {
-                    Ok(self.total_pooled_eth.to_f64().unwrap() /
-                        self.total_shares.to_f64().unwrap())
+                    let total_shares_f64 = u256_to_f64(biguint_to_u256(&self.total_shares))?;
+                    let total_pooled_eth_f64 =
+                        u256_to_f64(biguint_to_u256(&self.total_pooled_eth))?;
+
+                    Ok(total_pooled_eth_f64 / total_shares_f64)
                 } else {
                     Err(SimulationError::InvalidInput(
                         format!(
@@ -375,7 +382,7 @@ impl ProtocolSim for LidoState {
                 if token_in.address == Bytes::from(ETH_ADDRESS) &&
                     token_out.address == Bytes::from(ST_ETH_ADDRESS_PROXY)
                 {
-                    Ok(self.steth_swap(amount_in))
+                    Ok(self.steth_swap(amount_in)?)
                 } else {
                     Err(SimulationError::InvalidInput(
                         format!(
@@ -416,7 +423,7 @@ impl ProtocolSim for LidoState {
         // If it's the stETH type:
         //   - and the buy token is ETH, the limits are 0
         //   - sell token is ETH: use the StakeLimitState
-        // If it's wstETH: rely on the total supply (I think)
+        // If it's wstETH: rely on the total supply
         match self.pool_type {
             LidoPoolType::StEth => self.st_eth_limits(sell_token, buy_token),
             LidoPoolType::WStEth => self.wst_eth_limits(sell_token, buy_token),
@@ -598,12 +605,12 @@ mod tests {
         let token_st_eth = token_st_eth();
         let state = lido_state_steth();
 
-        let amount_in = BigUint::from_str("0009001102957532401").unwrap();
+        let amount_in = BigUint::from_str("9001102957532401").unwrap();
         let res = state
             .get_amount_out(amount_in.clone(), &token_eth, &token_st_eth)
             .unwrap();
 
-        let exp = BigUint::from_str("9001102957532401").unwrap(); // diff in total pooled eth; rounding error
+        let exp = BigUint::from_str("9001102957532400").unwrap(); // diff in total pooled eth; rounding error
         assert_eq!(res.amount, exp);
 
         let total_shares_after = from_hex_str_to_biguint(
