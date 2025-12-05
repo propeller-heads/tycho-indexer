@@ -70,26 +70,18 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
         selected = angstromExecutor.selectAttestation(encodedAttestations);
         assertEq(selected, attestation3);
 
-        // Test selecting for block 350 (should revert)
+        // Test selecting for block 350 (should return empty bytes)
         vm.roll(350);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                UniswapV4Executor__NoAngstromAttestationForBlock.selector, 350
-            )
-        );
         selected = angstromExecutor.selectAttestation(encodedAttestations);
+        assertEq(selected, "");
     }
 
     function testSelectAttestationEmptyAttestations() public {
-        // Encode empty attestations
+        // Encode empty attestations - should return empty bytes
         bytes memory encodedAttestations;
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                UniswapV4Executor__NoAngstromAttestationForBlock.selector,
-                block.number
-            )
-        );
-        angstromExecutor.selectAttestation(encodedAttestations);
+        bytes memory selected =
+            angstromExecutor.selectAttestation(encodedAttestations);
+        assertEq(selected, "");
     }
 
     function testSingleSwapAngstrom() public {
@@ -139,21 +131,13 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
         assertTrue(amountOut > 0);
     }
 
-    function testSwapFailsWithExpiredAttestations() public {
+    function testSwapWithExpiredAttestations() public {
         uint256 amountIn = 4160938619;
         deal(USDC_ADDR, address(angstromExecutor), amountIn);
 
-        UniswapV4Executor.UniswapV4Pool[] memory pools =
-            new UniswapV4Executor.UniswapV4Pool[](1);
-        pools[0] = UniswapV4Executor.UniswapV4Pool({
-            intermediaryToken: WETH_ADDR,
-            fee: uint24(8388608),
-            tickSpacing: int24(10),
-            hook: address(0x0000000aa232009084Bd71A5797d089AA4Edfad4),
-            hookData: bytes("")
-        });
-
         // Create attestations that are all in the past
+        // The executor will pass empty hook data to Angstrom
+        // However, the Angstrom hook itself will reject empty attestations
         uint256 currentBlock = block.number;
         bytes memory attestation =
             hex"d437f3372f3add2c2bc3245e6bd6f9c202e61bb367c79a6f740c7c12ca9c54a760bead943516fafaf8a4fe65a907b31d45c2ab4b525f9f32ec2771033e0832359ceb2e38d9288a755c7c366ce889b0df24b5821b1c";
@@ -177,12 +161,9 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
             firstPool
         );
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                UniswapV4Executor__NoAngstromAttestationForBlock.selector,
-                currentBlock
-            )
-        );
+        // The executor no longer reverts, but the Angstrom hook will reject empty attestations
+        // This demonstrates that empty hook data is successfully passed to Angstrom
+        vm.expectRevert();
         angstromExecutor.swap(amountIn, data);
     }
 

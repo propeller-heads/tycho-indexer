@@ -40,7 +40,6 @@ error UniswapV4Executor__DeltaNotNegative(Currency currency);
 error UniswapV4Executor__V4TooMuchRequested(
     uint256 maxAmountInRequested, uint256 amountRequested
 );
-error UniswapV4Executor__NoAngstromAttestationForBlock(uint256 blockNumber);
 error UniswapV4Executor__InvalidAngstromAttestationDataLength(uint256 length);
 error UniswapV4Executor__ZeroAddressAngstromHook();
 
@@ -501,7 +500,7 @@ contract UniswapV4Executor is
     /// @notice Selects the appropriate attestation for the current block number
     /// @dev Each attestation is exactly 93 bytes: 8 bytes blockNumber + 85 bytes attestation
     /// @param attestationData Raw bytes of encoded attestations for several blocks
-    /// @return The attestation bytes for the current or next valid block
+    /// @return The attestation bytes for the current block, or empty bytes if no attestation found
     function _selectAttestation(bytes memory attestationData)
         internal
         view
@@ -549,6 +548,7 @@ contract UniswapV4Executor is
         }
 
         // All attestations decoded and no attestation found for the current block.
-        revert UniswapV4Executor__NoAngstromAttestationForBlock(block.number);
+        // Return empty bytes instead of reverting
+        return "";
     }
 }
