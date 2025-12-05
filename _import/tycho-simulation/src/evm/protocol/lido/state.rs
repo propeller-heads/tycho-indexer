@@ -106,7 +106,11 @@ impl LidoState {
         if amount_in.is_zero() {
             return Err(SimulationError::InvalidInput("Cannot wrap 0 stETH ".to_string(), None))
         }
-        let amount_out = &amount_in * &self.total_shares / &self.total_pooled_eth;
+
+        let amount_out = u256_to_biguint(safe_div_u256(
+            safe_mul_u256(biguint_to_u256(&amount_in), biguint_to_u256(&self.total_shares))?,
+            biguint_to_u256(&self.total_pooled_eth),
+        )?);
 
         let new_total_wrapped_st_eth = self
             .total_wrapped_st_eth
@@ -134,7 +138,10 @@ impl LidoState {
             return Err(SimulationError::InvalidInput("Cannot unwrap 0 wstETH ".to_string(), None))
         }
 
-        let amount_out = &amount_in * &self.total_pooled_eth / &self.total_shares;
+        let amount_out = u256_to_biguint(safe_div_u256(
+            safe_mul_u256(biguint_to_u256(&amount_in), biguint_to_u256(&self.total_pooled_eth))?,
+            biguint_to_u256(&self.total_shares),
+        )?);
 
         let new_total_wrapped_st_eth = self
             .total_wrapped_st_eth
