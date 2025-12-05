@@ -41,7 +41,7 @@ use crate::{
         post_processors::POST_PROCESSOR_REGISTRY,
         protocol_cache::ProtocolMemoryCache,
         protocol_extractor::{ExtractorPgGateway, ProtocolExtractor},
-        ExtractionError, Extractor, ExtractorExtension, ExtractorMsg, RPCRetryConfig,
+        ExtractionError, Extractor, ExtractorExtension, ExtractorMsg,
     },
     pb::sf::substreams::v1::Package,
     substreams::{
@@ -447,8 +447,6 @@ pub struct ExtractorBuilder {
     /// Handle of the tokio runtime on which the extraction tasks will be run.
     /// If 'None' the default runtime will be used.
     runtime_handle: Option<Handle>,
-    /// RPC Retry configuration
-    rpc_retry_config: RPCRetryConfig,
 }
 
 impl ExtractorBuilder {
@@ -467,7 +465,6 @@ impl ExtractorBuilder {
             database_insert_batch_size: None,
             final_block_only: false,
             runtime_handle: None,
-            rpc_retry_config: RPCRetryConfig::default(),
         }
     }
 
@@ -499,12 +496,6 @@ impl ExtractorBuilder {
 
     pub fn set_runtime(mut self, runtime: Handle) -> Self {
         self.runtime_handle = Some(runtime);
-        self
-    }
-
-    /// Set the RPC retry configuration
-    pub fn rpc_retry_config(mut self, config: RPCRetryConfig) -> Self {
-        self.rpc_retry_config = config;
         self
     }
 
@@ -678,7 +669,6 @@ impl ExtractorBuilder {
                     )
                     .pause_after_retries(3)
                     .max_retries(5)
-                    .rpc_retry_config(self.rpc_retry_config.clone())
                     .build()?;
 
                     hooks_dci.initialize().await?;

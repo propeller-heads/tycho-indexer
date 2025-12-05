@@ -79,7 +79,7 @@ impl AllowanceSlotDetector for EVMAllowanceSlotDetector {
 
         let params = (owner, spender);
         let results = self
-            .detect_token_slots(&filtered_tokens, &params, &block_hash)
+            .detect_slots_chunked(&filtered_tokens, &params, &block_hash)
             .await;
 
         info!("Allowance slot detection completed. Found results for {} tokens", results.len());
@@ -128,7 +128,7 @@ mod tests {
         let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
 
         let rpc = EthereumRpcClient::new(&rpc_url).expect("failed to create RPC client");
-        let detector = EVMAllowanceSlotDetector::new(&rpc);
+        let detector = EVMAllowanceSlotDetector::new(&rpc).with_max_token_batch_size(5);
 
         // TRUF
         let token = Address::from_str("0x38c2a4a7330b22788374b8ff70bba513c8d848ca").unwrap();
@@ -197,7 +197,7 @@ mod tests {
         let block_hash = BlockHash::from_str(BLOCK_HASH).expect("Invalid block hash");
         println!("Block hash: {block_hash}");
 
-        let detector = EVMAllowanceSlotDetector::new(&rpc);
+        let detector = EVMAllowanceSlotDetector::new(&rpc).with_max_token_batch_size(5);
         let results = detector
             .detect_allowance_slots(&tokens, owner_address, spender_address, block_hash)
             .await;

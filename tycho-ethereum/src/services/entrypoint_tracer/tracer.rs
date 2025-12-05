@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeMap, HashMap, HashSet},
-    time::Duration,
-};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use alloy::{
     primitives::{
@@ -19,7 +16,6 @@ use alloy::{
     },
 };
 use async_trait::async_trait;
-use backoff::ExponentialBackoffBuilder;
 use serde_json::{json, Map, Value};
 use tycho_common::{
     models::{
@@ -34,7 +30,7 @@ use tycho_common::{
 };
 
 use crate::{
-    rpc::{retry::WithMaxAttemptsBackoff, EthereumRpcClient},
+    rpc::{config::RPCRetryConfig, EthereumRpcClient},
     BytesCodec, RPCError,
 };
 
@@ -44,20 +40,19 @@ pub struct EVMEntrypointService {
 }
 
 impl EVMEntrypointService {
+    // TODO: consider if we want to use the default retry policy from the rpc client
     pub fn new(rpc: &EthereumRpcClient) -> Self {
         Self::new_with_config(rpc, 3, 200)
     }
 
-    // TODO: consider if we want to use the default retry policy from the rpc client
     pub fn new_with_config(rpc: &EthereumRpcClient, max_retries: u32, retry_delay_ms: u64) -> Self {
-        let exp_policy = ExponentialBackoffBuilder::default()
-            .with_initial_interval(Duration::from_millis(retry_delay_ms))
-            .with_max_interval(Duration::from_millis(retry_delay_ms))
-            .build();
+        let policy = RPCRetryConfig {
+            max_retries: max_retries as usize,
+            initial_backoff_ms: retry_delay_ms,
+            max_backoff_ms: retry_delay_ms,
+        };
 
-        let policy = WithMaxAttemptsBackoff::new(exp_policy, max_retries as usize);
-
-        let rpc_client = rpc.clone().with_retry_policy(policy);
+        let rpc_client = rpc.clone().with_retry(policy);
 
         Self { rpc: rpc_client }
     }

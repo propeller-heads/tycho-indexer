@@ -14,6 +14,8 @@ use backoff::backoff::Backoff;
 pub use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use serde_json::value::RawValue;
 
+use crate::rpc::config::RPCRetryConfig;
+
 /// Extension trait to implement retry logic for [`RpcError<TransportErrorKind>`].
 ///
 /// This trait provides methods to analyze RPC errors and determine whether they should
@@ -140,19 +142,13 @@ impl<E: std::borrow::Borrow<RawValue>> RetryableError for RpcError<TransportErro
 }
 
 #[derive(Clone, Debug)]
-pub struct WithMaxAttemptsBackoff<B: Clone> {
-    inner: B,
+pub struct RetryPolicy {
+    inner: ExponentialBackoff,
     attempts_left: usize,
     max_retries: usize,
 }
 
-impl<B: Clone> WithMaxAttemptsBackoff<B> {
-    pub fn new(inner: B, max_retries: usize) -> Self {
-        Self { inner, attempts_left: max_retries, max_retries }
-    }
-}
-
-impl<B: Backoff + Clone> Backoff for WithMaxAttemptsBackoff<B> {
+impl Backoff for RetryPolicy {
     fn reset(&mut self) {
         self.attempts_left = self.max_retries;
         self.inner.reset();
@@ -167,35 +163,30 @@ impl<B: Backoff + Clone> Backoff for WithMaxAttemptsBackoff<B> {
     }
 }
 
-impl Default for WithMaxAttemptsBackoff<ExponentialBackoff> {
-    /// Creates a new retry policy with default values:
-    /// - Initial interval: 100ms
-    /// - Multiplier: 2.0x
-    /// - Max interval: 5s
-    /// - Max attempts: 3 retries
-    fn default() -> Self {
+impl From<RPCRetryConfig> for RetryPolicy {
+    fn from(value: RPCRetryConfig) -> Self {
         let policy = ExponentialBackoffBuilder::new()
-            .with_initial_interval(Duration::from_millis(100))
-            .with_multiplier(2.0)
-            .with_max_interval(Duration::from_secs(5))
+            .with_initial_interval(Duration::from_millis(value.initial_backoff_ms))
+            .with_max_interval(Duration::from_millis(value.max_backoff_ms))
             .build();
 
-        // Retry attempts after the initial try
-        let max_attempts = 3;
-
-        Self::new(policy, max_attempts)
+        Self::new(policy, value.max_retries)
     }
 }
 
-impl<B: Backoff + Clone> WithMaxAttemptsBackoff<B> {
-    pub fn with_max_retries(mut self, attempts: usize) -> Self {
-        self.max_retries = attempts;
-        self
+impl From<&RetryPolicy> for RPCRetryConfig {
+    fn from(value: &RetryPolicy) -> Self {
+        Self {
+            max_retries: value.max_retries,
+            initial_backoff_ms: value.inner.initial_interval.as_millis() as u64,
+            max_backoff_ms: value.inner.max_interval.as_millis() as u64,
+        }
     }
+}
 
-    pub fn with_policy(mut self, policy: B) -> Self {
-        self.inner = policy;
-        self
+impl RetryPolicy {
+    pub(crate) fn new(backoff: ExponentialBackoff, max_attempts: usize) -> Self {
+        Self { inner: backoff, attempts_left: max_attempts, max_retries: max_attempts }
     }
 
     /// Executes an RPC request with automatic retry on transient failures.
@@ -237,14 +228,14 @@ pub(crate) mod tests {
 
     pub(crate) const MOCK_RETRY_POLICY_MAX_ATTEMPTS: usize = 3;
 
-    pub(crate) fn mock_retry_policy() -> WithMaxAttemptsBackoff<ExponentialBackoff> {
+    pub(crate) fn mock_retry_policy() -> RetryPolicy {
         let inner = ExponentialBackoffBuilder::new()
             .with_initial_interval(Duration::from_millis(10))
             .with_multiplier(2.0)
             .with_max_interval(Duration::from_millis(100))
             .build();
 
-        WithMaxAttemptsBackoff::new(inner, MOCK_RETRY_POLICY_MAX_ATTEMPTS)
+        RetryPolicy::new(inner, MOCK_RETRY_POLICY_MAX_ATTEMPTS)
     }
 
     async fn mock_success(server: &mut ServerGuard) -> Mock {
@@ -433,7 +424,7 @@ pub(crate) mod tests {
 
         let retry_count = 5;
 
-        let policy = WithMaxAttemptsBackoff::new(exp_policy.clone(), retry_count);
+        let policy = RetryPolicy::new(exp_policy.clone(), retry_count);
 
         assert_eq!(policy.max_retries, retry_count);
         assert_eq!(policy.attempts_left, retry_count);
@@ -595,7 +586,7 @@ pub(crate) mod tests {
             .with_initial_interval(Duration::from_millis(start_interval))
             .with_multiplier(multiplier)
             .build();
-        let policy = WithMaxAttemptsBackoff::new(exp_policy, max_retries);
+        let policy = RetryPolicy::new(exp_policy, max_retries);
 
         let result = policy
             .retry_request(|| async {

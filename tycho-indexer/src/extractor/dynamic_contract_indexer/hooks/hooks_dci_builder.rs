@@ -10,9 +10,7 @@ use tycho_common::{
 };
 use tycho_ethereum::{
     rpc::EthereumRpcClient,
-    services::entrypoint_tracer::{
-        balance_slot_detector::EVMBalanceSlotDetector, slot_detector::SlotDetectorConfig,
-    },
+    services::entrypoint_tracer::balance_slot_detector::EVMBalanceSlotDetector,
 };
 
 use crate::extractor::{
@@ -34,7 +32,7 @@ use crate::extractor::{
             rpc_metadata_provider::RPCMetadataProvider,
         },
     },
-    ExtractionError, RPCRetryConfig,
+    ExtractionError,
 };
 
 /// Builder for creating a fully configured UniswapV4HookDCI
@@ -55,7 +53,6 @@ where
     pause_after_retries: u32,
     max_retries: u32,
     rpc_batch_size: usize,
-    rpc_retry_config: RPCRetryConfig,
 }
 
 impl<AE, T, G> UniswapV4HookDCIBuilder<AE, T, G>
@@ -83,7 +80,6 @@ where
             pause_after_retries: 3,
             max_retries: 5,
             rpc_batch_size: 50,
-            rpc_retry_config: RPCRetryConfig::new(5, 150, 5000),
         }
     }
 
@@ -102,12 +98,6 @@ where
     /// Sets the RPC batch size limit
     pub(super) fn rpc_batch_size(mut self, batch_size: usize) -> Self {
         self.rpc_batch_size = batch_size;
-        self
-    }
-
-    /// Sets the RPC retry configuration
-    pub(crate) fn rpc_retry_config(mut self, config: RPCRetryConfig) -> Self {
-        self.rpc_retry_config = config;
         self
     }
 
@@ -131,21 +121,13 @@ where
             "rpc_default".to_string(),
             Arc::new(RPCMetadataProvider::new_with_retry_config(
                 self.rpc_batch_size,
-                self.rpc_retry_config.clone(),
+                self.rpc.get_retry_config().clone(),
             )),
         );
 
         // Create EVM balance slot detector
-        let balance_slot_detector = {
-            let config = SlotDetectorConfig {
-                max_batch_size: 5,
-                max_retries: self.rpc_retry_config.max_retries,
-                initial_backoff_ms: self.rpc_retry_config.initial_backoff_ms,
-                max_backoff_ms: self.rpc_retry_config.max_backoff_ms,
-            };
-
-            EVMBalanceSlotDetector::new(config, &self.rpc)
-        };
+        let balance_slot_detector =
+            EVMBalanceSlotDetector::new(&self.rpc).with_max_token_batch_size(5);
 
         // TODO: refactor the MiniRouter contract to take the pool manager address as a parameter
         let router_code = match self.chain {
@@ -290,8 +272,7 @@ mod tests {
         let builder = builder
             .pause_after_retries(5)
             .max_retries(10)
-            .rpc_batch_size(100)
-            .rpc_retry_config(RPCRetryConfig::new(3, 100, 3000));
+            .rpc_batch_size(100);
 
         // Verify the builder fields are set correctly
         assert_eq!(builder.pause_after_retries, 5);

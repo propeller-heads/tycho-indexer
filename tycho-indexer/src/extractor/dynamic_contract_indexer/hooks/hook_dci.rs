@@ -1798,7 +1798,7 @@ mod tests {
 
         use tracing::info;
         use tycho_ethereum::{
-            rpc::{BatchingConfig, EthereumRpcClient},
+            rpc::EthereumRpcClient,
             services::entrypoint_tracer::{
                 balance_slot_detector::EVMBalanceSlotDetector, tracer::EVMEntrypointService,
             },
@@ -1939,13 +1939,8 @@ mod tests {
                 pool_manager.clone(),
             );
 
-            // Use a shared RPC client with a custom batching policy with the slot detector
-            let batching_config = BatchingConfig { max_batch_size: 5, ..Default::default() };
-            let rpc = rpc
-                .clone()
-                .with_batching(Some(batching_config));
-
-            let balance_slot_detector = EVMBalanceSlotDetector::new(&rpc);
+            let balance_slot_detector =
+                EVMBalanceSlotDetector::new(rpc).with_max_token_batch_size(5);
 
             let mut entrypoint_generator = UniswapV4DefaultHookEntrypointGenerator::new(
                 DefaultSwapAmountEstimator::with_limits(),
