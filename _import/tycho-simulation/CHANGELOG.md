@@ -1,3 +1,11 @@
+## [0.211.2](https://github.com/propeller-heads/tycho-simulation/compare/0.211.1...0.211.2) (2025-12-05)
+
+
+### Bug Fixes
+
+* Add state overwrites for an angstrom swap without attestation data ([9a0169f](https://github.com/propeller-heads/tycho-simulation/commit/9a0169ff53ca042a07b59aea621e803974a66934))
+* **quickstart:** Remove filter for uniswap_v4_hooks ([394afa7](https://github.com/propeller-heads/tycho-simulation/commit/394afa7d91f8f73563150462c608a32b33ced739))
+
 ## [0.211.1](https://github.com/propeller-heads/tycho-simulation/compare/0.211.0...0.211.1) (2025-12-04)
 
 
