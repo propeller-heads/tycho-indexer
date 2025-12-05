@@ -158,9 +158,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
             SLIPSTREAMS_NEW_FACTORY_BASE,
             PERMIT2_ADDRESS
         );
-        rocketpoolExecutor = new RocketpoolExecutor(
-            PERMIT2_ADDRESS
-        );
+        rocketpoolExecutor = new RocketpoolExecutor(PERMIT2_ADDRESS);
 
         address[] memory executors = new address[](14);
         executors[0] = address(usv2Executor);
