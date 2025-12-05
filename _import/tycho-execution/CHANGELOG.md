@@ -1,3 +1,10 @@
+## [0.141.0](https://github.com/propeller-heads/tycho-execution/compare/0.140.0...0.141.0) (2025-12-05)
+
+
+### Features
+
+* Update UniV4 hook executor with Angstrom support ([0fb4b86](https://github.com/propeller-heads/tycho-execution/commit/0fb4b863a682dea6abc86253492d70647584b48b))
+
 ## [0.140.0](https://github.com/propeller-heads/tycho-execution/compare/0.139.2...0.140.0) (2025-12-05)
 
 
