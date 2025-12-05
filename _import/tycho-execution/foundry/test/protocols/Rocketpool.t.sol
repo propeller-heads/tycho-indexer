@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
+import "../TychoRouterTestSetup.sol";
 import {CommonBase} from "../../lib/forge-std/src/Base.sol";
+import {Constants} from "../Constants.sol";
+import {RestrictTransferFrom} from "../../src/RestrictTransferFrom.sol";
+import {RocketpoolExecutor, RocketpoolExecutor__InvalidDataLength, IRocketTokenRETH} from "../../src/executors/RocketpoolExecutor.sol";
 import {StdAssertions} from "../../lib/forge-std/src/StdAssertions.sol";
 import {StdChains} from "../../lib/forge-std/src/StdChains.sol";
 import {StdCheats, StdCheatsSafe} from "../../lib/forge-std/src/StdCheats.sol";
 import {StdUtils} from "../../lib/forge-std/src/StdUtils.sol";
-import {RestrictTransferFrom} from "../../src/RestrictTransferFrom.sol";
-import {RocketpoolExecutor, RocketpoolExecutor__InvalidDataLength, IRocketTokenRETH} from "../../src/executors/RocketpoolExecutor.sol";
-import {Constants} from "../Constants.sol";
 import {TestUtils} from "../TestUtils.sol";
 
 contract RocketpoolExecutorExposed is RocketpoolExecutor {
@@ -30,7 +31,6 @@ contract RocketpoolExecutorExposed is RocketpoolExecutor {
 contract RocketpoolExecutorTest is TestUtils, Constants {
     RocketpoolExecutorExposed rocketpoolExecutor;
 
-    // Use the same interface as the executor
     IRocketTokenRETH constant RETH =
     IRocketTokenRETH(0xae78736Cd615f374D3085123A210448E74Fc6393);
 
@@ -179,6 +179,40 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
         // Check balances
         assertEq(rethBalanceAfter - rethBalanceBefore, amountOut);
         assertEq(amountOut, 3_905_847_020_555_141_679);
+    }
+
+    function testExportContract() public {
+        exportRuntimeBytecode(address(rocketpoolExecutor), "Rocketpool");
+    }
+}
+
+contract TychoRouterForRocketpoolTest is TychoRouterTestSetup {
+    function getForkBlock() public pure override returns (uint256) {
+        return 23899254;
+    }
+
+    function testSingleSwap() public {
+            IRocketTokenRETH RETH =
+    IRocketTokenRETH(0xae78736Cd615f374D3085123A210448E74Fc6393);
+
+        uint256 amountIn = 4.5e18;
+        bytes memory callData =
+            loadCallDataFromFile("test_single_encoding_strategy_rocketpool");
+
+        // Fund ALICE with ETH to send with the call
+        vm.deal(ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+
+        uint256 rethBalanceBefore = RETH.balanceOf(ALICE);
+        (bool success,) = tychoRouterAddr.call{value: amountIn}(callData);
+        uint256 rethBalanceAfter = RETH.balanceOf(ALICE);
+
+        // Check balances
+        assertTrue(success, "Call Failed");
+        assertEq(rethBalanceAfter - rethBalanceBefore, 3_905_847_020_555_141_679);
+        assertEq(RETH.balanceOf(tychoRouterAddr), 0);
+        assertEq(tychoRouterAddr.balance, 0);
     }
 
     function testExportContract() public {

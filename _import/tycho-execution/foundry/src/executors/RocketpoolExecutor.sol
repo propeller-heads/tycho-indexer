@@ -32,7 +32,7 @@ contract RocketpoolExecutor is IExecutor, RestrictTransferFrom {
 
         if (isDeposit) {
             // ETH -> rETH: Deposit ETH to Rocketpool to receive rETH
-
+            // We don't need to _transfer ETH into this contract since it must be sent along with the call
             uint256 rethBefore = RETH.balanceOf(address(this));
             ROCKET_DEPOSIT_POOL.deposit{value: givenAmount}();
             calculatedAmount = RETH.balanceOf(address(this)) - rethBefore;

@@ -1029,6 +1029,52 @@ fn test_sequential_encoding_strategy_fluid() {
 }
 
 #[test]
+fn test_sequential_encoding_strategy_rocketpool() {
+    // ETH -> (rocketpool) -> rETH
+    let rocketpool_pool = ProtocolComponent {
+        id: String::from("0xdd3f50f8a6cafbe9b31a427582963f465e745af8"),
+        protocol_system: String::from("rocketpool"),
+        ..Default::default()
+    };
+    let token_in = eth();
+    let token_out = Bytes::from("0xae78736Cd615f374D3085123A210448E74Fc6393");
+    let swap = SwapBuilder::new(rocketpool_pool, token_in.clone(), token_out.clone()).build();
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: token_in,
+        given_amount: BigUint::from(4_500_000_000_000_000_000_u128),
+        checked_token: token_out,
+        checked_amount: BigUint::from(3_905_847_020_555_141_679_u128),
+        // Alice
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFrom,
+        &eth(),
+        None,
+    )
+    .unwrap()
+    .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_single_encoding_strategy_rocketpool", hex_calldata.as_str());
+}
+
+#[test]
 fn test_single_encoding_strategy_slipstreams() {
     // WETH -> (Slipstreams) -> USDC
     let static_attributes = HashMap::from([(
