@@ -52,6 +52,7 @@ const executors_to_deploy = {
         {
             exchange: "UniswapV4Executor", args: [
                 "0x000000000004444c5dc75cB358380D2e3dE08A90",
+                "0x0000000aa232009084Bd71A5797d089AA4Edfad4",
                 "0x000000000022D473030F116dDEE9F6B43aC78BA3"
             ]
         },
