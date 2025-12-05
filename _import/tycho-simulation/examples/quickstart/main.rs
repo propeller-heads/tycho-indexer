@@ -39,9 +39,7 @@ use tycho_simulation::{
         engine_db::tycho_db::PreCachedDB,
         protocol::{
             ekubo::state::EkuboState,
-            filters::{
-                balancer_v2_pool_filter, curve_pool_filter, uniswap_v4_euler_hook_pool_filter,
-            },
+            filters::{balancer_v2_pool_filter, curve_pool_filter},
             pancakeswap_v2::state::PancakeswapV2State,
             u256_num::biguint_to_u256,
             uniswap_v2::state::UniswapV2State,
@@ -181,11 +179,7 @@ async fn main() {
                     Some(balancer_v2_pool_filter),
                 )
                 .exchange::<UniswapV4State>("uniswap_v4", tvl_filter.clone(), None)
-                .exchange::<UniswapV4State>(
-                    "uniswap_v4_hooks",
-                    tvl_filter.clone(),
-                    Some(uniswap_v4_euler_hook_pool_filter),
-                )
+                .exchange::<UniswapV4State>("uniswap_v4_hooks", tvl_filter.clone(), None)
                 // Only uncomment if you have ANGSTROM_API_KEY set
                 // .exchange::<UniswapV4State>("uniswap_v4_hooks", tvl_filter.clone(),
                 // Some(uniswap_v4_angstrom_hook_pool_filter))
