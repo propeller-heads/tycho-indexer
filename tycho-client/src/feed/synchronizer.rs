@@ -2274,8 +2274,8 @@ mod test {
             !first_snapshot
                 .snapshots
                 .states
-                .is_empty()
-                || first_snapshot.deltas.is_some()
+                .is_empty() ||
+                first_snapshot.deltas.is_some()
         );
         // Now send close signal - this should be handled in the main processing loop
         let _ = end_tx.send(());

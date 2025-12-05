@@ -408,7 +408,7 @@ impl WsDeltasClient {
             uri,
             auth_key: auth_key.map(|s| s.to_string()),
             inner: Arc::new(Mutex::new(None)),
-            ws_buffer_size: 128,
+            ws_buffer_size: 512,
             subscription_buffer_size: 128,
             conn_notify: Arc::new(Notify::new()),
             max_reconnects: 5,
@@ -481,7 +481,7 @@ impl WsDeltasClient {
     /// connection is established if not already connected.
     async fn ensure_connection(&self) -> Result<(), DeltasError> {
         if self.dead.load(Ordering::SeqCst) {
-            return Err(DeltasError::NotConnected)
+            return Err(DeltasError::NotConnected);
         };
         if !self.is_connected().await {
             self.conn_notify.notified().await;
@@ -691,7 +691,7 @@ impl WsDeltasClient {
             .subscriptions
             .get(&subscription_id)
         {
-            return
+            return;
         }
 
         let (tx, rx) = oneshot::channel();
