@@ -1,0 +1,9 @@
+substreams_yaml_path: ./substreams.yaml
+protocol_system: "ekubo_v3"
+module_name: "map_protocol_changes"
+adapter_build_signature: "constructor(address)" # TODO
+adapter_build_args: "0x16e186ecdc94083fff53ef2a41d46b92a54f61e2" # TODO
+skip_balance_check: true # Fails because the pool id is not the owner of the tokens. Needs to be address in the testing framework.
+protocol_type_names:
+  - "ekubo_v3_pool"
+tests: # TODO

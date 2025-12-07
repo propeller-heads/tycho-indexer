@@ -1,0 +1,157 @@
+specVersion: v0.1.0
+package:
+  name: "ethereum_ekubo_v3"
+  version: v0.1.0
+  url: "https://github.com/propeller-heads/tycho-protocol-sdk/tree/main/substreams/ethereum-ekubo-v3"
+
+protobuf:
+  files:
+    - tycho/evm/v1/common.proto
+    - tycho/evm/v1/utils.proto
+    - ekubo.proto
+  importPaths:
+    - ../../proto
+    - ./proto
+  excludePaths:
+    - google
+    - tycho
+    - sf/substreams
+
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ../target/wasm32-unknown-unknown/release/ethereum_ekubo_v3.wasm
+
+network: sepolia
+networks:
+  sepolia:
+    initialBlock:
+      map_events: 9739898 # Core deployment https://sepolia.etherscan.io/tx/0x3c3d1f0249781a60f90fad1d4c2f1a79b10b8cd205196df10ba2f94c48321c97
+    params:
+      map_events: "core=0x7dced58f40d871ab5d67689c35586a327116eb7f&oracle=0x518187914f592ac397654abb965d71389219a5b7&twamm=0xd483d0468db3336b9f64535ac675c7593d18789d&mev_capture=0x55ac4030e1d9b51f17207ce08b09ff27ead3098f"
+
+modules:
+  - name: map_events
+    kind: map
+    inputs:
+      - params: string
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:ekubo.BlockTransactionEvents
+
+  - name: map_components
+    kind: map
+    inputs:
+      - map: map_events
+    output:
+      type: proto:tycho.evm.v1.BlockChanges
+
+  - name: map_order_sale_rate_deltas
+    kind: map
+    inputs:
+      - map: map_events
+    output:
+      type: proto:ekubo.OrderSaleRateDeltas
+
+  - name: map_sale_rate_changes
+    kind: map
+    inputs:
+      - map: map_events
+    output:
+      type: proto:ekubo.SaleRateChanges
+
+  - name: map_tick_deltas
+    kind: map
+    inputs:
+      - map: map_events
+    output:
+      type: proto:ekubo.TickDeltas
+
+  - name: store_active_ticks
+    kind: store
+    valueType: int64
+    updatePolicy: set
+    inputs:
+      - map: map_events
+
+  - name: map_liquidity_changes
+    kind: map
+    inputs:
+      - map: map_events
+      - store: store_active_ticks
+    output:
+      type: proto:ekubo.LiquidityChanges
+
+  - name: store_active_sale_rates
+    kind: store
+    valueType: bigint
+    updatePolicy: set_sum
+    inputs:
+      - map: map_sale_rate_changes
+
+  - name: store_order_sale_rates
+    kind: store
+    valueType: bigint
+    updatePolicy: add
+    inputs:
+      - map: map_order_sale_rate_deltas
+
+  - name: store_pool_details
+    kind: store
+    valueType: proto:ekubo.PoolDetails
+    updatePolicy: set_if_not_exists
+    inputs:
+      - map: map_components
+
+  - name: store_tick_liquidities
+    kind: store
+    valueType: bigint
+    updatePolicy: add
+    inputs:
+      - map: map_tick_deltas
+
+  - name: map_balance_changes
+    kind: map
+    inputs:
+      - map: map_events
+      - store: store_pool_details
+    output:
+      type: proto:tycho.evm.v1.BlockBalanceDeltas
+
+  - name: store_active_liquidities
+    kind: store
+    valueType: bigint
+    updatePolicy: set_sum
+    inputs:
+      - map: map_liquidity_changes
+
+  - name: store_balance_changes
+    kind: store
+    valueType: bigint
+    updatePolicy: add
+    inputs:
+      - map: map_balance_changes
+
+  - name: map_protocol_changes
+    kind: map
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+      - map: map_components
+      - map: map_events
+      - map: map_balance_changes
+      - store: store_balance_changes
+        mode: deltas
+      - map: map_tick_deltas
+      - store: store_tick_liquidities
+        mode: deltas
+      - map: map_order_sale_rate_deltas
+      - store: store_order_sale_rates
+        mode: deltas
+      - map: map_liquidity_changes
+      - store: store_active_liquidities
+        mode: deltas
+      - map: map_sale_rate_changes
+      - store: store_active_sale_rates
+        mode: deltas
+    output:
+      type: proto:tycho.evm.v1.BlockChanges

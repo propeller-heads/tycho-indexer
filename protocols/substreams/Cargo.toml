@@ -17,6 +17,7 @@ members = [
     "ethereum-uniswap-v4/no-hooks",
     "ethereum-uniswap-v4/with-hooks",
     "ethereum-ekubo-v2",
+    "ethereum-ekubo-v3",
     "ethereum-maverick-v2",
     "ethereum-lido",
     "ethereum-balancer-v3",
@@ -33,3 +34,6 @@ resolver = "2"
 lto = true
 opt-level = 's'
 strip = "debuginfo"
+
+[patch.crates-io]
+ekubo_sdk = {git = "https://github.com/die-herdplatte/evm-rust-sdk.git", branch = "evm-utils"}
