@@ -37,20 +37,23 @@ impl PostgresGateway {
             })
             .collect_vec();
 
+        // Insert in batches to avoid exceeding PostgreSQL parameter limit
         // assumes that block with the same hash will not appear with different values
-        diesel::insert_into(block)
-            .values(&new_blocks)
-            .on_conflict_do_nothing()
-            .execute(conn)
-            .await
-            .map_err(|err| {
-                storage_error_from_diesel(
-                    err,
-                    "Block",
-                    &format!("Batch: {} and {} more", &new_blocks[0].hash, new_blocks.len() - 1),
-                    None,
-                )
-            })?;
+        for chunk in new_blocks.chunks(orm::NewBlock::MAX_BATCH_SIZE) {
+            diesel::insert_into(block)
+                .values(chunk)
+                .on_conflict_do_nothing()
+                .execute(conn)
+                .await
+                .map_err(|err| {
+                    storage_error_from_diesel(
+                        err,
+                        "Block",
+                        &format!("Batch: {} and {} more", &chunk[0].hash, chunk.len() - 1),
+                        None,
+                    )
+                })?;
+        }
         Ok(())
     }
 
@@ -137,20 +140,23 @@ impl PostgresGateway {
             })
             .collect::<Result<Vec<orm::NewTransaction>, StorageError>>()?;
 
+        // Insert in batches to avoid exceeding PostgreSQL parameter limit
         // assumes that tx with the same hash will not appear with different values
-        diesel::insert_into(transaction)
-            .values(&orm_txns)
-            .on_conflict_do_nothing()
-            .execute(conn)
-            .await
-            .map_err(|err| {
-                storage_error_from_diesel(
-                    err,
-                    "Transaction",
-                    &format!("Batch {:x} and {} more", &orm_txns[0].hash, orm_txns.len() - 1),
-                    None,
-                )
-            })?;
+        for chunk in orm_txns.chunks(orm::NewTransaction::MAX_BATCH_SIZE) {
+            diesel::insert_into(transaction)
+                .values(chunk)
+                .on_conflict_do_nothing()
+                .execute(conn)
+                .await
+                .map_err(|err| {
+                    storage_error_from_diesel(
+                        err,
+                        "Transaction",
+                        &format!("Batch {:x} and {} more", &chunk[0].hash, chunk.len() - 1),
+                        None,
+                    )
+                })?;
+        }
         Ok(())
     }
 

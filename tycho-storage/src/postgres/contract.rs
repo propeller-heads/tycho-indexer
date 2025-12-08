@@ -1497,11 +1497,17 @@ impl PostgresGateway {
                 .map(|b| b.entity)
                 .collect::<Vec<_>>();
             apply_versioning::<_, orm::AccountBalance>(&mut sorted, conn).await?;
-            diesel::insert_into(schema::account_balance::table)
-                .values(&sorted)
-                .execute(conn)
-                .await
-                .map_err(|err| storage_error_from_diesel(err, "AccountBalance", "batch", None))?;
+
+            // Insert in batches to avoid exceeding PostgreSQL parameter limit
+            for chunk in sorted.chunks(orm::NewAccountBalance::MAX_BATCH_SIZE) {
+                diesel::insert_into(schema::account_balance::table)
+                    .values(chunk)
+                    .execute(conn)
+                    .await
+                    .map_err(|err| {
+                        storage_error_from_diesel(err, "AccountBalance", "batch", None)
+                    })?;
+            }
         }
 
         Ok(())

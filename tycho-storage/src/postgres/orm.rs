@@ -222,6 +222,17 @@ pub struct NewBlock {
     pub ts: NaiveDateTime,
 }
 
+impl NewBlock {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 6;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
+}
+
 #[derive(Identifiable, Queryable, Associations, Selectable, Debug)]
 #[diesel(belongs_to(Block))]
 #[diesel(table_name = transaction)]
@@ -284,6 +295,17 @@ pub struct NewTransaction {
     pub from: Address,
     pub to: Address,
     pub index: i64,
+}
+
+impl NewTransaction {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 5;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
 }
 
 #[derive(Identifiable, Queryable, Selectable)]
@@ -384,6 +406,15 @@ pub struct NewComponentBalance {
 }
 
 impl NewComponentBalance {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 8;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
+
     pub fn new(
         token_id: i64,
         new_balance: Balance,
@@ -492,6 +523,17 @@ pub struct NewComponentBalanceLatest {
     pub valid_to: NaiveDateTime,
 }
 
+impl NewComponentBalanceLatest {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 8;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
+}
+
 impl From<NewComponentBalance> for NewComponentBalanceLatest {
     fn from(value: NewComponentBalance) -> Self {
         Self {
@@ -563,6 +605,15 @@ pub struct NewProtocolComponent {
 }
 
 impl NewProtocolComponent {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 7;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
+
     pub fn new(
         external_id: &str,
         chain_id: i64,
@@ -1054,6 +1105,17 @@ pub struct NewProtocolState {
     pub valid_to: NaiveDateTime,
 }
 
+impl NewProtocolState {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 7;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
+}
+
 impl From<ProtocolState> for NewProtocolState {
     fn from(value: ProtocolState) -> Self {
         Self {
@@ -1156,6 +1218,17 @@ pub struct NewProtocolStateLatest {
     pub modify_tx: i64,
     pub valid_from: NaiveDateTime,
     pub valid_to: NaiveDateTime,
+}
+
+impl NewProtocolStateLatest {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 7;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
 }
 
 impl From<NewProtocolState> for NewProtocolStateLatest {
@@ -1264,6 +1337,17 @@ pub struct NewAccount<'a> {
     pub deleted_at: Option<NaiveDateTime>,
 }
 
+impl<'a> NewAccount<'a> {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 6;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
+}
+
 #[derive(Identifiable, Queryable, Associations, Selectable, Debug, PartialEq)]
 #[diesel(belongs_to(Account))]
 #[diesel(table_name = token)]
@@ -1293,6 +1377,15 @@ pub struct NewToken {
 }
 
 impl NewToken {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 6;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
+
     pub fn from_token(account_id: i64, token: &models::token::Token) -> Self {
         Self {
             account_id,
@@ -1403,6 +1496,17 @@ pub struct NewAccountBalance {
     pub modify_tx: i64,
     pub valid_from: NaiveDateTime,
     pub valid_to: Option<NaiveDateTime>,
+}
+
+impl NewAccountBalance {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 6;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
 }
 
 impl VersionedRow for NewAccountBalance {
@@ -2055,4 +2159,77 @@ pub struct EntryPointTracingParamsCallsAccount {
 pub struct NewEntryPointTracingParamsCallsAccount {
     pub entry_point_tracing_params_id: i64,
     pub account_id: i64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test that MAX_BATCH_SIZE is calculated correctly and doesn't exceed i16 limit
+    #[test]
+    fn test_max_batch_size_within_limits() {
+        // Verify that MAX_BATCH_SIZE * FIELD_COUNT doesn't exceed i16::MAX (32767)
+        const {
+            assert!(
+                NewComponentBalance::MAX_BATCH_SIZE * NewComponentBalance::FIELD_COUNT <= 32767,
+                "NewComponentBalance: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+        const {
+            assert!(
+                NewComponentBalanceLatest::MAX_BATCH_SIZE * NewComponentBalanceLatest::FIELD_COUNT <=
+                    32767,
+                "NewComponentBalanceLatest: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+        const {
+            assert!(
+                NewProtocolState::MAX_BATCH_SIZE * NewProtocolState::FIELD_COUNT <= 32767,
+                "NewProtocolState: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+        const {
+            assert!(
+                NewProtocolStateLatest::MAX_BATCH_SIZE * NewProtocolStateLatest::FIELD_COUNT <=
+                    32767,
+                "NewProtocolStateLatest: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+        const {
+            assert!(
+                NewAccountBalance::MAX_BATCH_SIZE * NewAccountBalance::FIELD_COUNT <= 32767,
+                "NewAccountBalance: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+        const {
+            assert!(
+                NewBlock::MAX_BATCH_SIZE * NewBlock::FIELD_COUNT <= 32767,
+                "NewBlock: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+        const {
+            assert!(
+                NewTransaction::MAX_BATCH_SIZE * NewTransaction::FIELD_COUNT <= 32767,
+                "NewTransaction: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+        const {
+            assert!(
+                NewAccount::MAX_BATCH_SIZE * NewAccount::FIELD_COUNT <= 32767,
+                "NewAccount: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+        const {
+            assert!(
+                NewToken::MAX_BATCH_SIZE * NewToken::FIELD_COUNT <= 32767,
+                "NewToken: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+        const {
+            assert!(
+                NewProtocolComponent::MAX_BATCH_SIZE * NewProtocolComponent::FIELD_COUNT <= 32767,
+                "NewProtocolComponent: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+    }
 }
