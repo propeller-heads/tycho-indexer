@@ -1,3 +1,11 @@
+## [0.119.2](https://github.com/propeller-heads/tycho-indexer/compare/0.119.1...0.119.2) (2025-12-08)
+
+
+### Bug Fixes
+
+* chuck inserts across to avoid exceeding PostgreSQL parameter limits. ([c873493](https://github.com/propeller-heads/tycho-indexer/commit/c87349301a9358d3ecd991096b6dbb3b2debad7d))
+* chuck inserts across to avoid exceeding PostgreSQL parameter limits. ([#800](https://github.com/propeller-heads/tycho-indexer/issues/800)) ([711e137](https://github.com/propeller-heads/tycho-indexer/commit/711e137a0f7d59766edcf60b898bb4b71d5ad8f6))
+
 ## [0.119.1](https://github.com/propeller-heads/tycho-indexer/compare/0.119.0...0.119.1) (2025-12-03)
 
 ## [0.119.0](https://github.com/propeller-heads/tycho-indexer/compare/0.118.1...0.119.0) (2025-12-02)
