@@ -26,13 +26,22 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoState {
         _all_tokens: &HashMap<Bytes, Token>,
         _decoder_context: &DecoderContext,
     ) -> Result<Self, Self::Error> {
-        let (pool_type, id) = match snapshot.component.id.as_str() {
-            ST_ETH_ADDRESS_PROXY => (LidoPoolType::StEth, ST_ETH_ADDRESS_PROXY),
-            WST_ETH_ADDRESS => (LidoPoolType::WStEth, WST_ETH_ADDRESS),
+        let id = snapshot.component.id.as_str();
+
+        let pool_type = match snapshot
+            .component
+            .static_attributes
+            .get("protocol_type_name")
+            .and_then(|bytes| std::str::from_utf8(bytes).ok())
+            .ok_or(InvalidSnapshotError::MissingAttribute(
+                "protocol_type_name is missing".to_owned(),
+            ))? {
+            "stETH" => LidoPoolType::StEth,
+            "wstETH" => LidoPoolType::WStEth,
             _ => {
                 return Err(InvalidSnapshotError::ValueError(format!(
-                    "Unknown component id: {:?}",
-                    snapshot.component.id
+                    "Unknown protocol type name: {:?}",
+                    snapshot.component.protocol_type_name
                 )))
             }
         };
@@ -184,6 +193,8 @@ mod tests {
             "token_to_track_total_pooled_eth".to_string(),
             Bytes::from_str(ETH_ADDRESS).unwrap(),
         );
+        static_attr.insert("protocol_type_name".to_string(), "stETH".as_bytes().to_vec().into());
+
         let pc = ProtocolComponent {
             id: ST_ETH_ADDRESS_PROXY.to_string(),
             protocol_system: "protocol_system".to_owned(),
@@ -330,6 +341,9 @@ mod tests {
         static_attr.insert(
             "token_to_track_total_pooled_eth".to_string(),
             Bytes::from_str(ST_ETH_ADDRESS_PROXY).unwrap(),
+        );
+        static_attr.insert("protocol_type_name".to_string(), "wstETH".as_bytes().to_vec().into());
+
         let pc = ProtocolComponent {
             id: WST_ETH_ADDRESS.to_string(),
             protocol_system: "protocol_system".to_owned(),
