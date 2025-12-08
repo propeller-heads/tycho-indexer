@@ -37,6 +37,7 @@ use crate::{
         dynamic_contract_indexer::{
             dci::DynamicContractIndexer,
             hooks::{hook_dci::UniswapV4HookDCI, hooks_dci_builder::UniswapV4HookDCIBuilder},
+            pausing::TracingPauseStrategy,
         },
         post_processors::POST_PROCESSOR_REGISTRY,
         protocol_cache::ProtocolMemoryCache,
@@ -430,10 +431,17 @@ impl ExtractorConfig {
 pub enum DCIType {
     /// RPC DCI plugin - uses the RPC endpoint to fetch the account data
     #[serde(rename = "rpc")]
-    RPC,
+    RPC {
+        #[serde(default)]
+        tracing_pause_strategy: TracingPauseStrategy,
+    },
     /// UniswapV4Hooks DCI plugin - wrapper for the RPC DCI plugin that generates hook entrypoints
     /// for tracing
-    UniswapV4Hooks { pool_manager_address: String },
+    UniswapV4Hooks {
+        pool_manager_address: String,
+        #[serde(default)]
+        tracing_pause_strategy: TracingPauseStrategy,
+    },
 }
 
 pub struct ExtractorBuilder {
@@ -550,6 +558,7 @@ impl ExtractorBuilder {
         chain: Chain,
         extractor_name: String,
         cached_gw: &CachedGateway,
+        tracing_pause_strategy: TracingPauseStrategy,
     ) -> Result<
         DynamicContractIndexer<EVMAccountExtractor, EVMEntrypointService, CachedGateway>,
         ExtractionError,
@@ -588,6 +597,7 @@ impl ExtractorBuilder {
             account_extractor,
             tracer,
         );
+        rpc_dci.with_pause_strategy(tracing_pause_strategy);
         rpc_dci.initialize().await?;
 
         Ok(rpc_dci)
@@ -643,18 +653,19 @@ impl ExtractorBuilder {
 
         let dci_plugin = if let Some(ref dci_type) = self.config.dci_plugin {
             Some(match dci_type {
-                DCIType::RPC => {
+                DCIType::RPC { tracing_pause_strategy } => {
                     let rpc_dci = Self::create_rpc_dci(
                         rpc_client,
                         self.config.chain,
                         self.config.name.clone(),
                         cached_gw,
+                        *tracing_pause_strategy,
                     )
                     .await?;
 
                     DCIPlugin::Standard(rpc_dci)
                 }
-                DCIType::UniswapV4Hooks { pool_manager_address } => {
+                DCIType::UniswapV4Hooks { pool_manager_address, tracing_pause_strategy } => {
                     // random address to deploy our mini router to
                     let router_address =
                         Address::from("0x2e234DAe75C793f67A35089C9d99245E1C58470b");
@@ -665,6 +676,7 @@ impl ExtractorBuilder {
                         self.config.chain,
                         self.config.name.clone(),
                         cached_gw,
+                        *tracing_pause_strategy,
                     )
                     .await?;
 
@@ -876,7 +888,7 @@ dci_plugin:
 
         // Verify DCI plugin is RPC
         assert!(
-            matches!(config.dci_plugin, Some(DCIType::RPC)),
+            matches!(config.dci_plugin, Some(DCIType::RPC { .. })),
             "Expected RPC DCI plugin but got {:?}",
             config.dci_plugin
         );
@@ -919,7 +931,7 @@ dci_plugin:
             .dci_plugin
             .expect("Expected dci_plugin to be set");
         match dci_plugin {
-            DCIType::UniswapV4Hooks { pool_manager_address } => {
+            DCIType::UniswapV4Hooks { pool_manager_address, .. } => {
                 assert_eq!(pool_manager_address, "0x000000000004444c5dc75cB358380D2e3dE08A90");
             }
             _ => {

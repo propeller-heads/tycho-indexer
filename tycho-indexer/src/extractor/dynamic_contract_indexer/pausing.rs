@@ -6,6 +6,7 @@
 use std::collections::{HashMap, HashSet};
 
 use deepsize::DeepSizeOf;
+use serde::Deserialize;
 use tycho_common::models::{blockchain::TxWithChanges, ComponentId};
 
 /// Represents the reason why a component has been paused.
@@ -95,6 +96,89 @@ pub(crate) enum PausingReasonError {
     InvalidReason(u8),
     #[error("Empty bytes for pausing reason")]
     EmptyBytes,
+}
+
+/// Strategy for determining when to pause/unpause components based on tracing results.
+///
+/// This enum defines the behavior for pause/unpause decisions after tracing entrypoints.
+/// Different protocols may need different strategies depending on whether they have
+/// redundant entrypoints or require each entrypoint to succeed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TracingPauseStrategy {
+    /// Pause only when ALL entrypoints for a component fail.
+    /// Unpause when all entrypoints succeed.
+    ///
+    /// Best for protocols with redundant entrypoints (e.g., UniswapV4 hooks) where
+    /// a component should only be paused if none of its entrypoints can be traced.
+    #[default]
+    AllFail,
+
+    /// Pause when ANY single entrypoint for a component fails.
+    /// Unpause when all entrypoints succeed.
+    ///
+    /// Best for protocols where each entrypoint is critical and any failure
+    /// indicates a problem that should pause the component.
+    AnyFail,
+}
+
+/// Decision from evaluating a pause strategy based on tracing results.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PauseDecision {
+    /// Component should be paused
+    Pause,
+    /// Component should be unpaused
+    Unpause,
+    /// No action should be taken (mixed results or incomplete data)
+    NoAction,
+}
+
+impl TracingPauseStrategy {
+    /// Evaluates whether a component should be paused based on tracing results.
+    ///
+    /// # Arguments
+    /// * `traced_count` - Total number of entrypoints traced for this component
+    /// * `success_count` - Number of successful traces
+    /// * `failure_count` - Number of failed traces
+    ///
+    /// # Returns
+    /// * `PauseDecision::Pause` - Component should be paused
+    /// * `PauseDecision::Unpause` - Component should be unpaused
+    /// * `PauseDecision::NoAction` - No action (mixed results for AllFail, or no traces)
+    pub fn evaluate(
+        &self,
+        traced_count: usize,
+        success_count: usize,
+        failure_count: usize,
+    ) -> PauseDecision {
+        if traced_count == 0 {
+            return PauseDecision::NoAction;
+        }
+
+        let all_succeeded = success_count == traced_count;
+
+        match self {
+            TracingPauseStrategy::AllFail => {
+                let all_failed = failure_count == traced_count;
+                if all_failed {
+                    PauseDecision::Pause
+                } else if all_succeeded {
+                    PauseDecision::Unpause
+                } else {
+                    PauseDecision::NoAction
+                }
+            }
+            TracingPauseStrategy::AnyFail => {
+                if failure_count > 0 {
+                    PauseDecision::Pause
+                } else if all_succeeded {
+                    PauseDecision::Unpause
+                } else {
+                    PauseDecision::NoAction
+                }
+            }
+        }
+    }
 }
 
 /// Extracts SDK pause/unpause updates from transaction changes.
@@ -418,6 +502,74 @@ mod tests {
             assert!(paused.is_empty());
             assert_eq!(unpaused.len(), 1);
             assert!(unpaused.contains("component_1"));
+        }
+    }
+
+    mod tracing_pause_strategy_tests {
+        use super::*;
+
+        #[test]
+        fn test_default_is_all_fail() {
+            assert_eq!(TracingPauseStrategy::default(), TracingPauseStrategy::AllFail);
+        }
+
+        #[rstest]
+        #[case::zero_traces(0, 0, 0, PauseDecision::NoAction)]
+        #[case::all_succeed_1(1, 1, 0, PauseDecision::Unpause)]
+        #[case::all_succeed_3(3, 3, 0, PauseDecision::Unpause)]
+        #[case::all_fail_1(1, 0, 1, PauseDecision::Pause)]
+        #[case::all_fail_3(3, 0, 3, PauseDecision::Pause)]
+        #[case::mixed_1_success_1_fail(2, 1, 1, PauseDecision::NoAction)]
+        #[case::mixed_2_success_1_fail(3, 2, 1, PauseDecision::NoAction)]
+        #[case::mixed_1_success_2_fail(3, 1, 2, PauseDecision::NoAction)]
+        fn test_all_fail_strategy(
+            #[case] traced: usize,
+            #[case] success: usize,
+            #[case] failure: usize,
+            #[case] expected: PauseDecision,
+        ) {
+            let strategy = TracingPauseStrategy::AllFail;
+            assert_eq!(strategy.evaluate(traced, success, failure), expected);
+        }
+
+        #[rstest]
+        #[case::zero_traces(0, 0, 0, PauseDecision::NoAction)]
+        #[case::all_succeed_1(1, 1, 0, PauseDecision::Unpause)]
+        #[case::all_succeed_3(3, 3, 0, PauseDecision::Unpause)]
+        #[case::one_fail_of_1(1, 0, 1, PauseDecision::Pause)]
+        #[case::one_fail_of_3(3, 2, 1, PauseDecision::Pause)]
+        #[case::two_fail_of_3(3, 1, 2, PauseDecision::Pause)]
+        #[case::all_fail_3(3, 0, 3, PauseDecision::Pause)]
+        fn test_any_fail_strategy(
+            #[case] traced: usize,
+            #[case] success: usize,
+            #[case] failure: usize,
+            #[case] expected: PauseDecision,
+        ) {
+            let strategy = TracingPauseStrategy::AnyFail;
+            assert_eq!(strategy.evaluate(traced, success, failure), expected);
+        }
+
+        #[rstest]
+        #[case::all_fail_lowercase("all_fail", TracingPauseStrategy::AllFail)]
+        #[case::any_fail_lowercase("any_fail", TracingPauseStrategy::AnyFail)]
+        fn test_serde_deserialization(#[case] input: &str, #[case] expected: TracingPauseStrategy) {
+            let json = format!("\"{}\"", input);
+            let parsed: TracingPauseStrategy = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed, expected);
+        }
+
+        #[test]
+        fn test_serde_default_in_struct() {
+            // Test that default works when embedded in a struct
+            #[derive(Deserialize)]
+            struct TestConfig {
+                #[serde(default)]
+                strategy: TracingPauseStrategy,
+            }
+
+            let config: TestConfig = serde_json::from_str("{}").unwrap();
+            assert_eq!(config.strategy, TracingPauseStrategy::AllFail);
         }
     }
 }

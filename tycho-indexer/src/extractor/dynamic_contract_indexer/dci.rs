@@ -24,7 +24,7 @@ use tycho_common::{
 
 use super::{
     cache::DCICache,
-    pausing::{self, PausingReason},
+    pausing::{self, PauseDecision, PausingReason, TracingPauseStrategy},
 };
 use crate::extractor::{
     models::{
@@ -48,6 +48,7 @@ where
     cache: DCICache,
     address_byte_len: usize,
     max_retry_count: u32,
+    tracing_pause_strategy: TracingPauseStrategy,
 }
 
 static DCI_BLACKLIST: LazyLock<Vec<Address>> = LazyLock::new(|| {
@@ -430,37 +431,47 @@ where
                     continue;
                 }
 
-                let all_failed = traced_params
+                let traced_count = traced_params.len();
+                let success_count = traced_params
                     .iter()
-                    .all(|p| failed_params.contains(p));
-                let all_succeeded = traced_params
+                    .filter(|p| successful_params.contains(*p))
+                    .count();
+                let failure_count = traced_params
                     .iter()
-                    .all(|p| successful_params.contains(p));
+                    .filter(|p| failed_params.contains(*p))
+                    .count();
 
-                if all_failed {
-                    // Find the transaction for this component (use first failed param's tx)
-                    if let Some((_, tx)) = failed_entrypoints
-                        .iter()
-                        .find(|(ep, _)| traced_params.contains(ep))
-                    {
-                        component_ids_to_pause.insert(component_id, tx);
+                match self.tracing_pause_strategy.evaluate(
+                    traced_count,
+                    success_count,
+                    failure_count,
+                ) {
+                    PauseDecision::Pause => {
+                        // PAUSE: Find transaction from failed entrypoint
+                        if let Some((_, tx)) = failed_entrypoints
+                            .iter()
+                            .find(|(ep, _)| traced_params.contains(ep))
+                        {
+                            component_ids_to_pause.insert(component_id, tx);
+                        }
                     }
-                } else if all_succeeded {
-                    // Check if component is currently paused with TracingError
-                    if let Some(Some(reason)) = self
-                        .cache
-                        .paused_components
-                        .get(&component_id)
-                    {
-                        if *reason == PausingReason::TracingError {
-                            // Find transaction from any successful param for this component
-                            if let Some(ep) = traced_params.iter().next() {
-                                if let Some(tx) = entrypoints_to_analyze.get(*ep) {
-                                    component_ids_to_unpause.insert(component_id, *tx);
+                    PauseDecision::Unpause => {
+                        // UNPAUSE: Only if previously paused with TracingError
+                        if let Some(Some(reason)) = self
+                            .cache
+                            .paused_components
+                            .get(&component_id)
+                        {
+                            if *reason == PausingReason::TracingError {
+                                if let Some(ep) = traced_params.iter().next() {
+                                    if let Some(tx) = entrypoints_to_analyze.get(*ep) {
+                                        component_ids_to_unpause.insert(component_id, *tx);
+                                    }
                                 }
                             }
                         }
                     }
+                    PauseDecision::NoAction => {}
                 }
             }
 
@@ -818,7 +829,22 @@ where
             cache: DCICache::new(),
             address_byte_len: 20,
             max_retry_count: 5,
+            tracing_pause_strategy: TracingPauseStrategy::default(),
         }
+    }
+
+    /// Sets the tracing pause strategy for determining when to pause/unpause components.
+    ///
+    /// # Arguments
+    /// * `strategy` - The strategy to use for pause decisions
+    ///
+    /// # Example
+    /// ```ignore
+    /// let mut dci = DynamicContractIndexer::new(...);
+    /// dci.with_pause_strategy(TracingPauseStrategy::AnyFail);
+    /// ```
+    pub(crate) fn with_pause_strategy(&mut self, strategy: TracingPauseStrategy) {
+        self.tracing_pause_strategy = strategy;
     }
 
     /// Sets the maximum number of retry attempts for failed TracingParams.
