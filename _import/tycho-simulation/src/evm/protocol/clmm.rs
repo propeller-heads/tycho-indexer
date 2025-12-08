@@ -49,7 +49,6 @@ where
 {
     let zero_for_one = token_in < token_out;
 
-    // Calculate sqrt_price_limit from target_price
     let sqrt_price_limit =
         get_sqrt_price_limit(token_in, token_out, target_price, U256::from(fee_pips))?;
 

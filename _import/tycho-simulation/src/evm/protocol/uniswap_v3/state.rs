@@ -16,7 +16,7 @@ use tycho_common::{
 
 use super::enums::FeeAmount;
 use crate::evm::protocol::{
-    clmm::protocol::clmm_swap_to_price,
+    clmm::clmm_swap_to_price,
     safe_math::{safe_add_u256, safe_sub_u256},
     u256_num::u256_to_biguint,
     utils::uniswap::{
