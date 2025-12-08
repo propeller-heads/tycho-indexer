@@ -37,6 +37,18 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoState {
             }
         };
 
+        let token_to_track_total_pooled_eth = snapshot
+            .component
+            .static_attributes
+            .get("token_to_track_total_pooled_eth")
+            .ok_or(InvalidSnapshotError::MissingAttribute(
+                "token_to_track_total_pooled_eth is missing".to_owned(),
+            ))?
+            .clone();
+
+        let tokens: [Bytes; 2] =
+            [snapshot.component.tokens[0].clone(), snapshot.component.tokens[1].clone()];
+
         let total_shares = snapshot
             .state
             .attributes
@@ -45,27 +57,13 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoState {
                 "Total shares field is missing".to_owned(),
             ))?;
 
-        let total_pooled_eth = if pool_type == LidoPoolType::StEth {
-            snapshot
+        let total_pooled_eth = snapshot
                 .state
                 .balances
-                .get(&Bytes::from_str(ETH_ADDRESS).unwrap())
+            .get(&token_to_track_total_pooled_eth)
                 .ok_or(InvalidSnapshotError::MissingAttribute(
                     "Total shares field is missing".to_owned(),
-                ))?
-        } else if pool_type == LidoPoolType::WStEth {
-            snapshot
-                .state
-                .balances
-                .get(&Bytes::from_str(ST_ETH_ADDRESS_PROXY).unwrap())
-                .ok_or(InvalidSnapshotError::MissingAttribute(
-                    "Total shares field is missing".to_owned(),
-                ))?
-        } else {
-            return Err(InvalidSnapshotError::ValueError(
-                "Could not get total pooled eth: {:?}".to_owned(),
-            ))
-        };
+            ))?;
 
         let (staking_status_parsed, staking_limit) = if pool_type == LidoPoolType::StEth {
             let staking_status = snapshot
@@ -131,6 +129,8 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoState {
                 staking_status: staking_status_parsed,
                 staking_limit: BigUint::from_bytes_be(staking_limit),
             },
+            tokens,
+            token_to_track_total_pooled_eth,
         })
     }
 }
@@ -172,14 +172,29 @@ mod tests {
 
     #[tokio::test]
     async fn test_lido_steth_try_from() {
+        let mut static_attr = HashMap::new();
+        static_attr.insert(
+            "token_to_track_total_pooled_eth".to_string(),
+            "0x0000000000000000000000000000000000000000"
+                .as_bytes()
+                .to_vec()
+                .into(),
+        );
+        static_attr.insert(
+            "token_to_track_total_pooled_eth".to_string(),
+            Bytes::from_str(ETH_ADDRESS).unwrap(),
+        );
         let pc = ProtocolComponent {
             id: ST_ETH_ADDRESS_PROXY.to_string(),
             protocol_system: "protocol_system".to_owned(),
             protocol_type_name: "protocol_type_name".to_owned(),
             chain: Chain::Ethereum,
-            tokens: vec![],
+            tokens: vec![
+                Bytes::from("0x0000000000000000000000000000000000000000"),
+                Bytes::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84"),
+            ],
             contract_ids: vec![],
-            static_attributes: HashMap::new(),
+            static_attributes: static_attr,
             change: ChangeType::Creation,
             creation_tx: Bytes::from(vec![0; 32]),
             created_at: NaiveDateTime::default(),
@@ -227,7 +242,12 @@ mod tests {
                 stake_limits_state: StakeLimitState {
                     staking_status: crate::evm::protocol::lido::state::StakingStatus::Limited,
                     staking_limit: BigUint::zero(),
-                }
+                },
+                tokens: [
+                    Bytes::from("0x0000000000000000000000000000000000000000"),
+                    Bytes::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84"),
+                ],
+                token_to_track_total_pooled_eth: Bytes::from(ETH_ADDRESS)
             }
         );
     }
@@ -238,14 +258,23 @@ mod tests {
     #[case::missing_staking_status("staking_status")]
     #[case::missing_staking_limit("staking_limit")]
     async fn test_lido_try_from_missing_attribute(#[case] missing_attribute: &str) {
+        let mut static_attr = HashMap::new();
+        static_attr.insert(
+            "token_to_track_total_pooled_eth".to_string(),
+            Bytes::from_str(ETH_ADDRESS).unwrap(),
+        );
+
         let pc = ProtocolComponent {
             id: ST_ETH_ADDRESS_PROXY.to_string(),
             protocol_system: "protocol_system".to_owned(),
             protocol_type_name: "protocol_type_name".to_owned(),
             chain: Chain::Ethereum,
-            tokens: vec![],
+            tokens: vec![
+                Bytes::from("0x0000000000000000000000000000000000000000"),
+                Bytes::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84"),
+            ],
             contract_ids: vec![],
-            static_attributes: HashMap::new(),
+            static_attributes: static_attr,
             change: ChangeType::Creation,
             creation_tx: Bytes::from(vec![0; 32]),
             created_at: NaiveDateTime::default(),
@@ -290,14 +319,28 @@ mod tests {
 
     #[tokio::test]
     async fn test_lido_wst_eth_try_from() {
+        let mut static_attr = HashMap::new();
+        static_attr.insert(
+            "token_to_track_total_pooled_eth".to_string(),
+            "0xae7ab96520de3a18e5e111b5eaab095312d7fe84"
+                .as_bytes()
+                .to_vec()
+                .into(),
+        );
+        static_attr.insert(
+            "token_to_track_total_pooled_eth".to_string(),
+            Bytes::from_str(ST_ETH_ADDRESS_PROXY).unwrap(),
         let pc = ProtocolComponent {
             id: WST_ETH_ADDRESS.to_string(),
             protocol_system: "protocol_system".to_owned(),
             protocol_type_name: "protocol_type_name".to_owned(),
             chain: Chain::Ethereum,
-            tokens: vec![],
+            tokens: vec![
+                Bytes::from("0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"),
+                Bytes::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84"),
+            ],
             contract_ids: vec![],
-            static_attributes: HashMap::new(),
+            static_attributes: static_attr,
             change: ChangeType::Creation,
             creation_tx: Bytes::from(vec![0; 32]),
             created_at: NaiveDateTime::default(),
@@ -344,7 +387,14 @@ mod tests {
                 stake_limits_state: StakeLimitState {
                     staking_status: crate::evm::protocol::lido::state::StakingStatus::Limited,
                     staking_limit: BigUint::zero(),
-                }
+                },
+                tokens: [
+                    Bytes::from("0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"),
+                    Bytes::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84"),
+                ],
+                token_to_track_total_pooled_eth: Bytes::from(
+                    "0xae7ab96520de3a18e5e111b5eaab095312d7fe84"
+                )
             }
         );
     }
@@ -359,7 +409,10 @@ mod tests {
             protocol_system: "protocol_system".to_owned(),
             protocol_type_name: "protocol_type_name".to_owned(),
             chain: Chain::Ethereum,
-            tokens: vec![],
+            tokens: vec![
+                Bytes::from("0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"),
+                Bytes::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84"),
+            ],
             contract_ids: vec![],
             static_attributes: HashMap::new(),
             change: ChangeType::Creation,

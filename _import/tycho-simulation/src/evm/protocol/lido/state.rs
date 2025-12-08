@@ -73,6 +73,8 @@ pub struct LidoState {
     pub id: Bytes,
     pub native_address: Bytes,
     pub stake_limits_state: StakeLimitState,
+    pub tokens: [Bytes; 2],
+    pub token_to_track_total_pooled_eth: Bytes,
 }
 
 impl LidoState {
@@ -98,6 +100,10 @@ impl LidoState {
                 id: self.id.clone(),
                 native_address: self.native_address.clone(),
                 stake_limits_state: self.stake_limits_state.clone(),
+                tokens: self.tokens.clone(),
+                token_to_track_total_pooled_eth: self
+                    .token_to_track_total_pooled_eth
+                    .clone(),
             }),
         })
     }
@@ -129,6 +135,10 @@ impl LidoState {
                 id: self.id.clone(),
                 native_address: self.native_address.clone(),
                 stake_limits_state: self.stake_limits_state.clone(),
+                tokens: self.tokens.clone(),
+                token_to_track_total_pooled_eth: self
+                    .token_to_track_total_pooled_eth
+                    .clone(),
             }),
         })
     }
@@ -160,6 +170,10 @@ impl LidoState {
                 id: self.id.clone(),
                 native_address: self.native_address.clone(),
                 stake_limits_state: self.stake_limits_state.clone(),
+                tokens: self.tokens.clone(),
+                token_to_track_total_pooled_eth: self
+                    .token_to_track_total_pooled_eth
+                    .clone(),
             }),
         })
     }
@@ -278,7 +292,7 @@ impl LidoState {
 
     fn st_eth_balance_transition(&mut self, balances: &HashMap<Bytes, Bytes>) {
         for (token, balance) in balances.iter() {
-            if token == &Bytes::from(ETH_ADDRESS) {
+            if token == &self.token_to_track_total_pooled_eth {
                 self.total_pooled_eth = BigUint::from_bytes_be(balance)
             }
         }
@@ -310,7 +324,7 @@ impl LidoState {
 
     fn wst_eth_balance_transition(&mut self, balances: &HashMap<Bytes, Bytes>) {
         for (token, balance) in balances.iter() {
-            if token == &Bytes::from(ST_ETH_ADDRESS_PROXY) {
+            if token == &self.token_to_track_total_pooled_eth {
                 self.total_pooled_eth = BigUint::from_bytes_be(balance)
             }
         }
@@ -525,6 +539,11 @@ mod tests {
                 staking_status: crate::evm::protocol::lido::state::StakingStatus::Limited,
                 staking_limit,
             },
+            tokens: [
+                Bytes::from("0x0000000000000000000000000000000000000000"),
+                Bytes::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84"),
+            ],
+            token_to_track_total_pooled_eth: Bytes::from(ETH_ADDRESS),
         }
     }
 
@@ -548,6 +567,11 @@ mod tests {
                 staking_status: crate::evm::protocol::lido::state::StakingStatus::Limited,
                 staking_limit: BigUint::zero(),
             },
+            tokens: [
+                Bytes::from("0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"),
+                Bytes::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84"),
+            ],
+            token_to_track_total_pooled_eth: Bytes::from(ST_ETH_ADDRESS_PROXY),
         }
     }
 
@@ -861,6 +885,11 @@ mod tests {
                     &hex::decode("1fc3842bd1f071c00000").unwrap(),
                 ),
             },
+            tokens: [
+                Bytes::from("0x0000000000000000000000000000000000000000"),
+                Bytes::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84"),
+            ],
+            token_to_track_total_pooled_eth: Bytes::from(ETH_ADDRESS),
         };
         assert_eq!(st_state, exp);
     }
@@ -947,6 +976,11 @@ mod tests {
             id: ST_ETH_ADDRESS_PROXY.into(),
             native_address: ETH_ADDRESS.into(),
             stake_limits_state: wst_state.stake_limits_state.clone(),
+            tokens: [
+                Bytes::from("0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"),
+                Bytes::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84"),
+            ],
+            token_to_track_total_pooled_eth: Bytes::from(ST_ETH_ADDRESS_PROXY),
         };
 
         assert_eq!(wst_state, exp);
