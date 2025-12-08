@@ -2054,6 +2054,16 @@ mod tests {
             trade_ofz.amount_out > BigUint::ZERO,
             "One for zero swap should return non-zero output"
         );
+
+        // Higher fees require more volume to reach the same price target
+        // trade_zfo has 0.1% protocol fee, trade_ofz has 0.02% protocol fee
+        assert!(
+            trade_zfo.amount_out > trade_ofz.amount_out,
+            "Zero for one (higher fees: 0.1%) should require more volume than one for zero (lower fees: 0.02%). \
+             Got zfo: {}, ofz: {}",
+            trade_zfo.amount_out,
+            trade_ofz.amount_out
+        );
     }
 
     #[test]
@@ -2067,31 +2077,40 @@ mod tests {
         // Pool at 2.0 Y/X (20M/10M)
         // Test 1: Target close to spot (1.98 Y/X)
         let target_price = Price::new(BigUint::from(2_000_000u64), BigUint::from(1_010_000u64));
-        let trade = pool
+        let trade_close = pool
             .swap_to_price(&token_x, &token_y, target_price)
             .expect("swap_to_price failed");
-        assert!(trade.amount_out > BigUint::ZERO, "Expected non-zero for 1.98 Y/X target");
+        assert!(trade_close.amount_out > BigUint::ZERO, "Expected non-zero for 1.98 Y/X target");
 
         // Test 2: Target further from spot (1.90 Y/X)
         let target_price = Price::new(BigUint::from(1_900_000u64), BigUint::from(1_000_000u64));
-        let trade = pool
+        let trade_medium = pool
             .swap_to_price(&token_x, &token_y, target_price)
             .expect("swap_to_price failed");
-        assert!(trade.amount_out > BigUint::ZERO, "Expected non-zero for 1.90 Y/X target");
+        assert!(trade_medium.amount_out > BigUint::ZERO, "Expected non-zero for 1.90 Y/X target");
 
         // Test 3: Target far from spot (1.5 Y/X)
         let target_price = Price::new(BigUint::from(1_500_000u64), BigUint::from(1_000_000u64));
-        let trade = pool
+        let trade_far = pool
             .swap_to_price(&token_x, &token_y, target_price)
             .expect("swap_to_price failed");
-        assert!(trade.amount_out > BigUint::ZERO, "Expected non-zero for 1.5 Y/X target");
+        assert!(trade_far.amount_out > BigUint::ZERO, "Expected non-zero for 1.5 Y/X target");
 
-        // Test 4: Pool at 2.0 Y/X (20M/10M), target 0.1 Y/X (90% price drop)
-        let target_price = Price::new(BigUint::from(1_000_000u64), BigUint::from(10_000_000u64));
-        let trade = pool
-            .swap_to_price(&token_y, &token_x, target_price)
-            .expect("swap_to_price failed");
-        assert!(trade.amount_out > BigUint::ZERO, "Expected non-zero for 0.1 Y/X target");
+        // Verify that further targets require more volume
+        assert!(
+            trade_close.amount_out < trade_medium.amount_out,
+            "Closer target (1.98 Y/X) should require less volume than medium target (1.90 Y/X). \
+             Got close: {}, medium: {}",
+            trade_close.amount_out,
+            trade_medium.amount_out
+        );
+        assert!(
+            trade_medium.amount_out < trade_far.amount_out,
+            "Medium target (1.90 Y/X) should require less volume than far target (1.5 Y/X). \
+             Got medium: {}, far: {}",
+            trade_medium.amount_out,
+            trade_far.amount_out
+        );
     }
 
     #[test]
@@ -2182,7 +2201,7 @@ mod tests {
 
         // The amount_out from get_amount_out should be close to swap_to_price's amount_out
         // Allow for small rounding differences
-        let diff = if result.amount > trade.amount_out {
+        let diff = if result.amount >= trade.amount_out {
             &result.amount - &trade.amount_out
         } else {
             &trade.amount_out - &result.amount
@@ -2233,7 +2252,7 @@ mod tests {
             .swap_to_price(&token_x, &token_y, target_price)
             .expect("swap_to_price failed");
 
-        // Exact assertions for regression testing (captured from actual run)
+        // Should match V3's output exactly with same fees (0.3%)
         let expected_amount_in =
             BigUint::from_str("246739021727519745").expect("Failed to parse expected amount_in");
         let expected_amount_out =

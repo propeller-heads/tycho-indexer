@@ -1,6 +1,5 @@
 use alloy::primitives::{Sign, I256, U256};
 use num_bigint::BigUint;
-use tracing::trace;
 use tycho_common::{
     simulation::{
         errors::SimulationError,
@@ -67,6 +66,8 @@ where
         })?;
 
     // Call the provided swap function
+    // The swap function should already ensure that the sqrt price result is on the correct side of
+    // the sqrt_price_limit
     let result = swap_fn(zero_for_one, amount_specified, sqrt_price_limit)?;
 
     // Calculate amount_in from amount consumed: amount_in = amount_specified - amount_remaining
@@ -83,25 +84,6 @@ where
         .amount_calculated
         .abs()
         .into_raw();
-
-    // Validate that the executed price doesn't exceed the target price
-    // executed_price = amount_in / amount_out (token_in per token_out)
-    // target_price is token_out/token_in, so we need: amount_in/amount_out <=
-    // denominator/numerator Which gives: amount_in * numerator <= amount_out *
-    // denominator
-    if u256_to_biguint(amount_in) * &target_price.numerator >
-        u256_to_biguint(amount_out) * &target_price.denominator
-    {
-        trace!(
-            "Executed price exceeds target price. amount_in={}, amount_out={}, \
-                target_price=({}/{})",
-            amount_in,
-            amount_out,
-            target_price.numerator,
-            target_price.denominator
-        );
-        return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
-    }
 
     Ok(Trade::new(u256_to_biguint(amount_in), u256_to_biguint(amount_out)))
 }

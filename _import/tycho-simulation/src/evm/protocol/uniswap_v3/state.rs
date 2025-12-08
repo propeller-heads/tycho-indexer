@@ -1192,7 +1192,7 @@ mod tests {
 
         // The amount_out from get_amount_out should be close to swap_to_price's amount_out
         // Allow for small rounding differences
-        let diff = if result.amount > trade.amount_out {
+        let diff = if result.amount >= trade.amount_out {
             &result.amount - &trade.amount_out
         } else {
             &trade.amount_out - &result.amount
