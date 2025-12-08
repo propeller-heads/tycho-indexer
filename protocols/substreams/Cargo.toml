@@ -34,6 +34,3 @@ resolver = "2"
 lto = true
 opt-level = 's'
 strip = "debuginfo"
-
-[patch.crates-io]
-ekubo_sdk = {git = "https://github.com/die-herdplatte/evm-rust-sdk.git", branch = "evm-utils"}
