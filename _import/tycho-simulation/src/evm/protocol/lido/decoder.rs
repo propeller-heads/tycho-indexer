@@ -1,19 +1,18 @@
-use std::{collections::HashMap, str::FromStr};
+use std::collections::HashMap;
 
 use num_bigint::BigUint;
 use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
 use tycho_common::{models::token::Token, Bytes};
 
 use crate::{
-    evm::protocol::lido::state::{
-        LidoPoolType, LidoState, StakeLimitState, StakingStatus, ETH_ADDRESS, ST_ETH_ADDRESS_PROXY,
-        WST_ETH_ADDRESS,
-    },
+    evm::protocol::lido::state::{LidoPoolType, LidoState, StakeLimitState, StakingStatus},
     protocol::{
         errors::InvalidSnapshotError,
         models::{DecoderContext, TryFromWithBlock},
     },
 };
+
+pub const ETH_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
 
 impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoState {
     type Error = InvalidSnapshotError;
@@ -159,15 +158,18 @@ mod tests {
     };
 
     use crate::{
-        evm::protocol::lido::state::{
-            LidoPoolType, LidoState, StakeLimitState, ETH_ADDRESS, ST_ETH_ADDRESS_PROXY,
-            WST_ETH_ADDRESS,
+        evm::protocol::lido::{
+            decoder::ETH_ADDRESS,
+            state::{LidoPoolType, LidoState, StakeLimitState},
         },
         protocol::{
             errors::InvalidSnapshotError,
             models::{DecoderContext, TryFromWithBlock},
         },
     };
+
+    const ST_ETH_ADDRESS_PROXY: &str = "0xae7ab96520de3a18e5e111b5eaab095312d7fe84";
+    const WST_ETH_ADDRESS: &str = "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0";
 
     fn header() -> BlockHeader {
         BlockHeader {
@@ -219,10 +221,7 @@ mod tests {
                     ("staking_status".to_string(), "Limited".as_bytes().to_vec().into()),
                     ("staking_limit".to_string(), Bytes::from(vec![0; 32])),
                 ]),
-                balances: HashMap::from([(
-                    Bytes::from_str(ETH_ADDRESS).unwrap(),
-                    Bytes::from(vec![0; 32]),
-                )]),
+                balances: HashMap::from([(Bytes::from(ETH_ADDRESS), Bytes::from(vec![0; 32]))]),
             },
             component: pc,
             component_tvl: None,
@@ -442,7 +441,7 @@ mod tests {
                     ("total_wstETH".to_string(), Bytes::from(vec![0; 32])),
                 ]),
                 balances: HashMap::from([(
-                    Bytes::from_str(ST_ETH_ADDRESS_PROXY).unwrap(),
+                    Bytes::from(ST_ETH_ADDRESS_PROXY),
                     Bytes::from(vec![0; 32]),
                 )]),
             },

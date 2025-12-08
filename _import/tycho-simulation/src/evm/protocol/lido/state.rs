@@ -59,9 +59,6 @@ impl StakeLimitState {
     }
 }
 
-pub const ST_ETH_ADDRESS_PROXY: &str = "0xae7ab96520de3a18e5e111b5eaab095312d7fe84";
-pub const WST_ETH_ADDRESS: &str = "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0";
-pub const ETH_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
 pub const DEFAULT_GAS: u64 = 60000;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -487,6 +484,10 @@ mod tests {
 
     use super::*;
 
+    const ST_ETH_ADDRESS_PROXY: &str = "0xae7ab96520de3a18e5e111b5eaab095312d7fe84";
+    const WST_ETH_ADDRESS: &str = "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0";
+    const ETH_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
+
     fn from_hex_str_to_biguint(input: &str) -> BigUint {
         let bytes = hex::decode(input).unwrap();
         BigUint::from_bytes_be(&bytes)
@@ -532,7 +533,7 @@ mod tests {
             total_shares: total_shares_start,
             total_pooled_eth: total_pooled_eth_start.clone(),
             total_wrapped_st_eth: Some(total_wsteth_start),
-            id: ST_ETH_ADDRESS_PROXY.into(),
+            id: WST_ETH_ADDRESS.into(),
             native_address: ETH_ADDRESS.into(),
             stake_limits_state: StakeLimitState {
                 staking_status: crate::evm::protocol::lido::state::StakingStatus::Limited,
@@ -944,7 +945,7 @@ mod tests {
                 &hex::decode("00000000000000000000000000000000000000000002ba6f7b9af3c7a7b749e2")
                     .unwrap(),
             )),
-            id: ST_ETH_ADDRESS_PROXY.into(),
+            id: WST_ETH_ADDRESS.into(),
             native_address: ETH_ADDRESS.into(),
             stake_limits_state: wst_state.stake_limits_state.clone(),
             tokens: [
