@@ -198,14 +198,14 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ) -> Result<(), TransitionError<String>>;
 
     /// Calculates the amount of token_in required to move the pool's marginal price down to
-    /// a target price, and the amount of token_out received.
+    /// a target price limit, and the amount of token_out received.
     ///
     /// # Arguments
     ///
     /// * `token_in` - The address of the token being sold (swapped into the pool)
     /// * `token_out` - The address of the token being bought (swapped out of the pool)
-    /// * `target_price` - The target marginal price as a `Price` struct representing **token_out
-    ///   per token_in** (token_out/token_in) net of all fees:
+    /// * `target_price_limit` - The target marginal price as a `Price` struct representing
+    ///   **token_out per token_in** (token_out/token_in) net of all fees:
     ///   - `numerator`: Amount of token_out (what the pool offers)
     ///   - `denominator`: Amount of token_in (what the pool wants)
     ///   - The pool's price will move **down** to this level as token_in is sold into it
@@ -213,7 +213,7 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     /// # Returns
     ///
     /// * `Ok(Trade)` - A `Trade` struct containing the amount that needs to be swapped on the pool
-    ///   to move its price to target_price.
+    ///   to move its price to target_price_limit.
     /// * `Err(SimulationError)` - If:
     ///   - The calculation encounters numerical issues (overflow, division by zero, etc.)
     ///   - The method is not implemented for this protocol
@@ -222,24 +222,26 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// ## Exact Price Achievement
     ///
-    /// It is almost never possible to achieve the target price exactly, only within some margin
-    /// of tolerance. This is due to:
+    /// It is almost never possible to achieve the target price limit exactly, only within some
+    /// margin of tolerance. This is due to:
     /// - **Discrete liquidity**: For concentrated liquidity protocols (e.g., Uniswap V3), liquidity
-    ///   is distributed across discrete price ticks, making exact price targeting impossible
-    /// - **Numerical precision**: Integer arithmetic and rounding may prevent exact price matching
+    ///   is distributed across discrete price ticks, making exact price targeting impossible. The
+    ///   closest achievable trade with target price as lower limit will be returned.
+    /// - **Numerical precision**: Integer arithmetic and rounding may prevent exact price matching.
+    ///   In case of overflow an error will be returned.
     /// - **Protocol constraints**: Some protocols have minimum trade sizes or other constraints
     ///
     /// ## Unreachable Prices
     ///
-    /// If the target price is already below the current spot price (i.e., the price would need to
-    /// move in the wrong direction), implementations typically return a zero trade (`Trade` with
-    /// `amount_in = 0` and `amount_out = 0`).
+    /// If the target price limit is already below the current marginal price (i.e., the price would
+    /// need to move in the wrong direction), implementations typically return a zero trade
+    /// (`Trade` with `amount_in = 0` and `amount_out = 0`).
     #[allow(unused)]
     fn swap_to_price(
         &self,
         token_in: &Bytes,
         token_out: &Bytes,
-        target_price: Price,
+        target_price_limit: Price,
     ) -> Result<Trade, SimulationError> {
         Err(SimulationError::FatalError("swap_to_price not implemented".into()))
     }
