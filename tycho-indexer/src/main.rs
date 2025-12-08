@@ -273,7 +273,7 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
         .dci_plugin
         .clone()
         .map_or(Ok(None), |s| match s.as_str() {
-            "rpc" => Ok(Some(DCIType::RPC)),
+            "rpc" => Ok(Some(DCIType::RPC { tracing_pause_strategy: Default::default() })),
             _ => Err(ExtractionError::Setup(format!("Unknown DCI plugin: {s}"))),
         })?;
 
