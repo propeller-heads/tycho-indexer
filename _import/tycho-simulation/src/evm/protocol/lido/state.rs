@@ -178,19 +178,17 @@ impl LidoState {
         })
     }
 
-    fn st_eth_limits(
-        &self,
-        sell_token: Bytes,
-        buy_token: Bytes,
-    ) -> Result<(BigUint, BigUint), SimulationError> {
-        if buy_token == Bytes::from(ST_ETH_ADDRESS_PROXY) && sell_token == Bytes::from(ETH_ADDRESS)
-        {
-            let limit = self.stake_limits_state.get_limit();
-            Ok((limit.clone(), limit))
-        } else if buy_token == Bytes::from(ETH_ADDRESS) &&
-            sell_token == Bytes::from(ST_ETH_ADDRESS_PROXY)
-        {
-            Ok((BigUint::zero(), BigUint::zero()))
+    fn is_forward(&self, sell_token: &Bytes, buy_token: &Bytes) -> Result<bool, SimulationError> {
+        let second_token = self
+            .tokens
+            .iter()
+            .find(|t| **t != self.token_to_track_total_pooled_eth)
+            .expect("No different value found");
+
+        if buy_token == second_token && *sell_token == self.token_to_track_total_pooled_eth {
+            Ok(true)
+        } else if *buy_token == self.token_to_track_total_pooled_eth && sell_token == second_token {
+            Ok(false)
         } else {
             Err(SimulationError::InvalidInput(
                 format!(
@@ -202,14 +200,25 @@ impl LidoState {
         }
     }
 
+    fn st_eth_limits(
+        &self,
+        sell_token: Bytes,
+        buy_token: Bytes,
+    ) -> Result<(BigUint, BigUint), SimulationError> {
+        if self.is_forward(&sell_token, &buy_token)? {
+            let limit = self.stake_limits_state.get_limit();
+            Ok((limit.clone(), limit))
+        } else {
+            Ok((BigUint::zero(), BigUint::zero()))
+        }
+    }
+
     fn wst_eth_limits(
         &self,
         sell_token: Bytes,
         buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
-        if buy_token == Bytes::from(ST_ETH_ADDRESS_PROXY) &&
-            sell_token == Bytes::from(WST_ETH_ADDRESS)
-        {
+        if !self.is_forward(&sell_token, &buy_token)? {
             //amount of wsteth
             Ok((
                 self.total_wrapped_st_eth
@@ -219,9 +228,7 @@ impl LidoState {
                     .clone()
                     .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool"),
             ))
-        } else if buy_token == Bytes::from(WST_ETH_ADDRESS) &&
-            sell_token == Bytes::from(ST_ETH_ADDRESS_PROXY)
-        {
+        } else {
             // total_shares - wstETH
 
             let limit_for_wrapping = &self.total_shares -
@@ -230,14 +237,6 @@ impl LidoState {
                     .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool");
 
             Ok((limit_for_wrapping.clone(), limit_for_wrapping))
-        } else {
-            Err(SimulationError::InvalidInput(
-                format!(
-                    "Invalid combination of tokens for type {:?}: {:?}, {:?}",
-                    self.pool_type, buy_token, sell_token
-                ),
-                None,
-            ))
         }
     }
 
@@ -340,9 +339,7 @@ impl ProtocolSim for LidoState {
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
         match self.pool_type {
             LidoPoolType::StEth => {
-                if base.address == Bytes::from(ETH_ADDRESS) &&
-                    quote.address == Bytes::from(ST_ETH_ADDRESS_PROXY)
-                {
+                if self.is_forward(&base.address, &quote.address)? {
                     let total_shares_f64 = u256_to_f64(biguint_to_u256(&self.total_shares))?;
                     let total_pooled_eth_f64 =
                         u256_to_f64(biguint_to_u256(&self.total_pooled_eth))?;
@@ -360,30 +357,18 @@ impl ProtocolSim for LidoState {
                 }
             }
             LidoPoolType::WStEth => {
-                if base.address == Bytes::from(ST_ETH_ADDRESS_PROXY) &&
-                    quote.address == Bytes::from(WST_ETH_ADDRESS)
-                {
+                if self.is_forward(&base.address, &quote.address)? {
                     let total_shares_f64 = u256_to_f64(biguint_to_u256(&self.total_shares))?;
                     let total_pooled_eth_f64 =
                         u256_to_f64(biguint_to_u256(&self.total_pooled_eth))?;
 
                     Ok(total_shares_f64 / total_pooled_eth_f64)
-                } else if base.address == Bytes::from(WST_ETH_ADDRESS) &&
-                    quote.address == Bytes::from(ST_ETH_ADDRESS_PROXY)
-                {
+                } else {
                     let total_shares_f64 = u256_to_f64(biguint_to_u256(&self.total_shares))?;
                     let total_pooled_eth_f64 =
                         u256_to_f64(biguint_to_u256(&self.total_pooled_eth))?;
 
                     Ok(total_pooled_eth_f64 / total_shares_f64)
-                } else {
-                    Err(SimulationError::InvalidInput(
-                        format!(
-                            "Invalid combination of tokens for type {:?}: {:?}, {:?}",
-                            self.pool_type, base, quote
-                        ),
-                        None,
-                    ))
                 }
             }
         }
@@ -400,9 +385,7 @@ impl ProtocolSim for LidoState {
         // call the corresponding swap method
         match self.pool_type {
             LidoPoolType::StEth => {
-                if token_in.address == Bytes::from(ETH_ADDRESS) &&
-                    token_out.address == Bytes::from(ST_ETH_ADDRESS_PROXY)
-                {
+                if self.is_forward(&token_in.address, &token_out.address)? {
                     Ok(self.steth_swap(amount_in)?)
                 } else {
                     Err(SimulationError::InvalidInput(
@@ -415,22 +398,10 @@ impl ProtocolSim for LidoState {
                 }
             }
             LidoPoolType::WStEth => {
-                if token_in.address == Bytes::from(ST_ETH_ADDRESS_PROXY) &&
-                    token_out.address == Bytes::from(WST_ETH_ADDRESS)
-                {
+                if self.is_forward(&token_in.address, &token_out.address)? {
                     self.wrap_steth(amount_in)
-                } else if token_in.address == Bytes::from(WST_ETH_ADDRESS) &&
-                    token_out.address == Bytes::from(ST_ETH_ADDRESS_PROXY)
-                {
-                    self.unwrap_steth(amount_in)
                 } else {
-                    Err(SimulationError::InvalidInput(
-                        format!(
-                            "Invalid combination of tokens for type {:?}: {:?}, {:?}",
-                            self.pool_type, token_in, token_out
-                        ),
-                        None,
-                    ))
+                    self.unwrap_steth(amount_in)
                 }
             }
         }
