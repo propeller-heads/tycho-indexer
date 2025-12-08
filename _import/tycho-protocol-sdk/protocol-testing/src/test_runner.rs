@@ -267,6 +267,8 @@ impl TestRunner {
             .into_diagnostic()
             .wrap_err("Failed to wait for protocol sync")?;
 
+        self.run_tvl_import()?;
+
         // Start live testing with streaming (updates will come as indexer catches up)
         self.run_live_testing(&config).await
     }
@@ -667,6 +669,70 @@ impl TestRunner {
                 .wrap_err("Failed to empty the database")?;
         }
         Ok(TychoRunner::new(self.chain, self.db_url.to_string(), initialized_accounts))
+    }
+
+    fn run_tvl_import(&self) -> miette::Result<()> {
+        debug!("Running token price import for chain: {}", self.chain);
+
+        const IMPORT_SCRIPT: &str = include_str!("../scripts/import_token_prices.sh");
+        const TVL_SCRIPT: &str = include_str!("../scripts/update_component_tvl.sh");
+
+        let temp_dir = std::env::temp_dir();
+        let import_script_path = temp_dir.join("import_token_prices.sh");
+
+        std::fs::write(&import_script_path, IMPORT_SCRIPT)
+            .into_diagnostic()
+            .wrap_err("Failed to write import_token_prices.sh to temp directory")?;
+
+        let import_output = std::process::Command::new("bash")
+            .arg(&import_script_path)
+            .arg("--chain")
+            .arg(self.chain.to_string())
+            .arg("--db-url")
+            .arg(&self.db_url)
+            .output()
+            .into_diagnostic()
+            .wrap_err("Failed to execute import_token_prices.sh")?;
+
+        if !import_output.status.success() {
+            let stderr = String::from_utf8_lossy(&import_output.stderr);
+            let stdout = String::from_utf8_lossy(&import_output.stdout);
+            error!("Token price import failed: {}, {}", stderr, stdout);
+            return Err(miette::miette!("Token price import failed: {}, {}", stderr, stdout));
+        }
+
+        let stdout = String::from_utf8_lossy(&import_output.stdout);
+        debug!("Imported token prices successfully:\n{}", stdout);
+
+        // Step 2: Update component TVL
+        debug!("Running component TVL update");
+
+        let tvl_script_path = temp_dir.join("update_component_tvl.sh");
+
+        std::fs::write(&tvl_script_path, TVL_SCRIPT)
+            .into_diagnostic()
+            .wrap_err("Failed to write update_component_tvl.sh to temp directory")?;
+
+        let tvl_output = std::process::Command::new("bash")
+            .arg(&tvl_script_path)
+            .arg("--db-url")
+            .arg(&self.db_url)
+            .output()
+            .into_diagnostic()
+            .wrap_err("Failed to execute update_component_tvl.sh")?;
+
+        if !tvl_output.status.success() {
+            let stderr = String::from_utf8_lossy(&tvl_output.stderr);
+            let stdout = String::from_utf8_lossy(&tvl_output.stdout);
+            error!("Component TVL update failed: {}, {}", stderr, stdout);
+            return Err(miette::miette!("Component TVL update failed: {}", stderr));
+        }
+
+        let stdout = String::from_utf8_lossy(&tvl_output.stdout);
+        debug!("Updated component TVL successfully:\n{}", stdout);
+
+        info!("TVL import completed successfully");
+        Ok(())
     }
 
     /// Fetches protocol data from the Tycho RPC server and prepares it for validation and
