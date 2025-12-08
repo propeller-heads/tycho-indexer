@@ -82,3 +82,6 @@ pretty_assertions = "1.4.0"
 rstest = "0.18.2"
 mockall = "0.11.4"
 mockito = "1.1.1"
+
+[patch.crates-io]
+tokio-postgres = { git = "https://github.com/zizou0x/rust-postgres.git", branch = "debug" }
