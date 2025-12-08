@@ -3626,7 +3626,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2 0.6.0",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -4864,7 +4864,7 @@ checksum = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483"
 [[package]]
 name = "postgres-protocol"
 version = "0.6.8"
-source = "git+https://github.com/zizou0x/rust-postgres.git?branch=debug#8fceca264b5fc0b95310fc946ef27091fdbfdf36"
+source = "git+https://github.com/zizou0x/rust-postgres.git?branch=debug#b36b347731519f7c59537e3e227cbe3ac328687b"
 dependencies = [
  "base64 0.22.1",
  "byteorder",
@@ -4881,7 +4881,7 @@ dependencies = [
 [[package]]
 name = "postgres-types"
 version = "0.2.9"
-source = "git+https://github.com/zizou0x/rust-postgres.git?branch=debug#8fceca264b5fc0b95310fc946ef27091fdbfdf36"
+source = "git+https://github.com/zizou0x/rust-postgres.git?branch=debug#b36b347731519f7c59537e3e227cbe3ac328687b"
 dependencies = [
  "bytes",
  "fallible-iterator",
@@ -6727,7 +6727,7 @@ dependencies = [
 [[package]]
 name = "tokio-postgres"
 version = "0.7.13"
-source = "git+https://github.com/zizou0x/rust-postgres.git?branch=debug#8fceca264b5fc0b95310fc946ef27091fdbfdf36"
+source = "git+https://github.com/zizou0x/rust-postgres.git?branch=debug#b36b347731519f7c59537e3e227cbe3ac328687b"
 dependencies = [
  "async-trait",
  "byteorder",
