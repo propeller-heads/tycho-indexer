@@ -429,11 +429,13 @@ pub fn setup_angstrom_overwrites(
         0, 3,
     ]);
 
-    // Set the current block number in the first 8 bytes (big-endian)
-    let mut storage_value = [0u8; 32];
+    // Use the actual storage pattern and only update the block number at the end
+    // Pattern: 0x00000000e40df67976149fe316ca8437300da6fec92629ea00000000016d620b
+    let mut storage_value =
+        hex::decode("00000000e40df67976149fe316ca8437300da6fec92629ea00000000016d620b").unwrap();
     storage_value[24..32].copy_from_slice(&current_block_number.to_be_bytes());
-    let storage_value_b256 = alloy::primitives::B256::from(storage_value);
 
+    let storage_value_b256 = alloy::primitives::B256::from_slice(&storage_value);
     overwrites.insert(
         angstrom_address,
         AccountOverride::default().with_state_diff(vec![(storage_slot, storage_value_b256)]),
