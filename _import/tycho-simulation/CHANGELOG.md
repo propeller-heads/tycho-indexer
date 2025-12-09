@@ -1,3 +1,25 @@
+## [0.212.0](https://github.com/propeller-heads/tycho-simulation/compare/0.211.4...0.212.0) (2025-12-09)
+
+
+### Features
+
+* add dependecy for test set up ([6e9f0bb](https://github.com/propeller-heads/tycho-simulation/commit/6e9f0bbcc57d71c8503667475b2110ad8a43c811))
+* add helper to convert hex string to BigUint ([3ac5226](https://github.com/propeller-heads/tycho-simulation/commit/3ac5226753740cde6b2c453c830d88325ec2d0c5))
+* add initial state and decoder for Lido ([ef2d8b5](https://github.com/propeller-heads/tycho-simulation/commit/ef2d8b5ad872c894012b8be3b122e960cd3716e5))
+* add parsing of the total_wrapped_st_eth for lido state ([4e1995a](https://github.com/propeller-heads/tycho-simulation/commit/4e1995a8512a42244309df0bbebf0d21baa9e3a1))
+* add pooled ETH and token tracking fields ([f6cdd72](https://github.com/propeller-heads/tycho-simulation/commit/f6cdd72433153b74fa5577020f4b390564bc774c))
+* add unit tests for lido state ([8b02221](https://github.com/propeller-heads/tycho-simulation/commit/8b02221a278c9bc50befc4fc9e36547231cd70d2))
+* add unit tests for wrapped stETH ([5021cfd](https://github.com/propeller-heads/tycho-simulation/commit/5021cfd05d02a3cbf35304e2c46d64af04cbd84f))
+
+
+### Bug Fixes
+
+* add balance set up to the test where required ([d517b33](https://github.com/propeller-heads/tycho-simulation/commit/d517b3345a300fc401f6771f0b1d1a339b3a91ac))
+* correct calculation logic ([9e572c9](https://github.com/propeller-heads/tycho-simulation/commit/9e572c989c45ccbc6e58a593ae90d218670ebd64))
+* put inputs in the correct order ([abe6e8b](https://github.com/propeller-heads/tycho-simulation/commit/abe6e8bee8d04317fbffdaf54fe529f75b6db3a0))
+* replace spot calculation with correct formula ([b403e40](https://github.com/propeller-heads/tycho-simulation/commit/b403e400ee110de7f362094514f946cfaacf3d3a))
+* use u256 operations ([06c490b](https://github.com/propeller-heads/tycho-simulation/commit/06c490b9798f9adff67dcb161b984b0df6dc1559))
+
 ## [0.211.4](https://github.com/propeller-heads/tycho-simulation/compare/0.211.3...0.211.4) (2025-12-09)
 
 
