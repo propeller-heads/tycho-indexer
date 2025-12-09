@@ -96,7 +96,7 @@ pub struct TestRunner {
     runtime: Runtime,
     rpc_provider: RPCProvider,
     protocol_components: Arc<RwLock<HashMap<String, ProtocolComponentModel>>>,
-    clear_db: bool,
+    reuse_last_sync: bool,
 }
 
 impl TestRunner {
@@ -109,7 +109,7 @@ impl TestRunner {
         db_url: String,
         rpc_url: String,
         vm_simulation_traces: bool,
-        clear_db: bool,
+        reuse_last_sync: bool,
     ) -> miette::Result<Self> {
         let base_protocol = CLONE_TO_BASE_PROTOCOL
             .get(protocol.as_str())
@@ -149,7 +149,7 @@ impl TestRunner {
             adapter_contract_builder,
             runtime,
             rpc_provider,
-            clear_db,
+            reuse_last_sync,
             protocol_components: Arc::new(RwLock::new(HashMap::new())),
         })
     }
@@ -295,8 +295,8 @@ impl TestRunner {
 
         let _ = tycho_simulation::evm::engine_db::SHARED_TYCHO_DB.clear();
 
-        let protocol_stream_builder = ProtocolStreamBuilder::new("localhost:4242/", chain)
-            .skip_state_decode_failures(true);
+        let protocol_stream_builder =
+            ProtocolStreamBuilder::new("localhost:4242/", chain).skip_state_decode_failures(true);
 
         let adapter_contract_path = self.get_adapter_contract_path(
             &config.adapter_contract,
@@ -494,7 +494,9 @@ impl TestRunner {
             let tycho_runner = self
                 .runtime
                 .block_on(self.tycho_runner(initialized_accounts))?;
-            if self.clear_db {
+            if self.reuse_last_sync {
+                info!("Skipping indexing and using existent DB")
+            } else {
                 let spkg_path = build_spkg(substreams_yaml_path, test.start_block)
                     .wrap_err("Failed to build spkg")?;
 
@@ -508,8 +510,6 @@ impl TestRunner {
                         config.module_name.clone(),
                     )
                     .wrap_err("Failed to run Tycho")?;
-            } else {
-                info!("Skipping indexing and using existent DB")
             }
             let rpc_server = tycho_runner.start_rpc_server()?;
             match self.run_test(test, &config, test.stop_block) {
@@ -661,8 +661,7 @@ impl TestRunner {
     }
 
     async fn tycho_runner(&self, initialized_accounts: Vec<String>) -> miette::Result<TychoRunner> {
-        // If we want to clear db, reuse current db state
-        if self.clear_db {
+        if !self.reuse_last_sync {
             self.empty_database()
                 .await
                 .into_diagnostic()
@@ -1210,10 +1209,7 @@ impl TestRunner {
         let router_overwrites_data =
             Some(execution::create_router_overwrites_data(protocol_system)?);
 
-        info!(
-            "Executing {} simulations in batches ...",
-            filtered_execution_data.len()
-        );
+        info!("Executing {} simulations in batches ...", filtered_execution_data.len());
 
         // Split execution data into smaller batches to avoid RPC request size limits
         // This happens because our overwrites are colossal

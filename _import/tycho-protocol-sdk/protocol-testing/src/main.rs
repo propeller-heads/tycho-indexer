@@ -55,7 +55,7 @@ impl FullTestCommand {
             args.db_url,
             args.rpc_url,
             args.vm_simulation_traces,
-            args.clear_db,
+            args.reuse_last_sync,
         )?
         .run()
     }
@@ -83,7 +83,7 @@ impl RangeTestCommand {
             args.db_url,
             args.rpc_url,
             args.vm_simulation_traces,
-            args.clear_db,
+            args.reuse_last_sync,
         )?
         .run()
     }
@@ -122,11 +122,11 @@ struct CommonArgs {
     #[arg(long, default_value_t = false)]
     execution_traces: bool,
 
-    /// If true (default), clears the DB and re-syncs from start. If false:
-    //   - for the ranged test, it skips indexing and uses the current state
-    //   - for the full test, it starts syncing from the last block in the db
-    #[arg(long, default_value_t = true)]
-    clear_db: bool,
+    /// If false (default), clears the DB and re-syncs from start. If true:
+    ///   - for the ranged test, it skips indexing and uses the current state
+    ///   - for the full test, it starts syncing from the last block in the db
+    #[arg(long, default_value_t = false)]
+    reuse_last_sync: bool,
 }
 
 impl CommonArgs {
