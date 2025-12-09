@@ -1029,8 +1029,10 @@ fn test_sequential_encoding_strategy_fluid() {
 }
 
 #[test]
-fn test_single_encoding_strategy_rocketpool() {
+fn test_single_encoding_strategy_rocketpool_deposit() {
     // ETH -> (rocketpool) -> rETH
+    // Based on real tx 0x6213b6c235c52d2132711c18a1c66934832722fd71c098e843bc792ecdbd11b3
+    // where 4.5 ETH was deposited for 3.905847020555141679 rETH
     let rocketpool_pool = ProtocolComponent {
         id: String::from("0xdd3f50f8a6cafbe9b31a427582963f465e745af8"),
         protocol_system: String::from("rocketpool"),
@@ -1071,7 +1073,60 @@ fn test_single_encoding_strategy_rocketpool() {
     .unwrap()
     .data;
     let hex_calldata = encode(&calldata);
-    write_calldata_to_file("test_single_encoding_strategy_rocketpool", hex_calldata.as_str());
+    write_calldata_to_file(
+        "test_single_encoding_strategy_rocketpool_deposit",
+        hex_calldata.as_str(),
+    );
+}
+
+#[test]
+fn test_single_encoding_strategy_rocketpool_burn() {
+    // rETH -> (rocketpool) -> ETH
+    // Based on real tx 0xf461ace5ae15d1db7a9f83da2e5a62745e91ecd1908274fb6583f70a29d8f68d
+    // where 1 rETH was burned for 1.151971256664605227 ETH
+    // We use `bob*` address as sender/receiver as Alice's address has a drainer deployed that
+    // would interfere with the test when we send ETH back to her.
+    let rocketpool_pool = ProtocolComponent {
+        id: String::from("0xdd3f50f8a6cafbe9b31a427582963f465e745af8"),
+        protocol_system: String::from("rocketpool"),
+        ..Default::default()
+    };
+    let token_in = Bytes::from("0xae78736Cd615f374D3085123A210448E74Fc6393");
+    let token_out = eth();
+    let swap = SwapBuilder::new(rocketpool_pool, token_in.clone(), token_out.clone()).build();
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: token_in,
+        given_amount: BigUint::from(1_000_000_000_000_000_000u128), // 1 rETH
+        checked_token: token_out,
+        checked_amount: BigUint::from(1_151_971_256_664_605_227u128), // 1.151971256664605227 ETH
+        // Bob*
+        sender: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
+        receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
+        swaps: vec![swap],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFrom,
+        &eth(),
+        None,
+    )
+    .unwrap()
+    .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_single_encoding_strategy_rocketpool_burn", hex_calldata.as_str());
 }
 
 #[test]
