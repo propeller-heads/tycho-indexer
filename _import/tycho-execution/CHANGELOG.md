@@ -1,3 +1,21 @@
+## [0.142.0](https://github.com/propeller-heads/tycho-execution/compare/0.141.0...0.142.0) (2025-12-09)
+
+
+### Features
+
+* add 'rocketpool' to the set of IN_TRANSFER_REQUIRED_PROTOCOLS protocols ([ee9ad55](https://github.com/propeller-heads/tycho-execution/commit/ee9ad55dcf594eb794f33bf35fa4717d72a0163b))
+* add formatting check for foundry in check script ([df16328](https://github.com/propeller-heads/tycho-execution/commit/df16328d0cfcbfa726118464a5930475150f737f))
+* add RocketpoolExecutor tests and encoding integration ([733fa99](https://github.com/propeller-heads/tycho-execution/commit/733fa99b221e88f182a525fb34b3fb55faf6e83d))
+* add RocketpoolSwapEncoder ([df535ce](https://github.com/propeller-heads/tycho-execution/commit/df535ce6420d2ac612f9521b93bb3ff6a63871ad))
+* add single encoding strategy test for Rocketpool integration ([1d716e3](https://github.com/propeller-heads/tycho-execution/commit/1d716e3bb79ebfc586a918946c778b74391d61e3))
+* implement RocketpoolExecutor contract for ETH to rETH swaps ([7cfb493](https://github.com/propeller-heads/tycho-execution/commit/7cfb493220b74dba546f422b3fd18c1ed5fd9480))
+* update Rocketpool integration tests for deposit and burn operations ([a877a67](https://github.com/propeller-heads/tycho-execution/commit/a877a67538daff3f770a196ae653ee74a1cd0ea6))
+
+
+### Bug Fixes
+
+* remove ``--all-features` flag from nextest command in check script to mirror the CI ([8c91bf8](https://github.com/propeller-heads/tycho-execution/commit/8c91bf81fab04e5e33facce563c749d833303b99))
+
 ## [0.141.0](https://github.com/propeller-heads/tycho-execution/compare/0.140.0...0.141.0) (2025-12-05)
 
 
