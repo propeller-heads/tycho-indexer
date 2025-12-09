@@ -99,6 +99,45 @@ impl Trade {
     }
 }
 
+/// Represents the parameters for a swap to price operation.
+///
+/// # Fields
+///
+/// * `token_in` - The token being sold (swapped into the pool)
+/// * `token_out` - The token being bought (swapped out of the pool)
+/// * `target_price_limit` - The target marginal price as a `Price` struct representing **token_out
+///   per token_in** (token_out/token_in) net of all fees:
+///   - `numerator`: Amount of token_out (what the pool offers)
+///   - `denominator`: Amount of token_in (what the pool wants)
+///   - The pool's price will move **down** to this level as token_in is sold into it
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SwapToPriceParams {
+    token_in: Token,
+    token_out: Token,
+    target_price_limit: Price,
+}
+
+impl SwapToPriceParams {
+    pub fn new(token_in: Token, token_out: Token, target_price_limit: Price) -> Self {
+        Self { token_in, token_out, target_price_limit }
+    }
+
+    /// Returns a reference to the input token (token being sold)
+    pub fn token_in(&self) -> &Token {
+        &self.token_in
+    }
+
+    /// Returns a reference to the output token (token being bought)
+    pub fn token_out(&self) -> &Token {
+        &self.token_out
+    }
+
+    /// Returns a reference to the target price limit
+    pub fn target_price_limit(&self) -> &Price {
+        &self.target_price_limit
+    }
+}
+
 /// ProtocolSim trait
 /// This trait defines the methods that a protocol state must implement in order to be used
 /// in the trade simulation.
@@ -202,13 +241,8 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Arguments
     ///
-    /// * `token_in` - The address of the token being sold (swapped into the pool)
-    /// * `token_out` - The address of the token being bought (swapped out of the pool)
-    /// * `target_price_limit` - The target marginal price as a `Price` struct representing
-    ///   **token_out per token_in** (token_out/token_in) net of all fees:
-    ///   - `numerator`: Amount of token_out (what the pool offers)
-    ///   - `denominator`: Amount of token_in (what the pool wants)
-    ///   - The pool's price will move **down** to this level as token_in is sold into it
+    /// * `params` - A `SwapToPriceParams` struct containing the token being sold (swapped into the
+    ///   pool), the token being bought (swapped out of the pool), and the target price limit
     ///
     /// # Returns
     ///
@@ -237,12 +271,7 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     /// need to move in the wrong direction), implementations typically return a zero trade
     /// (`Trade` with `amount_in = 0` and `amount_out = 0`).
     #[allow(unused)]
-    fn swap_to_price(
-        &self,
-        token_in: &Bytes,
-        token_out: &Bytes,
-        target_price_limit: Price,
-    ) -> Result<Trade, SimulationError> {
+    fn swap_to_price(&self, params: SwapToPriceParams) -> Result<Trade, SimulationError> {
         Err(SimulationError::FatalError("swap_to_price not implemented".into()))
     }
 
