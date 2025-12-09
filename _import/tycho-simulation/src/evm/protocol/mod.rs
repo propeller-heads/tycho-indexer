@@ -13,4 +13,5 @@ pub mod uniswap_v4;
 pub mod utils;
 pub mod vm;
 
+mod clmm;
 mod cpmm;
