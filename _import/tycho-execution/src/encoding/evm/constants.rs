@@ -43,7 +43,6 @@ pub static IN_TRANSFER_REQUIRED_PROTOCOLS: LazyLock<HashSet<&'static str>> = Laz
     set.insert("vm:balancer_v3");
     set.insert("fluid_v1");
     set.insert("aerodrome_slipstreams");
-    set.insert("rocketpool");
     set
 });
 
