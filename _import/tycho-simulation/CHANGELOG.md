@@ -1,3 +1,10 @@
+## [0.213.0](https://github.com/propeller-heads/tycho-simulation/compare/0.212.0...0.213.0) (2025-12-09)
+
+
+### Features
+
+* Implement swap_to_price method in UniswapV4State ([3ca1948](https://github.com/propeller-heads/tycho-simulation/commit/3ca1948f7b8d28dbd89b8ec5c8184b8739c4ea36))
+
 ## [0.212.0](https://github.com/propeller-heads/tycho-simulation/compare/0.211.4...0.212.0) (2025-12-09)
 
 
