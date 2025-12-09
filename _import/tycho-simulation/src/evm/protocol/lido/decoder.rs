@@ -66,11 +66,11 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoState {
             ))?;
 
         let total_pooled_eth = snapshot
-                .state
-                .balances
+            .state
+            .balances
             .get(&token_to_track_total_pooled_eth)
-                .ok_or(InvalidSnapshotError::MissingAttribute(
-                    "Total shares field is missing".to_owned(),
+            .ok_or(InvalidSnapshotError::MissingAttribute(
+                "Total shares field is missing".to_owned(),
             ))?;
 
         let (staking_status_parsed, staking_limit) = if pool_type == LidoPoolType::StEth {
