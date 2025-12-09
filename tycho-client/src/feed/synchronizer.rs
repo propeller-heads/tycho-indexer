@@ -15,7 +15,7 @@ use tokio::{
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     dto::{
-        BlockChanges, Chain, EntryPointWithTracingParams, ExtractorIdentity, ProtocolComponent,
+        BlockChanges, EntryPointWithTracingParams, ExtractorIdentity, ProtocolComponent,
         ResponseAccount, ResponseProtocolState, TracingResult,
     },
     Bytes,
@@ -273,9 +273,16 @@ where
             return Ok(StateSyncMessage { header, ..Default::default() });
         }
 
-        //TODO: Improve this, we should not query for every component, but only for the ones that
-        // could have entrypoints. Maybe apply a filter per protocol?
-        let entrypoints_result = if self.extractor_id.chain == Chain::Ethereum {
+        // TODO: Find a smarter way to dynamically detect DCI protocols.
+        const DCI_PROTOCOLS: &[&str] = &[
+            "uniswap_v4_hooks",
+            "vm:curve",
+            "vm:balancer_v2",
+            "vm:balancer_v3",
+            "fluid_v1",
+            "erc4626",
+        ];
+        let entrypoints_result = if DCI_PROTOCOLS.contains(&self.extractor_id.name.as_str()) {
             let result = self
                 .rpc_client
                 .get_traced_entry_points_paginated(
