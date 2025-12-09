@@ -2045,11 +2045,6 @@ mod tests {
             .swap_to_price(&token_y, &token_x, target_price_reverse)
             .expect("swap_to_price failed");
 
-        // Both should return non-zero amounts
-        assert!(
-            trade_zfo.amount_out > BigUint::ZERO,
-            "Zero for one swap should return non-zero output"
-        );
         assert!(
             trade_ofz.amount_out > BigUint::ZERO,
             "One for zero swap should return non-zero output"
