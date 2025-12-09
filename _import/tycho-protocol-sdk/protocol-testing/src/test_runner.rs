@@ -1053,6 +1053,9 @@ impl TestRunner {
             let swap_directions: Vec<_> = tokens
                 .iter()
                 .permutations(2)
+                .filter(|perm| {
+                    perm[1].address != Bytes::from("0x0000000000000000000000000000000000000000")
+                }) // remove if second element is zero
                 .map(|perm| (perm[0], perm[1]))
                 .collect();
 
