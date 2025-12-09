@@ -426,26 +426,28 @@ impl ProtocolSim for LidoState {
         balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
         for (component_id, balances) in balances.component_balances.iter() {
-            if component_id == ST_ETH_ADDRESS_PROXY {
-                self.st_eth_balance_transition(balances)
-            } else if component_id == WST_ETH_ADDRESS {
-                self.wst_eth_balance_transition(balances)
+            if Bytes::from(component_id.as_str()) == self.id {
+                match self.pool_type {
+                    LidoPoolType::StEth => self.st_eth_balance_transition(balances),
+                    LidoPoolType::WStEth => self.wst_eth_balance_transition(balances),
+                }
             } else {
                 return Err(TransitionError::DecodeError(format!(
-                    "Invalid component id or wrong pool type: {:?}",
+                    "Invalid component id in balances: {:?}",
                     component_id,
                 )))
             }
         }
 
-        if delta.component_id == ST_ETH_ADDRESS_PROXY {
-            self.st_eth_delta_transition(delta)
-        } else if delta.component_id == WST_ETH_ADDRESS {
-            self.wst_eth_delta_transition(delta)
+        if Bytes::from(delta.component_id.as_str()) == self.id {
+            match self.pool_type {
+                LidoPoolType::StEth => self.st_eth_delta_transition(delta),
+                LidoPoolType::WStEth => self.wst_eth_delta_transition(delta),
+            }
         } else {
             Err(TransitionError::DecodeError(format!(
                 "Invalid component id in delta: {:?}",
-                delta.component_id
+                delta.component_id,
             )))
         }
     }
