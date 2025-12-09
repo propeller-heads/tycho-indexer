@@ -61,26 +61,21 @@ pub fn cpmm_spot_price(
 
 pub fn cpmm_get_amount_out(
     amount_in: U256,
-    zero2one: bool,
-    reserve0: U256,
-    reserve1: U256,
-    fee_bps: u32,
+    reserve_in: U256,
+    reserve_out: U256,
+    fee: ProtocolFee,
 ) -> Result<U256, SimulationError> {
     if amount_in == U256::from(0u64) {
         return Err(SimulationError::InvalidInput("Amount in cannot be zero".to_string(), None));
     }
-    let reserve_sell = if zero2one { reserve0 } else { reserve1 };
-    let reserve_buy = if zero2one { reserve1 } else { reserve0 };
 
-    if reserve_sell == U256::from(0u64) || reserve_buy == U256::from(0u64) {
+    if reserve_in == U256::from(0u64) || reserve_out == U256::from(0u64) {
         return Err(SimulationError::RecoverableError("No liquidity".to_string()));
     }
 
-    let fee_multiplier = U256::from(10000 - fee_bps);
-    let amount_in_with_fee = safe_mul_u256(amount_in, fee_multiplier)?;
-    let numerator = safe_mul_u256(amount_in_with_fee, reserve_buy)?;
-    let denominator =
-        safe_add_u256(safe_mul_u256(reserve_sell, U256::from(10000))?, amount_in_with_fee)?;
+    let amount_in_with_fee = safe_mul_u256(amount_in, fee.numerator)?;
+    let numerator = safe_mul_u256(amount_in_with_fee, reserve_out)?;
+    let denominator = safe_add_u256(safe_mul_u256(reserve_in, fee.precision)?, amount_in_with_fee)?;
 
     safe_div_u256(numerator, denominator)
 }
@@ -173,14 +168,14 @@ impl ProtocolFee {
 /// ## Base equations
 /// 1. Constant product: `x * y = k` where x = reserve_in, y = reserve_out
 /// 2. Swap with 0.3% fee: Only 99.7% of input affects price
-/// 3. Marginal price after swap: `price = (x' * 1000) / (y' * 997)`
+/// 3. Marginal price after swap: `price = (x' * 10000) / (y' * 9970)`
 ///
 /// ## Derivation
 /// We want the pool to reach target price: `price = sell_price / buy_price`
 ///
 /// From marginal price formula:
 /// ```text,no_run
-/// x' / y' = (sell_price * 997) / (buy_price * 1000)  [call this target_price_w_fee]
+/// x' / y' = (sell_price * 9970) / (buy_price * 10000)  [call this target_price_w_fee]
 /// ```
 ///
 /// From constant product:
@@ -209,7 +204,7 @@ impl ProtocolFee {
 /// amount_in = x' - x = sqrt(k * target_price_w_fee) - reserve_in
 /// ```
 ///
-/// where `target_price_w_fee = (sell_price * 997) / (buy_price * 1000)`
+/// where `target_price_w_fee = (sell_price * 9970) / (buy_price * 10000)`
 /// Then swap to get amount_out.
 pub fn cpmm_swap_to_price(
     reserve_in: U256,

@@ -22,8 +22,8 @@ use crate::evm::protocol::{
 };
 
 const UNISWAP_V2_FEE_BPS: u32 = 30; // 0.3% fee
-const FEE_PRECISION: U256 = U256::from_limbs([1000, 0, 0, 0]);
-const FEE_NUMERATOR: U256 = U256::from_limbs([997, 0, 0, 0]);
+const FEE_PRECISION: U256 = U256::from_limbs([10000, 0, 0, 0]);
+const FEE_NUMERATOR: U256 = U256::from_limbs([9970, 0, 0, 0]);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UniswapV2State {
@@ -60,13 +60,10 @@ impl ProtocolSim for UniswapV2State {
     ) -> Result<GetAmountOutResult, SimulationError> {
         let amount_in = biguint_to_u256(&amount_in);
         let zero2one = token_in.address < token_out.address;
-        let amount_out = cpmm_get_amount_out(
-            amount_in,
-            zero2one,
-            self.reserve0,
-            self.reserve1,
-            UNISWAP_V2_FEE_BPS,
-        )?;
+        let (reserve_in, reserve_out) =
+            if zero2one { (self.reserve0, self.reserve1) } else { (self.reserve1, self.reserve0) };
+        let fee = ProtocolFee::new(FEE_NUMERATOR, FEE_PRECISION);
+        let amount_out = cpmm_get_amount_out(amount_in, reserve_in, reserve_out, fee)?;
         let mut new_state = self.clone();
         let (reserve0_mut, reserve1_mut) = (&mut new_state.reserve0, &mut new_state.reserve1);
         if zero2one {
