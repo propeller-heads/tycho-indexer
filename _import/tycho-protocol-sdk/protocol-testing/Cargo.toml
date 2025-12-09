@@ -8,8 +8,8 @@ glob = "0.3.0"
 miette = { version = "7.6.0", features = ["fancy"] }
 # Logging & Tracing
 tracing = "0.1.37"
-tycho-simulation = { git = "https://github.com/propeller-heads/tycho-simulation.git", tag = "0.211.1", features = ["evm"] }
-tycho-test = { git = "https://github.com/propeller-heads/tycho-simulation.git", tag = "0.211.1" }
+tycho-simulation = { git = "https://github.com/propeller-heads/tycho-simulation.git", tag = "0.213.0", features = ["evm"] }
+tycho-test = { git = "https://github.com/propeller-heads/tycho-simulation.git", tag = "0.213.0" }
 tycho-execution = ">=0.136.0"
 num-bigint = "0.4"
 num-traits = "0.2"
