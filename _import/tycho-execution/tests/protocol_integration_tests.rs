@@ -1029,7 +1029,7 @@ fn test_sequential_encoding_strategy_fluid() {
 }
 
 #[test]
-fn test_sequential_encoding_strategy_rocketpool() {
+fn test_single_encoding_strategy_rocketpool() {
     // ETH -> (rocketpool) -> rETH
     let rocketpool_pool = ProtocolComponent {
         id: String::from("0xdd3f50f8a6cafbe9b31a427582963f465e745af8"),
