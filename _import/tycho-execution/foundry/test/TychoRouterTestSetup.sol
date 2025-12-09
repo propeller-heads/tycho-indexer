@@ -17,6 +17,7 @@ import {
 import {UniswapV4Executor} from "../src/executors/UniswapV4Executor.sol";
 import {FluidV1Executor} from "../src/executors/FluidV1Executor.sol";
 import {SlipstreamsExecutor} from "../src/executors/SlipstreamsExecutor.sol";
+import {RocketpoolExecutor} from "../src/executors/RocketpoolExecutor.sol";
 
 // Test utilities and mocks
 import "./Constants.sol";
@@ -81,6 +82,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     HashflowExecutor public hashflowExecutor;
     FluidV1Executor public fluidV1Executor;
     SlipstreamsExecutor public slipstreamsExecutor;
+    RocketpoolExecutor public rocketpoolExecutor;
 
     function getChain() public view virtual returns (string memory) {
         return "mainnet";
@@ -156,8 +158,9 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
             SLIPSTREAMS_NEW_FACTORY_BASE,
             PERMIT2_ADDRESS
         );
+        rocketpoolExecutor = new RocketpoolExecutor(PERMIT2_ADDRESS);
 
-        address[] memory executors = new address[](13);
+        address[] memory executors = new address[](14);
         executors[0] = address(usv2Executor);
         executors[1] = address(usv3Executor);
         executors[2] = address(pancakev3Executor);
@@ -171,6 +174,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         executors[10] = address(hashflowExecutor);
         executors[11] = address(fluidV1Executor);
         executors[12] = address(slipstreamsExecutor);
+        executors[13] = address(rocketpoolExecutor);
 
         return executors;
     }
