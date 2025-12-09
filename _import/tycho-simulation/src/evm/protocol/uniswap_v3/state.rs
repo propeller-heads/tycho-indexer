@@ -22,16 +22,19 @@ use crate::evm::protocol::{
     clmm::clmm_swap_to_price,
     safe_math::{safe_add_u256, safe_sub_u256},
     u256_num::u256_to_biguint,
-    utils::uniswap::{
-        i24_be_bytes_to_i32, liquidity_math,
-        sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
-        swap_math,
-        tick_list::{TickInfo, TickList, TickListErrorKind},
-        tick_math::{
-            get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
-            MIN_SQRT_RATIO, MIN_TICK,
+    utils::{
+        apply_fee,
+        uniswap::{
+            i24_be_bytes_to_i32, liquidity_math,
+            sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
+            swap_math,
+            tick_list::{TickInfo, TickList, TickListErrorKind},
+            tick_math::{
+                get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
+                MIN_SQRT_RATIO, MIN_TICK,
+            },
+            StepComputation, SwapResults, SwapState,
         },
-        StepComputation, SwapResults, SwapState,
     },
 };
 
@@ -242,12 +245,12 @@ impl ProtocolSim for UniswapV3State {
     }
 
     fn spot_price(&self, a: &Token, b: &Token) -> Result<f64, SimulationError> {
-        if a < b {
-            sqrt_price_q96_to_f64(self.sqrt_price, a.decimals, b.decimals)
+        let price = if a < b {
+            sqrt_price_q96_to_f64(self.sqrt_price, a.decimals, b.decimals)?
         } else {
-            sqrt_price_q96_to_f64(self.sqrt_price, b.decimals, a.decimals)
-                .map(|price| 1.0f64 / price)
-        }
+            1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, b.decimals, a.decimals)?
+        };
+        Ok(apply_fee(price, self.fee()))
     }
 
     fn get_amount_out(

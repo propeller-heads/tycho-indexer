@@ -5,6 +5,15 @@ pub mod uniswap;
 use alloy::primitives::Address;
 use tycho_common::{simulation::errors::SimulationError, Bytes};
 
+/// Applies a fee to an amount, reducing it by the fee percentage.
+///
+/// # Arguments
+/// * `amount` - The raw amount before fees
+/// * `fee` - The fee as a ratio (e.g., 0.003 for 0.3%)
+pub fn apply_fee(amount: f64, fee: f64) -> f64 {
+    amount * (1.0 - fee)
+}
+
 /// Safely converts a `Bytes` object to an `Address` object.
 ///
 /// Checks the length of the `Bytes` before attempting to convert, and returns a `SimulationError`

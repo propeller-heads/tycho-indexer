@@ -18,6 +18,7 @@ use crate::evm::protocol::{
     safe_math::{safe_add_u256, safe_sub_u256},
     u256_num::u256_to_biguint,
     utils::{
+        apply_fee,
         slipstreams::{
             dynamic_fee_module::{get_dynamic_fee, DynamicFeeConfig},
             observations::{Observation, Observations},
@@ -269,12 +270,12 @@ impl ProtocolSim for AerodromeSlipstreamsState {
     }
 
     fn spot_price(&self, a: &Token, b: &Token) -> Result<f64, SimulationError> {
-        if a < b {
-            sqrt_price_q96_to_f64(self.sqrt_price, a.decimals, b.decimals)
+        let price = if a < b {
+            sqrt_price_q96_to_f64(self.sqrt_price, a.decimals, b.decimals)?
         } else {
-            sqrt_price_q96_to_f64(self.sqrt_price, b.decimals, a.decimals)
-                .map(|price| 1.0f64 / price)
-        }
+            1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, b.decimals, a.decimals)?
+        };
+        Ok(apply_fee(price, self.fee()))
     }
 
     fn get_amount_out(
