@@ -45,7 +45,18 @@ pub fn create_components() -> Vec<ProtocolComponent> {
             id: ST_ETH_ADDRESS_PROXY_COMPONENT_ID.to_owned(),
             tokens: vec![ST_ETH_ADDRESS_PROXY.into(), ETH_ADDRESS.into()],
             contracts: vec![],
-            static_att: vec![],
+            static_att: vec![
+                Attribute {
+                    name: "protocol_type_name".into(),
+                    value: "stETH".into(),
+                    change: ChangeType::Creation.into(),
+                },
+                Attribute {
+                    name: "token_to_track_total_pooled_eth".into(),
+                    value: ETH_ADDRESS.into(),
+                    change: ChangeType::Creation.into(),
+                },
+            ],
             change: ChangeType::Creation.into(),
             protocol_type: Some(ProtocolType {
                 name: "stETH".to_string(),
@@ -58,7 +69,18 @@ pub fn create_components() -> Vec<ProtocolComponent> {
             id: WST_ETH_ADDRESS_COMPONENT_ID.to_owned(),
             tokens: vec![ST_ETH_ADDRESS_PROXY.into(), WST_ETH_ADDRESS.into()],
             contracts: vec![],
-            static_att: vec![],
+            static_att: vec![
+                Attribute {
+                    name: "protocol_type_name".into(),
+                    value: "wstETH".into(),
+                    change: ChangeType::Creation.into(),
+                },
+                Attribute {
+                    name: "token_to_track_total_pooled_eth".into(),
+                    value: ST_ETH_ADDRESS_PROXY.into(),
+                    change: ChangeType::Creation.into(),
+                },
+            ],
             change: ChangeType::Creation.into(),
             protocol_type: Some(ProtocolType {
                 name: "wstETH".to_string(),
