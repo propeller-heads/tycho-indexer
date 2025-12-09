@@ -25,11 +25,13 @@ library FractionMath {
     }
 
     /// @notice Converts a Fraction into unsigned Q128.128 fixed point
-    function toQ128x128( ISwapAdapterTypes.Fraction memory rational )
-    internal pure returns (uint256 result) {
+    function toQ128x128(ISwapAdapterTypes.Fraction memory rational)
+        internal
+        pure
+        returns (uint256 result)
+    {
         return toQ128x128(rational.numerator, rational.denominator);
     }
-
 
     /// @notice Converts an unsigned rational `numerator / denominator`
     ///         into Q128.128 (unsigned 128.128 fixed point),
@@ -45,7 +47,10 @@ library FractionMath {
     ///      using a full 512-bit intermediate to avoid precision loss.
     ///
     function toQ128x128(uint256 numerator, uint256 denominator)
-    internal pure returns (uint256 result) {
+        internal
+        pure
+        returns (uint256 result)
+    {
         require(denominator != 0, "toQ128x128: div by zero");
 
         // We want (numerator * 2^128) / denominator using full precision,
@@ -70,7 +75,7 @@ library FractionMath {
         // This is the cheap path: just do a normal 256-bit division.
         if (prod1 == 0) {
             unchecked {
-            // denominator was already checked for 0.
+                // denominator was already checked for 0.
                 return prod0 / denominator;
             }
         }
@@ -153,11 +158,12 @@ library FractionMath {
         unchecked {
             uint256 inv = (3 * denominator) ^ 2;
 
-        // Perform Newton-Raphson iterations to refine the inverse.
-        // Starting from inv which is correct modulo 2^4, then each
-        // Newton-Raphson step doubles the number of correct bits:
-        // 2⁴ → 2⁸ → 2¹⁶ → 2³² → 2⁶⁴ → 2¹²⁸ → 2²⁵⁶
-        // Requiring six iterations for 256-bit precision:
+            // Perform Newton-Raphson iterations to refine the inverse.
+            // Starting from inv which is correct modulo 2^4, then each
+            // Newton-Raphson step doubles the number of correct bits:
+            // 2⁴ → 2⁸ → 2¹⁶ → 2³² → 2⁶⁴ →
+            // 2¹²⁸ → 2²⁵⁶
+            // Requiring six iterations for 256-bit precision:
             inv *= 2 - denominator * inv;
             inv *= 2 - denominator * inv;
             inv *= 2 - denominator * inv;
@@ -165,14 +171,13 @@ library FractionMath {
             inv *= 2 - denominator * inv;
             inv *= 2 - denominator * inv;
 
-        // Now inv is the modular inverse of denominator mod 2^256.
-        // The exact division result is then:
-        //
-        //   result = (prod0 * inv) mod 2^256
-        //
-        // which is just ordinary 256-bit multiplication.
+            // Now inv is the modular inverse of denominator mod 2^256.
+            // The exact division result is then:
+            //
+            //   result = (prod0 * inv) mod 2^256
+            //
+            // which is just ordinary 256-bit multiplication.
             result = prod0 * inv;
         }
     }
-
 }
