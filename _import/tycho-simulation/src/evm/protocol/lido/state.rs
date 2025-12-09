@@ -175,12 +175,12 @@ impl LidoState {
         })
     }
 
-    fn is_forward(&self, sell_token: &Bytes, buy_token: &Bytes) -> Result<bool, SimulationError> {
+    fn zero2one(&self, sell_token: &Bytes, buy_token: &Bytes) -> Result<bool, SimulationError> {
         let second_token = self
             .tokens
             .iter()
             .find(|t| **t != self.token_to_track_total_pooled_eth)
-            .expect("No different value found");
+            .expect("No second token found");
 
         if buy_token == second_token && *sell_token == self.token_to_track_total_pooled_eth {
             Ok(true)
@@ -189,7 +189,7 @@ impl LidoState {
         } else {
             Err(SimulationError::InvalidInput(
                 format!(
-                    "Get_limits: Invalid combination of tokens for type {:?}: {:?}, {:?}",
+                    "Invalid combination of tokens for type {:?}: {:?}, {:?}",
                     self.pool_type, buy_token, sell_token
                 ),
                 None,
@@ -202,8 +202,9 @@ impl LidoState {
         sell_token: Bytes,
         buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
-        if self.is_forward(&sell_token, &buy_token)? {
+        if self.zero2one(&sell_token, &buy_token)? {
             let limit = self.stake_limits_state.get_limit();
+
             Ok((limit.clone(), limit))
         } else {
             Ok((BigUint::zero(), BigUint::zero()))
@@ -215,7 +216,7 @@ impl LidoState {
         sell_token: Bytes,
         buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
-        if !self.is_forward(&sell_token, &buy_token)? {
+        if !self.zero2one(&sell_token, &buy_token)? {
             //amount of wsteth
             Ok((
                 self.total_wrapped_st_eth
@@ -336,7 +337,7 @@ impl ProtocolSim for LidoState {
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
         match self.pool_type {
             LidoPoolType::StEth => {
-                if self.is_forward(&base.address, &quote.address)? {
+                if self.zero2one(&base.address, &quote.address)? {
                     let total_shares_f64 = u256_to_f64(biguint_to_u256(&self.total_shares))?;
                     let total_pooled_eth_f64 =
                         u256_to_f64(biguint_to_u256(&self.total_pooled_eth))?;
@@ -354,7 +355,7 @@ impl ProtocolSim for LidoState {
                 }
             }
             LidoPoolType::WStEth => {
-                if self.is_forward(&base.address, &quote.address)? {
+                if self.zero2one(&base.address, &quote.address)? {
                     let total_shares_f64 = u256_to_f64(biguint_to_u256(&self.total_shares))?;
                     let total_pooled_eth_f64 =
                         u256_to_f64(biguint_to_u256(&self.total_pooled_eth))?;
@@ -382,7 +383,7 @@ impl ProtocolSim for LidoState {
         // call the corresponding swap method
         match self.pool_type {
             LidoPoolType::StEth => {
-                if self.is_forward(&token_in.address, &token_out.address)? {
+                if self.zero2one(&token_in.address, &token_out.address)? {
                     Ok(self.steth_swap(amount_in)?)
                 } else {
                     Err(SimulationError::InvalidInput(
@@ -395,7 +396,7 @@ impl ProtocolSim for LidoState {
                 }
             }
             LidoPoolType::WStEth => {
-                if self.is_forward(&token_in.address, &token_out.address)? {
+                if self.zero2one(&token_in.address, &token_out.address)? {
                     self.wrap_steth(amount_in)
                 } else {
                     self.unwrap_steth(amount_in)
@@ -681,7 +682,6 @@ mod tests {
     #[test]
 
     fn test_lido_unwrapping_get_amount_out() {
-        //new data
         // total pooled eth: 0x072409d75ebf50c5534125, 8632667470434094430765349
         // total shares: 0x00000000000000000000000000000000000000000005dc41ec2e3ba19cf3ea6d
         // tx 0xa49316d76b7cf2ba9f81c7b84868faaa6306eef5a15f194f55b3675bce89367a
