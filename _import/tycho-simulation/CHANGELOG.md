@@ -1,3 +1,10 @@
+## [0.211.4](https://github.com/propeller-heads/tycho-simulation/compare/0.211.3...0.211.4) (2025-12-09)
+
+
+### Bug Fixes
+
+* Use little endian encoding in evm conversion utils ([cf0490b](https://github.com/propeller-heads/tycho-simulation/commit/cf0490b8e3588b944d4c692b398b165266e31761))
+
 ## [0.211.3](https://github.com/propeller-heads/tycho-simulation/compare/0.211.2...0.211.3) (2025-12-08)
 
 
