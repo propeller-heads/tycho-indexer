@@ -248,20 +248,12 @@ pub fn cpmm_swap_to_price(
     if x_prime <= reserve_in {
         return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
     }
-    let amount_in = safe_sub_u256(x_prime, reserve_in)?;
 
+    let amount_in = safe_sub_u256(x_prime, reserve_in)?;
     if amount_in == U256::ZERO {
         return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
     }
 
-    let implied_amount_out = (amount_in * swap_price_den)
-        .checked_div(swap_price_num)
-        .ok_or_else(|| {
-            SimulationError::FatalError("Division by zero in implied_amount_out".to_string())
-        })?;
-
-    if implied_amount_out == U256::ZERO {
-        return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
-    }
-    Ok(Trade::new(u256_to_biguint(amount_in), u256_to_biguint(implied_amount_out)))
+    let amount_out = cpmm_get_amount_out(amount_in, reserve_in, reserve_out, fee)?;
+    Ok(Trade::new(u256_to_biguint(amount_in), u256_to_biguint(amount_out)))
 }
