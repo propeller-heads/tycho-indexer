@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
 use alloy::{
-    primitives::U256,
+    primitives::{Address, U256},
     rpc::types::{state::AccountOverride, Block},
     sol_types::SolValue,
 };
@@ -114,6 +114,30 @@ pub async fn simulate_swap_transaction(
         };
         if let Some(ref router_overwrites) = router_overwrites {
             state_overwrites.extend(router_overwrites.clone());
+        }
+
+        // Add protocol-specific overwrites for Angstrom hooks
+        if let Some(first_swap) = info.solution.swaps.first() {
+            if let Some(hook_identifier) = first_swap
+                .component
+                .static_attributes
+                .get("hook_identifier")
+            {
+                if let Ok(hook_id_str) = std::str::from_utf8(hook_identifier) {
+                    if hook_id_str == "angstrom_v1" {
+                        let angstrom_address =
+                            Address::from_str("0x0000000aa232009084Bd71A5797d089AA4Edfad4")
+                                .map_err(|e| {
+                                    (miette!("Invalid Angstrom address: {e}"), None, None)
+                                })?;
+                        let angstrom_overwrites = encoding::setup_angstrom_overwrites(
+                            angstrom_address,
+                            block.header.number,
+                        );
+                        state_overwrites.extend(angstrom_overwrites);
+                    }
+                }
+            }
         }
 
         inputs.insert(

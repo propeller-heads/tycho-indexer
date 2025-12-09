@@ -107,13 +107,13 @@ pub fn u256_to_f64(x: U256) -> Result<f64, SimulationError> {
 }
 
 pub fn u256_to_biguint(value: U256) -> BigUint {
-    let bytes: [u8; 32] = value.to_be_bytes();
-    BigUint::from_bytes_be(&bytes)
+    let bytes: [u8; 32] = value.to_le_bytes();
+    BigUint::from_bytes_le(&bytes)
 }
 
 pub fn biguint_to_u256(value: &BigUint) -> U256 {
-    let bytes = value.to_bytes_be();
-    U256::from_be_slice(&bytes)
+    let bytes = value.to_bytes_le();
+    U256::from_le_slice(&bytes)
 }
 
 pub fn bytes_to_u256(bytes: Bytes) -> U256 {

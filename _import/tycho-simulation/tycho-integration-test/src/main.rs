@@ -1011,7 +1011,7 @@ fn process_execution_result(
             } else {
                 String::new()
             };
-            let error_category = categorize_error(&error_name);
+            let error_category = categorize_error(revert_reason);
             error!(
                 event_type = "simulation_execution_failure",
                 error_message = %revert_reason,
@@ -1075,13 +1075,14 @@ fn extract_error_name(revert_reason: &str) -> String {
     }
 }
 
-fn categorize_error(error_name: &str) -> &'static str {
+fn categorize_error(error_message: &str) -> &'static str {
     // We can add more categories here when we find new meaningful ones
-    match error_name {
+    match error_message {
         e if e.contains("Couldn't find storage slot") => "Storage slot not found",
         e if e.contains("TychoRouter__NegativeSlippage") => "TychoRouter__NegativeSlippage",
         e if e.contains("0xf7bf5832") => "Fee token", /* Decodes to TychoRouter__AmountOutNotFullyReceived */
         e if e.contains("UniswapV2: K") => "Fee token",
+        e if e.contains("Insufficient balance for amount + tax") => "Fee token",
         _ => "other",
     }
 }
