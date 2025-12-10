@@ -398,10 +398,6 @@ where
     ///   latest pending layer.
     /// * `None` - If the key is not found in any layer.
     pub(super) fn get_all<'a>(&'a self, k: K) -> Option<impl Iterator<Item = &'a V> + 'a> {
-        if !self.contains_key(&k) {
-            return None;
-        }
-
         let key_for_pending = k.clone();
         let key_for_permanent = k;
 
@@ -416,7 +412,17 @@ where
             .get(&key_for_permanent)
             .into_iter();
 
-        Some(pending_iter.chain(permanent_iter))
+        let iter = pending_iter.chain(permanent_iter);
+
+        // Check if iterator would yield any items by peeking at the first element
+        // This avoids the redundant contains_key() check that iterates through all layers again
+        // while still returning None for empty iterators
+        let mut iter = iter.peekable();
+        if iter.peek().is_some() {
+            Some(iter)
+        } else {
+            None
+        }
     }
 
     /// Checks if the given key exists in either the pending or permanent layer.
