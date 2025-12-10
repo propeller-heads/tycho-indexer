@@ -99,30 +99,37 @@ impl Trade {
     }
 }
 
-/// Represents the parameters for target-price-based queries.
-///
-/// This struct is used for both `swap_to_price` and `query_supply` operations, which query
-/// trades at a target price.
+/// Represents the parameters for swap_to_price.
 ///
 /// # Fields
 ///
 /// * `token_in` - The token being sold (swapped into the pool)
 /// * `token_out` - The token being bought (swapped out of the pool)
-/// * `target_price_limit` - The target marginal price as a `Price` struct representing **token_out
-///   per token_in** (token_out/token_in) net of all fees:
+/// * `target_price` - The target marginal price as a `Price` struct representing **token_out per
+///   token_in** (token_out/token_in) net of all fees:
 ///   - `numerator`: Amount of token_out (what the pool offers)
 ///   - `denominator`: Amount of token_in (what the pool wants)
 ///   - The pool's price will move **down** to this level as token_in is sold into it
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TargetPriceParams {
+/// * `tolerance` - The tolerance percentage for the resulting trade price. The condition that must
+///   be satisfied for any resulting Trade is: `(1 - tolerance) * target_price <= result marginal
+///   price <= target_price`. This keeps `target_price` as a hard upper limit. If this condition is
+///   not met, an error is thrown.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SwapToPriceParams {
     token_in: Token,
     token_out: Token,
     target_price: Price,
+    tolerance: Option<f64>,
 }
 
-impl TargetPriceParams {
-    pub fn new(token_in: Token, token_out: Token, target_price: Price) -> Self {
-        Self { token_in, token_out, target_price }
+impl SwapToPriceParams {
+    pub fn new(
+        token_in: Token,
+        token_out: Token,
+        target_price: Price,
+        tolerance: Option<f64>,
+    ) -> Self {
+        Self { token_in, token_out, target_price, tolerance }
     }
 
     /// Returns a reference to the input token (token being sold into the pool)
@@ -138,6 +145,65 @@ impl TargetPriceParams {
     /// Returns a reference to the target price
     pub fn target_price(&self) -> &Price {
         &self.target_price
+    }
+
+    /// Returns a reference to the tolerance
+    pub fn tolerance(&self) -> Option<f64> {
+        self.tolerance
+    }
+}
+
+/// Represents the parameters for query_supply.
+///
+/// # Fields
+///
+/// * `token_in` - The token being sold (swapped into the pool)
+/// * `token_out` - The token being bought (swapped out of the pool)
+/// * `trade_price_limit` - The trade price limit as a `Price` struct representing **token_out per
+///   token_in** (token_out/token_in) net of all fees:
+///   - `numerator`: Amount of token_out (what the pool offers)
+///   - `denominator`: Amount of token_in (what the pool wants)
+///   - The trade price will be at or above this level
+/// * `tolerance` - The tolerance for early stopping in iterative algorithms. The condition that
+///   must be satisfied for any result is: `result trade price <= target trade price`.The tolerance
+///   parameter can be used for early stopping of iterative algorithms when the result is within the
+///   tolerance of the target.
+#[derive(Debug, Clone, PartialEq)]
+pub struct QuerySupplyParams {
+    token_in: Token,
+    token_out: Token,
+    trade_price_limit: Price,
+    tolerance: Option<f64>,
+}
+
+impl QuerySupplyParams {
+    pub fn new(
+        token_in: Token,
+        token_out: Token,
+        trade_price_limit: Price,
+        tolerance: Option<f64>,
+    ) -> Self {
+        Self { token_in, token_out, trade_price_limit, tolerance }
+    }
+
+    /// Returns a reference to the input token (token being sold into the pool)
+    pub fn token_in(&self) -> &Token {
+        &self.token_in
+    }
+
+    /// Returns a reference to the output token (token being bought out of the pool)
+    pub fn token_out(&self) -> &Token {
+        &self.token_out
+    }
+
+    /// Returns a reference to the trade price limit
+    pub fn trade_price_limit(&self) -> &Price {
+        &self.trade_price_limit
+    }
+
+    /// Returns a reference to the tolerance
+    pub fn tolerance(&self) -> Option<f64> {
+        self.tolerance
     }
 }
 
@@ -240,28 +306,33 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ) -> Result<(), TransitionError<String>>;
 
     /// Calculates the amount of token_in required to move the pool's marginal price down to
-    /// a target price limit, and the amount of token_out received.
+    /// a target price, and the amount of token_out received.
     ///
     /// # Arguments
     ///
-    /// * `params` - A `TargetPriceParams` struct containing:
+    /// * `params` - A `SwapToPriceParams` struct containing:
     ///   - `token_in`: The token being sold (swapped into the pool)
     ///   - `token_out`: The token being bought (swapped out of the pool)
-    ///   - `target_price`: The target marginal price limit
+    ///   - `target_price`: The target marginal price
+    ///   - `tolerance`: Optional tolerance percentage for marginal price of the resulting trade
+    ///     price
     ///
     /// # Returns
     ///
     /// * `Ok(Trade)` - A `Trade` struct containing the amount that needs to be swapped on the pool
-    ///   to move its price to the target price limit.
+    ///   to move its price to the target price.
     /// * `Err(SimulationError)` - If:
     ///   - The calculation encounters numerical issues (overflow, division by zero, etc.)
     ///   - The method is not implemented for this protocol
+    ///   - The tolerance condition is not met (i.e., the resulting marginal price does not satisfy
+    ///     `(1
+    ///     - tolerance) * target_price <= result marginal price <= target_price`)
     ///
     /// # Edge Cases and Limitations
     ///
     /// ## Exact Price Achievement
     ///
-    /// It is almost never possible to achieve the target price limit exactly, only within some
+    /// It is almost never possible to achieve the target price exactly, only within some
     /// margin of tolerance. This is due to:
     /// - **Discrete liquidity**: For concentrated liquidity protocols (e.g., Uniswap V3), liquidity
     ///   is distributed across discrete price ticks, making exact price targeting impossible. The
@@ -270,13 +341,19 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///   In case of overflow an error will be returned.
     /// - **Protocol constraints**: Some protocols have minimum trade sizes or other constraints
     ///
+    /// ## Tolerance Validation
+    ///
+    /// The resulting marginal price must satisfy: `(1 - tolerance) * target_price <= result
+    /// marginal price <= target_price`. If this condition is not met, implementations return an
+    /// error. This ensures that `target_price` remains a hard upper limit that is never
+    /// exceeded.
+    ///
     /// ## Unreachable Prices
     ///
-    /// If the target price limit is already below the current marginal price (i.e., the price would
-    /// need to move in the wrong direction), implementations typically return a zero trade
-    /// (`Trade` with `amount_in = 0` and `amount_out = 0`).
+    /// If the target price is already below the current marginal price (i.e., the price would
+    /// need to move in the wrong direction), implementations return an error.
     #[allow(unused)]
-    fn swap_to_price(&self, params: TargetPriceParams) -> Result<Trade, SimulationError> {
+    fn swap_to_price(&self, params: &SwapToPriceParams) -> Result<Trade, SimulationError> {
         Err(SimulationError::FatalError("swap_to_price not implemented".into()))
     }
 
@@ -286,20 +363,26 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Arguments
     ///
-    /// * `params` - A `TargetPriceParams` struct containing:
+    /// * `params` - A `QuerySupplyParams` struct containing:
     ///   - `token_in`: The token being bought by the pool (the buy token)
     ///   - `token_out`: The token being sold by the pool (the sell token)
-    ///   - `target_price`: The minimum acceptable price for the trade
+    ///   - `trade_price_limit`: The minimum acceptable price for the trade
+    ///   - `tolerance`: Optional tolerance percentage for early stopping in iterative algorithms
     ///
     /// # Returns
     ///
     /// * `Ok(Trade)` - A `Trade` struct containing the largest trade that can be executed on this
-    ///   pool while respecting the provided trace price
+    ///   pool while respecting the provided trade price limit
     /// * `Err(SimulationError)` - If:
     ///   - The calculation encounters numerical issues
     ///   - The method is not implemented for this protocol
+    ///
+    /// # Tolerance Usage
+    ///
+    /// The tolerance parameter can be used for early stopping of iterative algorithms when the
+    /// result is within the tolerance of the target trade price.
     #[allow(unused)]
-    fn query_supply(&self, params: TargetPriceParams) -> Result<Trade, SimulationError> {
+    fn query_supply(&self, params: &QuerySupplyParams) -> Result<Trade, SimulationError> {
         Err(SimulationError::FatalError("query_supply not implemented".into()))
     }
 
