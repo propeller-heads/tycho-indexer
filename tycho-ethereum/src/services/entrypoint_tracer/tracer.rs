@@ -378,8 +378,8 @@ impl EntryPointTracer for EVMEntrypointService {
 
                     // Provides a very simplistic way of finding retriggers. A better way would
                     // involve using the structure of callframes. So basically iterate the call
-                    // tree in a parent child manner then search the
-                    // childs address in the prestate of parent.
+                    // tree in a parent child manner then search the childs address in the prestate
+                    // of parent.
                     let retriggers = if let GethTrace::PreStateTracer(PreStateFrame::Default(
                         PreStateMode(frame),
                     )) = pre_state_trace
