@@ -1,9 +1,6 @@
 use tycho_common::Bytes;
 
-use crate::encoding::{
-    evm::constants::{get_protocol_grouping_family, GROUPABLE_PROTOCOLS},
-    models::Swap,
-};
+use crate::encoding::{evm::constants::GROUPABLE_PROTOCOLS, models::Swap};
 
 /// Represents a group of swaps that can be encoded into a single swap execution for gas
 /// optimization.
@@ -40,23 +37,22 @@ impl PartialEq for SwapGroup {
 pub fn group_swaps(swaps: &Vec<Swap>) -> Vec<SwapGroup> {
     let mut grouped_swaps: Vec<SwapGroup> = Vec::new();
     let mut current_group: Option<SwapGroup> = None;
-    let mut last_swap_protocol_family = "".to_string();
+    let mut last_swap_protocol = "".to_string();
     let mut groupable_protocol;
     let mut last_swap_out_token = Bytes::default();
     for swap in swaps {
-        let current_swap_protocol = swap.component.protocol_system.clone();
-        let current_swap_protocol_family =
-            get_protocol_grouping_family(&current_swap_protocol).to_string();
+        let mut current_swap_protocol = swap.component.protocol_system.clone();
+        // Normalize uniswap_v4_hooks to uniswap_v4 for grouping (same PoolManager)
+        if current_swap_protocol == "uniswap_v4_hooks" {
+            current_swap_protocol = "uniswap_v4".to_string();
+        };
         groupable_protocol = GROUPABLE_PROTOCOLS.contains(&current_swap_protocol.as_str());
 
         // Split 0 can also mean that the swap is the remaining part of a branch of splits,
         // so we need to check the last swap's out token as well
         let no_split = swap.split == 0.0 && swap.token_in == last_swap_out_token;
 
-        if current_swap_protocol_family == last_swap_protocol_family &&
-            groupable_protocol &&
-            no_split
-        {
+        if current_swap_protocol == last_swap_protocol && groupable_protocol && no_split {
             // Second or later groupable pool in a sequence of groupable pools. Merge to the
             // current group.
             if let Some(group) = current_group.as_mut() {
@@ -78,7 +74,7 @@ pub fn group_swaps(swaps: &Vec<Swap>) -> Vec<SwapGroup> {
                 split: swap.split,
             });
         }
-        last_swap_protocol_family = current_swap_protocol_family;
+        last_swap_protocol = current_swap_protocol;
         last_swap_out_token = swap.token_out.clone();
     }
     if let Some(group) = current_group.as_mut() {
