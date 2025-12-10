@@ -20,6 +20,7 @@ use tycho_simulation::{
             filters::{balancer_v2_pool_filter, curve_pool_filter, fluid_v1_paused_pools_filter},
             fluid::FluidV1,
             pancakeswap_v2::state::PancakeswapV2State,
+            rocketpool::state::RocketpoolState,
             uniswap_v2::state::UniswapV2State,
             uniswap_v3::state::UniswapV3State,
             uniswap_v4::state::UniswapV4State,
@@ -154,6 +155,7 @@ impl ProtocolStreamProcessor {
                 "vm:maverick_v2".to_string(),
                 "fluid_v1".to_string(),
                 "erc4626".to_string(),
+                "rocketpool".to_string(),
             ],
             Chain::Base => vec![
                 "uniswap_v2".to_string(),
@@ -245,6 +247,9 @@ impl ProtocolStreamProcessor {
             }
             "erc4626" => {
                 stream = stream.exchange::<ERC4626State>("erc4626", tvl_filter.clone(), None);
+            }
+            "rocketpool" => {
+                stream = stream.exchange::<RocketpoolState>("rocketpool", tvl_filter.clone(), None);
             }
             _ => {
                 return Err(miette::miette!("Unknown protocol: {}", protocol));
