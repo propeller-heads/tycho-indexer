@@ -23,7 +23,7 @@ use crate::evm::protocol::{
     safe_math::{safe_add_u256, safe_sub_u256},
     u256_num::u256_to_biguint,
     utils::{
-        apply_fee,
+        add_fee_markup,
         uniswap::{
             i24_be_bytes_to_i32, liquidity_math,
             sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
@@ -250,7 +250,7 @@ impl ProtocolSim for UniswapV3State {
         } else {
             1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, b.decimals, a.decimals)?
         };
-        Ok(apply_fee(price, self.fee()))
+        Ok(add_fee_markup(price, self.fee()))
     }
 
     fn get_amount_out(

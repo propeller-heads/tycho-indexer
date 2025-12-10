@@ -23,7 +23,7 @@ use super::pool::{
     base::BasePool, full_range::FullRangePool, oracle::OraclePool, twamm::TwammPool, EkuboPool,
 };
 use crate::evm::protocol::{
-    ekubo::pool::mev_resist::MevResistPool, u256_num::u256_to_f64, utils::apply_fee,
+    ekubo::pool::mev_resist::MevResistPool, u256_num::u256_to_f64, utils::add_fee_markup,
 };
 
 #[enum_delegate::implement(EkuboPool)]
@@ -60,7 +60,7 @@ impl ProtocolSim for EkuboState {
         } else {
             1.0f64 / sqrt_price_q128_to_f64(sqrt_ratio, (quote_decimals, base_decimals))?
         };
-        Ok(apply_fee(price, self.fee()))
+        Ok(add_fee_markup(price, self.fee()))
     }
 
     fn get_amount_out(

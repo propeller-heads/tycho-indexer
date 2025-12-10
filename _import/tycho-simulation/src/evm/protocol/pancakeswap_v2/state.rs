@@ -23,7 +23,7 @@ use crate::evm::protocol::{
     },
     safe_math::{safe_add_u256, safe_sub_u256},
     u256_num::{biguint_to_u256, u256_to_biguint},
-    utils::apply_fee,
+    utils::add_fee_markup,
 };
 
 const PANCAKESWAP_V2_FEE: u32 = 25; // 0.25% fee
@@ -55,7 +55,7 @@ impl ProtocolSim for PancakeswapV2State {
 
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
         let price = cpmm_spot_price(base, quote, self.reserve0, self.reserve1)?;
-        Ok(apply_fee(price, self.fee()))
+        Ok(add_fee_markup(price, self.fee()))
     }
 
     fn get_amount_out(
@@ -293,8 +293,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case(true, 0.0008189195647755381f64)] // 0.0008209719947624441 * 0.9975
-    #[case(false, 1215.023175411283f64)] // 1218.0683462769755 * 0.9975
+    #[case(true, 0.0008230295686841545)] // 0.0008209719947624441 / 0.9975
+    #[case(false, 1221.12114914985)] // 1218.0683462769755 / 0.9975
     fn test_spot_price(#[case] zero_to_one: bool, #[case] exp: f64) {
         let state = PancakeswapV2State::new(
             U256::from_str("36925554990922").unwrap(),

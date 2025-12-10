@@ -31,7 +31,7 @@ use crate::evm::protocol::{
         },
     },
     utils::{
-        apply_fee,
+        add_fee_markup,
         uniswap::{
             i24_be_bytes_to_i32, liquidity_math, lp_fee,
             lp_fee::is_dynamic,
@@ -485,7 +485,7 @@ impl ProtocolSim for UniswapV4State {
             1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, quote.decimals, base.decimals)?
         };
 
-        Ok(apply_fee(price, fee))
+        Ok(add_fee_markup(price, fee))
     }
 
     fn get_amount_out(
