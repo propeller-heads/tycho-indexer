@@ -75,6 +75,13 @@ pub struct Price {
 
 impl Price {
     pub fn new(numerator: BigUint, denominator: BigUint) -> Self {
+        if denominator == BigUint::ZERO {
+            // Division by zero is not possible
+            panic!("Price denominator cannot be zero");
+        } else if numerator == BigUint::ZERO {
+            // Zero pool price is not valid in our context
+            panic!("Price numerator cannot be zero");
+        }
         Self { numerator, denominator }
     }
 }
