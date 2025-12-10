@@ -1,3 +1,12 @@
+## [0.213.2](https://github.com/propeller-heads/tycho-simulation/compare/0.213.1...0.213.2) (2025-12-10)
+
+
+### Bug Fixes
+
+* add unichain default min days to token fetch util fn ([824f772](https://github.com/propeller-heads/tycho-simulation/commit/824f772c48c0bf977bb92de526f0acf36587a847))
+* log panics on the price printer ([414374c](https://github.com/propeller-heads/tycho-simulation/commit/414374c476c7e8e2b27ff3642a187ee02acb1b0f))
+* only require RPC_URL on ethereum price printer ([9895ba4](https://github.com/propeller-heads/tycho-simulation/commit/9895ba425c55d58fe4a18e96ada0713f7b84d29a))
+
 ## [0.213.1](https://github.com/propeller-heads/tycho-simulation/compare/0.213.0...0.213.1) (2025-12-10)
 
 
