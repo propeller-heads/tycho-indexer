@@ -1,3 +1,10 @@
+## [0.213.1](https://github.com/propeller-heads/tycho-simulation/compare/0.213.0...0.213.1) (2025-12-10)
+
+
+### Bug Fixes
+
+* derive amount_out with get_amount_out in swap_to_price ([538ae0a](https://github.com/propeller-heads/tycho-simulation/commit/538ae0ae478e5682b8a36d13951225276020a229))
+
 ## [0.213.0](https://github.com/propeller-heads/tycho-simulation/compare/0.212.0...0.213.0) (2025-12-09)
 
 
