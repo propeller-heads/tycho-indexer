@@ -43,7 +43,7 @@ async-trait = "0.1.88"
 tycho-client = ">=0.117.4"
 tycho-common = ">=0.117.4"
 tycho-ethereum = ">=0.117.4"
-tycho-execution = ">=0.137.1"
+tycho-execution = ">=0.143.0"
 
 # EVM dependencies
 alloy = { version = "1.0.30", features = ["providers", "signer-local", "rpc-types-eth"] }
