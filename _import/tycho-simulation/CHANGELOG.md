@@ -1,3 +1,12 @@
+## [0.214.1](https://github.com/propeller-heads/tycho-simulation/compare/0.214.0...0.214.1) (2025-12-10)
+
+
+### Bug Fixes
+
+* add correct values to the test ([3352c60](https://github.com/propeller-heads/tycho-simulation/commit/3352c6084450f83f1e6f000a0f5a62bbfddb25e1))
+* remove print ([c2c49d8](https://github.com/propeller-heads/tycho-simulation/commit/c2c49d8457a523dc2abb93737e4f860a730d441f))
+* return limits in the correct token amount ([d2a8106](https://github.com/propeller-heads/tycho-simulation/commit/d2a8106e63b300a8e0d8bceb475fb45fa8609994))
+
 ## [0.214.0](https://github.com/propeller-heads/tycho-simulation/compare/0.213.2...0.214.0) (2025-12-10)
 
 
