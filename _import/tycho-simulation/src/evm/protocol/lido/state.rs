@@ -50,7 +50,6 @@ pub struct StakeLimitState {
 impl StakeLimitState {
     fn get_limit(&self) -> BigUint {
         // https://github.com/lidofinance/core/blob/cca04b42123735714d8c60a73c2f7af949e989db/contracts/0.4.24/lib/StakeLimitUtils.sol#L98
-        println!("self.staking_status: {:?}", self.staking_status);
         match self.staking_status {
             StakingStatus::Limited => self.staking_limit.clone(),
             StakingStatus::Paused => BigUint::zero(),
@@ -205,7 +204,17 @@ impl LidoState {
         if self.zero2one(&sell_token, &buy_token)? {
             let limit = self.stake_limits_state.get_limit();
 
-            Ok((limit.clone(), limit))
+            let shares = safe_div_u256(
+                safe_mul_u256(biguint_to_u256(&limit), biguint_to_u256(&self.total_shares))?,
+                biguint_to_u256(&self.total_pooled_eth),
+            )?;
+
+            let amount_out = safe_div_u256(
+                safe_mul_u256(shares, biguint_to_u256(&self.total_pooled_eth))?,
+                biguint_to_u256(&self.total_shares),
+            )?;
+
+            Ok((limit.clone(), u256_to_biguint(amount_out)))
         } else {
             Ok((BigUint::zero(), BigUint::zero()))
         }
@@ -217,24 +226,43 @@ impl LidoState {
         buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
         if !self.zero2one(&sell_token, &buy_token)? {
-            //amount of wsteth
+            //amount of wsteth, wstETH -> stETH
+
+            let total_wrapped_eth = self
+                .total_wrapped_st_eth
+                .clone()
+                .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool");
+
+            let amount_out = u256_to_biguint(safe_div_u256(
+                safe_mul_u256(
+                    biguint_to_u256(&total_wrapped_eth),
+                    biguint_to_u256(&self.total_pooled_eth),
+                )?,
+                biguint_to_u256(&self.total_shares),
+            )?);
             Ok((
                 self.total_wrapped_st_eth
                     .clone()
                     .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool"),
-                self.total_wrapped_st_eth
-                    .clone()
-                    .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool"),
+                amount_out,
             ))
         } else {
-            // total_shares - wstETH
+            // total_shares - wstETH, stETH -> wstETH
 
             let limit_for_wrapping = &self.total_shares -
                 self.total_wrapped_st_eth
                     .as_ref()
                     .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool");
 
-            Ok((limit_for_wrapping.clone(), limit_for_wrapping))
+            let amount_in = u256_to_biguint(safe_div_u256(
+                safe_mul_u256(
+                    biguint_to_u256(&limit_for_wrapping),
+                    biguint_to_u256(&self.total_shares),
+                )?,
+                biguint_to_u256(&self.total_pooled_eth),
+            )?);
+
+            Ok((amount_in, limit_for_wrapping))
         }
     }
 
@@ -766,10 +794,7 @@ mod tests {
                 .stake_limits_state
                 .staking_limit
                 .clone(),
-            st_state
-                .stake_limits_state
-                .staking_limit
-                .clone(),
+            BigUint::from_str("149999999999999999999999").unwrap(),
         );
         assert_eq!(res, exp);
 
@@ -790,7 +815,7 @@ mod tests {
                 .total_wrapped_st_eth
                 .clone()
                 .unwrap();
-        let exp = (allowed_to_wrap.clone(), allowed_to_wrap);
+        let exp = (BigUint::from_str("3093477275082723426591391").unwrap(), allowed_to_wrap);
 
         assert_eq!(res, exp);
 
@@ -801,7 +826,7 @@ mod tests {
             .total_wrapped_st_eth
             .clone()
             .unwrap();
-        let exp = (total_wrapped.clone(), total_wrapped);
+        let exp = (total_wrapped, BigUint::from_str("4039778360807033131920717").unwrap());
 
         assert_eq!(res, exp);
 
