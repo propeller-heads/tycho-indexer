@@ -216,7 +216,7 @@ impl EVMEntrypointService {
 
         let (access_list_data, pre_state_trace) = self
             .rpc
-            .batch_trace_and_access_list(
+            .trace_and_access_list(
                 &alloy::primitives::Address::from_bytes(target),
                 &B256::from_bytes(block_hash),
                 &access_list_params,

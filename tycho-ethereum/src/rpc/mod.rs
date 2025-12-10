@@ -76,7 +76,9 @@ impl EthereumRpcClient {
 
         let rpc = ClientBuilder::default().http_with_client(http_client, url);
 
-        let batching = RPCBatchingConfig::default();
+        // Enable batching with default settings as most RPC providers support it
+        let batching = RPCBatchingConfig::enabled_with_defaults();
+
         let retry_policy = RPCRetryConfig::default().into();
 
         Ok(Self { inner: rpc, batching, retry_policy, url: rpc_url.to_string() })
@@ -289,8 +291,8 @@ impl EthereumRpcClient {
         block_id: BlockNumberOrTag,
         addresses: &[Address],
     ) -> Result<HashMap<Address, (Bytes, U256)>, RPCError> {
-        if self.batching.supported {
-            self.batch_fetch_accounts_code_and_balance(block_id, addresses)
+        if let Some(max_batch_size) = self.batching.max_batch_size() {
+            self.batch_fetch_accounts_code_and_balance(block_id, addresses, max_batch_size)
                 .await
         } else {
             self.non_batch_fetch_accounts_code_and_balance(block_id, addresses)
@@ -302,28 +304,23 @@ impl EthereumRpcClient {
         &self,
         block_id: BlockNumberOrTag,
         addresses: &[Address],
+        batch_size: usize,
     ) -> Result<HashMap<Address, (Bytes, U256)>, RPCError> {
-        if !self.batching.supported {
-            return Err(RPCError::SetupError(
-                "RPC Batching Configuration indicates batching is not supported".to_string(),
-            ));
-        }
-
-        debug!(
-            chunk_size = self.batching.max_batch_size,
-            total_chunks = addresses.len() / self.batching.max_batch_size + 1,
-            block_id = block_id.to_string(),
-            "Preparing batch request for account code and balance"
-        );
-
-        let mut result = HashMap::with_capacity(addresses.len());
-
-        let chunk_size = self.batching.max_batch_size / 2; // we make 2 requests in a batch call: code + balance
+        let chunk_size = batch_size / 2; // we make 2 requests in a batch call: code + balance
         if chunk_size == 0 {
             return Err(RPCError::SetupError(
                 "BatchingConfig max_batch_size must be at least 2".to_string(),
             ));
         }
+
+        debug!(
+            chunk_size = chunk_size,
+            total_chunks = addresses.len() / chunk_size + 1,
+            block_id = block_id.to_string(),
+            "Preparing batch request for account code and balance"
+        );
+
+        let mut result = HashMap::with_capacity(addresses.len());
 
         // perf: consider running multiple batches in parallel using map of futures
         for chunk_addresses in addresses.chunks(chunk_size) {
@@ -394,8 +391,11 @@ impl EthereumRpcClient {
         address: Address,
         slots: &[B256],
     ) -> Result<HashMap<B256, Option<B256>>, RPCError> {
-        if self.batching.supported {
-            self.batch_get_selected_storage(block_id, address, slots)
+        if let Some(storage_slot_max_batch_size) = self
+            .batching
+            .storage_slot_max_batch_size()
+        {
+            self.batch_get_selected_storage(block_id, address, slots, storage_slot_max_batch_size)
                 .await
         } else {
             self.non_batch_get_selected_storage(block_id, address, slots)
@@ -440,18 +440,11 @@ impl EthereumRpcClient {
         block_id: BlockNumberOrTag,
         address: Address,
         slots: &[B256],
+        batch_size: usize,
     ) -> Result<HashMap<B256, Option<B256>>, RPCError> {
-        if !self.batching.supported {
-            return Err(RPCError::SetupError(
-                "RPC Batching Configuration indicates batching is not supported".to_string(),
-            ));
-        }
-
         let mut result = HashMap::with_capacity(slots.len());
 
-        let chunk_size = self
-            .batching
-            .max_storage_slot_batch_size; // we make 1 request in a batch call
+        let chunk_size = batch_size; // we make 1 request in a batch call
 
         // perf: consider running multiple batches in parallel using map of futures
         for slot_batch in slots.chunks(chunk_size) {
@@ -553,22 +546,42 @@ impl EthereumRpcClient {
             })
     }
 
-    pub(crate) async fn batch_trace_and_access_list(
+    pub(crate) async fn trace_and_access_list(
         &self,
         target: &Address,
         block_hash: &B256,
         access_list_params: &Value,
         trace_call_params: &Value,
     ) -> Result<(AccessListResult, GethTrace), RPCError> {
-        if !self.batching.supported {
-            return Err(RPCError::SetupError(
-                "RPC Batching Configuration indicates batching is not supported".to_string(),
-            ));
+        if let Some(max_batch_size) = self.batching.max_batch_size() {
+            self.batch_trace_and_access_list(
+                target,
+                block_hash,
+                access_list_params,
+                trace_call_params,
+                max_batch_size,
+            )
+            .await
+        } else {
+            Err(RPCError::SetupError(
+                "`trace_and_access_list` requires the `EthereumRpcClient` to have batching enabled. \
+                Either use a suitable RPC provider and enable batching in the `EthereumRpcClient`, \
+                or implement a non-batched version of this method.".to_string(),
+            ))
         }
+    }
 
-        if self.batching.max_batch_size < 2 {
+    async fn batch_trace_and_access_list(
+        &self,
+        target: &Address,
+        block_hash: &B256,
+        access_list_params: &Value,
+        trace_call_params: &Value,
+        batch_size: usize,
+    ) -> Result<(AccessListResult, GethTrace), RPCError> {
+        if batch_size < 2 {
             return Err(RPCError::SetupError(
-                "BatchingConfig max_batch_size must be at least 2".to_string(),
+                "trace_and_access_list requires max_batch_size >= 2".to_string(),
             ));
         }
 
@@ -608,22 +621,36 @@ impl EthereumRpcClient {
         })
     }
 
-    pub(crate) async fn batch_slot_detector_trace(
+    pub(crate) async fn slot_detector_trace(
         &self,
         requests: Vec<SlotDetectorValueRequest>,
         calldata: &Bytes,
         block_hash: &B256,
     ) -> Result<Vec<(GethTrace, U256)>, RPCError> {
-        if !self.batching.supported {
-            return Err(RPCError::SetupError(
-                "RPC Batching Configuration indicates batching is not supported".to_string(),
-            ));
+        if let Some(max_batch_size) = self.batching.max_batch_size() {
+            self.batch_slot_detector_trace(requests, calldata, block_hash, max_batch_size)
+                .await
+        } else {
+            Err(RPCError::SetupError(
+                "`slot_detector_trace` requires the `EthereumRpcClient` to have batching enabled. \
+                Either use a suitable RPC provider and enable batching in the `EthereumRpcClient`, \
+                or implement a non-batched version of this method."
+                    .to_string(),
+            ))
         }
+    }
 
-        let chunk_size = self.batching.max_batch_size / 2; // we make 2 requests in a batch call: trace + eth_call
+    async fn batch_slot_detector_trace(
+        &self,
+        requests: Vec<SlotDetectorValueRequest>,
+        calldata: &Bytes,
+        block_hash: &B256,
+        batch_size: usize,
+    ) -> Result<Vec<(GethTrace, U256)>, RPCError> {
+        let chunk_size = batch_size / 2; // we make 2 requests in a batch call: trace + eth_call
         if chunk_size == 0 {
             return Err(RPCError::SetupError(
-                "BatchingConfig max_batch_size must be at least 2".to_string(),
+                "slot_detector_trace requires max_batch_size >= 2".to_string(),
             ));
         }
 
@@ -684,25 +711,38 @@ impl EthereumRpcClient {
         Ok(result)
     }
 
-    /// Performs batch slot detector tests using eth_call with state diffs.
+    /// Performs slot detector tests using eth_call with state diffs.
     /// This method returns a vector of Results for each individual test request.
-    ///
-    /// This method is different from the ones above as it retries the entire batch either if all
-    /// requests fail or if some requests fail with retryable errors. If the RPC call itself
-    /// fails, it is retried in case it was a transient error.
-    pub(crate) async fn batch_slot_detector_tests(
+    pub(crate) async fn slot_detector_tests(
         &self,
         requests: &[SlotDetectorSlotTestRequest],
         calldata: &Bytes,
         block_hash: &B256,
     ) -> Result<Vec<TransportResult<Value>>, RPCError> {
-        if !self.batching.supported {
-            return Err(RPCError::SetupError(
-                "RPC Batching Configuration indicates batching is not supported".to_string(),
-            ));
+        if let Some(max_batch_size) = self.batching.max_batch_size() {
+            self.batch_slot_detector_tests(requests, calldata, block_hash, max_batch_size)
+                .await
+        } else {
+            Err(RPCError::SetupError(
+                "`slot_detector_tests` requires the `EthereumRpcClient` to have batching enabled. \
+                Either use a suitable RPC provider and enable batching in the `EthereumRpcClient`, \
+                or implement a non-batched version of this method."
+                    .to_string(),
+            ))
         }
+    }
 
-        let chunk_size = self.batching.max_batch_size; // we make 1 request per test
+    /// This method is different from the ones above as it retries the entire batch either if all
+    /// requests fail or if some requests fail with retryable errors. If the RPC call itself
+    /// fails, it is retried in case it was a transient error.
+    async fn batch_slot_detector_tests(
+        &self,
+        requests: &[SlotDetectorSlotTestRequest],
+        calldata: &Bytes,
+        block_hash: &B256,
+        batch_size: usize,
+    ) -> Result<Vec<TransportResult<Value>>, RPCError> {
+        let chunk_size = batch_size; // we make 1 request per test
         let mut result = Vec::with_capacity(requests.len());
 
         for chunk_requests in requests.chunks(chunk_size) {
@@ -843,7 +883,11 @@ mod tests {
     // Local extension methods specific to account extractor tests
     impl TestFixture {
         pub(crate) fn create_rpc_client(&self, batching: bool) -> EthereumRpcClient {
-            let batching = RPCBatchingConfig { supported: batching, ..Default::default() };
+            let batching = if batching {
+                RPCBatchingConfig::enabled_with_defaults()
+            } else {
+                RPCBatchingConfig::Disabled
+            };
             // We use 10 retries for tests to potential rate limiting issues.
             let retry_policy = RPCRetryConfig { max_retries: 10, ..Default::default() }.into();
 
@@ -1053,21 +1097,12 @@ mod tests {
         // Test with multiple addresses
         let requests = vec![parse_address(BALANCER_VAULT_STR), parse_address(STETH_STR)];
 
-        let codes_and_balances = if batching {
-            client
-                .batch_fetch_accounts_code_and_balance(
-                    BlockNumberOrTag::Number(fixture.block.number),
-                    &requests,
-                )
-                .await
-        } else {
-            client
-                .non_batch_fetch_accounts_code_and_balance(
-                    BlockNumberOrTag::Number(fixture.block.number),
-                    &requests,
-                )
-                .await
-        }?;
+        let codes_and_balances = client
+            .fetch_accounts_code_and_balance(
+                BlockNumberOrTag::Number(fixture.block.number),
+                &requests,
+            )
+            .await?;
 
         // Check that we got code and balance for both addresses
         assert_eq!(codes_and_balances.len(), 2);
@@ -1135,23 +1170,13 @@ mod tests {
         // Create request with specific slots
         let slots_request: Vec<B256> = TEST_SLOTS.keys().cloned().collect();
 
-        let storage = if batching {
-            client
-                .batch_get_selected_storage(
-                    BlockNumberOrTag::Number(fixture.block.number),
-                    parse_address(BALANCER_VAULT_STR),
-                    &slots_request,
-                )
-                .await
-        } else {
-            client
-                .non_batch_get_selected_storage(
-                    BlockNumberOrTag::Number(fixture.block.number),
-                    parse_address(BALANCER_VAULT_STR),
-                    &slots_request,
-                )
-                .await
-        }?;
+        let storage = client
+            .get_selected_storage(
+                BlockNumberOrTag::Number(fixture.block.number),
+                parse_address(BALANCER_VAULT_STR),
+                &slots_request,
+            )
+            .await?;
 
         // Verify that we got the storage for all requested slots
         assert_eq!(storage.len(), 3);
@@ -1316,7 +1341,7 @@ mod tests {
         let fixture = TestFixture::new();
         let client = fixture
             .create_rpc_client(true)
-            .with_batching(RPCBatchingConfig { max_batch_size: 10, ..Default::default() });
+            .with_batching(RPCBatchingConfig::enabled_with_defaults());
 
         let weth = parse_address(WETH_STR);
         let usdc = parse_address(USDC_STR);
@@ -1356,7 +1381,7 @@ mod tests {
             .collect();
 
         let results = client
-            .batch_slot_detector_trace(requests.clone(), &calldata, &block_hash)
+            .slot_detector_trace(requests.clone(), &calldata, &block_hash)
             .await
             .expect("Batch slot detector trace failed");
 
@@ -1390,7 +1415,10 @@ mod tests {
         let fixture = TestFixture::new();
         let client = fixture
             .create_rpc_client(true)
-            .with_batching(RPCBatchingConfig { max_batch_size: 2, ..Default::default() });
+            .with_batching(RPCBatchingConfig::Enabled {
+                max_batch_size: 2,
+                storage_slot_max_batch_size_override: None,
+            });
 
         // Using verified test case data with real balance slots for USDT, WETH, and USDC
         let usdt = parse_address(USDT_STR);
@@ -1452,7 +1480,7 @@ mod tests {
         ];
 
         let results = client
-            .batch_slot_detector_tests(&requests, &calldata, &block_hash)
+            .slot_detector_tests(&requests, &calldata, &block_hash)
             .await
             .expect("Batch slot detector tests failed");
 
@@ -1492,6 +1520,7 @@ mod tests {
 
         let rpc_client = EthereumRpcClient::new(&server.url())
             .expect("Failed to create EthereumRpcClient")
+            .with_batching(RPCBatchingConfig::enabled_with_defaults())
             .with_retry((&policy).into());
 
         let batch_request = vec![
@@ -1507,7 +1536,7 @@ mod tests {
         let calldata: Bytes = Bytes::new();
 
         let result = rpc_client
-            .batch_slot_detector_tests(&batch_request, &calldata, &B256::ZERO)
+            .slot_detector_tests(&batch_request, &calldata, &B256::ZERO)
             .await;
 
         result

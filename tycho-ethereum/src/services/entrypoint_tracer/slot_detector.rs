@@ -158,7 +158,7 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
         // Send the batched request
         let responses = match self
             .rpc
-            .batch_slot_detector_trace(requests, &calldata, &B256::from_bytes(block_hash))
+            .slot_detector_trace(requests, &calldata, &B256::from_bytes(block_hash))
             .await
         {
             Ok(responses) => responses,
@@ -317,7 +317,7 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
 
             let responses = match self
                 .rpc
-                .batch_slot_detector_tests(&requests, calldata, &B256::from_bytes(block_hash))
+                .slot_detector_tests(&requests, calldata, &B256::from_bytes(block_hash))
                 .await
             {
                 Ok(responses) => responses,
