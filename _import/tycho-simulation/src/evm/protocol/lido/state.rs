@@ -794,10 +794,7 @@ mod tests {
                 .stake_limits_state
                 .staking_limit
                 .clone(),
-            st_state
-                .stake_limits_state
-                .staking_limit
-                .clone(),
+            BigUint::from_str("149999999999999999999999").unwrap(),
         );
         assert_eq!(res, exp);
 
@@ -818,7 +815,7 @@ mod tests {
                 .total_wrapped_st_eth
                 .clone()
                 .unwrap();
-        let exp = (allowed_to_wrap.clone(), allowed_to_wrap);
+        let exp = (BigUint::from_str("3093477275082723426591391").unwrap(), allowed_to_wrap);
 
         assert_eq!(res, exp);
 
@@ -829,7 +826,7 @@ mod tests {
             .total_wrapped_st_eth
             .clone()
             .unwrap();
-        let exp = (total_wrapped.clone(), total_wrapped);
+        let exp = (total_wrapped, BigUint::from_str("4039778360807033131920717").unwrap());
 
         assert_eq!(res, exp);
 
