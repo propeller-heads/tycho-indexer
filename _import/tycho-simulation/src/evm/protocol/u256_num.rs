@@ -113,7 +113,11 @@ pub fn u256_to_biguint(value: U256) -> BigUint {
 
 pub fn biguint_to_u256(value: &BigUint) -> U256 {
     let mut limbs = [0u64; 4];
-    for (i, digit) in value.iter_u64_digits().take(4).enumerate() {
+    for (i, digit) in value
+        .iter_u64_digits()
+        .take(4)
+        .enumerate()
+    {
         limbs[i] = digit;
     }
     U256::from_limbs(limbs)
