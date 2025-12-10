@@ -107,36 +107,6 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
         assertEq(balanceAfter - balanceBefore, amountOut);
     }
 
-    function testSwapDepositIntegration() public {
-        bytes memory protocolData =
-            loadCallDataFromFile("test_encode_erc4626_deposit");
-
-        uint256 amountIn = 10 ** 18;
-        deal(GHO_ADDR, address(maverickV2Exposed), amountIn);
-        uint256 balanceBefore = USDC.balanceOf(BOB);
-
-        uint256 amountOut = maverickV2Exposed.swap(amountIn, protocolData);
-
-        uint256 balanceAfter = USDC.balanceOf(BOB);
-        assertGt(balanceAfter, balanceBefore);
-        assertEq(balanceAfter - balanceBefore, amountOut);
-    }
-
-    function testSwapRedeemIntegration() public {
-        bytes memory protocolData =
-            loadCallDataFromFile("test_encode_erc4626_redeem");
-
-        uint256 amountIn = 10 ** 18;
-        deal(GHO_ADDR, address(maverickV2Exposed), amountIn);
-        uint256 balanceBefore = USDC.balanceOf(BOB);
-
-        uint256 amountOut = maverickV2Exposed.swap(amountIn, protocolData);
-
-        uint256 balanceAfter = USDC.balanceOf(BOB);
-        assertGt(balanceAfter, balanceBefore);
-        assertEq(balanceAfter - balanceBefore, amountOut);
-    }
-
     function testExportContract() public {
         exportRuntimeBytecode(address(ERC4626Exposed), "ERC4626");
     }
@@ -148,39 +118,42 @@ contract TychoRouterForERC4626Test is TychoRouterTestSetup {
     }
 
     function testSingleERC4626Integration() public {
-        // deal(BASE_WETH, ALICE, 1 ether);
-        // uint256 balanceBefore = IERC20(BASE_USDC).balanceOf(ALICE);
+        IERC4626 spETH = IERC4626(0xfE6eb3b609a7C8352A241f7F3A21CEA4e9209B8f);
+        deal(WETH_ADDR, ALICE, 1 ether);
+        uint256 balanceBefore = spETH.balanceOf(ALICE);
 
-        // vm.startPrank(ALICE);
-        // IERC20(BASE_WETH).approve(tychoRouterAddr, type(uint256).max);
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
 
-        // bytes memory callData =
-        //     loadCallDataFromFile("test_single_encoding_strategy_slipstreams");
-        // (bool success,) = tychoRouterAddr.call(callData);
+        bytes memory callData =
+            loadCallDataFromFile("test_single_encoding_strategy_erc4626");
+        (bool success,) = tychoRouterAddr.call(callData);
 
-        // uint256 balanceAfter = IERC20(BASE_USDC).balanceOf(ALICE);
+        uint256 balanceAfter = spETH.balanceOf(ALICE);
 
-        // assertTrue(success, "Call Failed");
-        // assertEq(IERC20(BASE_WETH).balanceOf(tychoRouterAddr), 0);
-        // assertGt(balanceAfter, balanceBefore);
+        assertTrue(success, "Call Failed");
+        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
+        assertGt(balanceAfter, balanceBefore);
     }
 
     function testSequentialERC4626Integration() public {
-        // deal(BASE_WETH, ALICE, 1 ether);
-        // uint256 balanceBefore = IERC20(BASE_cbBTC).balanceOf(ALICE);
+        // spUSDC -> (ERC4626) -> USDC -> (ERC4626) -> sUSDC
+        IERC4626 spusdc = IERC4626(0x28B3a8fb53B741A8Fd78c0fb9A6B2393d896a43d);
+        IERC4626 susdc = IERC4626(0xBc65ad17c5C0a2A4D159fa5a503f4992c7B545FE);
+        deal(address(spusdc), ALICE, 100e6);
+        uint256 balanceBefore = susdc.balanceOf(ALICE);
 
-        // vm.startPrank(ALICE);
-        // IERC20(BASE_WETH).approve(tychoRouterAddr, type(uint256).max);
+        vm.startPrank(ALICE);
+        IERC20(address(spusdc)).approve(tychoRouterAddr, type(uint256).max);
 
-        // bytes memory callData = loadCallDataFromFile(
-        //     "test_sequential_encoding_strategy_slipstreams"
-        // );
-        // (bool success,) = tychoRouterAddr.call(callData);
+        bytes memory callData =
+            loadCallDataFromFile("test_sequential_encoding_strategy_erc4626");
+        (bool success,) = tychoRouterAddr.call(callData);
 
-        // uint256 balanceAfter = IERC20(BASE_cbBTC).balanceOf(ALICE);
+        uint256 balanceAfter = susdc.balanceOf(ALICE);
 
-        // assertTrue(success, "Call Failed");
-        // assertEq(IERC20(BASE_WETH).balanceOf(tychoRouterAddr), 0);
-        // assertGt(balanceAfter, balanceBefore);
+        assertTrue(success, "Call Failed");
+        assertEq(spusdc.balanceOf(tychoRouterAddr), 0);
+        assertGt(balanceAfter, balanceBefore);
     }
 }
