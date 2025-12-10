@@ -254,6 +254,13 @@ where
         let retriggered_entrypoints: HashMap<EntryPointWithTracingParams, &Transaction> =
             self.detect_retriggers(&block_changes.block_contract_changes)?;
 
+        if !retriggered_entrypoints.is_empty() {
+            debug!(
+                retriggered_entrypoints = retriggered_entrypoints.len(),
+                "DCI: Retriggered entrypoints"
+            );
+        }
+
         // Update the entrypoint results with the retriggered entrypoints
         entrypoints_to_analyze.extend(retriggered_entrypoints);
 
@@ -546,16 +553,7 @@ where
                     .map(|ep| (ep.external_id.clone(), ep)),
             )?;
 
-        let _span = span!(
-            Level::INFO,
-            "dci_extract_tracked_updates",
-            block_contract_changes = block_changes
-                .block_contract_changes
-                .len()
-        )
-        .entered();
         let tracked_updates = self.extract_tracked_updates(block_changes)?;
-        drop(_span);
 
         let mut tx_with_changes = block_changes
             .txs_with_update
@@ -1180,6 +1178,12 @@ where
     ///
     /// Note: the tx_with_changes are only contain the account deltas for the tracked contracts;
     /// they need to be merged with the `txs_with_update` vector from the block changes.
+    #[instrument(
+        level = "info",
+        name = "dci_extract_tracked_updates",
+        skip(self, block_changes),
+        fields(block_contract_changes = block_changes.block_contract_changes.len())
+    )]
     fn extract_tracked_updates(
         &self,
         block_changes: &BlockChanges,
