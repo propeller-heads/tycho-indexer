@@ -121,7 +121,7 @@ where
             "rpc_default".to_string(),
             Arc::new(RPCMetadataProvider::new_with_retry_config(
                 self.rpc_batch_size,
-                self.rpc.get_retry_config().clone(),
+                self.rpc.get_retry_config(),
             )),
         );
 
