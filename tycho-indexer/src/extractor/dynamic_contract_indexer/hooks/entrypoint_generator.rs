@@ -1440,8 +1440,8 @@ mod tests {
             .as_ref()
             .unwrap();
 
-        // Should have overrides for router, pool manager and token_in
-        assert_eq!(state_overrides.len(), 3);
+        // Should have overrides for router, pool manager, sender and token_in
+        assert_eq!(state_overrides.len(), 4);
 
         // Check pool manager has storage overrides
         let pool_manager = Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90"));
@@ -1573,8 +1573,8 @@ mod tests {
             .as_ref()
             .unwrap();
 
-        // Should have overrides for both router and pool manager
-        assert_eq!(state_overrides.len(), 2);
+        // Should have overrides for router, pool manager and sender
+        assert_eq!(state_overrides.len(), 3);
 
         // Check pool manager has storage overrides
         let pool_manager = Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90"));
