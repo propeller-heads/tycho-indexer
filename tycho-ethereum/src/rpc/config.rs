@@ -66,3 +66,52 @@ impl RPCBatchingConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use super::*;
+
+    #[test]
+    fn test_max_batch_size_enabled() {
+        let enabled = RPCBatchingConfig::Enabled {
+            max_batch_size: 50,
+            storage_slot_max_batch_size_override: None,
+        };
+        assert_eq!(enabled.max_batch_size(), Some(50));
+    }
+
+    #[test]
+    fn test_max_batch_size_disabled() {
+        assert_eq!(RPCBatchingConfig::Disabled.max_batch_size(), None);
+    }
+
+    #[test]
+    fn test_storage_slot_max_batch_size_returns_none_when_disabled() {
+        assert_eq!(RPCBatchingConfig::Disabled.storage_slot_max_batch_size(), None);
+    }
+
+    #[test]
+    fn test_storage_slot_max_batch_size_falls_back_to_max_batch_size_when_no_override() {
+        let config = RPCBatchingConfig::Enabled {
+            max_batch_size: 50,
+            storage_slot_max_batch_size_override: None,
+        };
+        assert_eq!(config.storage_slot_max_batch_size(), Some(50));
+    }
+
+    #[rstest]
+    #[case::override_higher_than_max(50, 1000)]
+    #[case::override_lower_than_max(1000, 50)]
+    fn test_storage_slot_max_batch_size_uses_override(
+        #[case] max_batch_size: usize,
+        #[case] override_size: usize,
+    ) {
+        let config = RPCBatchingConfig::Enabled {
+            max_batch_size,
+            storage_slot_max_batch_size_override: Some(override_size),
+        };
+        assert_eq!(config.storage_slot_max_batch_size(), Some(override_size));
+    }
+}
