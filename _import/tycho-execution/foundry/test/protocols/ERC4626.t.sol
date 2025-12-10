@@ -16,7 +16,8 @@ contract ERC4626ExecutorExposed is ERC4626Executor {
             IERC20 inToken,
             address target,
             address receiver,
-            RestrictTransferFrom.TransferType transferType
+            RestrictTransferFrom.TransferType transferType,
+            bool approvalNeeded
         )
     {
         return _decodeData(data);
@@ -41,14 +42,16 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
             WETH_ADDR,
             address(spETH),
             address(2),
-            RestrictTransferFrom.TransferType.None
+            RestrictTransferFrom.TransferType.None,
+            false
         );
 
         (
             IERC20 inToken,
             address target,
             address receiver,
-            RestrictTransferFrom.TransferType transferType
+            RestrictTransferFrom.TransferType transferType,
+            bool approvalNeeded
         ) = ERC4626Exposed.decodeParams(params);
 
         assertEq(address(inToken), WETH_ADDR);
@@ -57,6 +60,7 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
         assertEq(
             uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
         );
+        assertEq(approvalNeeded, false);
     }
 
     function testDecodeParamsInvalidDataLength() public {
@@ -73,7 +77,8 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
             WETH_ADDR,
             address(spETH),
             BOB,
-            RestrictTransferFrom.TransferType.None
+            RestrictTransferFrom.TransferType.None,
+            true
         );
 
         deal(WETH_ADDR, address(ERC4626Exposed), amountIn);
@@ -93,7 +98,8 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
             address(spETH),
             address(spETH),
             BOB,
-            RestrictTransferFrom.TransferType.None
+            RestrictTransferFrom.TransferType.None,
+            false
         );
 
         deal(address(spETH), address(ERC4626Exposed), amountIn);

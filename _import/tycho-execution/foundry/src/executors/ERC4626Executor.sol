@@ -25,8 +25,14 @@ contract ERC4626Executor is IExecutor, RestrictTransferFrom {
         address receiver;
         IERC20 tokenIn;
         TransferType transferType;
+        bool approvalNeeded;
 
-        (tokenIn, target, receiver, transferType) = _decodeData(data);
+        (tokenIn, target, receiver, transferType, approvalNeeded) =
+            _decodeData(data);
+        if (approvalNeeded) {
+            // slither-disable-next-line unused-return
+            tokenIn.forceApprove(target, type(uint256).max);
+        }
         _transfer(address(this), transferType, address(tokenIn), givenAmount);
 
         if (address(tokenIn) == target) {
@@ -35,7 +41,6 @@ contract ERC4626Executor is IExecutor, RestrictTransferFrom {
                 IERC4626(target).redeem(givenAmount, receiver, address(this));
         } else if (address(tokenIn) == IERC4626(target).asset()) {
             // asset --> shares
-            tokenIn.forceApprove(target, type(uint256).max);
             calculatedAmount = IERC4626(target).deposit(givenAmount, receiver);
         } else {
             revert ERC4626Executor__InvalidTarget();
@@ -49,15 +54,17 @@ contract ERC4626Executor is IExecutor, RestrictTransferFrom {
             IERC20 inToken,
             address target,
             address receiver,
-            TransferType transferType
+            TransferType transferType,
+            bool approvalNeeded
         )
     {
-        if (data.length != 61) {
+        if (data.length != 62) {
             revert ERC4626Executor__InvalidDataLength();
         }
         inToken = IERC20(address(bytes20(data[0:20])));
         target = address(bytes20(data[20:40]));
         receiver = address(bytes20(data[40:60]));
         transferType = TransferType(uint8(data[60]));
+        approvalNeeded = data[61] != 0;
     }
 }
