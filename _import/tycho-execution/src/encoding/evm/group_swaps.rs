@@ -41,7 +41,11 @@ pub fn group_swaps(swaps: &Vec<Swap>) -> Vec<SwapGroup> {
     let mut groupable_protocol;
     let mut last_swap_out_token = Bytes::default();
     for swap in swaps {
-        let current_swap_protocol = swap.component.protocol_system.clone();
+        let mut current_swap_protocol = swap.component.protocol_system.clone();
+        // Normalize uniswap_v4_hooks to uniswap_v4 for grouping (same PoolManager)
+        if current_swap_protocol == "uniswap_v4_hooks" {
+            current_swap_protocol = "uniswap_v4".to_string();
+        };
         groupable_protocol = GROUPABLE_PROTOCOLS.contains(&current_swap_protocol.as_str());
 
         // Split 0 can also mean that the swap is the remaining part of a branch of splits,
@@ -302,5 +306,58 @@ mod tests {
                 }
             ]
         );
+    }
+
+    #[test]
+    fn test_group_swaps_uniswap_v4_with_hooks() {
+        // Test that uniswap_v4 and uniswap_v4_hooks can be grouped together
+        // since they use the same PoolManager and flash accounting system.
+        //
+        //   WETH ──(USV4)──> WBTC ───(USV4_hooks)──> USDC ───(USV2)──> DAI
+
+        let weth = weth();
+        let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+
+        let swap_weth_wbtc = SwapBuilder::new(
+            ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
+            weth.clone(),
+            wbtc.clone(),
+        )
+        .build();
+
+        let swap_wbtc_usdc = SwapBuilder::new(
+            ProtocolComponent {
+                protocol_system: "uniswap_v4_hooks".to_string(),
+                ..Default::default()
+            },
+            wbtc.clone(),
+            usdc.clone(),
+        )
+        .build();
+
+        let swap_usdc_dai = SwapBuilder::new(
+            ProtocolComponent { protocol_system: "uniswap_v2".to_string(), ..Default::default() },
+            usdc.clone(),
+            dai.clone(),
+        )
+        .build();
+        let swaps = vec![swap_weth_wbtc.clone(), swap_wbtc_usdc.clone(), swap_usdc_dai.clone()];
+        let grouped_swaps = group_swaps(&swaps);
+
+        assert_eq!(grouped_swaps.len(), 2);
+        // First group should contain both uniswap_v4 and uniswap_v4_hooks swaps
+        assert_eq!(grouped_swaps[0].swaps.len(), 2);
+        assert_eq!(grouped_swaps[0].token_in, weth);
+        assert_eq!(grouped_swaps[0].token_out, usdc.clone());
+        // The protocol_system should be from the first swap in the group
+        assert_eq!(grouped_swaps[0].protocol_system, "uniswap_v4");
+
+        // Second group should be the uniswap_v2 swap
+        assert_eq!(grouped_swaps[1].swaps.len(), 1);
+        assert_eq!(grouped_swaps[1].token_in, usdc);
+        assert_eq!(grouped_swaps[1].token_out, dai);
+        assert_eq!(grouped_swaps[1].protocol_system, "uniswap_v2");
     }
 }
