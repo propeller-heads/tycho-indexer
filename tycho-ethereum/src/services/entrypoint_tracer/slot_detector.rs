@@ -97,6 +97,7 @@ pub trait SlotDetectionStrategy: Send + Sync {
 /// Generic slot detector that handles RPC communication and slot detection.
 /// The specific strategy (balance, allowance, etc.) is defined by the generic parameter `S`.
 pub struct SlotDetector<S: SlotDetectionStrategy> {
+    /// Maximum number of tokens to process per batch (unrelated to RPC batch size)
     max_token_batch_size: usize,
     rpc: EthereumRpcClient,
     cache: ThreadSafeCache<S::CacheKey, (Address, Bytes)>,
