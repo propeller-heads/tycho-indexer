@@ -1,3 +1,19 @@
+## [0.143.0](https://github.com/propeller-heads/tycho-execution/compare/0.142.0...0.143.0) (2025-12-10)
+
+
+### Features
+
+* Add conditional approval flag to ERC4626 executor ([461ab37](https://github.com/propeller-heads/tycho-execution/commit/461ab3781cc7f16775e16dd1da44b16f4522fe42))
+* Add ERC4626 executor for deposit and redeem operations ([4609976](https://github.com/propeller-heads/tycho-execution/commit/4609976850def8ef064234a9fb0c2a7891c1f6f2))
+* Add ERC4626 executor integration test ([bd0d211](https://github.com/propeller-heads/tycho-execution/commit/bd0d21175553a601f9bd3aed0c2a5faf84c12b4e))
+* update addresses for Rocketpool and ERC4626 executors ([dd37556](https://github.com/propeller-heads/tycho-execution/commit/dd375566bef31a871480a696bd954e469427345a))
+
+
+### Bug Fixes
+
+* Update ERC4626 executor address in test config ([f8e22fc](https://github.com/propeller-heads/tycho-execution/commit/f8e22fcbf8e348e0c8cf06cb2beb1d111b66e6e3))
+* Update ERC4626 test data and fork block ([f5216d8](https://github.com/propeller-heads/tycho-execution/commit/f5216d81f18a96b3785510d30396da574a287485))
+
 ## [0.142.0](https://github.com/propeller-heads/tycho-execution/compare/0.141.0...0.142.0) (2025-12-09)
 
 

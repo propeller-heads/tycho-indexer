@@ -1358,3 +1358,126 @@ fn test_sequential_encoding_strategy_slipstreams() {
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_sequential_encoding_strategy_slipstreams", hex_calldata.as_str());
 }
+
+#[test]
+fn test_single_encoding_strategy_erc4626() {
+    // WETH -> (ERC4626) -> spETH
+    let erc4626_pool = ProtocolComponent {
+        id: String::from("0xfE6eb3b609a7C8352A241f7F3A21CEA4e9209B8f"),
+        protocol_system: String::from("erc4626"),
+        ..Default::default()
+    };
+    let token_in = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2");
+    let token_out = Bytes::from("0xfE6eb3b609a7C8352A241f7F3A21CEA4e9209B8f");
+    let swap = Swap {
+        component: erc4626_pool,
+        token_in: token_in.clone(),
+        token_out: token_out.clone(),
+        split: 0f64,
+        user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
+    };
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: token_in,
+        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+        checked_token: token_out,
+        checked_amount: BigUint::from_str("1000").unwrap(),
+        // Alice
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFrom,
+        &eth(),
+        None,
+    )
+    .unwrap()
+    .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_single_encoding_strategy_erc4626", hex_calldata.as_str());
+}
+
+#[test]
+fn test_sequential_encoding_strategy_erc4626() {
+    // spUSDC -> (ERC4626) -> USDC -> (ERC4626) -> sUSDC
+    let spusdc_pool = ProtocolComponent {
+        id: String::from("0x28b3a8fb53b741a8fd78c0fb9a6b2393d896a43d"),
+        protocol_system: String::from("erc4626"),
+        ..Default::default()
+    };
+    let sp_usdc = Bytes::from("0x28b3a8fb53b741a8fd78c0fb9a6b2393d896a43d");
+    let usdc = Bytes::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
+    let swap1 = Swap {
+        component: spusdc_pool,
+        token_in: sp_usdc.clone(),
+        token_out: usdc.clone(),
+        split: 0f64,
+        user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
+    };
+    let susdc_pool = ProtocolComponent {
+        id: String::from("0xbc65ad17c5c0a2a4d159fa5a503f4992c7b545fe"),
+        protocol_system: String::from("erc4626"),
+        ..Default::default()
+    };
+    let susdc = Bytes::from("0xbc65ad17c5c0a2a4d159fa5a503f4992c7b545fe");
+    let swap2 = Swap {
+        component: susdc_pool,
+        token_in: usdc.clone(),
+        token_out: susdc.clone(),
+        split: 0f64,
+        user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
+    };
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: sp_usdc.clone(),
+        given_amount: BigUint::from_str("100_000_000").unwrap(),
+        checked_token: susdc.clone(),
+        checked_amount: BigUint::from_str("90_000000000000000000").unwrap(),
+        // Alice
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap1, swap2],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFrom,
+        &eth(),
+        None,
+    )
+    .unwrap()
+    .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_sequential_encoding_strategy_erc4626", hex_calldata.as_str());
+}
