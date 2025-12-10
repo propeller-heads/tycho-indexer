@@ -106,6 +106,11 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     /// Returns the fee of the protocol as ratio
     ///
     /// E.g. if the fee is 1%, the value returned would be 0.01.
+    ///
+    /// # Panics
+    ///
+    /// Panic for protocols with asymmetric fees (e.g. Rocketpool, Uniswap V4 with hooks),
+    /// where a single fee value cannot represent the protocol's fee structure.
     fn fee(&self) -> f64;
 
     /// Returns the amount of the quote token required to buy one unit of base token,
