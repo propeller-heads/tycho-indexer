@@ -395,6 +395,99 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
 }
 
 #[test]
+fn test_single_encoding_strategy_usv4_and_hooks_grouped_swap() {
+    // Performs a sequential swap from WETH to USDC through ETH using
+    // a USV4 pool with Euler hooks followed by a USV4 pool with no hooks
+    //
+    //   WETH  ───(USV4 Euler Hook)──> USDC ──(USV4)──> ETH
+
+    let usdc = usdc();
+    let eth = eth();
+    let weth = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
+
+    // First pool: WETH -> USDC (USV4 with Euler)
+    let pool_fee_weth_usdt = Bytes::from(BigInt::from(500).to_signed_bytes_be());
+    let tick_spacing_weth_usdt = Bytes::from(BigInt::from(1).to_signed_bytes_be());
+    let euler_hook = Bytes::from_str("0x69058613588536167BA0AA94F0CC1Fe420eF28a8").unwrap();
+    let mut static_attributes_weth_usdt: HashMap<String, Bytes> = HashMap::new();
+    static_attributes_weth_usdt.insert("key_lp_fee".into(), pool_fee_weth_usdt);
+    static_attributes_weth_usdt.insert("tick_spacing".into(), tick_spacing_weth_usdt);
+    static_attributes_weth_usdt.insert("hooks".into(), euler_hook);
+
+    // Second pool: USDC -> ETH (USV4 no hooks)
+    let pool_fee_usdc_eth = Bytes::from(BigInt::from(3000).to_signed_bytes_be());
+    let tick_spacing_usdc_eth = Bytes::from(BigInt::from(60).to_signed_bytes_be());
+    let mut static_attributes_usdc_eth: HashMap<String, Bytes> = HashMap::new();
+    static_attributes_usdc_eth.insert("key_lp_fee".into(), pool_fee_usdc_eth);
+    static_attributes_usdc_eth.insert("tick_spacing".into(), tick_spacing_usdc_eth);
+
+    let swap_weth_usdc = Swap {
+        component: ProtocolComponent {
+            protocol_system: "uniswap_v4_hooks".to_string(),
+            static_attributes: static_attributes_weth_usdt,
+            ..Default::default()
+        },
+        token_in: weth.clone(),
+        token_out: usdc.clone(),
+        split: 0f64,
+        user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
+    };
+
+    let swap_usdc_eth = Swap {
+        component: ProtocolComponent {
+            id: "0xdce6394339af00981949f5f3baf27e3610c76326a700af57e4b3e3ae4977f78d".to_string(),
+            protocol_system: "uniswap_v4".to_string(),
+            static_attributes: static_attributes_usdc_eth,
+            ..Default::default()
+        },
+        token_in: usdc.clone(),
+        token_out: eth.clone(),
+        split: 0f64,
+        user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
+    };
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: weth,
+        given_amount: BigUint::from_str("1000000000000000000").unwrap(), // 1 WETH
+        checked_token: eth.clone(),
+        checked_amount: BigUint::from_str("900000000000000000").unwrap(), // 0.9 ETH
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap_weth_usdc, swap_usdc_eth],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFromPermit2,
+        &eth,
+        Some(get_signer()),
+    )
+    .unwrap()
+    .data;
+
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file(
+        "test_single_encoding_strategy_usv4_and_hooks_grouped_swap",
+        hex_calldata.as_str(),
+    );
+}
+
+#[test]
 fn test_single_encoding_strategy_ekubo_grouped_swap() {
     // Test multi-hop Ekubo swap (grouped swaps)
     //

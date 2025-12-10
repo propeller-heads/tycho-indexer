@@ -71,3 +71,15 @@ pub static NON_PLE_ENCODED_PROTOCOLS: LazyLock<HashSet<&'static str>> = LazyLock
     set.insert("ekubo_v2");
     set
 });
+
+/// Returns the grouping family for a protocol system.
+/// Protocols in the same family can be grouped together for gas optimization.
+///
+/// For example, `uniswap_v4` and `uniswap_v4_hooks` are part of the same family
+/// since they use the same PoolManager and flash accounting system.
+pub fn get_protocol_grouping_family(protocol_system: &str) -> &str {
+    match protocol_system {
+        "uniswap_v4" | "uniswap_v4_hooks" => "uniswap_v4",
+        _ => protocol_system,
+    }
+}

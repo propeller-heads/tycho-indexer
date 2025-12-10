@@ -1,6 +1,9 @@
 use tycho_common::Bytes;
 
-use crate::encoding::{evm::constants::GROUPABLE_PROTOCOLS, models::Swap};
+use crate::encoding::{
+    evm::constants::{get_protocol_grouping_family, GROUPABLE_PROTOCOLS},
+    models::Swap,
+};
 
 /// Represents a group of swaps that can be encoded into a single swap execution for gas
 /// optimization.
@@ -37,18 +40,23 @@ impl PartialEq for SwapGroup {
 pub fn group_swaps(swaps: &Vec<Swap>) -> Vec<SwapGroup> {
     let mut grouped_swaps: Vec<SwapGroup> = Vec::new();
     let mut current_group: Option<SwapGroup> = None;
-    let mut last_swap_protocol = "".to_string();
+    let mut last_swap_protocol_family = "".to_string();
     let mut groupable_protocol;
     let mut last_swap_out_token = Bytes::default();
     for swap in swaps {
         let current_swap_protocol = swap.component.protocol_system.clone();
+        let current_swap_protocol_family =
+            get_protocol_grouping_family(&current_swap_protocol).to_string();
         groupable_protocol = GROUPABLE_PROTOCOLS.contains(&current_swap_protocol.as_str());
 
         // Split 0 can also mean that the swap is the remaining part of a branch of splits,
         // so we need to check the last swap's out token as well
         let no_split = swap.split == 0.0 && swap.token_in == last_swap_out_token;
 
-        if current_swap_protocol == last_swap_protocol && groupable_protocol && no_split {
+        if current_swap_protocol_family == last_swap_protocol_family &&
+            groupable_protocol &&
+            no_split
+        {
             // Second or later groupable pool in a sequence of groupable pools. Merge to the
             // current group.
             if let Some(group) = current_group.as_mut() {
@@ -70,7 +78,7 @@ pub fn group_swaps(swaps: &Vec<Swap>) -> Vec<SwapGroup> {
                 split: swap.split,
             });
         }
-        last_swap_protocol = current_swap_protocol;
+        last_swap_protocol_family = current_swap_protocol_family;
         last_swap_out_token = swap.token_out.clone();
     }
     if let Some(group) = current_group.as_mut() {
@@ -302,5 +310,58 @@ mod tests {
                 }
             ]
         );
+    }
+
+    #[test]
+    fn test_group_swaps_uniswap_v4_with_hooks() {
+        // Test that uniswap_v4 and uniswap_v4_hooks can be grouped together
+        // since they use the same PoolManager and flash accounting system.
+        //
+        //   WETH ──(USV4)──> WBTC ───(USV4_hooks)──> USDC ───(USV2)──> DAI
+
+        let weth = weth();
+        let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+
+        let swap_weth_wbtc = SwapBuilder::new(
+            ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
+            weth.clone(),
+            wbtc.clone(),
+        )
+        .build();
+
+        let swap_wbtc_usdc = SwapBuilder::new(
+            ProtocolComponent {
+                protocol_system: "uniswap_v4_hooks".to_string(),
+                ..Default::default()
+            },
+            wbtc.clone(),
+            usdc.clone(),
+        )
+        .build();
+
+        let swap_usdc_dai = SwapBuilder::new(
+            ProtocolComponent { protocol_system: "uniswap_v2".to_string(), ..Default::default() },
+            usdc.clone(),
+            dai.clone(),
+        )
+        .build();
+        let swaps = vec![swap_weth_wbtc.clone(), swap_wbtc_usdc.clone(), swap_usdc_dai.clone()];
+        let grouped_swaps = group_swaps(&swaps);
+
+        assert_eq!(grouped_swaps.len(), 2);
+        // First group should contain both uniswap_v4 and uniswap_v4_hooks swaps
+        assert_eq!(grouped_swaps[0].swaps.len(), 2);
+        assert_eq!(grouped_swaps[0].token_in, weth);
+        assert_eq!(grouped_swaps[0].token_out, usdc.clone());
+        // The protocol_system should be from the first swap in the group
+        assert_eq!(grouped_swaps[0].protocol_system, "uniswap_v4");
+
+        // Second group should be the uniswap_v2 swap
+        assert_eq!(grouped_swaps[1].swaps.len(), 1);
+        assert_eq!(grouped_swaps[1].token_in, usdc);
+        assert_eq!(grouped_swaps[1].token_out, dai);
+        assert_eq!(grouped_swaps[1].protocol_system, "uniswap_v2");
     }
 }

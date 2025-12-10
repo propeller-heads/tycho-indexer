@@ -447,7 +447,7 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
     }
 }
 
-contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
+contract TychoRouterForUniswapV4Test is TychoRouterTestSetup {
     function testSingleSwapUSV4CallbackPermit2() public {
         vm.startPrank(ALICE);
         uint256 amountIn = 100 ether;
@@ -622,5 +622,37 @@ contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
         assertTrue(success, "Call Failed");
         console.logUint(balanceAfter - balanceBefore);
         assertEq(balanceAfter - balanceBefore, 1474406268748155809);
+    }
+}
+
+contract TychoRouterForUniswapV4AndEulerTest is TychoRouterTestSetup {
+    function getForkBlock() public view virtual override returns (uint256) {
+        return 22689128;
+    }
+
+    function testSingleUSV4AndHooksIntegrationGroupedSwap() public {
+        // Test created with calldata from our router encoder.
+        // Tests that uniswap_v4 and uniswap_v4_hooks can be grouped together
+        //
+        //   WETH ───(USV4 with Euler)──> USDC ──(USV4)──> ETH
+
+        uint256 amountIn = 1 ether;
+        deal(WETH_ADDR, ALICE, amountIn);
+        uint256 balanceBefore = ALICE.balance;
+
+        // Approve permit2
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_usv4_and_hooks_grouped_swap"
+        );
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        vm.stopPrank();
+
+        uint256 balanceAfter = ALICE.balance;
+
+        assertTrue(success, "Call Failed");
+        assertGt(balanceAfter - balanceBefore, 0.9 ether); // At least 0.9 ETH
     }
 }
