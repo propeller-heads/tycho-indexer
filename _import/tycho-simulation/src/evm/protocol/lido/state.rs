@@ -205,7 +205,17 @@ impl LidoState {
         if self.zero2one(&sell_token, &buy_token)? {
             let limit = self.stake_limits_state.get_limit();
 
-            Ok((limit.clone(), limit))
+            let shares = safe_div_u256(
+                safe_mul_u256(biguint_to_u256(&limit), biguint_to_u256(&self.total_shares))?,
+                biguint_to_u256(&self.total_pooled_eth),
+            )?;
+
+            let amount_out = safe_div_u256(
+                safe_mul_u256(shares, biguint_to_u256(&self.total_pooled_eth))?,
+                biguint_to_u256(&self.total_shares),
+            )?;
+
+            Ok((limit.clone(), u256_to_biguint(amount_out)))
         } else {
             Ok((BigUint::zero(), BigUint::zero()))
         }
@@ -217,14 +227,24 @@ impl LidoState {
         buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
         if !self.zero2one(&sell_token, &buy_token)? {
-            //amount of wsteth
+
+            let total_wrapped_eth = self
+                .total_wrapped_st_eth
+                .clone()
+                .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool");
+
+            let amount_out = u256_to_biguint(safe_div_u256(
+                safe_mul_u256(
+                    biguint_to_u256(&total_wrapped_eth),
+                    biguint_to_u256(&self.total_pooled_eth),
+                )?,
+                biguint_to_u256(&self.total_shares),
+            )?);
             Ok((
                 self.total_wrapped_st_eth
                     .clone()
                     .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool"),
-                self.total_wrapped_st_eth
-                    .clone()
-                    .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool"),
+                amount_out,
             ))
         } else {
             // total_shares - wstETH
@@ -234,7 +254,15 @@ impl LidoState {
                     .as_ref()
                     .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool");
 
-            Ok((limit_for_wrapping.clone(), limit_for_wrapping))
+            let amount_out = u256_to_biguint(safe_div_u256(
+                safe_mul_u256(
+                    biguint_to_u256(&limit_for_wrapping),
+                    biguint_to_u256(&self.total_shares),
+                )?,
+                biguint_to_u256(&self.total_pooled_eth),
+            )?);
+
+            Ok((amount_out, limit_for_wrapping))
         }
     }
 
