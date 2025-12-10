@@ -50,7 +50,6 @@ pub struct StakeLimitState {
 impl StakeLimitState {
     fn get_limit(&self) -> BigUint {
         // https://github.com/lidofinance/core/blob/cca04b42123735714d8c60a73c2f7af949e989db/contracts/0.4.24/lib/StakeLimitUtils.sol#L98
-        println!("self.staking_status: {:?}", self.staking_status);
         match self.staking_status {
             StakingStatus::Limited => self.staking_limit.clone(),
             StakingStatus::Paused => BigUint::zero(),
