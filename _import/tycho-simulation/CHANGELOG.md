@@ -1,3 +1,20 @@
+## [0.214.0](https://github.com/propeller-heads/tycho-simulation/compare/0.213.2...0.214.0) (2025-12-10)
+
+
+### Features
+
+* Add ERC4626 in integration test ([822613a](https://github.com/propeller-heads/tycho-simulation/commit/822613a58ffc8fa5a01a79900e1c9dd022639d6e))
+* Add ERC4626 protocol implementation ([ef9a9e2](https://github.com/propeller-heads/tycho-simulation/commit/ef9a9e22768854ec03f049e1dc163f506faba2f4))
+* Add ERC4626 to default protocol ([a29528c](https://github.com/propeller-heads/tycho-simulation/commit/a29528cfc1523a6012d9d2b7f7ed9b0ab2a22338))
+* Add pool asset balance to ERC4626 decoding ([11b2156](https://github.com/propeller-heads/tycho-simulation/commit/11b21569c84008dfb549af4eaf662269a1ec6871))
+* Add pool total supply to ERC4626 state decoding ([e32d213](https://github.com/propeller-heads/tycho-simulation/commit/e32d213844a9ab880848d8a1d1b31ff5c91019b4))
+* get total_supply by vm instead of balance ([9c495ef](https://github.com/propeller-heads/tycho-simulation/commit/9c495ef77741d54d06d2d94a03c8275c17c20920))
+
+
+### Bug Fixes
+
+* ERC4626 pool total supply fallback to max_redeem ([4741719](https://github.com/propeller-heads/tycho-simulation/commit/4741719e327004f8186e74ecc269b07a53a2a885))
+
 ## [0.213.2](https://github.com/propeller-heads/tycho-simulation/compare/0.213.1...0.213.2) (2025-12-10)
 
 
