@@ -226,6 +226,7 @@ impl LidoState {
         buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
         if !self.zero2one(&sell_token, &buy_token)? {
+            //amount of wsteth, wstETH -> stETH
 
             let total_wrapped_eth = self
                 .total_wrapped_st_eth
@@ -246,7 +247,7 @@ impl LidoState {
                 amount_out,
             ))
         } else {
-            // total_shares - wstETH
+            // total_shares - wstETH, stETH -> wstETH
 
             let limit_for_wrapping = &self.total_shares -
                 self.total_wrapped_st_eth
