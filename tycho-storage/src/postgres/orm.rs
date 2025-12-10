@@ -2115,6 +2115,17 @@ pub struct NewEntryPointTracingResult {
     pub detection_data: serde_json::Value,
 }
 
+impl NewEntryPointTracingResult {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 3;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
+}
+
 #[derive(Insertable)]
 #[diesel(table_name = protocol_component_has_entry_point_tracing_params)]
 #[diesel(check_for_backend(diesel::pg::Pg))]

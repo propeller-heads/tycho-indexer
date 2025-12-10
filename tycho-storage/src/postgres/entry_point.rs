@@ -586,20 +586,28 @@ impl PostgresGateway {
             });
         }
 
-        diesel::insert_into(entry_point_tracing_result)
-            .values(&final_values)
-            .on_conflict(schema::entry_point_tracing_result::entry_point_tracing_params_id)
-            .do_update()
-            .set((
-                detection_block.eq(excluded(detection_block)),
-                detection_data.eq(excluded(detection_data)),
-                modified_ts.eq(excluded(modified_ts)),
-            ))
-            .execute(conn)
-            .await
-            .map_err(|err| {
-                storage_error_from_diesel(err, "NewEntryPointTracingResult", "Batch upsert", None)
-            })?;
+        // Insert protocol components in batches to avoid exceeding PostgreSQL parameter limit
+        for chunk in final_values.chunks(orm::NewEntryPointTracingResult::MAX_BATCH_SIZE) {
+            diesel::insert_into(entry_point_tracing_result)
+                .values(chunk)
+                .on_conflict(schema::entry_point_tracing_result::entry_point_tracing_params_id)
+                .do_update()
+                .set((
+                    detection_block.eq(excluded(detection_block)),
+                    detection_data.eq(excluded(detection_data)),
+                    modified_ts.eq(excluded(modified_ts)),
+                ))
+                .execute(conn)
+                .await
+                .map_err(|err| {
+                    storage_error_from_diesel(
+                        err,
+                        "NewEntryPointTracingResult",
+                        "Batch upsert",
+                        None,
+                    )
+                })?;
+        }
 
         let all_called_addresses: HashSet<_> = traced_entry_points
             .iter()
