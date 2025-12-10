@@ -337,12 +337,13 @@ async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
         ExtractionError::Setup("AUTH_API_KEY environment variable is not set".to_string())
     })?;
 
-    let (server_handle, server_task) = ServicesBuilder::new(direct_gw.clone(), rpc_client, api_key)
-        .prefix(&global_args.server_version_prefix)
-        .bind(&global_args.server_ip)
-        .port(global_args.server_port)
-        .min_tvl(global_args.rpc.min_tvl)
-        .run()?;
+    let (server_handle, server_task) =
+        ServicesBuilder::new(direct_gw.clone(), rpc_client.clone(), api_key)
+            .prefix(&global_args.server_version_prefix)
+            .bind(&global_args.server_ip)
+            .port(global_args.server_port)
+            .rpc_config(global_args.server.into())
+            .run()?;
     info!(server_url, "Http and Ws server started");
     let shutdown_task = tokio::spawn(shutdown_handler(server_handle, vec![], None));
     let (res, _, _) = select_all([server_task, shutdown_task]).await;
@@ -403,7 +404,7 @@ async fn create_indexing_tasks(
             .prefix(&global_args.server_version_prefix)
             .bind(&global_args.server_ip)
             .port(global_args.server_port)
-            .min_tvl(global_args.rpc.min_tvl)
+            .rpc_config(global_args.server.clone().into())
             .register_extractors(extractor_handles.clone())
             .run()?;
     info!(server_url, "Http and Ws server started");
