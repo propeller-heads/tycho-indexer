@@ -14,6 +14,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+
 use alloy::primitives::U256;
 use num_bigint::{BigUint, ToBigUint};
 use num_traits::Euclid;
@@ -34,6 +35,7 @@ use crate::evm::{
     protocol::{
         fluid::{v1::constant::RESERVES_RESOLVER, vm},
         u256_num::{biguint_to_u256, u256_to_biguint, u256_to_f64},
+        utils::add_fee_markup,
     },
 };
 
@@ -211,13 +213,11 @@ impl ProtocolSim for FluidV1 {
                     .token0_imaginary_reserves,
             )?
         };
-        let fee_factor =
-            1.0 - u256_to_f64(self.fee)? / u256_to_f64(constant::FEE_PERCENT_PRECISION)? / 100.0;
-        if base.address == self.token0.address {
-            Ok(price_f64 * fee_factor)
-        } else {
-            Ok(1.0 / price_f64 * fee_factor)
-        }
+        let fee = u256_to_f64(self.fee)? / u256_to_f64(constant::FEE_PERCENT_PRECISION)? / 100.0;
+        let oriented_price_f64 =
+            if base.address == self.token0.address { price_f64 } else { 1.0 / price_f64 };
+
+        Ok(add_fee_markup(oriented_price_f64, fee))
     }
 
     fn get_amount_out(
