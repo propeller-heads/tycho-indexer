@@ -1,3 +1,11 @@
+## [0.144.0](https://github.com/propeller-heads/tycho-execution/compare/0.143.0...0.144.0) (2025-12-10)
+
+
+### Features
+
+* Group USV4 hooks + non-hooks ([b76efbc](https://github.com/propeller-heads/tycho-execution/commit/b76efbcfe763718df889a55f499d287e7fffb6fa))
+* Hardcode Uniswap v4 grouping logic ([834acda](https://github.com/propeller-heads/tycho-execution/commit/834acda036986addd87025706217d1138141c6ae))
+
 ## [0.143.0](https://github.com/propeller-heads/tycho-execution/compare/0.142.0...0.143.0) (2025-12-10)
 
 
