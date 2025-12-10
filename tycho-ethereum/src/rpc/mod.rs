@@ -469,20 +469,23 @@ impl EthereumRpcClient {
                 Ok(storage_res)
             };
 
-            let chunk_res = self.retry_policy.retry_request(batch_call).await
-            .map_err(|e| {
-                let printable_slots = slot_batch
-                    .iter()
-                    .map(|slot| format!("{:?}", slot))
-                    .collect::<Vec<String>>()
-                    .join(", ");
-                RPCError::from_alloy(
-                    format!(
-                                    "Failed to get storage for address {address}, block {block_id}, slots {printable_slots}",
-                                ),
-                    e,
-                )
-            })?;
+            let chunk_res = self
+                .retry_policy
+                .retry_request(batch_call)
+                .await
+                .map_err(|e| {
+                    let printable_slots = slot_batch
+                        .iter()
+                        .map(|slot| format!("{:?}", slot))
+                        .collect::<Vec<String>>()
+                        .join(", ");
+                    RPCError::from_alloy(
+                        format!(
+                            "Failed to get storage for address {address}, block {block_id}, slots {printable_slots}"
+                        ),
+                        e,
+                    )
+                })?;
 
             for (storage_result, &address) in chunk_res
                 .into_iter()
