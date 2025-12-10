@@ -254,7 +254,7 @@ impl LidoState {
                     .as_ref()
                     .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool");
 
-            let amount_out = u256_to_biguint(safe_div_u256(
+            let amount_in = u256_to_biguint(safe_div_u256(
                 safe_mul_u256(
                     biguint_to_u256(&limit_for_wrapping),
                     biguint_to_u256(&self.total_shares),
@@ -262,7 +262,7 @@ impl LidoState {
                 biguint_to_u256(&self.total_pooled_eth),
             )?);
 
-            Ok((amount_out, limit_for_wrapping))
+            Ok((amount_in, limit_for_wrapping))
         }
     }
 
