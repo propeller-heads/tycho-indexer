@@ -317,7 +317,28 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
     all_tasks.append(&mut other_tasks);
 
     let (res, _, _) = select_all(all_tasks).await;
-    res.expect("Extractor- nor ServiceTasks should panic!")
+    match res {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            let err = e.try_into_panic();
+            match err {
+                Ok(err) => {
+                    if let Ok(extraction_err) = err.downcast::<ExtractionError>() {
+                        if let ExtractionError::SubstreamsError(msg) = *extraction_err {
+                            if msg.contains("stream ended") {
+                                info!("Stream ended: reached specified stop_block. Exiting gracefully.");
+                                return Ok(());
+                            }
+                        }
+                        Err(ExtractionError::Empty)
+                    } else {
+                        Err(ExtractionError::Empty)
+                    }
+                }
+                Err(_) => Err(ExtractionError::Empty),
+            }
+        }
+    }
 }
 
 #[tokio::main]
