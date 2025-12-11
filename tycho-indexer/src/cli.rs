@@ -1,7 +1,7 @@
 use clap::{Args, Parser, Subcommand};
 use tycho_common::{models::Chain, Bytes};
 
-use crate::extractor::RPCRetryConfig;
+use crate::{extractor::RPCRetryConfig, services::ServerRpcConfig};
 
 /// Tycho Indexer using Substreams
 ///
@@ -78,6 +78,10 @@ pub struct GlobalArgs {
     /// RPC configuration (URL and retry settings)
     #[command(flatten)]
     pub rpc: RPCArgs,
+
+    /// Tycho RPC server configuration (minimum filtering thresholds)
+    #[command(flatten)]
+    pub server: ServerArgs,
 }
 
 /// RPC configuration arguments (url, retry settings, and potentially others, such as batching)
@@ -98,11 +102,28 @@ pub struct RPCArgs {
     /// Maximum backoff delay in milliseconds (backoff is capped at this value)
     #[clap(long = "rpc-max-backoff-ms", env = "RPC_MAX_BACKOFF_MS", default_value = "5000")]
     pub max_backoff_ms: u64,
+}
 
+/// Tycho RPC server configuration (minimum filtering thresholds)
+#[derive(Args, Debug, Clone, PartialEq)]
+pub struct ServerArgs {
     /// Minimum TVL threshold for RPC responses (in chain's native token)
     /// Components with TVL below this value or with no TVL will be rejected
     #[clap(long = "rpc-min-tvl", env = "RPC_MIN_TVL")]
     pub min_tvl: Option<f64>,
+
+    /// Minimum token quality threshold for RPC responses
+    /// Tokens with quality below this value will be rejected
+    #[clap(long = "rpc-min-token-quality", env = "RPC_MIN_TOKEN_QUALITY")]
+    pub min_token_quality: Option<i32>,
+}
+
+impl From<ServerArgs> for ServerRpcConfig {
+    fn from(args: ServerArgs) -> Self {
+        Self::new()
+            .with_min_tvl(args.min_tvl)
+            .with_min_quality(args.min_token_quality)
+    }
 }
 
 impl From<RPCArgs> for RPCRetryConfig {
@@ -277,8 +298,8 @@ mod cli_tests {
                     max_retries: 5,
                     initial_backoff_ms: 150,
                     max_backoff_ms: 5000,
-                    min_tvl: None,
                 },
+                server: ServerArgs { min_tvl: None, min_token_quality: None },
             },
             command: Command::Run(RunSpkgArgs {
                 chain: "ethereum".to_string(),
@@ -338,8 +359,8 @@ mod cli_tests {
                     max_retries: 10,
                     initial_backoff_ms: 200,
                     max_backoff_ms: 10000,
-                    min_tvl: None,
                 },
+                server: ServerArgs { min_tvl: None, min_token_quality: None },
             },
             command: Command::Index(IndexArgs {
                 substreams_args: SubstreamsArgs {
@@ -375,7 +396,6 @@ mod cli_tests {
             max_retries: 7,
             initial_backoff_ms: 250,
             max_backoff_ms: 8000,
-            min_tvl: None,
         };
 
         let rpc_config: RPCRetryConfig = rpc_args.into();
