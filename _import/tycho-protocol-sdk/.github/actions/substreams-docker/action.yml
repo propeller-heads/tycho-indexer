@@ -33,6 +33,7 @@ runs:
         docker buildx build \
           --cache-from type=local,src=/tmp/.buildx-cache \
           --cache-to type=local,dest=/tmp/.buildx-cache \
+          --build-arg PROTOCOLS="${{ inputs.protocols }}" \
           -f protocol-testing/run.Dockerfile \
           -t protocol-testing-test-runner:latest \
           --load .
