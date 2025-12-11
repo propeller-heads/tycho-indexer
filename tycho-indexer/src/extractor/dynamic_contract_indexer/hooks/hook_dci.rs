@@ -1,14 +1,19 @@
 #![allow(unused_variables)] // TODO: Remove this
 #![allow(dead_code)] // TODO: Remove this
 
-use std::{collections::HashMap, slice};
+use std::{
+    collections::{HashMap, HashSet},
+    slice,
+};
 
 use deepsize::DeepSizeOf;
 use tonic::async_trait;
 use tracing::{debug, error, info, instrument, span, warn, Level};
 use tycho_common::{
     models::{
-        blockchain::Transaction, protocol::ProtocolComponent, BlockHash, Chain, ComponentId, TxHash,
+        blockchain::{Block, Transaction},
+        protocol::ProtocolComponent,
+        BlockHash, Chain, ComponentId, TxHash,
     },
     storage::{EntryPointFilter, EntryPointGateway, ProtocolGateway},
     traits::{AccountExtractor, EntryPointTracer},
@@ -24,7 +29,7 @@ use crate::extractor::{
             hook_permissions_detector::HookPermissionsDetector,
             metadata_orchestrator::BlockMetadataOrchestrator,
         },
-        PausingReason,
+        pausing::{self, PausingReason},
     },
     models::{insert_state_attribute_update, BlockChanges},
     ExtractionError, ExtractorExtension,
@@ -151,6 +156,62 @@ where
             skipped_no_hook, skipped_no_swap_perms, "Completed component filtering"
         );
 
+        // Load SDK-paused components from storage.
+        // Query protocol states for valid components to check if any are paused.
+        if !component_ids_for_batch.is_empty() {
+            let component_ids_refs: Vec<&str> = component_ids_for_batch
+                .iter()
+                .map(|s| s.as_str())
+                .collect();
+
+            match self
+                .db_gateway
+                .get_protocol_states(
+                    &self.chain,
+                    None,
+                    Some("uniswap_v4_hooks".to_string()),
+                    Some(&component_ids_refs),
+                    false,
+                    None,
+                )
+                .await
+            {
+                Ok(protocol_states) => {
+                    let mut paused_count = 0;
+                    for state in protocol_states.entity {
+                        if let Some(paused_bytes) = state
+                            .attributes
+                            .get(PausingReason::ATTRIBUTE_NAME)
+                        {
+                            match PausingReason::try_from_bytes(paused_bytes) {
+                                Ok(reason) => {
+                                    self.cache
+                                        .paused_components
+                                        .insert_permanent(state.component_id.clone(), Some(reason));
+                                    paused_count += 1;
+                                }
+                                Err(e) => {
+                                    warn!(
+                                        component_id = %state.component_id,
+                                        paused_bytes = ?paused_bytes.as_ref(),
+                                        error = %e,
+                                        "Component has invalid 'paused' attribute value"
+                                    );
+                                }
+                            }
+                        }
+                    }
+
+                    if paused_count > 0 {
+                        info!(paused_count, "Loaded paused components from storage");
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to load protocol states from storage to populate paused components cache: {e:?}");
+                }
+            }
+        }
+
         // Second pass: Batch request for all component entrypoints
         if !component_ids_for_batch.is_empty() {
             info!(batch_size = component_ids_for_batch.len(), "Starting batch entrypoint loading");
@@ -269,14 +330,38 @@ where
             })?;
 
         // Mark component as paused by setting the "paused" state attribute.
-        // This indicates the component processing has been paused due to metatdata failures.
+        // This indicates the component processing has been paused due to metadata failures.
+        let reason = PausingReason::MetadataError;
+
+        // Check if already paused with same reason - skip to avoid duplicate emissions
+        if let Some(Some(existing_reason)) = self
+            .cache
+            .paused_components
+            .get(&component_id)
+        {
+            if *existing_reason == reason {
+                debug!(
+                    component_id = %component_id,
+                    reason = ?reason,
+                    "Component already paused with same reason, skipping"
+                );
+                return Ok(());
+            }
+        }
+
         insert_state_attribute_update(
             &mut block_changes.txs_with_update,
             &component_id,
             tx,
             &"paused".to_string(),
-            &PausingReason::MetadataError.into(),
+            &reason.into(),
         )?;
+
+        // Update cache with new pause reason
+        self.cache
+            .paused_components
+            .insert_pending(block_changes.block.clone(), component_id.clone(), Some(reason))
+            .map_err(|e| ExtractionError::Unknown(format!("Failed to update pause cache: {e}")))?;
 
         Ok(())
     }
@@ -355,7 +440,7 @@ where
     fn handle_component_success(
         &mut self,
         component: ComponentId,
-        block: &tycho_common::models::blockchain::Block,
+        block: &Block,
     ) -> Result<(), ExtractionError> {
         debug!("Handling component success");
 
@@ -574,6 +659,53 @@ where
 
         Ok((components_needing_full_processing, components_needing_balance_only))
     }
+
+    /// Updates the paused_components cache with pause/unpause changes.
+    fn update_sdk_pause_cache(
+        &mut self,
+        block: &Block,
+        sdk_paused: &HashSet<ComponentId>,
+        sdk_unpaused: &HashSet<ComponentId>,
+    ) -> Result<(), ExtractionError> {
+        for component_id in sdk_paused {
+            self.cache
+                .paused_components
+                .insert_pending(
+                    block.clone(),
+                    component_id.clone(),
+                    Some(PausingReason::Substreams),
+                )
+                .map_err(|e| {
+                    ExtractionError::Unknown(format!(
+                        "Failed to update pause cache for {component_id}: {e}"
+                    ))
+                })?;
+        }
+
+        for component_id in sdk_unpaused {
+            self.cache
+                .paused_components
+                .insert_pending(block.clone(), component_id.clone(), None)
+                .map_err(|e| {
+                    ExtractionError::Unknown(format!(
+                        "Failed to update pause cache for {component_id}: {e}"
+                    ))
+                })?;
+        }
+
+        Ok(())
+    }
+
+    /// Checks if a component is SDK-paused (paused with reason 0x01).
+    fn is_component_sdk_paused(&self, component_id: &ComponentId) -> bool {
+        self.cache
+            .paused_components
+            .get(component_id)
+            .is_some_and(|opt| {
+                opt.as_ref()
+                    .is_some_and(|r| r.is_sdk_paused())
+            })
+    }
 }
 
 // Component state tracking
@@ -625,7 +757,30 @@ where
             })?;
 
         // 1. Filter-out components with no swap hooks (keep beforeSwap or afterSwap only)
-        let swap_hook_components = self.extract_components_with_swap_hooks(block_changes)?;
+        let mut swap_hook_components = self.extract_components_with_swap_hooks(block_changes)?;
+
+        // 2. Extract SDK pause/unpause updates and update the cache
+        let (sdk_paused, sdk_unpaused) =
+            pausing::extract_sdk_pause_updates(&block_changes.txs_with_update);
+
+        if !sdk_paused.is_empty() || !sdk_unpaused.is_empty() {
+            debug!(
+                paused_count = sdk_paused.len(),
+                unpaused_count = sdk_unpaused.len(),
+                "HooksDCI: Processing SDK pause state changes"
+            );
+
+            self.update_sdk_pause_cache(&block_changes.block, &sdk_paused, &sdk_unpaused)?;
+        }
+
+        // 3. Filter out components that are SDK-paused (reason 0x01)
+        let initial_count = swap_hook_components.len();
+        swap_hook_components.retain(|component_id, _| !self.is_component_sdk_paused(component_id));
+
+        let skipped_count = initial_count - swap_hook_components.len();
+        if skipped_count > 0 {
+            debug!(skipped_count, "HooksDCI: Skipped SDK-paused components from processing");
+        }
 
         // Early stop if no hook-components are affected
         if swap_hook_components.is_empty() {
@@ -728,11 +883,10 @@ where
         };
 
         // Create lookup set for components needing entrypoint generation
-        let full_processing_ids: std::collections::HashSet<ComponentId> =
-            components_needing_full_processing
-                .iter()
-                .map(|(_, comp)| comp.id.clone())
-                .collect();
+        let full_processing_ids: HashSet<ComponentId> = components_needing_full_processing
+            .iter()
+            .map(|(_, comp)| comp.id.clone())
+            .collect();
 
         // 5. Process all hook components through their orchestrators
         let hook_components: Vec<_> = swap_hook_components.iter().collect();
@@ -1004,6 +1158,13 @@ mod tests {
                 })
             });
 
+        // Mock get_protocol_states for inner DCI to return empty result (no paused components)
+        gateway
+            .expect_get_protocol_states()
+            .return_once(move |_, _, _, _, _, _| {
+                Box::pin(async move { Ok(WithTotal { entity: Vec::new(), total: Some(0) }) })
+            });
+
         gateway
     }
 
@@ -1229,8 +1390,8 @@ mod tests {
         let mut state_updates = HashMap::new();
         let state_delta = ProtocolComponentStateDelta::new(
             "existing_comp",
-            HashMap::new(),                   // No updated attributes
-            std::collections::HashSet::new(), // No deleted attributes
+            HashMap::new(), // No updated attributes
+            HashSet::new(), // No deleted attributes
         );
         state_updates.insert("existing_comp".to_string(), state_delta);
 
@@ -1586,10 +1747,15 @@ mod tests {
             Vec::new(),
         );
 
-        // Initialize the block layer in the cache first
+        // Initialize the block layers in the cache first
         hook_dci
             .cache
             .component_states
+            .validate_and_ensure_block_layer_test(&block)
+            .unwrap();
+        hook_dci
+            .cache
+            .paused_components
             .validate_and_ensure_block_layer_test(&block)
             .unwrap();
 
@@ -1639,6 +1805,116 @@ mod tests {
             paused_value,
             &Bytes::from([3u8]),
             "Paused attribute should have expected value"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_pause_deduplication_skips_same_reason() {
+        // Test that pausing a component that is already paused with the same reason
+        // does not emit a duplicate state update.
+        let gateway = MockGateway::new();
+        let account_extractor = MockAccountExtractor::new();
+        let entrypoint_tracer = MockEntryPointTracer::new();
+
+        let inner_dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        let metadata_orchestrator = BlockMetadataOrchestrator::new(
+            MetadataGeneratorRegistry::new(),
+            MetadataResponseParserRegistry::new(),
+            ProviderRegistry::new(),
+        );
+
+        let hook_orchestrator_registry = HookOrchestratorRegistry::new();
+
+        let gateway2 = MockGateway::new();
+        let mut hook_dci = UniswapV4HookDCI::new(
+            inner_dci,
+            metadata_orchestrator,
+            hook_orchestrator_registry,
+            gateway2,
+            Chain::Ethereum,
+            2, // pause_after_retries
+            3, // max_retries
+        );
+
+        let block = get_test_block(1);
+        let tx = get_test_transaction(1);
+        let component_id = "test_component".to_string();
+        let hook_address = create_hook_address_with_swap_permissions();
+        let component = create_hook_component(&component_id, hook_address);
+
+        // Create block changes with transaction
+        let mut block_changes = BlockChanges::new(
+            "test".to_string(),
+            Chain::Ethereum,
+            block.clone(),
+            1,
+            false,
+            vec![TxWithChanges {
+                tx: tx.clone(),
+                protocol_components: HashMap::new(),
+                state_updates: HashMap::new(),
+                balance_changes: HashMap::new(),
+                ..Default::default()
+            }],
+            Vec::new(),
+        );
+
+        // Initialize the block layers in the cache first
+        hook_dci
+            .cache
+            .component_states
+            .validate_and_ensure_block_layer_test(&block)
+            .unwrap();
+        hook_dci
+            .cache
+            .paused_components
+            .validate_and_ensure_block_layer_test(&block)
+            .unwrap();
+
+        // Pre-populate the cache with the component already paused with MetadataError
+        hook_dci
+            .cache
+            .paused_components
+            .insert_pending(block.clone(), component_id.clone(), Some(PausingReason::MetadataError))
+            .unwrap();
+
+        let tracing_metadata = ComponentTracingMetadata::new(tx.hash.clone()).with_balances(Err(
+            MetadataError::RequestFailed("RPC timeout during tracing".to_string()),
+        ));
+
+        let component_metadata = vec![(component.clone(), tracing_metadata)];
+        let component_id_to_tx_map = HashMap::from([(component_id.clone(), Some(tx.clone()))]);
+
+        // Process metadata errors - this should NOT emit a state update since already paused
+        let result = hook_dci.process_metadata_errors(
+            &component_metadata,
+            &component_id_to_tx_map,
+            &mut block_changes,
+        );
+
+        assert!(result.is_ok(), "process_metadata_errors should succeed");
+
+        // Verify that NO pausing attribute was added (deduplication worked)
+        // The original tx in block_changes had empty state_updates
+        assert!(
+            block_changes
+                .txs_with_update
+                .iter()
+                .all(|tx| !tx
+                    .state_updates
+                    .get(&component_id)
+                    .map(|s| s
+                        .updated_attributes
+                        .contains_key("paused"))
+                    .unwrap_or(false)),
+            "No paused attribute should be emitted when already paused with same reason"
         );
     }
 
@@ -2337,5 +2613,139 @@ mod tests {
             assert!(result.is_ok(), "process_block_update with state changes should succeed");
             println!("State update test completed successfully!");
         }
+    }
+
+    #[tokio::test]
+    async fn test_is_component_sdk_paused() {
+        let gateway = get_mock_gateway();
+        let account_extractor = MockAccountExtractor::new();
+        let entrypoint_tracer = MockEntryPointTracer::new();
+
+        let inner_dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        let metadata_orchestrator = BlockMetadataOrchestrator::new(
+            MetadataGeneratorRegistry::new(),
+            MetadataResponseParserRegistry::new(),
+            ProviderRegistry::new(),
+        );
+
+        let hook_orchestrator_registry = HookOrchestratorRegistry::new();
+        let gateway2 = MockGateway::new();
+
+        let mut hook_dci = UniswapV4HookDCI::new(
+            inner_dci,
+            metadata_orchestrator,
+            hook_orchestrator_registry,
+            gateway2,
+            Chain::Ethereum,
+            2,
+            3,
+        );
+
+        // Initially, component should not be paused
+        assert!(!hook_dci.is_component_sdk_paused(&"component_1".to_string()));
+
+        // Add component to paused_components cache with SDK pause reason
+        hook_dci
+            .cache
+            .paused_components
+            .insert_permanent("component_1".to_string(), Some(PausingReason::Substreams));
+
+        // Now it should be paused
+        assert!(hook_dci.is_component_sdk_paused(&"component_1".to_string()));
+
+        // Unpaused component (None = unpaused)
+        hook_dci
+            .cache
+            .paused_components
+            .insert_permanent("component_2".to_string(), None);
+
+        assert!(!hook_dci.is_component_sdk_paused(&"component_2".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_initialize_loads_sdk_paused_components_from_storage() {
+        let gateway = get_mock_gateway();
+        let account_extractor = MockAccountExtractor::new();
+        let entrypoint_tracer = MockEntryPointTracer::new();
+
+        let inner_dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        let metadata_orchestrator = BlockMetadataOrchestrator::new(
+            MetadataGeneratorRegistry::new(),
+            MetadataResponseParserRegistry::new(),
+            ProviderRegistry::new(),
+        );
+
+        let hook_orchestrator_registry = HookOrchestratorRegistry::new();
+
+        // Create a component with swap hooks to be returned by get_protocol_components
+        let hook_address = create_hook_address_with_swap_permissions();
+        let component = create_hook_component("paused_component", hook_address);
+
+        let mut gateway2 = MockGateway::new();
+
+        // Mock get_protocol_components to return the component
+        gateway2
+            .expect_get_protocol_components()
+            .return_once(move |_, _, _, _, _| {
+                Box::pin(async move {
+                    Ok(WithTotal { entity: vec![component.clone()], total: Some(1) })
+                })
+            });
+
+        // Mock get_entry_points_tracing_params for the second pass (entrypoint loading)
+        gateway2
+            .expect_get_entry_points_tracing_params()
+            .return_once(move |_, _| {
+                Box::pin(async move { Ok(WithTotal { entity: HashMap::new(), total: None }) })
+            });
+
+        // Mock get_protocol_states to return the component as SDK-paused
+        gateway2
+            .expect_get_protocol_states()
+            .return_once(move |_, _, _, _, _, _| {
+                let paused_state = ProtocolComponentState::new(
+                    "paused_component",
+                    HashMap::from([(
+                        PausingReason::ATTRIBUTE_NAME.to_string(),
+                        Bytes::from(vec![1u8]), // SDK pause reason
+                    )]),
+                    HashMap::new(),
+                );
+                Box::pin(
+                    async move { Ok(WithTotal { entity: vec![paused_state], total: Some(1) }) },
+                )
+            });
+
+        let mut hook_dci = UniswapV4HookDCI::new(
+            inner_dci,
+            metadata_orchestrator,
+            hook_orchestrator_registry,
+            gateway2,
+            Chain::Ethereum,
+            2,
+            3,
+        );
+
+        hook_dci.initialize().await.unwrap();
+
+        // Verify that the paused component was loaded into the cache
+        assert!(
+            hook_dci.is_component_sdk_paused(&"paused_component".to_string()),
+            "SDK-paused component should be in the cache after initialization"
+        );
     }
 }

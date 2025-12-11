@@ -22,10 +22,15 @@ use tycho_common::{
     traits::{AccountExtractor, EntryPointTracer, StorageSnapshotRequest},
 };
 
-use super::cache::DCICache;
+use super::{
+    cache::DCICache,
+    pausing::{self, PauseDecision, PausingReason, TracingPauseStrategy},
+};
 use crate::extractor::{
-    dynamic_contract_indexer::PausingReason,
-    models::{insert_state_attribute_update, BlockChanges, TxWithContractChanges},
+    models::{
+        insert_state_attribute_deletion, insert_state_attribute_update, BlockChanges,
+        TxWithContractChanges,
+    },
     ExtractionError, ExtractorExtension,
 };
 
@@ -43,6 +48,7 @@ where
     cache: DCICache,
     address_byte_len: usize,
     max_retry_count: u32,
+    tracing_pause_strategy: TracingPauseStrategy,
 }
 
 static DCI_BLACKLIST: LazyLock<Vec<Address>> = LazyLock::new(|| {
@@ -172,6 +178,41 @@ where
             }), "DCI: Entrypoints params");
         }
 
+        // Extract pause/unpause updates from block changes and update cache
+        let (sdk_paused, sdk_unpaused) =
+            pausing::extract_sdk_pause_updates(&block_changes.txs_with_update);
+
+        if !sdk_paused.is_empty() {
+            debug!(
+                paused_count = sdk_paused.len(),
+                paused_components = ?sdk_paused,
+                "DCI: SDK paused components detected"
+            );
+        }
+        if !sdk_unpaused.is_empty() {
+            debug!(
+                unpaused_count = sdk_unpaused.len(),
+                unpaused_components = ?sdk_unpaused,
+                "DCI: SDK unpaused components detected"
+            );
+        }
+
+        // Update the cache with the pause/unpause states
+        for component_id in sdk_paused.iter() {
+            self.cache
+                .paused_components
+                .insert_pending(
+                    block_changes.block.clone(),
+                    component_id.clone(),
+                    Some(PausingReason::Substreams),
+                )?;
+        }
+        for component_id in sdk_unpaused.iter() {
+            self.cache
+                .paused_components
+                .insert_pending(block_changes.block.clone(), component_id.clone(), None)?;
+        }
+
         let params_to_retry = self.extract_params_to_retry(block_changes);
 
         if !params_to_retry.is_empty() {
@@ -264,6 +305,50 @@ where
         // Update the entrypoint results with the retriggered entrypoints
         entrypoints_to_analyze.extend(retriggered_entrypoints);
 
+        // Filter out entrypoints that belong exclusively to SDK-paused components.
+        let sdk_paused_components: HashSet<_> = self
+            .cache
+            .paused_components
+            .iter()
+            .filter_map(|(cid, opt)| {
+                opt.as_ref()
+                    .is_some_and(|r| r.is_sdk_paused())
+                    .then(|| cid.clone())
+            })
+            .collect();
+
+        if !sdk_paused_components.is_empty() {
+            let mut paused_tracing_params: HashSet<EntryPointWithTracingParams> = HashSet::new();
+            let mut non_paused_params: HashSet<EntryPointWithTracingParams> = HashSet::new();
+
+            for (cid, eps) in self
+                .cache
+                .component_id_to_entrypoint_params
+                .iter()
+            {
+                if sdk_paused_components.contains(cid) {
+                    paused_tracing_params.extend(eps.iter().cloned());
+                } else {
+                    non_paused_params.extend(eps.iter().cloned());
+                }
+            }
+
+            // Params to skip are those exclusively from paused components (not used by non-paused)
+            let tracing_params_to_skip: HashSet<_> = paused_tracing_params
+                .into_iter()
+                .filter(|ep| !non_paused_params.contains(ep))
+                .collect();
+
+            if !tracing_params_to_skip.is_empty() {
+                debug!(
+                    count = tracing_params_to_skip.len(),
+                    "DCI: Skipping tracing params exclusively belonging to SDK-paused components"
+                );
+            }
+
+            entrypoints_to_analyze.retain(|ep, _| !tracing_params_to_skip.contains(ep));
+        }
+
         if !entrypoints_to_analyze.is_empty() {
             debug!(
                 entrypoints_to_analyze = entrypoints_to_analyze
@@ -303,27 +388,101 @@ where
                 match result {
                     Ok(tracing_result) => traced_entry_points.push(tracing_result),
                     Err(e) => {
-                        tracing::warn!("DCI: Failed to trace entrypoint {:?}: {:?}", ep, e);
+                        warn!("DCI: Failed to trace entrypoint {:?}: {:?}", ep, e);
                         failed_entrypoints.push((ep.clone(), *tx));
                     }
                 }
             }
 
-            let component_ids_to_pause = failed_entrypoints
+            // Build sets of successful and failed entry point params
+            let successful_params: HashSet<&EntryPointWithTracingParams> = traced_entry_points
                 .iter()
-                .flat_map(|(ep, tx)| {
-                    // Get component IDs associated with this entry point's external ID
+                .map(|tep| &tep.entry_point_with_params)
+                .collect();
+
+            let failed_params: HashSet<&EntryPointWithTracingParams> = failed_entrypoints
+                .iter()
+                .map(|(ep, _)| ep)
+                .collect();
+
+            // Get all components that had params traced in this block
+            let components_traced_in_block: HashSet<ComponentId> = entrypoints_to_analyze
+                .keys()
+                .flat_map(|ep| {
                     self.cache
                         .ep_id_to_component_id
                         .get_all(ep.entry_point.external_id.clone())
                         .into_iter()
                         .flatten()
-                        .flatten() // Flatten the inner iterator of component IDs
-                        .map(move |component_id| (component_id, *tx))
+                        .flatten()
+                        .cloned()
                 })
-                .collect::<HashMap<_, _>>();
+                .collect();
 
-            tracing::debug!(
+            // For each component, determine if it should be paused or unpaused
+            let mut component_ids_to_pause: HashMap<ComponentId, &Transaction> = HashMap::new();
+            let mut component_ids_to_unpause: HashMap<ComponentId, &Transaction> = HashMap::new();
+
+            for component_id in components_traced_in_block {
+                // Get all params for this component that were traced in this block
+                let traced_params: HashSet<&EntryPointWithTracingParams> = self
+                    .cache
+                    .component_id_to_entrypoint_params
+                    .get(&component_id)
+                    .into_iter()
+                    .flatten()
+                    .filter(|p| entrypoints_to_analyze.contains_key(*p))
+                    .collect();
+
+                if traced_params.is_empty() {
+                    continue;
+                }
+
+                let traced_count = traced_params.len();
+                let success_count = traced_params
+                    .iter()
+                    .filter(|p| successful_params.contains(*p))
+                    .count();
+                let failure_count = traced_params
+                    .iter()
+                    .filter(|p| failed_params.contains(*p))
+                    .count();
+
+                match self.tracing_pause_strategy.evaluate(
+                    traced_count,
+                    success_count,
+                    failure_count,
+                ) {
+                    PauseDecision::Pause => {
+                        // PAUSE: Find transaction from failed entrypoint
+                        if let Some((_, tx)) = failed_entrypoints
+                            .iter()
+                            .find(|(ep, _)| traced_params.contains(ep))
+                        {
+                            component_ids_to_pause.insert(component_id, tx);
+                        }
+                    }
+                    PauseDecision::Unpause => {
+                        // UNPAUSE: Only if previously paused with TracingError
+                        if let Some(Some(reason)) = self
+                            .cache
+                            .paused_components
+                            .get(&component_id)
+                        {
+                            if *reason == PausingReason::TracingError {
+                                if let Some(ep) = traced_params.iter().next() {
+                                    if let Some(tx) = entrypoints_to_analyze.get(*ep) {
+                                        component_ids_to_unpause.insert(component_id, *tx);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    PauseDecision::NoAction => {}
+                }
+            }
+
+            debug!(
                 traced_entry_points = traced_entry_points
                     .iter()
                     .map(|x| x.to_string())
@@ -516,14 +675,63 @@ where
             }
 
             // Insert the "paused" component state for the components that are paused
-            for (component_id, tx) in component_ids_to_pause {
+            // (only when ALL their traced params fail)
+            for (component_id, tx) in component_ids_to_pause.iter() {
+                let reason = PausingReason::TracingError;
+
+                // Check if already paused with same reason - skip to avoid duplicate emissions
+                if let Some(Some(existing_reason)) = self
+                    .cache
+                    .paused_components
+                    .get(component_id)
+                {
+                    if *existing_reason == reason {
+                        debug!(
+                            component_id = %component_id,
+                            reason = ?reason,
+                            "Component already paused with same reason, skipping"
+                        );
+                        continue;
+                    }
+                }
+
                 insert_state_attribute_update(
                     &mut block_changes.txs_with_update,
                     component_id,
                     tx,
                     &"paused".to_string(),
-                    &PausingReason::TracingError.into(),
+                    &reason.into(),
                 )?;
+
+                // Update cache with new pause reason
+                self.cache
+                    .paused_components
+                    .insert_pending(
+                        block_changes.block.clone(),
+                        component_id.clone(),
+                        Some(reason),
+                    )?;
+            }
+
+            // Unpause components where ALL their traced params succeeded
+            // (only if they were previously paused with TracingError)
+            for (component_id, tx) in component_ids_to_unpause.iter() {
+                insert_state_attribute_deletion(
+                    &mut block_changes.txs_with_update,
+                    component_id,
+                    tx,
+                    &PausingReason::ATTRIBUTE_NAME.to_string(),
+                )?;
+
+                // Update cache - set to None (unpaused)
+                self.cache
+                    .paused_components
+                    .insert_pending(block_changes.block.clone(), component_id.clone(), None)?;
+
+                debug!(
+                    component_id = %component_id,
+                    "Component unpaused - all tracing params succeeded"
+                );
             }
 
             // Update the cache with new traced entrypoints and failed entrypoints
@@ -619,7 +827,22 @@ where
             cache: DCICache::new(),
             address_byte_len: 20,
             max_retry_count: 5,
+            tracing_pause_strategy: TracingPauseStrategy::default(),
         }
+    }
+
+    /// Sets the tracing pause strategy for determining when to pause/unpause components.
+    ///
+    /// # Arguments
+    /// * `strategy` - The strategy to use for pause decisions
+    ///
+    /// # Example
+    /// ```ignore
+    /// let mut dci = DynamicContractIndexer::new(...);
+    /// dci.with_pause_strategy(TracingPauseStrategy::AnyFail);
+    /// ```
+    pub(crate) fn with_pause_strategy(&mut self, strategy: TracingPauseStrategy) {
+        self.tracing_pause_strategy = strategy;
     }
 
     /// Sets the maximum number of retry attempts for failed TracingParams.
@@ -690,6 +913,47 @@ where
             )
             .await
             .map_err(ExtractionError::from)?;
+
+        // Load SDK-paused components from storage.
+        match self
+            .entrypoint_gw
+            .get_protocol_states(&self.chain, None, Some(self.protocol.clone()), None, false, None)
+            .await
+        {
+            Ok(protocol_states) => {
+                let mut paused_count = 0;
+                for state in protocol_states.entity {
+                    if let Some(paused_bytes) = state
+                        .attributes
+                        .get(PausingReason::ATTRIBUTE_NAME)
+                    {
+                        match PausingReason::try_from_bytes(paused_bytes) {
+                            Ok(reason) => {
+                                self.cache
+                                    .paused_components
+                                    .insert_permanent(state.component_id.clone(), Some(reason));
+                                paused_count += 1;
+                            }
+                            Err(e) => {
+                                warn!(
+                                    component_id = %state.component_id,
+                                    paused_bytes = ?paused_bytes.as_ref(),
+                                    error = %e,
+                                    "Component has invalid 'paused' attribute value"
+                                );
+                            }
+                        }
+                    }
+                }
+
+                if paused_count > 0 {
+                    info!(paused_count, "Loaded paused components from storage");
+                }
+            }
+            Err(e) => {
+                warn!("Failed to load protocol states from storage to populate paused components cache: {e:?}");
+            }
+        }
 
         // Log a quick summary
         debug!("Components with params: {}", entrypoints_with_params.len());
@@ -1366,7 +1630,7 @@ mod tests {
                 TracingParams, Transaction, TxWithChanges,
             },
             contract::{AccountDelta, ContractChanges},
-            protocol::ProtocolComponentStateDelta,
+            protocol::{ProtocolComponentState, ProtocolComponentStateDelta},
             Chain, ChangeType, EntryPointId,
         },
         storage::WithTotal,
@@ -1671,6 +1935,13 @@ mod tests {
                 Box::pin(async move {
                     Ok(tycho_common::storage::WithTotal { entity: Vec::new(), total: Some(0) })
                 })
+            });
+
+        // Mock get_protocol_states to return empty result (no paused components)
+        gateway
+            .expect_get_protocol_states()
+            .return_once(move |_, _, _, _, _, _| {
+                Box::pin(async move { Ok(WithTotal { entity: Vec::new(), total: Some(0) }) })
             });
 
         gateway
@@ -3328,6 +3599,344 @@ mod tests {
         );
     }
 
+    /// Tests that a component is NOT paused when only some of its tracing params fail.
+    /// If a component has params [P1, P2] and only P1 fails, it should NOT be paused.
+    #[tokio::test]
+    async fn test_component_not_paused_on_partial_tracing_failure() {
+        let gateway = get_mock_gateway();
+        let mut account_extractor = MockAccountExtractor::new();
+        let mut entrypoint_tracer = MockEntryPointTracer::new();
+
+        // Component_1 has TWO entrypoints: entrypoint_9 (succeeds) and entrypoint_10 (fails)
+        // Since not ALL params fail, component_1 should NOT be paused
+        entrypoint_tracer
+            .expect_trace()
+            .with(
+                eq(Bytes::from(2_u8).lpad(32, 0)),
+                predicate::function(|entrypoints: &Vec<EntryPointWithTracingParams>| {
+                    entrypoints.len() == 2 &&
+                        entrypoints
+                            .iter()
+                            .any(|ep| ep.entry_point.external_id == "entrypoint_9") &&
+                        entrypoints
+                            .iter()
+                            .any(|ep| ep.entry_point.external_id == "entrypoint_10")
+                }),
+            )
+            .return_once(move |_, entrypoints| {
+                entrypoints
+                    .iter()
+                    .map(|ep| {
+                        if ep.entry_point.external_id == "entrypoint_9" {
+                            // entrypoint_9 succeeds
+                            Ok(TracedEntryPoint::new(
+                                ep.clone(),
+                                Bytes::zero(32),
+                                get_tracing_result(9),
+                            ))
+                        } else if ep.entry_point.external_id == "entrypoint_10" {
+                            // entrypoint_10 fails
+                            Err("Simulated tracing failure".to_string())
+                        } else {
+                            panic!("Unexpected entrypoint: {}", ep.entry_point.external_id)
+                        }
+                    })
+                    .collect()
+            });
+
+        // Mock account extraction for the successful entrypoint
+        account_extractor
+            .expect_get_accounts_at_block()
+            .with(
+                eq(testing::block(2)),
+                predicate::function(|requests: &[StorageSnapshotRequest]| {
+                    requests.len() == 2 &&
+                        requests
+                            .iter()
+                            .any(|r| r.address == Bytes::from("0x09")) &&
+                        requests
+                            .iter()
+                            .any(|r| r.address == Bytes::from("0x99"))
+                }),
+            )
+            .return_once(move |_, _| {
+                Ok(HashMap::from([
+                    (
+                        Bytes::from("0x09"),
+                        AccountDelta::new(
+                            Chain::Ethereum,
+                            Bytes::from("0x09"),
+                            HashMap::new(),
+                            None,
+                            None,
+                            ChangeType::Update,
+                        ),
+                    ),
+                    (
+                        Bytes::from("0x99"),
+                        AccountDelta::new(
+                            Chain::Ethereum,
+                            Bytes::from("0x99"),
+                            HashMap::new(),
+                            None,
+                            None,
+                            ChangeType::Update,
+                        ),
+                    ),
+                ]))
+            });
+
+        let mut dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        dci.initialize().await.unwrap();
+
+        // Create block changes where component_1 has BOTH entrypoints (one succeeds, one fails)
+        let tx = get_transaction(2);
+        let mut block_changes = BlockChanges::new(
+            "test".to_string(),
+            Chain::Ethereum,
+            testing::block(2),
+            2,
+            false,
+            vec![TxWithChanges {
+                tx: tx.clone(),
+                entrypoints: HashMap::from([
+                    // component_1 uses BOTH entrypoints
+                    (
+                        "component_1".to_string(),
+                        HashSet::from([get_entrypoint(9), get_entrypoint(10)]),
+                    ),
+                ]),
+                entrypoint_params: HashMap::from([
+                    (
+                        "entrypoint_9".to_string(),
+                        HashSet::from([(get_tracing_params(9), "component_1".to_string())]),
+                    ),
+                    (
+                        "entrypoint_10".to_string(),
+                        HashSet::from([(get_tracing_params(10), "component_1".to_string())]),
+                    ),
+                ]),
+                ..Default::default()
+            }],
+            Vec::new(),
+        );
+
+        dci.process_block_update(&mut block_changes)
+            .await
+            .unwrap();
+
+        // Verify that component_1 is NOT paused (only partial failure)
+        let component_1_paused = block_changes
+            .txs_with_update
+            .iter()
+            .any(|tx_with_changes| {
+                tx_with_changes
+                    .state_updates
+                    .get("component_1")
+                    .map(|state| {
+                        state
+                            .updated_attributes
+                            .contains_key("paused")
+                    })
+                    .unwrap_or(false)
+            });
+
+        assert!(
+            !component_1_paused,
+            "Component_1 should NOT be paused since only some (not all) of its params failed"
+        );
+
+        // Verify the successful entrypoint still produces trace results
+        assert_eq!(block_changes.trace_results.len(), 1);
+        assert_eq!(
+            block_changes.trace_results[0]
+                .entry_point_with_params
+                .entry_point
+                .external_id,
+            "entrypoint_9"
+        );
+    }
+
+    /// Tests that a component is unpaused when ALL its tracing params succeed
+    /// and it was previously paused with TracingError.
+    #[tokio::test]
+    async fn test_component_unpause_on_all_params_success() {
+        let gateway = get_mock_gateway();
+        let mut account_extractor = MockAccountExtractor::new();
+        let mut entrypoint_tracer = MockEntryPointTracer::new();
+
+        // Component_1 has entrypoint_9 which succeeds
+        entrypoint_tracer
+            .expect_trace()
+            .with(
+                eq(Bytes::from(2_u8).lpad(32, 0)),
+                predicate::function(|entrypoints: &Vec<EntryPointWithTracingParams>| {
+                    entrypoints.len() == 1 &&
+                        entrypoints
+                            .iter()
+                            .any(|ep| ep.entry_point.external_id == "entrypoint_9")
+                }),
+            )
+            .return_once(move |_, entrypoints| {
+                entrypoints
+                    .iter()
+                    .map(|ep| {
+                        Ok(TracedEntryPoint::new(
+                            ep.clone(),
+                            Bytes::zero(32),
+                            get_tracing_result(9),
+                        ))
+                    })
+                    .collect()
+            });
+
+        // Mock account extraction
+        account_extractor
+            .expect_get_accounts_at_block()
+            .with(
+                eq(testing::block(2)),
+                predicate::function(|requests: &[StorageSnapshotRequest]| {
+                    requests.len() == 2 &&
+                        requests
+                            .iter()
+                            .any(|r| r.address == Bytes::from("0x09")) &&
+                        requests
+                            .iter()
+                            .any(|r| r.address == Bytes::from("0x99"))
+                }),
+            )
+            .return_once(move |_, _| {
+                Ok(HashMap::from([
+                    (
+                        Bytes::from("0x09"),
+                        AccountDelta::new(
+                            Chain::Ethereum,
+                            Bytes::from("0x09"),
+                            HashMap::new(),
+                            None,
+                            None,
+                            ChangeType::Update,
+                        ),
+                    ),
+                    (
+                        Bytes::from("0x99"),
+                        AccountDelta::new(
+                            Chain::Ethereum,
+                            Bytes::from("0x99"),
+                            HashMap::new(),
+                            None,
+                            None,
+                            ChangeType::Update,
+                        ),
+                    ),
+                ]))
+            });
+
+        let mut dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        dci.initialize().await.unwrap();
+
+        let block = testing::block(2);
+
+        // Pre-pause component_1 with TracingError reason in the cache
+        dci.cache
+            .paused_components
+            .validate_and_ensure_block_layer_test(&block)
+            .unwrap();
+        dci.cache
+            .paused_components
+            .insert_pending(
+                block.clone(),
+                "component_1".to_string(),
+                Some(PausingReason::TracingError),
+            )
+            .unwrap();
+
+        // Also need to set up the component_id_to_entrypoint_params cache
+        let ep_with_params =
+            EntryPointWithTracingParams::new(get_entrypoint(9), get_tracing_params(9));
+        dci.cache
+            .component_id_to_entrypoint_params
+            .validate_and_ensure_block_layer_test(&block)
+            .unwrap();
+        dci.cache
+            .component_id_to_entrypoint_params
+            .insert_pending(
+                block.clone(),
+                "component_1".to_string(),
+                HashSet::from([ep_with_params]),
+            )
+            .unwrap();
+
+        // Create block changes with entrypoint_9 for component_1
+        let tx = get_transaction(2);
+        let mut block_changes = BlockChanges::new(
+            "test".to_string(),
+            Chain::Ethereum,
+            block,
+            2,
+            false,
+            vec![TxWithChanges {
+                tx: tx.clone(),
+                entrypoints: HashMap::from([(
+                    "component_1".to_string(),
+                    HashSet::from([get_entrypoint(9)]),
+                )]),
+                entrypoint_params: HashMap::from([(
+                    "entrypoint_9".to_string(),
+                    HashSet::from([(get_tracing_params(9), "component_1".to_string())]),
+                )]),
+                ..Default::default()
+            }],
+            Vec::new(),
+        );
+
+        dci.process_block_update(&mut block_changes)
+            .await
+            .unwrap();
+
+        // Verify that component_1 is unpaused (paused attribute deleted)
+        let component_1_unpaused = block_changes
+            .txs_with_update
+            .iter()
+            .any(|tx_with_changes| {
+                tx_with_changes
+                    .state_updates
+                    .get("component_1")
+                    .map(|state| {
+                        state
+                            .deleted_attributes
+                            .contains("paused")
+                    })
+                    .unwrap_or(false)
+            });
+
+        assert!(
+            component_1_unpaused,
+            "Component_1 should be unpaused (paused attribute deleted) since all params succeeded"
+        );
+
+        // Verify the cache was updated
+        let cache_state = dci
+            .cache
+            .paused_components
+            .get(&"component_1".to_string());
+        assert_eq!(cache_state, Some(&None), "Cache should show component_1 as unpaused (None)");
+    }
+
     #[tokio::test]
     async fn test_extract_tracked_updates_with_contract_balances() {
         let gateway = get_mock_gateway();
@@ -3758,6 +4367,11 @@ mod tests {
             .expect_get_tokens()
             .return_once(|_, _, _, _, _| Box::pin(async { Ok(gateway_response(vec![])) }));
 
+        // Mock get_protocol_states to return empty (no paused components)
+        gateway
+            .expect_get_protocol_states()
+            .return_once(|_, _, _, _, _, _| Box::pin(async { Ok(gateway_response(vec![])) }));
+
         let mut dci = DynamicContractIndexer::new(
             Chain::Ethereum,
             "test".to_string(),
@@ -3881,5 +4495,155 @@ mod tests {
 
         let params_set = cached_params.unwrap();
         assert!(params_set.contains(&EntryPointWithTracingParams::new(entrypoint, tracing_params,)));
+    }
+
+    #[tokio::test]
+    async fn test_sdk_paused_entrypoints_skipped_from_tracing() {
+        let gateway = get_mock_gateway();
+        let account_extractor = MockAccountExtractor::new();
+        let entrypoint_tracer = MockEntryPointTracer::new();
+
+        let mut dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        dci.initialize().await.unwrap();
+
+        // Manually set up a component as SDK-paused in the cache
+        dci.cache
+            .paused_components
+            .insert_permanent("component_id_1".to_string(), Some(PausingReason::Substreams));
+
+        // Add component_id_1 to component_id_to_entrypoint_params
+        // This component uses entrypoint_1 with tracing_params_1
+        dci.cache
+            .component_id_to_entrypoint_params
+            .insert_permanent(
+                "component_id_1".to_string(),
+                HashSet::from([EntryPointWithTracingParams::new(
+                    get_entrypoint(1),
+                    get_tracing_params(1),
+                )]),
+            );
+
+        // Create block changes with a new entrypoint for the paused component
+        // The tracer should not be called because the entrypoint belongs exclusively
+        // to a paused component
+        let tx = get_transaction(1);
+        let mut block_changes = BlockChanges::new(
+            "test".to_string(),
+            Chain::Ethereum,
+            testing::block(2),
+            2,
+            false,
+            vec![TxWithChanges {
+                tx,
+                entrypoints: HashMap::from([(
+                    "component_id_1".to_string(),
+                    HashSet::from([get_entrypoint(1)]),
+                )]),
+                entrypoint_params: HashMap::from([(
+                    "entrypoint_1".to_string(),
+                    HashSet::from([(get_tracing_params(1), "component_id_1".to_string())]),
+                )]),
+                ..Default::default()
+            }],
+            Vec::new(),
+        );
+
+        // Process block - the tracer should NOT be called because the entrypoint
+        // belongs exclusively to a paused component
+        let result = dci
+            .process_block_update(&mut block_changes)
+            .await;
+        assert!(result.is_ok());
+
+        // No trace results should be generated since the entrypoint was skipped
+        assert!(block_changes.trace_results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_initialize_loads_sdk_paused_components_from_storage() {
+        let mut gateway = MockGateway::new();
+
+        // Setup entrypoints data
+        let entrypoints_map = HashMap::from([(
+            "entrypoint_1".to_string(),
+            HashSet::from([EntryPointWithTracingParams::new(
+                get_entrypoint(1),
+                get_tracing_params(1),
+            )]),
+        )]);
+
+        gateway
+            .expect_get_entry_points_tracing_params()
+            .return_once(move |_, _| {
+                Box::pin(async move { Ok(WithTotal { entity: entrypoints_map, total: None }) })
+            });
+
+        let entrypoints_component_map =
+            HashMap::from([("component_1".to_string(), HashSet::from([get_entrypoint(1)]))]);
+
+        gateway
+            .expect_get_entry_points()
+            .return_once(move |_, _| {
+                Box::pin(
+                    async move { Ok(WithTotal { entity: entrypoints_component_map, total: None }) },
+                )
+            });
+
+        gateway
+            .expect_get_traced_entry_points()
+            .return_once(move |_| Box::pin(async move { Ok(HashMap::new()) }));
+
+        gateway
+            .expect_get_tokens()
+            .return_once(move |_, _, _, _, _| {
+                Box::pin(async move { Ok(WithTotal { entity: Vec::new(), total: Some(0) }) })
+            });
+
+        // Mock get_protocol_states to return a paused component
+        gateway
+            .expect_get_protocol_states()
+            .return_once(move |_, _, _, _, _, _| {
+                let paused_state = ProtocolComponentState::new(
+                    "paused_component_1",
+                    HashMap::from([(
+                        PausingReason::ATTRIBUTE_NAME.to_string(),
+                        Bytes::from(vec![1u8]), // SDK pause reason
+                    )]),
+                    HashMap::new(),
+                );
+                Box::pin(
+                    async move { Ok(WithTotal { entity: vec![paused_state], total: Some(1) }) },
+                )
+            });
+
+        let account_extractor = MockAccountExtractor::new();
+        let entrypoint_tracer = MockEntryPointTracer::new();
+
+        let mut dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        dci.initialize().await.unwrap();
+
+        // Verify that the paused component was loaded into the cache
+        assert!(
+            dci.cache
+                .paused_components
+                .get(&"paused_component_1".to_string())
+                .and_then(|opt| opt.as_ref())
+                .is_some_and(|r| r.is_sdk_paused()),
+            "SDK-paused component should be in the cache after initialization"
+        );
     }
 }

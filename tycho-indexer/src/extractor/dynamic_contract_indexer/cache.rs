@@ -12,7 +12,7 @@ use tycho_common::models::{
     Address, BlockHash, ComponentId, EntryPointId, StoreKey,
 };
 
-use super::hooks::hook_dci::ComponentProcessingState;
+use super::{hooks::hook_dci::ComponentProcessingState, pausing::PausingReason};
 
 /// A unique identifier for a storage location, consisting of an address and a storage key.
 type StorageLocation = (Address, StoreKey);
@@ -61,6 +61,11 @@ pub(super) struct DCICache {
     /// Tracks the number of retry attempts for each failed tracing params.
     /// Used to cap retries at a maximum number of attempts (e.g., 5).
     pub(super) tracing_retry_counts: VersionedCache<(EntryPointId, TracingParams), u32>,
+    /// Tracks paused components and their pause reason.
+    /// `Some(reason)` indicates the component is paused with that reason.
+    /// `None` indicates the component was unpaused (paused attribute deleted).
+    /// When a component is SDK-paused (reason = Substreams), DCI should skip tracing.
+    pub(super) paused_components: VersionedCache<ComponentId, Option<PausingReason>>,
 }
 
 impl DCICache {
@@ -75,6 +80,7 @@ impl DCICache {
             ep_id_to_component_id: VersionedCache::new(),
             component_id_to_entrypoint_params: VersionedCache::new(),
             tracing_retry_counts: VersionedCache::new(),
+            paused_components: VersionedCache::new(),
         }
     }
 
@@ -107,7 +113,8 @@ impl DCICache {
             .revert_to(block)?;
         self.tracing_retry_counts
             .revert_to(block)?;
-
+        self.paused_components
+            .revert_to(block)?;
         Ok(())
     }
 
@@ -181,6 +188,8 @@ impl DCICache {
         self.tracing_retry_counts
             .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
 
+        self.paused_components
+            .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
         Ok(())
     }
 
@@ -215,7 +224,8 @@ impl DCICache {
             .validate_and_ensure_block_layer_internal(block)?;
         self.tracing_retry_counts
             .validate_and_ensure_block_layer_internal(block)?;
-
+        self.paused_components
+            .validate_and_ensure_block_layer_internal(block)?;
         Ok(())
     }
 }
@@ -227,11 +237,25 @@ pub(super) struct HooksDCICache {
     pub(super) component_states: VersionedCache<ComponentId, ComponentProcessingState>,
     /// Stores ProtocolComponent data for both newly created and mutated components.
     pub(super) protocol_components: VersionedCache<ComponentId, ProtocolComponent>,
+    /// Tracks paused components and their pause reason.
+    /// `Some(reason)` indicates the component is paused with that reason.
+    /// `None` indicates the component was unpaused (paused attribute deleted).
+    /// When a component is SDK-paused (reason = Substreams), HooksDCI should skip processing.
+    ///
+    /// NOTE: This is intentionally separate from DCI's `paused_components` to avoid creating a
+    /// dependency on the DCI's cache, and keep the cache management independent.
+    /// This can be refactored to have a centralized cache, but that would ideally require a
+    /// centralized cache-management layer.
+    pub(super) paused_components: VersionedCache<ComponentId, Option<PausingReason>>,
 }
 
 impl HooksDCICache {
     pub(super) fn new() -> Self {
-        Self { component_states: VersionedCache::new(), protocol_components: VersionedCache::new() }
+        Self {
+            component_states: VersionedCache::new(),
+            protocol_components: VersionedCache::new(),
+            paused_components: VersionedCache::new(),
+        }
     }
 
     /// Reverts the cache to the state at a specific block hash.
@@ -250,6 +274,8 @@ impl HooksDCICache {
         self.component_states.revert_to(block)?;
         self.protocol_components
             .revert_to(block)?;
+        self.paused_components
+            .revert_to(block)?;
         Ok(())
     }
 
@@ -264,6 +290,8 @@ impl HooksDCICache {
         self.component_states
             .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
         self.protocol_components
+            .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
+        self.paused_components
             .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
         Ok(())
     }
@@ -284,6 +312,8 @@ impl HooksDCICache {
         self.component_states
             .validate_and_ensure_block_layer_internal(block)?;
         self.protocol_components
+            .validate_and_ensure_block_layer_internal(block)?;
+        self.paused_components
             .validate_and_ensure_block_layer_internal(block)?;
         Ok(())
     }
@@ -433,6 +463,30 @@ where
             }
         }
         self.permanent.contains_key(key)
+    }
+
+    /// Iterates over all key-value pairs, returning the latest value for each key.
+    ///
+    /// Keys that appear in multiple layers will only be returned once with their most recent value
+    /// (from the latest pending layer, or permanent if not in pending).
+    pub(super) fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
+        // Start with permanent layer, then overwrite with pending layers (oldest to newest)
+        // This ensures the latest value is always kept for each key
+        let mut result: HashMap<&K, &V> = HashMap::new();
+
+        // Process permanent layer first
+        for (k, v) in self.permanent.iter() {
+            result.insert(k, v);
+        }
+
+        // Process pending layers from oldest to newest, overwriting with newer values
+        for layer in self.pending.iter() {
+            for (k, v) in layer.data.iter() {
+                result.insert(k, v);
+            }
+        }
+
+        result.into_iter()
     }
 
     /// Process block finality by moving all finalized layers from pending to permanent storage.
