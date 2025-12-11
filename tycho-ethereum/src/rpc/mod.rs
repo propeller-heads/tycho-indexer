@@ -292,7 +292,7 @@ impl EthereumRpcClient {
         .collect())
     }
 
-    #[instrument(level = "debug", skip(self, addresses))]
+    #[instrument(level = "debug", skip(self))]
     pub(crate) async fn fetch_accounts_code_and_balance(
         &self,
         block_id: BlockNumberOrTag,

@@ -13,7 +13,7 @@ use alloy::{
 use backoff::backoff::Backoff;
 pub use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use serde_json::value::RawValue;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::rpc::config::RPCRetryConfig;
 
@@ -157,7 +157,7 @@ impl Backoff for RetryPolicy {
 
     fn next_backoff(&mut self) -> Option<Duration> {
         if self.attempts_left == 0 {
-            debug!(max_retries = self.max_retries, "RPC retry attempts exhausted");
+            warn!(max_retries = self.max_retries, "RPC retry attempts exhausted");
             return None;
         }
         self.attempts_left -= 1;
