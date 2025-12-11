@@ -331,12 +331,7 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Arguments
     ///
-    /// * `params` - A `SwapToPriceParams` struct containing:
-    ///   - `token_in`: The token being sold (swapped into the pool)
-    ///   - `token_out`: The token being bought (swapped out of the pool)
-    ///   - `target_price`: The target marginal price
-    ///   - `tolerance`: Optional tolerance percentage for marginal price of the resulting trade
-    ///     price
+    /// * `params` - A [SwapToPriceParams] struct containing the inputs for this method.
     ///
     /// # Returns
     ///
@@ -384,11 +379,7 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Arguments
     ///
-    /// * `params` - A `QuerySupplyParams` struct containing:
-    ///   - `token_in`: The token being bought by the pool (the buy token)
-    ///   - `token_out`: The token being sold by the pool (the sell token)
-    ///   - `trade_price_limit`: The minimum acceptable price for the trade
-    ///   - `tolerance`: Optional tolerance percentage for early stopping in iterative algorithms
+    /// * `params` - A [QuerySupplyParams] struct containing the inputs for this method.
     ///
     /// # Returns
     ///
