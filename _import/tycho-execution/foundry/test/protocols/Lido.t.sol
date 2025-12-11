@@ -123,8 +123,6 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
             true
         );
 
-        IERC20(STETH_ADDR).approve(WSTETH_ADDR, amountIn);
-
         uint256 amountOut = LidoExposed.swap(stETHAmount, protocolData);
 
         uint256 finalBalance = IERC20(WSTETH_ADDR).balanceOf(BOB);
