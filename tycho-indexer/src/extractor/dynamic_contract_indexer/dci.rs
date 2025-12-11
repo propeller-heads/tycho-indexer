@@ -254,6 +254,13 @@ where
         let retriggered_entrypoints: HashMap<EntryPointWithTracingParams, &Transaction> =
             self.detect_retriggers(&block_changes.block_contract_changes)?;
 
+        if !retriggered_entrypoints.is_empty() {
+            debug!(
+                retriggered_entrypoints = retriggered_entrypoints.len(),
+                "DCI: Retriggered entrypoints"
+            );
+        }
+
         // Update the entrypoint results with the retriggered entrypoints
         entrypoints_to_analyze.extend(retriggered_entrypoints);
 
@@ -546,16 +553,7 @@ where
                     .map(|ep| (ep.external_id.clone(), ep)),
             )?;
 
-        let _span = span!(
-            Level::INFO,
-            "dci_extract_tracked_updates",
-            block_contract_changes = block_changes
-                .block_contract_changes
-                .len()
-        )
-        .entered();
         let tracked_updates = self.extract_tracked_updates(block_changes)?;
-        drop(_span);
 
         let mut tx_with_changes = block_changes
             .txs_with_update
@@ -1180,50 +1178,142 @@ where
     ///
     /// Note: the tx_with_changes are only contain the account deltas for the tracked contracts;
     /// they need to be merged with the `txs_with_update` vector from the block changes.
+    #[instrument(
+        level = "info",
+        name = "dci_extract_tracked_updates",
+        skip(self, block_changes),
+        fields(block_contract_changes = block_changes.block_contract_changes.len())
+    )]
     fn extract_tracked_updates(
         &self,
         block_changes: &BlockChanges,
     ) -> Result<HashMap<TxHash, TxWithChanges>, ExtractionError> {
-        let mut tracked_updates: HashMap<TxHash, TxWithChanges> = HashMap::new();
+        // Pre-allocate with estimated size to reduce reallocations
+        let estimated_size = block_changes
+            .block_contract_changes
+            .len();
+        let mut tracked_updates: HashMap<TxHash, TxWithChanges> =
+            HashMap::with_capacity(estimated_size);
+
+        // Cache tracked keys per account to avoid repeated get_all() calls
+        // This is especially beneficial when the same account appears in multiple transactions
+        let mut tracked_keys_cache: HashMap<Address, HashSet<StoreKey>> = HashMap::new();
 
         for tx in block_changes
             .block_contract_changes
             .iter()
         {
+            let tx_hash = &tx.tx.hash;
+            let mut tx_account_deltas: HashMap<Address, AccountDelta> = HashMap::new();
+
             for (account, contract_changes) in tx.contract_changes.iter() {
-                let tracked_keys: HashSet<&StoreKey> = match self
+                // Check if tracked - use contains_key which is cheaper than get_all when we don't
+                // need the data yet
+                let is_tracked = self
                     .cache
                     .tracked_contracts
-                    .get_all(account.clone())
-                {
-                    // Early skip if the contract is not tracked
-                    None => continue,
-                    Some(keys) => keys.flatten().collect(),
-                };
+                    .contains_key(account);
 
-                let mut slot_updates = contract_changes
-                    .slots
-                    .iter()
-                    .map(|(slot, ContractStorageChange { value, .. })| {
-                        if value.is_zero() {
-                            (slot.clone(), None)
-                        } else {
-                            (slot.clone(), Some(value.clone()))
-                        }
-                    })
-                    .collect::<ContractStoreDeltas>();
-
-                // Only filter slots if skipping full indexing
-                if self.should_skip_full_indexing(account) {
-                    slot_updates.retain(|slot, _| tracked_keys.contains(slot));
+                if !is_tracked {
+                    continue;
                 }
 
-                if !slot_updates.is_empty() ||
-                    contract_changes
-                        .native_balance
-                        .is_some()
-                {
-                    let account_delta = HashMap::from([(
+                // Collect slot updates, filtering during collection if needed to avoid unnecessary
+                // clones
+                let slot_updates: ContractStoreDeltas = {
+                    if self.should_skip_full_indexing(account) {
+                        // Early exit if no slots to filter
+                        if contract_changes.slots.is_empty() {
+                            ContractStoreDeltas::new()
+                        } else {
+                            let tracked_keys = tracked_keys_cache
+                                .entry(account.clone())
+                                .or_insert_with(|| {
+                                    let _collect_tracked_keys_span =
+                                        span!(Level::DEBUG, "collect_tracked_keys", account = %account)
+                                            .entered();
+
+                                    if let Some(all_tracked) = self
+                                        .cache
+                                        .tracked_contracts
+                                        .get_all(account.clone())
+                                    {
+                                        // Collect iterator to allow multiple passes and accurate capacity calculation
+                                        let sets: Vec<_> = all_tracked.collect();
+
+                                        // Calculate total capacity (may overestimate due to duplicates, but avoids reallocations)
+                                        let total_capacity: usize = sets.iter().map(|set| set.len()).sum();
+
+                                        let mut merged = HashSet::with_capacity(total_capacity);
+
+                                        // Merge all sets in a single pass
+                                        for tracked_set in sets {
+                                            merged.extend(tracked_set.iter().cloned());
+                                        }
+                                        merged
+                                    } else {
+                                        HashSet::new()
+                                    }
+                                });
+
+                            // Filter slots using cached tracked keys
+                            let mut result = ContractStoreDeltas::new();
+
+                            // Iterate through the smaller collection to minimize iterations
+                            if contract_changes.slots.len() < tracked_keys.len() {
+                                // Fewer slots - iterate through slots and check if they're in
+                                // tracked_keys
+                                for (slot, change) in contract_changes.slots.iter() {
+                                    if tracked_keys.contains(slot) {
+                                        result.insert(
+                                            slot.clone(),
+                                            if change.value.is_zero() {
+                                                None
+                                            } else {
+                                                Some(change.value.clone())
+                                            },
+                                        );
+                                    }
+                                }
+                            } else {
+                                // Fewer tracked keys - iterate through tracked_keys and look up in
+                                // slots
+                                for slot in tracked_keys.iter() {
+                                    if let Some(change) = contract_changes.slots.get(slot) {
+                                        result.insert(
+                                            slot.clone(),
+                                            if change.value.is_zero() {
+                                                None
+                                            } else {
+                                                Some(change.value.clone())
+                                            },
+                                        );
+                                    }
+                                }
+                            }
+                            result
+                        }
+                    } else {
+                        // full indexing, return all slots
+                        contract_changes
+                            .slots
+                            .iter()
+                            .map(|(slot, ContractStorageChange { value, .. })| {
+                                (
+                                    slot.clone(),
+                                    if value.is_zero() { None } else { Some(value.clone()) },
+                                )
+                            })
+                            .collect()
+                    }
+                };
+
+                let has_balance_change = contract_changes
+                    .native_balance
+                    .is_some();
+                // Only create AccountDelta if we have updates
+                if !slot_updates.is_empty() || has_balance_change {
+                    tx_account_deltas.insert(
                         account.clone(),
                         AccountDelta::new(
                             self.chain,
@@ -1233,21 +1323,24 @@ where
                             None,
                             ChangeType::Update,
                         ),
-                    )]);
+                    );
+                }
+            }
 
-                    let tx_with_changes = TxWithChanges {
-                        tx: tx.tx.clone(),
-                        account_deltas: account_delta,
-                        ..Default::default()
-                    };
+            // Only create TxWithChanges if we have account deltas
+            if !tx_account_deltas.is_empty() {
+                let tx_with_changes = TxWithChanges {
+                    tx: tx.tx.clone(),
+                    account_deltas: tx_account_deltas,
+                    ..Default::default()
+                };
 
-                    match tracked_updates.entry(tx.tx.hash.clone()) {
-                        Entry::Occupied(mut entry) => {
-                            entry.get_mut().merge(tx_with_changes)?;
-                        }
-                        Entry::Vacant(entry) => {
-                            entry.insert(tx_with_changes);
-                        }
+                match tracked_updates.entry(tx_hash.clone()) {
+                    Entry::Occupied(mut entry) => {
+                        entry.get_mut().merge(tx_with_changes)?;
+                    }
+                    Entry::Vacant(entry) => {
+                        entry.insert(tx_with_changes);
                     }
                 }
             }
