@@ -124,6 +124,7 @@ impl ProtocolStreamProcessor {
             Some(protocols) => protocols.clone(),
             None => self.get_default_protocols_for_chain(),
         };
+        info!("Building protocol stream for protocols: {:?}", protocols_to_enable);
 
         for protocol in &protocols_to_enable {
             protocol_stream =
