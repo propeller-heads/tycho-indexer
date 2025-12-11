@@ -1,3 +1,15 @@
+## [0.215.0](https://github.com/propeller-heads/tycho-simulation/compare/0.214.1...0.215.0) (2025-12-11)
+
+
+### Features
+
+* update tycho dependencies to 0.120.0 ([f534afd](https://github.com/propeller-heads/tycho-simulation/commit/f534afd0faffe5ebf414566b7815d2524776cf89))
+
+
+### Bug Fixes
+
+* use lenient client start-up timeouts (needed for dci protocols) ([fb7bef7](https://github.com/propeller-heads/tycho-simulation/commit/fb7bef712d65a3fb643386cf7a0f7fea183a8dc9))
+
 ## [0.214.1](https://github.com/propeller-heads/tycho-simulation/compare/0.214.0...0.214.1) (2025-12-10)
 
 
