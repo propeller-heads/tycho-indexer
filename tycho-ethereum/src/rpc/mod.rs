@@ -361,6 +361,10 @@ impl EthereumRpcClient {
                 Ok(code_balance_res)
             };
 
+            // perf: current retry logic retries the entire batch on any retriable failure. Instead:
+            // 1. Only retry failed requests, not successful ones
+            // 2. Fail fast if any request has a non-retryable error (currently we only check
+            //    the first error encountered, potentially missing fatal errors in other requests)
             let chunk_results = self.retry_policy.retry_request(batch_call).await
             .map_err(|e| {
                     let printable_addresses = chunk_addresses
@@ -469,6 +473,10 @@ impl EthereumRpcClient {
                 Ok(storage_res)
             };
 
+            // perf: current retry logic retries the entire batch on any retriable failure. Instead:
+            // 1. Only retry failed requests, not successful ones
+            // 2. Fail fast if any request has a non-retryable error (currently we only check
+            //    the first error encountered, potentially missing fatal errors in other requests)
             let chunk_res = self
                 .retry_policy
                 .retry_request(batch_call)
@@ -695,6 +703,10 @@ impl EthereumRpcClient {
                 Ok(results)
             };
 
+            // perf: current retry logic retries the entire batch on any retriable failure. Instead:
+            // 1. Only retry failed requests, not successful ones
+            // 2. Fail fast if any request has a non-retryable error (currently we only check
+            //    the first error encountered, potentially missing fatal errors in other requests)
             let chunk_results = self
                 .retry_policy
                 .retry_request(|| async { batch_call().await })
@@ -735,9 +747,6 @@ impl EthereumRpcClient {
         }
     }
 
-    /// This method is different from the ones above as it retries the entire batch either if all
-    /// requests fail or if some requests fail with retryable errors. If the RPC call itself
-    /// fails, it is retried in case it was a transient error.
     async fn batch_slot_detector_tests(
         &self,
         requests: &[SlotDetectorSlotTestRequest],
@@ -787,8 +796,7 @@ impl EthereumRpcClient {
                 batch.send().await?;
 
                 // We do not check individual results for errors here, instead we handle that
-                // in the consumer. All we do is check if all requests failed or some requests
-                // failed with retryable errors to decide whether to retry the entire batch.
+                // in the consumer.
                 Ok(join_all(batch_calls).await)
             };
 
@@ -797,10 +805,14 @@ impl EthereumRpcClient {
 
             let mut policy = self.retry_policy.clone();
 
-            // Retry the batch call while either:
-            // - the entire batch failed
-            // - some requests failed with retryable errors
-            // - all requests failed
+            // Retries the batch if:
+            // - The RPC call itself fails with a retryable error
+            // - Any batched request fails with a retryable error
+            // - All batched requests fail (regardless of error type)
+            //
+            // This uses a more aggressive retry strategy than other batch methods as slot detector
+            // tests expect some requests to fail, so we retry in the described manner
+            // to maximize successful results. This is also why we need a custom retry closure here.
             let should_retry = |batch_result: &Result<
                 Vec<TransportResult<Value>>,
                 RpcError<TransportErrorKind>,
