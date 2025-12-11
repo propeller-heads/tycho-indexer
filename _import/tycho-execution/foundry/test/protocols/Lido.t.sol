@@ -6,6 +6,7 @@ import "@src/executors/LidoExecutor.sol";
 import {Constants} from "../Constants.sol";
 import {Permit2TestHelper} from "../Permit2TestHelper.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
+import "../TychoRouterTestSetup.sol";
 
 contract LidoExecutorExposed is LidoExecutor {
     constructor(
@@ -155,5 +156,59 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
         assertEq(finalBalance, expectedAmountOut);
         assertEq(IERC20(WSTETH_ADDR).balanceOf(address(LidoExposed)), 0);
         vm.stopPrank();
+    }
+}
+
+contract TychoRouterForLidoTest is TychoRouterTestSetup {
+    LidoExecutorExposed LidoExposed;
+
+    function getForkBlock() public pure override returns (uint256) {
+        return 23939449;
+    }
+
+    function testSingleStakeLidoIntegration() public {
+        deal(ALICE, 1 ether);
+
+        vm.startPrank(ALICE);
+
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_steth_lido"
+        );
+
+        (bool success, ) = tychoRouterAddr.call{value: 1 ether}(callData);
+
+        assertTrue(success, "Call Failed");
+        assertEq(ALICE.balance, 0);
+    }
+
+    function testSingleWrapLidoIntegration() public {
+        deal(address(ALICE), 1 ether);
+
+        vm.startPrank(ALICE);
+        LidoPool(STETH_ADDR).submit{value: 1 ether}(address(ALICE));
+
+        IERC20(STETH_ADDR).approve(tychoRouterAddr, type(uint256).max - 1);
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_wrap_wsteth_lido"
+        );
+        (bool success, ) = tychoRouterAddr.call(callData);
+
+        assertTrue(success, "Call Failed");
+        assertEq(IERC20(STETH_ADDR).balanceOf(ALICE), 0);
+    }
+
+    function testSingleUnwrapLidoIntegration() public {
+        vm.startPrank(ALICE);
+
+        deal(WSTETH_ADDR, address(ALICE), 1 ether);
+
+        IERC20(WSTETH_ADDR).approve(tychoRouterAddr, type(uint256).max - 1);
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_unwrap_wsteth_lido"
+        );
+        (bool success, ) = tychoRouterAddr.call(callData);
+
+        assertTrue(success, "Call Failed");
+        assertEq(IERC20(WSTETH_ADDR).balanceOf(ALICE), 0);
     }
 }

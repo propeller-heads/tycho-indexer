@@ -1481,3 +1481,168 @@ fn test_sequential_encoding_strategy_erc4626() {
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_sequential_encoding_strategy_erc4626", hex_calldata.as_str());
 }
+
+#[test]
+fn test_single_encoding_strategy_steth_lido() {
+    let lido_pool = ProtocolComponent {
+        id: String::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84"),
+        protocol_system: String::from("lido"),
+        ..Default::default()
+    };
+    let token_in = Bytes::from("0x0000000000000000000000000000000000000000");
+    let token_out = Bytes::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84");
+    let swap = Swap {
+        component: lido_pool,
+        token_in: token_in.clone(),
+        token_out: token_out.clone(),
+        split: 0f64,
+        user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
+    };
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: token_in,
+        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+        checked_token: token_out,
+        checked_amount: BigUint::from_str("999999999999999998").unwrap(),
+        // Alice
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::None,
+        &eth(),
+        None,
+    )
+    .unwrap()
+    .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_single_encoding_strategy_steth_lido", hex_calldata.as_str());
+}
+
+#[test]
+fn test_single_encoding_strategy_wrap_wsteth_lido() {
+    let lido_pool = ProtocolComponent {
+        id: String::from("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"),
+        protocol_system: String::from("lido"),
+        ..Default::default()
+    };
+
+    let token_in = Bytes::from("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84");
+    let token_out = Bytes::from("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0");
+    let swap = Swap {
+        component: lido_pool,
+        token_in: token_in.clone(),
+        token_out: token_out.clone(),
+        split: 0f64,
+        user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
+    };
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: token_in,
+        given_amount: BigUint::from_str("1000000000000000000").unwrap(),
+        checked_token: token_out,
+        checked_amount: BigUint::from_str("819085003283072218").unwrap(),
+        // Alice
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFrom,
+        &eth(),
+        None,
+    )
+    .unwrap()
+    .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_single_encoding_strategy_wrap_wsteth_lido", hex_calldata.as_str());
+}
+
+#[test]
+fn test_single_encoding_strategy_unwrap_wsteth_lido() {
+    let lido_pool = ProtocolComponent {
+        id: String::from("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"),
+        protocol_system: String::from("lido"),
+        ..Default::default()
+    };
+    let token_in = Bytes::from("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0");
+    let token_out = Bytes::from("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84");
+
+    let swap = Swap {
+        component: lido_pool,
+        token_in: token_in.clone(),
+        token_out: token_out.clone(),
+        split: 0f64,
+        user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
+    };
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: token_in,
+        given_amount: BigUint::from_str("1000000000000000000").unwrap(),
+        checked_token: token_out,
+        checked_amount: BigUint::from_str("1220874507519708969").unwrap(),
+        // Alice
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFrom,
+        &eth(),
+        None,
+    )
+    .unwrap()
+    .data;
+
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file(
+        "test_single_encoding_strategy_unwrap_wsteth_lido",
+        hex_calldata.as_str(),
+    );
+}

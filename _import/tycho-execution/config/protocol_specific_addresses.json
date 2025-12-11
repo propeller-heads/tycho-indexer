@@ -17,8 +17,8 @@
       "hashflow_router_address": "0x55084eE0fEf03f14a305cd24286359A35D735151"
     },
     "lido": {
-      "st_eth_address": "",
-      "wst_eth_address": ""
+      "st_eth_address": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+      "wst_eth_address": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"
     }
   },
   "base": {
