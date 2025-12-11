@@ -1,3 +1,26 @@
+## [0.121.0](https://github.com/propeller-heads/tycho-indexer/compare/0.120.0...0.121.0) (2025-12-11)
+
+
+### Features
+
+* add debug logging for RPC retry attempts and backoff duration ([96349e8](https://github.com/propeller-heads/tycho-indexer/commit/96349e84ae34eb4aa963c0f3ce4db286b190131b))
+* add RPC retry and batching configuration structs and otherwise polish the PR ([039872f](https://github.com/propeller-heads/tycho-indexer/commit/039872fda9cb51e6fe3cf29832b5a627e3285400))
+* add tracing instrumentation to async RPC methods for improved debugging ([2b32b8f](https://github.com/propeller-heads/tycho-indexer/commit/2b32b8f1d3b41c884ec82866052ffdff663c4424))
+* implement attempt-based RPC retry logic with custom error handling ([cfe018e](https://github.com/propeller-heads/tycho-indexer/commit/cfe018e7ac44b7976124de785a47dc3fe72db65f))
+* implement batch RPC support for slot detection and tracing ([a925115](https://github.com/propeller-heads/tycho-indexer/commit/a925115dc587ec402e389f8c14c48947e1763696))
+* integrate `RetryPolicy` across RPC methods for improved error handling ([1408734](https://github.com/propeller-heads/tycho-indexer/commit/140873415a0c557ca532925c64ff48d0f9b461db))
+* refactor RPC batching configuration to use enum and improve default settings. Update the methods that were checking for batch config to explicitly fail specifying that the RPC does not support batching ([1aeb24c](https://github.com/propeller-heads/tycho-indexer/commit/1aeb24c44010543a75559edaf2784f3d13473469))
+* universal retry logic for the RPC ([#778](https://github.com/propeller-heads/tycho-indexer/issues/778)) ([6514e4e](https://github.com/propeller-heads/tycho-indexer/commit/6514e4e246330726afd33544399970aa7c0cb89b))
+* use rpc retry policy for batch trace and access list processing ([964eb05](https://github.com/propeller-heads/tycho-indexer/commit/964eb05fb822212311e6dfff9cdb1ae98e0e690b))
+
+
+### Bug Fixes
+
+* add chunking based on `max_batch_size` for the slot_detector batch requests ([2382c4f](https://github.com/propeller-heads/tycho-indexer/commit/2382c4f9866e42fdab1c9e150f678e5f474fa985))
+* correct typo in `ValueExtractionError` error message ([7d8dc86](https://github.com/propeller-heads/tycho-indexer/commit/7d8dc8627567cd9869929cdd341411762e04ffad))
+* format slot and test values as 32-byte hex strings in RPC tracer params ([1eb0302](https://github.com/propeller-heads/tycho-indexer/commit/1eb03026aec6d858f0fb4021a57dc5ca5cc84d96))
+* integrate the changes in the tycho-ethereum into tycho-indexer and re-export useful structs from backoff crate ([e36c7a3](https://github.com/propeller-heads/tycho-indexer/commit/e36c7a3a3df741c1cddaea812df6bf2978815768))
+
 ## [0.120.0](https://github.com/propeller-heads/tycho-indexer/compare/0.119.2...0.120.0) (2025-12-11)
 
 
