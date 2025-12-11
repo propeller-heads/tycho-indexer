@@ -359,9 +359,7 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
         Err(SimulationError::FatalError("swap_to_price not implemented".into()))
     }
 
-    /// Calculates the maximum amount of token_out (sell token) a pool can supply, and the
-    /// corresponding demanded amount of token_in (buy token), while respecting a minimum trade
-    /// price.
+    /// Calculates the maximum trade that this pool can execute while respecting a trade limit price.
     ///
     /// # Arguments
     ///
