@@ -60,9 +60,6 @@ impl fmt::Display for GetAmountOutResult {
 /// * `numerator` - The amount of token_out (what you receive), including token decimals
 /// * `denominator` - The amount of token_in (what you pay), including token decimals
 ///
-/// In the context of `swap_to_price` and `query_supply`, this represents the pool's price in
-/// the **token_out/token_in** direction
-///
 /// A fraction struct is used for price to have flexibility in precision independent of the
 /// decimal precisions of the numerator and denominator tokens. This allows for:
 /// - Exact price representation without floating-point errors
