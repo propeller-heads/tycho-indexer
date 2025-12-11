@@ -175,7 +175,7 @@ impl SwapToPriceParams {
     }
 }
 
-/// Represents the parameters for query_supply.
+/// Represents the parameters for query_max_trade.
 ///
 /// # Fields
 ///
@@ -187,14 +187,14 @@ impl SwapToPriceParams {
 ///   limit price. This is used to loosen the acceptance criteria for implementations of this method,
 ///   but will never allow violating the trade limit price itself.
 #[derive(Debug, Clone, PartialEq)]
-pub struct QuerySupplyParams {
+pub struct QueryMaxTradeParams {
     token_in: Token,
     token_out: Token,
     trade_limit_price: Price,
     tolerance: f64,
 }
 
-impl QuerySupplyParams {
+impl QueryMaxTradeParams {
     pub fn new(
         token_in: Token,
         token_out: Token,
@@ -360,7 +360,7 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Arguments
     ///
-    /// * `params` - A [QuerySupplyParams] struct containing the inputs for this method.
+    /// * `params` - A [QueryMaxTradeParams] struct containing the inputs for this method.
     ///
     /// # Returns
     ///
@@ -375,8 +375,8 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     /// The tolerance parameter can be used for early stopping of iterative algorithms when the
     /// result is within the tolerance of the target trade price.
     #[allow(unused)]
-    fn query_supply(&self, params: &QuerySupplyParams) -> Result<Trade, SimulationError> {
-        Err(SimulationError::FatalError("query_supply not implemented".into()))
+    fn query_max_trade(&self, params: &QueryMaxTradeParams) -> Result<Trade, SimulationError> {
+        Err(SimulationError::FatalError("query_max_trade not implemented".into()))
     }
 
     /// Clones the protocol state as a trait object.
