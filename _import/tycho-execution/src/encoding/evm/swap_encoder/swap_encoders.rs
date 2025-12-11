@@ -1420,13 +1420,15 @@ impl SwapEncoder for LidoSwapEncoder {
             let token = bytes_to_address(&self.st_eth_address)?;
             let mut approval_needed: bool = true;
 
-            if !encoding_context.historical_trade {
-                let tycho_router_address = bytes_to_address(router_address)?;
-                approval_needed = token_approvals_manager.approval_needed(
-                    token,
-                    tycho_router_address,
-                    bytes_to_address(&self.wst_eth_address)?,
-                )?;
+            if let Some(router_address) = &encoding_context.router_address {
+                if !encoding_context.historical_trade {
+                    let tycho_router_address = bytes_to_address(router_address)?;
+                    approval_needed = token_approvals_manager.approval_needed(
+                        token,
+                        tycho_router_address,
+                        bytes_to_address(&self.wst_eth_address)?,
+                    )?;
+                }
             }
 
             (LidoPool::WStETH, LidoPoolDirection::Wrap, approval_needed)
