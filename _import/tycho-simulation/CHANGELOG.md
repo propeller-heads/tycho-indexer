@@ -1,3 +1,10 @@
+## [0.215.1](https://github.com/propeller-heads/tycho-simulation/compare/0.215.0...0.215.1) (2025-12-11)
+
+
+### Bug Fixes
+
+* update balance slot detector initialization ([a65c604](https://github.com/propeller-heads/tycho-simulation/commit/a65c6040bac5e8f983d86609d5aa9dc5f8fb8309)), closes [#778](https://github.com/propeller-heads/tycho-simulation/issues/778)
+
 ## [0.215.0](https://github.com/propeller-heads/tycho-simulation/compare/0.214.1...0.215.0) (2025-12-11)
 
 
