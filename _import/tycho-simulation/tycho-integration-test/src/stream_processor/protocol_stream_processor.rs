@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use futures::{Stream, StreamExt};
 use miette::{miette, IntoDiagnostic, WrapErr};
@@ -131,6 +131,7 @@ impl ProtocolStreamProcessor {
         protocol_stream
             .auth_key(Some(self.tycho_api_key.clone()))
             .skip_state_decode_failures(true)
+            .startup_timeout(Duration::from_secs(500))
             .set_tokens(all_tokens.clone())
             .await
             .build()
@@ -165,7 +166,12 @@ impl ProtocolStreamProcessor {
                 "aerodrome_slipstreams".to_string(),
             ],
             Chain::Unichain => {
-                vec!["uniswap_v2".to_string(), "uniswap_v3".to_string(), "uniswap_v4".to_string()]
+                vec![
+                    "uniswap_v2".to_string(),
+                    "uniswap_v3".to_string(),
+                    "uniswap_v4".to_string(),
+                    "uniswap_v4_hooks".to_string(),
+                ]
             }
             _ => vec![],
         }

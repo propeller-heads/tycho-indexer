@@ -216,7 +216,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
     )
     .await
     .map_err(|e| miette!("Failed to load tokens: {e:?}"))?;
-    info!(%cli.tycho_url, "Loaded tokens");
+    info!("Loaded {} tokens", all_tokens.len());
 
     // Run streams in background tasks
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
