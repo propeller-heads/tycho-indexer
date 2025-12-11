@@ -9,11 +9,11 @@ use serde_json::{json, Value};
 use thiserror::Error;
 use tonic::async_trait;
 use tracing::{debug, error, warn};
+use tycho_ethereum::rpc::config::RPCRetryConfig;
 
 use super::component_metadata::{
     DeduplicationId, MetadataError, RequestProvider, RequestTransport, RpcTransport,
 };
-use crate::extractor::RPCRetryConfig;
 
 /// Custom error type for RPC batch operations
 #[derive(Error, Debug)]
@@ -443,7 +443,6 @@ mod tests {
     use mockito::{Matcher, Server};
 
     use super::*;
-    use crate::extractor::RPCRetryConfig;
 
     #[tokio::test]
     #[ignore = "Requires a real RPC endpoint"]

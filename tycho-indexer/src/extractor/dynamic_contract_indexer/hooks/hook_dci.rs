@@ -1800,8 +1800,7 @@ mod tests {
         use tycho_ethereum::{
             rpc::EthereumRpcClient,
             services::entrypoint_tracer::{
-                balance_slot_detector::EVMBalanceSlotDetector, slot_detector::SlotDetectorConfig,
-                tracer::EVMEntrypointService,
+                balance_slot_detector::EVMBalanceSlotDetector, tracer::EVMEntrypointService,
             },
         };
 
@@ -1940,14 +1939,8 @@ mod tests {
                 pool_manager.clone(),
             );
 
-            let balance_slot_detector_config = SlotDetectorConfig {
-                max_batch_size: 5,
-                max_retries: 3,
-                initial_backoff_ms: 100,
-                max_backoff_ms: 5000,
-            };
             let balance_slot_detector =
-                EVMBalanceSlotDetector::new(balance_slot_detector_config, rpc);
+                EVMBalanceSlotDetector::new(rpc).with_max_token_batch_size(5);
 
             let mut entrypoint_generator = UniswapV4DefaultHookEntrypointGenerator::new(
                 DefaultSwapAmountEstimator::with_limits(),

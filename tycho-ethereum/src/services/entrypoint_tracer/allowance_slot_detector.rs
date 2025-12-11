@@ -96,7 +96,6 @@ mod tests {
     use super::*;
     use crate::{
         rpc::EthereumRpcClient,
-        services::entrypoint_tracer::slot_detector::SlotDetectorConfig,
         test_fixtures::{USDC_STR, USDT_STR, WETH_STR},
     };
 
@@ -129,7 +128,7 @@ mod tests {
         let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
 
         let rpc = EthereumRpcClient::new(&rpc_url).expect("failed to create RPC client");
-        let detector = EVMAllowanceSlotDetector::new(SlotDetectorConfig::default(), &rpc);
+        let detector = EVMAllowanceSlotDetector::new(&rpc).with_max_token_batch_size(5);
 
         // TRUF
         let token = Address::from_str("0x38c2a4a7330b22788374b8ff70bba513c8d848ca").unwrap();
@@ -183,12 +182,6 @@ mod tests {
         let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
         let rpc = EthereumRpcClient::new(&rpc_url).expect("Failed to create RPC client");
         println!("Using RPC URL: {}", rpc_url);
-        let config = SlotDetectorConfig {
-            max_batch_size: 5,
-            max_retries: 3,
-            initial_backoff_ms: 100,
-            max_backoff_ms: 5000,
-        };
 
         let weth = Address::from_str(WETH_STR).expect("Invalid WETH address");
         let usdc = Address::from_str(USDC_STR).expect("Invalid USDC address");
@@ -204,7 +197,7 @@ mod tests {
         let block_hash = BlockHash::from_str(BLOCK_HASH).expect("Invalid block hash");
         println!("Block hash: {block_hash}");
 
-        let detector = EVMAllowanceSlotDetector::new(config, &rpc);
+        let detector = EVMAllowanceSlotDetector::new(&rpc).with_max_token_batch_size(5);
         let results = detector
             .detect_allowance_slots(&tokens, owner_address, spender_address, block_hash)
             .await;
