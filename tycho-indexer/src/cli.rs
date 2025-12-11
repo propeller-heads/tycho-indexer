@@ -1,7 +1,7 @@
 use clap::{Args, Parser, Subcommand};
 use tycho_common::{models::Chain, Bytes};
 
-use crate::{extractor::RPCRetryConfig, services::RpcConfig};
+use crate::{extractor::RPCRetryConfig, services::ServerRpcConfig};
 
 /// Tycho Indexer using Substreams
 ///
@@ -118,7 +118,7 @@ pub struct ServerArgs {
     pub min_token_quality: Option<i32>,
 }
 
-impl From<ServerArgs> for RpcConfig {
+impl From<ServerArgs> for ServerRpcConfig {
     fn from(args: ServerArgs) -> Self {
         Self::new()
             .with_min_tvl(args.min_tvl)

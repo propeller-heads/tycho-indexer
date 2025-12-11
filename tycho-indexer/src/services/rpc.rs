@@ -32,7 +32,7 @@ use crate::{
         cache::RpcCache,
         deltas_buffer::{PendingDeltasBuffer, PendingDeltasError},
         middleware::{RequestPaginationValidation, ValidateFilter},
-        RpcConfig,
+        ServerRpcConfig,
     },
 };
 
@@ -56,7 +56,7 @@ pub enum RpcError {
     #[error("Unknown error: {0}")]
     Unknown(String),
 
-    #[error("Minimum filter for {0} not met: {1}")]
+    #[error("Minimum filtering requirements for {0} not met: {1}")]
     MinimumFilterNotMet(String, String),
 }
 
@@ -109,7 +109,7 @@ pub struct RpcHandler<G, T> {
         RpcCache<dto::TracedEntryPointRequestBody, dto::TracedEntryPointRequestResponse>,
     #[allow(dead_code)]
     tracer: T,
-    rpc_config: RpcConfig,
+    rpc_config: ServerRpcConfig,
 }
 
 impl<G, T> RpcHandler<G, T>
@@ -121,7 +121,7 @@ where
         db_gateway: G,
         pending_deltas: Option<Arc<dyn PendingDeltasBuffer + Send + Sync>>,
         tracer: T,
-        rpc_config: RpcConfig,
+        rpc_config: ServerRpcConfig,
     ) -> Self {
         const ONE_MB: u64 = 1_024 * 1_024;
         const HUNDRED_MB: u64 = ONE_MB * 100;
@@ -1665,7 +1665,7 @@ mod tests {
             gw,
             Some(Arc::new(mock_buffer)),
             MockEntryPointTracer::new(),
-            RpcConfig::new(),
+            ServerRpcConfig::new(),
         );
 
         let request = dto::StateRequestBody {
@@ -1969,7 +1969,7 @@ mod tests {
             expected_upserted_tracing_results,
         );
 
-        let req_handler = RpcHandler::new(gw, None, mock_entrypoint_tracer, RpcConfig::new());
+        let req_handler = RpcHandler::new(gw, None, mock_entrypoint_tracer, ServerRpcConfig::new());
         let response = req_handler
             .add_entry_points(&req_body)
             .await
@@ -2043,7 +2043,7 @@ mod tests {
             expected_upserted_tracing_results,
         );
 
-        let req_handler = RpcHandler::new(gw, None, tracer, RpcConfig::new());
+        let req_handler = RpcHandler::new(gw, None, tracer, ServerRpcConfig::new());
         let response = req_handler
             .add_entry_points(&req_body)
             .await
@@ -2162,7 +2162,8 @@ mod tests {
         gw.expect_get_traced_entry_points()
             .return_once(|_| Box::pin(async move { mock_traced_entry_points_response }));
 
-        let req_handler = RpcHandler::new(gw, None, MockEntryPointTracer::new(), RpcConfig::new());
+        let req_handler =
+            RpcHandler::new(gw, None, MockEntryPointTracer::new(), ServerRpcConfig::new());
 
         // Request for two protocol components
         let request = dto::TracedEntryPointRequestBody {
@@ -2360,7 +2361,8 @@ mod tests {
         gw.expect_get_traced_entry_points()
             .return_once(|_| Box::pin(async move { mock_traced_entry_points_response }));
 
-        let req_handler = RpcHandler::new(gw, None, MockEntryPointTracer::new(), RpcConfig::new());
+        let req_handler =
+            RpcHandler::new(gw, None, MockEntryPointTracer::new(), ServerRpcConfig::new());
 
         let request = dto::TracedEntryPointRequestBody {
             chain: dto::Chain::Ethereum,
@@ -2429,7 +2431,8 @@ mod tests {
         // ensure the gateway is only accessed once - the second request should hit cache
         gw.expect_get_tokens()
             .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
-        let req_handler = RpcHandler::new(gw, None, MockEntryPointTracer::new(), RpcConfig::new());
+        let req_handler =
+            RpcHandler::new(gw, None, MockEntryPointTracer::new(), ServerRpcConfig::new());
 
         // request for 2 tokens that are in the DB (WETH and USDC)
         let request = dto::TokensRequestBody {
@@ -2503,7 +2506,7 @@ mod tests {
             gw,
             Some(Arc::new(mock_buffer)),
             MockEntryPointTracer::new(),
-            RpcConfig::new(),
+            ServerRpcConfig::new(),
         );
 
         let request = dto::ProtocolStateRequestBody {
@@ -2589,7 +2592,7 @@ mod tests {
             gw,
             Some(Arc::new(mock_buffer)),
             MockEntryPointTracer::new(),
-            RpcConfig::new(),
+            ServerRpcConfig::new(),
         );
 
         let request = dto::ProtocolComponentsRequestBody {
@@ -2687,7 +2690,7 @@ mod tests {
             gw,
             Some(Arc::new(mock_buffer)),
             MockEntryPointTracer::new(),
-            RpcConfig::new(),
+            ServerRpcConfig::new(),
         );
 
         let request = dto::ProtocolComponentsRequestBody {
@@ -2727,15 +2730,23 @@ mod tests {
     }
 
     #[rstest]
-    #[case::config_set_no_filter_rejects(Some(1000.0), None)]
-    #[case::config_set_below_threshold_rejects(Some(1000.0), Some(500.0))]
+    #[case::config_set_no_filter_rejects(Some(1000.0), None, false)]
+    #[case::config_set_below_threshold_rejects(Some(1000.0), Some(500.0), false)]
+    #[case::config_set_above_threshold_accepts(Some(1000.0), Some(1500.0), true)]
     #[actix_web::test]
     async fn test_protocol_components_endpoint_rejects_invalid_filters(
         #[case] min_tvl: Option<f64>,
         #[case] tvl_gt: Option<f64>,
+        #[case] should_pass: bool,
     ) {
-        let gw = MockGateway::new();
-        let config = RpcConfig::new().with_min_tvl(min_tvl);
+        let mut gw = MockGateway::new();
+        if should_pass {
+            // Set up mock expectation for successful validation
+            let mock_response = Ok(WithTotal { entity: vec![], total: Some(0) });
+            gw.expect_get_protocol_components()
+                .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
+        }
+        let config = ServerRpcConfig::new().with_min_tvl(min_tvl);
         let handler = RpcHandler::new(gw, None, MockEntryPointTracer::new(), config);
 
         let app = test::init_service(
@@ -2763,34 +2774,52 @@ mod tests {
 
         let resp = test::call_service(&app, req).await;
 
-        // Should fail with 400 Bad Request due to filter validation
-        assert_eq!(
-            resp.status(),
-            actix_web::http::StatusCode::BAD_REQUEST,
-            "Expected validation to reject request"
-        );
+        if should_pass {
+            // Should succeed with 200 OK
+            assert_eq!(
+                resp.status(),
+                actix_web::http::StatusCode::OK,
+                "Expected validation to accept request"
+            );
+        } else {
+            // Should fail with 400 Bad Request due to filter validation
+            assert_eq!(
+                resp.status(),
+                actix_web::http::StatusCode::BAD_REQUEST,
+                "Expected validation to reject request"
+            );
 
-        let body = test::read_body(resp).await;
-        let body_str = std::str::from_utf8(&body).unwrap_or("");
-        assert!(
-            body_str.contains("tvl_gt parameter is required") ||
-                body_str.contains("tvl_gt must be at least"),
-            "Should fail with filter validation error. Body: {}",
-            body_str
-        );
+            let body = test::read_body(resp).await;
+            let body_str = std::str::from_utf8(&body).unwrap_or("");
+            assert!(
+                body_str.contains("tvl_gt parameter is required") ||
+                    body_str.contains("tvl_gt must be at least"),
+                "Should fail with filter validation error. Body: {}",
+                body_str
+            );
+        }
     }
 
     #[rstest]
-    #[case::config_set_no_filter_rejects(Some(50), None, None)]
-    #[case::config_set_below_threshold_rejects(Some(50), Some(30), None)]
+    #[case::config_set_no_filter_rejects(Some(50), None, None, false)]
+    #[case::config_set_below_threshold_rejects(Some(50), Some(30), None, false)]
+    #[case::config_set_token_addresses_accepts(Some(50), None, Some(vec![Bytes::from_str("0x01").unwrap()]), true)]
+    #[case::config_set_above_threshold_accepts(Some(50), Some(75), None, true)]
     #[actix_web::test]
     async fn test_tokens_endpoint_rejects_invalid_filters(
         #[case] min_quality: Option<i32>,
         #[case] request_quality: Option<i32>,
         #[case] token_addresses: Option<Vec<tycho_common::Bytes>>,
+        #[case] should_pass: bool,
     ) {
-        let gw = MockGateway::new();
-        let config = RpcConfig::new().with_min_quality(min_quality);
+        let mut gw = MockGateway::new();
+        if should_pass {
+            // Set up mock expectation for successful validation
+            let mock_response = Ok(WithTotal { entity: vec![], total: Some(0) });
+            gw.expect_get_tokens()
+                .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
+        }
+        let config = ServerRpcConfig::new().with_min_quality(min_quality);
         let handler = RpcHandler::new(gw, None, MockEntryPointTracer::new(), config);
 
         let app = test::init_service(
@@ -2815,20 +2844,29 @@ mod tests {
 
         let resp = test::call_service(&app, req).await;
 
-        // Should fail with 400 Bad Request due to filter validation
-        assert_eq!(
-            resp.status(),
-            actix_web::http::StatusCode::BAD_REQUEST,
-            "Expected validation to reject request"
-        );
+        if should_pass {
+            // Should succeed with 200 OK
+            assert_eq!(
+                resp.status(),
+                actix_web::http::StatusCode::OK,
+                "Expected validation to accept request"
+            );
+        } else {
+            // Should fail with 400 Bad Request due to filter validation
+            assert_eq!(
+                resp.status(),
+                actix_web::http::StatusCode::BAD_REQUEST,
+                "Expected validation to reject request"
+            );
 
-        let body = test::read_body(resp).await;
-        let body_str = std::str::from_utf8(&body).unwrap_or("");
-        assert!(
-            body_str.contains("min_quality parameter is required") ||
-                body_str.contains("min_quality must be at least"),
-            "Should fail with filter validation error. Body: {}",
-            body_str
-        );
+            let body = test::read_body(resp).await;
+            let body_str = std::str::from_utf8(&body).unwrap_or("");
+            assert!(
+                body_str.contains("min_quality parameter is required") ||
+                    body_str.contains("min_quality must be at least"),
+                "Should fail with filter validation error. Body: {}",
+                body_str
+            );
+        }
     }
 }
