@@ -131,6 +131,7 @@ impl ProtocolStreamProcessor {
         protocol_stream
             .auth_key(Some(self.tycho_api_key.clone()))
             .skip_state_decode_failures(true)
+            .startup_timeout(Duration::from_secs(500))
             .set_tokens(all_tokens.clone())
             .await
             .build()
