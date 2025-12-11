@@ -10,7 +10,7 @@ use tycho_ethereum::{
     rpc::EthereumRpcClient,
     services::entrypoint_tracer::{
         allowance_slot_detector::EVMAllowanceSlotDetector,
-        balance_slot_detector::EVMBalanceSlotDetector, slot_detector::SlotDetectorConfig,
+        balance_slot_detector::EVMBalanceSlotDetector,
     },
 };
 use tycho_simulation::tycho_common::models::Chain;
@@ -39,10 +39,9 @@ impl RPCTools {
         let rpc = EthereumRpcClient::new(rpc_url)
             .into_diagnostic()
             .wrap_err("Failed to create Ethereum RPC client")?;
-        let config = SlotDetectorConfig { ..Default::default() };
 
-        let evm_balance_slot_detector = Arc::new(EVMBalanceSlotDetector::new(config.clone(), &rpc));
-        let evm_allowance_slot_detector = Arc::new(EVMAllowanceSlotDetector::new(config, &rpc));
+        let evm_balance_slot_detector = Arc::new(EVMBalanceSlotDetector::new(&rpc));
+        let evm_allowance_slot_detector = Arc::new(EVMAllowanceSlotDetector::new(&rpc));
 
         Ok(Self {
             rpc_url: rpc_url.to_string(),
