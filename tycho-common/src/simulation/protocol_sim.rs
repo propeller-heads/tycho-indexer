@@ -135,21 +135,16 @@ impl Trade {
 ///
 /// * `token_in` - The token being sold (swapped into the pool)
 /// * `token_out` - The token being bought (swapped out of the pool)
-/// * `target_price` - The target marginal price as a `Price` struct representing **token_out per
-///   token_in** (token_out/token_in) net of all fees:
-///   - `numerator`: Amount of token_out (what the pool offers)
-///   - `denominator`: Amount of token_in (what the pool wants)
-///   - The pool's price will move **down** to this level as token_in is sold into it
-/// * `tolerance` - The tolerance percentage for the resulting trade price. The condition that must
-///   be satisfied for any resulting Trade is: `(1 - tolerance) * target_price <= result marginal
-///   price <= target_price`. This keeps `target_price` as a hard upper limit. If this condition is
-///   not met, an error is thrown.
+/// * `target_price` - The marginal price we want the pool to be after the trade, as a [Price]
+///    struct. The pool's price will move down to this level as token_in is sold into it
+/// * `tolerance` - The tolerance percentage for the resulting trade price. After trading, the pool's
+///    price will decrease to the interval `[target_price, target_price * (1 + tolerance)]`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SwapToPriceParams {
     token_in: Token,
     token_out: Token,
     target_price: Price,
-    tolerance: Option<f64>,
+    tolerance: f64,
 }
 
 impl SwapToPriceParams {
@@ -157,7 +152,7 @@ impl SwapToPriceParams {
         token_in: Token,
         token_out: Token,
         target_price: Price,
-        tolerance: Option<f64>,
+        tolerance: f64,
     ) -> Self {
         Self { token_in, token_out, target_price, tolerance }
     }
@@ -177,8 +172,8 @@ impl SwapToPriceParams {
         &self.target_price
     }
 
-    /// Returns a reference to the tolerance
-    pub fn tolerance(&self) -> Option<f64> {
+    /// Returns the tolerance
+    pub fn tolerance(&self) -> f64 {
         self.tolerance
     }
 }
@@ -189,31 +184,27 @@ impl SwapToPriceParams {
 ///
 /// * `token_in` - The token being sold (swapped into the pool)
 /// * `token_out` - The token being bought (swapped out of the pool)
-/// * `trade_price_limit` - The trade price limit as a `Price` struct representing **token_out per
-///   token_in** (token_out/token_in) net of all fees:
-///   - `numerator`: Amount of token_out (what the pool offers)
-///   - `denominator`: Amount of token_in (what the pool wants)
-///   - The trade price will be at or above this level
-/// * `tolerance` - The tolerance for early stopping in iterative algorithms. The condition that
-///   must be satisfied for any result is: `result trade price <= target trade price`.The tolerance
-///   parameter can be used for early stopping of iterative algorithms when the result is within the
-///   tolerance of the target.
+/// * `trade_limit_price` - The minimum acceptable price for the resulting trade, as a [Price] struct.
+///   The resulting amount_out / amount_in must be >= trade_limit_price
+/// * `tolerance` - The tolerance as a percentage to be applied on top of (increasing) the trade
+///   limit price. This is used to loosen the acceptance criteria for implementations of this method,
+///   but will never allow violating the trade limit price itself.
 #[derive(Debug, Clone, PartialEq)]
 pub struct QuerySupplyParams {
     token_in: Token,
     token_out: Token,
-    trade_price_limit: Price,
-    tolerance: Option<f64>,
+    trade_limit_price: Price,
+    tolerance: f64,
 }
 
 impl QuerySupplyParams {
     pub fn new(
         token_in: Token,
         token_out: Token,
-        trade_price_limit: Price,
-        tolerance: Option<f64>,
+        trade_limit_price: Price,
+        tolerance: f64,
     ) -> Self {
-        Self { token_in, token_out, trade_price_limit, tolerance }
+        Self { token_in, token_out, trade_limit_price, tolerance }
     }
 
     /// Returns a reference to the input token (token being sold into the pool)
@@ -227,12 +218,12 @@ impl QuerySupplyParams {
     }
 
     /// Returns a reference to the trade price limit
-    pub fn trade_price_limit(&self) -> &Price {
-        &self.trade_price_limit
+    pub fn trade_limit_price(&self) -> &Price {
+        &self.trade_limit_price
     }
 
-    /// Returns a reference to the tolerance
-    pub fn tolerance(&self) -> Option<f64> {
+    /// Returns the tolerance
+    pub fn tolerance(&self) -> f64 {
         self.tolerance
     }
 }
