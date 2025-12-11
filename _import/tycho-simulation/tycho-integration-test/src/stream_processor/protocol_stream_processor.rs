@@ -165,7 +165,12 @@ impl ProtocolStreamProcessor {
                 "aerodrome_slipstreams".to_string(),
             ],
             Chain::Unichain => {
-                vec!["uniswap_v2".to_string(), "uniswap_v3".to_string(), "uniswap_v4".to_string()]
+                vec![
+                    "uniswap_v2".to_string(),
+                    "uniswap_v3".to_string(),
+                    "uniswap_v4".to_string(),
+                    "uniswap_v4_hooks".to_string(),
+                ]
             }
             _ => vec![],
         }
