@@ -67,6 +67,29 @@ impl fmt::Display for GetAmountOutResult {
 /// decimal precisions of the numerator and denominator tokens. This allows for:
 /// - Exact price representation without floating-point errors
 /// - Handling tokens with different decimal places without loss of precision
+///
+/// # Example
+/// If we want to represent that token A is worth 2.5 units of token B:
+///
+/// ```
+/// use num_bigint::BigUint;
+/// use tycho_common::simulation::protocol_sim::Price;
+///
+/// let numerator = BigUint::from(25u32); // Represents 25 units of token B
+/// let denominator = BigUint::from(10u32); // Represents 10 units of token A
+/// let price = Price::new(numerator, denominator);
+/// ```
+///
+/// If you want to define a limit price for a trade, where you expect to get at least 120 T1 for
+/// 50 T2:
+/// ```
+/// use num_bigint::BigUint;
+/// use tycho_common::simulation::protocol_sim::Price;
+///
+/// let min_amount_out = BigUint::from(120u32); // The minimum amount of T1 you expect
+/// let amount_in = BigUint::from(50u32); // The amount of T2 you are selling
+/// let limit_price = Price::new(min_amount_out, amount_in);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Price {
     pub numerator: BigUint,
