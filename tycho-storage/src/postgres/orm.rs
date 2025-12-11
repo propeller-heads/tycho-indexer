@@ -2242,5 +2242,13 @@ mod tests {
                 "NewProtocolComponent: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
             );
         }
+        const {
+            assert!(
+                NewEntryPointTracingResult::MAX_BATCH_SIZE *
+                    NewEntryPointTracingResult::FIELD_COUNT <=
+                    32767,
+                "NewEntryPointTracingResult: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
     }
 }
