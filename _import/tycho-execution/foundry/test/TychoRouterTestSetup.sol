@@ -194,7 +194,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         erc4626Executor = new ERC4626Executor(PERMIT2_ADDRESS);
         lidoExecutor = new LidoExecutor(steth, wsteth, PERMIT2_ADDRESS);
 
-        address[] memory executors = new address[](15);
+        address[] memory executors = new address[](16);
         executors[0] = address(usv2Executor);
         executors[1] = address(usv3Executor);
         executors[2] = address(pancakev3Executor);
@@ -210,6 +210,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         executors[12] = address(slipstreamsExecutor);
         executors[13] = address(rocketpoolExecutor);
         executors[14] = address(erc4626Executor);
+        executors[15] = address(lidoExecutor);
 
         return executors;
     }
