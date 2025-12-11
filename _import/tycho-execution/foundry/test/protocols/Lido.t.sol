@@ -21,7 +21,8 @@ contract LidoExecutorExposed is LidoExecutor {
             address receiver,
             TransferType transferType,
             LidoPoolType pool,
-            LidoPoolDirection direction
+            LidoPoolDirection direction,
+            bool approvalNeeded
         )
     {
         return _decodeData(data);
@@ -48,14 +49,16 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
             BOB,
             RestrictTransferFrom.TransferType.None,
             LidoPoolType.stETH,
-            LidoPoolDirection.Stake
+            LidoPoolDirection.Stake,
+            false
         );
 
         (
             address receiver,
             RestrictTransferFrom.TransferType transferType,
             LidoPoolType pool,
-            LidoPoolDirection direction
+            LidoPoolDirection direction,
+            bool approvalNeeded
         ) = LidoExposed.decodeParams(params);
 
         assertEq(receiver, BOB);
@@ -86,7 +89,8 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
             BOB,
             RestrictTransferFrom.TransferType.None,
             LidoPoolType.stETH,
-            LidoPoolDirection.Stake
+            LidoPoolDirection.Stake,
+            false
         );
 
         deal(BOB, amountIn);
@@ -114,7 +118,8 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
             BOB,
             RestrictTransferFrom.TransferType.None,
             LidoPoolType.wstETH,
-            LidoPoolDirection.Wrap
+            LidoPoolDirection.Wrap,
+            true
         );
 
         IERC20(STETH_ADDR).approve(WSTETH_ADDR, amountIn);
@@ -139,7 +144,8 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
             BOB,
             RestrictTransferFrom.TransferType.None,
             LidoPoolType.wstETH,
-            LidoPoolDirection.Unwrap
+            LidoPoolDirection.Unwrap,
+            false
         );
         vm.startPrank(address(LidoExposed));
         uint256 amountOut = LidoExposed.swap(amountIn, protocolData);

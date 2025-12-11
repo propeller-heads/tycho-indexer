@@ -63,8 +63,11 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
         TransferType transferType;
         LidoPoolType pool;
         LidoPoolDirection direction;
+        bool approvalNeeded;
 
-        (receiver, transferType, pool, direction) = _decodeData(data);
+        (receiver, transferType, pool, direction, approvalNeeded) = _decodeData(
+            data
+        );
 
         if (pool == LidoPoolType.stETH && direction == LidoPoolDirection.Stake)
         {
@@ -133,10 +136,11 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
             address receiver,
             TransferType transferType,
             LidoPoolType pool,
-            LidoPoolDirection direction
+            LidoPoolDirection direction,
+            bool approvalNeeded
         )
     {
-        if (data.length != 23) {
+        if (data.length != 24) {
             // TODO: double check the length
             revert LidoExecutor__InvalidDataLength();
         }
@@ -145,5 +149,6 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
         transferType = TransferType(uint8(data[20]));
         pool = LidoPoolType(uint8(data[21]));
         direction = LidoPoolDirection(uint8(data[22]));
+        approvalNeeded = data[23] != 0;
     }
 }

@@ -1411,10 +1411,10 @@ impl SwapEncoder for LidoSwapEncoder {
         swap: &Swap,
         encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
-        let (pool, direction) = if swap.token_in == self.eth_address &&
+        let (pool, direction, approval_needed) = if swap.token_in == self.eth_address &&
             swap.token_out == self.st_eth_address
         {
-            (LidoPool::StETH, LidoPoolDirection::Stake)
+            (LidoPool::StETH, LidoPoolDirection::Stake, false)
         } else if swap.token_in == self.st_eth_address && swap.token_out == self.wst_eth_address {
             let token_approvals_manager = ProtocolApprovalsManager::new()?;
             let token = bytes_to_address(&self.st_eth_address)?;
@@ -1429,9 +1429,9 @@ impl SwapEncoder for LidoSwapEncoder {
                 )?;
             }
 
-            (LidoPool::WStETH, LidoPoolDirection::Wrap)
+            (LidoPool::WStETH, LidoPoolDirection::Wrap, approval_needed)
         } else if swap.token_in == self.wst_eth_address && swap.token_out == self.st_eth_address {
-            (LidoPool::WStETH, LidoPoolDirection::Unwrap)
+            (LidoPool::WStETH, LidoPoolDirection::Unwrap, false)
         } else {
             return Err(EncodingError::InvalidInput("Combination not allowed".to_owned()))
         };
@@ -1443,6 +1443,7 @@ impl SwapEncoder for LidoSwapEncoder {
             (encoding_context.transfer_type as u8).to_be_bytes(),
             (pool as u8).to_be_bytes(),
             (direction as u8).to_be_bytes(),
+            approval_needed,
         );
 
         Ok(args.abi_encode_packed())
