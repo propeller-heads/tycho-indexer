@@ -24,7 +24,7 @@ use backoff::backoff::Backoff;
 use futures::future::join_all;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use tracing::{debug, info, trace};
+use tracing::{debug, info, instrument, trace};
 use tycho_common::Bytes;
 
 use crate::{RPCError, RequestError};
@@ -102,6 +102,7 @@ impl EthereumRpcClient {
         self
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub async fn get_block_number(&self) -> Result<u64, RPCError> {
         let block_number = self
             .retry_policy
@@ -122,6 +123,7 @@ impl EthereumRpcClient {
         }
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub(crate) async fn eth_get_block_by_number(
         &self,
         block_id: BlockId,
@@ -145,6 +147,7 @@ impl EthereumRpcClient {
         ))))
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub(crate) async fn eth_get_balance(
         &self,
         block_id: BlockNumberOrTag,
@@ -165,6 +168,7 @@ impl EthereumRpcClient {
             })
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub(crate) async fn eth_get_code(
         &self,
         block_id: BlockNumberOrTag,
@@ -185,6 +189,7 @@ impl EthereumRpcClient {
             })
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub(crate) async fn debug_storage_range_at(
         &self,
         block_hash: B256,
@@ -238,6 +243,7 @@ impl EthereumRpcClient {
         Ok(wrapper.into())
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub(crate) async fn get_storage_range(
         &self,
         address: Address,
@@ -286,6 +292,7 @@ impl EthereumRpcClient {
         .collect())
     }
 
+    #[instrument(level = "debug", skip(self, addresses))]
     pub(crate) async fn fetch_accounts_code_and_balance(
         &self,
         block_id: BlockNumberOrTag,
@@ -389,6 +396,7 @@ impl EthereumRpcClient {
         Ok(result)
     }
 
+    #[instrument(level = "debug", skip(self, slots))]
     pub(crate) async fn get_selected_storage(
         &self,
         block_id: BlockNumberOrTag,
@@ -511,6 +519,7 @@ impl EthereumRpcClient {
     /// another. See https://openethereum.github.io/JSONRPC-trace-module#trace_callmany
     ///
     /// Returns error if communication with the node failed.
+    #[instrument(level = "debug", skip(self, requests))]
     pub(crate) async fn trace_call_many(
         &self,
         requests: Vec<TransactionRequest>,
@@ -537,6 +546,7 @@ impl EthereumRpcClient {
     /// See https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_call
     ///
     /// Returns the output data from the call or an error if the call failed.
+    #[instrument(level = "debug", skip(self, request))]
     pub(crate) async fn eth_call(
         &self,
         request: TransactionRequest,
@@ -557,6 +567,7 @@ impl EthereumRpcClient {
             })
     }
 
+    #[instrument(level = "debug", skip(self, access_list_params, trace_call_params))]
     pub(crate) async fn trace_and_access_list(
         &self,
         target: &Address,
@@ -632,6 +643,7 @@ impl EthereumRpcClient {
         })
     }
 
+    #[instrument(level = "debug", skip(self, requests, calldata))]
     pub(crate) async fn slot_detector_trace(
         &self,
         requests: Vec<SlotDetectorValueRequest>,
@@ -728,6 +740,7 @@ impl EthereumRpcClient {
 
     /// Performs slot detector tests using eth_call with state diffs.
     /// This method returns a vector of Results for each individual test request.
+    #[instrument(level = "debug", skip(self, requests, calldata))]
     pub(crate) async fn slot_detector_tests(
         &self,
         requests: &[SlotDetectorSlotTestRequest],
