@@ -46,7 +46,7 @@ pub struct ServicesBuilder<G> {
     api_key: String,
     extractor_handles: ws::MessageSenderMap,
     db_gateway: G,
-    rpc_config: RpcConfig,
+    rpc_config: ServerRpcConfig,
 }
 
 impl<G> ServicesBuilder<G>
@@ -62,7 +62,7 @@ where
             api_key,
             extractor_handles: HashMap::new(),
             db_gateway,
-            rpc_config: RpcConfig::new(),
+            rpc_config: ServerRpcConfig::new(),
         }
     }
 
@@ -94,7 +94,7 @@ where
         self
     }
 
-    pub fn rpc_config(mut self, v: RpcConfig) -> Self {
+    pub fn server_rpc_config(mut self, v: ServerRpcConfig) -> Self {
         self.rpc_config = v;
         self
     }
@@ -272,7 +272,7 @@ where
 /// Configuration for RPC filtering thresholds to prevent overly broad queries
 /// that could cause excessive database load.
 #[derive(Default, Debug, Clone)]
-pub struct RpcConfig {
+pub struct ServerRpcConfig {
     /// Minimum TVL threshold for filtering protocol components.
     /// When set, clients must provide a `tvl_gt` parameter at least this high,
     /// unless querying specific `component_ids`.
@@ -283,7 +283,7 @@ pub struct RpcConfig {
     min_token_quality: Option<i32>,
 }
 
-impl RpcConfig {
+impl ServerRpcConfig {
     pub fn new() -> Self {
         Self { min_component_tvl: None, min_token_quality: None }
     }

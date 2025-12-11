@@ -9,7 +9,7 @@ use metrics::{counter, histogram};
 use tracing::instrument;
 use tycho_common::dto::{self, PaginationLimits};
 
-use crate::services::{rpc::RpcError, RpcConfig};
+use crate::services::{rpc::RpcError, ServerRpcConfig};
 
 /// Middleware to record metrics for RPC requests.
 #[instrument(skip_all, fields(user_identity))]
@@ -126,7 +126,7 @@ pub trait ValidateFilter {
     ///
     /// # Errors
     /// Returns `RpcError::MinimumFilterNotMet` if the request doesn't meet filtering requirements.
-    fn validate_filter(&self, config: &RpcConfig) -> Result<(), RpcError>;
+    fn validate_filter(&self, config: &ServerRpcConfig) -> Result<(), RpcError>;
 }
 
 /// Validation implementation for protocol components requests.
@@ -135,7 +135,7 @@ pub trait ValidateFilter {
 /// - Provide specific `component_ids`, OR
 /// - Include a `tvl_gt` parameter that meets or exceeds the minimum threshold
 impl ValidateFilter for dto::ProtocolComponentsRequestBody {
-    fn validate_filter(&self, config: &RpcConfig) -> Result<(), RpcError> {
+    fn validate_filter(&self, config: &ServerRpcConfig) -> Result<(), RpcError> {
         // Allow requests with specific component IDs (targeted queries don't cause broad scans)
         if self.component_ids.is_some() {
             return Ok(());
@@ -170,7 +170,7 @@ impl ValidateFilter for dto::ProtocolComponentsRequestBody {
 /// - Provide specific `token_addresses`, OR
 /// - Include a `min_quality` parameter that meets or exceeds the minimum threshold
 impl ValidateFilter for dto::TokensRequestBody {
-    fn validate_filter(&self, config: &RpcConfig) -> Result<(), RpcError> {
+    fn validate_filter(&self, config: &ServerRpcConfig) -> Result<(), RpcError> {
         // Allow requests with specific token addresses (targeted queries don't cause broad scans)
         if self.token_addresses.is_some() {
             return Ok(());
@@ -541,31 +541,43 @@ mod tests {
     #[case::rejects_none_when_min_tvl_set(
         Some(1000.0),
         None,
-        false,
+        None,
         Some("tvl_gt parameter is required")
     )]
     #[case::rejects_below_threshold(
         Some(1000.0),
         Some(500.0),
-        false,
+        None,
         Some("tvl_gt must be at least")
     )]
-    #[case::accepts_equal_threshold(Some(1000.0), Some(1000.0), true, None)]
-    #[case::accepts_above_threshold(Some(1000.0), Some(5000.0), true, None)]
-    #[case::accepts_none_when_no_min_tvl(None, None, true, None)]
-    #[case::accepts_any_value_when_no_min_tvl(None, Some(100.0), true, None)]
+    #[case::accepts_equal_threshold(Some(1000.0), Some(1000.0), None, None)]
+    #[case::accepts_above_threshold(Some(1000.0), Some(5000.0), None, None)]
+    #[case::accepts_none_when_no_min_tvl(None, None, None, None)]
+    #[case::accepts_any_value_when_no_min_tvl(None, Some(100.0), None, None)]
+    #[case::accepts_specific_component_ids_without_tvl(
+        Some(1000.0),
+        None,
+        Some(vec!["component1".to_string()]),
+        None
+    )]
+    #[case::accepts_specific_component_ids_with_low_tvl(
+        Some(1000.0),
+        Some(100.0),
+        Some(vec!["component1".to_string(), "component2".to_string()]),
+        None
+    )]
     #[tokio::test]
     async fn test_min_tvl_validation(
         #[case] min_tvl: Option<f64>,
         #[case] request_tvl_gt: Option<f64>,
-        #[case] should_succeed: bool,
+        #[case] component_ids: Option<Vec<String>>,
         #[case] error_message_contains: Option<&str>,
     ) {
-        let config = RpcConfig::new().with_min_tvl(min_tvl);
+        let config = ServerRpcConfig::new().with_min_tvl(min_tvl);
 
         let request = dto::ProtocolComponentsRequestBody {
             protocol_system: "ambient".to_string(),
-            component_ids: None,
+            component_ids,
             tvl_gt: request_tvl_gt,
             chain: dto::Chain::Ethereum,
             pagination: dto::PaginationParams::new(0, 10),
@@ -574,7 +586,7 @@ mod tests {
         // Test validation trait method directly (called at endpoint level before cache lookup)
         let result = request.validate_filter(&config);
 
-        if should_succeed {
+        if error_message_contains.is_none() {
             assert!(result.is_ok(), "Expected success but got error: {:?}", result);
         } else {
             assert!(result.is_err(), "Expected error but got success");
@@ -596,25 +608,22 @@ mod tests {
         Some(50),
         None,
         None,
-        false,
         Some("min_quality parameter is required")
     )]
     #[case::rejects_below_threshold(
         Some(50),
         Some(30),
         None,
-        false,
         Some("min_quality must be at least")
     )]
-    #[case::accepts_equal_threshold(Some(50), Some(50), None, true, None)]
-    #[case::accepts_above_threshold(Some(50), Some(80), None, true, None)]
-    #[case::accepts_none_when_no_min_quality(None, None, None, true, None)]
-    #[case::accepts_any_value_when_no_min_quality(None, Some(10), None, true, None)]
+    #[case::accepts_equal_threshold(Some(50), Some(50), None, None)]
+    #[case::accepts_above_threshold(Some(50), Some(80), None, None)]
+    #[case::accepts_none_when_no_min_quality(None, None, None, None)]
+    #[case::accepts_any_value_when_no_min_quality(None, Some(10), None, None)]
     #[case::accepts_specific_addresses_without_quality(
         Some(50),
         None,
         Some(vec![Bytes::from("0x0123")]),
-        true,
         None
     )]
     #[tokio::test]
@@ -622,10 +631,9 @@ mod tests {
         #[case] min_token_quality: Option<i32>,
         #[case] request_min_quality: Option<i32>,
         #[case] token_addresses: Option<Vec<Bytes>>,
-        #[case] should_succeed: bool,
         #[case] error_message_contains: Option<&str>,
     ) {
-        let config = RpcConfig::new().with_min_quality(min_token_quality);
+        let config = ServerRpcConfig::new().with_min_quality(min_token_quality);
 
         let request = dto::TokensRequestBody {
             chain: dto::Chain::Ethereum,
@@ -638,7 +646,7 @@ mod tests {
         // Test validation trait method directly (called at endpoint level before cache lookup)
         let result = request.validate_filter(&config);
 
-        if should_succeed {
+        if error_message_contains.is_none() {
             assert!(result.is_ok(), "Expected success but got error: {:?}", result);
         } else {
             assert!(result.is_err(), "Expected error but got success");

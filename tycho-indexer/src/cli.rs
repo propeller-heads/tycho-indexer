@@ -2,7 +2,7 @@ use clap::{Args, Parser, Subcommand};
 use tycho_common::{models::Chain, Bytes};
 use tycho_ethereum::rpc::{config::RPCRetryConfig, EthereumRpcClient};
 
-use crate::{extractor::ExtractionError, services::RpcConfig};
+use crate::{extractor::ExtractionError, services::ServerRpcConfig};
 
 /// Tycho Indexer using Substreams
 ///
@@ -119,7 +119,7 @@ pub struct ServerArgs {
     pub min_token_quality: Option<i32>,
 }
 
-impl From<ServerArgs> for RpcConfig {
+impl From<ServerArgs> for ServerRpcConfig {
     fn from(args: ServerArgs) -> Self {
         Self::new()
             .with_min_tvl(args.min_tvl)

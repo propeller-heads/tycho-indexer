@@ -342,7 +342,7 @@ async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
             .prefix(&global_args.server_version_prefix)
             .bind(&global_args.server_ip)
             .port(global_args.server_port)
-            .rpc_config(global_args.server.into())
+            .server_rpc_config(global_args.server.into())
             .run()?;
     info!(server_url, "Http and Ws server started");
     let shutdown_task = tokio::spawn(shutdown_handler(server_handle, vec![], None));
@@ -404,7 +404,7 @@ async fn create_indexing_tasks(
             .prefix(&global_args.server_version_prefix)
             .bind(&global_args.server_ip)
             .port(global_args.server_port)
-            .rpc_config(global_args.server.clone().into())
+            .server_rpc_config(global_args.server.clone().into())
             .register_extractors(extractor_handles.clone())
             .run()?;
     info!(server_url, "Http and Ws server started");
