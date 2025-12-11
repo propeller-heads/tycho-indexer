@@ -363,8 +363,8 @@ impl EthereumRpcClient {
 
             // perf: current retry logic retries the entire batch on any retriable failure. Instead:
             // 1. Only retry failed requests, not successful ones
-            // 2. Fail fast if any request has a non-retryable error (currently we only check
-            //    the first error encountered, potentially missing fatal errors in other requests)
+            // 2. Fail fast if any request has a non-retryable error (currently we only check the
+            //    first error encountered, potentially missing fatal errors in other requests)
             let chunk_results = self.retry_policy.retry_request(batch_call).await
             .map_err(|e| {
                     let printable_addresses = chunk_addresses
@@ -475,8 +475,8 @@ impl EthereumRpcClient {
 
             // perf: current retry logic retries the entire batch on any retriable failure. Instead:
             // 1. Only retry failed requests, not successful ones
-            // 2. Fail fast if any request has a non-retryable error (currently we only check
-            //    the first error encountered, potentially missing fatal errors in other requests)
+            // 2. Fail fast if any request has a non-retryable error (currently we only check the
+            //    first error encountered, potentially missing fatal errors in other requests)
             let chunk_res = self
                 .retry_policy
                 .retry_request(batch_call)
@@ -705,8 +705,8 @@ impl EthereumRpcClient {
 
             // perf: current retry logic retries the entire batch on any retriable failure. Instead:
             // 1. Only retry failed requests, not successful ones
-            // 2. Fail fast if any request has a non-retryable error (currently we only check
-            //    the first error encountered, potentially missing fatal errors in other requests)
+            // 2. Fail fast if any request has a non-retryable error (currently we only check the
+            //    first error encountered, potentially missing fatal errors in other requests)
             let chunk_results = self
                 .retry_policy
                 .retry_request(|| async { batch_call().await })
