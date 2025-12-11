@@ -1,3 +1,17 @@
+## [0.120.0](https://github.com/propeller-heads/tycho-indexer/compare/0.119.2...0.120.0) (2025-12-11)
+
+
+### Features
+
+* improvements for DCI on fast chains ([#802](https://github.com/propeller-heads/tycho-indexer/issues/802)) ([9835efb](https://github.com/propeller-heads/tycho-indexer/commit/9835efbaf4429a0d4139188cb201ad878bf7c8dc))
+* **tycho-client:** extend dci support to non-ethereum chains ([424977c](https://github.com/propeller-heads/tycho-indexer/commit/424977c71ccaa09a47b399e3d570f20bd70fc836))
+
+
+### Bug Fixes
+
+* **dci:** handle native token balances overwrites if native token is a pool token ([7d92dd6](https://github.com/propeller-heads/tycho-indexer/commit/7d92dd6c879689af3aa0b78dfae462e178bc8d41))
+* **storage:** chunk trace result inserts to avoid exceeding PostgreSQL param limit ([bd13042](https://github.com/propeller-heads/tycho-indexer/commit/bd130424b140c0bbc5473468cd264dab413716e2))
+
 ## [0.119.2](https://github.com/propeller-heads/tycho-indexer/compare/0.119.1...0.119.2) (2025-12-08)
 
 
