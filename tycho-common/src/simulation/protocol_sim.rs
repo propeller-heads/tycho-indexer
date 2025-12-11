@@ -340,34 +340,20 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     /// * `Err(SimulationError)` - If:
     ///   - The calculation encounters numerical issues (overflow, division by zero, etc.)
     ///   - The method is not implemented for this protocol
-    ///   - The tolerance condition is not met (i.e., the resulting marginal price does not satisfy
-    ///     `(1
-    ///     - tolerance) * target_price <= result marginal price <= target_price`)
+    ///   - The pool cannot be decreased to the target price within the specified tolerance
     ///
     /// # Edge Cases and Limitations
     ///
-    /// ## Exact Price Achievement
+    /// Computing the exact amount to move a pool's marginal price to a target has several challenges:
+    /// - The definition of marginal price varies between protocols. It is usually not an attribute
+    /// of the pool but a consequence of its liquidity distribution and current state.
+    /// - For protocols with concentrated liquidity, the marginal price is discrete, meaning we can't
+    /// always find an exact trade amount to reach the target price.
+    /// - Not all protocols support analytical solutions for this problem, requiring numerical
+    /// methods.
     ///
-    /// It is almost never possible to achieve the target price exactly, only within some
-    /// margin of tolerance. This is due to:
-    /// - **Discrete liquidity**: For concentrated liquidity protocols (e.g., Uniswap V3), liquidity
-    ///   is distributed across discrete price ticks, making exact price targeting impossible. The
-    ///   closest achievable trade with target price as lower limit will be returned.
-    /// - **Numerical precision**: Integer arithmetic and rounding may prevent exact price matching.
-    ///   In case of overflow an error will be returned.
-    /// - **Protocol constraints**: Some protocols have minimum trade sizes or other constraints
-    ///
-    /// ## Tolerance Validation
-    ///
-    /// The resulting marginal price must satisfy: `(1 - tolerance) * target_price <= result
-    /// marginal price <= target_price`. If this condition is not met, implementations return an
-    /// error. This ensures that `target_price` remains a hard upper limit that is never
-    /// exceeded.
-    ///
-    /// ## Unreachable Prices
-    ///
-    /// If the target price is already below the current marginal price (i.e., the price would
-    /// need to move in the wrong direction), implementations return an error.
+    /// To accomodate these limitations, we add a tolerance parameter for the resulting price. See
+    /// [SwapToPriceParams] for details.
     #[allow(unused)]
     fn swap_to_price(&self, params: &SwapToPriceParams) -> Result<Trade, SimulationError> {
         Err(SimulationError::FatalError("swap_to_price not implemented".into()))
