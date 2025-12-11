@@ -113,19 +113,20 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     /// where a single fee value cannot represent the protocol's fee structure.
     fn fee(&self) -> f64;
 
-    /// Returns the amount of the quote token required to buy one unit of base token,
-    /// accounting for protocol fees.
+    /// Returns the protocol's current spot price of two tokens.
+    ///
+    /// Current spot price is defined as the amount of the quote token required to buy one unit of
+    /// the base token, accounting for protocol fees.
     ///
     /// E.g. if BTC/USDT is trading at 1000 with a 20% fee, you would need 1,250 USDT (1000 / 0.8)
-    /// to buy 1 BTC (base currency) as you will be deducted 20% of your quote token when buying.
-    /// Hence, the spot price returned would be 1250 USDT per BTC.
+    /// to buy 1 BTC (base currency).
     ///
     /// # Arguments
     ///
-    /// * `base` - Base Token: refers to the token being priced in a pair. For the symbol BTC/USDT,
-    ///   BTC would be the base token.
-    /// * `quote` - Quote Token: refers to the token used to price the base token. For the symbol
-    ///   BTC/USDT, USDT would be the quote asset.
+    /// * `base` - the token being priced in a pair. For the symbol BTC/USDT, BTC would be the base
+    ///   token.
+    /// * `quote` - the token used to price the base token. For the symbol BTC/USDT, USDT would be
+    ///   the quote token.
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError>;
 
     /// Returns the amount out given an amount in and input/output tokens.
