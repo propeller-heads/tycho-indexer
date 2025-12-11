@@ -3158,7 +3158,6 @@ mod tests {
                     "00",
                 ))
             );
-            write_calldata_to_file("test_encode_lido", hex_swap.as_str());
         }
 
         #[test]
@@ -3204,7 +3203,6 @@ mod tests {
                     "01",
                 ))
             );
-            write_calldata_to_file("test_encode_lido", hex_swap.as_str());
         }
 
         #[test]
