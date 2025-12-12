@@ -3206,6 +3206,8 @@ mod tests {
                     "01",
                     // direction
                     "01",
+                    // approval_needed
+                    "01",
                 ))
             );
         }
@@ -3251,6 +3253,8 @@ mod tests {
                     "01",
                     // direction
                     "02",
+                    // approval_needed
+                    "00",
                 ))
             );
             write_calldata_to_file("test_encode_lido", hex_swap.as_str());
