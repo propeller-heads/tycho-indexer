@@ -47,9 +47,8 @@ use crate::evm::protocol::{
 const SWAP_BASE_GAS: u64 = 130_000;
 // This gas is estimated from _nextInitializedTickWithinOneWord calls on Tenderly
 const GAS_PER_TICK: u64 = 2_500;
-// Conservative max gas budget for a single swap (about 1/3 of block limit)
-const MAX_SWAP_GAS: u64 = 15_000_000;
-// Maximum number of ticks that can be crossed within the gas budget
+// Conservative max gas budget for a single swap (Ethereum transaction gas limit)
+const MAX_SWAP_GAS: u64 = 16_700_000;
 const MAX_TICKS_CROSSED: u64 = (MAX_SWAP_GAS - SWAP_BASE_GAS) / GAS_PER_TICK;
 
 #[derive(Clone)]
@@ -690,7 +689,6 @@ impl ProtocolSim for UniswapV4State {
             .next_initialized_tick_within_one_word(current_tick, zero_for_one)
         {
             // Cap iteration to prevent exceeding Ethereum's gas limit
-            // This is a "soft limit" similar to UniswapV2's price impact cap
             if ticks_crossed >= MAX_TICKS_CROSSED {
                 break;
             }
