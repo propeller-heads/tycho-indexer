@@ -32,6 +32,15 @@ use crate::evm::protocol::{
     },
 };
 
+// Gas limit constants for capping get_limits calculations
+// These prevent simulations from exceeding Ethereum's block gas limit
+const SWAP_BASE_GAS: u64 = 130_000;
+// This gas is estimated from _nextInitializedTickWithinOneWord calls on Tenderly
+const GAS_PER_TICK: u64 = 2_500;
+// Conservative max gas budget for a single swap (Ethereum transaction gas limit)
+const MAX_SWAP_GAS: u64 = 16_700_000;
+const MAX_TICKS_CROSSED: u64 = (MAX_SWAP_GAS - SWAP_BASE_GAS) / GAS_PER_TICK;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UniswapV3State {
     liquidity: u128,
@@ -289,13 +298,20 @@ impl ProtocolSim for UniswapV3State {
         let mut current_liquidity = self.liquidity;
         let mut total_amount_in = U256::from(0u64);
         let mut total_amount_out = U256::from(0u64);
+        let mut ticks_crossed: u64 = 0;
 
-        // Iterate through all ticks in the direction of the swap
-        // Continues until there is no more liquidity in the pool or no more ticks to process
+        // Iterate through ticks in the direction of the swap
+        // Stops when: no more liquidity, no more ticks, or gas limit would be exceeded
         while let Ok((tick, initialized)) = self
             .ticks
             .next_initialized_tick_within_one_word(current_tick, zero_for_one)
         {
+            // Cap iteration to prevent exceeding Ethereum's gas limit
+            if ticks_crossed >= MAX_TICKS_CROSSED {
+                break;
+            }
+            ticks_crossed += 1;
+
             // Clamp the tick value to ensure it's within valid range
             let next_tick = tick.clamp(MIN_TICK, MAX_TICK);
 
