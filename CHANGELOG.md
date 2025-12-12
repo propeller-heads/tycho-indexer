@@ -1,3 +1,11 @@
+## [0.121.2](https://github.com/propeller-heads/tycho-indexer/compare/0.121.1...0.121.2) (2025-12-12)
+
+
+### Bug Fixes
+
+* normalise balance overrides (remove leading zeros) ([4ff652b](https://github.com/propeller-heads/tycho-indexer/commit/4ff652b0a6aab9bb290a998140d61581174a85b6))
+* normalise balance overrides (remove leading zeros) ([#806](https://github.com/propeller-heads/tycho-indexer/issues/806)) ([6b7a6f9](https://github.com/propeller-heads/tycho-indexer/commit/6b7a6f99b0752e4ca16a31d917a353d731592079))
+
 ## [0.121.1](https://github.com/propeller-heads/tycho-indexer/compare/0.121.0...0.121.1) (2025-12-12)
 
 
