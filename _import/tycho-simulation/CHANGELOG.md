@@ -1,3 +1,15 @@
+## [0.217.0](https://github.com/propeller-heads/tycho-simulation/compare/0.216.0...0.217.0) (2025-12-12)
+
+
+### Features
+
+* Cap UniswapV3/V4 limits based on block gas limit ([053bf94](https://github.com/propeller-heads/tycho-simulation/commit/053bf94b121f51c7f271a796b7583c993a455834))
+
+
+### Bug Fixes
+
+* Set MAX_SWAP_GAS to the Ethereum limit ([240c1b5](https://github.com/propeller-heads/tycho-simulation/commit/240c1b56a333aaef5de1e469129c5d7b7627f461))
+
 ## [0.216.0](https://github.com/propeller-heads/tycho-simulation/compare/0.215.1...0.216.0) (2025-12-12)
 
 
