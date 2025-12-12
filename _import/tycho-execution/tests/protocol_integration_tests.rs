@@ -1724,7 +1724,7 @@ fn test_single_encoding_strategy_lido_grouped_swap() {
         &solution,
         &UserTransferType::TransferFrom,
         &eth,
-        Some(get_signer()),
+        None,
     )
     .unwrap()
     .data;
