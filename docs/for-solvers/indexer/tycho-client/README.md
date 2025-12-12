@@ -30,7 +30,7 @@ We welcome community contributions to expand language support. See our contribut
 
 ## Authentication
 
-Currently, interacting with the hosted Tycho Indexer doesn't require a personalized API Key; you can use the key `sampletoken`. For broader rate-limiting, priority support, and access to new products, please contact `@tanay_j` on Telegram.
+Currently, interacting with the hosted Tycho Indexer requires a personalized API Key. Please contact `@tanay_j` on Telegram to get your API key.
 
 ***
 
@@ -49,7 +49,7 @@ You can request individual pools or use a minimum TVL threshold to filter the co
 **TVL Filtering:**
 
 {% hint style="info" %}
-Tycho indexes all the components in a Protocol. TVL filtering is highly encouraged to speed up data transfer and processing times by reducing the number of returned components.&#x20;
+Tycho indexes all the components in a Protocol. TVL filtering is highly encouraged to speed up data transfer and processing times by reducing the number of returned components.
 {% endhint %}
 
 **TVL is measured in the chain's native currency (e.g., 1 00 ETH on Ethereum Mainnet).**
@@ -203,7 +203,7 @@ Tycho emits data in an easy-to-read JSON format. Get granular updates on each bl
 
 Each message includes block details to help you stay on track with the latest block data.
 
-**FeedMessage**&#x20;
+**FeedMessage**
 
 The main outer message type. It contains both the individual SynchronizerState (one per extractor) and the StateSyncMessage (also one per extractor). Each extractor is supposed to emit one message per block (even if no changes happened in that block) and metadata about the extractor's block synchronization state. The latter allows consumers to handle delayed extractors gracefully.
 
@@ -264,7 +264,4 @@ Deltas include the following few special attributes:
 * `component_tvl`: If there was a balance change in a tracked component, the new tvl for the component is emitted.
 * `account_balances`: For protocols that need the balance (both native and ERC-20) of accounts tracked for the simulation package (like BalancerV3 which needs the Vault balances), the updated balances are emitted.
 
-
-
 Note: exact byte encoding might differ depending on the protocol, but as a general guideline integers are big-endian encoded.
-

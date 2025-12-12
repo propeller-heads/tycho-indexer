@@ -48,7 +48,7 @@ async fn main() {
         TychoStreamBuilder::new("tycho-beta.propellerheads.xyz", Chain::Ethereum)
             // Set authentication key
             // In production, use environment variable: std::env::var("TYCHO_AUTH_KEY").expect("...")
-            .auth_key(Some("sampletoken".into()))
+            .auth_key(Some("your-api-key".into()))
             // Subscribe to Uniswap V2 pools with TVL above 1000 ETH and remove the ones below 900 ETH
             .exchange("uniswap_v2", ComponentFilter::with_tvl_range(900.0, 1000.0))
             // Subscribe to specific Uniswap V3 pools by their pool IDs (contract addresses)
@@ -100,4 +100,3 @@ let tokens = client
 ///  - 5: Token analysis failed on cronjob (after creation).
 ///  - 0: Failed to extract decimals onchain
 ```
-

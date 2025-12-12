@@ -77,7 +77,7 @@ export TYCHO_API_KEY=<tycho-api-key-for-chain>
 cargo run --release --example quickstart -- --sell-token "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" --buy-token "0x4200000000000000000000000000000000000006" --tvl-threshold 100 --sell-amount 10 --chain "base"
 ```
 
-This example would seek the best swap for 10 USDC -> WETH on Base.&#x20;
+This example would seek the best swap for 10 USDC -> WETH on Base.
 
 The TVL filter means we will only look for snapshot data for pools with TVL greater than the specified threshold (in ETH). Its default is **1000 ETH** to limit the data you pull.
 
@@ -104,7 +104,7 @@ The quickstart shows you how to:
 Run Tycho Indexer by setting up the following environment variables:
 
 * TYCHO\_URL (by default `"tycho-beta.propellerheads.xyz"`)
-* TYCHO\_API\_KEY key (by default, the test key is `sampletoken`)
+* TYCHO\_API\_KEY key
 * PRIVATE\_KEY if you wish to execute the swap against the Tycho Router
 
 The Indexer stream or the Simulation does not manage tokens; you manage them yourself.
@@ -165,9 +165,9 @@ After choosing the best swap, you can use Tycho Execution to encode it.
 
 #### a. Create a solution object
 
-Now you know the best protocol component (i.e., pool), you can compute a minimum amount out. And you can put the swap into the expected input format for your encoder.&#x20;
+Now you know the best protocol component (i.e., pool), you can compute a minimum amount out. And you can put the swap into the expected input format for your encoder.
 
-The minimum amount out is a very important parameter to set in Tycho Execution. The value acts as a guardrail and protects your funds during execution against MEV. This quickstart accepts a slippage of 0.25% over the simulated amount out.&#x20;
+The minimum amount out is a very important parameter to set in Tycho Execution. The value acts as a guardrail and protects your funds during execution against MEV. This quickstart accepts a slippage of 0.25% over the simulated amount out.
 
 ```rust
 let slippage = 0.0025; // 0.25% slippage
@@ -217,7 +217,7 @@ let encoded_solution = encoder
 
 ### 5. Encode full method calldata
 
-You need to build the full calldata for the router. Tycho handles the swap encoding, but you control the full input to the router method. This quickstart provides helper functions (`encode_tycho_router_call`  and `sign_permit`)
+You need to build the full calldata for the router. Tycho handles the swap encoding, but you control the full input to the router method. This quickstart provides helper functions (`encode_tycho_router_call` and `sign_permit`)
 
 Use it as follows:
 
@@ -327,8 +327,6 @@ In this quickstart, you explored how to use Tycho to:
 5. **Execute a Swap:** Execute the best trade using the Tycho Router.
 
 ### What's next?
-
-
 
 * **Integrate with your Solver**: Add Tycho pool liquidity to your solver, using this [guide](for-dexs/protocol-integration/).
 * **Learn more about** [**Tycho Execution**](for-solvers/execution/) and the datatypes necessary to encode an execution against a Tycho router or executor.

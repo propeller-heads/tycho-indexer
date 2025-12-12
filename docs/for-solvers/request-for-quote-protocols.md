@@ -11,7 +11,7 @@ Tycho supports streaming, simulating, and executing RFQ quotes as part of multi-
 
 ## Quickstart
 
-The RFQ quickstart is similar to the other protocols [quickstart](../).&#x20;
+The RFQ quickstart is similar to the other protocols [quickstart](../).
 
 See the code [here](https://github.com/propeller-heads/tycho-simulation/tree/main/examples/rfq_quickstart). As of now, [Bebop](https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/pmm-rfq-api-intro) and [Hashflow](https://docs.hashflow.com/hashflow/taker/getting-started-api-v3) are the only supported providers.
 
@@ -56,7 +56,7 @@ This example would seek the best swap for 10 USDC -> WETH on Base.
 You’ll need to configure:
 
 * Tycho URL (by default `"tycho-beta.propellerheads.xyz"`)
-* Tycho API key (by default, the test key is `sampletoken`)
+* Tycho API key
 * RFQ API keys (Have a look at `src/rfq/constants.rs` to see the authentication variables that are expected)
 * Private key if you wish to execute the swap against the Tycho Router
 
@@ -64,7 +64,7 @@ To get token information from Tycho Indexer RPC please use [load\_all\_tokens](s
 
 ### RFQClient
 
-Each RFQ protocol will have its own client. The client can **stream live prices updates** and **request binding quotes**.&#x20;
+Each RFQ protocol will have its own client. The client can **stream live prices updates** and **request binding quotes**.
 
 Example setup for Bebop:
 
@@ -99,7 +99,7 @@ let rfq_stream_builder = RFQStreamBuilder::new()
 * Use `add_client()` for each RFQ provider.
 * Streams that return errors are removed automatically.
 
-RFQ streams are **timestamped**, not block-based. Each update provides the full known state from the provider at that moment (not just deltas). The `removed_pairs` field indicates any pairs that disappeared since the last update. The `new_pairs` field contains all the currently available pairs.&#x20;
+RFQ streams are **timestamped**, not block-based. Each update provides the full known state from the provider at that moment (not just deltas). The `removed_pairs` field indicates any pairs that disappeared since the last update. The `new_pairs` field contains all the currently available pairs.
 
 ### Simulation
 
@@ -113,7 +113,7 @@ This returns an indicative output amount, which you can use to decide if this sw
 
 ### Encoding
 
-After choosing the best swap, you can use Tycho Execution to encode it. This is very similar to the encoding done in the general [quickstart](../#id-4.-encode-a-swap).&#x20;
+After choosing the best swap, you can use Tycho Execution to encode it. This is very similar to the encoding done in the general [quickstart](../#id-4.-encode-a-swap).
 
 #### Create a solution object
 
@@ -153,7 +153,7 @@ When working with RFQs, two fields are **required** in Swap:
     ```
 * `estimated_amount_in` : This represents the estimaed input amount for the quote request. It’s especially important when the swap path is complex (e.g., involving multiple hops), where the actual input amount may differ slightly because of slippage. We recommend setting `estimated_amount_in` a bit higher than your expected value. Many RFQs enforce that execution can only occur for amounts **less than or equal to** the quoted base amount—so setting it conservatively helps avoid dropping funds. If the actual required input exceeds your estimate, any leftover tokens will remain in the Tycho Router.
 
-This mechanism also makes RFQs composable with other on-chain swaps. That enables hybrid routing strategies, such as a path like **Uniswap → RFQ → Curve**, seamlessly combining RFQ-based and traditional on-chain routes.&#x20;
+This mechanism also makes RFQs composable with other on-chain swaps. That enables hybrid routing strategies, such as a path like **Uniswap → RFQ → Curve**, seamlessly combining RFQ-based and traditional on-chain routes.
 
 {% hint style="warning" %}
 After encoding, quotes are valid for only 1–3 seconds. Execution must follow immediately, otherwise the transaction will revert.
@@ -199,7 +199,7 @@ These functions are only examples intended for use within the quickstart. **Do n
 This gives you full control over execution. And it protects you from MEV and slippage risks.
 {% endhint %}
 
-### Execution&#x20;
+### Execution
 
 This step allows you to test or perform real transactions based on the best available swap options. For this step, you need to pass your wallet's private key in the run command. Handle it securely and never expose it publicly.
 

@@ -162,7 +162,7 @@ use tycho_core::models::Chain;
 let all_tokens = load_all_tokens(
             "tycho-beta.propellerheads.xyz",  // tycho url
             false,                            // use tsl (this flag disables tsl)
-            Some("sampletoken"),              // auth key
+            Some("your-api-token"),           // auth key
             Chain::Ethereum,                  // chain
             None,                             // min quality (defaults to 100: ERC20-like tokens only) 
             None,                             // days since last trade (has chain specific defaults)
@@ -176,9 +176,7 @@ You can use the [ProtocolStreamBuilder](https://github.com/propeller-heads/tycho
 ```rust
 use tycho_simulation::evm::{
     engine_db::tycho_db::PreCachedDB,
-    protocol::{
-        filters::balancer_pool_filter, uniswap_v2::state::UniswapV2State, vm::state::EVMPoolState,
-    },
+    protocol::{uniswap_v2::state::UniswapV2State, vm::state::EVMPoolState},
     stream::ProtocolStreamBuilder,
 };
 use tycho_core::models::Chain;
@@ -187,12 +185,8 @@ use tycho_client::feed::component_tracker::ComponentFilter;
 let tvl_filter = ComponentFilter::with_tvl_range(9, 10); // filter buffer of 9-10ETH
 let mut protocol_stream = ProtocolStreamBuilder::new("tycho-beta.propellerheads.xyz", Chain::Ethereum)
     .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
-    .exchange::<EVMPoolState<PreCachedDB>>(
-        "vm:balancer_v2",
-        tvl_filter.clone(),
-        Some(balancer_pool_filter),
-    )
-    .auth_key(Some("sampletoken"))
+    // add other protocols here
+    .auth_key(Some("your-api-token"))
     .skip_state_decode_failures(true) // skips the pool instead of panicking if it errors on decode
     .set_tokens(all_tokens.clone())
     .await
