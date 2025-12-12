@@ -293,6 +293,26 @@ impl EVMEntrypointService {
         None
     }
 
+    /// Normalizes a hex string by removing leading zeros.
+    /// Converts Bytes to U256 and formats as hex without leading zeros.
+    /// This is required for Ethereum JSON-RPC state overrides which don't accept
+    /// hex numbers with leading zeros.
+    fn normalize_hex_bytes(bytes: &Bytes) -> String {
+        // Convert bytes to U256 (big-endian)
+        let bytes_slice = bytes.as_ref();
+        let mut buf = [0u8; 32];
+        let start = 32usize.saturating_sub(bytes_slice.len());
+        buf[start..].copy_from_slice(bytes_slice);
+        let value = U256::from_be_bytes(buf);
+
+        // Format as hex without leading zeros, but keep at least "0x0" for zero
+        if value.is_zero() {
+            "0x0".to_string()
+        } else {
+            format!("0x{:x}", value)
+        }
+    }
+
     fn build_state_overrides(
         overrides: &BTreeMap<Address, AccountOverrides>,
     ) -> Map<String, Value> {
@@ -306,7 +326,8 @@ impl EVMEntrypointService {
             }
 
             if let Some(ref balance) = account_override.native_balance {
-                override_obj.insert("balance".to_string(), json!(balance.to_string()));
+                let normalized_balance = Self::normalize_hex_bytes(balance);
+                override_obj.insert("balance".to_string(), json!(normalized_balance));
             }
 
             if let Some(ref slots) = account_override.slots {
@@ -1653,5 +1674,27 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_normalize_hex_bytes() {
+        // Test with leading zeros - should normalize
+        let bytes_with_zeros =
+            Bytes::from_str("0x0000000000000000000000000000000000000000000000000000002e8fbca300")
+                .unwrap();
+        let normalized = EVMEntrypointService::normalize_hex_bytes(&bytes_with_zeros);
+        assert_eq!(normalized, "0x2e8fbca300");
+
+        // Test with no leading zeros - should stay the same (but normalized format)
+        let bytes_no_zeros = Bytes::from_str("0x2e8fbca300").unwrap();
+        let normalized2 = EVMEntrypointService::normalize_hex_bytes(&bytes_no_zeros);
+        assert_eq!(normalized2, "0x2e8fbca300");
+
+        // Test with zero value
+        let zero_bytes =
+            Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000000")
+                .unwrap();
+        let normalized_zero = EVMEntrypointService::normalize_hex_bytes(&zero_bytes);
+        assert_eq!(normalized_zero, "0x0");
     }
 }
