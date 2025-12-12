@@ -160,10 +160,6 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
 contract TychoRouterForLidoTest is TychoRouterTestSetup {
     LidoExecutorExposed LidoExposed;
 
-    function getForkBlock() public pure override returns (uint256) {
-        return 23939449;
-    }
-
     function testSingleStakeLidoIntegration() public {
         deal(ALICE, 1 ether);
 

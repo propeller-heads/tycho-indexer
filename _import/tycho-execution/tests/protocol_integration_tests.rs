@@ -1508,7 +1508,7 @@ fn test_single_encoding_strategy_steth_lido() {
         given_token: token_in,
         given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
         checked_token: token_out,
-        checked_amount: BigUint::from_str("999999999999999998").unwrap(),
+        checked_amount: BigUint::from_str("999999999999999997").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -1616,7 +1616,7 @@ fn test_single_encoding_strategy_unwrap_wsteth_lido() {
         given_token: token_in,
         given_amount: BigUint::from_str("1000000000000000000").unwrap(),
         checked_token: token_out,
-        checked_amount: BigUint::from_str("1220874507519708969").unwrap(),
+        checked_amount: BigUint::from_str("1197232205332596846").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -1705,7 +1705,7 @@ fn test_single_encoding_strategy_lido_grouped_swap() {
         given_token: usdc,
         given_amount: BigUint::from_str("1000_000000").unwrap(),
         checked_token: token_out,
-        checked_amount: BigUint::from_str("999999999999999998").unwrap(),
+        checked_amount: BigUint::from_str("492041525283271396").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -1793,7 +1793,7 @@ fn test_single_encoding_strategy_curve_lido_grouped_swap() {
         given_token: eth(),
         given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
         checked_token: token_out,
-        checked_amount: BigUint::from_str("1").unwrap(),
+        checked_amount: BigUint::from_str("835224812176401374").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
