@@ -38,11 +38,8 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
     function setUp() public {
         uint256 forkBlock = 23934489; //change for a newer block
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        LidoExposed = new LidoExecutorExposed(
-            STETH_ADDR,
-            WSTETH_ADDR,
-            PERMIT2_ADDRESS
-        );
+        LidoExposed =
+            new LidoExecutorExposed(STETH_ADDR, WSTETH_ADDR, PERMIT2_ADDRESS);
     }
 
     function testDecodeParams() public view {
@@ -64,8 +61,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         assertEq(receiver, BOB);
         assertEq(
-            uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.None)
+            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
         );
         assertEq(uint8(pool), uint8(LidoPoolType.stETH));
         assertEq(uint8(direction), uint8(LidoPoolDirection.Stake));
@@ -73,9 +69,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
     function testDecodeParamsInvalidDataLength() public {
         bytes memory invalidParams = abi.encodePacked(
-            BOB,
-            RestrictTransferFrom.TransferType.None,
-            LidoPoolType.stETH
+            BOB, RestrictTransferFrom.TransferType.None, LidoPoolType.stETH
         );
 
         vm.expectRevert(LidoExecutor__InvalidDataLength.selector);
@@ -112,6 +106,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
         // Need to mint STETH before, just dealing won't work because stETH does some internal accounting
         deal(address(LidoExposed), amountIn);
         vm.startPrank(address(LidoExposed));
+        // slither-disable-next-line arbitrary-send-eth
         LidoPool(STETH_ADDR).submit{value: amountIn}(address(LidoExposed));
         uint256 stETHAmount = IERC20(STETH_ADDR).balanceOf(address(LidoExposed));
 
@@ -131,7 +126,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
         // there is 1 wei left in the contract
         assertEq(IERC20(STETH_ADDR).balanceOf(address(LidoExposed)), 1);
 
-    vm.stopPrank();
+        vm.stopPrank();
     }
 
     function testUnwrapping() public {
@@ -165,11 +160,10 @@ contract TychoRouterForLidoTest is TychoRouterTestSetup {
 
         vm.startPrank(ALICE);
 
-        bytes memory callData = loadCallDataFromFile(
-            "test_single_encoding_strategy_steth_lido"
-        );
+        bytes memory callData =
+            loadCallDataFromFile("test_single_encoding_strategy_steth_lido");
 
-        (bool success, ) = tychoRouterAddr.call{value: 1 ether}(callData);
+        (bool success,) = tychoRouterAddr.call{value: 1 ether}(callData);
 
         assertTrue(success, "Call Failed");
         assertEq(ALICE.balance, 0);
@@ -185,7 +179,7 @@ contract TychoRouterForLidoTest is TychoRouterTestSetup {
         bytes memory callData = loadCallDataFromFile(
             "test_single_encoding_strategy_wrap_wsteth_lido"
         );
-        (bool success, ) = tychoRouterAddr.call(callData);
+        (bool success,) = tychoRouterAddr.call(callData);
 
         assertTrue(success, "Call Failed");
         assertEq(IERC20(STETH_ADDR).balanceOf(ALICE), 0);
@@ -200,63 +194,44 @@ contract TychoRouterForLidoTest is TychoRouterTestSetup {
         bytes memory callData = loadCallDataFromFile(
             "test_single_encoding_strategy_unwrap_wsteth_lido"
         );
-        (bool success, ) = tychoRouterAddr.call(callData);
+        (bool success,) = tychoRouterAddr.call(callData);
 
         assertTrue(success, "Call Failed");
         assertEq(IERC20(WSTETH_ADDR).balanceOf(ALICE), 0);
     }
 
-    function testSingleLidoIntegrationGroupedSwap() public {
-        // Test created with calldata from our router encoder.
-
-        // Performs a single swap from USDC to stETH though ETH using two
-        //  USV4  and Lido pools. It's a single swap because it is a consecutive grouped swaps
-        //
+    function testSingleUsv4LidoIntegrationGroupedSwap() public {
         //   USDC ──(USV4)──> ETH ───(Lido)──> stETH
-        //
 
-        uint256 balanceBefore = IERC20(STETH_ADDR).balanceOf(ALICE);
-
-        // Approve
         vm.startPrank(ALICE);
 
         deal(USDC_ADDR, ALICE, 1000_000000);
 
-        uint256 balanceBefore1 = IERC20(USDC_ADDR).balanceOf(ALICE);
         IERC20(USDC_ADDR).approve(tychoRouterAddr, type(uint256).max);
-
         bytes memory callData = loadCallDataFromFile(
-            "test_single_encoding_strategy_usv4_lido_2"
+            "test_single_encoding_strategy_usv4_lido_grouped_swap"
         );
-        (bool success, ) = tychoRouterAddr.call(callData);
+
+        (bool success,) = tychoRouterAddr.call(callData);
 
         vm.stopPrank();
-
-        console.log(balanceBefore1, ALICE.balance);
 
         assertTrue(success, "Call Failed");
     }
 
     function testSingleCurveLidoIntegrationGroupedSwap() public {
-        // Test created with calldata from our router encoder.
-
-        // Performs a single swap from USDC to stETH though ETH using two
-        //  USV4  and Lido pools. It's a single swap because it is a consecutive grouped swaps
-        //
         //   ETH ──(Curve)──> stETH (Lido)──> wstETH
-        //
 
         deal(ALICE, 1 ether);
 
         vm.startPrank(ALICE);
 
         IERC20(STETH_ADDR).approve(tychoRouterAddr, type(uint256).max - 1);
-
         bytes memory callData = loadCallDataFromFile(
             "test_single_encoding_strategy_curve_lido_grouped_swap"
         );
 
-        (bool success, ) = tychoRouterAddr.call{value: 1 ether}(callData);
+        (bool success,) = tychoRouterAddr.call{value: 1 ether}(callData);
 
         assertTrue(success, "Call Failed");
         assertEq(ALICE.balance, 0);

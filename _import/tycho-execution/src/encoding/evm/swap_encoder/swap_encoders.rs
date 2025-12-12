@@ -1440,6 +1440,7 @@ impl SwapEncoder for LidoSwapEncoder {
 
         // Token in address is always needed to perform a manual transfer from the router,
         // since no optimizations are performed that send from one pool to the next
+
         let args = (
             bytes_to_address(&encoding_context.receiver)?,
             (encoding_context.transfer_type as u8).to_be_bytes(),

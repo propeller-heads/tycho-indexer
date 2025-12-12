@@ -1648,12 +1648,9 @@ fn test_single_encoding_strategy_unwrap_wsteth_lido() {
 }
 
 #[test]
-fn test_single_encoding_strategy_lido_grouped_swap() {
-    // Performs a sequential swap from USDC to PEPE though ETH using two consecutive
-    // USV4 pools
-    //
+fn test_single_encoding_strategy_usv4_lido_grouped_swap() {
     //   USDC ──(USV4)──> ETH (Lido)──> stETH
-    //
+
     let eth = eth();
     let usdc = usdc();
 
@@ -1687,11 +1684,11 @@ fn test_single_encoding_strategy_lido_grouped_swap() {
         ..Default::default()
     };
 
-    let token_out = Bytes::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84");
-    let swap_2 = Swap {
+    let st_eth = Bytes::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84");
+    let swap_eth_steth = Swap {
         component: lido_pool,
         token_in: eth.clone(),
-        token_out: token_out.clone(),
+        token_out: st_eth.clone(),
         split: 0f64,
         user_data: None,
         protocol_state: None,
@@ -1704,12 +1701,12 @@ fn test_single_encoding_strategy_lido_grouped_swap() {
         exact_out: false,
         given_token: usdc,
         given_amount: BigUint::from_str("1000_000000").unwrap(),
-        checked_token: token_out,
+        checked_token: st_eth,
         checked_amount: BigUint::from_str("492041525283271396").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        swaps: vec![swap_usdc_eth, swap_2],
+        swaps: vec![swap_usdc_eth, swap_eth_steth],
         ..Default::default()
     };
 
@@ -1731,15 +1728,18 @@ fn test_single_encoding_strategy_lido_grouped_swap() {
 
     let hex_calldata = encode(&calldata);
 
-    write_calldata_to_file("test_single_encoding_strategy_usv4_lido_2", hex_calldata.as_str());
+    write_calldata_to_file(
+        "test_single_encoding_strategy_usv4_lido_grouped_swap",
+        hex_calldata.as_str(),
+    );
 }
 
 #[test]
 fn test_single_encoding_strategy_curve_lido_grouped_swap() {
     //   ETH ──(Curve)──> stETH (Lido)──> wstETH
 
-    let token_in = eth();
-    let token_out = Bytes::from("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"); // STETH
+    let eth = eth();
+    let st_eth = Bytes::from("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84");
 
     let static_attributes = HashMap::from([(
         "factory".to_string(),
@@ -1758,10 +1758,10 @@ fn test_single_encoding_strategy_curve_lido_grouped_swap() {
         ..Default::default()
     };
 
-    let swap = Swap {
+    let swap_eth_steth = Swap {
         component,
-        token_in: token_in.clone(),
-        token_out: token_out.clone(),
+        token_in: eth.clone(),
+        token_out: st_eth.clone(),
         split: 0f64,
         user_data: None,
         protocol_state: None,
@@ -1773,13 +1773,13 @@ fn test_single_encoding_strategy_curve_lido_grouped_swap() {
         protocol_system: String::from("lido"),
         ..Default::default()
     };
-    let token_in = Bytes::from("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84");
-    let token_out = Bytes::from("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0");
 
-    let swap_2 = Swap {
+    let wst_eth = Bytes::from("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0");
+
+    let swap_steth_wsteth = Swap {
         component: lido_pool,
-        token_in: token_in.clone(),
-        token_out: token_out.clone(),
+        token_in: st_eth.clone(),
+        token_out: wst_eth.clone(),
         split: 0f64,
         user_data: None,
         protocol_state: None,
@@ -1790,14 +1790,14 @@ fn test_single_encoding_strategy_curve_lido_grouped_swap() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: eth(),
+        given_token: eth.clone(),
         given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: token_out,
+        checked_token: wst_eth,
         checked_amount: BigUint::from_str("835224812176401374").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        swaps: vec![swap, swap_2],
+        swaps: vec![swap_eth_steth, swap_steth_wsteth],
         ..Default::default()
     };
 
@@ -1811,8 +1811,8 @@ fn test_single_encoding_strategy_curve_lido_grouped_swap() {
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
-        &eth(),
-        Some(get_signer()),
+        &eth,
+        None,
     )
     .unwrap()
     .data;
