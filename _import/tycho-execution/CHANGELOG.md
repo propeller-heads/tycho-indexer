@@ -1,3 +1,10 @@
+## [0.144.1](https://github.com/propeller-heads/tycho-execution/compare/0.144.0...0.144.1) (2025-12-12)
+
+
+### Bug Fixes
+
+* Use same executor for USV4 hooks + hookless ([576d38a](https://github.com/propeller-heads/tycho-execution/commit/576d38af1d8fb42422130bb35ddb9159ad12b613))
+
 ## [0.144.0](https://github.com/propeller-heads/tycho-execution/compare/0.143.0...0.144.0) (2025-12-10)
 
 
