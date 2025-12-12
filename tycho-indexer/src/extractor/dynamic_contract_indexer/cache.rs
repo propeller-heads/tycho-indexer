@@ -435,6 +435,18 @@ where
         self.permanent.contains_key(key)
     }
 
+    /// Returns the count of all unique keys across permanent and pending layers.
+    pub(super) fn unique_key_count(&self) -> usize {
+        let mut unique_keys = HashSet::new();
+        // Collect keys from permanent layer
+        unique_keys.extend(self.permanent.keys());
+        // Collect keys from all pending layers
+        for layer in self.pending.iter() {
+            unique_keys.extend(layer.data.keys());
+        }
+        unique_keys.len()
+    }
+
     /// Process block finality by moving all finalized layers from pending to permanent storage.
     ///
     /// # Arguments
