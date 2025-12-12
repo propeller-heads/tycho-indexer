@@ -39,6 +39,10 @@ pub fn initialize_metrics() {
         "tycho_integration_simulation_execution_failures_total",
         "Total number of failed execution simulations"
     );
+    describe_counter!(
+        "tycho_integration_simulation_execution_reverts_total",
+        "Total number of reverted execution simulations"
+    );
     describe_histogram!(
         "tycho_integration_simulation_execution_slippage_ratio",
         "Slippage ratio between simulated and actual execution amounts"
@@ -116,6 +120,16 @@ pub fn record_simulation_execution_success(protocol: &str) {
     counter!(
         "tycho_integration_simulation_execution_success_total",
         "protocol" => protocol.to_string(),
+    )
+    .increment(1);
+}
+
+/// Record a reverted execution simulation
+pub fn record_simulation_execution_revert(protocol: &str, error_category: &str) {
+    counter!(
+        "tycho_integration_simulation_execution_reverts_total",
+        "protocol" => protocol.to_string(),
+        "error_category" => error_category.to_string(),
     )
     .increment(1);
 }
