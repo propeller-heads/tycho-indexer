@@ -6,6 +6,7 @@ use std::{
 
 use async_trait::async_trait;
 use deepsize::DeepSizeOf;
+use metrics::{counter, gauge};
 use tracing::{debug, info, instrument, span, trace, warn, Instrument, Level};
 use tycho_common::{
     models::{
@@ -309,6 +310,12 @@ where
                 }
             }
 
+            // Emit metrics for successful and failed traces
+            counter!("dci_traces_succeeded", "extractor" => self.protocol.clone())
+                .increment(traced_entry_points.len() as u64);
+            counter!("dci_traces_failed", "extractor" => self.protocol.clone())
+                .increment(failed_entrypoints.len() as u64);
+
             let component_ids_to_pause = failed_entrypoints
                 .iter()
                 .flat_map(|(ep, tx)| {
@@ -536,6 +543,16 @@ where
             .entered();
             self.update_cache(&block_changes.block, &traced_entry_points, &failed_entrypoints)?;
             drop(_span);
+
+            // Only emit metric if there were successful traces (count may have changed)
+            if !traced_entry_points.is_empty() {
+                let tracked_contracts_count = self
+                    .cache
+                    .tracked_contracts
+                    .unique_key_count();
+                gauge!("dci_tracked_contracts", "extractor" => self.protocol.clone())
+                    .set(tracked_contracts_count as f64);
+            }
 
             // Update the block changes with the traced entrypoints
             block_changes.trace_results = traced_entry_points;
