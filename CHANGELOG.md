@@ -1,3 +1,12 @@
+## [0.121.1](https://github.com/propeller-heads/tycho-indexer/compare/0.121.0...0.121.1) (2025-12-12)
+
+
+### Bug Fixes
+
+* add dci trace metrics ([5dee152](https://github.com/propeller-heads/tycho-indexer/commit/5dee152a6ffb479ffaf5fb0c4b761b0a896dd16e))
+* add dci trace metrics ([#805](https://github.com/propeller-heads/tycho-indexer/issues/805)) ([e217b90](https://github.com/propeller-heads/tycho-indexer/commit/e217b90226bfac8f6c108d78b4ad590461df222e))
+* **dci:** skip cache update on blocks with no traces ([4cc50cc](https://github.com/propeller-heads/tycho-indexer/commit/4cc50ccca667c104b32846cd3a1dbb4d171524fc))
+
 ## [0.121.0](https://github.com/propeller-heads/tycho-indexer/compare/0.120.0...0.121.0) (2025-12-11)
 
 
