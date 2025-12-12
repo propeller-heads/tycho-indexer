@@ -293,7 +293,7 @@ where
                 ))
                 .await;
 
-            let mut traced_entry_points = vec![];
+            let mut traced_entrypoints = vec![];
             let mut failed_entrypoints = vec![];
 
             // This is safe because tracer ensures order is preserved
@@ -302,7 +302,7 @@ where
                 .zip(tracing_results)
             {
                 match result {
-                    Ok(tracing_result) => traced_entry_points.push(tracing_result),
+                    Ok(tracing_result) => traced_entrypoints.push(tracing_result),
                     Err(e) => {
                         tracing::warn!("DCI: Failed to trace entrypoint {:?}: {:?}", ep, e);
                         failed_entrypoints.push((ep.clone(), *tx));
@@ -312,7 +312,7 @@ where
 
             // Emit metrics for successful and failed traces
             counter!("dci_traces_succeeded", "extractor" => self.protocol.clone())
-                .increment(traced_entry_points.len() as u64);
+                .increment(traced_entrypoints.len() as u64);
             counter!("dci_traces_failed", "extractor" => self.protocol.clone())
                 .increment(failed_entrypoints.len() as u64);
 
@@ -331,7 +331,7 @@ where
                 .collect::<HashMap<_, _>>();
 
             tracing::debug!(
-                traced_entry_points = traced_entry_points
+                traced_entrypoints = traced_entrypoints
                     .iter()
                     .map(|x| x.to_string())
                     .collect::<Vec<_>>()
@@ -339,29 +339,29 @@ where
                 "DCI: Traced entrypoints"
             );
 
-            let mut tx_to_traced_entry_point: HashMap<&Transaction, Vec<&TracedEntryPoint>> =
+            let mut tx_to_traced_entrypoint: HashMap<&Transaction, Vec<&TracedEntryPoint>> =
                 HashMap::new();
-            for traced_entry_point in traced_entry_points.iter() {
+            for traced_entrypoint in traced_entrypoints.iter() {
                 let tx = entrypoints_to_analyze
-                    .get(&traced_entry_point.entry_point_with_params)
+                    .get(&traced_entrypoint.entry_point_with_params)
                     .ok_or_else(|| {
                         ExtractionError::Unknown(format!(
-                            "Traced entrypoint {traced_entry_point:?} not found in the entrypoints_to_analyze map. \
+                            "Traced entrypoint {traced_entrypoint:?} not found in the entrypoints_to_analyze map. \
                             Every traced entrypoint should be in the entrypoints_to_analyze map"
                         ))
                     })?;
-                tx_to_traced_entry_point
+                tx_to_traced_entrypoint
                     .entry(tx)
                     .or_default()
-                    .push(traced_entry_point);
+                    .push(traced_entrypoint);
             }
 
             let mut new_account_addr_to_slots: HashMap<Address, HashSet<StoreKey>> = HashMap::new();
             let mut new_account_addr_to_tx: HashMap<Address, &Transaction> = HashMap::new();
 
-            for (tx, traced_entry_points) in tx_to_traced_entry_point {
-                for traced_entry_point in traced_entry_points.iter() {
-                    for (account, slots) in traced_entry_point
+            for (tx, traced_entrypoints) in tx_to_traced_entrypoint {
+                for traced_entrypoint in traced_entrypoints.iter() {
+                    for (account, slots) in traced_entrypoint
                         .tracing_result
                         .accessed_slots
                         .iter()
@@ -534,12 +534,12 @@ where
             }
 
             // Only update the cache if there were traces done (failed or succeeded)
-            if !traced_entry_points.is_empty() || !failed_entrypoints.is_empty() {
-                self.update_cache(&block_changes.block, &traced_entry_points, &failed_entrypoints)?;
+            if !traced_entrypoints.is_empty() || !failed_entrypoints.is_empty() {
+                self.update_cache(&block_changes.block, &traced_entrypoints, &failed_entrypoints)?;
             }
 
             // Only emit metric if there were successful traces (count may have changed)
-            if !traced_entry_points.is_empty() {
+            if !traced_entrypoints.is_empty() {
                 let tracked_contracts_count = self
                     .cache
                     .tracked_contracts
@@ -549,7 +549,7 @@ where
             }
 
             // Update the block changes with the traced entrypoints
-            block_changes.trace_results = traced_entry_points;
+            block_changes.trace_results = traced_entrypoints;
         }
 
         // Update the entrypoint cache from the block changes
