@@ -3158,6 +3158,8 @@ mod tests {
                     "00",
                     // direction
                     "00",
+                    // approval_needed
+                    "00",
                 ))
             );
         }
