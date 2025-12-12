@@ -533,16 +533,10 @@ where
                 )?;
             }
 
-            // Update the cache with new traced entrypoints and failed entrypoints
-            let _span = span!(
-                Level::INFO,
-                "dci_cache_update",
-                traced_entrypoints = traced_entry_points.len(),
-                block_number = block_changes.block.number
-            )
-            .entered();
-            self.update_cache(&block_changes.block, &traced_entry_points, &failed_entrypoints)?;
-            drop(_span);
+            // Only update the cache if there were traces done (failed or succeeded)
+            if !traced_entry_points.is_empty() || !failed_entrypoints.is_empty() {
+                self.update_cache(&block_changes.block, &traced_entry_points, &failed_entrypoints)?;
+            }
 
             // Only emit metric if there were successful traces (count may have changed)
             if !traced_entry_points.is_empty() {
@@ -1002,6 +996,11 @@ where
     }
 
     /// Update the DCI cache with the new entrypoints and tracing results
+    #[instrument(
+        skip_all,
+        level = "info", 
+        name = "dci_update_cache", 
+        fields(block_number = block.number, traced_entrypoints = new_tracing_results.len(), failed_entrypoints = failed_entrypoints.len()))]
     fn update_cache(
         &mut self,
         block: &Block,
@@ -1198,7 +1197,7 @@ where
     #[instrument(
         level = "info",
         name = "dci_extract_tracked_updates",
-        skip(self, block_changes),
+        skip_all,
         fields(block_contract_changes = block_changes.block_contract_changes.len())
     )]
     fn extract_tracked_updates(
