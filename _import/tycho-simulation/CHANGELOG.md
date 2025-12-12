@@ -1,3 +1,10 @@
+## [0.216.0](https://github.com/propeller-heads/tycho-simulation/compare/0.215.1...0.216.0) (2025-12-12)
+
+
+### Features
+
+* **cluster-test:** Count execution failures and reverts individually ([f592340](https://github.com/propeller-heads/tycho-simulation/commit/f5923404a377ab30199123160af3a70bdde70cb1))
+
 ## [0.215.1](https://github.com/propeller-heads/tycho-simulation/compare/0.215.0...0.215.1) (2025-12-11)
 
 
