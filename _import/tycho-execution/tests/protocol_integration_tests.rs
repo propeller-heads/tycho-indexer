@@ -1646,3 +1646,181 @@ fn test_single_encoding_strategy_unwrap_wsteth_lido() {
         hex_calldata.as_str(),
     );
 }
+
+#[test]
+fn test_single_encoding_strategy_lido_grouped_swap() {
+    // Performs a sequential swap from USDC to PEPE though ETH using two consecutive
+    // USV4 pools
+    //
+    //   USDC ──(USV4)──> ETH (Lido)──> stETH
+    //
+    let eth = eth();
+    let usdc = usdc();
+
+    // Fee and tick spacing information for this test is obtained by querying the
+    // USV4 Position Manager contract: 0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e
+    // Using the poolKeys function with the first 25 bytes of the pool id
+    let pool_fee_usdc_eth = Bytes::from(BigInt::from(3000).to_signed_bytes_be());
+    let tick_spacing_usdc_eth = Bytes::from(BigInt::from(60).to_signed_bytes_be());
+    let mut static_attributes_usdc_eth: HashMap<String, Bytes> = HashMap::new();
+    static_attributes_usdc_eth.insert("key_lp_fee".into(), pool_fee_usdc_eth);
+    static_attributes_usdc_eth.insert("tick_spacing".into(), tick_spacing_usdc_eth);
+
+    let swap_usdc_eth = Swap {
+        component: ProtocolComponent {
+            id: "0xdce6394339af00981949f5f3baf27e3610c76326a700af57e4b3e3ae4977f78d".to_string(),
+            protocol_system: "uniswap_v4".to_string(),
+            static_attributes: static_attributes_usdc_eth,
+            ..Default::default()
+        },
+        token_in: usdc.clone(),
+        token_out: eth.clone(),
+        split: 0f64,
+        user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
+    };
+
+    let lido_pool = ProtocolComponent {
+        id: String::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84"),
+        protocol_system: String::from("lido"),
+        ..Default::default()
+    };
+
+    let token_out = Bytes::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84");
+    let swap_2 = Swap {
+        component: lido_pool,
+        token_in: eth.clone(),
+        token_out: token_out.clone(),
+        split: 0f64,
+        user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
+    };
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: usdc,
+        given_amount: BigUint::from_str("1000_000000").unwrap(),
+        checked_token: token_out,
+        checked_amount: BigUint::from_str("999999999999999998").unwrap(),
+        // Alice
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap_usdc_eth, swap_2],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFrom,
+        &eth,
+        Some(get_signer()),
+    )
+    .unwrap()
+    .data;
+
+    let hex_calldata = encode(&calldata);
+
+    write_calldata_to_file("test_single_encoding_strategy_usv4_lido_2", hex_calldata.as_str());
+}
+
+#[test]
+fn test_single_encoding_strategy_curve_lido_grouped_swap() {
+    //   ETH ──(Curve)──> stETH (Lido)──> wstETH
+
+    let token_in = eth();
+    let token_out = Bytes::from("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"); // STETH
+
+    let static_attributes = HashMap::from([(
+        "factory".to_string(),
+        Bytes::from(
+            "0x0000000000000000000000000000000000000000"
+                .as_bytes()
+                .to_vec(),
+        ),
+    ),
+        ("coins".to_string(), Bytes::from_str("0x5b22307865656565656565656565656565656565656565656565656565656565656565656565656565656565222c22307861653761623936353230646533613138653565313131623565616162303935333132643766653834225d").unwrap()),]);
+
+    let component = ProtocolComponent {
+        id: String::from("0xDC24316b9AE028F1497c275EB9192a3Ea0f67022"),
+        protocol_system: String::from("vm:curve"),
+        static_attributes,
+        ..Default::default()
+    };
+
+    let swap = Swap {
+        component,
+        token_in: token_in.clone(),
+        token_out: token_out.clone(),
+        split: 0f64,
+        user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
+    };
+
+    let lido_pool = ProtocolComponent {
+        id: String::from("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"),
+        protocol_system: String::from("lido"),
+        ..Default::default()
+    };
+    let token_in = Bytes::from("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84");
+    let token_out = Bytes::from("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0");
+
+    let swap_2 = Swap {
+        component: lido_pool,
+        token_in: token_in.clone(),
+        token_out: token_out.clone(),
+        split: 0f64,
+        user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
+    };
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: eth(),
+        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+        checked_token: token_out,
+        checked_amount: BigUint::from_str("1").unwrap(),
+        // Alice
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap, swap_2],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFrom,
+        &eth(),
+        Some(get_signer()),
+    )
+    .unwrap()
+    .data;
+
+    let hex_calldata = encode(&calldata);
+
+    write_calldata_to_file(
+        "test_single_encoding_strategy_curve_lido_grouped_swap",
+        hex_calldata.as_str(),
+    );
+}

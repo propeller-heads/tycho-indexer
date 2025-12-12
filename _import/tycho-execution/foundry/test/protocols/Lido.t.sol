@@ -209,4 +209,60 @@ contract TychoRouterForLidoTest is TychoRouterTestSetup {
         assertTrue(success, "Call Failed");
         assertEq(IERC20(WSTETH_ADDR).balanceOf(ALICE), 0);
     }
+
+    function testSingleLidoIntegrationGroupedSwap() public {
+        // Test created with calldata from our router encoder.
+
+        // Performs a single swap from USDC to stETH though ETH using two
+        //  USV4  and Lido pools. It's a single swap because it is a consecutive grouped swaps
+        //
+        //   USDC ──(USV4)──> ETH ───(Lido)──> stETH
+        //
+
+        uint256 balanceBefore = IERC20(STETH_ADDR).balanceOf(ALICE);
+
+        // Approve
+        vm.startPrank(ALICE);
+
+        deal(USDC_ADDR, ALICE, 1000_000000);
+
+        uint256 balanceBefore1 = IERC20(USDC_ADDR).balanceOf(ALICE);
+        IERC20(USDC_ADDR).approve(tychoRouterAddr, type(uint256).max);
+
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_usv4_lido_2"
+        );
+        (bool success, ) = tychoRouterAddr.call(callData);
+
+        vm.stopPrank();
+
+        console.log(balanceBefore1, ALICE.balance);
+
+        assertTrue(success, "Call Failed");
+    }
+
+    function testSingleCurveLidoIntegrationGroupedSwap() public {
+        // Test created with calldata from our router encoder.
+
+        // Performs a single swap from USDC to stETH though ETH using two
+        //  USV4  and Lido pools. It's a single swap because it is a consecutive grouped swaps
+        //
+        //   ETH ──(Curve)──> stETH (Lido)──> wstETH
+        //
+
+        deal(ALICE, 1 ether);
+
+        vm.startPrank(ALICE);
+
+        IERC20(STETH_ADDR).approve(tychoRouterAddr, type(uint256).max - 1);
+
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_curve_lido_grouped_swap"
+        );
+
+        (bool success, ) = tychoRouterAddr.call{value: 1 ether}(callData);
+
+        assertTrue(success, "Call Failed");
+        assertEq(ALICE.balance, 0);
+    }
 }
