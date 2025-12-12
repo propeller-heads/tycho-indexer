@@ -1013,7 +1013,7 @@ fn process_execution_result(
             };
             let error_category = categorize_error(revert_reason);
             error!(
-                event_type = "simulation_execution_failure",
+                event_type = "simulation_execution_revert",
                 error_message = %revert_reason,
                 error_name = %error_name,
                 error_category = %error_category,
@@ -1024,10 +1024,10 @@ fn process_execution_result(
                 overwrites = %overwrites_string,
                 "Failed to simulate swap: {error_msg}"
             );
-            debug!(event_type = "simulation_execution_failure",
+            debug!(event_type = "simulation_execution_revert",
                 state = ?state_str,
                 "State of failed swap: {error_msg}");
-            metrics::record_simulation_execution_failure(
+            metrics::record_simulation_execution_revert(
                 &execution_info.protocol_system,
                 error_category,
             );
