@@ -2,11 +2,9 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use alloy::{
     primitives::{
-        map::FbBuildHasher, Address as AlloyAddress, BlockHash as AlloyBlockHash,
-        Bytes as AlloyBytes, FixedBytes, B256, U256,
+        Address as AlloyAddress, BlockHash as AlloyBlockHash, Bytes as AlloyBytes, B256, U256,
     },
     rpc::types::{
-        state::AccountOverride,
         trace::geth::{
             GethDebugBuiltInTracerType, GethDebugTracerConfig, GethDebugTracerType,
             GethDebugTracingOptions, GethDefaultTracingOptions, GethTrace, PreStateFrame,
@@ -113,95 +111,39 @@ impl EVMEntrypointService {
 
         let block_id = BlockId::Hash(AlloyBlockHash::from_slice(block_hash.as_ref()).into());
 
-        let state_overrides = params
+        // Check if we have non-empty state overrides
+        let has_state_overrides = params
             .state_overrides
             .as_ref()
-            .map(|overrides| {
-                let mut state_map = HashMap::new();
+            .is_some_and(|o| !o.is_empty());
 
-                for (address, override_data) in overrides.iter() {
-                    let mut account_override = AccountOverride::default();
-
-                    // Handle storage overrides
-                    if let Some(storage_override) = &override_data.slots {
-                        let storage_map: HashMap<
-                            FixedBytes<32>,
-                            FixedBytes<32>,
-                            FbBuildHasher<32>,
-                        > = match storage_override {
-                            StorageOverride::Diff(slots) | StorageOverride::Replace(slots) => slots
-                                .iter()
-                                .map(|(k, v)| {
-                                    (
-                                        FixedBytes::from(
-                                            k.as_ref()
-                                                .try_into()
-                                                .unwrap_or([0u8; 32]),
-                                        ),
-                                        FixedBytes::from(
-                                            v.as_ref()
-                                                .try_into()
-                                                .unwrap_or([0u8; 32]),
-                                        ),
-                                    )
-                                })
-                                .collect(),
-                        };
-
-                        match storage_override {
-                            StorageOverride::Diff(_) => {
-                                account_override.state_diff = Some(storage_map);
-                            }
-                            StorageOverride::Replace(_) => {
-                                account_override.state = Some(storage_map);
-                            }
-                        }
-                    }
-
-                    // Handle balance override
-                    if let Some(balance) = &override_data.native_balance {
-                        account_override.balance = Some(U256::from_be_bytes(
-                            balance
-                                .as_ref()
-                                .try_into()
-                                .unwrap_or([0u8; 32]),
-                        ));
-                    }
-
-                    // Handle code override
-                    if let Some(code) = &override_data.code {
-                        account_override.code = Some(AlloyBytes::from(code.to_vec()));
-                    }
-
-                    state_map.insert(AlloyAddress::from_slice(address.as_ref()), account_override);
-                }
-
-                state_map
+        if has_state_overrides {
+            // Use build_state_overrides to properly normalize balance values (removes leading
+            // zeros) This is required because Go's hexutil.Big rejects hex numbers with
+            // leading zeros.
+            let state_overrides = Self::build_state_overrides(
+                params
+                    .state_overrides
+                    .as_ref()
+                    .unwrap_or(&BTreeMap::new()),
+            );
+            let tracing_with_overrides = json!({
+                "enableReturnData": true,
+                "tracer": "prestateTracer",
+                "stateOverrides": Value::Object(state_overrides)
             });
 
-        match state_overrides {
-            Some(overrides) => {
-                // Need to manually construct this because Alloy misses `stateOverrides` in their
-                // structs.
-                let tracing_with_overrides = json!({
-                    "enableReturnData": true,
-                    "tracer": "prestateTracer",
-                    "stateOverrides": overrides
-                });
-
-                json!([tx_request, block_id, tracing_with_overrides])
-            }
-            None => {
-                let tracing_options = GethDebugTracingOptions {
-                    config: GethDefaultTracingOptions::default().enable_return_data(),
-                    tracer: Some(GethDebugTracerType::BuiltInTracer(
-                        GethDebugBuiltInTracerType::PreStateTracer,
-                    )),
-                    tracer_config: GethDebugTracerConfig::default(),
-                    timeout: None,
-                };
-                json!([tx_request, block_id, tracing_options])
-            }
+            json!([tx_request, block_id, tracing_with_overrides])
+        } else {
+            let tracing_options = GethDebugTracingOptions {
+                config: GethDefaultTracingOptions::default().enable_return_data(),
+                tracer: Some(GethDebugTracerType::BuiltInTracer(
+                    GethDebugBuiltInTracerType::PreStateTracer,
+                )),
+                tracer_config: GethDebugTracerConfig::default(),
+                timeout: None,
+            };
+            json!([tx_request, block_id, tracing_options])
         }
     }
 
@@ -1696,5 +1638,160 @@ mod tests {
                 .unwrap();
         let normalized_zero = EVMEntrypointService::normalize_hex_bytes(&zero_bytes);
         assert_eq!(normalized_zero, "0x0");
+    }
+
+    /// Tests that trace calls with balance overrides work correctly with a real RPC node.
+    /// This specifically validates that balance values with leading zeros (from U256::to_be_bytes)
+    /// are properly normalized before being sent to the RPC.
+    ///
+    /// Run with: RPC_URL=<url> cargo test --package tycho-ethereum --lib \
+    ///   test_trace_call_with_balance_override_integration -- --ignored --nocapture
+    #[tokio::test]
+    #[ignore = "requires a RPC connection"]
+    async fn test_trace_call_with_balance_override_integration() {
+        use alloy::{primitives::U256 as AlloyU256, rpc::types::BlockNumberOrTag};
+
+        // Create RPC client to fetch a recent block
+        let fixture = TestFixture::new();
+        let rpc_client = fixture.create_rpc_client(true);
+
+        // Get a recent finalized block from the chain (works on any EVM chain)
+        let recent_block = rpc_client
+            .eth_get_block_by_number(BlockId::Number(BlockNumberOrTag::Finalized))
+            .await
+            .expect("Failed to get finalized block");
+        let block_hash = Bytes::from(recent_block.header.hash.to_vec());
+
+        let tracer = EVMEntrypointService::new(&rpc_client);
+
+        // Create state overrides with a balance that has leading zeros when represented as 32 bytes
+        // 10 ETH in wei = 10_000_000_000_000_000_000
+        // When converted to 32 bytes big-endian, this will have many leading zeros
+        let balance_wei = AlloyU256::from(10_000_000_000_000_000_000u128);
+        let balance_bytes = Bytes::from(
+            balance_wei
+                .to_be_bytes::<32>()
+                .as_slice(),
+        );
+
+        // Verify the balance bytes have leading zeros (this is the bug condition)
+        assert!(
+            balance_bytes
+                .as_ref()
+                .starts_with(&[0, 0, 0, 0]),
+            "Test setup: balance should have leading zeros"
+        );
+
+        let mut state_overrides = BTreeMap::new();
+        let zero_address = Bytes::from([0u8; 20].as_slice());
+
+        let account_overrides =
+            AccountOverrides { slots: None, native_balance: Some(balance_bytes), code: None };
+        state_overrides.insert(zero_address, account_overrides);
+
+        // Use a simple target address - we're just testing that the RPC call doesn't fail
+        // due to leading zeros in balance. The actual call can fail/revert; we just need
+        // to verify the balance serialization doesn't cause an RPC error.
+        let target_address = Bytes::from([0x42u8; 20].as_slice());
+
+        // Empty calldata - this will just be a simple call to the target address
+        let calldata = Bytes::from("0x");
+
+        let entry_points = vec![EntryPointWithTracingParams::new(
+            EntryPoint::new(
+                "test:balanceOverride".to_string(),
+                target_address.clone(),
+                "test".to_string(),
+            ),
+            TracingParams::RPCTracer(
+                RPCTracerParams::new(None, calldata).with_state_overrides(state_overrides),
+            ),
+        )];
+
+        let results = tracer
+            .trace(block_hash, entry_points)
+            .await;
+
+        assert_eq!(results.len(), 1, "Expected 1 result");
+
+        // The key assertion: the call should succeed without the "leading zero digits" error
+        // Note: The trace itself may return an error (e.g., contract doesn't exist), but
+        // we specifically check that it's NOT a balance normalization error
+        match &results[0] {
+            Ok(_) => {
+                // Success - the trace completed
+            }
+            Err(e) => {
+                let error_msg = format!("{:?}", e);
+                assert!(
+                    !error_msg.contains("leading zero"),
+                    "Trace call failed due to leading zeros in balance. \
+                     The balance normalization fix is not working correctly. Error: {}",
+                    error_msg
+                );
+                // If it's another error (like contract not found), that's acceptable for this test
+            }
+        }
+    }
+
+    /// Unit test to verify that create_trace_call_params properly normalizes balance overrides
+    #[test]
+    fn test_create_trace_call_params_normalizes_balance() {
+        use alloy::primitives::U256 as AlloyU256;
+
+        // Create balance with leading zeros (32-byte big-endian representation)
+        let balance_wei = AlloyU256::from(10_000_000_000_000_000_000u128);
+        let balance_bytes = Bytes::from(
+            balance_wei
+                .to_be_bytes::<32>()
+                .as_slice(),
+        );
+
+        let mut state_overrides = BTreeMap::new();
+        let zero_address = Bytes::from([0u8; 20].as_slice());
+
+        let account_overrides =
+            AccountOverrides { slots: None, native_balance: Some(balance_bytes), code: None };
+        state_overrides.insert(zero_address, account_overrides);
+
+        let target = Bytes::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap();
+        let block_hash =
+            Bytes::from_str("0xfebbe1110db8fd453b7125860a1c909561d00872aedb40765f54356ac4d7cc40")
+                .unwrap();
+        let params =
+            RPCTracerParams::new(None, Bytes::from("0x00")).with_state_overrides(state_overrides);
+
+        let json_params =
+            EVMEntrypointService::create_trace_call_params(&target, &params, &block_hash);
+
+        // Extract the stateOverrides from the JSON
+        let tracing_options = json_params
+            .as_array()
+            .unwrap()
+            .get(2)
+            .unwrap();
+        let state_overrides = tracing_options
+            .get("stateOverrides")
+            .unwrap();
+        let zero_addr_override = state_overrides
+            .get("0x0000000000000000000000000000000000000000")
+            .unwrap();
+        let balance = zero_addr_override
+            .get("balance")
+            .unwrap()
+            .as_str()
+            .unwrap();
+
+        // The balance should NOT have leading zeros (except for the 0x prefix)
+        // 10 ETH = 0x8ac7230489e80000
+        assert_eq!(
+            balance, "0x8ac7230489e80000",
+            "Balance should be normalized without leading zeros"
+        );
+        assert!(
+            !balance.starts_with("0x00"),
+            "Balance should not start with leading zeros: {}",
+            balance
+        );
     }
 }
