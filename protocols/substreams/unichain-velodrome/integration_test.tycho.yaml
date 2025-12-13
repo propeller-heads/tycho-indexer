@@ -1,0 +1,56 @@
+substreams_yaml_path: ./base-aerodrome-slipstreams.yaml
+protocol_system: "aerodrome_slipstreams"
+protocol_type_names:
+  - "aerodrome_slipstreams_pool"
+module_name: "map_protocol_changes"
+skip_balance_check: true
+initialized_accounts:
+tests:
+  # These tests are skipped because they require some specific testing logic (see comment in2_store_tick_spacing_fee.rs)
+  # Else we would need to index over 10M blocks, which would take days.
+
+  # - name: test_weth_b3
+  #   start_block: 26204083
+  #   stop_block: 26281121 # dynamic fee module
+  #   expected_components:
+  #     - id: "0xB099C658e784b41EE435d48a8eb67e8f27285C93"
+  #       tokens:
+  #         - "0x4200000000000000000000000000000000000006" # weth
+  #         - "0xB3B32F9f8827D4634fE7d973Fa1034Ec9fdDB3B3" # b3
+  #       static_attributes:
+  #         default_fee: "0x1f4"
+  #         tick_spacing: "0x64"
+  #       creation_tx: "0xa47c7350a988573e757b524fd2ab2b0cb0a7f377a1580ce191cbaec5949a3972"
+  #       skip_simulation: false
+  #       skip_execution: true
+
+  # - name: test_crvUSD_USDC
+  #   start_block: 13901096
+  #   stop_block: 13928560 # observations[0] changed
+  #   expected_components:
+  #     - id: "0xf8d5df4d3408acd52a3ff54e8dbce0b3b28aa744"
+  #       tokens:
+  #         - "0x417Ac0e078398C154EdFadD9Ef675d30Be60Af93" # crvUSD
+  #         - "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" # usdc
+  #       static_attributes:
+  #         default_fee: "0x64"
+  #         tick_spacing: "0x01"
+  #       creation_tx: "0x742dde25cb497abebb36eacc75aee7bd1c409e2c85db125b03fd1fbcb78679a9"
+  #       skip_simulation: false
+  #       skip_execution: true
+
+  # # created by new factory
+  # - name: test_weth_bmi
+  #   start_block: 38086214
+  #   stop_block: 38087214
+  #   expected_components:
+  #     - id: "0x1b7088833548A8C4Ab12a900a2f4bdFA49221081"
+  #       tokens:
+  #         - "0x4200000000000000000000000000000000000006" # weth
+  #         - "0x2F16386bB37709016023232523FF6d9DAF444BE3" # bmi
+  #       static_attributes:
+  #         default_fee: "0x0bb8"
+  #         tick_spacing: "0x00c8"
+  #       creation_tx: "0x77fae105ce2c7c959b8839f8a5fd787f6d2b79f9f7e17d66d55f714b710372a6"
+  #       skip_simulation: false
+  #       skip_execution: true
