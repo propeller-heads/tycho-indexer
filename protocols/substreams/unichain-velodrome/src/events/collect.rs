@@ -1,6 +1,6 @@
 use crate::{
     abi::pool::events::Collect,
-    pb::tycho::evm::aerodrome::Pool,
+    pb::tycho::evm::velodrome::Pool,
     storage::{constants::TRACKED_SLOTS, pool_storage::SlipstreamsPoolStorage},
 };
 use substreams_ethereum::pb::eth::v2::StorageChange;

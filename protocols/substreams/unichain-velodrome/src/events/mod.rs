@@ -1,9 +1,6 @@
 use crate::{
-    abi::pool::events::{
-        Burn, Collect, CollectFees, Flash, IncreaseObservationCardinalityNext, Initialize, Mint,
-        Swap,
-    },
-    pb::tycho::evm::aerodrome::Pool,
+    abi::pool::events::{Burn, Collect, CollectFees, Flash, Initialize, Mint, Swap},
+    pb::tycho::evm::velodrome::Pool,
 };
 use substreams_ethereum::{
     pb::eth::v2::{Log, StorageChange},
@@ -18,7 +15,6 @@ pub mod burn;
 pub mod collect;
 pub mod collect_fees;
 pub mod flash;
-pub mod increase_observation_cardinality_next;
 pub mod initialize;
 pub mod mint;
 pub mod swap;
@@ -65,7 +61,6 @@ pub enum EventType {
     Burn(Burn),
     Collect(Collect),
     CollectFees(CollectFees),
-    IncreaseObservationCardinalityNext(IncreaseObservationCardinalityNext),
 }
 
 impl EventType {
@@ -78,7 +73,6 @@ impl EventType {
             EventType::Burn(e) => e,
             EventType::Collect(e) => e,
             EventType::CollectFees(e) => e,
-            EventType::IncreaseObservationCardinalityNext(e) => e,
         }
     }
 }
@@ -101,8 +95,6 @@ pub fn decode_event(event: &Log) -> Option<EventType> {
         Burn::match_and_decode(event).map(EventType::Burn),
         Collect::match_and_decode(event).map(EventType::Collect),
         CollectFees::match_and_decode(event).map(EventType::CollectFees),
-        IncreaseObservationCardinalityNext::match_and_decode(event)
-            .map(EventType::IncreaseObservationCardinalityNext),
     ]
     .into_iter()
     .find_map(std::convert::identity)

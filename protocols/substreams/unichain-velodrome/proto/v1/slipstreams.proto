@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package tycho.evm.aerodrome;
+package tycho.evm.velodrome;
 
 message Pool {
   bytes address = 1;

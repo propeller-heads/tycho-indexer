@@ -1,4 +1,4 @@
-use crate::{events::get_log_changed_balances, pb::tycho::evm::aerodrome::Pool};
+use crate::{events::get_log_changed_balances, pb::tycho::evm::velodrome::Pool};
 use anyhow::Ok;
 use substreams::store::{StoreGet, StoreGetProto};
 use substreams_ethereum::pb::eth::v2::{self as eth};

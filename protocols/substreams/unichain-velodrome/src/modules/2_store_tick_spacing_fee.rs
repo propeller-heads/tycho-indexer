@@ -1,4 +1,4 @@
-use crate::pb::tycho::evm::aerodrome::TickSpacingFees;
+use crate::pb::tycho::evm::velodrome::TickSpacingFees;
 use substreams::store::{StoreNew, StoreSet, StoreSetInt64};
 
 #[substreams::handlers::store]

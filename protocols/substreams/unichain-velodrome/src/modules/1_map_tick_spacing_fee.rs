@@ -1,7 +1,7 @@
 use crate::{
     abi::factory::events::TickSpacingEnabled,
     modules::utils::Params,
-    pb::tycho::evm::aerodrome::{TickSpacingFee, TickSpacingFees},
+    pb::tycho::evm::velodrome::{TickSpacingFee, TickSpacingFees},
 };
 use ethabi::ethereum_types::Address;
 use std::str::FromStr;

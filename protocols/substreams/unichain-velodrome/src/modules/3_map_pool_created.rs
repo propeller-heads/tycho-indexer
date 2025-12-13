@@ -112,7 +112,7 @@ fn get_new_pools(
                 ],
                 change: i32::from(ChangeType::Creation),
                 protocol_type: Option::from(ProtocolType {
-                    name: "aerodrome_slipstreams_pool".to_string(),
+                    name: "velodrome_slipstreams_pool".to_string(),
                     financial_type: FinancialType::Swap.into(),
                     attribute_schema: vec![],
                     implementation_type: ImplementationType::Custom.into(),

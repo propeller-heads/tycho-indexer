@@ -10,14 +10,6 @@ pub fn calc_map_slot(map_index: &[u8; 32], base_slot: &[u8; 32]) -> [u8; 32] {
     output
 }
 
-pub fn calc_fixed_array_slot(base_slot: &[u8; 32], index: u64) -> [u8; 32] {
-    let base_low = u64::from_be_bytes(base_slot[24..32].try_into().unwrap());
-    let new_low = base_low + index;
-    let mut result = *base_slot;
-    result[24..32].copy_from_slice(&new_low.to_be_bytes());
-    result
-}
-
 pub fn left_pad_from_bigint(input: &BigInt) -> [u8; 32] {
     if input.lt(&BigInt::zero()) {
         return left_pad(&input.to_signed_bytes_be(), 255);

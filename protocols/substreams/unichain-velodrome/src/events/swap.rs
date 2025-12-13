@@ -1,6 +1,6 @@
 use crate::{
     abi::pool::events::Swap,
-    pb::tycho::evm::aerodrome::Pool,
+    pb::tycho::evm::velodrome::Pool,
     storage::{constants::TRACKED_SLOTS, pool_storage::SlipstreamsPoolStorage},
 };
 use substreams::scalar::BigInt;
@@ -26,11 +26,8 @@ impl EventTrait for Swap {
 
         let pool_storage = SlipstreamsPoolStorage::new(&filtered_storage_changes);
 
-        let mut changed_attributes =
+        let changed_attributes =
             pool_storage.get_changed_attributes(TRACKED_SLOTS.to_vec().iter().collect());
-
-        let changed_observation = pool_storage.get_all_observations_changes();
-        changed_attributes.extend(changed_observation);
 
         changed_attributes
     }

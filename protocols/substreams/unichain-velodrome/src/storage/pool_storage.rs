@@ -1,9 +1,4 @@
-use std::collections::HashSet;
-
-use crate::storage::{
-    constants::{OBSERVATIONS, OBSERVATIONS_BASE_U64},
-    utils,
-};
+use crate::storage::utils;
 use tycho_substreams::prelude::{Attribute, ChangeType};
 
 use super::{constants::TICKS_MAP_SLOT, utils::read_bytes};
@@ -130,61 +125,5 @@ impl<'a> SlipstreamsPoolStorage<'a> {
         }
 
         self.get_changed_attributes(storage_locs.iter().collect())
-    }
-
-    pub fn get_observations_changes(&self, observations_idx: Vec<&BigInt>) -> Vec<Attribute> {
-        let mut storage_locs = Vec::new();
-        let mut observation_names = Vec::new();
-
-        for observation_idx in observations_idx.iter() {
-            observation_names.push(format!("observations/{observation_idx}"));
-        }
-
-        for (observation_idx, observation_name) in observations_idx
-            .iter()
-            .zip(observation_names.iter())
-        {
-            let observation_slot =
-                utils::calc_fixed_array_slot(&OBSERVATIONS, observation_idx.to_u64());
-
-            storage_locs.push(StorageLocation {
-                name: observation_name,
-                slot: observation_slot,
-                offset: 0,
-                number_of_bytes: 32,
-                signed: false,
-            });
-        }
-
-        self.get_changed_attributes(storage_locs.iter().collect())
-    }
-
-    pub fn get_all_observations_changes(&self) -> Vec<Attribute> {
-        let mut observations_idx: Vec<BigInt> = Vec::new();
-        let mut seen = HashSet::new();
-        let max_obs = 65535u64;
-
-        for change in self.storage_changes.iter() {
-            let key_low = u64::from_be_bytes(
-                change.key[24..32]
-                    .try_into()
-                    .expect("slice length must be 8"),
-            );
-            if key_low < OBSERVATIONS_BASE_U64 {
-                continue;
-            }
-
-            let idx = key_low - OBSERVATIONS_BASE_U64;
-
-            if idx > max_obs {
-                continue;
-            }
-            if seen.insert(idx) {
-                observations_idx.push(BigInt::from(idx));
-            }
-        }
-        let observation_idx_refs: Vec<&BigInt> = observations_idx.iter().collect();
-
-        self.get_observations_changes(observation_idx_refs)
     }
 }

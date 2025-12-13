@@ -4,7 +4,7 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 pub struct Params {
     pub factories: Vec<String>,
-    pub dynamic_fee_modules: Vec<String>,
+    pub custom_fee_modules: Vec<String>,
 }
 
 impl Params {

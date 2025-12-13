@@ -211,13 +211,13 @@ pub mod functions {
         }
     }
     #[derive(Debug, Clone, PartialEq)]
-    pub struct CreatePool {
+    pub struct CreatePool1 {
         pub token_a: Vec<u8>,
         pub token_b: Vec<u8>,
         pub tick_spacing: substreams::scalar::BigInt,
         pub sqrt_price_x96: substreams::scalar::BigInt,
     }
-    impl CreatePool {
+    impl CreatePool1 {
         const METHOD_ID: [u8; 4] = [35u8, 42u8, 165u8, 172u8];
         pub fn decode(
             call: &substreams_ethereum::pb::eth::v2::Call,
@@ -366,7 +366,7 @@ pub mod functions {
             }
         }
     }
-    impl substreams_ethereum::Function for CreatePool {
+    impl substreams_ethereum::Function for CreatePool1 {
         const NAME: &'static str = "createPool";
         fn match_call(call: &substreams_ethereum::pb::eth::v2::Call) -> bool {
             Self::match_call(call)
@@ -380,7 +380,149 @@ pub mod functions {
             self.encode()
         }
     }
-    impl substreams_ethereum::rpc::RPCDecodable<Vec<u8>> for CreatePool {
+    impl substreams_ethereum::rpc::RPCDecodable<Vec<u8>> for CreatePool1 {
+        fn output(data: &[u8]) -> Result<Vec<u8>, String> {
+            Self::output(data)
+        }
+    }
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct CreatePool2 {
+        pub token_a: Vec<u8>,
+        pub token_b: Vec<u8>,
+        pub tick_spacing: substreams::scalar::BigInt,
+    }
+    impl CreatePool2 {
+        const METHOD_ID: [u8; 4] = [161u8, 103u8, 18u8, 149u8];
+        pub fn decode(
+            call: &substreams_ethereum::pb::eth::v2::Call,
+        ) -> Result<Self, String> {
+            let maybe_data = call.input.get(4..);
+            if maybe_data.is_none() {
+                return Err("no data to decode".to_string());
+            }
+            let mut values = ethabi::decode(
+                    &[
+                        ethabi::ParamType::Address,
+                        ethabi::ParamType::Address,
+                        ethabi::ParamType::Uint(24usize),
+                    ],
+                    maybe_data.unwrap(),
+                )
+                .map_err(|e| format!("unable to decode call.input: {:?}", e))?;
+            values.reverse();
+            Ok(Self {
+                token_a: values
+                    .pop()
+                    .expect(INTERNAL_ERR)
+                    .into_address()
+                    .expect(INTERNAL_ERR)
+                    .as_bytes()
+                    .to_vec(),
+                token_b: values
+                    .pop()
+                    .expect(INTERNAL_ERR)
+                    .into_address()
+                    .expect(INTERNAL_ERR)
+                    .as_bytes()
+                    .to_vec(),
+                tick_spacing: {
+                    let mut v = [0 as u8; 32];
+                    values
+                        .pop()
+                        .expect(INTERNAL_ERR)
+                        .into_uint()
+                        .expect(INTERNAL_ERR)
+                        .to_big_endian(v.as_mut_slice());
+                    substreams::scalar::BigInt::from_unsigned_bytes_be(&v)
+                },
+            })
+        }
+        pub fn encode(&self) -> Vec<u8> {
+            let data = ethabi::encode(
+                &[
+                    ethabi::Token::Address(ethabi::Address::from_slice(&self.token_a)),
+                    ethabi::Token::Address(ethabi::Address::from_slice(&self.token_b)),
+                    ethabi::Token::Uint(
+                        ethabi::Uint::from_big_endian(
+                            match self.tick_spacing.clone().to_bytes_be() {
+                                (num_bigint::Sign::Plus, bytes) => bytes,
+                                (num_bigint::Sign::NoSign, bytes) => bytes,
+                                (num_bigint::Sign::Minus, _) => {
+                                    panic!("negative numbers are not supported")
+                                }
+                            }
+                                .as_slice(),
+                        ),
+                    ),
+                ],
+            );
+            let mut encoded = Vec::with_capacity(4 + data.len());
+            encoded.extend(Self::METHOD_ID);
+            encoded.extend(data);
+            encoded
+        }
+        pub fn output_call(
+            call: &substreams_ethereum::pb::eth::v2::Call,
+        ) -> Result<Vec<u8>, String> {
+            Self::output(call.return_data.as_ref())
+        }
+        pub fn output(data: &[u8]) -> Result<Vec<u8>, String> {
+            let mut values = ethabi::decode(&[ethabi::ParamType::Address], data.as_ref())
+                .map_err(|e| format!("unable to decode output data: {:?}", e))?;
+            Ok(
+                values
+                    .pop()
+                    .expect("one output data should have existed")
+                    .into_address()
+                    .expect(INTERNAL_ERR)
+                    .as_bytes()
+                    .to_vec(),
+            )
+        }
+        pub fn match_call(call: &substreams_ethereum::pb::eth::v2::Call) -> bool {
+            match call.input.get(0..4) {
+                Some(signature) => Self::METHOD_ID == signature,
+                None => false,
+            }
+        }
+        pub fn call(&self, address: Vec<u8>) -> Option<Vec<u8>> {
+            use substreams_ethereum::pb::eth::rpc;
+            let rpc_calls = rpc::RpcCalls {
+                calls: vec![rpc::RpcCall { to_addr : address, data : self.encode(), }],
+            };
+            let responses = substreams_ethereum::rpc::eth_call(&rpc_calls).responses;
+            let response = responses.get(0).expect("one response should have existed");
+            if response.failed {
+                return None;
+            }
+            match Self::output(response.raw.as_ref()) {
+                Ok(data) => Some(data),
+                Err(err) => {
+                    use substreams_ethereum::Function;
+                    substreams::log::info!(
+                        "Call output for function `{}` failed to decode with error: {}",
+                        Self::NAME, err
+                    );
+                    None
+                }
+            }
+        }
+    }
+    impl substreams_ethereum::Function for CreatePool2 {
+        const NAME: &'static str = "createPool";
+        fn match_call(call: &substreams_ethereum::pb::eth::v2::Call) -> bool {
+            Self::match_call(call)
+        }
+        fn decode(
+            call: &substreams_ethereum::pb::eth::v2::Call,
+        ) -> Result<Self, String> {
+            Self::decode(call)
+        }
+        fn encode(&self) -> Vec<u8> {
+            self.encode()
+        }
+    }
+    impl substreams_ethereum::rpc::RPCDecodable<Vec<u8>> for CreatePool2 {
         fn output(data: &[u8]) -> Result<Vec<u8>, String> {
             Self::output(data)
         }
@@ -580,9 +722,9 @@ pub mod functions {
         }
     }
     #[derive(Debug, Clone, PartialEq)]
-    pub struct FactoryRegistry {}
-    impl FactoryRegistry {
-        const METHOD_ID: [u8; 4] = [59u8, 240u8, 201u8, 251u8];
+    pub struct GaugeFactory {}
+    impl GaugeFactory {
+        const METHOD_ID: [u8; 4] = [13u8, 82u8, 51u8, 60u8];
         pub fn decode(
             call: &substreams_ethereum::pb::eth::v2::Call,
         ) -> Result<Self, String> {
@@ -642,8 +784,8 @@ pub mod functions {
             }
         }
     }
-    impl substreams_ethereum::Function for FactoryRegistry {
-        const NAME: &'static str = "factoryRegistry";
+    impl substreams_ethereum::Function for GaugeFactory {
+        const NAME: &'static str = "gaugeFactory";
         fn match_call(call: &substreams_ethereum::pb::eth::v2::Call) -> bool {
             Self::match_call(call)
         }
@@ -656,18 +798,160 @@ pub mod functions {
             self.encode()
         }
     }
-    impl substreams_ethereum::rpc::RPCDecodable<Vec<u8>> for FactoryRegistry {
+    impl substreams_ethereum::rpc::RPCDecodable<Vec<u8>> for GaugeFactory {
         fn output(data: &[u8]) -> Result<Vec<u8>, String> {
             Self::output(data)
         }
     }
     #[derive(Debug, Clone, PartialEq)]
-    pub struct GetPool {
-        pub param0: Vec<u8>,
-        pub param1: Vec<u8>,
-        pub param2: substreams::scalar::BigInt,
+    pub struct GetPool1 {
+        pub token_a: Vec<u8>,
+        pub token_b: Vec<u8>,
+        pub tick_spacing: substreams::scalar::BigInt,
     }
-    impl GetPool {
+    impl GetPool1 {
+        const METHOD_ID: [u8; 4] = [22u8, 152u8, 238u8, 130u8];
+        pub fn decode(
+            call: &substreams_ethereum::pb::eth::v2::Call,
+        ) -> Result<Self, String> {
+            let maybe_data = call.input.get(4..);
+            if maybe_data.is_none() {
+                return Err("no data to decode".to_string());
+            }
+            let mut values = ethabi::decode(
+                    &[
+                        ethabi::ParamType::Address,
+                        ethabi::ParamType::Address,
+                        ethabi::ParamType::Uint(24usize),
+                    ],
+                    maybe_data.unwrap(),
+                )
+                .map_err(|e| format!("unable to decode call.input: {:?}", e))?;
+            values.reverse();
+            Ok(Self {
+                token_a: values
+                    .pop()
+                    .expect(INTERNAL_ERR)
+                    .into_address()
+                    .expect(INTERNAL_ERR)
+                    .as_bytes()
+                    .to_vec(),
+                token_b: values
+                    .pop()
+                    .expect(INTERNAL_ERR)
+                    .into_address()
+                    .expect(INTERNAL_ERR)
+                    .as_bytes()
+                    .to_vec(),
+                tick_spacing: {
+                    let mut v = [0 as u8; 32];
+                    values
+                        .pop()
+                        .expect(INTERNAL_ERR)
+                        .into_uint()
+                        .expect(INTERNAL_ERR)
+                        .to_big_endian(v.as_mut_slice());
+                    substreams::scalar::BigInt::from_unsigned_bytes_be(&v)
+                },
+            })
+        }
+        pub fn encode(&self) -> Vec<u8> {
+            let data = ethabi::encode(
+                &[
+                    ethabi::Token::Address(ethabi::Address::from_slice(&self.token_a)),
+                    ethabi::Token::Address(ethabi::Address::from_slice(&self.token_b)),
+                    ethabi::Token::Uint(
+                        ethabi::Uint::from_big_endian(
+                            match self.tick_spacing.clone().to_bytes_be() {
+                                (num_bigint::Sign::Plus, bytes) => bytes,
+                                (num_bigint::Sign::NoSign, bytes) => bytes,
+                                (num_bigint::Sign::Minus, _) => {
+                                    panic!("negative numbers are not supported")
+                                }
+                            }
+                                .as_slice(),
+                        ),
+                    ),
+                ],
+            );
+            let mut encoded = Vec::with_capacity(4 + data.len());
+            encoded.extend(Self::METHOD_ID);
+            encoded.extend(data);
+            encoded
+        }
+        pub fn output_call(
+            call: &substreams_ethereum::pb::eth::v2::Call,
+        ) -> Result<Vec<u8>, String> {
+            Self::output(call.return_data.as_ref())
+        }
+        pub fn output(data: &[u8]) -> Result<Vec<u8>, String> {
+            let mut values = ethabi::decode(&[ethabi::ParamType::Address], data.as_ref())
+                .map_err(|e| format!("unable to decode output data: {:?}", e))?;
+            Ok(
+                values
+                    .pop()
+                    .expect("one output data should have existed")
+                    .into_address()
+                    .expect(INTERNAL_ERR)
+                    .as_bytes()
+                    .to_vec(),
+            )
+        }
+        pub fn match_call(call: &substreams_ethereum::pb::eth::v2::Call) -> bool {
+            match call.input.get(0..4) {
+                Some(signature) => Self::METHOD_ID == signature,
+                None => false,
+            }
+        }
+        pub fn call(&self, address: Vec<u8>) -> Option<Vec<u8>> {
+            use substreams_ethereum::pb::eth::rpc;
+            let rpc_calls = rpc::RpcCalls {
+                calls: vec![rpc::RpcCall { to_addr : address, data : self.encode(), }],
+            };
+            let responses = substreams_ethereum::rpc::eth_call(&rpc_calls).responses;
+            let response = responses.get(0).expect("one response should have existed");
+            if response.failed {
+                return None;
+            }
+            match Self::output(response.raw.as_ref()) {
+                Ok(data) => Some(data),
+                Err(err) => {
+                    use substreams_ethereum::Function;
+                    substreams::log::info!(
+                        "Call output for function `{}` failed to decode with error: {}",
+                        Self::NAME, err
+                    );
+                    None
+                }
+            }
+        }
+    }
+    impl substreams_ethereum::Function for GetPool1 {
+        const NAME: &'static str = "getPool";
+        fn match_call(call: &substreams_ethereum::pb::eth::v2::Call) -> bool {
+            Self::match_call(call)
+        }
+        fn decode(
+            call: &substreams_ethereum::pb::eth::v2::Call,
+        ) -> Result<Self, String> {
+            Self::decode(call)
+        }
+        fn encode(&self) -> Vec<u8> {
+            self.encode()
+        }
+    }
+    impl substreams_ethereum::rpc::RPCDecodable<Vec<u8>> for GetPool1 {
+        fn output(data: &[u8]) -> Result<Vec<u8>, String> {
+            Self::output(data)
+        }
+    }
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct GetPool2 {
+        pub token_a: Vec<u8>,
+        pub token_b: Vec<u8>,
+        pub tick_spacing: substreams::scalar::BigInt,
+    }
+    impl GetPool2 {
         const METHOD_ID: [u8; 4] = [40u8, 175u8, 141u8, 11u8];
         pub fn decode(
             call: &substreams_ethereum::pb::eth::v2::Call,
@@ -687,21 +971,21 @@ pub mod functions {
                 .map_err(|e| format!("unable to decode call.input: {:?}", e))?;
             values.reverse();
             Ok(Self {
-                param0: values
+                token_a: values
                     .pop()
                     .expect(INTERNAL_ERR)
                     .into_address()
                     .expect(INTERNAL_ERR)
                     .as_bytes()
                     .to_vec(),
-                param1: values
+                token_b: values
                     .pop()
                     .expect(INTERNAL_ERR)
                     .into_address()
                     .expect(INTERNAL_ERR)
                     .as_bytes()
                     .to_vec(),
-                param2: {
+                tick_spacing: {
                     let mut v = [0 as u8; 32];
                     values
                         .pop()
@@ -716,10 +1000,12 @@ pub mod functions {
         pub fn encode(&self) -> Vec<u8> {
             let data = ethabi::encode(
                 &[
-                    ethabi::Token::Address(ethabi::Address::from_slice(&self.param0)),
-                    ethabi::Token::Address(ethabi::Address::from_slice(&self.param1)),
+                    ethabi::Token::Address(ethabi::Address::from_slice(&self.token_a)),
+                    ethabi::Token::Address(ethabi::Address::from_slice(&self.token_b)),
                     {
-                        let non_full_signed_bytes = self.param2.to_signed_bytes_be();
+                        let non_full_signed_bytes = self
+                            .tick_spacing
+                            .to_signed_bytes_be();
                         let full_signed_bytes_init = if non_full_signed_bytes[0] & 0x80
                             == 0x80
                         {
@@ -791,7 +1077,7 @@ pub mod functions {
             }
         }
     }
-    impl substreams_ethereum::Function for GetPool {
+    impl substreams_ethereum::Function for GetPool2 {
         const NAME: &'static str = "getPool";
         fn match_call(call: &substreams_ethereum::pb::eth::v2::Call) -> bool {
             Self::match_call(call)
@@ -805,7 +1091,7 @@ pub mod functions {
             self.encode()
         }
     }
-    impl substreams_ethereum::rpc::RPCDecodable<Vec<u8>> for GetPool {
+    impl substreams_ethereum::rpc::RPCDecodable<Vec<u8>> for GetPool2 {
         fn output(data: &[u8]) -> Result<Vec<u8>, String> {
             Self::output(data)
         }
@@ -1029,6 +1315,108 @@ pub mod functions {
         }
     }
     #[derive(Debug, Clone, PartialEq)]
+    pub struct IsPair {
+        pub pool: Vec<u8>,
+    }
+    impl IsPair {
+        const METHOD_ID: [u8; 4] = [229u8, 227u8, 27u8, 19u8];
+        pub fn decode(
+            call: &substreams_ethereum::pb::eth::v2::Call,
+        ) -> Result<Self, String> {
+            let maybe_data = call.input.get(4..);
+            if maybe_data.is_none() {
+                return Err("no data to decode".to_string());
+            }
+            let mut values = ethabi::decode(
+                    &[ethabi::ParamType::Address],
+                    maybe_data.unwrap(),
+                )
+                .map_err(|e| format!("unable to decode call.input: {:?}", e))?;
+            values.reverse();
+            Ok(Self {
+                pool: values
+                    .pop()
+                    .expect(INTERNAL_ERR)
+                    .into_address()
+                    .expect(INTERNAL_ERR)
+                    .as_bytes()
+                    .to_vec(),
+            })
+        }
+        pub fn encode(&self) -> Vec<u8> {
+            let data = ethabi::encode(
+                &[ethabi::Token::Address(ethabi::Address::from_slice(&self.pool))],
+            );
+            let mut encoded = Vec::with_capacity(4 + data.len());
+            encoded.extend(Self::METHOD_ID);
+            encoded.extend(data);
+            encoded
+        }
+        pub fn output_call(
+            call: &substreams_ethereum::pb::eth::v2::Call,
+        ) -> Result<bool, String> {
+            Self::output(call.return_data.as_ref())
+        }
+        pub fn output(data: &[u8]) -> Result<bool, String> {
+            let mut values = ethabi::decode(&[ethabi::ParamType::Bool], data.as_ref())
+                .map_err(|e| format!("unable to decode output data: {:?}", e))?;
+            Ok(
+                values
+                    .pop()
+                    .expect("one output data should have existed")
+                    .into_bool()
+                    .expect(INTERNAL_ERR),
+            )
+        }
+        pub fn match_call(call: &substreams_ethereum::pb::eth::v2::Call) -> bool {
+            match call.input.get(0..4) {
+                Some(signature) => Self::METHOD_ID == signature,
+                None => false,
+            }
+        }
+        pub fn call(&self, address: Vec<u8>) -> Option<bool> {
+            use substreams_ethereum::pb::eth::rpc;
+            let rpc_calls = rpc::RpcCalls {
+                calls: vec![rpc::RpcCall { to_addr : address, data : self.encode(), }],
+            };
+            let responses = substreams_ethereum::rpc::eth_call(&rpc_calls).responses;
+            let response = responses.get(0).expect("one response should have existed");
+            if response.failed {
+                return None;
+            }
+            match Self::output(response.raw.as_ref()) {
+                Ok(data) => Some(data),
+                Err(err) => {
+                    use substreams_ethereum::Function;
+                    substreams::log::info!(
+                        "Call output for function `{}` failed to decode with error: {}",
+                        Self::NAME, err
+                    );
+                    None
+                }
+            }
+        }
+    }
+    impl substreams_ethereum::Function for IsPair {
+        const NAME: &'static str = "isPair";
+        fn match_call(call: &substreams_ethereum::pb::eth::v2::Call) -> bool {
+            Self::match_call(call)
+        }
+        fn decode(
+            call: &substreams_ethereum::pb::eth::v2::Call,
+        ) -> Result<Self, String> {
+            Self::decode(call)
+        }
+        fn encode(&self) -> Vec<u8> {
+            self.encode()
+        }
+    }
+    impl substreams_ethereum::rpc::RPCDecodable<bool> for IsPair {
+        fn output(data: &[u8]) -> Result<bool, String> {
+            Self::output(data)
+        }
+    }
+    #[derive(Debug, Clone, PartialEq)]
     pub struct IsPool {
         pub pool: Vec<u8>,
     }
@@ -1127,6 +1515,88 @@ pub mod functions {
     }
     impl substreams_ethereum::rpc::RPCDecodable<bool> for IsPool {
         fn output(data: &[u8]) -> Result<bool, String> {
+            Self::output(data)
+        }
+    }
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct Nft {}
+    impl Nft {
+        const METHOD_ID: [u8; 4] = [71u8, 204u8, 202u8, 2u8];
+        pub fn decode(
+            call: &substreams_ethereum::pb::eth::v2::Call,
+        ) -> Result<Self, String> {
+            Ok(Self {})
+        }
+        pub fn encode(&self) -> Vec<u8> {
+            let data = ethabi::encode(&[]);
+            let mut encoded = Vec::with_capacity(4 + data.len());
+            encoded.extend(Self::METHOD_ID);
+            encoded.extend(data);
+            encoded
+        }
+        pub fn output_call(
+            call: &substreams_ethereum::pb::eth::v2::Call,
+        ) -> Result<Vec<u8>, String> {
+            Self::output(call.return_data.as_ref())
+        }
+        pub fn output(data: &[u8]) -> Result<Vec<u8>, String> {
+            let mut values = ethabi::decode(&[ethabi::ParamType::Address], data.as_ref())
+                .map_err(|e| format!("unable to decode output data: {:?}", e))?;
+            Ok(
+                values
+                    .pop()
+                    .expect("one output data should have existed")
+                    .into_address()
+                    .expect(INTERNAL_ERR)
+                    .as_bytes()
+                    .to_vec(),
+            )
+        }
+        pub fn match_call(call: &substreams_ethereum::pb::eth::v2::Call) -> bool {
+            match call.input.get(0..4) {
+                Some(signature) => Self::METHOD_ID == signature,
+                None => false,
+            }
+        }
+        pub fn call(&self, address: Vec<u8>) -> Option<Vec<u8>> {
+            use substreams_ethereum::pb::eth::rpc;
+            let rpc_calls = rpc::RpcCalls {
+                calls: vec![rpc::RpcCall { to_addr : address, data : self.encode(), }],
+            };
+            let responses = substreams_ethereum::rpc::eth_call(&rpc_calls).responses;
+            let response = responses.get(0).expect("one response should have existed");
+            if response.failed {
+                return None;
+            }
+            match Self::output(response.raw.as_ref()) {
+                Ok(data) => Some(data),
+                Err(err) => {
+                    use substreams_ethereum::Function;
+                    substreams::log::info!(
+                        "Call output for function `{}` failed to decode with error: {}",
+                        Self::NAME, err
+                    );
+                    None
+                }
+            }
+        }
+    }
+    impl substreams_ethereum::Function for Nft {
+        const NAME: &'static str = "nft";
+        fn match_call(call: &substreams_ethereum::pb::eth::v2::Call) -> bool {
+            Self::match_call(call)
+        }
+        fn decode(
+            call: &substreams_ethereum::pb::eth::v2::Call,
+        ) -> Result<Self, String> {
+            Self::decode(call)
+        }
+        fn encode(&self) -> Vec<u8> {
+            self.encode()
+        }
+    }
+    impl substreams_ethereum::rpc::RPCDecodable<Vec<u8>> for Nft {
+        fn output(data: &[u8]) -> Result<Vec<u8>, String> {
             Self::output(data)
         }
     }

@@ -1,7 +1,7 @@
 use super::{BalanceDelta, EventTrait};
 use crate::{
     abi::pool::events::Mint,
-    pb::tycho::evm::aerodrome::Pool,
+    pb::tycho::evm::velodrome::Pool,
     storage::{constants::TRACKED_SLOTS, pool_storage::SlipstreamsPoolStorage},
 };
 use substreams_ethereum::pb::eth::v2::StorageChange;
@@ -31,9 +31,6 @@ impl EventTrait for Mint {
             pool_storage.get_ticks_changes(vec![&self.tick_upper, &self.tick_lower]);
 
         changed_attributes.extend(changed_ticks);
-
-        let changed_observation = pool_storage.get_all_observations_changes();
-        changed_attributes.extend(changed_observation);
 
         changed_attributes
     }

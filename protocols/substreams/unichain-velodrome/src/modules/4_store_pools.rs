@@ -1,4 +1,4 @@
-use crate::pb::tycho::evm::aerodrome::Pool;
+use crate::pb::tycho::evm::velodrome::Pool;
 use std::str;
 use substreams::store::{StoreNew, StoreSetIfNotExists, StoreSetIfNotExistsProto};
 use tycho_substreams::prelude::BlockChanges;
