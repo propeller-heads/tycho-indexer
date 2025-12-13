@@ -1,3 +1,11 @@
+## [0.122.0](https://github.com/propeller-heads/tycho-indexer/compare/0.121.2...0.122.0) (2025-12-13)
+
+
+### Features
+
+* fix balance overrides for Go node providers ([355da1b](https://github.com/propeller-heads/tycho-indexer/commit/355da1b73cfd904e2f9cb77731cd224110f23ce3))
+* fix balance overrides for Go node providers ([#807](https://github.com/propeller-heads/tycho-indexer/issues/807)) ([a31d5f2](https://github.com/propeller-heads/tycho-indexer/commit/a31d5f2db8497f463ace52de3d10cc37a1013bd6))
+
 ## [0.121.2](https://github.com/propeller-heads/tycho-indexer/compare/0.121.1...0.121.2) (2025-12-12)
 
 
