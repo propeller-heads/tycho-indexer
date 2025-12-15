@@ -392,7 +392,7 @@ where
 
                         // Add account if it's new OR has new slots and is not full-indexed
                         if is_new_account ||
-                            (!new_slots.is_empty() && !self.should_skip_full_indexing(account))
+                            (!new_slots.is_empty() && self.should_skip_full_indexing(account))
                         {
                             // Only add new slots to new_account_addr_to_slots (might be empty for
                             // new accounts)
