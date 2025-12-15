@@ -1,3 +1,33 @@
+## [0.145.0](https://github.com/propeller-heads/tycho-execution/compare/0.144.1...0.145.0) (2025-12-15)
+
+
+### Features
+
+* add flag indicating whether approval is required for the operation ([148ec40](https://github.com/propeller-heads/tycho-execution/commit/148ec4008ec68022a3fc9f5e3198ba15f98387b8))
+* add more tests ([36ab1bf](https://github.com/propeller-heads/tycho-execution/commit/36ab1bf751145e34e11e0cc18ab624098effc633))
+* add separate field for stETH IERC20 to avoid repeated casting ([67d131d](https://github.com/propeller-heads/tycho-execution/commit/67d131d7de3c564e13ed3ee7cff616f7eab30d83))
+* add sequential test ([b3b5c18](https://github.com/propeller-heads/tycho-execution/commit/b3b5c18e043d6db5edbf70bb0305ccc71cc2fb7c))
+* add tests for decoding ([f6efe8e](https://github.com/propeller-heads/tycho-execution/commit/f6efe8e41a71e38c50440a2775ec11a6757d5d6a))
+* add tests for lido encoding ([1ae1be8](https://github.com/propeller-heads/tycho-execution/commit/1ae1be8b393fe83444a7a84ff815ad214ba9f22e))
+* add TychoRouterTestSetup for Lido ([ffe598f](https://github.com/propeller-heads/tycho-execution/commit/ffe598f2cbccb34a1e1de31f0a30765ffc33d737))
+* initial commit for Lido ([996b971](https://github.com/propeller-heads/tycho-execution/commit/996b971d96c7c3038f5350932d617e1533b4161f))
+* **lido:** Correct staking and wrapping operations ([41b127f](https://github.com/propeller-heads/tycho-execution/commit/41b127f55a2505c66fc14ea11387f1461c54c934))
+* **lido:** Correct unwrapping operation ([aef90c7](https://github.com/propeller-heads/tycho-execution/commit/aef90c7da0459565b68bfa08532c5b57fe9f1aca))
+
+
+### Bug Fixes
+
+* add missing field in the test ([d825d26](https://github.com/propeller-heads/tycho-execution/commit/d825d26373d256c2da026be3a712a20bdffa5137))
+* add new field to the test ([dcb43a8](https://github.com/propeller-heads/tycho-execution/commit/dcb43a887252e424509b167d74c09c36e5d8a0fa))
+* remove signer ([8a770be](https://github.com/propeller-heads/tycho-execution/commit/8a770be4be5f27d5756678dfed947020bd60883c))
+* remove unnecessary approval now handled by new flag ([0d328d4](https://github.com/propeller-heads/tycho-execution/commit/0d328d4ac1c48c8418c4acaddf1ddddfc59b57db))
+* remove unnecessary writing of calldata to file ([8bd2774](https://github.com/propeller-heads/tycho-execution/commit/8bd2774f18d26947835f9f5bca27b50c407a6c93))
+* retrieve missing router address ([459d30f](https://github.com/propeller-heads/tycho-execution/commit/459d30f1a79f95a2b3192b80d6a79ea47e98e0bb))
+* revert numbers to reflect the order ([e7129d5](https://github.com/propeller-heads/tycho-execution/commit/e7129d50c397c5a407ee45db75cc7096228c459e))
+* Scratch on upcoming changes: ([e5073d2](https://github.com/propeller-heads/tycho-execution/commit/e5073d21264f8016fd51dc535d935660fc8eee3f))
+* update elements after rebase ([0db4555](https://github.com/propeller-heads/tycho-execution/commit/0db45557d945e53ec4876dc486b2526545126a5e))
+* use TychoRouterTestSetup forkblock ([f0873ea](https://github.com/propeller-heads/tycho-execution/commit/f0873eaac43bafac8837358e1e796bb821244b16))
+
 ## [0.144.1](https://github.com/propeller-heads/tycho-execution/compare/0.144.0...0.144.1) (2025-12-12)
 
 
