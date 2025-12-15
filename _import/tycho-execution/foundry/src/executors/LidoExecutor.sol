@@ -14,8 +14,7 @@ error LidoExecutor__InvalidSwapDirection();
 error LidoExecutor__ZeroAddress();
 
 interface LidoPool {
-    // slither-disable-next-line naming-convention
-    function submit(address _referral) external payable returns (uint256);
+    function submit(address referral) external payable returns (uint256);
 }
 
 interface LidoWrappedPool {
