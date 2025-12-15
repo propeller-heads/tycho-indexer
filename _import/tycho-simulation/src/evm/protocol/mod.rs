@@ -13,6 +13,6 @@ pub mod uniswap_v3;
 pub mod uniswap_v4;
 pub mod utils;
 pub mod vm;
-
+pub mod velodrome_slipstreams;
 mod clmm;
 mod cpmm;
