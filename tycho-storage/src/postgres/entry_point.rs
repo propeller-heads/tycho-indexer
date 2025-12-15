@@ -42,10 +42,7 @@ impl PostgresGateway {
         let chain_id = self.get_chain_id(chain)?;
 
         let pc_ids = orm::ProtocolComponent::ids_by_external_ids(
-            &new_data
-                .keys()
-                .map(AsRef::as_ref)
-                .collect::<Vec<_>>(),
+            new_data.keys().map(AsRef::as_ref),
             chain_id,
             conn,
         )
@@ -214,11 +211,10 @@ impl PostgresGateway {
         .await?;
 
         let pc_ids = orm::ProtocolComponent::ids_by_external_ids(
-            &new_data
+            new_data
                 .values()
                 .flat_map(|set| set.iter())
-                .map(|(_, pc_ext_id)| pc_ext_id.as_str())
-                .collect::<Vec<_>>(),
+                .map(|(_, pc_ext_id)| pc_ext_id.as_str()),
             chain_id,
             conn,
         )
