@@ -310,11 +310,23 @@ where
                 }
             }
 
-            // Emit metrics for successful and failed traces
-            counter!("dci_traces_succeeded", "extractor" => self.protocol.clone())
-                .increment(traced_entrypoints.len() as u64);
-            counter!("dci_traces_failed", "extractor" => self.protocol.clone())
-                .increment(failed_entrypoints.len() as u64);
+            // Emit metrics for successful and failed traces per entrypoint ID
+            for traced_entrypoint in &traced_entrypoints {
+                counter!(
+                    "dci_traces_succeeded",
+                    "extractor" => self.protocol.clone(),
+                    "entrypoint_id" => traced_entrypoint.entry_point_id()
+                )
+                .increment(1);
+            }
+            for (ep, _tx) in &failed_entrypoints {
+                counter!(
+                    "dci_traces_failed",
+                    "extractor" => self.protocol.clone(),
+                    "entrypoint_id" => ep.entry_point.external_id.clone()
+                )
+                .increment(1);
+            }
 
             let component_ids_to_pause = failed_entrypoints
                 .iter()
