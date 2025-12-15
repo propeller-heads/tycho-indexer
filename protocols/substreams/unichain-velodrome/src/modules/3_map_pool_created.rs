@@ -63,27 +63,7 @@ fn get_new_pools(
                         change: ChangeType::Creation.into(),
                     },
                     Attribute {
-                        name: "observationIndex".to_string(),
-                        value: BigInt::from(0).to_signed_bytes_be(),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "observationCardinality".to_string(),
-                        value: BigInt::from(0).to_signed_bytes_be(),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "dfc_baseFee".to_string(),
-                        value: BigInt::from(0).to_signed_bytes_be(),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "dfc_scalingFactor".to_string(),
-                        value: BigInt::from(0).to_signed_bytes_be(),
-                        change: ChangeType::Creation.into(),
-                    },
-                    Attribute {
-                        name: "dfc_feeCap".to_string(),
+                        name: "custom_fee".to_string(),
                         value: BigInt::from(0).to_signed_bytes_be(),
                         change: ChangeType::Creation.into(),
                     },
