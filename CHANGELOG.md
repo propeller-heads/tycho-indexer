@@ -1,3 +1,10 @@
+## [0.122.3](https://github.com/propeller-heads/tycho-indexer/compare/0.122.2...0.122.3) (2025-12-15)
+
+
+### Bug Fixes
+
+* **dci:** add entrypoint_id to trace metrics ([ef3012d](https://github.com/propeller-heads/tycho-indexer/commit/ef3012dfbb306d2cb3c20bdb5194e0dbf730624b))
+
 ## [0.122.2](https://github.com/propeller-heads/tycho-indexer/compare/0.122.1...0.122.2) (2025-12-15)
 
 
