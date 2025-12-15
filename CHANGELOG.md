@@ -1,3 +1,13 @@
+## [0.122.2](https://github.com/propeller-heads/tycho-indexer/compare/0.122.1...0.122.2) (2025-12-15)
+
+
+### Bug Fixes
+
+* early exit account extractions on empty storage requests ([1772677](https://github.com/propeller-heads/tycho-indexer/commit/1772677b17e6d8f65b597e55a28a94b5e89094aa))
+* full indexing check on slot extraction trigger ([eb2187b](https://github.com/propeller-heads/tycho-indexer/commit/eb2187b8a690302ad2e60e4c570fbe194240885c))
+* skip account extraction on new slots for full indexed contracts ([61e74ba](https://github.com/propeller-heads/tycho-indexer/commit/61e74ba95745abb848981eb994b4c1e5185f2611))
+* skip account extraction on new slots for full indexed contracts ([#808](https://github.com/propeller-heads/tycho-indexer/issues/808)) ([c87e18e](https://github.com/propeller-heads/tycho-indexer/commit/c87e18ef994a81a38fd34daeb28b2b1be51ef9c0))
+
 ## [0.122.1](https://github.com/propeller-heads/tycho-indexer/compare/0.122.0...0.122.1) (2025-12-15)
 
 ## [0.122.0](https://github.com/propeller-heads/tycho-indexer/compare/0.121.2...0.122.0) (2025-12-13)
