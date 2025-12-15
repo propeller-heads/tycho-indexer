@@ -42,17 +42,15 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
     address public immutable stETHAddress;
     address public immutable wstETH;
 
-    constructor(
-        address _stETH_address,
-        address _wstETH_address,
-        address _permit2
-    ) RestrictTransferFrom(_permit2) {
-        if (_stETH_address == address(0) || _wstETH_address == address(0)) {
+    constructor(address _stETHAddress, address _wstETHAddress, address _permit2)
+        RestrictTransferFrom(_permit2)
+    {
+        if (_stETHAddress == address(0) || _wstETHAddress == address(0)) {
             revert LidoExecutor__ZeroAddress();
         }
-        stETH = IERC20(_stETH_address);
-        stETHAddress = _stETH_address;
-        wstETH = _wstETH_address;
+        stETH = IERC20(_stETHAddress);
+        stETHAddress = _stETHAddress;
+        wstETH = _wstETHAddress;
     }
 
     // slither-disable-next-line locked-ether
