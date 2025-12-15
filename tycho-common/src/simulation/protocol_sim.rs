@@ -114,65 +114,52 @@ impl Price {
 /// * `amount_out` - The amount of token_out (what you receive)
 ///
 /// The price of the trade is the ratio of amount_out to amount_in, i.e. amount_out / amount_in.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Trade {
+#[derive(Debug, Clone)]
+pub struct PoolSwap {
     pub amount_in: BigUint,
     pub amount_out: BigUint,
+    pub new_state: Box<dyn ProtocolSim>,
 }
 
-impl Trade {
-    pub fn new(amount_in: BigUint, amount_out: BigUint) -> Self {
-        Self { amount_in, amount_out }
+impl PoolSwap {
+    pub fn new(amount_in: BigUint, amount_out: BigUint, new_state: Box<dyn ProtocolSim>) -> Self {
+        Self { amount_in, amount_out, new_state }
     }
 }
 
-/// Represents the parameters for swap_to_price.
-///
-/// # Fields
-///
-/// * `token_in` - The token being sold (swapped into the pool)
-/// * `token_out` - The token being bought (swapped out of the pool)
-/// * `target_price` - The marginal price we want the pool to be after the trade, as a [Price]
-///    struct. The pool's price will move down to this level as token_in is sold into it
-/// * `tolerance` - The tolerance percentage for the resulting trade price. After trading, the pool's
-///    price will decrease to the interval `[target_price, target_price * (1 + tolerance)]`.
 #[derive(Debug, Clone, PartialEq)]
-pub struct SwapToPriceParams {
-    token_in: Token,
-    token_out: Token,
-    target_price: Price,
-    tolerance: f64,
-}
+pub enum PriceConstraint {
+    /// This mode will calculate the maximum trade that this pool can execute while respecting a
+    /// trade limit price.
+    ///
+    /// # Fields
+    /// * `limit_price` - The minimum acceptable price for the resulting trade, as a [Price] struct.
+    ///   The resulting amount_out / amount_in must be >= trade_limit_price
+    /// * `tolerance` - The tolerance as a percentage to be applied on top of (increasing) the trade
+    ///   limit price. This is used to loosen the acceptance criteria for implementations of this method,
+    ///   but will never allow violating the trade limit price itself.
+    /// * `max_amount_in` - The maximum amount of token_in that can be used for this trade.
+    TradeLimitPrice { limit: Price, tolerance: f64, max_amount_in: Option<BigUint> },
 
-impl SwapToPriceParams {
-    pub fn new(
-        token_in: Token,
-        token_out: Token,
-        target_price: Price,
-        tolerance: f64,
-    ) -> Self {
-        Self { token_in, token_out, target_price, tolerance }
-    }
-
-    /// Returns a reference to the input token (token being sold into the pool)
-    pub fn token_in(&self) -> &Token {
-        &self.token_in
-    }
-
-    /// Returns a reference to the output token (token being bought out of the pool)
-    pub fn token_out(&self) -> &Token {
-        &self.token_out
-    }
-
-    /// Returns a reference to the target price
-    pub fn target_price(&self) -> &Price {
-        &self.target_price
-    }
-
-    /// Returns the tolerance
-    pub fn tolerance(&self) -> f64 {
-        self.tolerance
-    }
+    /// This mode will Calculate the amount of token_in required to move the pool's marginal price
+    /// down to a target price, and the amount of token_out received.
+    ///
+    /// # Fields
+    /// * `target_price` - The marginal price we want the pool to be after the trade, as a [Price]
+    ///    struct. The pool's price will move down to this level as token_in is sold into it
+    /// * `tolerance` - The tolerance percentage for the resulting trade price. After trading, the pool's
+    ///    price will decrease to the interval `[target_price, target_price * (1 + tolerance)]`.
+    ///
+    /// # Edge Cases and Limitations
+    ///
+    /// Computing the exact amount to move a pool's marginal price to a target has several challenges:
+    /// - The definition of marginal price varies between protocols. It is usually not an attribute
+    /// of the pool but a consequence of its liquidity distribution and current state.
+    /// - For protocols with concentrated liquidity, the marginal price is discrete, meaning we can't
+    /// always find an exact trade amount to reach the target price.
+    /// - Not all protocols support analytical solutions for this problem, requiring numerical
+    /// methods.
+    PoolTargetPrice { target: Price, tolerance: f64 },
 }
 
 /// Represents the parameters for query_max_trade.
@@ -181,27 +168,17 @@ impl SwapToPriceParams {
 ///
 /// * `token_in` - The token being sold (swapped into the pool)
 /// * `token_out` - The token being bought (swapped out of the pool)
-/// * `trade_limit_price` - The minimum acceptable price for the resulting trade, as a [Price] struct.
-///   The resulting amount_out / amount_in must be >= trade_limit_price
-/// * `tolerance` - The tolerance as a percentage to be applied on top of (increasing) the trade
-///   limit price. This is used to loosen the acceptance criteria for implementations of this method,
-///   but will never allow violating the trade limit price itself.
+/// * `price_constraint` - Type of price constraint to be applied. See [PriceConstraint].
 #[derive(Debug, Clone, PartialEq)]
-pub struct QueryMaxTradeParams {
+pub struct QuerySwapSizeParams {
     token_in: Token,
     token_out: Token,
-    trade_limit_price: Price,
-    tolerance: f64,
+    price_constraint: PriceConstraint,
 }
 
-impl QueryMaxTradeParams {
-    pub fn new(
-        token_in: Token,
-        token_out: Token,
-        trade_limit_price: Price,
-        tolerance: f64,
-    ) -> Self {
-        Self { token_in, token_out, trade_limit_price, tolerance }
+impl QuerySwapSizeParams {
+    pub fn new(token_in: Token, token_out: Token, price_constraint: PriceConstraint) -> Self {
+        Self { token_in, token_out, price_constraint }
     }
 
     /// Returns a reference to the input token (token being sold into the pool)
@@ -214,14 +191,9 @@ impl QueryMaxTradeParams {
         &self.token_out
     }
 
-    /// Returns a reference to the trade price limit
-    pub fn trade_limit_price(&self) -> &Price {
-        &self.trade_limit_price
-    }
-
-    /// Returns the tolerance
-    pub fn tolerance(&self) -> f64 {
-        self.tolerance
+    /// Returns a reference to the price constraint
+    pub fn price_constraint(&self) -> &PriceConstraint {
+        &self.price_constraint
     }
 }
 
@@ -323,60 +295,29 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
         balances: &Balances,
     ) -> Result<(), TransitionError<String>>;
 
-    /// Calculates the amount of token_in required to move the pool's marginal price down to
-    /// a target price, and the amount of token_out received.
+    /// Calculates the swap volume required to achieve the provided goal when trading against this pool.
+    ///
+    /// This method will branch towards different behaviors based on [PriceConstraint] enum. Please
+    /// refer to its documentation for further details on each behavior.
+    ///
+    /// In short, the current two options are:
+    /// - Maximize your trade while respecting a trade limit price: [PriceConstraint::TradeLimitPrice]
+    /// - Move the pool price to a target price: [PriceConstraint::PoolTargetPrice]
     ///
     /// # Arguments
     ///
-    /// * `params` - A [SwapToPriceParams] struct containing the inputs for this method.
+    /// * `params` - A [QuerySwapSizeParams] struct containing the inputs for this method.
     ///
     /// # Returns
     ///
-    /// * `Ok(Trade)` - A `Trade` struct containing the amount that needs to be swapped on the pool
-    ///   to move its price to the target price.
-    /// * `Err(SimulationError)` - If:
-    ///   - The calculation encounters numerical issues (overflow, division by zero, etc.)
-    ///   - The method is not implemented for this protocol
-    ///   - The pool cannot be decreased to the target price within the specified tolerance
-    ///
-    /// # Edge Cases and Limitations
-    ///
-    /// Computing the exact amount to move a pool's marginal price to a target has several challenges:
-    /// - The definition of marginal price varies between protocols. It is usually not an attribute
-    /// of the pool but a consequence of its liquidity distribution and current state.
-    /// - For protocols with concentrated liquidity, the marginal price is discrete, meaning we can't
-    /// always find an exact trade amount to reach the target price.
-    /// - Not all protocols support analytical solutions for this problem, requiring numerical
-    /// methods.
-    ///
-    /// To accomodate these limitations, we add a tolerance parameter for the resulting price. See
-    /// [SwapToPriceParams] for details.
-    #[allow(unused)]
-    fn swap_to_price(&self, params: &SwapToPriceParams) -> Result<Trade, SimulationError> {
-        Err(SimulationError::FatalError("swap_to_price not implemented".into()))
-    }
-
-    /// Calculates the maximum trade that this pool can execute while respecting a trade limit price.
-    ///
-    /// # Arguments
-    ///
-    /// * `params` - A [QueryMaxTradeParams] struct containing the inputs for this method.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(Trade)` - A `Trade` struct containing the largest trade that can be executed on this
-    ///   pool while respecting the provided trade price limit
+    /// * `Ok(Trade)` - A `Trade` struct containing the amounts to be traded and the state of the
+    /// pool after trading.
     /// * `Err(SimulationError)` - If:
     ///   - The calculation encounters numerical issues
     ///   - The method is not implemented for this protocol
-    ///
-    /// # Tolerance Usage
-    ///
-    /// The tolerance parameter can be used for early stopping of iterative algorithms when the
-    /// result is within the tolerance of the target trade price.
     #[allow(unused)]
-    fn query_max_trade(&self, params: &QueryMaxTradeParams) -> Result<Trade, SimulationError> {
-        Err(SimulationError::FatalError("query_max_trade not implemented".into()))
+    fn query_swap_size(&self, params: &QuerySwapSizeParams) -> Result<PoolSwap, SimulationError> {
+        Err(SimulationError::FatalError("query_swap_size not implemented".into()))
     }
 
     /// Clones the protocol state as a trait object.
