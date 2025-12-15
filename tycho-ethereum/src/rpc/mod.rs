@@ -24,7 +24,7 @@ use backoff::backoff::Backoff;
 use futures::future::join_all;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use tracing::{debug, info, instrument, trace};
+use tracing::{debug, info, instrument, trace, Span};
 use tycho_common::Bytes;
 
 use crate::{RPCError, RequestError};
@@ -243,12 +243,13 @@ impl EthereumRpcClient {
         Ok(wrapper.into())
     }
 
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "debug", skip(self), fields(slot_count = tracing::field::Empty))]
     pub(crate) async fn get_storage_range(
         &self,
         address: Address,
         block_hash: B256,
     ) -> Result<HashMap<B256, B256>, RPCError> {
+        let span = Span::current();
         let mut all_slots = HashMap::new();
         let mut start_key = B256::ZERO;
         loop {
@@ -268,6 +269,8 @@ impl EthereumRpcClient {
             }
         }
 
+        let slot_count = all_slots.len();
+        span.record("slot_count", slot_count as u64);
         Ok(all_slots)
     }
 
