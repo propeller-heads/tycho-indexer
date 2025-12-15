@@ -1562,7 +1562,7 @@ fn test_single_encoding_strategy_wrap_wsteth_lido() {
         given_token: token_in,
         given_amount: BigUint::from_str("1000000000000000000").unwrap(),
         checked_token: token_out,
-        checked_amount: BigUint::from_str("819085003283072218").unwrap(),
+        checked_amount: BigUint::from_str("835259856480552328").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),

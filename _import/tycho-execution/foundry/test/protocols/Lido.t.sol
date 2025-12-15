@@ -167,6 +167,7 @@ contract TychoRouterForLidoTest is TychoRouterTestSetup {
 
         assertTrue(success, "Call Failed");
         assertEq(ALICE.balance, 0);
+        assertEq(IERC20(STETH_ADDR).balanceOf(ALICE), 999999999999999997);
     }
 
     function testSingleWrapLidoIntegration() public {
@@ -183,6 +184,7 @@ contract TychoRouterForLidoTest is TychoRouterTestSetup {
 
         assertTrue(success, "Call Failed");
         assertEq(IERC20(STETH_ADDR).balanceOf(ALICE), 0);
+        assertEq(IERC20(WSTETH_ADDR).balanceOf(ALICE), 835259856480552328);
     }
 
     function testSingleUnwrapLidoIntegration() public {
@@ -198,6 +200,7 @@ contract TychoRouterForLidoTest is TychoRouterTestSetup {
 
         assertTrue(success, "Call Failed");
         assertEq(IERC20(WSTETH_ADDR).balanceOf(ALICE), 0);
+        assertEq(IERC20(STETH_ADDR).balanceOf(ALICE), 1197232205332596846);
     }
 
     function testSequentialUsv4LidoIntegrationSwap() public {
