@@ -1392,12 +1392,29 @@ impl SwapEncoder for LidoSwapEncoder {
     fn new(
         executor_address: Bytes,
         chain: Chain,
-        _config: Option<HashMap<String, String>>,
+        config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
+        let config =
+            config.ok_or_else(|| EncodingError::FatalError("Lido config is empty".to_string()))?;
+
+        let st_eth_address = config
+            .get("st_eth_address")
+            .map(|a| Bytes::from(a.as_str()))
+            .ok_or_else(|| {
+                EncodingError::FatalError("Missing st_eth_address in lido config".to_string())
+            })?;
+
+        let wst_eth_address = config
+            .get("wst_eth_address")
+            .map(|a| Bytes::from(a.as_str()))
+            .ok_or_else(|| {
+                EncodingError::FatalError("Missing wst_eth_address in lido config".to_string())
+            })?;
+
         Ok(Self {
             executor_address,
-            st_eth_address: Bytes::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84"),
-            wst_eth_address: Bytes::from("0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"),
+            st_eth_address,
+            wst_eth_address,
             eth_address: chain.native_token().address,
         })
     }
@@ -3111,6 +3128,20 @@ mod tests {
     mod lido {
         use super::*;
         use crate::encoding::models::SwapBuilder;
+
+        fn lido_config() -> HashMap<String, String> {
+            HashMap::from([
+                (
+                    "st_eth_address".to_string(),
+                    "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84".to_string(),
+                ),
+                (
+                    "wst_eth_address".to_string(),
+                    "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0".to_string(),
+                ),
+            ])
+        }
+
         #[test]
         fn test_encode_lido_steth() {
             let lido_steth_pool = ProtocolComponent {
@@ -3134,7 +3165,7 @@ mod tests {
             let encoder = LidoSwapEncoder::new(
                 Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
                 Chain::Ethereum,
-                None,
+                Some(lido_config()),
             )
             .unwrap();
             let encoded_swap = encoder
@@ -3181,7 +3212,7 @@ mod tests {
             let encoder = LidoSwapEncoder::new(
                 Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
                 Chain::Ethereum,
-                None,
+                Some(lido_config()),
             )
             .unwrap();
             let encoded_swap = encoder
@@ -3228,7 +3259,7 @@ mod tests {
             let encoder = LidoSwapEncoder::new(
                 Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
                 Chain::Ethereum,
-                None,
+                Some(lido_config()),
             )
             .unwrap();
             let encoded_swap = encoder
@@ -3250,7 +3281,6 @@ mod tests {
                     "00",
                 ))
             );
-            write_calldata_to_file("test_encode_lido", hex_swap.as_str());
         }
 
         #[test]
@@ -3276,7 +3306,7 @@ mod tests {
             let encoder = LidoSwapEncoder::new(
                 Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
                 Chain::Ethereum,
-                None,
+                Some(lido_config()),
             )
             .unwrap();
 
