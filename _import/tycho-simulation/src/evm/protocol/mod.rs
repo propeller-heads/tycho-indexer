@@ -1,4 +1,6 @@
 pub mod aerodrome_slipstreams;
+mod clmm;
+mod cpmm;
 pub mod ekubo;
 pub mod erc4626;
 pub mod filters;
@@ -12,7 +14,5 @@ pub mod uniswap_v2;
 pub mod uniswap_v3;
 pub mod uniswap_v4;
 pub mod utils;
-pub mod vm;
 pub mod velodrome_slipstreams;
-mod clmm;
-mod cpmm;
+pub mod vm;

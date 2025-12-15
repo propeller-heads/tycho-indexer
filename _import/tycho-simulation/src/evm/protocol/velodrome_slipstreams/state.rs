@@ -1,8 +1,8 @@
 use std::{any::Any, collections::HashMap};
 
 use alloy::primitives::{Sign, I256, U256};
-use num_bigint::{BigInt, BigUint};
-use num_traits::{ToPrimitive, Zero};
+use num_bigint::BigUint;
+use num_traits::Zero;
 use tracing::trace;
 use tycho_common::{
     dto::ProtocolStateDelta,
@@ -17,97 +17,69 @@ use tycho_common::{
 use crate::evm::protocol::{
     safe_math::{safe_add_u256, safe_sub_u256},
     u256_num::u256_to_biguint,
-    utils::{
-        slipstreams::{
-            dynamic_fee_module::{get_dynamic_fee, DynamicFeeConfig},
-            observations::{Observation, Observations},
+    utils::uniswap::{
+        i24_be_bytes_to_i32, liquidity_math,
+        sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
+        swap_math,
+        tick_list::{TickInfo, TickList, TickListErrorKind},
+        tick_math::{
+            get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
+            MIN_SQRT_RATIO, MIN_TICK,
         },
-        uniswap::{
-            i24_be_bytes_to_i32, liquidity_math,
-            sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
-            swap_math,
-            tick_list::{TickInfo, TickList, TickListErrorKind},
-            tick_math::{
-                get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
-                MIN_SQRT_RATIO, MIN_TICK,
-            },
-            StepComputation, SwapResults, SwapState,
-        },
+        StepComputation, SwapResults, SwapState,
     },
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VelodromeSlipstreamsState {
-    block_timestamp: u64,
     liquidity: u128,
     sqrt_price: U256,
-    observation_index: u16,
-    observation_cardinality: u16,
     default_fee: u32,
+    custom_fee: u32,
     tick_spacing: i32,
     tick: i32,
     ticks: TickList,
-    observations: Observations,
-    dfc: DynamicFeeConfig,
 }
 
 impl VelodromeSlipstreamsState {
     /// Creates a new instance of `AerodromeSlipstreamsState`.
     ///
     /// # Arguments
-    /// - `block_timestamp`: The timestamp of the block.
     /// - `liquidity`: The initial liquidity of the pool.
     /// - `sqrt_price`: The square root of the current price.
-    /// - `observation_index`: The index of the current observation.
-    /// - `observation_cardinality`: The cardinality of the observation.
     /// - `default_fee`: The default fee for the pool.
+    /// - `custom_fee`: The custom fee for the pool.
     /// - `tick_spacing`: The tick spacing for the pool.
     /// - `tick`: The current tick of the pool.
     /// - `ticks`: A vector of `TickInfo` representing the tick information for the pool.
-    /// - `observations`: A vector of `Observation` representing the observation information for the
-    ///   pool.
-    /// - `dfc`: The dynamic fee configuration for the pool.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        block_timestamp: u64,
         liquidity: u128,
         sqrt_price: U256,
-        observation_index: u16,
-        observation_cardinality: u16,
         default_fee: u32,
+        custom_fee: u32,
         tick_spacing: i32,
         tick: i32,
         ticks: Vec<TickInfo>,
-        observations: Vec<Observation>,
-        dfc: DynamicFeeConfig,
     ) -> Result<Self, SimulationError> {
         let tick_list = TickList::from(tick_spacing as u16, ticks)?;
         Ok(VelodromeSlipstreamsState {
-            block_timestamp,
             liquidity,
             sqrt_price,
-            observation_index,
-            observation_cardinality,
             default_fee,
+            custom_fee,
             tick_spacing,
             tick,
             ticks: tick_list,
-            observations: Observations::new(observations),
-            dfc,
         })
     }
 
     fn get_fee(&self) -> u32 {
-        get_dynamic_fee(
-            &self.dfc,
-            self.default_fee,
-            self.tick,
-            self.liquidity,
-            self.observation_index,
-            self.observation_cardinality,
-            &self.observations,
-            self.block_timestamp as u32,
-        )
+        if self.custom_fee > 0 {
+            self.custom_fee
+        } else {
+            self.default_fee
+        }
     }
 
     fn swap(
@@ -406,14 +378,6 @@ impl ProtocolSim for VelodromeSlipstreamsState {
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
-        if let Some(block_timestamp) = delta
-            .updated_attributes
-            .get("block_timestamp")
-        {
-            self.block_timestamp = BigInt::from_signed_bytes_be(block_timestamp)
-                .to_u64()
-                .unwrap();
-        }
         // apply attribute changes
         if let Some(liquidity) = delta
             .updated_attributes
@@ -443,44 +407,17 @@ impl ProtocolSim for VelodromeSlipstreamsState {
         {
             self.sqrt_price = U256::from_be_slice(sqrt_price);
         }
-        if let Some(observation_index) = delta
-            .updated_attributes
-            .get("observationIndex")
-        {
-            self.observation_index = u16::from(observation_index.clone());
-        }
-        if let Some(observation_cardinality) = delta
-            .updated_attributes
-            .get("observationCardinality")
-        {
-            self.observation_cardinality = u16::from(observation_cardinality.clone());
-        }
         if let Some(default_fee) = delta
             .updated_attributes
             .get("default_fee")
         {
             self.default_fee = u32::from(default_fee.clone());
         }
-        if let Some(dfc_base_fee) = delta
+        if let Some(custom_fee) = delta
             .updated_attributes
-            .get("dfc_baseFee")
+            .get("custom_fee")
         {
-            self.dfc
-                .update_base_fee(u32::from(dfc_base_fee.clone()));
-        }
-        if let Some(dfc_fee_cap) = delta
-            .updated_attributes
-            .get("dfc_feeCap")
-        {
-            self.dfc
-                .update_fee_cap(u32::from(dfc_fee_cap.clone()));
-        }
-        if let Some(dfc_scaling_factor) = delta
-            .updated_attributes
-            .get("dfc_scalingFactor")
-        {
-            self.dfc
-                .update_scaling_factor(u64::from(dfc_scaling_factor.clone()));
+            self.custom_fee = u32::from(custom_fee.clone());
         }
         if let Some(tick) = delta.updated_attributes.get("tick") {
             // This is a hotfix because if the tick has never been updated after creation, it's
@@ -515,15 +452,6 @@ impl ProtocolSim for VelodromeSlipstreamsState {
                     )
                     .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
             }
-
-            // observations keys are in the format "observations/{observation_index}"
-            if let Some(idx_str) = key.strip_prefix("observations/") {
-                if let Ok(idx) = idx_str.parse::<i32>() {
-                    let _ = self
-                        .observations
-                        .upsert_observation(idx, value);
-                }
-            }
         }
         // delete ticks - ignores deletes for attributes other than tick liquidity
         for key in delta.deleted_attributes.iter() {
@@ -538,15 +466,6 @@ impl ProtocolSim for VelodromeSlipstreamsState {
                         0,
                     )
                     .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
-            }
-
-            // observations keys are in the format "observations/{observation_index}"
-            if let Some(idx_str) = key.strip_prefix("observations/") {
-                if let Ok(idx) = idx_str.parse::<i32>() {
-                    let _ = self
-                        .observations
-                        .upsert_observation(idx, &[]);
-                }
             }
         }
         Ok(())

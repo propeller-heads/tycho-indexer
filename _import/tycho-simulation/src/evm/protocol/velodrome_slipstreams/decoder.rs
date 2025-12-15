@@ -6,10 +6,7 @@ use tycho_common::{models::token::Token, Bytes};
 
 use super::state::VelodromeSlipstreamsState;
 use crate::{
-    evm::protocol::utils::{
-        slipstreams::{dynamic_fee_module::DynamicFeeConfig, observations::Observation},
-        uniswap::{i24_be_bytes_to_i32, tick_list::TickInfo},
-    },
+    evm::protocol::utils::uniswap::{i24_be_bytes_to_i32, tick_list::TickInfo},
     protocol::{
         errors::InvalidSnapshotError,
         models::{DecoderContext, TryFromWithBlock},
@@ -24,7 +21,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for VelodromeSlipstreamsS
     /// amount is not supported.
     async fn try_from_with_header(
         snapshot: ComponentWithState,
-        block: BlockHeader,
+        _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
         _decoder_context: &DecoderContext,
@@ -62,54 +59,12 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for VelodromeSlipstreamsS
                 .ok_or_else(|| InvalidSnapshotError::MissingAttribute("sqrt_price".to_string()))?,
         );
 
-        let observation_index = u16::from(
+        let custom_fee = u32::from(
             snapshot
                 .state
                 .attributes
-                .get("observationIndex")
-                .ok_or_else(|| {
-                    InvalidSnapshotError::MissingAttribute("observationIndex".to_string())
-                })?
-                .clone(),
-        );
-
-        let observation_cardinality = u16::from(
-            snapshot
-                .state
-                .attributes
-                .get("observationCardinality")
-                .ok_or_else(|| {
-                    InvalidSnapshotError::MissingAttribute("observationCardinality".to_string())
-                })?
-                .clone(),
-        );
-
-        let dfc_base_fee = u32::from(
-            snapshot
-                .state
-                .attributes
-                .get("dfc_baseFee")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("dfc_baseFee".to_string()))?
-                .clone(),
-        );
-
-        let dfc_scaling_factor = u64::from(
-            snapshot
-                .state
-                .attributes
-                .get("dfc_scalingFactor")
-                .ok_or_else(|| {
-                    InvalidSnapshotError::MissingAttribute("dfc_scalingFactor".to_string())
-                })?
-                .clone(),
-        );
-
-        let dfc_fee_cap = u32::from(
-            snapshot
-                .state
-                .attributes
-                .get("dfc_feeCap")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("dfc_feeCap".to_string()))?
+                .get("custom_fee")
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("custom_fee".to_string()))?
                 .clone(),
         );
 
@@ -201,41 +156,14 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for VelodromeSlipstreamsS
 
         ticks.sort_by_key(|tick| tick.index);
 
-        let observations: Vec<Observation> = snapshot
-            .state
-            .attributes
-            .iter()
-            .filter_map(|(key, value)| {
-                key.strip_prefix("observations/")?
-                    .parse::<i32>()
-                    .ok()
-                    .and_then(|idx| Observation::from_attribute(idx, value).ok())
-            })
-            .collect();
-
-        let mut observations: Vec<_> = observations
-            .into_iter()
-            .filter(|t| t.initialized)
-            .collect();
-
-        if observations.is_empty() {
-            return Err(InvalidSnapshotError::MissingAttribute("observations".to_string()));
-        }
-
-        observations.sort_by_key(|observation| observation.index);
-
         VelodromeSlipstreamsState::new(
-            block.timestamp,
             liquidity,
             sqrt_price,
-            observation_index,
-            observation_cardinality,
             default_fee,
+            custom_fee,
             tick_spacing,
             tick,
             ticks,
-            observations,
-            DynamicFeeConfig::new(dfc_base_fee, dfc_fee_cap, dfc_scaling_factor),
         )
         .map_err(|err| InvalidSnapshotError::ValueError(err.to_string()))
     }
