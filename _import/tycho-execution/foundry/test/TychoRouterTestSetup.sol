@@ -135,8 +135,6 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         address poolManagerAddress = 0x000000000004444c5dc75cB358380D2e3dE08A90;
         address ekuboCore = 0xe0e0e08A6A4b9Dc7bD67BCB7aadE5cF48157d444;
         address ekuboMevResist = 0x553a2EFc570c9e104942cEC6aC1c18118e54C091;
-        address steth = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
-        address wsteth = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
 
         IPoolManager poolManager = IPoolManager(poolManagerAddress);
         usv2Executor =
@@ -167,7 +165,8 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         );
         rocketpoolExecutor = new RocketpoolExecutor(PERMIT2_ADDRESS);
         erc4626Executor = new ERC4626Executor(PERMIT2_ADDRESS);
-        lidoExecutor = new LidoExecutor(steth, wsteth, PERMIT2_ADDRESS);
+        lidoExecutor =
+            new LidoExecutor(STETH_ADDR, WSTETH_ADDR, PERMIT2_ADDRESS);
 
         address[] memory executors = new address[](16);
         executors[0] = address(usv2Executor);

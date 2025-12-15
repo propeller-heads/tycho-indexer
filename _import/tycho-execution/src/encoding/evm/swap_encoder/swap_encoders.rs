@@ -65,8 +65,6 @@ impl SwapEncoder for UniswapV2SwapEncoder {
         let component_id = Address::from_str(&swap.component.id)
             .map_err(|_| EncodingError::FatalError("Invalid USV2 component id".to_string()))?;
 
-        // Token in address is always needed to perform a manual transfer from the router,
-        // since no optimizations are performed that send from one pool to the next
         let args = (
             token_in_address,
             component_id,
@@ -1390,8 +1388,6 @@ enum LidoPoolDirection {
     Unwrap = 2,
 }
 
-impl LidoSwapEncoder {}
-
 impl SwapEncoder for LidoSwapEncoder {
     fn new(
         executor_address: Bytes,
@@ -1437,9 +1433,6 @@ impl SwapEncoder for LidoSwapEncoder {
         } else {
             return Err(EncodingError::InvalidInput("Combination not allowed".to_owned()))
         };
-
-        // Token in address is always needed to perform a manual transfer from the router,
-        // since no optimizations are performed that send from one pool to the next
 
         let args = (
             bytes_to_address(&encoding_context.receiver)?,

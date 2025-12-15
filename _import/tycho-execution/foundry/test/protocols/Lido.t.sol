@@ -36,7 +36,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
     LidoExecutorExposed LidoExposed;
 
     function setUp() public {
-        uint256 forkBlock = 23934489; //change for a newer block
+        uint256 forkBlock = 23934489;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
         LidoExposed =
             new LidoExecutorExposed(STETH_ADDR, WSTETH_ADDR, PERMIT2_ADDRESS);
@@ -107,7 +107,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
         deal(address(LidoExposed), amountIn);
         vm.startPrank(address(LidoExposed));
         // slither-disable-next-line arbitrary-send-eth
-        LidoPool(STETH_ADDR).submit{value: amountIn}(address(LidoExposed));
+        LidoPool(STETH_ADDR).submit{value: amountIn}(address(this));
         uint256 stETHAmount = IERC20(STETH_ADDR).balanceOf(address(LidoExposed));
 
         bytes memory protocolData = abi.encodePacked(
@@ -173,7 +173,7 @@ contract TychoRouterForLidoTest is TychoRouterTestSetup {
         deal(address(ALICE), 1 ether);
 
         vm.startPrank(ALICE);
-        LidoPool(STETH_ADDR).submit{value: 1 ether}(address(ALICE));
+        LidoPool(STETH_ADDR).submit{value: 1 ether}(address(this));
 
         IERC20(STETH_ADDR).approve(tychoRouterAddr, type(uint256).max - 1);
         bytes memory callData = loadCallDataFromFile(
@@ -200,7 +200,7 @@ contract TychoRouterForLidoTest is TychoRouterTestSetup {
         assertEq(IERC20(WSTETH_ADDR).balanceOf(ALICE), 0);
     }
 
-    function testSingleUsv4LidoIntegrationGroupedSwap() public {
+    function testSequentialUsv4LidoIntegrationSwap() public {
         //   USDC ──(USV4)──> ETH ───(Lido)──> stETH
 
         vm.startPrank(ALICE);
@@ -209,7 +209,7 @@ contract TychoRouterForLidoTest is TychoRouterTestSetup {
 
         IERC20(USDC_ADDR).approve(tychoRouterAddr, type(uint256).max);
         bytes memory callData = loadCallDataFromFile(
-            "test_single_encoding_strategy_usv4_lido_grouped_swap"
+            "test_encoding_strategy_usv4_lido_sequential_swap"
         );
 
         (bool success,) = tychoRouterAddr.call(callData);
@@ -219,7 +219,7 @@ contract TychoRouterForLidoTest is TychoRouterTestSetup {
         assertTrue(success, "Call Failed");
     }
 
-    function testSingleCurveLidoIntegrationGroupedSwap() public {
+    function testSequentialCurveLidoIntegrationSwap() public {
         //   ETH ──(Curve)──> stETH (Lido)──> wstETH
 
         deal(ALICE, 1 ether);
@@ -228,7 +228,7 @@ contract TychoRouterForLidoTest is TychoRouterTestSetup {
 
         IERC20(STETH_ADDR).approve(tychoRouterAddr, type(uint256).max - 1);
         bytes memory callData = loadCallDataFromFile(
-            "test_single_encoding_strategy_curve_lido_grouped_swap"
+            "test_encoding_strategy_curve_lido_sequential_swap"
         );
 
         (bool success,) = tychoRouterAddr.call{value: 1 ether}(callData);

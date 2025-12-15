@@ -55,10 +55,7 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
     }
 
     // slither-disable-next-line locked-ether
-    function swap(
-        uint256 givenAmount,
-        bytes calldata data //abi packed encoded
-    )
+    function swap(uint256 givenAmount, bytes calldata data)
         external
         payable
         returns (uint256 calculatedAmount)
@@ -81,8 +78,7 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
 
             // slither-disable-next-line arbitrary-send-eth
             uint256 _shares =
-                LidoPool(stETH).submit{value: givenAmount}(receiver);
-            // _shares;
+                LidoPool(stETH).submit{value: givenAmount}(address(this));
 
             uint256 balanceAfter = IERC20(stETH).balanceOf(address(this));
             calculatedAmount = balanceAfter - balanceBefore;
@@ -102,7 +98,7 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
         } else if (
             pool == LidoPoolType.wstETH && direction == LidoPoolDirection.Wrap
         ) {
-            //wsteth, steth -> wsteth
+            // wstETH wrapping: stETH -> wstETH
             _transfer(address(this), transferType, stETH, givenAmount);
 
             if (approvalNeeded) {
@@ -116,7 +112,7 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
         } else if (
             pool == LidoPoolType.wstETH && direction == LidoPoolDirection.Unwrap
         ) {
-            //wsteth, wsteth -> steth
+            // wstETH unwrapping: wstETH -> stETH
             _transfer(address(this), transferType, wstETH, givenAmount);
             calculatedAmount = LidoWrappedPool(wstETH).unwrap(givenAmount);
             if (receiver != address(this)) {
@@ -145,7 +141,6 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
         )
     {
         if (data.length != 24) {
-            // TODO: double check the length
             revert LidoExecutor__InvalidDataLength();
         }
 

@@ -1648,7 +1648,7 @@ fn test_single_encoding_strategy_unwrap_wsteth_lido() {
 }
 
 #[test]
-fn test_single_encoding_strategy_usv4_lido_grouped_swap() {
+fn test_encoding_strategy_usv4_lido_sequential_swap() {
     //   USDC ──(USV4)──> ETH (Lido)──> stETH
 
     let eth = eth();
@@ -1729,13 +1729,13 @@ fn test_single_encoding_strategy_usv4_lido_grouped_swap() {
     let hex_calldata = encode(&calldata);
 
     write_calldata_to_file(
-        "test_single_encoding_strategy_usv4_lido_grouped_swap",
+        "test_encoding_strategy_usv4_lido_sequential_swap",
         hex_calldata.as_str(),
     );
 }
 
 #[test]
-fn test_single_encoding_strategy_curve_lido_grouped_swap() {
+fn test_encoding_strategy_curve_lido_sequential_swap() {
     //   ETH ──(Curve)──> stETH (Lido)──> wstETH
 
     let eth = eth();
@@ -1820,7 +1820,7 @@ fn test_single_encoding_strategy_curve_lido_grouped_swap() {
     let hex_calldata = encode(&calldata);
 
     write_calldata_to_file(
-        "test_single_encoding_strategy_curve_lido_grouped_swap",
+        "test_encoding_strategy_curve_lido_sequential_swap",
         hex_calldata.as_str(),
     );
 }
