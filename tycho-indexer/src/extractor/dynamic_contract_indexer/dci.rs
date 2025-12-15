@@ -457,27 +457,35 @@ where
             let retry_delay_ms = 1000;
             let mut retry_count = 0;
 
-            let mut new_accounts = loop {
-                match self
-                    .storage_source
-                    .get_accounts_at_block(&block_changes.block, &storage_request)
-                    .instrument(span!(
-                        Level::INFO,
-                        "dci_account_extraction",
-                        account_count = storage_request.len(),
-                        block_number = block_changes.block.number
-                    ))
-                    .await
-                {
-                    Ok(accounts) => break accounts,
-                    Err(e) => {
-                        if retry_count < max_retries {
-                            warn!(error = ?e, "DCI: Account extraction error, will retry");
-                            retry_count += 1;
-                            tokio::time::sleep(tokio::time::Duration::from_millis(retry_delay_ms))
+            let mut new_accounts = if storage_request.is_empty() {
+                HashMap::new() // early exit for empty requests
+            } else {
+                loop {
+                    match self
+                        .storage_source
+                        .get_accounts_at_block(&block_changes.block, &storage_request)
+                        .instrument(span!(
+                            Level::INFO,
+                            "dci_account_extraction",
+                            account_count = storage_request.len(),
+                            block_number = block_changes.block.number
+                        ))
+                        .await
+                    {
+                        Ok(accounts) => break accounts,
+                        Err(e) => {
+                            if retry_count < max_retries {
+                                warn!(error = ?e, "DCI: Account extraction error, will retry");
+                                retry_count += 1;
+                                tokio::time::sleep(tokio::time::Duration::from_millis(
+                                    retry_delay_ms,
+                                ))
                                 .await;
-                        } else {
-                            return Err(ExtractionError::AccountExtractionError(format!("{e:?}")));
+                            } else {
+                                return Err(ExtractionError::AccountExtractionError(format!(
+                                    "{e:?}"
+                                )));
+                            }
                         }
                     }
                 }
@@ -2614,7 +2622,7 @@ mod tests {
     #[tokio::test]
     async fn test_process_block_update_new_slots_on_tracked_contracts() {
         let gateway = get_mock_gateway();
-        let mut account_extractor = MockAccountExtractor::new();
+        let account_extractor = MockAccountExtractor::new();
         let mut entrypoint_tracer = MockEntryPointTracer::new();
 
         // Create test addresses
@@ -2631,52 +2639,19 @@ mod tests {
                 )]),
             )
             .return_once({
-                let tracked_address = tracked_address.clone();
-                let new_slot = new_slot.clone();
                 move |_, _| {
                     vec![Ok(TracedEntryPoint::new(
                         EntryPointWithTracingParams::new(get_entrypoint(9), get_tracing_params(9)),
                         Bytes::zero(32),
                         get_tracing_result_with_addresses_and_slots(vec![
-                            (
-                                tracked_address.clone(),
-                                vec![Bytes::from(0x22_u8).lpad(32, 0), new_slot],
-                            ), // One existing slot, one new
+                            (tracked_address, vec![Bytes::from(0x22_u8).lpad(32, 0), new_slot]), // One previously detected slot, one new slot
                         ]),
                     ))]
                 }
             });
 
-        // Expect all slots to be requested since address 0x02 is not a token or blacklisted
-        account_extractor
-            .expect_get_accounts_at_block()
-            .with(
-                eq(testing::block(2)),
-                predicate::function({
-                    let tracked_address = tracked_address.clone();
-                    move |requests: &[StorageSnapshotRequest]| {
-                        requests.len() == 1 &&
-                            requests[0].address == tracked_address &&
-                            requests[0].slots.is_none() // Should request all slots for non-tokens
-                    }
-                }),
-            )
-            .return_once({
-                let tracked_address = tracked_address.clone();
-                move |_, _| {
-                    Ok(HashMap::from([(
-                        tracked_address.clone(),
-                        AccountDelta::new(
-                            Chain::Ethereum,
-                            tracked_address,
-                            HashMap::new(),
-                            None,
-                            None,
-                            ChangeType::Update,
-                        ),
-                    )]))
-                }
-            });
+        // Note - 0x02 contract is initialised as tracked and fully indexed (not a token or
+        // blacklisted contract), so get_accounts_at_block should not be called (no expectation set)
 
         let mut dci = DynamicContractIndexer::new(
             Chain::Ethereum,
