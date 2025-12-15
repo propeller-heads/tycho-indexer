@@ -19,6 +19,7 @@ import {FluidV1Executor} from "../src/executors/FluidV1Executor.sol";
 import {SlipstreamsExecutor} from "../src/executors/SlipstreamsExecutor.sol";
 import {RocketpoolExecutor} from "../src/executors/RocketpoolExecutor.sol";
 import {ERC4626Executor} from "../src/executors/ERC4626Executor.sol";
+import {LidoExecutor} from "../src/executors/LidoExecutor.sol";
 
 // Test utilities and mocks
 import "./Constants.sol";
@@ -86,6 +87,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     RocketpoolExecutor public rocketpoolExecutor;
 
     ERC4626Executor public erc4626Executor;
+    LidoExecutor public lidoExecutor;
 
     function getChain() public view virtual returns (string memory) {
         return "mainnet";
@@ -163,8 +165,10 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         );
         rocketpoolExecutor = new RocketpoolExecutor(PERMIT2_ADDRESS);
         erc4626Executor = new ERC4626Executor(PERMIT2_ADDRESS);
+        lidoExecutor =
+            new LidoExecutor(STETH_ADDR, WSTETH_ADDR, PERMIT2_ADDRESS);
 
-        address[] memory executors = new address[](15);
+        address[] memory executors = new address[](16);
         executors[0] = address(usv2Executor);
         executors[1] = address(usv3Executor);
         executors[2] = address(pancakev3Executor);
@@ -180,6 +184,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         executors[12] = address(slipstreamsExecutor);
         executors[13] = address(rocketpoolExecutor);
         executors[14] = address(erc4626Executor);
+        executors[15] = address(lidoExecutor);
 
         return executors;
     }

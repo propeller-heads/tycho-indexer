@@ -62,6 +62,7 @@ contract Constants is Test, BaseConstants {
     address PEPE_ADDR = address(0x6982508145454Ce325dDbE47a25d4ec3d2311933);
     address STETH_ADDR = address(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
     address RETH_ADDR = address(0xae78736Cd615f374D3085123A210448E74Fc6393);
+    address WSTETH_ADDR = address(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
     address LUSD_ADDR = address(0x5f98805A4E8be255a32880FDeC7F6728C6568bA0);
     address LDO_ADDR = address(0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32);
     address CRV_ADDR = address(0xD533a949740bb3306d119CC777fa900bA034cd52);
