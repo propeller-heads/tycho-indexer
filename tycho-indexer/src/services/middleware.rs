@@ -610,12 +610,7 @@ mod tests {
         None,
         Some("min_quality parameter is required")
     )]
-    #[case::rejects_below_threshold(
-        Some(50),
-        Some(30),
-        None,
-        Some("min_quality must be at least")
-    )]
+    #[case::rejects_below_threshold(Some(50), Some(30), None, Some("min_quality must be at least"))]
     #[case::accepts_equal_threshold(Some(50), Some(50), None, None)]
     #[case::accepts_above_threshold(Some(50), Some(80), None, None)]
     #[case::accepts_none_when_no_min_quality(None, None, None, None)]
