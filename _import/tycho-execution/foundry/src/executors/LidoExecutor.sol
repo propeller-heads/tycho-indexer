@@ -39,6 +39,7 @@ enum LidoPoolDirection {
 contract LidoExecutor is IExecutor, RestrictTransferFrom {
     using SafeERC20 for IERC20;
 
+    IERC20 public immutable stETHIERC20;
     address public immutable stETH;
     address public immutable wstETH;
 
@@ -50,6 +51,7 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
         if (_stETH_address == address(0) || _wstETH_address == address(0)) {
             revert LidoExecutor__ZeroAddress();
         }
+        stETHIERC20 = IERC20(_stETH_address);
         stETH = _stETH_address;
         wstETH = _wstETH_address;
     }
@@ -74,23 +76,22 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
             // stETH staking: ETH -> stETH
             // stETH is a rebasing token where balances are calculated from shares
             // Measure actual balance changes to account for rounding in share conversions
-            uint256 balanceBefore = IERC20(stETH).balanceOf(address(this));
+            uint256 balanceBefore = stETHIERC20.balanceOf(address(this));
 
             // slither-disable-next-line arbitrary-send-eth
             uint256 _shares =
                 LidoPool(stETH).submit{value: givenAmount}(address(this));
 
-            uint256 balanceAfter = IERC20(stETH).balanceOf(address(this));
+            uint256 balanceAfter = stETHIERC20.balanceOf(address(this));
             calculatedAmount = balanceAfter - balanceBefore;
 
             // submit() sends stETH to this contract, transfer to receiver if needed
             if (receiver != address(this)) {
-                uint256 receiverBalanceBefore =
-                    IERC20(stETH).balanceOf(receiver);
+                uint256 receiverBalanceBefore = stETHIERC20.balanceOf(receiver);
 
-                IERC20(stETH).safeTransfer(receiver, calculatedAmount);
+                stETHIERC20.safeTransfer(receiver, calculatedAmount);
 
-                uint256 receiverBalanceAfter = IERC20(stETH).balanceOf(receiver);
+                uint256 receiverBalanceAfter = stETHIERC20.balanceOf(receiver);
                 // Update calculatedAmount to reflect actual tokens received after transfer
                 // (accounts for additional rounding during transfer)
                 calculatedAmount = receiverBalanceAfter - receiverBalanceBefore;
@@ -102,7 +103,7 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
             _transfer(address(this), transferType, stETH, givenAmount);
 
             if (approvalNeeded) {
-                IERC20(stETH).forceApprove(wstETH, type(uint256).max - 1);
+                stETHIERC20.forceApprove(wstETH, type(uint256).max - 1);
             }
             calculatedAmount = LidoWrappedPool(wstETH).wrap(givenAmount);
 
@@ -116,10 +117,9 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
             _transfer(address(this), transferType, wstETH, givenAmount);
             calculatedAmount = LidoWrappedPool(wstETH).unwrap(givenAmount);
             if (receiver != address(this)) {
-                uint256 receiverBalanceBefore =
-                    IERC20(stETH).balanceOf(receiver);
-                IERC20(stETH).safeTransfer(receiver, calculatedAmount);
-                uint256 receiverBalanceAfter = IERC20(stETH).balanceOf(receiver);
+                uint256 receiverBalanceBefore = stETHIERC20.balanceOf(receiver);
+                stETHIERC20.safeTransfer(receiver, calculatedAmount);
+                uint256 receiverBalanceAfter = stETHIERC20.balanceOf(receiver);
                 // Update calculatedAmount to reflect actual tokens received after transfer
                 // (accounts for additional rounding during transfer)
                 calculatedAmount = receiverBalanceAfter - receiverBalanceBefore;
