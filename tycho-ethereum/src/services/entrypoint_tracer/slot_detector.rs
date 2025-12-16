@@ -877,92 +877,78 @@ mod tests {
         assert!(retry_data.is_empty());
     }
 
-    /// Helper to build a JSON-RPC response with matching ID
-    fn rpc_response(id: u64, result: serde_json::Value) -> serde_json::Value {
-        json!({"jsonrpc": "2.0", "id": id, "result": result})
-    }
-
     #[tokio::test]
     async fn test_cache_prevents_duplicate_rpc_calls() {
-        use std::sync::{
-            atomic::{AtomicUsize, Ordering},
-            Arc,
-        };
-
         let mut server = mockito::Server::new_async().await;
 
         let token = Address::from([0x11u8; 20]);
         let holder = Address::from([0x22u8; 20]);
         let block_hash = BlockHash::from([0x33u8; 32]);
 
-        let call_count = Arc::new(AtomicUsize::new(0));
-        let call_count_clone = call_count.clone();
+        let trace_response = json!([
+            {
+                "jsonrpc": "2.0",
+                "id": 0,
+                "result": {
+                    "0x1111111111111111111111111111111111111111": {
+                        "storage": {
+                            "0x0000000000000000000000000000000000000000000000000000000000000001": "0x00000000000000000000000000000000000000000000000000000000000003e8"
+                        }
+                    }
+                }
+            },
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": "0x00000000000000000000000000000000000000000000000000000000000003e8"
+            }
+        ]);
+        let slot_test_response = json!([
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "result": "0x00000000000000000000000000000000000000000000000000000000000007d0"
+            }
+        ]);
 
-        let mock = server
+        // First RPC call: trace + balance fetch.
+        let trace_mock = server
             .mock("POST", "/")
             .with_status(200)
-            .with_body_from_request(move |req| {
-                call_count_clone.fetch_add(1, Ordering::SeqCst);
-                let body = String::from_utf8_lossy(req.body().unwrap());
-                let requests: Vec<serde_json::Value> = serde_json::from_str(&body).unwrap();
+            .with_body(trace_response.to_string())
+            .expect(1)
+            .create_async()
+            .await;
 
-                let responses: Vec<_> = requests
-                    .iter()
-                    .map(|r| {
-                        let id = r["id"].as_u64().unwrap();
-                        match r["method"].as_str().unwrap() {
-                            "debug_traceCall" => rpc_response(
-                                id,
-                                json!({
-                                    "0x1111111111111111111111111111111111111111": {
-                                        "storage": {
-                                            "0x0000000000000000000000000000000000000000000000000000000000000001": "0x00000000000000000000000000000000000000000000000000000000000003e8"
-                                        }
-                                    }
-                                }),
-                            ),
-                            // Return different value on slot test to pass validation,
-                            // same value on regular eth_call
-                            "eth_call" if r["params"].as_array().is_some_and(|p| p.len() > 2) => {
-                                rpc_response(id, json!("0x00000000000000000000000000000000000000000000000000000000000007d0"))
-                            }
-                            "eth_call" => {
-                                rpc_response(id, json!("0x00000000000000000000000000000000000000000000000000000000000003e8"))
-                            }
-                            _ => rpc_response(id, json!(null)),
-                        }
-                    })
-                    .collect();
-
-                serde_json::to_string(&responses).unwrap().into_bytes()
-            })
-            .expect_at_least(1)
+        // Second RPC call: slot test with state override.
+        let slot_test_mock = server
+            .mock("POST", "/")
+            .with_status(200)
+            .with_body(slot_test_response.to_string())
+            .expect(1)
             .create_async()
             .await;
 
         let detector = TestFixture::create_slot_detector(&server.url());
 
-        // First call - populates cache via RPC
+        // First call - should populate the cache
         let results1 = detector
             .detect_slots_chunked(std::slice::from_ref(&token), &holder, &block_hash)
             .await;
-        assert!(results1[&token].is_ok(), "First call should succeed");
+        assert!(results1[&token].is_ok(), "First call should succeed: {:?}", results1[&token]);
 
-        let calls_after_first = call_count.load(Ordering::SeqCst);
-        assert_eq!(calls_after_first, 2, "First call should make 2 RPC calls (trace + slot test)");
+        // Verify both RPC calls were made after the first invocation
+        trace_mock.assert();
+        slot_test_mock.assert();
 
-        // Second call - should use cache, no additional RPC calls
+        // Second call - should use the cache
         let results2 = detector
             .detect_slots_chunked(std::slice::from_ref(&token), &holder, &block_hash)
             .await;
         assert!(results2[&token].is_ok(), "Second call should succeed from cache");
 
-        let calls_after_second = call_count.load(Ordering::SeqCst);
-        assert_eq!(
-            calls_after_first, calls_after_second,
-            "Second call should not make additional RPC calls (cache hit)"
-        );
-
-        mock.assert();
+        // Verify no additional RPC calls were made (counts unchanged)
+        trace_mock.assert();
+        slot_test_mock.assert();
     }
 }
