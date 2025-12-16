@@ -155,7 +155,6 @@ impl ProtocolStreamProcessor {
                 "uniswap_v4_hooks".to_string(),
                 "vm:maverick_v2".to_string(),
                 "fluid_v1".to_string(),
-                "erc4626".to_string(),
                 "rocketpool".to_string(),
             ],
             Chain::Base => vec![
