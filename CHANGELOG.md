@@ -1,3 +1,12 @@
+## [0.124.0](https://github.com/propeller-heads/tycho-indexer/compare/0.123.0...0.124.0) (2025-12-16)
+
+
+### Features
+
+* add min_traded_n_days_ago filter to RPC server configuration and validation ([b99e717](https://github.com/propeller-heads/tycho-indexer/commit/b99e7171e5afd4fbde3e7efbad68107df5099d5b))
+* add RPC server configuration and validation for filtering thresholds ([c86bb8f](https://github.com/propeller-heads/tycho-indexer/commit/c86bb8fe5cd4b628d89022aedd41b3ed08bdff75))
+* add RPC server configuration and validation for filtering thresholds ([#803](https://github.com/propeller-heads/tycho-indexer/issues/803)) ([8ce170b](https://github.com/propeller-heads/tycho-indexer/commit/8ce170bff47f33b910ae35898c8861c58cf96612))
+
 ## [0.123.0](https://github.com/propeller-heads/tycho-indexer/compare/0.122.3...0.123.0) (2025-12-16)
 
 
