@@ -166,36 +166,68 @@ impl ValidateFilter for dto::ProtocolComponentsRequestBody {
 
 /// Validation implementation for tokens requests.
 ///
-/// When `min_token_quality` is configured, clients must either:
+/// When `min_token_quality` or `min_traded_n_days_ago` is configured, clients must either:
 /// - Provide specific `token_addresses`, OR
-/// - Include a `min_quality` parameter that meets or exceeds the minimum threshold
+/// - Include a `min_quality` parameter that meets or exceeds the minimum threshold AND/OR
+/// - Include a `traded_n_days_ago` parameter that is at most the maximum threshold
 impl ValidateFilter for dto::TokensRequestBody {
     fn validate_filter(&self, config: &ServerRpcConfig) -> Result<(), RpcError> {
         // Allow requests with specific token addresses (targeted queries don't cause broad scans)
         if self.token_addresses.is_some() {
             return Ok(());
         }
+
+        // Validate min_quality if configured
         match (config.min_token_quality(), self.min_quality) {
-            (Some(min_quality), None) => Err(RpcError::MinimumFilterNotMet(
-                "/tokens".to_string(),
-                format!(
-                    "min_quality parameter is required (minimum: {}) to prevent overly broad queries. \
-                     Alternatively, specify token_addresses for targeted queries.",
-                    min_quality
-                ),
-            )),
+            (Some(min_quality), None) => {
+                return Err(RpcError::MinimumFilterNotMet(
+                    "/tokens".to_string(),
+                    format!(
+                        "min_quality parameter is required (minimum: {}) to prevent overly broad queries. \
+                         Alternatively, specify token_addresses for targeted queries.",
+                        min_quality
+                    ),
+                ));
+            }
             (Some(min_quality), Some(requested_quality)) if requested_quality < min_quality => {
-                Err(RpcError::MinimumFilterNotMet(
+                return Err(RpcError::MinimumFilterNotMet(
                     "/tokens".to_string(),
                     format!(
                         "min_quality must be at least {} (requested: {}) to prevent overly broad queries. \
                          Alternatively, specify token_addresses for targeted queries.",
                         min_quality, requested_quality
                     ),
-                ))
+                ));
             }
-            _ => Ok(()),
+            _ => {}
         }
+
+        // Validate traded_n_days_ago if configured
+        match (config.min_traded_n_days_ago(), self.traded_n_days_ago) {
+            (Some(max_days), None) => {
+                return Err(RpcError::MinimumFilterNotMet(
+                    "/tokens".to_string(),
+                    format!(
+                        "traded_n_days_ago parameter is required (maximum: {}) to prevent overly broad queries. \
+                         Alternatively, specify token_addresses for targeted queries.",
+                        max_days
+                    ),
+                ));
+            }
+            (Some(max_days), Some(requested_days)) if requested_days > max_days => {
+                return Err(RpcError::MinimumFilterNotMet(
+                    "/tokens".to_string(),
+                    format!(
+                        "traded_n_days_ago must be at most {} (requested: {}) to prevent overly broad queries. \
+                         Alternatively, specify token_addresses for targeted queries.",
+                        max_days, requested_days
+                    ),
+                ));
+            }
+            _ => {}
+        }
+
+        Ok(())
     }
 }
 
@@ -635,6 +667,66 @@ mod tests {
             token_addresses,
             min_quality: request_min_quality,
             traded_n_days_ago: None,
+            pagination: dto::PaginationParams::new(0, 10),
+        };
+
+        // Test validation trait method directly (called at endpoint level before cache lookup)
+        let result = request.validate_filter(&config);
+
+        if error_message_contains.is_none() {
+            assert!(result.is_ok(), "Expected success but got error: {:?}", result);
+        } else {
+            assert!(result.is_err(), "Expected error but got success");
+            let err = result.unwrap_err();
+            assert!(matches!(err, RpcError::MinimumFilterNotMet(_, _)));
+            if let Some(msg) = error_message_contains {
+                assert!(
+                    err.to_string().contains(msg),
+                    "Error message '{}' does not contain '{}'",
+                    err,
+                    msg
+                );
+            }
+        }
+    }
+
+    #[rstest]
+    #[case::rejects_none_when_min_traded_n_days_ago_set(
+        Some(30),
+        None,
+        None,
+        Some("traded_n_days_ago parameter is required")
+    )]
+    #[case::rejects_above_threshold(
+        Some(30),
+        Some(60),
+        None,
+        Some("traded_n_days_ago must be at most")
+    )]
+    #[case::accepts_equal_threshold(Some(30), Some(30), None, None)]
+    #[case::accepts_below_threshold(Some(30), Some(15), None, None)]
+    #[case::accepts_none_when_no_min_traded_n_days_ago(None, None, None, None)]
+    #[case::accepts_any_value_when_no_min_traded_n_days_ago(None, Some(100), None, None)]
+    #[case::accepts_specific_addresses_without_traded_n_days_ago(
+        Some(30),
+        None,
+        Some(vec![Bytes::from("0x0123")]),
+        None
+    )]
+    #[tokio::test]
+    async fn test_min_traded_n_days_ago_validation(
+        #[case] min_traded_n_days_ago: Option<u64>,
+        #[case] request_traded_n_days_ago: Option<u64>,
+        #[case] token_addresses: Option<Vec<Bytes>>,
+        #[case] error_message_contains: Option<&str>,
+    ) {
+        let config = ServerRpcConfig::new().with_min_traded_n_days_ago(min_traded_n_days_ago);
+
+        let request = dto::TokensRequestBody {
+            chain: dto::Chain::Ethereum,
+            token_addresses,
+            min_quality: None,
+            traded_n_days_ago: request_traded_n_days_ago,
             pagination: dto::PaginationParams::new(0, 10),
         };
 

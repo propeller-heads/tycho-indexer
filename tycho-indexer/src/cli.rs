@@ -117,6 +117,11 @@ pub struct ServerArgs {
     /// Tokens with quality below this value will be rejected
     #[clap(long = "rpc-min-token-quality", env = "RPC_MIN_TOKEN_QUALITY")]
     pub min_token_quality: Option<i32>,
+
+    /// Minimum traded_n_days_ago threshold for RPC responses
+    /// Tokens that were last traded more than this many days ago will be rejected
+    #[clap(long = "rpc-min-traded-n-days-ago", env = "RPC_MIN_TRADED_N_DAYS_AGO")]
+    pub min_traded_n_days_ago: Option<u64>,
 }
 
 impl From<ServerArgs> for ServerRpcConfig {
@@ -124,6 +129,7 @@ impl From<ServerArgs> for ServerRpcConfig {
         Self::new()
             .with_min_tvl(args.min_tvl)
             .with_min_quality(args.min_token_quality)
+            .with_min_traded_n_days_ago(args.min_traded_n_days_ago)
     }
 }
 
@@ -301,7 +307,11 @@ mod cli_tests {
                     initial_backoff_ms: 150,
                     max_backoff_ms: 5000,
                 },
-                server: ServerArgs { min_tvl: None, min_token_quality: None },
+                server: ServerArgs {
+                    min_tvl: None,
+                    min_token_quality: None,
+                    min_traded_n_days_ago: None,
+                },
             },
             command: Command::Run(RunSpkgArgs {
                 chain: "ethereum".to_string(),
@@ -362,7 +372,11 @@ mod cli_tests {
                     initial_backoff_ms: 200,
                     max_backoff_ms: 10000,
                 },
-                server: ServerArgs { min_tvl: None, min_token_quality: None },
+                server: ServerArgs {
+                    min_tvl: None,
+                    min_token_quality: None,
+                    min_traded_n_days_ago: None,
+                },
             },
             command: Command::Index(IndexArgs {
                 substreams_args: SubstreamsArgs {
