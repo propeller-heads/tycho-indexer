@@ -425,7 +425,7 @@ mod tests {
             .floor();
 
         let expected_price = initial_price / 10.0;
-        assert!(expected_price == new_price, "Price impact not 90%.");
+        assert_eq!(expected_price, new_price, "Price impact not 90%.");
     }
 
     #[test]
@@ -441,33 +441,32 @@ mod tests {
         // Selling token_in decreases price from 0.5 down to 0.4
         let target_price = Price::new(BigUint::from(2u32), BigUint::from(5u32));
 
-        let trade = state
-            .query_pool_swap(&QueryPoolSwapParams::new(
-                token_in.clone(),
-                token_out.clone(),
-                SwapConstraint::PoolTargetPrice {
-                    target: target_price,
-                    tolerance: 0f64,
-                    min_amount_in: None,
-                    max_amount_in: None,
-                },
-            ))
-            .unwrap();
+        let params = QueryPoolSwapParams::new(
+            token_in.clone(),
+            token_out.clone(),
+            SwapConstraint::PoolTargetPrice {
+                target: target_price,
+                tolerance: 0f64,
+                min_amount_in: None,
+                max_amount_in: None,
+            },
+        );
 
-        assert!(trade.amount_in().clone() > BigUint::ZERO, "Should require some input amount");
+        let pool_swap = state.query_pool_swap(&params).unwrap();
+
+        assert_eq!(
+            *pool_swap.amount_in(),
+            BigUint::from(233271u32),
+            "Should require some input amount"
+        );
+        assert_eq!(*pool_swap.amount_out(), BigUint::from(104218u32));
 
         // Verify that swapping this amount brings us close to the target price
-        let result = state
-            .get_amount_out(trade.amount_in().clone(), &token_in, &token_out)
-            .unwrap();
-        let new_state = result
-            .new_state
+        let new_state = pool_swap
+            .new_state()
             .as_any()
             .downcast_ref::<PancakeswapV2State>()
             .unwrap();
-
-        // Check that we got some output
-        assert!(result.amount > BigUint::ZERO);
 
         // The new reserves should reflect the target price
         // Price = reserve1/reserve0, so if price = 0.4, then reserve0/reserve1 = 2.5
@@ -525,7 +524,7 @@ mod tests {
         let target_price =
             Price::new(u256_to_biguint(spot_price_num), u256_to_biguint(spot_price_den));
 
-        let trade = state
+        let pool_swap = state
             .query_pool_swap(&QueryPoolSwapParams::new(
                 token_in,
                 token_out,
@@ -540,12 +539,12 @@ mod tests {
 
         // At exact spot price, we should return zero amount
         assert_eq!(
-            trade.amount_in().clone(),
+            *pool_swap.amount_in(),
             BigUint::ZERO,
             "At spot price should require zero input amount"
         );
         assert_eq!(
-            trade.amount_out().clone(),
+            *pool_swap.amount_out(),
             BigUint::ZERO,
             "At spot price should return zero output amount"
         );
@@ -568,7 +567,7 @@ mod tests {
         let target_price =
             Price::new(u256_to_biguint(spot_price_num), u256_to_biguint(spot_price_den));
 
-        let trade = state
+        let pool_swap = state
             .query_pool_swap(&QueryPoolSwapParams::new(
                 token_in,
                 token_out,
@@ -582,7 +581,7 @@ mod tests {
             .unwrap();
 
         assert!(
-            trade.amount_in().clone() > BigUint::ZERO,
+            *pool_swap.amount_in() > BigUint::ZERO,
             "Should return non-zero amount for target slightly below spot"
         );
     }
@@ -607,7 +606,7 @@ mod tests {
 
         let target_price = Price::new(price_numerator, price_denominator);
 
-        let trade = state
+        let pool_swap = state
             .query_pool_swap(&QueryPoolSwapParams::new(
                 token_in,
                 token_out,
@@ -620,8 +619,8 @@ mod tests {
             ))
             .unwrap();
 
-        assert!(trade.amount_in().clone() > BigUint::ZERO, "Should require some input amount");
-        assert!(trade.amount_out().clone() > BigUint::ZERO, "Should get some output");
+        assert!(*pool_swap.amount_in() > BigUint::ZERO, "Should require some input amount");
+        assert!(*pool_swap.amount_out() > BigUint::ZERO, "Should get some output");
     }
 
     #[test]
@@ -633,7 +632,7 @@ mod tests {
 
         let target_price = Price::new(BigUint::from(2u32), BigUint::from(3u32));
 
-        let trade = state
+        let pool_swap = state
             .query_pool_swap(&QueryPoolSwapParams::new(
                 token_in,
                 token_out,
@@ -645,8 +644,8 @@ mod tests {
                 },
             ))
             .unwrap();
-        assert!(trade.amount_in().clone() > BigUint::ZERO, "Amount in should be non-zero");
-        assert!(trade.amount_out().clone() > BigUint::ZERO, "Amount out should be non-zero");
+        assert!(*pool_swap.amount_in() > BigUint::ZERO, "Amount in should be non-zero");
+        assert!(*pool_swap.amount_out() > BigUint::ZERO, "Amount out should be non-zero");
     }
 
     #[test]
@@ -665,7 +664,7 @@ mod tests {
         // This is reachable by selling token_in
         let target_price = Price::new(BigUint::from(1_950_000u128), BigUint::from(1_000_000u128));
 
-        let trade = state
+        let pool_swap = state
             .query_pool_swap(&QueryPoolSwapParams::new(
                 token_in,
                 token_out,
@@ -678,13 +677,10 @@ mod tests {
             ))
             .unwrap();
         assert!(
-            trade.amount_out().clone() > BigUint::ZERO,
+            *pool_swap.amount_out() > BigUint::ZERO,
             "Should return amount out for valid price"
         );
-        assert!(
-            trade.amount_in().clone() > BigUint::ZERO,
-            "Should return amount in for valid price"
-        );
+        assert!(*pool_swap.amount_in() > BigUint::ZERO, "Should return amount in for valid price");
     }
 
     #[test]
@@ -759,7 +755,7 @@ mod tests {
         let target_price =
             Price::new(u256_to_biguint(below_limit_num), u256_to_biguint(below_limit_den));
 
-        let trade_below_limit = pool
+        let swap_below_limit = pool
             .query_pool_swap(&QueryPoolSwapParams::new(
                 usdc.clone(),
                 dai.clone(),
@@ -773,20 +769,13 @@ mod tests {
             .unwrap();
 
         assert!(
-            trade_below_limit.amount_out().clone() > BigUint::ZERO,
+            swap_below_limit.amount_out().clone() > BigUint::ZERO,
             "Should return non-zero for reachable price"
         );
 
         // Verify with actual swap
         let actual_result = pool
-            .get_amount_out(
-                trade_below_limit
-                    .amount_in()
-                    .clone()
-                    .clone(),
-                &usdc,
-                &dai,
-            )
+            .get_amount_out(swap_below_limit.amount_in().clone(), &usdc, &dai)
             .unwrap();
 
         assert_eq!(
@@ -795,7 +784,7 @@ mod tests {
             "Should return non-zero amount"
         );
         assert!(
-            actual_result.amount >= trade_below_limit.amount_out().clone(),
+            actual_result.amount >= swap_below_limit.amount_out().clone(),
             "Actual swap should give at least predicted amount"
         );
     }
