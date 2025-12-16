@@ -1,3 +1,10 @@
+## [0.217.2](https://github.com/propeller-heads/tycho-simulation/compare/0.217.1...0.217.2) (2025-12-16)
+
+
+### Bug Fixes
+
+* Limit client/common version while new trait is not supported ([e19a448](https://github.com/propeller-heads/tycho-simulation/commit/e19a448e95e28bf65ba8cb46478712c0a934346a))
+
 ## [0.217.1](https://github.com/propeller-heads/tycho-simulation/compare/0.217.0...0.217.1) (2025-12-16)
 
 ## [0.217.0](https://github.com/propeller-heads/tycho-simulation/compare/0.216.0...0.217.0) (2025-12-12)
