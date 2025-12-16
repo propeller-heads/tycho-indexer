@@ -2,7 +2,7 @@ use clap::{Args, Parser, Subcommand};
 use tycho_common::{models::Chain, Bytes};
 use tycho_ethereum::rpc::{config::RPCRetryConfig, EthereumRpcClient};
 
-use crate::extractor::ExtractionError;
+use crate::{extractor::ExtractionError, services::ServerRpcConfig};
 
 /// Tycho Indexer using Substreams
 ///
@@ -79,6 +79,10 @@ pub struct GlobalArgs {
     /// RPC configuration (URL and retry settings)
     #[command(flatten)]
     pub rpc: RPCArgs,
+
+    /// Tycho RPC server configuration (minimum filtering thresholds)
+    #[command(flatten)]
+    pub server: ServerArgs,
 }
 
 /// RPC configuration arguments (url, retry settings, and potentially others, such as batching)
@@ -99,11 +103,34 @@ pub struct RPCArgs {
     /// Maximum backoff delay in milliseconds (backoff is capped at this value)
     #[clap(long = "rpc-max-backoff-ms", env = "RPC_MAX_BACKOFF_MS", default_value = "5000")]
     pub max_backoff_ms: u64,
+}
 
+/// Tycho RPC server configuration (minimum filtering thresholds)
+#[derive(Args, Debug, Clone, PartialEq)]
+pub struct ServerArgs {
     /// Minimum TVL threshold for RPC responses (in chain's native token)
     /// Components with TVL below this value or with no TVL will be rejected
     #[clap(long = "rpc-min-tvl", env = "RPC_MIN_TVL")]
     pub min_tvl: Option<f64>,
+
+    /// Minimum token quality threshold for RPC responses
+    /// Tokens with quality below this value will be rejected
+    #[clap(long = "rpc-min-token-quality", env = "RPC_MIN_TOKEN_QUALITY")]
+    pub min_token_quality: Option<i32>,
+
+    /// Minimum traded_n_days_ago threshold for RPC responses
+    /// Tokens that were last traded more than this many days ago will be rejected
+    #[clap(long = "rpc-min-traded-n-days-ago", env = "RPC_MIN_TRADED_N_DAYS_AGO")]
+    pub min_traded_n_days_ago: Option<u64>,
+}
+
+impl From<ServerArgs> for ServerRpcConfig {
+    fn from(args: ServerArgs) -> Self {
+        Self::new()
+            .with_min_tvl(args.min_tvl)
+            .with_min_quality(args.min_token_quality)
+            .with_min_traded_n_days_ago(args.min_traded_n_days_ago)
+    }
 }
 
 impl RPCArgs {
@@ -279,7 +306,11 @@ mod cli_tests {
                     max_retries: 5,
                     initial_backoff_ms: 150,
                     max_backoff_ms: 5000,
+                },
+                server: ServerArgs {
                     min_tvl: None,
+                    min_token_quality: None,
+                    min_traded_n_days_ago: None,
                 },
             },
             command: Command::Run(RunSpkgArgs {
@@ -340,7 +371,11 @@ mod cli_tests {
                     max_retries: 10,
                     initial_backoff_ms: 200,
                     max_backoff_ms: 10000,
+                },
+                server: ServerArgs {
                     min_tvl: None,
+                    min_token_quality: None,
+                    min_traded_n_days_ago: None,
                 },
             },
             command: Command::Index(IndexArgs {
@@ -377,7 +412,6 @@ mod cli_tests {
             max_retries: 7,
             initial_backoff_ms: 250,
             max_backoff_ms: 8000,
-            min_tvl: None,
         };
 
         let rpc_client = rpc_args.build_client().unwrap();

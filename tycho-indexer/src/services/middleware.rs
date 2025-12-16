@@ -7,7 +7,9 @@ use actix_web::{
 };
 use metrics::{counter, histogram};
 use tracing::instrument;
-use tycho_common::dto::PaginationLimits;
+use tycho_common::dto::{self, PaginationLimits};
+
+use crate::services::{rpc::RpcError, ServerRpcConfig};
 
 /// Middleware to record metrics for RPC requests.
 #[instrument(skip_all, fields(user_identity))]
@@ -114,6 +116,121 @@ pub trait RequestPaginationValidation: PaginationLimits {
 
 impl<T: PaginationLimits> RequestPaginationValidation for T {}
 
+/// Trait for validating filter parameters on RPC requests to prevent overly broad queries.
+///
+/// Request types implement this trait to define their validation logic against
+/// configured thresholds. Validation happens at the endpoint level before cache lookups
+/// or database queries, enabling early rejection of invalid requests.
+pub trait ValidateFilter {
+    /// Validates the filter parameters against the provided RPC configuration.
+    ///
+    /// # Errors
+    /// Returns `RpcError::MinimumFilterNotMet` if the request doesn't meet filtering requirements.
+    fn validate_filter(&self, config: &ServerRpcConfig) -> Result<(), RpcError>;
+}
+
+/// Validation implementation for protocol components requests.
+///
+/// When `min_component_tvl` is configured, clients must either:
+/// - Provide specific `component_ids`, OR
+/// - Include a `tvl_gt` parameter that meets or exceeds the minimum threshold
+impl ValidateFilter for dto::ProtocolComponentsRequestBody {
+    fn validate_filter(&self, config: &ServerRpcConfig) -> Result<(), RpcError> {
+        // Allow requests with specific component IDs (targeted queries don't cause broad scans)
+        if self.component_ids.is_some() {
+            return Ok(());
+        }
+        match (config.min_component_tvl(), self.tvl_gt) {
+            (Some(min_tvl), None) => Err(RpcError::MinimumFilterNotMet(
+                "/protocol_components".to_string(),
+                format!(
+                    "tvl_gt parameter is required (minimum: {}) to prevent overly broad queries. \
+                     Alternatively, specify component_ids for targeted queries.",
+                    min_tvl
+                ),
+            )),
+            (Some(min_tvl), Some(requested_tvl)) if requested_tvl < min_tvl => {
+                Err(RpcError::MinimumFilterNotMet(
+                    "/protocol_components".to_string(),
+                    format!(
+                        "tvl_gt must be at least {} (requested: {}) to prevent overly broad queries. \
+                         Alternatively, specify component_ids for targeted queries.",
+                        min_tvl, requested_tvl
+                    ),
+                ))
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+/// Validation implementation for tokens requests.
+///
+/// When `min_token_quality` or `min_traded_n_days_ago` is configured, clients must either:
+/// - Provide specific `token_addresses`, OR
+/// - Include a `min_quality` parameter that meets or exceeds the minimum threshold AND/OR
+/// - Include a `traded_n_days_ago` parameter that is at most the maximum threshold
+impl ValidateFilter for dto::TokensRequestBody {
+    fn validate_filter(&self, config: &ServerRpcConfig) -> Result<(), RpcError> {
+        // Allow requests with specific token addresses (targeted queries don't cause broad scans)
+        if self.token_addresses.is_some() {
+            return Ok(());
+        }
+
+        // Validate min_quality if configured
+        match (config.min_token_quality(), self.min_quality) {
+            (Some(min_quality), None) => {
+                return Err(RpcError::MinimumFilterNotMet(
+                    "/tokens".to_string(),
+                    format!(
+                        "min_quality parameter is required (minimum: {}) to prevent overly broad queries. \
+                         Alternatively, specify token_addresses for targeted queries.",
+                        min_quality
+                    ),
+                ));
+            }
+            (Some(min_quality), Some(requested_quality)) if requested_quality < min_quality => {
+                return Err(RpcError::MinimumFilterNotMet(
+                    "/tokens".to_string(),
+                    format!(
+                        "min_quality must be at least {} (requested: {}) to prevent overly broad queries. \
+                         Alternatively, specify token_addresses for targeted queries.",
+                        min_quality, requested_quality
+                    ),
+                ));
+            }
+            _ => {}
+        }
+
+        // Validate traded_n_days_ago if configured
+        match (config.min_traded_n_days_ago(), self.traded_n_days_ago) {
+            (Some(max_days), None) => {
+                return Err(RpcError::MinimumFilterNotMet(
+                    "/tokens".to_string(),
+                    format!(
+                        "traded_n_days_ago parameter is required (maximum: {}) to prevent overly broad queries. \
+                         Alternatively, specify token_addresses for targeted queries.",
+                        max_days
+                    ),
+                ));
+            }
+            (Some(max_days), Some(requested_days)) if requested_days > max_days => {
+                return Err(RpcError::MinimumFilterNotMet(
+                    "/tokens".to_string(),
+                    format!(
+                        "traded_n_days_ago must be at most {} (requested: {}) to prevent overly broad queries. \
+                         Alternatively, specify token_addresses for targeted queries.",
+                        max_days, requested_days
+                    ),
+                ));
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeMap, HashMap};
@@ -125,7 +242,7 @@ mod tests {
     };
     use once_cell::sync::OnceCell;
     use rstest::rstest;
-    use tycho_common::dto::PaginationParams;
+    use tycho_common::{dto::PaginationParams, Bytes};
 
     use super::*;
     use crate::services::rpc::RpcError;
@@ -450,5 +567,186 @@ mod tests {
 
         let body = test::read_body(resp).await;
         assert!(!body.is_empty());
+    }
+
+    #[rstest]
+    #[case::rejects_none_when_min_tvl_set(
+        Some(1000.0),
+        None,
+        None,
+        Some("tvl_gt parameter is required")
+    )]
+    #[case::rejects_below_threshold(
+        Some(1000.0),
+        Some(500.0),
+        None,
+        Some("tvl_gt must be at least")
+    )]
+    #[case::accepts_equal_threshold(Some(1000.0), Some(1000.0), None, None)]
+    #[case::accepts_above_threshold(Some(1000.0), Some(5000.0), None, None)]
+    #[case::accepts_none_when_no_min_tvl(None, None, None, None)]
+    #[case::accepts_any_value_when_no_min_tvl(None, Some(100.0), None, None)]
+    #[case::accepts_specific_component_ids_without_tvl(
+        Some(1000.0),
+        None,
+        Some(vec!["component1".to_string()]),
+        None
+    )]
+    #[case::accepts_specific_component_ids_with_low_tvl(
+        Some(1000.0),
+        Some(100.0),
+        Some(vec!["component1".to_string(), "component2".to_string()]),
+        None
+    )]
+    #[tokio::test]
+    async fn test_min_tvl_validation(
+        #[case] min_tvl: Option<f64>,
+        #[case] request_tvl_gt: Option<f64>,
+        #[case] component_ids: Option<Vec<String>>,
+        #[case] error_message_contains: Option<&str>,
+    ) {
+        let config = ServerRpcConfig::new().with_min_tvl(min_tvl);
+
+        let request = dto::ProtocolComponentsRequestBody {
+            protocol_system: "ambient".to_string(),
+            component_ids,
+            tvl_gt: request_tvl_gt,
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::new(0, 10),
+        };
+
+        // Test validation trait method directly (called at endpoint level before cache lookup)
+        let result = request.validate_filter(&config);
+
+        if error_message_contains.is_none() {
+            assert!(result.is_ok(), "Expected success but got error: {:?}", result);
+        } else {
+            assert!(result.is_err(), "Expected error but got success");
+            let err = result.unwrap_err();
+            assert!(matches!(err, RpcError::MinimumFilterNotMet(_, _)));
+            if let Some(msg) = error_message_contains {
+                assert!(
+                    err.to_string().contains(msg),
+                    "Error message '{}' does not contain '{}'",
+                    err,
+                    msg
+                );
+            }
+        }
+    }
+
+    #[rstest]
+    #[case::rejects_none_when_min_quality_set(
+        Some(50),
+        None,
+        None,
+        Some("min_quality parameter is required")
+    )]
+    #[case::rejects_below_threshold(Some(50), Some(30), None, Some("min_quality must be at least"))]
+    #[case::accepts_equal_threshold(Some(50), Some(50), None, None)]
+    #[case::accepts_above_threshold(Some(50), Some(80), None, None)]
+    #[case::accepts_none_when_no_min_quality(None, None, None, None)]
+    #[case::accepts_any_value_when_no_min_quality(None, Some(10), None, None)]
+    #[case::accepts_specific_addresses_without_quality(
+        Some(50),
+        None,
+        Some(vec![Bytes::from("0x0123")]),
+        None
+    )]
+    #[tokio::test]
+    async fn test_min_token_quality_validation(
+        #[case] min_token_quality: Option<i32>,
+        #[case] request_min_quality: Option<i32>,
+        #[case] token_addresses: Option<Vec<Bytes>>,
+        #[case] error_message_contains: Option<&str>,
+    ) {
+        let config = ServerRpcConfig::new().with_min_quality(min_token_quality);
+
+        let request = dto::TokensRequestBody {
+            chain: dto::Chain::Ethereum,
+            token_addresses,
+            min_quality: request_min_quality,
+            traded_n_days_ago: None,
+            pagination: dto::PaginationParams::new(0, 10),
+        };
+
+        // Test validation trait method directly (called at endpoint level before cache lookup)
+        let result = request.validate_filter(&config);
+
+        if error_message_contains.is_none() {
+            assert!(result.is_ok(), "Expected success but got error: {:?}", result);
+        } else {
+            assert!(result.is_err(), "Expected error but got success");
+            let err = result.unwrap_err();
+            assert!(matches!(err, RpcError::MinimumFilterNotMet(_, _)));
+            if let Some(msg) = error_message_contains {
+                assert!(
+                    err.to_string().contains(msg),
+                    "Error message '{}' does not contain '{}'",
+                    err,
+                    msg
+                );
+            }
+        }
+    }
+
+    #[rstest]
+    #[case::rejects_none_when_min_traded_n_days_ago_set(
+        Some(30),
+        None,
+        None,
+        Some("traded_n_days_ago parameter is required")
+    )]
+    #[case::rejects_above_threshold(
+        Some(30),
+        Some(60),
+        None,
+        Some("traded_n_days_ago must be at most")
+    )]
+    #[case::accepts_equal_threshold(Some(30), Some(30), None, None)]
+    #[case::accepts_below_threshold(Some(30), Some(15), None, None)]
+    #[case::accepts_none_when_no_min_traded_n_days_ago(None, None, None, None)]
+    #[case::accepts_any_value_when_no_min_traded_n_days_ago(None, Some(100), None, None)]
+    #[case::accepts_specific_addresses_without_traded_n_days_ago(
+        Some(30),
+        None,
+        Some(vec![Bytes::from("0x0123")]),
+        None
+    )]
+    #[tokio::test]
+    async fn test_min_traded_n_days_ago_validation(
+        #[case] min_traded_n_days_ago: Option<u64>,
+        #[case] request_traded_n_days_ago: Option<u64>,
+        #[case] token_addresses: Option<Vec<Bytes>>,
+        #[case] error_message_contains: Option<&str>,
+    ) {
+        let config = ServerRpcConfig::new().with_min_traded_n_days_ago(min_traded_n_days_ago);
+
+        let request = dto::TokensRequestBody {
+            chain: dto::Chain::Ethereum,
+            token_addresses,
+            min_quality: None,
+            traded_n_days_ago: request_traded_n_days_ago,
+            pagination: dto::PaginationParams::new(0, 10),
+        };
+
+        // Test validation trait method directly (called at endpoint level before cache lookup)
+        let result = request.validate_filter(&config);
+
+        if error_message_contains.is_none() {
+            assert!(result.is_ok(), "Expected success but got error: {:?}", result);
+        } else {
+            assert!(result.is_err(), "Expected error but got success");
+            let err = result.unwrap_err();
+            assert!(matches!(err, RpcError::MinimumFilterNotMet(_, _)));
+            if let Some(msg) = error_message_contains {
+                assert!(
+                    err.to_string().contains(msg),
+                    "Error message '{}' does not contain '{}'",
+                    err,
+                    msg
+                );
+            }
+        }
     }
 }
