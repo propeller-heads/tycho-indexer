@@ -107,48 +107,67 @@ impl Price {
 }
 
 /// Represents a trade between two tokens at a given price on a pool.
-///
-/// # Fields
-///
-/// * `amount_in` - The amount of token_in (what you pay)
-/// * `amount_out` - The amount of token_out (what you receive)
-///
-/// The price of the trade is the ratio of amount_out to amount_in, i.e. amount_out / amount_in.
 #[derive(Debug, Clone)]
 pub struct PoolSwap {
-    pub amount_in: BigUint,
-    pub amount_out: BigUint,
-    pub new_state: Box<dyn ProtocolSim>,
+    /// The amount of token_in sold to the pool
+    amount_in: BigUint,
+    /// The amount of token_out bought from the pool
+    amount_out: BigUint,
+    /// The new state of the pool after the swap
+    new_state: Box<dyn ProtocolSim>,
+    /// Optional price points that the pool was transitioned through while computing this swap.
+    /// The values are tuples of (amount_in, amount_out, price). This is useful for repeated calls
+    /// by providing good bounds for the next call.
+    price_points: Option<Vec<(BigUint, BigUint, f64)>>,
 }
 
 impl PoolSwap {
-    pub fn new(amount_in: BigUint, amount_out: BigUint, new_state: Box<dyn ProtocolSim>) -> Self {
-        Self { amount_in, amount_out, new_state }
+    pub fn new(
+        amount_in: BigUint,
+        amount_out: BigUint,
+        new_state: Box<dyn ProtocolSim>,
+        price_points: Option<Vec<(BigUint, BigUint, f64)>>,
+    ) -> Self {
+        Self { amount_in, amount_out, new_state, price_points }
+    }
+
+    pub fn amount_in(&self) -> &BigUint {
+        &self.amount_in
+    }
+
+    pub fn amount_out(&self) -> &BigUint {
+        &self.amount_out
+    }
+
+    pub fn new_state(&self) -> &Box<dyn ProtocolSim> {
+        &self.new_state
+    }
+
+    pub fn price_points(&self) -> &Option<Vec<(BigUint, BigUint, f64)>> {
+        &self.price_points
     }
 }
 
+/// Options on how to constrain the pool swap query
 #[derive(Debug, Clone, PartialEq)]
-pub enum PriceConstraint {
+pub enum SwapConstraint {
     /// This mode will calculate the maximum trade that this pool can execute while respecting a
     /// trade limit price.
-    ///
-    /// # Fields
-    /// * `limit_price` - The minimum acceptable price for the resulting trade, as a [Price] struct.
-    ///   The resulting amount_out / amount_in must be >= trade_limit_price
-    /// * `tolerance` - The tolerance as a percentage to be applied on top of (increasing) the trade
-    ///   limit price. This is used to loosen the acceptance criteria for implementations of this method,
-    ///   but will never allow violating the trade limit price itself.
-    /// * `max_amount_in` - The maximum amount of token_in that can be used for this trade.
-    TradeLimitPrice { limit: Price, tolerance: f64, max_amount_in: Option<BigUint> },
+    TradeLimitPrice {
+        /// The minimum acceptable price for the resulting trade, as a [Price] struct. The resulting amount_out / amount_in must be >= trade_limit_price
+        limit: Price,
+        /// The tolerance as a percentage to be applied on top of (increasing) the trade
+        /// limit price. This is used to loosen the acceptance criteria for implementations of this method,
+        /// but will never allow violating the trade limit price itself.
+        tolerance: f64,
+        /// The minimum amount of token_in that must be used for this trade.
+        min_amount_in: Option<BigUint>,
+        /// The maximum amount of token_in that can be used for this trade.
+        max_amount_in: Option<BigUint>,
+    },
 
     /// This mode will Calculate the amount of token_in required to move the pool's marginal price
     /// down to a target price, and the amount of token_out received.
-    ///
-    /// # Fields
-    /// * `target_price` - The marginal price we want the pool to be after the trade, as a [Price]
-    ///    struct. The pool's price will move down to this level as token_in is sold into it
-    /// * `tolerance` - The tolerance percentage for the resulting trade price. After trading, the pool's
-    ///    price will decrease to the interval `[target_price, target_price * (1 + tolerance)]`.
     ///
     /// # Edge Cases and Limitations
     ///
@@ -159,7 +178,18 @@ pub enum PriceConstraint {
     /// always find an exact trade amount to reach the target price.
     /// - Not all protocols support analytical solutions for this problem, requiring numerical
     /// methods.
-    PoolTargetPrice { target: Price, tolerance: f64 },
+    PoolTargetPrice {
+        /// The marginal price we want the pool to be after the trade, as a [Price] struct. The
+        /// pool's price will move down to this level as token_in is sold into it
+        target: Price,
+        /// The tolerance percentage for the resulting trade price. After trading, the pool's
+        //  price will decrease to the interval `[target_price, target_price * (1 + tolerance)]`.
+        tolerance: f64,
+        /// The lower bound for searching algorithms.
+        min_amount_in: Option<BigUint>,
+        /// The upper bound for searching algorithms.
+        max_amount_in: Option<BigUint>,
+    },
 }
 
 /// Represents the parameters for query_max_trade.
@@ -168,17 +198,17 @@ pub enum PriceConstraint {
 ///
 /// * `token_in` - The token being sold (swapped into the pool)
 /// * `token_out` - The token being bought (swapped out of the pool)
-/// * `price_constraint` - Type of price constraint to be applied. See [PriceConstraint].
+/// * `swap_constraint` - Type of price constraint to be applied. See [SwapConstraint].
 #[derive(Debug, Clone, PartialEq)]
-pub struct QuerySwapSizeParams {
+pub struct QueryPoolSwapParams {
     token_in: Token,
     token_out: Token,
-    price_constraint: PriceConstraint,
+    swap_constraint: SwapConstraint,
 }
 
-impl QuerySwapSizeParams {
-    pub fn new(token_in: Token, token_out: Token, price_constraint: PriceConstraint) -> Self {
-        Self { token_in, token_out, price_constraint }
+impl QueryPoolSwapParams {
+    pub fn new(token_in: Token, token_out: Token, swap_constraint: SwapConstraint) -> Self {
+        Self { token_in, token_out, swap_constraint }
     }
 
     /// Returns a reference to the input token (token being sold into the pool)
@@ -192,8 +222,8 @@ impl QuerySwapSizeParams {
     }
 
     /// Returns a reference to the price constraint
-    pub fn price_constraint(&self) -> &PriceConstraint {
-        &self.price_constraint
+    pub fn swap_constraint(&self) -> &SwapConstraint {
+        &self.swap_constraint
     }
 }
 
@@ -297,16 +327,16 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
 
     /// Calculates the swap volume required to achieve the provided goal when trading against this pool.
     ///
-    /// This method will branch towards different behaviors based on [PriceConstraint] enum. Please
+    /// This method will branch towards different behaviors based on [SwapConstraint] enum. Please
     /// refer to its documentation for further details on each behavior.
     ///
     /// In short, the current two options are:
-    /// - Maximize your trade while respecting a trade limit price: [PriceConstraint::TradeLimitPrice]
-    /// - Move the pool price to a target price: [PriceConstraint::PoolTargetPrice]
+    /// - Maximize your trade while respecting a trade limit price: [SwapConstraint::TradeLimitPrice]
+    /// - Move the pool price to a target price: [SwapConstraint::PoolTargetPrice]
     ///
     /// # Arguments
     ///
-    /// * `params` - A [QuerySwapSizeParams] struct containing the inputs for this method.
+    /// * `params` - A [QueryPoolSwapParams] struct containing the inputs for this method.
     ///
     /// # Returns
     ///
@@ -316,7 +346,7 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///   - The calculation encounters numerical issues
     ///   - The method is not implemented for this protocol
     #[allow(unused)]
-    fn query_swap_size(&self, params: &QuerySwapSizeParams) -> Result<PoolSwap, SimulationError> {
+    fn query_pool_swap(&self, params: &QueryPoolSwapParams) -> Result<PoolSwap, SimulationError> {
         Err(SimulationError::FatalError("query_swap_size not implemented".into()))
     }
 
