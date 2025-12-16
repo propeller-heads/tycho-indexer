@@ -18,16 +18,14 @@ pub struct Balances {
     pub account_balances: HashMap<Bytes, HashMap<Bytes, Bytes>>,
 }
 
-/// GetAmountOutResult struct represents the result of getting the amount out of a trading pair
-///
-/// # Fields
-///
-/// * `amount`: BigUint, the amount of the trading pair
-/// * `gas`: BigUint, the gas of the trading pair
+/// Represents the result of getting the amount out of a trading pair.
 #[derive(Debug)]
 pub struct GetAmountOutResult {
+    /// The output amount
     pub amount: BigUint,
+    /// The gas cost
     pub gas: BigUint,
+    /// The new state after the swap
     pub new_state: Box<dyn ProtocolSim>,
 }
 
@@ -54,11 +52,6 @@ impl fmt::Display for GetAmountOutResult {
 
 /// Represents a price as a fraction in the token_in -> token_out direction. With units
 /// [token_out/token_in].
-///
-/// # Fields
-///
-/// * `numerator` - The amount of token_out (what you receive), including token decimals
-/// * `denominator` - The amount of token_in (what you pay), including token decimals
 ///
 /// A fraction struct is used for price to have flexibility in precision independent of the
 /// decimal precisions of the numerator and denominator tokens. This allows for:
@@ -89,7 +82,9 @@ impl fmt::Display for GetAmountOutResult {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Price {
+    /// The amount of token_out (what you receive), including token decimals
     pub numerator: BigUint,
+    /// The amount of token_in (what you pay), including token decimals
     pub denominator: BigUint,
 }
 
@@ -197,16 +192,13 @@ pub enum SwapConstraint {
 }
 
 /// Represents the parameters for query_max_trade.
-///
-/// # Fields
-///
-/// * `token_in` - The token being sold (swapped into the pool)
-/// * `token_out` - The token being bought (swapped out of the pool)
-/// * `swap_constraint` - Type of price constraint to be applied. See [SwapConstraint].
 #[derive(Debug, Clone, PartialEq)]
 pub struct QueryPoolSwapParams {
+    /// The token being sold (swapped into the pool)
     token_in: Token,
+    /// The token being bought (swapped out of the pool)
     token_out: Token,
+    /// Type of price constraint to be applied. See [SwapConstraint].
     swap_constraint: SwapConstraint,
 }
 
