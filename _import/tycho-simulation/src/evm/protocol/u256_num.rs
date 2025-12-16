@@ -1,7 +1,7 @@
 //! Numeric methods for the U256 type
 use std::collections::HashMap;
 
-use alloy::primitives::{bytes::Bytes, U256};
+use alloy::primitives::{bytes::Bytes, U256, U512};
 use num_bigint::BigUint;
 use tycho_common::simulation::errors::SimulationError;
 
@@ -108,6 +108,11 @@ pub fn u256_to_f64(x: U256) -> Result<f64, SimulationError> {
 
 pub fn u256_to_biguint(value: U256) -> BigUint {
     let bytes: [u8; 32] = value.to_le_bytes();
+    BigUint::from_bytes_le(&bytes)
+}
+
+pub fn u512_to_biguint(value: U512) -> BigUint {
+    let bytes: [u8; 64] = value.to_le_bytes();
     BigUint::from_bytes_le(&bytes)
 }
 

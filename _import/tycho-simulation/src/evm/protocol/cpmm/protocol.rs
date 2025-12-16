@@ -7,7 +7,7 @@ use tycho_common::{
     models::token::Token,
     simulation::{
         errors::{SimulationError, TransitionError},
-        protocol_sim::{Price, Trade},
+        protocol_sim::Price,
     },
     Bytes,
 };
@@ -16,7 +16,7 @@ use super::reserve_price::spot_price_from_reserves;
 use crate::{
     evm::protocol::{
         safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256, sqrt_u512},
-        u256_num::{biguint_to_u256, u256_to_biguint},
+        u256_num::{biguint_to_u256, u256_to_biguint, u512_to_biguint},
     },
     protocol::errors::InvalidSnapshotError,
 };
@@ -156,8 +156,6 @@ impl ProtocolFee {
 /// Calculates the exact amount of token_in required to move the pool's marginal price down to
 /// a target price.
 ///
-/// See [`ProtocolSim::swap_to_price`] for the trait documentation.
-///
 /// # Algorithm
 ///
 /// Derives how much to swap to reach a target price using the constant product formula.
@@ -206,12 +204,21 @@ impl ProtocolFee {
 ///
 /// where `target_price_w_fee = (sell_price * 9970) / (buy_price * 10000)`
 /// Then swap to get amount_out.
+///
+/// # Returns
+/// * `Ok((amount_in, implied_amount_out))` - The implied amount out is computed analytically and
+///   will be smaller than actually swapping against the pool.
+/// * `Err(SimulationError)` - If an error occurs during calculation.
 pub fn cpmm_swap_to_price(
     reserve_in: U256,
     reserve_out: U256,
-    target_price: Price,
+    target_price: &Price,
     fee: ProtocolFee,
-) -> Result<Trade, SimulationError> {
+) -> Result<(BigUint, BigUint), SimulationError> {
+    if reserve_in == U256::ZERO || reserve_out == U256::ZERO {
+        return Err(SimulationError::FatalError("Reserves cannot be zero".to_string()));
+    }
+
     // Flip target pool price to swap price
     let swap_price_num = biguint_to_u256(&target_price.denominator);
     let swap_price_den = biguint_to_u256(&target_price.numerator);
@@ -221,17 +228,21 @@ pub fn cpmm_swap_to_price(
     // FEE_NUMERATOR)
     // Cross-multiply to avoid division: swap_price_num * reserve_out * FEE_NUMERATOR >=
     // swap_price_den * reserve_in * FEE_PRECISION
-    let target_price_cross_mult = swap_price_num
-        .checked_mul(reserve_out)
-        .and_then(|x| x.checked_mul(fee.numerator))
+    // Use U512 precision to match the calculation of new reserves
+    let target_price_cross_mult = U512::from(swap_price_num)
+        .checked_mul(U512::from(reserve_out))
+        .and_then(|x| x.checked_mul(U512::from(fee.numerator)))
         .ok_or_else(|| SimulationError::FatalError("Overflow in price check".to_string()))?;
-    let current_price_cross_mult = swap_price_den
-        .checked_mul(reserve_in)
-        .and_then(|x| x.checked_mul(fee.precision))
+    let current_price_cross_mult = U512::from(swap_price_den)
+        .checked_mul(U512::from(reserve_in))
+        .and_then(|x| x.checked_mul(U512::from(fee.precision)))
         .ok_or_else(|| SimulationError::FatalError("Overflow in price check".to_string()))?;
 
     if target_price_cross_mult < current_price_cross_mult {
-        return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
+        return Err(SimulationError::InvalidInput(
+            "Target price is unreachable (already below current spot price)".to_string(),
+            None,
+        ));
     }
 
     // Calculate new reserve_in: x' = sqrt(k * price_num * FEE_NUMERATOR / (price_den *
@@ -246,14 +257,19 @@ pub fn cpmm_swap_to_price(
     let x_prime = U256::from_limbs([limbs[0], limbs[1], limbs[2], limbs[3]]);
 
     if x_prime <= reserve_in {
-        return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
+        return Ok((BigUint::ZERO, BigUint::ZERO));
     }
 
     let amount_in = safe_sub_u256(x_prime, reserve_in)?;
     if amount_in == U256::ZERO {
-        return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
+        return Ok((BigUint::ZERO, BigUint::ZERO));
     }
 
-    let amount_out = cpmm_get_amount_out(amount_in, reserve_in, reserve_out, fee)?;
-    Ok(Trade::new(u256_to_biguint(amount_in), u256_to_biguint(amount_out)))
+    let implied_amount_out = (U512::from(amount_in).checked_mul(U512::from(swap_price_den)))
+        .and_then(|x| x.checked_div(U512::from(swap_price_num)))
+        .ok_or_else(|| {
+            SimulationError::FatalError("Division by zero in implied_amount_out".to_string())
+        })?;
+
+    Ok((u256_to_biguint(amount_in), u512_to_biguint(implied_amount_out)))
 }

@@ -28,7 +28,7 @@ pub(crate) struct StepComputation {
     pub(crate) fee_amount: U256,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct SwapResults {
     pub(crate) amount_calculated: I256,
     pub(crate) amount_specified: I256,
