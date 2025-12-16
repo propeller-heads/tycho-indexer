@@ -154,11 +154,13 @@ pub enum SwapConstraint {
     /// This mode will calculate the maximum trade that this pool can execute while respecting a
     /// trade limit price.
     TradeLimitPrice {
-        /// The minimum acceptable price for the resulting trade, as a [Price] struct. The resulting amount_out / amount_in must be >= trade_limit_price
+        /// The minimum acceptable price for the resulting trade, as a [Price] struct. The
+        /// resulting amount_out / amount_in must be >= trade_limit_price
         limit: Price,
-        /// The tolerance as a percentage to be applied on top of (increasing) the trade
-        /// limit price. This is used to loosen the acceptance criteria for implementations of this method,
-        /// but will never allow violating the trade limit price itself.
+        /// The tolerance as a fraction to be applied on top of (increasing) the trade
+        /// limit price, raising the acceptance threshold. This is used to loosen the acceptance
+        /// criteria for implementations of this method, but will never allow violating the trade
+        /// limit price itself.
         tolerance: f64,
         /// The minimum amount of token_in that must be used for this trade.
         min_amount_in: Option<BigUint>,
@@ -182,8 +184,8 @@ pub enum SwapConstraint {
         /// The marginal price we want the pool to be after the trade, as a [Price] struct. The
         /// pool's price will move down to this level as token_in is sold into it
         target: Price,
-        /// The tolerance percentage for the resulting trade price. After trading, the pool's
-        //  price will decrease to the interval `[target_price, target_price * (1 + tolerance)]`.
+        /// The tolerance as a fraction of the resulting pool marginal price. After trading, the pool's
+        ///  price will decrease to the interval `[target, target * (1 + tolerance)]`.
         tolerance: f64,
         /// The lower bound for searching algorithms.
         min_amount_in: Option<BigUint>,
