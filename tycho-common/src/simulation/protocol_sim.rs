@@ -139,8 +139,8 @@ impl PoolSwap {
         &self.amount_out
     }
 
-    pub fn new_state(&self) -> &Box<dyn ProtocolSim> {
-        &self.new_state
+    pub fn new_state(&self) -> &dyn ProtocolSim {
+        self.new_state.as_ref()
     }
 
     pub fn price_points(&self) -> &Option<Vec<(BigUint, BigUint, f64)>> {
@@ -175,11 +175,11 @@ pub enum SwapConstraint {
     ///
     /// Computing the exact amount to move a pool's marginal price to a target has several challenges:
     /// - The definition of marginal price varies between protocols. It is usually not an attribute
-    /// of the pool but a consequence of its liquidity distribution and current state.
+    ///   of the pool but a consequence of its liquidity distribution and current state.
     /// - For protocols with concentrated liquidity, the marginal price is discrete, meaning we can't
-    /// always find an exact trade amount to reach the target price.
+    ///   always find an exact trade amount to reach the target price.
     /// - Not all protocols support analytical solutions for this problem, requiring numerical
-    /// methods.
+    ///   methods.
     PoolTargetPrice {
         /// The marginal price we want the pool to be after the trade, as a [Price] struct. The
         /// pool's price will move down to this level as token_in is sold into it
@@ -343,7 +343,7 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     /// # Returns
     ///
     /// * `Ok(Trade)` - A `Trade` struct containing the amounts to be traded and the state of the
-    /// pool after trading.
+    ///   pool after trading.
     /// * `Err(SimulationError)` - If:
     ///   - The calculation encounters numerical issues
     ///   - The method is not implemented for this protocol
