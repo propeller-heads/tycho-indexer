@@ -173,19 +173,21 @@ pub enum SwapConstraint {
     ///
     /// # Edge Cases and Limitations
     ///
-    /// Computing the exact amount to move a pool's marginal price to a target has several challenges:
+    /// Computing the exact amount to move a pool's marginal price to a target has several
+    /// challenges:
     /// - The definition of marginal price varies between protocols. It is usually not an attribute
     ///   of the pool but a consequence of its liquidity distribution and current state.
-    /// - For protocols with concentrated liquidity, the marginal price is discrete, meaning we can't
-    ///   always find an exact trade amount to reach the target price.
+    /// - For protocols with concentrated liquidity, the marginal price is discrete, meaning we
+    ///   can't always find an exact trade amount to reach the target price.
     /// - Not all protocols support analytical solutions for this problem, requiring numerical
     ///   methods.
     PoolTargetPrice {
         /// The marginal price we want the pool to be after the trade, as a [Price] struct. The
         /// pool's price will move down to this level as token_in is sold into it
         target: Price,
-        /// The tolerance as a fraction of the resulting pool marginal price. After trading, the pool's
-        ///  price will decrease to the interval `[target, target * (1 + tolerance)]`.
+        /// The tolerance as a fraction of the resulting pool marginal price. After trading, the
+        /// pool's  price will decrease to the interval `[target, target * (1 +
+        /// tolerance)]`.
         tolerance: f64,
         /// The lower bound for searching algorithms.
         min_amount_in: Option<BigUint>,
@@ -327,13 +329,15 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
         balances: &Balances,
     ) -> Result<(), TransitionError<String>>;
 
-    /// Calculates the swap volume required to achieve the provided goal when trading against this pool.
+    /// Calculates the swap volume required to achieve the provided goal when trading against this
+    /// pool.
     ///
     /// This method will branch towards different behaviors based on [SwapConstraint] enum. Please
     /// refer to its documentation for further details on each behavior.
     ///
     /// In short, the current two options are:
-    /// - Maximize your trade while respecting a trade limit price: [SwapConstraint::TradeLimitPrice]
+    /// - Maximize your trade while respecting a trade limit price:
+    ///   [SwapConstraint::TradeLimitPrice]
     /// - Move the pool price to a target price: [SwapConstraint::PoolTargetPrice]
     ///
     /// # Arguments
