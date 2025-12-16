@@ -1,7 +1,7 @@
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use alloy::{
-    primitives::{keccak256, FixedBytes},
+    primitives::{keccak256, map::AddressHashMap, Address, FixedBytes, Keccak256, U256},
     rpc::types::{state::AccountOverride, Block, TransactionRequest},
     sol_types::SolValue,
 };
@@ -19,11 +19,7 @@ use tycho_execution::encoding::{
     models::{EncodedSolution, Solution, SwapBuilder, Transaction, UserTransferType},
 };
 use tycho_simulation::{
-    evm::protocol::u256_num::biguint_to_u256,
-    foundry_evm::revm::primitives::{
-        alloy_primitives::Keccak256, map::AddressHashMap, Address, U256,
-    },
-    protocol::models::ProtocolComponent,
+    evm::protocol::u256_num::biguint_to_u256, protocol::models::ProtocolComponent,
 };
 
 use crate::{execution::tenderly::OverwriteMetadata, rpc_tools::RPCTools};
