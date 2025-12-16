@@ -23,7 +23,7 @@ pub(crate) struct TraceResult {
     pub gas_used: u64,
 }
 
-/// Handle traces with Etherscan identification and pretty printing
+/// Handle traces with Etherscan & 4Byte identification and pretty printing
 /// This is the main public function used by SimulationEngine
 pub(crate) async fn handle_traces(
     mut result: TraceResult,

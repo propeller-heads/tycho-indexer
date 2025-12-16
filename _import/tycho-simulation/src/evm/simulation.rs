@@ -74,6 +74,10 @@ where
     ///
     /// * `state` - Database reference to be used for simulation
     /// * `trace` - Whether to print the entire execution trace
+    ///
+    /// # Notes
+    /// If you set traces to true, consider setting the ETHERSCAN_API_KEY env variable
+    /// so the tracer can pull contract metadata from etherscan.
     pub fn new(state: D, trace: bool) -> Self {
         Self { state, trace }
     }
