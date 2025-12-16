@@ -121,7 +121,7 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
     }
 
     /// Detect slots for tokens using batched requests (debug_traceCall + eth_call per token)
-    pub(super) async fn detect_token_slots(
+    async fn detect_token_slots(
         &self,
         tokens: &[Address],
         params: &S::Params,
@@ -651,15 +651,19 @@ mod tests {
     struct TestFixtureStrategy {}
 
     impl SlotDetectionStrategy for TestFixtureStrategy {
-        type CacheKey = ();
-        type Params = ();
+        type CacheKey = (Address, Address); // (token, holder)
+        type Params = Address; // holder
 
-        fn cache_key(_token: &Address, _params: &Self::Params) -> Self::CacheKey {
-            unreachable!()
+        fn cache_key(token: &Address, params: &Self::Params) -> Self::CacheKey {
+            (token.clone(), params.clone())
         }
 
-        fn encode_calldata(_params: &Self::Params) -> Bytes {
-            unreachable!()
+        fn encode_calldata(params: &Self::Params) -> Bytes {
+            // balanceOf selector + padded address
+            let mut calldata = vec![0x70, 0xa0, 0x82, 0x31];
+            calldata.extend_from_slice(&[0u8; 12]);
+            calldata.extend_from_slice(params.as_ref());
+            Bytes::from(calldata)
         }
     }
 
@@ -871,5 +875,80 @@ mod tests {
 
         // No retries should be scheduled since SlotValues only had one slot each
         assert!(retry_data.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_cache_prevents_duplicate_rpc_calls() {
+        let mut server = mockito::Server::new_async().await;
+
+        let token = Address::from([0x11u8; 20]);
+        let holder = Address::from([0x22u8; 20]);
+        let block_hash = BlockHash::from([0x33u8; 32]);
+
+        let trace_response = json!([
+            {
+                "jsonrpc": "2.0",
+                "id": 0,
+                "result": {
+                    "0x1111111111111111111111111111111111111111": {
+                        "storage": {
+                            "0x0000000000000000000000000000000000000000000000000000000000000001": "0x00000000000000000000000000000000000000000000000000000000000003e8"
+                        }
+                    }
+                }
+            },
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": "0x00000000000000000000000000000000000000000000000000000000000003e8"
+            }
+        ]);
+        let slot_test_response = json!([
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "result": "0x00000000000000000000000000000000000000000000000000000000000007d0"
+            }
+        ]);
+
+        // First RPC call: trace + balance fetch.
+        let trace_mock = server
+            .mock("POST", "/")
+            .with_status(200)
+            .with_body(trace_response.to_string())
+            .expect(1)
+            .create_async()
+            .await;
+
+        // Second RPC call: slot test with state override.
+        let slot_test_mock = server
+            .mock("POST", "/")
+            .with_status(200)
+            .with_body(slot_test_response.to_string())
+            .expect(1)
+            .create_async()
+            .await;
+
+        let detector = TestFixture::create_slot_detector(&server.url());
+
+        // First call - should populate the cache
+        let results1 = detector
+            .detect_slots_chunked(std::slice::from_ref(&token), &holder, &block_hash)
+            .await;
+        assert!(results1[&token].is_ok(), "First call should succeed: {:?}", results1[&token]);
+
+        // Verify both RPC calls were made after the first invocation
+        trace_mock.assert();
+        slot_test_mock.assert();
+
+        // Second call - should use the cache
+        let results2 = detector
+            .detect_slots_chunked(std::slice::from_ref(&token), &holder, &block_hash)
+            .await;
+        assert!(results2[&token].is_ok(), "Second call should succeed from cache");
+
+        // Verify no additional RPC calls were made (counts unchanged)
+        trace_mock.assert();
+        slot_test_mock.assert();
     }
 }
