@@ -1,3 +1,16 @@
+## [0.123.0](https://github.com/propeller-heads/tycho-indexer/compare/0.122.3...0.123.0) (2025-12-16)
+
+
+### Features
+
+* Address PR reviews. Add new return parameter. ([25da39c](https://github.com/propeller-heads/tycho-indexer/commit/25da39c66f2d6d30e75e4f60510e27d0fde4ca50))
+* Unify two methods in protocol sim. Add enum for price constraint ([ecbf5b2](https://github.com/propeller-heads/tycho-indexer/commit/ecbf5b26ccd935c11849586930c9ce358981c4ae))
+
+
+### Bug Fixes
+
+* add input validation for Price struct parameters ([e2508a0](https://github.com/propeller-heads/tycho-indexer/commit/e2508a0a5e19f9bf013e9813dbc61fd4ed863e96))
+
 ## [0.122.3](https://github.com/propeller-heads/tycho-indexer/compare/0.122.2...0.122.3) (2025-12-15)
 
 
