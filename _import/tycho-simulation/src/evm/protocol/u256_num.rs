@@ -106,9 +106,9 @@ pub fn u256_to_f64(x: U256) -> Result<f64, SimulationError> {
     Ok(f64::from_bits(merged))
 }
 
+#[inline]
 pub fn u256_to_biguint(value: U256) -> BigUint {
-    let bytes: [u8; 32] = value.to_le_bytes();
-    BigUint::from_bytes_le(&bytes)
+    BigUint::from_bytes_le(&value.to_le_bytes::<32>())
 }
 
 pub fn biguint_to_u256(value: &BigUint) -> U256 {

@@ -1,10 +1,7 @@
 use alloy::primitives::{Sign, I256, U256};
 use num_bigint::BigUint;
 use tycho_common::{
-    simulation::{
-        errors::SimulationError,
-        protocol_sim::{Price, Trade},
-    },
+    simulation::{errors::SimulationError, protocol_sim::Price},
     Bytes,
 };
 
@@ -31,8 +28,7 @@ const U160_MAX: U256 = U256::from_limbs([u64::MAX, u64::MAX, u64::MAX >> 32, 0])
 /// * `swap_fn` - Closure that performs the actual swap operation
 ///
 /// # Returns
-/// A Trade struct containing the amount that needs to be swapped on the pool to move its price to
-/// target_price.
+/// A tuple containing (amount_in, amount_out, SwapResults)
 #[allow(clippy::too_many_arguments)]
 pub fn clmm_swap_to_price<F>(
     sqrt_price: U256,
@@ -42,7 +38,7 @@ pub fn clmm_swap_to_price<F>(
     fee_pips: u32,
     amount_sign: Sign,
     swap_fn: F,
-) -> Result<Trade, SimulationError>
+) -> Result<(BigUint, BigUint, SwapResults), SimulationError>
 where
     F: FnOnce(bool, I256, U256) -> Result<SwapResults, SimulationError>,
 {
@@ -53,10 +49,16 @@ where
 
     // Validate price limit is compatible with swap direction
     if zero_for_one && sqrt_price_limit >= sqrt_price {
-        return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
+        return Err(SimulationError::InvalidInput(
+            "Target price is unreachable (already below current spot price)".to_string(),
+            None,
+        ));
     }
     if !zero_for_one && sqrt_price_limit <= sqrt_price {
-        return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
+        return Err(SimulationError::InvalidInput(
+            "Target price is unreachable (already below current spot price)".to_string(),
+            None,
+        ));
     }
 
     // Use U160_MAX as "infinite" amount to find maximum available liquidity
@@ -76,7 +78,7 @@ where
         .into_raw();
 
     if amount_in == U256::ZERO {
-        return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
+        return Ok((BigUint::ZERO, BigUint::ZERO, SwapResults::default()));
     }
 
     // Use the accumulated amount_calculated for output
@@ -85,5 +87,5 @@ where
         .abs()
         .into_raw();
 
-    Ok(Trade::new(u256_to_biguint(amount_in), u256_to_biguint(amount_out)))
+    Ok((u256_to_biguint(amount_in), u256_to_biguint(amount_out), result))
 }
