@@ -1,3 +1,11 @@
+## [0.220.0](https://github.com/propeller-heads/tycho-simulation/compare/0.219.0...0.220.0) (2025-12-17)
+
+
+### Features
+
+* Update swap to price implementations to the new interface ([1338afa](https://github.com/propeller-heads/tycho-simulation/commit/1338afa308621eea8d6e48b627d2292ef91902cb))
+* Update tycho dependencies to latest version ([c670929](https://github.com/propeller-heads/tycho-simulation/commit/c670929222f1f15145143775cf4020593f3d4036))
+
 ## [0.219.0](https://github.com/propeller-heads/tycho-simulation/compare/0.218.0...0.219.0) (2025-12-17)
 
 
