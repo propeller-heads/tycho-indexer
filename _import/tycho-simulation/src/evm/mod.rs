@@ -11,7 +11,6 @@ pub mod traces;
 pub mod tycho_models;
 
 pub type SlotId = U256;
-
 /// Enum representing the type of contract compiler.
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum ContractCompiler {

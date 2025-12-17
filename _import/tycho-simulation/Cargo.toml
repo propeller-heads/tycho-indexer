@@ -1,5 +1,5 @@
 [workspace.package]
-version = "0.217.2"
+version = "0.219.0"
 
 [package]
 name = "tycho-simulation"
@@ -31,6 +31,7 @@ tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.17", default-features = false }
 
 # Utility
+ruint = { version = "1.17.0", features = ["num-traits"] }
 num-traits = "0.2.17"
 num-bigint = { version = "0.4.6", features = ["serde"] }
 dotenv = "0.15.0"
@@ -46,7 +47,9 @@ tycho-ethereum = ">=0.123.0"
 tycho-execution = ">=0.143.0"
 
 # EVM dependencies
-alloy = { version = "1.0.30", features = ["providers", "signer-local", "rpc-types-eth"] }
+# Alloy's dyn-abi 1.4.0 has a security vulnerability, so we require at least 1.4.1
+alloy-dyn-abi = ">=1.4.1"
+alloy = { version = "1.0.30", features = ["providers", "signer-local", "rpc-types-eth", "rand", "eip712"] }
 
 [dependencies]
 # Serialization/Deserialization
@@ -86,12 +89,10 @@ tycho-common = { workspace = true }
 tycho-ethereum = { workspace = true }
 
 # EVM dependencies
-foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "d6daa0ac83fe6b3883072436bb3f95ba7820e5d9", optional = true }
-foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "d6daa0ac83fe6b3883072436bb3f95ba7820e5d9", optional = true }
-solar-config = "=0.1.7"
-solar-data-structures = "=0.1.7"
-alloy = { workspace = true, features = ["sol-types"], optional = true }
-revm = { version = "29.0.1", features = ["alloydb", "serde"], optional = true }
+foundry-block-explorers = { version = "0.22.0", optional = true }
+alloy = { workspace = true, features = ["sol-types", "rand"], optional = true }
+ruint.workspace = true
+revm = { version = "29.0.1", features = ["alloydb", "serde", "optional_eip3607"], optional = true }
 revm-inspectors = { version = "0.30.0", features = ["serde"], optional = true }
 num-bigint = { workspace = true }
 tokio-stream = "0.1.16"
@@ -109,6 +110,7 @@ tokio-tungstenite = { version = "0.28.0", features = ["native-tls"], optional = 
 async-stream = { version = "0.3.6", optional = true }
 http = { version = "1.0", optional = true }
 prost = { version = "0.13", optional = true }
+alloy-chains = "0.2.18"
 hex-literal.workspace = true
 
 
@@ -140,7 +142,7 @@ tracing-appender = "0.2.3"
 default = ["evm", "rfq"]
 network_tests = []
 evm = [
-    "dep:foundry-config", "dep:foundry-evm", "dep:revm", "dep:revm-inspectors", "dep:alloy",
+    "dep:foundry-block-explorers", "dep:revm", "dep:revm-inspectors", "dep:alloy", "dep:reqwest"
 ]
 rfq = ["dep:reqwest", "dep:async-trait", "dep:tokio-tungstenite", "dep:async-stream", "dep:http", "dep:prost"]
 

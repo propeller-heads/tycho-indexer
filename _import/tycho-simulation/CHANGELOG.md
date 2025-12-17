@@ -1,3 +1,26 @@
+## [0.219.0](https://github.com/propeller-heads/tycho-simulation/compare/0.218.0...0.219.0) (2025-12-17)
+
+
+### Features
+
+* Bump alloy-dyn-abi to 1.5.0 to avoid security vulnerability ([430e433](https://github.com/propeller-heads/tycho-simulation/commit/430e4330538a02fb5a7d44c7e7e5102f33b48b6a))
+
+## [0.218.0](https://github.com/propeller-heads/tycho-simulation/compare/0.217.2...0.218.0) (2025-12-16)
+
+
+### Features
+
+* automatically release crate ([3c6904b](https://github.com/propeller-heads/tycho-simulation/commit/3c6904bf33553d76ab4873705314ffb8b7523557))
+* Disabling eip3607 again ([897af24](https://github.com/propeller-heads/tycho-simulation/commit/897af24fcf97c20a788324267a0818a2901b781c))
+* Expose SignatureIdentifier for tycho-test ([f470705](https://github.com/propeller-heads/tycho-simulation/commit/f470705ac54ae89148680b58c53c1900872f0963))
+* Reimplement foundry traces ([0605c29](https://github.com/propeller-heads/tycho-simulation/commit/0605c29e1e1b3fafb5751f9b6f96a46ff9e21577))
+* Update handle_traces signature ([ee55be6](https://github.com/propeller-heads/tycho-simulation/commit/ee55be6d70a09612f0bf22afcee1c71a41bbf988))
+
+
+### Bug Fixes
+
+* fix missing ruint feature ([020065b](https://github.com/propeller-heads/tycho-simulation/commit/020065bf0b0f93dfb9b999f040c93451d1674cf9))
+
 ## [0.217.2](https://github.com/propeller-heads/tycho-simulation/compare/0.217.1...0.217.2) (2025-12-16)
 
 

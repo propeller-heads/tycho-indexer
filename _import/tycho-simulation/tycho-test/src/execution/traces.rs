@@ -9,7 +9,7 @@ use alloy::{
 };
 use colored::Colorize;
 use serde_json::Value;
-use tycho_simulation::foundry_evm::traces::identifier::SignaturesIdentifier;
+use tycho_simulation::evm::traces::SignaturesIdentifier;
 
 use crate::execution::execution_simulator::{ExecutionSimulator, SolidityError};
 

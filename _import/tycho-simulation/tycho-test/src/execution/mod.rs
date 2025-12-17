@@ -1,7 +1,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use alloy::{
-    primitives::{Address, U256},
+    primitives::{map::AddressHashMap, Address, U256},
     rpc::types::{state::AccountOverride, Block},
     sol_types::SolValue,
 };
@@ -11,9 +11,7 @@ use tokio_retry2::{
     Retry, RetryError,
 };
 use tycho_execution::encoding::evm::utils::bytes_to_address;
-use tycho_simulation::{
-    evm::protocol::u256_num::u256_to_biguint, foundry_evm::revm::primitives::map::AddressHashMap,
-};
+use tycho_simulation::evm::protocol::u256_num::u256_to_biguint;
 
 use crate::{
     execution::{
