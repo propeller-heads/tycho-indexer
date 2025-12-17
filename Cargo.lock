@@ -7206,6 +7206,7 @@ dependencies = [
  "maplit",
  "mockall",
  "num-bigint",
+ "num-traits",
  "pretty_assertions",
  "rand 0.8.5",
  "rstest",
