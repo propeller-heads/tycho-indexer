@@ -353,7 +353,7 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///   - The method is not implemented for this protocol
     #[allow(unused)]
     fn query_pool_swap(&self, params: &QueryPoolSwapParams) -> Result<PoolSwap, SimulationError> {
-        Err(SimulationError::FatalError("query_swap_size not implemented".into()))
+        Err(SimulationError::FatalError("query_pool_swap not implemented".into()))
     }
 
     /// Clones the protocol state as a trait object.
