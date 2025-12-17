@@ -166,7 +166,7 @@ impl ValidateFilter for dto::ProtocolComponentsRequestBody {
 
 /// Validation implementation for tokens requests.
 ///
-/// When `min_token_quality` or `min_traded_n_days_ago` is configured, clients must either:
+/// When `min_token_quality` or `max_traded_n_days_ago` is configured, clients must either:
 /// - Provide specific `token_addresses`, OR
 /// - Include a `min_quality` parameter that meets or exceeds the minimum threshold AND/OR
 /// - Include a `traded_n_days_ago` parameter that is at most the maximum threshold
@@ -203,7 +203,7 @@ impl ValidateFilter for dto::TokensRequestBody {
         }
 
         // Validate traded_n_days_ago if configured
-        match (config.min_traded_n_days_ago(), self.traded_n_days_ago) {
+        match (config.max_traded_n_days_ago(), self.traded_n_days_ago) {
             (Some(max_days), None) => {
                 return Err(RpcError::MinimumFilterNotMet(
                     "/tokens".to_string(),
@@ -691,7 +691,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::rejects_none_when_min_traded_n_days_ago_set(
+    #[case::rejects_none_when_max_traded_n_days_ago_set(
         Some(30),
         None,
         None,
@@ -705,8 +705,8 @@ mod tests {
     )]
     #[case::accepts_equal_threshold(Some(30), Some(30), None, None)]
     #[case::accepts_below_threshold(Some(30), Some(15), None, None)]
-    #[case::accepts_none_when_no_min_traded_n_days_ago(None, None, None, None)]
-    #[case::accepts_any_value_when_no_min_traded_n_days_ago(None, Some(100), None, None)]
+    #[case::accepts_none_when_no_max_traded_n_days_ago(None, None, None, None)]
+    #[case::accepts_any_value_when_no_max_traded_n_days_ago(None, Some(100), None, None)]
     #[case::accepts_specific_addresses_without_traded_n_days_ago(
         Some(30),
         None,
@@ -714,13 +714,13 @@ mod tests {
         None
     )]
     #[tokio::test]
-    async fn test_min_traded_n_days_ago_validation(
-        #[case] min_traded_n_days_ago: Option<u64>,
+    async fn test_max_traded_n_days_ago_validation(
+        #[case] max_traded_n_days_ago: Option<u64>,
         #[case] request_traded_n_days_ago: Option<u64>,
         #[case] token_addresses: Option<Vec<Bytes>>,
         #[case] error_message_contains: Option<&str>,
     ) {
-        let config = ServerRpcConfig::new().with_min_traded_n_days_ago(min_traded_n_days_ago);
+        let config = ServerRpcConfig::new().with_max_traded_n_days_ago(max_traded_n_days_ago);
 
         let request = dto::TokensRequestBody {
             chain: dto::Chain::Ethereum,
