@@ -109,7 +109,7 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Panics
     ///
-    /// Panic for protocols with asymmetric fees (e.g. Rocketpool, Uniswap V4 with hooks),
+    /// Currently panic for protocols with asymmetric fees (e.g. Rocketpool, Uniswap V4),
     /// where a single fee value cannot represent the protocol's fee structure.
     fn fee(&self) -> f64;
 
