@@ -1,3 +1,10 @@
+## [0.125.0](https://github.com/propeller-heads/tycho-indexer/compare/0.124.0...0.125.0) (2025-12-17)
+
+
+### Features
+
+* restore higher pagination limits ([#813](https://github.com/propeller-heads/tycho-indexer/issues/813)) ([5f33369](https://github.com/propeller-heads/tycho-indexer/commit/5f33369021d8259ce252843247b2a63db98feed5))
+
 ## [0.124.0](https://github.com/propeller-heads/tycho-indexer/compare/0.123.0...0.124.0) (2025-12-16)
 
 
