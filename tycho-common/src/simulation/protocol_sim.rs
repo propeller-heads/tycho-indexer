@@ -52,13 +52,13 @@ impl fmt::Display for GetAmountOutResult {
     }
 }
 
-/// Represents a price as a fraction in the token_in -> token_out direction. With units
-/// [token_out/token_in].
+/// Represents a price as a fraction in the token_in -> token_out direction with units
+/// `[token_out/token_in]`.
 ///
 /// # Fields
 ///
-/// * `numerator` - The amount of token_out (what you receive), including token decimals
-/// * `denominator` - The amount of token_in (what you pay), including token decimals
+/// * `numerator` - The amount of token_out (what you receive) in atomic units (wei)
+/// * `denominator` - The amount of token_in (what you pay) in atomic units (wei)
 ///
 /// A fraction struct is used for price to have flexibility in precision independent of the
 /// decimal precisions of the numerator and denominator tokens. This allows for:
@@ -106,7 +106,7 @@ impl Price {
     }
 }
 
-/// Represents a trade between two tokens at a given price on a pool.
+/// Represents a pool swap between two tokens at a given price on a pool.
 #[derive(Debug, Clone)]
 pub struct PoolSwap {
     /// The amount of token_in sold to the pool
@@ -148,19 +148,18 @@ impl PoolSwap {
     }
 }
 
-/// Options on how to constrain the pool swap query
+/// Options on how to constrain the pool swap query.
+///
+/// All prices use units `[token_out/token_in]` with amounts in atomic units (wei). When selling
+/// token_in into a pool, prices decrease due to slippage.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SwapConstraint {
-    /// This mode will calculate the maximum trade that this pool can execute while respecting a
-    /// trade limit price.
+    /// Calculates the maximum trade while respecting a minimum trade price.
     TradeLimitPrice {
-        /// The minimum acceptable price for the resulting trade, as a [Price] struct. The
-        /// resulting amount_out / amount_in must be >= trade_limit_price
+        /// The minimum acceptable trade price. The resulting `amount_out / amount_in >= limit`.
         limit: Price,
-        /// The tolerance as a fraction to be applied on top of (increasing) the trade
-        /// limit price, raising the acceptance threshold. This is used to loosen the acceptance
-        /// criteria for implementations of this method, but will never allow violating the trade
-        /// limit price itself.
+        /// Fraction to raise the acceptance threshold above `limit`. Loosens the search criteria
+        /// but will never allow violating the trade limit price itself.
         tolerance: f64,
         /// The minimum amount of token_in that must be used for this trade.
         min_amount_in: Option<BigUint>,
@@ -168,8 +167,7 @@ pub enum SwapConstraint {
         max_amount_in: Option<BigUint>,
     },
 
-    /// This mode will Calculate the amount of token_in required to move the pool's marginal price
-    /// down to a target price, and the amount of token_out received.
+    /// Calculates the swap required to move the pool's marginal price down to a target.
     ///
     /// # Edge Cases and Limitations
     ///
@@ -182,12 +180,11 @@ pub enum SwapConstraint {
     /// - Not all protocols support analytical solutions for this problem, requiring numerical
     ///   methods.
     PoolTargetPrice {
-        /// The marginal price we want the pool to be after the trade, as a [Price] struct. The
-        /// pool's price will move down to this level as token_in is sold into it
+        /// The target marginal price for the pool after the trade. The pool's price decreases
+        /// toward this target as token_in is sold into it.
         target: Price,
-        /// The tolerance as a fraction of the resulting pool marginal price. After trading, the
-        /// pool's  price will decrease to the interval `[target, target * (1 +
-        /// tolerance)]`.
+        /// Fraction above `target` considered acceptable. After trading, the pool's marginal
+        /// price will be in `[target, target * (1 + tolerance)]`.
         tolerance: f64,
         /// The lower bound for searching algorithms.
         min_amount_in: Option<BigUint>,
@@ -196,7 +193,7 @@ pub enum SwapConstraint {
     },
 }
 
-/// Represents the parameters for query_max_trade.
+/// Represents the parameters for [ProtocolSim::query_pool_swap].
 ///
 /// # Fields
 ///
@@ -246,15 +243,15 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     /// order to understand how much of the quote currency is required
     /// to buy one unit of the base currency.
     ///
-    /// E.g. if ETH/USD is trading at 1000, we need 1000 USD (quote)
-    /// to buy 1 ETH (base currency).
+    /// E.g. if WBTC/USDT is trading at 50_000, we need 50_000 USDT (quote)
+    /// to buy 1 WBTC (base currency).
     ///
     /// # Arguments
     ///
-    /// * `a` - Base Token: refers to the token that is the quantity of a pair. For the pair
-    ///   BTC/USDT, BTC would be the base asset.
-    /// * `b` - Quote Token: refers to the token that is the price of a pair. For the symbol
-    ///   BTC/USDT, USDT would be the quote asset.
+    /// * `base` - Base Token: the token that is the quantity of a pair. For WBTC/USDT, WBTC would
+    ///   be the base asset.
+    /// * `quote` - Quote Token: the token that is the price of a pair. For WBTC/USDT, USDT would
+    ///   be the quote asset.
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError>;
 
     /// Returns the amount out given an amount in and input/output tokens.
@@ -294,13 +291,11 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     /// * `buy_token` - The address of the token being bought
     ///
     /// # Returns
-    /// * `Ok((Option<BigUint>, Option<BigUint>))` - A tuple containing:
-    ///   - First element: The maximum input amount
-    ///   - Second element: The maximum output amount
+    /// * `Ok((BigUint, BigUint))` - A tuple containing:
+    ///   - First element: The maximum input amount (sell_token)
+    ///   - Second element: The maximum output amount (buy_token)
     ///
-    /// This means that for `let res = get_limits(...)` the amount input domain for `get_amount_out`
-    /// would be `[0, res.0]` and the amount input domain for `get_amount_in` would be `[0,
-    /// res.1]`
+    /// For `let res = get_limits(...)`, the valid input domain for `get_amount_out` is `[0, res.0]`.
     ///
     /// * `Err(SimulationError)` - If any unexpected error occurs
     fn get_limits(
@@ -346,7 +341,7 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Returns
     ///
-    /// * `Ok(Trade)` - A `Trade` struct containing the amounts to be traded and the state of the
+    /// * `Ok(PoolSwap)` - A `PoolSwap` struct containing the amounts to be traded and the state of the
     ///   pool after trading.
     /// * `Err(SimulationError)` - If:
     ///   - The calculation encounters numerical issues
