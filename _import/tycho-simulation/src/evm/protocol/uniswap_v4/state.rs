@@ -883,7 +883,7 @@ impl ProtocolSim for UniswapV4State {
 
         match params.swap_constraint() {
             SwapConstraint::TradeLimitPrice { .. } => Err(SimulationError::InvalidInput(
-                "Uniswap V3 does not support TradeLimitPrice constraint in query_pool_swap"
+                "Uniswap V4 does not support TradeLimitPrice constraint in query_pool_swap"
                     .to_string(),
                 None,
             )),

@@ -16,7 +16,8 @@ use super::reserve_price::spot_price_from_reserves;
 use crate::{
     evm::protocol::{
         safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256, sqrt_u512},
-        u256_num::{biguint_to_u256, u256_to_biguint, u512_to_biguint},
+        u256_num::{biguint_to_u256, u256_to_biguint},
+        utils::solidity_math::mul_div,
     },
     protocol::errors::InvalidSnapshotError,
 };
@@ -265,11 +266,7 @@ pub fn cpmm_swap_to_price(
         return Ok((BigUint::ZERO, BigUint::ZERO));
     }
 
-    let implied_amount_out = (U512::from(amount_in).checked_mul(U512::from(swap_price_den)))
-        .and_then(|x| x.checked_div(U512::from(swap_price_num)))
-        .ok_or_else(|| {
-            SimulationError::FatalError("Division by zero in implied_amount_out".to_string())
-        })?;
+    let implied_amount_out = mul_div(amount_in, swap_price_den, swap_price_num)?;
 
-    Ok((u256_to_biguint(amount_in), u512_to_biguint(implied_amount_out)))
+    Ok((u256_to_biguint(amount_in), u256_to_biguint(implied_amount_out)))
 }
