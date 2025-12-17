@@ -1,3 +1,10 @@
+## [0.219.0](https://github.com/propeller-heads/tycho-simulation/compare/0.218.0...0.219.0) (2025-12-17)
+
+
+### Features
+
+* Bump alloy-dyn-abi to 1.5.0 to avoid security vulnerability ([430e433](https://github.com/propeller-heads/tycho-simulation/commit/430e4330538a02fb5a7d44c7e7e5102f33b48b6a))
+
 ## [0.218.0](https://github.com/propeller-heads/tycho-simulation/compare/0.217.2...0.218.0) (2025-12-16)
 
 
