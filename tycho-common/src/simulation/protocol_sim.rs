@@ -392,7 +392,8 @@ mod tests {
     #[test]
     fn serde() {
         use serde::{Deserialize, Serialize};
-        #[derive(Debug, Clone, Serialize, Deserialize)]
+
+        #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
         struct DummyProtocol {
             reserve_0: u64,
             reserve_1: u64,
@@ -405,15 +406,19 @@ mod tests {
             }
 
             fn as_any(&self) -> &dyn Any {
-                todo!()
+                self
             }
 
             fn as_any_mut(&mut self) -> &mut dyn Any {
                 todo!()
             }
 
-            fn eq(&self, _other: &dyn ProtocolSim) -> bool {
-                todo!()
+            fn eq(&self, other: &dyn ProtocolSim) -> bool {
+                if let Some(other) = other.as_any().downcast_ref::<Self>() {
+                    self.reserve_0 == other.reserve_0 && self.reserve_1 == other.reserve_1
+                } else {
+                    false
+                }
             }
 
             fn fee(&self) -> f64 {
@@ -454,5 +459,12 @@ mod tests {
             serde_json::to_string(&state as &dyn ProtocolSim).unwrap(),
             r#"{"protocol":"DummyProtocol","state":{"reserve_0":1,"reserve_1":2}}"#
         );
+
+        let deserialized: Box<dyn ProtocolSim> = serde_json::from_str(
+            r#"{"protocol":"DummyProtocol","state":{"reserve_0":1,"reserve_1":2}}"#,
+        )
+        .unwrap();
+
+        assert!(deserialized.eq(&state));
     }
 }
