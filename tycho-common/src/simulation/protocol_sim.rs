@@ -238,23 +238,25 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     /// Returns the fee of the protocol as ratio
     ///
     /// E.g. if the fee is 1%, the value returned would be 0.01.
+    ///
+    /// # Panics
+    ///
+    /// Currently panic for protocols with asymmetric fees (e.g. Rocketpool, Uniswap V4),
+    /// where a single fee value cannot represent the protocol's fee structure.
     fn fee(&self) -> f64;
 
-    /// Returns the protocol's current spot price of two tokens
+    /// Returns the protocol's current spot buy price for `base` in units of `quote`.
     ///
-    /// Currency pairs are meant to be compared against one another in
-    /// order to understand how much of the quote currency is required
-    /// to buy one unit of the base currency.
-    ///
-    /// E.g. if ETH/USD is trading at 1000, we need 1000 USD (quote)
-    /// to buy 1 ETH (base currency).
+    /// The returned price is the amount of `quote` required to buy exactly 1 unit of `base`,
+    /// accounting for the protocol fee (i.e. `price = pre_fee_price / (1.0 - fee)`)
+    /// and assuming zero slippage (i.e., a negligibly small trade size).
     ///
     /// # Arguments
+    /// * `base` - the token being priced (what you buy). For BTC/USDT, BTC is the base token.
+    /// * `quote` - the token used to price (pay) for `base`. For BTC/USDT, USDT is the quote token.
     ///
-    /// * `a` - Base Token: refers to the token that is the quantity of a pair. For the pair
-    ///   BTC/USDT, BTC would be the base asset.
-    /// * `b` - Quote Token: refers to the token that is the price of a pair. For the symbol
-    ///   BTC/USDT, USDT would be the quote asset.
+    /// # Examples
+    /// If the BTC/USDT is trading at 1000 with a 20% fee, this returns `1000 / (1.0 - 0.20) = 1250`
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError>;
 
     /// Returns the amount out given an amount in and input/output tokens.
