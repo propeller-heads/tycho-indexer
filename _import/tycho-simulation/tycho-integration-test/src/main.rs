@@ -171,7 +171,10 @@ async fn main() -> miette::Result<()> {
 
     // Run main application with signal support
     let result = tokio::select! {
-        result = run(cli) => result,
+        result = tokio::spawn(run(cli)) => match result {
+          Ok(inner) => inner,
+          Err(e) => Err(miette!("run() panicked: {:?}", e)),
+        },
         _ = async {
             loop {
                 if shutdown_requested.load(std::sync::atomic::Ordering::SeqCst) {
