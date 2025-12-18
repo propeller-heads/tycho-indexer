@@ -175,18 +175,6 @@ impl LidoState {
             biguint_to_u256(&self.total_shares),
         )?);
 
-        dbg!("AMOUNT_OUT");
-        dbg!(&amount_out);
-
-        dbg!("amount_in");
-        dbg!(&amount_in);
-
-        dbg!("total_pooled_eth");
-        dbg!(&self.total_pooled_eth);
-
-        dbg!("total_shares");
-        dbg!(&self.total_shares);
-
         let new_total_wrapped_st_eth = self
             .total_wrapped_st_eth
             .as_ref()
