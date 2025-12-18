@@ -1,3 +1,16 @@
+## [0.221.0](https://github.com/propeller-heads/tycho-simulation/compare/0.220.0...0.221.0) (2025-12-18)
+
+
+### Features
+
+* add fees to uni v2 and pakcakeswap v2 and improve price impact calculations by incorporating fee adjustments in CPMM functions ([2b8d667](https://github.com/propeller-heads/tycho-simulation/commit/2b8d66727b40ac2537e7381ff806efbaf783fa5a))
+* adjust fee application logic to reflect the amount needed to purchase original amount after fees ([1791784](https://github.com/propeller-heads/tycho-simulation/commit/179178413ad2c1d9c3d7b716e07237a2dcb95511))
+* implement fee application in spot price calculations fro uni v3, ekubo and aerodrome ([82bc950](https://github.com/propeller-heads/tycho-simulation/commit/82bc950171b94c4f0b4b99ed7ce3cff8cd3ee7d2))
+* incorporate fee calculations into price conversion logic for uni v4 when no hooks are enabled ([bf46637](https://github.com/propeller-heads/tycho-simulation/commit/bf46637d8ef2fa1a4b58425a7d42390eb5081872))
+* update spot price calculations to accurately compute the amount needed to **buy** one base, instead of the amount that we get for **selling** one base. ([ab9110f](https://github.com/propeller-heads/tycho-simulation/commit/ab9110f38ca1ed139120160eb5ff2f89232961df))
+* update the spot price fee application to Fluid to reflect that the output is the amount we need to buy 1 base, which needs to be then scales by the fee that will be applied. Additionally, fix the fee fn ([9e2d301](https://github.com/propeller-heads/tycho-simulation/commit/9e2d3014fe8d2a483691165368f1bc52535dddcd))
+* update the spot price fee application to reflect that the output is the amount we need to buy 1 base, which needs to be then scales by the fee that will be applied ([aa458b2](https://github.com/propeller-heads/tycho-simulation/commit/aa458b2fe50b05c9559ce93ebaae585a4283f10a))
+
 ## [0.220.0](https://github.com/propeller-heads/tycho-simulation/compare/0.219.0...0.220.0) (2025-12-17)
 
 
