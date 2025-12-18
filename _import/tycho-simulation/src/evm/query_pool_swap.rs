@@ -54,9 +54,9 @@ fn iqi(p: &[PricePoint], target: f64) -> Option<f64> {
     let d2 = (pr1 - pr0) * (pr1 - pr2);
     let d3 = (pr2 - pr0) * (pr2 - pr1);
 
-    let result = a0 * (target - pr1) * (target - pr2) / d1
-        + a1 * (target - pr0) * (target - pr2) / d2
-        + a2 * (target - pr0) * (target - pr1) / d3;
+    let result = a0 * (target - pr1) * (target - pr2) / d1 +
+        a1 * (target - pr0) * (target - pr2) / d2 +
+        a2 * (target - pr0) * (target - pr1) / d3;
 
     (result.is_finite() && result > 0.0).then_some(result)
 }
@@ -65,10 +65,7 @@ fn secant(p: &[PricePoint], target: f64) -> Option<f64> {
     if p.len() != 2 {
         return None;
     }
-    let (a0, a1) = (
-        p[0].0.to_f64().unwrap_or(0.0),
-        p[1].0.to_f64().unwrap_or(0.0),
-    );
+    let (a0, a1) = (p[0].0.to_f64().unwrap_or(0.0), p[1].0.to_f64().unwrap_or(0.0));
     let (pr0, pr1) = (p[0].2, p[1].2);
     let dp = pr1 - pr0;
     let result = a1 - (pr1 - target) * (a1 - a0) / dp;
@@ -134,12 +131,17 @@ fn search(
     let limit_price = if use_trade_price {
         trade_price(
             max_in.to_f64().unwrap_or(f64::MAX),
-            limit_result.amount.to_f64().unwrap_or(0.0),
+            limit_result
+                .amount
+                .to_f64()
+                .unwrap_or(0.0),
             token_in.decimals,
             token_out.decimals,
         )
     } else {
-        limit_result.new_state.spot_price(token_in, token_out)?
+        limit_result
+            .new_state
+            .spot_price(token_in, token_out)?
     };
 
     if target_price < limit_price {
@@ -176,7 +178,9 @@ fn search(
                 token_out.decimals,
             )
         } else {
-            result.new_state.spot_price(token_in, token_out)?
+            result
+                .new_state
+                .spot_price(token_in, token_out)?
         };
 
         price_points.push((amount.clone(), result.amount.clone(), price));
@@ -209,7 +213,9 @@ fn search(
         }
     }
 
-    Ok(best.unwrap_or_else(|| PoolSwap::new(BigUint::zero(), BigUint::zero(), state.clone_box(), Some(price_points))))
+    Ok(best.unwrap_or_else(|| {
+        PoolSwap::new(BigUint::zero(), BigUint::zero(), state.clone_box(), Some(price_points))
+    }))
 }
 
 /// Generic query_pool_swap using Brent's method.
@@ -224,12 +230,18 @@ pub fn query_pool_swap(
 
     match params.swap_constraint() {
         SwapConstraint::TradeLimitPrice { limit, tolerance, .. } => {
-            let num = limit.numerator.to_f64().ok_or_else(|| {
-                SimulationError::InvalidInput("Invalid limit numerator".into(), None)
-            })?;
-            let den = limit.denominator.to_f64().ok_or_else(|| {
-                SimulationError::InvalidInput("Invalid limit denominator".into(), None)
-            })?;
+            let num = limit
+                .numerator
+                .to_f64()
+                .ok_or_else(|| {
+                    SimulationError::InvalidInput("Invalid limit numerator".into(), None)
+                })?;
+            let den = limit
+                .denominator
+                .to_f64()
+                .ok_or_else(|| {
+                    SimulationError::InvalidInput("Invalid limit denominator".into(), None)
+                })?;
             let decimal_adj = 10_f64.powi(token_in.decimals as i32 - token_out.decimals as i32);
             let target = (num / den) * decimal_adj;
 
@@ -237,12 +249,18 @@ pub fn query_pool_swap(
         }
 
         SwapConstraint::PoolTargetPrice { target, tolerance, .. } => {
-            let num = target.numerator.to_f64().ok_or_else(|| {
-                SimulationError::InvalidInput("Invalid target numerator".into(), None)
-            })?;
-            let den = target.denominator.to_f64().ok_or_else(|| {
-                SimulationError::InvalidInput("Invalid target denominator".into(), None)
-            })?;
+            let num = target
+                .numerator
+                .to_f64()
+                .ok_or_else(|| {
+                    SimulationError::InvalidInput("Invalid target numerator".into(), None)
+                })?;
+            let den = target
+                .denominator
+                .to_f64()
+                .ok_or_else(|| {
+                    SimulationError::InvalidInput("Invalid target denominator".into(), None)
+                })?;
             let decimal_adj = 10_f64.powi(token_in.decimals as i32 - token_out.decimals as i32);
             let target_price = (num / den) * decimal_adj;
 
@@ -253,16 +271,12 @@ pub fn query_pool_swap(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
 
     use alloy::primitives::U256;
-    use tycho_common::{
-        hex_bytes::Bytes,
-        models::Chain,
-        simulation::protocol_sim::Price,
-    };
+    use tycho_common::{hex_bytes::Bytes, models::Chain, simulation::protocol_sim::Price};
 
+    use super::*;
     use crate::evm::protocol::uniswap_v2::state::UniswapV2State;
 
     fn create_token(address: &str, symbol: &str, decimals: u32) -> Token {
@@ -548,7 +562,10 @@ mod tests {
         let pool_swap = result.unwrap();
         assert!(pool_swap.amount_in() > &BigUint::zero());
 
-        let new_spot = pool_swap.new_state().spot_price(&dai, &weth).unwrap();
+        let new_spot = pool_swap
+            .new_state()
+            .spot_price(&dai, &weth)
+            .unwrap();
         let error_bps = ((new_spot - target_price_f64) / target_price_f64).abs() * 10000.0;
         assert!(
             error_bps < tolerance_bps,
@@ -596,7 +613,10 @@ mod tests {
         assert!(result.is_ok(), "query_pool_swap failed: {:?}", result.err());
 
         let pool_swap = result.unwrap();
-        let new_spot = pool_swap.new_state().spot_price(&usdc, &weth).unwrap();
+        let new_spot = pool_swap
+            .new_state()
+            .spot_price(&usdc, &weth)
+            .unwrap();
         let error_bps = ((new_spot - target_price_f64) / target_price_f64).abs() * 10000.0;
         assert!(
             error_bps < tolerance_bps,
@@ -789,11 +809,11 @@ mod tests {
         let token_in = token_0();
         let token_out = token_1();
 
-        let spot = state.spot_price(&token_in, &token_out).unwrap();
-        let target_price = Price::new(
-            BigUint::from((spot * 1e18) as u128),
-            BigUint::from(10u128.pow(18)),
-        );
+        let spot = state
+            .spot_price(&token_in, &token_out)
+            .unwrap();
+        let target_price =
+            Price::new(BigUint::from((spot * 1e18) as u128), BigUint::from(10u128.pow(18)));
 
         let params = QueryPoolSwapParams::new(
             token_in,
@@ -809,7 +829,10 @@ mod tests {
         let result = query_pool_swap(&state, &params);
         assert!(result.is_ok());
         let pool_swap = result.unwrap();
-        assert!(pool_swap.amount_in() <= &BigUint::from(1u32) || pool_swap.amount_in() == &BigUint::zero());
+        assert!(
+            pool_swap.amount_in() <= &BigUint::from(1u32) ||
+                pool_swap.amount_in() == &BigUint::zero()
+        );
     }
 
     #[test]
@@ -877,7 +900,10 @@ mod tests {
         assert!(result.is_ok(), "Should handle large reserves");
 
         let pool_swap = result.unwrap();
-        let new_spot = pool_swap.new_state().spot_price(&dai, &weth).unwrap();
+        let new_spot = pool_swap
+            .new_state()
+            .spot_price(&dai, &weth)
+            .unwrap();
         let target_f64 = spot_price * 0.90;
         let error_bps = ((new_spot - target_f64) / target_f64).abs() * 10000.0;
         assert!(error_bps < 10.0, "Error should be <10bps for large reserves");
