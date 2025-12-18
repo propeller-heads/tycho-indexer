@@ -254,25 +254,632 @@ pub fn query_pool_swap(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
+
+    use alloy::primitives::U256;
+    use tycho_common::{
+        hex_bytes::Bytes,
+        models::Chain,
+        simulation::protocol_sim::Price,
+    };
+
+    use crate::evm::protocol::uniswap_v2::state::UniswapV2State;
+
+    fn create_token(address: &str, symbol: &str, decimals: u32) -> Token {
+        Token::new(
+            &Bytes::from_str(address).unwrap(),
+            symbol,
+            decimals,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
+        )
+    }
+
+    fn token_0() -> Token {
+        create_token("0x0000000000000000000000000000000000000000", "T0", 18)
+    }
+
+    fn token_1() -> Token {
+        create_token("0x0000000000000000000000000000000000000001", "T1", 18)
+    }
+
+    // =========================================================================
+    // Tests for within_tolerance
+    // =========================================================================
 
     #[test]
-    fn test_within_tolerance() {
+    fn test_within_tolerance_exact() {
         assert!(within_tolerance(1.0, 1.0, 0.001));
-        assert!(within_tolerance(1.0005, 1.0, 0.001));
-        assert!(!within_tolerance(0.999, 1.0, 0.001));
-        assert!(!within_tolerance(1.002, 1.0, 0.001));
+        assert!(within_tolerance(1000.0, 1000.0, 0.001));
+        assert!(within_tolerance(0.001, 0.001, 0.001));
     }
 
     #[test]
-    fn test_geometric_mean() {
+    fn test_within_tolerance_above_within_range() {
+        let tolerance = 0.001;
+        assert!(within_tolerance(1.0005, 1.0, tolerance));
+        assert!(within_tolerance(1.001, 1.0, tolerance));
+    }
+
+    #[test]
+    fn test_within_tolerance_above_out_of_range() {
+        let tolerance = 0.001;
+        assert!(!within_tolerance(1.002, 1.0, tolerance));
+        assert!(!within_tolerance(1.01, 1.0, tolerance));
+    }
+
+    #[test]
+    fn test_within_tolerance_below_target() {
+        let tolerance = 0.001;
+        assert!(!within_tolerance(0.999, 1.0, tolerance));
+        assert!(!within_tolerance(0.9999, 1.0, tolerance));
+        assert!(!within_tolerance(0.0, 1.0, tolerance));
+    }
+
+    #[test]
+    fn test_within_tolerance_zero_tolerance() {
+        assert!(within_tolerance(1.0, 1.0, 0.0));
+        assert!(!within_tolerance(1.0001, 1.0, 0.0));
+    }
+
+    // =========================================================================
+    // Tests for geometric_mean
+    // =========================================================================
+
+    #[test]
+    fn test_geometric_mean_basic() {
         let a = BigUint::from(100u32);
         let b = BigUint::from(400u32);
         assert_eq!(geometric_mean(&a, &b), BigUint::from(200u32));
     }
 
     #[test]
-    fn test_trade_price() {
-        assert!((trade_price(50.0, 100.0, 18, 18) - 2.0).abs() < 0.001);
+    fn test_geometric_mean_same_values() {
+        let a = BigUint::from(100u32);
+        assert_eq!(geometric_mean(&a, &a), BigUint::from(100u32));
+    }
+
+    #[test]
+    fn test_geometric_mean_one_and_large() {
+        let a = BigUint::one();
+        let b = BigUint::from(1000000u32);
+        assert_eq!(geometric_mean(&a, &b), BigUint::from(1000u32));
+    }
+
+    #[test]
+    fn test_geometric_mean_with_zero() {
+        let a = BigUint::from(0u32);
+        let b = BigUint::from(100u32);
+        assert_eq!(geometric_mean(&a, &b), BigUint::from(50u32));
+    }
+
+    #[test]
+    fn test_geometric_mean_adjacent() {
+        let a = BigUint::from(10u32);
+        let b = BigUint::from(11u32);
+        let result = geometric_mean(&a, &b);
+        assert!(result == BigUint::from(10u32) || result == BigUint::from(11u32));
+    }
+
+    // =========================================================================
+    // Tests for trade_price
+    // =========================================================================
+
+    #[test]
+    fn test_trade_price_basic() {
+        let price = trade_price(50.0, 100.0, 18, 18);
+        assert!((price - 2.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_trade_price_decimal_adjustment() {
+        let price = trade_price(50.0, 100.0, 6, 18);
+        assert!((price - 2e-12).abs() < 1e-18);
+    }
+
+    #[test]
+    fn test_trade_price_reverse_decimal_adjustment() {
+        let price = trade_price(50.0, 100.0, 18, 6);
+        assert!((price - 2e12).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_trade_price_zero_input() {
         assert_eq!(trade_price(0.0, 100.0, 18, 18), f64::MAX);
+    }
+
+    #[test]
+    fn test_trade_price_negative_input() {
+        assert_eq!(trade_price(-1.0, 100.0, 18, 18), f64::MAX);
+    }
+
+    // =========================================================================
+    // Tests for iqi (Inverse Quadratic Interpolation)
+    // =========================================================================
+
+    #[test]
+    fn test_iqi_linear_data() {
+        let points = vec![
+            (BigUint::from(1u32), BigUint::zero(), 2.0),
+            (BigUint::from(2u32), BigUint::zero(), 4.0),
+            (BigUint::from(3u32), BigUint::zero(), 6.0),
+        ];
+        let result = iqi(&points, 3.5);
+        assert!(result.is_some());
+        assert!((result.unwrap() - 1.75).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_iqi_same_prices() {
+        let points = vec![
+            (BigUint::from(1u32), BigUint::zero(), 5.0),
+            (BigUint::from(2u32), BigUint::zero(), 5.0),
+            (BigUint::from(3u32), BigUint::zero(), 5.0),
+        ];
+        assert!(iqi(&points, 5.0).is_none());
+    }
+
+    #[test]
+    fn test_iqi_two_points() {
+        let points = vec![
+            (BigUint::from(1u32), BigUint::zero(), 2.0),
+            (BigUint::from(2u32), BigUint::zero(), 4.0),
+        ];
+        assert!(iqi(&points, 3.0).is_none());
+    }
+
+    #[test]
+    fn test_iqi_quadratic_data() {
+        let points = vec![
+            (BigUint::from(100u32), BigUint::zero(), 1.0),
+            (BigUint::from(200u32), BigUint::zero(), 0.5),
+            (BigUint::from(400u32), BigUint::zero(), 0.25),
+        ];
+        let result = iqi(&points, 0.4);
+        assert!(result.is_some());
+        let est = result.unwrap();
+        assert!(est > 200.0 && est < 400.0);
+    }
+
+    // =========================================================================
+    // Tests for secant
+    // =========================================================================
+
+    #[test]
+    fn test_secant_basic() {
+        let points = vec![
+            (BigUint::from(1u32), BigUint::zero(), 2.0),
+            (BigUint::from(3u32), BigUint::zero(), 6.0),
+        ];
+        let result = secant(&points, 4.0);
+        assert!(result.is_some());
+        assert!((result.unwrap() - 2.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_secant_same_prices() {
+        let points = vec![
+            (BigUint::from(1u32), BigUint::zero(), 5.0),
+            (BigUint::from(2u32), BigUint::zero(), 5.0),
+        ];
+        let result = secant(&points, 5.0);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_secant_one_point() {
+        let points = vec![(BigUint::from(1u32), BigUint::zero(), 2.0)];
+        assert!(secant(&points, 3.0).is_none());
+    }
+
+    #[test]
+    fn test_secant_negative_result() {
+        let points = vec![
+            (BigUint::from(1u32), BigUint::zero(), 2.0),
+            (BigUint::from(2u32), BigUint::zero(), 1.0),
+        ];
+        let result = secant(&points, 5.0);
+        assert!(result.is_none());
+    }
+
+    // =========================================================================
+    // Tests for next_amount
+    // =========================================================================
+
+    #[test]
+    fn test_next_amount_fallback_to_geometric_mean() {
+        let history = vec![(BigUint::from(100u32), BigUint::zero(), 1.0)];
+        let low = BigUint::from(100u32);
+        let high = BigUint::from(400u32);
+        let result = next_amount(&history, &low, &high, 0.5);
+        assert_eq!(result, BigUint::from(200u32));
+    }
+
+    #[test]
+    fn test_next_amount_uses_secant() {
+        let history = vec![
+            (BigUint::from(100u32), BigUint::zero(), 1.0),
+            (BigUint::from(400u32), BigUint::zero(), 0.25),
+        ];
+        let low = BigUint::from(100u32);
+        let high = BigUint::from(400u32);
+        let result = next_amount(&history, &low, &high, 0.5);
+        assert!(result > low && result < high);
+    }
+
+    // =========================================================================
+    // Integration tests with UniswapV2State - PoolTargetPrice
+    // =========================================================================
+
+    #[test]
+    fn test_query_pool_swap_pool_target_price_same_decimals() {
+        let state = UniswapV2State::new(
+            U256::from(1000u64) * U256::from(10u64).pow(U256::from(18u64)),
+            U256::from(2_000_000u64) * U256::from(10u64).pow(U256::from(18u64)),
+        );
+
+        let weth = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
+        let dai = create_token("0x0000000000000000000000000000000000000001", "DAI", 18);
+
+        let spot_price = state.spot_price(&dai, &weth).unwrap();
+        let target_price_f64 = spot_price * 0.99;
+        let target_price = Price::new(
+            BigUint::from((target_price_f64 * 1e18) as u128),
+            BigUint::from(10u128.pow(18)),
+        );
+
+        let tolerance_bps = 10f64;
+        let params = QueryPoolSwapParams::new(
+            dai.clone(),
+            weth.clone(),
+            SwapConstraint::PoolTargetPrice {
+                target: target_price,
+                tolerance: tolerance_bps / 10000.0,
+                min_amount_in: None,
+                max_amount_in: None,
+            },
+        );
+
+        let result = query_pool_swap(&state, &params);
+        assert!(result.is_ok(), "query_pool_swap failed: {:?}", result.err());
+
+        let pool_swap = result.unwrap();
+        assert!(pool_swap.amount_in() > &BigUint::zero());
+
+        let new_spot = pool_swap.new_state().spot_price(&dai, &weth).unwrap();
+        let error_bps = ((new_spot - target_price_f64) / target_price_f64).abs() * 10000.0;
+        assert!(
+            error_bps < tolerance_bps,
+            "New spot {} should be within {}bps of target {}, got {}bps",
+            new_spot,
+            tolerance_bps,
+            target_price_f64,
+            error_bps
+        );
+    }
+
+    #[test]
+    fn test_query_pool_swap_pool_target_price_different_decimals() {
+        let state = UniswapV2State::new(
+            U256::from(1000u64) * U256::from(10u64).pow(U256::from(18u64)),
+            U256::from(2_000_000u64) * U256::from(10u64).pow(U256::from(6u64)),
+        );
+
+        let weth = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
+        let usdc = create_token("0x0000000000000000000000000000000000000001", "USDC", 6);
+
+        let spot_price = state.spot_price(&usdc, &weth).unwrap();
+        let target_price_f64 = spot_price * 0.95;
+
+        let decimal_adj = 10_f64.powi(usdc.decimals as i32 - weth.decimals as i32);
+        let price_no_decimals = target_price_f64 / decimal_adj;
+        let target_price = Price::new(
+            BigUint::from((price_no_decimals * 1e12) as u128),
+            BigUint::from(10u128.pow(12)),
+        );
+
+        let tolerance_bps = 10f64;
+        let params = QueryPoolSwapParams::new(
+            usdc.clone(),
+            weth.clone(),
+            SwapConstraint::PoolTargetPrice {
+                target: target_price,
+                tolerance: tolerance_bps / 10000.0,
+                min_amount_in: None,
+                max_amount_in: None,
+            },
+        );
+
+        let result = query_pool_swap(&state, &params);
+        assert!(result.is_ok(), "query_pool_swap failed: {:?}", result.err());
+
+        let pool_swap = result.unwrap();
+        let new_spot = pool_swap.new_state().spot_price(&usdc, &weth).unwrap();
+        let error_bps = ((new_spot - target_price_f64) / target_price_f64).abs() * 10000.0;
+        assert!(
+            error_bps < tolerance_bps,
+            "Error should be <{}bps, got {}bps",
+            tolerance_bps,
+            error_bps
+        );
+    }
+
+    #[test]
+    fn test_query_pool_swap_pool_target_price_unreachable() {
+        let state = UniswapV2State::new(U256::from(2_000_000u32), U256::from(1_000_000u32));
+
+        let token_in = token_0();
+        let token_out = token_1();
+
+        let target_price = Price::new(BigUint::from(1u32), BigUint::from(1u32));
+
+        let params = QueryPoolSwapParams::new(
+            token_in,
+            token_out,
+            SwapConstraint::PoolTargetPrice {
+                target: target_price,
+                tolerance: 0.0,
+                min_amount_in: None,
+                max_amount_in: None,
+            },
+        );
+
+        let result = query_pool_swap(&state, &params);
+        assert!(result.is_err(), "Should return error for unreachable price");
+    }
+
+    // =========================================================================
+    // Integration tests with UniswapV2State - TradeLimitPrice
+    // =========================================================================
+
+    #[test]
+    fn test_query_pool_swap_trade_limit_price_same_decimals() {
+        let state = UniswapV2State::new(
+            U256::from(1000u64) * U256::from(10u64).pow(U256::from(18u64)),
+            U256::from(2_000_000u64) * U256::from(10u64).pow(U256::from(18u64)),
+        );
+
+        let weth = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
+        let dai = create_token("0x0000000000000000000000000000000000000001", "DAI", 18);
+
+        let spot_price = state.spot_price(&dai, &weth).unwrap();
+        let limit_price_f64 = spot_price * 0.99;
+        let limit_price = Price::new(
+            BigUint::from((limit_price_f64 * 1e18) as u128),
+            BigUint::from(10u128.pow(18)),
+        );
+
+        let params = QueryPoolSwapParams::new(
+            dai.clone(),
+            weth.clone(),
+            SwapConstraint::TradeLimitPrice {
+                limit: limit_price,
+                tolerance: 0.001,
+                min_amount_in: None,
+                max_amount_in: None,
+            },
+        );
+
+        let result = query_pool_swap(&state, &params);
+        assert!(result.is_ok(), "query_pool_swap failed: {:?}", result.err());
+
+        let pool_swap = result.unwrap();
+        assert!(pool_swap.amount_in() > &BigUint::zero());
+        assert!(pool_swap.amount_out() > &BigUint::zero());
+
+        let actual_trade_price = trade_price(
+            pool_swap.amount_in().to_f64().unwrap(),
+            pool_swap.amount_out().to_f64().unwrap(),
+            dai.decimals,
+            weth.decimals,
+        );
+        assert!(
+            actual_trade_price >= limit_price_f64,
+            "Trade price {} should be >= limit {}",
+            actual_trade_price,
+            limit_price_f64
+        );
+    }
+
+    #[test]
+    fn test_query_pool_swap_trade_limit_price_different_decimals() {
+        let state = UniswapV2State::new(
+            U256::from(1000u64) * U256::from(10u64).pow(U256::from(18u64)),
+            U256::from(2_000_000u64) * U256::from(10u64).pow(U256::from(6u64)),
+        );
+
+        let weth = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
+        let usdc = create_token("0x0000000000000000000000000000000000000001", "USDC", 6);
+
+        let spot_price = state.spot_price(&usdc, &weth).unwrap();
+        let limit_price_f64 = spot_price * 0.95;
+
+        let decimal_adj = 10_f64.powi(usdc.decimals as i32 - weth.decimals as i32);
+        let price_no_decimals = limit_price_f64 / decimal_adj;
+        let limit_price = Price::new(
+            BigUint::from((price_no_decimals * 1e12) as u128),
+            BigUint::from(10u128.pow(12)),
+        );
+
+        let params = QueryPoolSwapParams::new(
+            usdc.clone(),
+            weth.clone(),
+            SwapConstraint::TradeLimitPrice {
+                limit: limit_price,
+                tolerance: 0.001,
+                min_amount_in: None,
+                max_amount_in: None,
+            },
+        );
+
+        let result = query_pool_swap(&state, &params);
+        assert!(result.is_ok(), "query_pool_swap failed: {:?}", result.err());
+
+        let pool_swap = result.unwrap();
+
+        let actual_trade_price = trade_price(
+            pool_swap.amount_in().to_f64().unwrap(),
+            pool_swap.amount_out().to_f64().unwrap(),
+            usdc.decimals,
+            weth.decimals,
+        );
+        assert!(
+            actual_trade_price >= limit_price_f64,
+            "Trade price {} should be >= limit {}",
+            actual_trade_price,
+            limit_price_f64
+        );
+    }
+
+    #[test]
+    fn test_query_pool_swap_trade_limit_price_maximizes_trade() {
+        let state = UniswapV2State::new(
+            U256::from(1000u64) * U256::from(10u64).pow(U256::from(18u64)),
+            U256::from(2_000_000u64) * U256::from(10u64).pow(U256::from(18u64)),
+        );
+
+        let weth = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
+        let dai = create_token("0x0000000000000000000000000000000000000001", "DAI", 18);
+
+        let spot_price = state.spot_price(&dai, &weth).unwrap();
+
+        let mut prev_amount = BigUint::zero();
+        for multiplier in [0.99, 0.95, 0.90, 0.80] {
+            let limit_price_f64 = spot_price * multiplier;
+            let limit_price = Price::new(
+                BigUint::from((limit_price_f64 * 1e18) as u128),
+                BigUint::from(10u128.pow(18)),
+            );
+
+            let params = QueryPoolSwapParams::new(
+                dai.clone(),
+                weth.clone(),
+                SwapConstraint::TradeLimitPrice {
+                    limit: limit_price,
+                    tolerance: 0.001,
+                    min_amount_in: None,
+                    max_amount_in: None,
+                },
+            );
+
+            let result = query_pool_swap(&state, &params);
+            assert!(result.is_ok(), "query_pool_swap failed at multiplier {}", multiplier);
+
+            let amount = result.unwrap().amount_in().clone();
+            assert!(
+                amount >= prev_amount,
+                "Lower price limit should allow larger trade: {} vs {}",
+                amount,
+                prev_amount
+            );
+            prev_amount = amount;
+        }
+    }
+
+    // =========================================================================
+    // Edge cases
+    // =========================================================================
+
+    #[test]
+    fn test_query_pool_swap_at_spot_price() {
+        let state = UniswapV2State::new(U256::from(2_000_000u32), U256::from(1_000_000u32));
+
+        let token_in = token_0();
+        let token_out = token_1();
+
+        let spot = state.spot_price(&token_in, &token_out).unwrap();
+        let target_price = Price::new(
+            BigUint::from((spot * 1e18) as u128),
+            BigUint::from(10u128.pow(18)),
+        );
+
+        let params = QueryPoolSwapParams::new(
+            token_in,
+            token_out,
+            SwapConstraint::PoolTargetPrice {
+                target: target_price,
+                tolerance: 0.001,
+                min_amount_in: None,
+                max_amount_in: None,
+            },
+        );
+
+        let result = query_pool_swap(&state, &params);
+        assert!(result.is_ok());
+        let pool_swap = result.unwrap();
+        assert!(pool_swap.amount_in() <= &BigUint::from(1u32) || pool_swap.amount_in() == &BigUint::zero());
+    }
+
+    #[test]
+    fn test_query_pool_swap_returns_price_points() {
+        let state = UniswapV2State::new(
+            U256::from(1000u64) * U256::from(10u64).pow(U256::from(18u64)),
+            U256::from(2_000_000u64) * U256::from(10u64).pow(U256::from(18u64)),
+        );
+
+        let weth = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
+        let dai = create_token("0x0000000000000000000000000000000000000001", "DAI", 18);
+
+        let spot_price = state.spot_price(&dai, &weth).unwrap();
+        let target_price = Price::new(
+            BigUint::from((spot_price * 0.95 * 1e18) as u128),
+            BigUint::from(10u128.pow(18)),
+        );
+
+        let params = QueryPoolSwapParams::new(
+            dai,
+            weth,
+            SwapConstraint::PoolTargetPrice {
+                target: target_price,
+                tolerance: 0.001,
+                min_amount_in: None,
+                max_amount_in: None,
+            },
+        );
+
+        let result = query_pool_swap(&state, &params).unwrap();
+        let price_points = result.price_points();
+        assert!(price_points.is_some());
+        let pp = price_points.as_ref().unwrap();
+        assert!(pp.len() >= 2, "Should have at least 2 boundary points");
+    }
+
+    #[test]
+    fn test_query_pool_swap_large_reserves() {
+        let state = UniswapV2State::new(
+            U256::from_str("1000000000000000000000000").unwrap(),
+            U256::from_str("2000000000000000000000000000").unwrap(),
+        );
+
+        let weth = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
+        let dai = create_token("0x0000000000000000000000000000000000000001", "DAI", 18);
+
+        let spot_price = state.spot_price(&dai, &weth).unwrap();
+        let target_price = Price::new(
+            BigUint::from((spot_price * 0.90 * 1e18) as u128),
+            BigUint::from(10u128.pow(18)),
+        );
+
+        let params = QueryPoolSwapParams::new(
+            dai.clone(),
+            weth.clone(),
+            SwapConstraint::PoolTargetPrice {
+                target: target_price,
+                tolerance: 0.001,
+                min_amount_in: None,
+                max_amount_in: None,
+            },
+        );
+
+        let result = query_pool_swap(&state, &params);
+        assert!(result.is_ok(), "Should handle large reserves");
+
+        let pool_swap = result.unwrap();
+        let new_spot = pool_swap.new_state().spot_price(&dai, &weth).unwrap();
+        let target_f64 = spot_price * 0.90;
+        let error_bps = ((new_spot - target_f64) / target_f64).abs() * 10000.0;
+        assert!(error_bps < 10.0, "Error should be <10bps for large reserves");
     }
 }
