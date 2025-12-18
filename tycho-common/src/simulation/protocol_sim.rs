@@ -250,8 +250,8 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// * `base` - Base Token: the token that is the quantity of a pair. For WBTC/USDT, WBTC would
     ///   be the base asset.
-    /// * `quote` - Quote Token: the token that is the price of a pair. For WBTC/USDT, USDT would
-    ///   be the quote asset.
+    /// * `quote` - Quote Token: the token that is the price of a pair. For WBTC/USDT, USDT would be
+    ///   the quote asset.
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError>;
 
     /// Returns the amount out given an amount in and input/output tokens.
@@ -295,7 +295,8 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///   - First element: The maximum input amount (sell_token)
     ///   - Second element: The maximum output amount (buy_token)
     ///
-    /// For `let res = get_limits(...)`, the valid input domain for `get_amount_out` is `[0, res.0]`.
+    /// For `let res = get_limits(...)`, the valid input domain for `get_amount_out` is `[0,
+    /// res.0]`.
     ///
     /// * `Err(SimulationError)` - If any unexpected error occurs
     fn get_limits(
@@ -341,8 +342,8 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Returns
     ///
-    /// * `Ok(PoolSwap)` - A `PoolSwap` struct containing the amounts to be traded and the state of the
-    ///   pool after trading.
+    /// * `Ok(PoolSwap)` - A `PoolSwap` struct containing the amounts to be traded and the state of
+    ///   the pool after trading.
     /// * `Err(SimulationError)` - If:
     ///   - The calculation encounters numerical issues
     ///   - The method is not implemented for this protocol
