@@ -265,11 +265,11 @@ fn search(
 ///
 /// # Constraints
 ///
-/// - `PoolTargetPrice`: Returns amount needed to move **spot price** to target.
-///   The resulting spot price will be within `tolerance` of target.
+/// - `PoolTargetPrice`: Returns amount needed to move **spot price** to target. The resulting spot
+///   price will be within `tolerance` of target.
 ///
-/// - `TradeLimitPrice`: Returns max amount where **execution price** ≥ limit.
-///   Execution price = amount_out / amount_in (decimal-adjusted).
+/// - `TradeLimitPrice`: Returns max amount where **execution price** ≥ limit. Execution price =
+///   amount_out / amount_in (decimal-adjusted).
 ///
 /// # Returns
 ///
