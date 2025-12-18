@@ -88,6 +88,9 @@ pub(super) fn has_custom_retry_code<T>(e: &ErrorPayload<T>) -> bool {
         -32602 => false, // "invalid params" - wrong parameters
         -32604 => false, // "method not supported" - not supported by this node
 
+        // Other non EIP-1474 errors
+        3 => false, // "execution reverted" - non-retryable EVM execution error
+
         // Default: retry unknown error codes (conservative approach)
         // perf: consider being less conservative to reduce unnecessary retries
         _ => true,
@@ -319,6 +322,8 @@ pub(crate) mod tests {
     #[case::method_not_found(-32601, false, "method not found", "method doesn't exist")]
     #[case::invalid_params(-32602, false, "invalid params", "wrong parameters")]
     #[case::method_not_supported(-32604, false, "method not supported", "not supported by node")]
+    // EVM execution errors (EIP-1474)
+    #[case::execution_reverted(3, false, "execution reverted", "contract reverted")]
     // Unknown error codes (should be retryable by default for safety)
     #[case::unknown_error(-99999, true, "unknown error", "should be retryable by default")]
     fn test_json_rpc_error_code_classification(
