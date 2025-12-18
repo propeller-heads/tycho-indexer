@@ -13,7 +13,7 @@ use tycho_common::{
 };
 
 use crate::evm::protocol::{
-    safe_math::{safe_div_u256, safe_mul_u256},
+    safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256},
     u256_num::{biguint_to_u256, u256_to_biguint, u256_to_f64},
 };
 
@@ -80,18 +80,34 @@ impl LidoState {
             biguint_to_u256(&self.total_pooled_eth),
         )?;
 
-        let amount_out = safe_div_u256(
-            safe_mul_u256(shares, biguint_to_u256(&self.total_pooled_eth))?,
-            biguint_to_u256(&self.total_shares),
+        let new_shares = safe_add_u256(biguint_to_u256(&self.total_shares.clone()), shares)?;
+        let new_total_pooled_eth = safe_add_u256(
+            biguint_to_u256(&self.total_pooled_eth.clone()),
+            biguint_to_u256(&amount_in),
         )?;
 
+        let amount_from_shares = u256_to_biguint(safe_div_u256(
+            safe_mul_u256(shares, new_total_pooled_eth)?,
+            new_shares,
+        )?);
+
+        let shares_to_transfer = safe_div_u256(
+            safe_mul_u256(biguint_to_u256(&amount_from_shares), new_shares)?,
+            new_total_pooled_eth,
+        )?;
+
+        let amount_transferred = u256_to_biguint(safe_div_u256(
+            safe_mul_u256(shares_to_transfer, new_total_pooled_eth)?,
+            new_shares,
+        )?);
+
         Ok(GetAmountOutResult {
-            amount: u256_to_biguint(amount_out),
+            amount: amount_transferred,
             gas: BigUint::from(DEFAULT_GAS),
             new_state: Box::new(Self {
                 pool_type: self.pool_type.clone(),
-                total_shares: self.total_shares.clone() + u256_to_biguint(shares),
-                total_pooled_eth: self.total_pooled_eth.clone() + amount_in,
+                total_shares: u256_to_biguint(new_shares),
+                total_pooled_eth: u256_to_biguint(new_total_pooled_eth),
                 total_wrapped_st_eth: None,
                 id: self.id.clone(),
                 native_address: self.native_address.clone(),
