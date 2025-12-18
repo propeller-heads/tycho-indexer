@@ -594,6 +594,8 @@ fn select_components_to_process(
         Vec::new();
 
     // Collect updated components
+    // As the component ordering is semi-random, it is safe to just take the first N components and
+    // have a good coverage
     for (id, state) in update
         .update
         .states
