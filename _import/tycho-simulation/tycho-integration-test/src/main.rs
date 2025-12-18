@@ -795,26 +795,21 @@ async fn process_state(
             token_in.symbol, token_out.symbol
         );
 
-        // Calculate amount_in as 0.1% of max_input
-        // For precision, multiply by 1000 then divide by 1000
-        let percentage = 0.001;
-        let percentage_biguint = BigUint::from((percentage * 1000.0) as u32);
-        let thousand = BigUint::from(1000u32);
-        let mut amount_in = (&max_input * &percentage_biguint) / &thousand;
+        // Calculate amount_in as percentage of max_input
+        const PERCENTAGE: f64 = 0.001; // 0.1%
+        const PRECISION: u64 = 1_000; // Supports up to 3 decimal places
+        let numerator = (PERCENTAGE * PRECISION as f64) as u64;
+        let mut amount_in = (&max_input * numerator) / PRECISION;
         if amount_in.is_zero() {
             debug!("Calculated amount_in is zero, skipping...");
             continue;
         }
-        if min_amount != BigUint::ZERO && amount_in < min_amount {
-            amount_in = min_amount.clone();
-        }
+        amount_in = amount_in.max(min_amount.clone());
 
         // Cap amount_in to avoid "amount exceeds 96 bits" error (it happens for uniswap v3 and v4
         // sometimes because the returned limits can be very high)
         let max_96_bit = BigUint::from(2u128.pow(96) - 1);
-        if amount_in > max_96_bit {
-            amount_in = max_96_bit - BigUint::from(1u32);
-        }
+        amount_in = amount_in.min(max_96_bit);
 
         // Get expected amount out using tycho-simulation and measure duration
         let start_time = std::time::Instant::now();
@@ -823,7 +818,7 @@ async fn process_state(
             .into_diagnostic()
             .wrap_err(format!(
                 "Error calculating amount out at {:.1}% with input of {amount_in} {}.",
-                percentage * 100.0,
+                PERCENTAGE * 100.0,
                 token_in.symbol,
             )) {
             Ok(res) => {
