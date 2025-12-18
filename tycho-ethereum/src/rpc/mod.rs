@@ -847,7 +847,12 @@ impl EthereumRpcClient {
                     .all(|res| res.is_err());
                 let some_retryable_failed = batch_result.iter().any(|res| {
                     if let Err(RpcError::ErrorResp(e)) = res {
-                        e.is_retry_err() || has_custom_retry_code(e)
+                        if e.is_retry_err() || has_custom_retry_code(e) {
+                            debug!("A slot detector test request in batch failed with retryable error: {e:?}");
+                            true
+                        } else {
+                            false
+                        }
                     } else {
                         false
                     }
