@@ -578,4 +578,11 @@ impl ProtocolSim for AerodromeSlipstreamsState {
             false
         }
     }
+
+    fn query_pool_swap(
+        &self,
+        params: &tycho_common::simulation::protocol_sim::QueryPoolSwapParams,
+    ) -> Result<tycho_common::simulation::protocol_sim::PoolSwap, SimulationError> {
+        crate::evm::query_pool_swap::query_pool_swap(self, params)
+    }
 }
