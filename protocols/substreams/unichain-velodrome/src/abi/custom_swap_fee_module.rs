@@ -605,10 +605,10 @@ pub mod events {
             29u8,
         ];
         pub fn match_log(log: &substreams_ethereum::pb::eth::v2::Log) -> bool {
-            if log.topics.len() != 2usize {
+            if log.topics.len() != 3usize {
                 return false;
             }
-            if log.data.len() != 32usize {
+            if log.data.len() != 0usize {
                 return false;
             }
             return log.topics.get(0).expect("bounds already checked").as_ref()
@@ -617,12 +617,6 @@ pub mod events {
         pub fn decode(
             log: &substreams_ethereum::pb::eth::v2::Log,
         ) -> Result<Self, String> {
-            let mut values = ethabi::decode(
-                    &[ethabi::ParamType::Uint(24usize)],
-                    log.data.as_ref(),
-                )
-                .map_err(|e| format!("unable to decode log.data: {:?}", e))?;
-            values.reverse();
             Ok(Self {
                 pool: ethabi::decode(
                         &[ethabi::ParamType::Address],
@@ -642,7 +636,16 @@ pub mod events {
                     .to_vec(),
                 fee: {
                     let mut v = [0 as u8; 32];
-                    values
+                    ethabi::decode(
+                            &[ethabi::ParamType::Uint(24usize)],
+                            log.topics[2usize].as_ref(),
+                        )
+                        .map_err(|e| {
+                            format!(
+                                "unable to decode param 'fee' from topic of type 'uint24': {:?}",
+                                e
+                            )
+                        })?
                         .pop()
                         .expect(INTERNAL_ERR)
                         .into_uint()

@@ -20,7 +20,7 @@
         "type": "address"
       },
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "uint24",
         "name": "fee",
         "type": "uint24"
