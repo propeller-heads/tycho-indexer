@@ -114,7 +114,7 @@ impl EthereumRpcClient {
     pub async fn get_block_number(&self) -> Result<u64, RPCError> {
         let block_number = self
             .retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request_noparams("eth_blockNumber")
                     .await
@@ -219,7 +219,7 @@ impl EthereumRpcClient {
 
         let result: Option<Block> = self
             .retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request("eth_getBlockByNumber", (block_id, full_tx_objects))
                     .await
@@ -241,7 +241,7 @@ impl EthereumRpcClient {
         address: Address,
     ) -> Result<U256, RPCError> {
         self.retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request("eth_getBalance", (address, block_id))
                     .await
@@ -262,7 +262,7 @@ impl EthereumRpcClient {
         address: Address,
     ) -> Result<Bytes, RPCError> {
         self.retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request("eth_getCode", (address, block_id))
                     .await
@@ -314,7 +314,7 @@ impl EthereumRpcClient {
         // Use the wrapper type to handle nodes that return null instead of {} for empty storage
         let wrapper: StorageRangeResultWrapper = self
             .retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request("debug_storageRangeAt", params)
                     .await
@@ -462,7 +462,7 @@ impl EthereumRpcClient {
             // 1. Only retry failed requests, not successful ones
             // 2. Fail fast if any request has a non-retryable error (currently we only check the
             //    first error encountered, potentially missing fatal errors in other requests)
-            let chunk_results = self.retry_policy.retry_request(batch_call).await
+            let chunk_results = self.retry_policy.call_with_retry(batch_call).await
             .map_err(|e| {
                     let printable_addresses = chunk_addresses
                         .iter()
@@ -515,7 +515,7 @@ impl EthereumRpcClient {
 
         for slot in slots {
             let storage_value = self.retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self
                     .inner
                     .request("eth_getStorageAt", (&address, slot, block_id))
@@ -577,7 +577,7 @@ impl EthereumRpcClient {
             //    first error encountered, potentially missing fatal errors in other requests)
             let chunk_res = self
                 .retry_policy
-                .retry_request(batch_call)
+                .call_with_retry(batch_call)
                 .await
                 .map_err(|e| {
                     let printable_slots = slot_batch
@@ -621,7 +621,7 @@ impl EthereumRpcClient {
             .collect();
 
         self.retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request("trace_callMany", (&trace_requests, block))
                     .await
@@ -643,7 +643,7 @@ impl EthereumRpcClient {
         block: BlockNumberOrTag,
     ) -> Result<Bytes, RPCError> {
         self.retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request("eth_call", (&request, block))
                     .await
@@ -754,7 +754,7 @@ impl EthereumRpcClient {
             Ok((access_list_data, pre_state_trace))
         };
 
-        self.retry_policy.retry_request(|| async {
+        self.retry_policy.call_with_retry(|| async {
             batch_call().await
         }).await
         .map_err(|e| {
@@ -845,7 +845,7 @@ impl EthereumRpcClient {
             //    first error encountered, potentially missing fatal errors in other requests)
             let chunk_results = self
                 .retry_policy
-                .retry_request(|| async { batch_call().await })
+                .call_with_retry(|| async { batch_call().await })
                 .await
                 .map_err(|e| {
                     RPCError::from_alloy(
