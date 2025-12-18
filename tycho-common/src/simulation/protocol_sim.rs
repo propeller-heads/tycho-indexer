@@ -1,4 +1,4 @@
-use std::{any::Any, collections::HashMap, fmt};
+use std::{any::Any, collections::HashMap, fmt, fmt::Debug};
 
 use num_bigint::BigUint;
 
@@ -234,7 +234,10 @@ impl QueryPoolSwapParams {
 /// ProtocolSim trait
 /// This trait defines the methods that a protocol state must implement in order to be used
 /// in the trade simulation.
-pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
+///
+/// To implement this trait, your type must also implement `Clone + PartialEq + Debug`, and then
+/// the implementation for `DynProtocolSim` will be derived automatically.
+pub trait ProtocolSim: Debug + Send + Sync + DynProtocolSim + 'static {
     /// Returns the fee of the protocol as ratio
     ///
     /// E.g. if the fee is 1%, the value returned would be 0.01.
@@ -360,18 +363,36 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
 
     /// Clones the protocol state as a trait object.
     /// This allows the state to be cloned when it is being used as a `Box<dyn ProtocolSim>`.
-    fn clone_box(&self) -> Box<dyn ProtocolSim>;
+    #[deprecated(note = "Use clone_box from DynProtocolSim instead")]
+    fn clone_box(&self) -> Box<dyn ProtocolSim> {
+        DynProtocolSim::clone_box(self)
+    }
 
     /// Allows downcasting of the trait object to its underlying type.
-    fn as_any(&self) -> &dyn Any;
+    #[deprecated(note = "Use as_any from DynProtocolSim instead")]
+    fn as_any(&self) -> &dyn Any
+    where
+        Self: Sized,
+    {
+        self
+    }
 
     /// Allows downcasting of the trait object to its mutable underlying type.
-    fn as_any_mut(&mut self) -> &mut dyn Any;
+    #[deprecated(note = "Use as_any_mut from DynProtocolSim instead")]
+    fn as_any_mut(&mut self) -> &mut dyn Any
+    where
+        Self: Sized,
+    {
+        self
+    }
 
     /// Compares two protocol states for equality.
     /// This method must be implemented to define how two protocol states are considered equal
     /// (used for tests).
-    fn eq(&self, other: &dyn ProtocolSim) -> bool;
+    #[deprecated(note = "Use the PartialEq implementation instead")]
+    fn eq(&self, other: &dyn ProtocolSim) -> bool {
+        self.dyn_eq(other)
+    }
 
     /// Cast as IndicativelyPriced. This is necessary for RFQ protocols
     fn as_indicatively_priced(&self) -> Result<&dyn IndicativelyPriced, SimulationError> {
@@ -379,8 +400,127 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     }
 }
 
+/// Helper trait enabling `Clone`, `PartialEq`, and downcasting for `dyn ProtocolSim`.
+///
+/// # Blanket Implementation
+///
+/// A blanket impl provides `DynProtocolSim` for any `T: ProtocolSim + Clone + PartialEq`.
+/// Note: this looks circular (`ProtocolSim` requires `DynProtocolSim`), but Rust resolves it:
+/// the compiler checks that `T` *will* satisfy `DynProtocolSim` once all bounds are met.
+pub trait DynProtocolSim {
+    /// Returns a reference to the concrete type as [`Any`] for downcasting.
+    fn as_any(&self) -> &dyn Any;
+    /// Returns a mutable reference to the concrete type as [`Any`] for downcasting.
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+    /// Compares two trait objects for equality. Returns `false` if they are different types.
+    fn dyn_eq(&self, other: &dyn DynProtocolSim) -> bool;
+    /// Clones the concrete type into a new `Box<dyn ProtocolSim>`.
+    fn clone_box(&self) -> Box<dyn ProtocolSim>;
+}
+
+/// Blanket impl: any `T: Any + Eq` automatically supports `DynEq`.
+impl<T> DynProtocolSim for T
+where
+    T: Any + ProtocolSim + Clone + PartialEq,
+{
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn dyn_eq(&self, other: &dyn DynProtocolSim) -> bool {
+        other
+            .as_any()
+            .downcast_ref::<T>()
+            .is_some_and(|o| self == o)
+    }
+
+    fn clone_box(&self) -> Box<dyn ProtocolSim> {
+        Box::new(self.clone())
+    }
+}
+
+impl PartialEq for dyn ProtocolSim {
+    fn eq(&self, other: &Self) -> bool {
+        self.dyn_eq(other)
+    }
+}
+
 impl Clone for Box<dyn ProtocolSim> {
     fn clone(&self) -> Box<dyn ProtocolSim> {
-        self.clone_box()
+        DynProtocolSim::clone_box(self.as_ref())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Minimal mock implementing ProtocolSim for testing DynProtocolSim behavior.
+    #[derive(Debug, Clone, PartialEq)]
+    struct MockPoolA {
+        reserve: u64,
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
+    struct MockPoolB {
+        liquidity: u64,
+    }
+
+    macro_rules! impl_mock_protocol_sim {
+        ($t:ty) => {
+            impl ProtocolSim for $t {
+                fn fee(&self) -> f64 {
+                    0.0
+                }
+                fn spot_price(&self, _: &Token, _: &Token) -> Result<f64, SimulationError> {
+                    unimplemented!()
+                }
+                fn get_amount_out(
+                    &self,
+                    _: BigUint,
+                    _: &Token,
+                    _: &Token,
+                ) -> Result<GetAmountOutResult, SimulationError> {
+                    unimplemented!()
+                }
+                fn get_limits(
+                    &self,
+                    _: Bytes,
+                    _: Bytes,
+                ) -> Result<(BigUint, BigUint), SimulationError> {
+                    unimplemented!()
+                }
+                fn delta_transition(
+                    &mut self,
+                    _: ProtocolStateDelta,
+                    _: &HashMap<Bytes, Token>,
+                    _: &Balances,
+                ) -> Result<(), TransitionError<String>> {
+                    unimplemented!()
+                }
+            }
+        };
+    }
+
+    impl_mock_protocol_sim!(MockPoolA);
+    impl_mock_protocol_sim!(MockPoolB);
+
+    #[test]
+    fn test_dyn_protocol_sim_clone_and_eq() {
+        let a: Box<dyn ProtocolSim> = Box::new(MockPoolA { reserve: 100 });
+        let a_clone = a.clone();
+        let a_different: Box<dyn ProtocolSim> = Box::new(MockPoolA { reserve: 200 });
+        let b: Box<dyn ProtocolSim> = Box::new(MockPoolB { liquidity: 100 });
+
+        // Same type, same value
+        assert_eq!(a.as_ref(), a_clone.as_ref());
+        // Same type, different value
+        assert_ne!(a.as_ref(), a_different.as_ref());
+        // Different types are never equal
+        assert_ne!(a.as_ref(), b.as_ref());
     }
 }
