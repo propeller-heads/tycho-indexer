@@ -1086,7 +1086,7 @@ fn categorize_error(error_message: &str) -> &'static str {
 
 /// Generate a unique simulation ID based on protocol system and state ID
 fn generate_simulation_id(protocol_system: &str, state_id: &str) -> String {
-    let random_number: u32 = rand::random::<u32>() % 90000 + 10000; // Range 10000-99999
+    let random_number: u32 = rand::random_range(10000..=99999);
     let component_prefix = state_id
         .chars()
         .take(8)
