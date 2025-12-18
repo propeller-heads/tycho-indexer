@@ -1,7 +1,23 @@
-//! Generic query_pool_swap implementation using Brent's method.
+//! Default `query_pool_swap` implementation for EVM protocols.
 //!
-//! Provides a default `query_pool_swap` for protocols without analytical solutions.
-//! Uses history-based Brent's method adapted for AMM price curves.
+//! Uses a history-based Brent's method adapted for AMM price curves.
+//! Combines inverse quadratic interpolation (IQI) and secant methods
+//! with bisection fallback for robust convergence.
+//!
+//! # Supported Constraints
+//!
+//! - [`SwapConstraint::PoolTargetPrice`]: Find amount to reach a target **spot price**
+//! - [`SwapConstraint::TradeLimitPrice`]: Find max trade where **execution price** ≥ limit
+//!
+//! # Usage
+//!
+//! ```ignore
+//! use tycho_simulation::evm::query_pool_swap::query_pool_swap;
+//!
+//! let result = query_pool_swap(&pool_state, &params)?;
+//! let amount_in = result.amount_in();
+//! let new_state = result.new_state();
+//! ```
 
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
@@ -39,6 +55,13 @@ fn geometric_mean(a: &BigUint, b: &BigUint) -> BigUint {
     BigUint::from_f64((a_f64 * b_f64).sqrt()).unwrap_or_else(|| (a + b) / 2u32)
 }
 
+/// Inverse Quadratic Interpolation (IQI) - estimates amount for target price.
+///
+/// Fits a quadratic through 3 points in (price, amount) space and solves for
+/// the amount where price equals target. This is the "inverse" of standard
+/// quadratic interpolation which would estimate price from amount.
+///
+/// Part of Brent's method. See: <https://en.wikipedia.org/wiki/Brent%27s_method>
 fn iqi(p: &[PricePoint], target: f64) -> Option<f64> {
     if p.len() != 3 {
         return None;
@@ -61,6 +84,10 @@ fn iqi(p: &[PricePoint], target: f64) -> Option<f64> {
     (result.is_finite() && result > 0.0).then_some(result)
 }
 
+/// Secant method - linear interpolation to estimate amount for target price.
+///
+/// Uses 2 points to draw a line and find where it crosses the target price.
+/// Faster than bisection but less robust than IQI for nonlinear curves.
 fn secant(p: &[PricePoint], target: f64) -> Option<f64> {
     if p.len() != 2 {
         return None;
@@ -72,6 +99,12 @@ fn secant(p: &[PricePoint], target: f64) -> Option<f64> {
     (result.is_finite() && result > 0.0).then_some(result)
 }
 
+/// Select next amount to evaluate using Brent's method heuristics.
+///
+/// Tries methods in order of convergence speed:
+/// 1. IQI (if 3+ points and estimate improves bracket by >1%)
+/// 2. Secant (if 2+ points and estimate is within bracket)
+/// 3. Geometric mean bisection (fallback)
 fn next_amount(history: &[PricePoint], low: &BigUint, high: &BigUint, target: f64) -> BigUint {
     let low_f64 = low.to_f64().unwrap_or(0.0);
     let high_f64 = high.to_f64().unwrap_or(f64::MAX);
@@ -108,6 +141,14 @@ fn next_amount(history: &[PricePoint], low: &BigUint, high: &BigUint, target: f6
     geometric_mean(low, high)
 }
 
+/// Core search using Brent's method adapted for AMM price curves.
+///
+/// Maintains a bracket [low, high] where price(low) > target > price(high).
+/// Each iteration narrows the bracket using [`next_amount`] until convergence
+/// or the bracket width reaches 1 (integer precision limit).
+///
+/// Based on the van Wijngaarden-Dekker-Brent method for root finding.
+/// See: Brent, R.P. (1973). "Algorithms for Minimization without Derivatives"
 fn search(
     state: &dyn ProtocolSim,
     target_price: f64,
@@ -218,9 +259,29 @@ fn search(
     }))
 }
 
-/// Generic query_pool_swap using Brent's method.
+/// Find the swap amount to reach a target price.
 ///
-/// Handles both `TradeLimitPrice` and `PoolTargetPrice` constraints.
+/// See [`ProtocolSim::query_pool_swap`] for the trait method this implements.
+///
+/// # Constraints
+///
+/// - `PoolTargetPrice`: Returns amount needed to move **spot price** to target.
+///   The resulting spot price will be within `tolerance` of target.
+///
+/// - `TradeLimitPrice`: Returns max amount where **execution price** ≥ limit.
+///   Execution price = amount_out / amount_in (decimal-adjusted).
+///
+/// # Returns
+///
+/// A [`PoolSwap`] containing:
+/// - `amount_in`: Input token amount
+/// - `amount_out`: Output token amount
+/// - `new_state`: Pool state after the swap
+/// - `price_points`: Search history for debugging (includes 2 initial boundary points)
+///
+/// # Errors
+///
+/// Returns `SimulationError::InvalidInput` if target is unreachable (above spot or below limit).
 pub fn query_pool_swap(
     state: &dyn ProtocolSim,
     params: &QueryPoolSwapParams,
