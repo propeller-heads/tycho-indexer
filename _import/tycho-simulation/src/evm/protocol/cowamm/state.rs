@@ -1,20 +1,21 @@
-use crate::evm::protocol::{
-    cowamm::{bmath::*, constants::BONE, error::CowAMMError},
-    safe_math::{div_mod_u256, safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
-    u256_num::{biguint_to_u256, u256_to_biguint, u256_to_f64},
-};
-use alloy::primitives::{Address, U256};
+use std::{any::Any, collections::HashMap, fmt::Debug};
+
+use alloy::primitives::{U256};
 use num_bigint::{BigUint, ToBigUint};
-use std::any::Any;
-use std::{collections::HashMap, fmt::Debug};
 use tycho_common::{
     dto::ProtocolStateDelta,
-    models::{token::Token, Chain},
+    models::{token::Token},
     simulation::{
         errors::{SimulationError, TransitionError},
         protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
     },
     Bytes,
+};
+
+use crate::evm::protocol::{
+    cowamm::{bmath::*, constants::BONE, error::CowAMMError},
+    safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
+    u256_num::{biguint_to_u256, u256_to_biguint, u256_to_f64},
 };
 
 const COWAMM_FEE: f64 = 0.0; // 0% fee
@@ -56,6 +57,7 @@ impl CowAMMState {
     ///
     /// # Returns
     /// A new `CowAMMState` with token states initialized.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         address: Bytes,
         token_a_addr: Bytes,
@@ -82,10 +84,6 @@ impl CowAMMState {
         &self.token_a.0
     }
 
-    fn token_b_addr(&self) -> &Bytes {
-        &self.token_b.0
-    }
-
     fn liquidity_a(&self) -> U256 {
         self.token_a.1
     }
@@ -102,7 +100,8 @@ impl CowAMMState {
         self.token_b.2
     }
 
-    /// Calculates the proportion of tokens a user receives when exiting the pool by burning LP tokens,
+    /// Calculates the proportion of tokens a user receives when exiting the pool by burning LP
+    /// tokens,
     ///
     ///
     /// Solidity reference:
@@ -122,7 +121,7 @@ impl CowAMMState {
         lp_token_in: U256,
     ) -> Result<(U256, U256), SimulationError> {
         // Collect balances
-        let balances = vec![self.liquidity_a(), self.liquidity_b()];
+        let balances = [self.liquidity_a(), self.liquidity_b()];
 
         let total_lp_token = self.lp_token_supply;
 
@@ -213,7 +212,7 @@ impl CowAMMState {
             if token_amount_out < min_amounts_out[i] {
                 return Err(CowAMMError::TokenAmountOutBelowMinAmountOut);
             }
-            
+
             //equivalent to _pushUnderlying
             if i == 0 {
                 new_state.token_a.1 = bsub(self.token_a.1, token_amount_out)?;
@@ -231,16 +230,17 @@ impl ProtocolSim for CowAMMState {
         COWAMM_FEE
     }
     /// Calculates a f64 representation of base token price in the AMM.
-    /// **********************************************************************************************
-    /// calcSpotPrice                                                                             //
-    /// sP = spotPrice                                                                            //
-    /// bI = tokenBalanceIn                ( bI / wI )         1                                  //
-    /// bO = tokenBalanceOut         sP =  -----------  *  ----------                             //
-    /// wI = tokenWeightIn                 ( bO / wO )     ( 1 - sF )                             //
-    /// wO = tokenWeightOut                                                                       //
-    /// sF = swapFee                                                                              //
-    ///**********************************************************************************************/
-    fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
+    /// ********************************************************************************************
+    /// ** calcSpotPrice
+    /// // sP = spotPrice
+    /// // bI = tokenBalanceIn                ( bI / wI )         1
+    /// // bO = tokenBalanceOut         sP =  -----------  *  ----------
+    /// // wI = tokenWeightIn                 ( bO / wO )     ( 1 - sF )
+    /// // wO = tokenWeightOut
+    /// // sF = swapFee
+    /// // *************************************************************************************
+    /// *********/
+    fn spot_price(&self, _base: &Token, _quote: &Token) -> Result<f64, SimulationError> {
         let numer = bdiv(self.liquidity_a(), self.weight_a()).map_err(|err| {
             SimulationError::FatalError(format!(
                 "Error in numerator bdiv(balance_base / weight_base): {err:?}"
@@ -262,7 +262,7 @@ impl ProtocolSim for CowAMMState {
             SimulationError::FatalError(format!("Error in bmul(ratio * scale): {err:?}"))
         })?;
 
-        Ok(u256_to_f64(ratio)?)
+        u256_to_f64(ratio)
     }
 
     fn get_amount_out(
@@ -274,10 +274,7 @@ impl ProtocolSim for CowAMMState {
         let amount_in = biguint_to_u256(&amount_in);
 
         if amount_in.is_zero() {
-            return Err(SimulationError::InvalidInput(
-                "Amount in cannot be zero".to_string(),
-                None,
-            ));
+            return Err(SimulationError::InvalidInput("Amount in cannot be zero".to_string(), None));
         }
 
         let is_lp_in = token_in.address == self.address;
@@ -302,7 +299,12 @@ impl ProtocolSim for CowAMMState {
                     ))
                 })?;
 
-            let _ = self.exit_pool(&mut new_state, amount_in, &[proportional_token_amount_a, proportional_token_amount_b], U256::from(self.fee));
+            let _ = self.exit_pool(
+                &mut new_state,
+                amount_in,
+                &[proportional_token_amount_a, proportional_token_amount_b],
+                U256::from(self.fee),
+            );
 
             let (amount_to_swap, is_token_a_swap) = if token_out.address == *self.token_a_addr() {
                 (proportional_token_amount_b, false) // Swap token B for token A
@@ -358,9 +360,9 @@ impl ProtocolSim for CowAMMState {
                         "failed to calculate token proportions out error: {e:?}"
                     ))
                 })?;
-            //Think of it from the pools perspective , when a user joins the pool, they send their tokens to the pool
-            // Determine which token to swap based on token_in address
-            // supply changes only happens when tokens are minted are burned
+            //Think of it from the pools perspective , when a user joins the pool, they send their
+            // tokens to the pool Determine which token to swap based on token_in
+            // address supply changes only happens when tokens are minted are burned
             let (amount_to_swap, is_token_a_swap) = if token_in.address == *new_state.token_a_addr()
             {
                 (proportional_token_amount_b, false) // Swap token B for token A to join pool
@@ -396,8 +398,12 @@ impl ProtocolSim for CowAMMState {
                 new_state.token_b.1 = safe_sub_u256(new_state.liquidity_b(), amount_to_swap)?;
                 new_state.token_a.1 = safe_add_u256(new_state.liquidity_a(), amt_in)?;
             }
-         
-            let _ = self.join_pool(&mut new_state, amount_in, &[proportional_token_amount_a, proportional_token_amount_b]);
+
+            let _ = self.join_pool(
+                &mut new_state,
+                amount_in,
+                &[proportional_token_amount_a, proportional_token_amount_b],
+            );
 
             return Ok(GetAmountOutResult {
                 amount: u256_to_biguint(amt_in),
@@ -455,8 +461,8 @@ impl ProtocolSim for CowAMMState {
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
-        // liquidity_a, liquidity_b and lp_token_supply are considered required attributes and are expected in every delta
-        // we process
+        // liquidity_a, liquidity_b and lp_token_supply are considered required attributes and are
+        // expected in every delta we process
         let liquidity_a = U256::from_be_slice(
             delta
                 .updated_attributes
@@ -507,27 +513,28 @@ impl ProtocolSim for CowAMMState {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, HashSet};
-    use std::str::FromStr;
+    use std::{
+        collections::{HashMap, HashSet},
+        str::FromStr,
+    };
 
-    use alloy::primitives::{Address, U256};
+    use alloy::primitives::{U256};
     use approx::assert_ulps_eq;
-    use num_bigint::{BigUint, ToBigUint};
+    use num_bigint::{BigUint};
     use num_traits::One;
     use rstest::rstest;
     use tycho_common::{
         dto::ProtocolStateDelta,
-        models::token::Token,
+        models::{token::Token, Chain},
         simulation::errors::{SimulationError, TransitionError},
         Bytes,
     };
 
     use super::*;
-    use crate::{
-        evm::protocol::cowamm::state::{CowAMMState, ProtocolSim},
-        evm::protocol::u256_num::{biguint_to_u256, u256_to_biguint},
+    use crate::evm::protocol::{
+        cowamm::state::{CowAMMState, ProtocolSim},
+        u256_num::{biguint_to_u256},
     };
-
     fn create_test_tokens() -> (Token, Token, Token, Token, Token) {
         let t0 = Token::new(
             &Bytes::from_str("0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB").unwrap(),
@@ -572,7 +579,7 @@ mod tests {
             "USDC",
             6,
             0,
-            &[Some(1_0000_000)],
+            &[Some(10_000_000)],
             Chain::Ethereum,
             100,
         );
@@ -609,8 +616,8 @@ mod tests {
 
         let state = CowAMMState::new(
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            Bytes::from(token_in.address.clone()),
-            Bytes::from(token_out.address.clone()),
+            token_in.address.clone(),
+            token_out.address.clone(),
             liq_a, //COW
             liq_b, //wstETH
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
@@ -621,7 +628,7 @@ mod tests {
         );
 
         let res = state
-            .get_amount_out(amount_in.clone(), &token_in, &token_out)
+            .get_amount_out(amount_in.clone(), token_in, token_out)
             .unwrap();
 
         assert_eq!(res.amount, expected_out);
@@ -677,8 +684,8 @@ mod tests {
 
         let state = CowAMMState::new(
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            Bytes::from(t0.address.clone()), //COW
-            Bytes::from(t1.address.clone()), //wstETH
+            t0.address.clone(), //COW
+            t1.address.clone(), //wstETH
             liq_a,                           //COW
             liq_b,                           //wstETH
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
@@ -689,7 +696,7 @@ mod tests {
         );
 
         let res = state
-            .get_amount_out(amount_in.clone(), &token_a, &token_b)
+            .get_amount_out(amount_in.clone(), token_a, token_b)
             .unwrap();
 
         assert_eq!(res.amount, expected_out);
@@ -725,8 +732,8 @@ mod tests {
 
         let state = CowAMMState::new(
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            Bytes::from(t0.address.clone()),
-            Bytes::from(t1.address.clone()),
+            t0.address.clone(),
+            t1.address.clone(),
             U256::from_str("886800000000000000").unwrap(),
             U256::from_str("50000000000000000").unwrap(),
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
@@ -748,8 +755,8 @@ mod tests {
         let (t0, t1, _, _, _) = create_test_tokens();
         let state = CowAMMState::new(
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            Bytes::from(t0.address.clone()),
-            Bytes::from(t1.address.clone()),
+            t0.address.clone(),
+            t1.address.clone(),
             U256::from_str("886800000000000000").unwrap(),
             U256::from_str("50000000000000000").unwrap(),
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
@@ -760,8 +767,6 @@ mod tests {
         );
 
         let price = state.spot_price(&t0, &t1).unwrap();
-        println!("THIS IS THE PRICE: {}", price);
-        let expected = expected;
         assert_ulps_eq!(price, expected);
     }
 
@@ -771,8 +776,8 @@ mod tests {
 
         let state = CowAMMState::new(
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            Bytes::from(t0.address.clone()),
-            Bytes::from(t1.address.clone()),
+            t0.address.clone(),
+            t1.address.clone(),
             U256::from_str("36925554990922").unwrap(),
             U256::from_str("30314846538607556521556").unwrap(),
             Bytes::from("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"),
@@ -792,8 +797,8 @@ mod tests {
 
         let mut state = CowAMMState::new(
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            Bytes::from(t0.address.clone()),
-            Bytes::from(t1.address.clone()),
+            t0.address.clone(),
+            t1.address.clone(),
             U256::from_str("36925554990922").unwrap(),
             U256::from_str("30314846538607556521556").unwrap(),
             Bytes::from("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"),
@@ -871,8 +876,8 @@ mod tests {
 
         let state = CowAMMState::new(
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            Bytes::from(t0.address.clone()),
-            Bytes::from(t1.address.clone()),
+            t0.address.clone(),
+            t1.address.clone(),
             U256::from_str("886800000000000000").unwrap(),
             U256::from_str("50000000000000000").unwrap(),
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),

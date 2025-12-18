@@ -1,28 +1,22 @@
 use std::collections::HashMap;
+
 use alloy::primitives::U256;
 use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
 use tycho_common::{
-    dto::{ProtocolComponent, ResponseProtocolState},
+    dto::{ProtocolComponent},
     models::token::Token,
-    simulation::errors::{SimulationError, TransitionError},
     Bytes,
 };
+
 use crate::{
-    evm::protocol::cowamm::{bmath, state::CowAMMState},
-    protocol::{errors::InvalidSnapshotError, models::{TryFromWithBlock, DecoderContext}},
+    evm::protocol::cowamm::{state::CowAMMState},
+    protocol::{
+        errors::InvalidSnapshotError,
+        models::{DecoderContext, TryFromWithBlock},
+    },
 };
 
 const BYTES: usize = 32;
-
-fn header() -> BlockHeader {
-    BlockHeader {
-        number: 1,
-        hash: Bytes::from(vec![0; 32]),
-        parent_hash: Bytes::from(vec![0; 32]),
-        revert: false,
-        timestamp: 0,
-    }
-}
 
 impl TryFromWithBlock<ComponentWithState, BlockHeader> for CowAMMState {
     type Error = InvalidSnapshotError;
@@ -199,6 +193,16 @@ mod tests {
 
     use super::*;
 
+    fn header() -> BlockHeader {
+        BlockHeader {
+            number: 1,
+            hash: Bytes::from(vec![0; 32]),
+            parent_hash: Bytes::from(vec![0; 32]),
+            revert: false,
+            timestamp: 0,
+        }
+    }
+    
     #[tokio::test]
     async fn test_cowamm_try_from_with_block() {
         let snapshot = ComponentWithState {
@@ -208,11 +212,14 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = CowAMMState::try_from_with_block(
+        let decoder_context = DecoderContext::new();
+
+        let result = CowAMMState::try_from_with_header(
             snapshot,
             header(),
             &HashMap::default(),
             &HashMap::default(),
+            &decoder_context
         )
         .await
         .unwrap();
@@ -257,11 +264,14 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = CowAMMState::try_from_with_block(
+        let decoder_context = DecoderContext::new();
+
+        let result = CowAMMState::try_from_with_header(
             snapshot,
             header(),
             &HashMap::default(),
             &HashMap::default(),
+            &decoder_context
         )
         .await;
 

@@ -1,7 +1,9 @@
-use super::constants::{BONE, U256_1, U256_10E_10, U256_2};
-use super::error::CowAMMError;
-use crate::tycho_common::Bytes;
 use alloy::primitives::U256;
+
+use super::{
+    constants::{BONE, U256_1, U256_10E_10, U256_2},
+    error::CowAMMError,
+};
 
 // https://github.com/darkforestry/amms-rs/blob/main/src/amms/balancer/bmath.rs
 pub fn btoi(a: U256) -> U256 {
@@ -133,15 +135,33 @@ pub fn bmul(a: U256, b: U256) -> Result<U256, CowAMMError> {
     Ok(c1 / BONE)
 }
 
-/**********************************************************************************************
-// calcSpotPrice                                                                             //
-// sP = spotPrice                                                                            //
-// bI = tokenBalanceIn                ( bI / wI )         1                                  //
-// bO = tokenBalanceOut         sP =  -----------  *  ----------                             //
-// wI = tokenWeightIn                 ( bO / wO )     ( 1 - sF )                             //
-// wO = tokenWeightOut                                                                       //
-// sF = swapFee                                                                              //
- **********************************************************************************************/
+/// Calculates the spot price of a token in the pool.
+///
+/// # Description
+/// Computes the spot price `sP` of an input token relative to an output token, 
+/// based on the current balances, weights, and swap fee.
+///
+/// # Parameters
+/// - `token_balance_in` (`bI`): Balance of the input token in the pool.
+/// - `token_weight_in` (`wI`): Weight of the input token.
+/// - `token_balance_out` (`bO`): Balance of the output token in the pool.
+/// - `token_weight_out` (`wO`): Weight of the output token.
+/// - `swap_fee` (`sF`): Swap fee of the pool.
+///
+/// # Returns
+/// - `spot_price` (`sP`): Current spot price of the input token in terms of the output token.
+///
+/// # Formula
+/// ```text
+/// sP = (bI / wI) / (bO / wO) * (1 / (1 - sF))
+/// 
+/// where:
+/// bI = token_balance_in
+/// wI = token_weight_in
+/// bO = token_balance_out
+/// wO = token_weight_out
+/// sF = swap_fee
+/// ```
 pub fn calculate_price(
     b_i: U256,
     w_i: U256,
@@ -156,16 +176,35 @@ pub fn calculate_price(
     bmul(ratio, scale)
 }
 
-/**********************************************************************************************
-// calcOutGivenIn                                                                            //
-// aO = token_amount_out                                                                       //
-// bO = token_balance_out                                                                      //
-// bI = token_balance_in              /      /            bI             \    (wI / wO) \      //
-// aI = tokenAmount_in    aO = bO * |  1 - | --------------------------  | ^            |     //
-// wI = token_weight_in               \      \ ( bI + ( aI * ( 1 - sF )) /              /      //
-// wO = token_weight_out                                                                       //
-// sF = swap_fee                                                                              //
- **********************************************************************************************/
+/// Calculates the output amount of a token given an input amount for a swap.
+///
+/// # Description
+/// This function computes `token_amount_out` given `token_amount_in`, taking into account
+/// the pool balances, token weights, and swap fee.
+///
+/// # Parameters
+/// - `token_balance_in`: Balance of the input token in the pool (`bI`).
+/// - `token_weight_in`: Weight of the input token (`wI`).
+/// - `token_balance_out`: Balance of the output token in the pool (`bO`).
+/// - `token_weight_out`: Weight of the output token (`wO`).
+/// - `token_amount_in`: Amount of input token (`aI`).
+/// - `swap_fee`: Swap fee of the pool (`sF`).
+///
+/// # Returns
+/// - `token_amount_out` (`aO`): Amount of output token for the swap.
+///
+/// # Formula
+/// ```text
+/// aO = token_amount_out
+/// bO = token_balance_out
+/// bI = token_balance_in
+/// aI = token_amount_in
+/// wI = token_weight_in
+/// wO = token_weight_out
+/// sF = swap_fee
+///
+/// aO = bO * (1 - (bI / (bI + aI * (1 - sF))) ^ (wI / wO))
+/// ```
 pub fn calculate_out_given_in(
     token_balance_in: U256,
     token_weight_in: U256,
@@ -183,27 +222,34 @@ pub fn calculate_out_given_in(
     bmul(token_balance_out, z)
 }
 
-/** @dev Computes how many tokens must be sent to a pool in order to take `tokenAmountOut`, given the current balances
- * and price bounds. */
-/**
- * @notice Calculate the amount of token in given the amount of token out for a swap
- * @param tokenBalanceIn The balance of the input token in the pool
- * @param tokenWeightIn The weight of the input token in the pool
- * @param tokenBalanceOut The balance of the output token in the pool
- * @param tokenWeightOut The weight of the output token in the pool
- * @param tokenAmountOut The amount of the output token
- * @param swapFee The swap fee of the pool
- * @return tokenAmountIn The amount of token in given the amount of token out for a swap
- * @dev Formula:
- * aI = tokenAmountIn
- * bO = tokenBalanceOut               /  /     bO      \    (wO / wI)      \
- * bI = tokenBalanceIn          bI * |  | ------------  | ^            - 1  |
- * aO = tokenAmountOut    aI =        \  \ ( bO - aO ) /                   /
- * wI = tokenWeightIn           --------------------------------------------
- * wO = tokenWeightOut                          ( 1 - sF )
- * sF = swapFee
- */
-
+/// Computes how many tokens must be sent to a pool in order to take `token_amount_out`,
+/// given the current balances and price bounds.
+///
+/// # Description
+/// Calculate the amount of token in given the amount of token out for a swap.
+///
+/// # Parameters
+/// - `token_balance_in`: The balance of the input token in the pool.
+/// - `token_weight_in`: The weight of the input token in the pool.
+/// - `token_balance_out`: The balance of the output token in the pool.
+/// - `token_weight_out`: The weight of the output token in the pool.
+/// - `token_amount_out`: The amount of the output token.
+/// - `swap_fee`: The swap fee of the pool.
+///
+/// # Returns
+/// - `token_amount_in`: The amount of token in given the amount of token out for a swap.
+///
+/// # Formula
+/// ```text
+/// aI = token_amount_in
+/// bO = token_balance_out               /  /     bO      \    (wO / wI)      \
+/// bI = token_balance_in          bI * |  | ------------  | ^            - 1  |
+/// aO = token_amount_out    aI =        \  \ ( bO - aO ) /                   /
+/// wI = token_weight_in           --------------------------------------------
+/// wO = token_weight_out                          ( 1 - sF )
+/// sF = swap_fee
+/// ```
+#[allow(clippy::disallowed_names)]
 pub fn calculate_in_given_out(
     token_balance_in: U256,
     token_weight_in: U256,
