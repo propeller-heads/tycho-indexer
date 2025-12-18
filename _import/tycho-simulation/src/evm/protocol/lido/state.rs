@@ -149,6 +149,16 @@ impl LidoState {
             biguint_to_u256(&self.total_shares),
         )?);
 
+        let shares_from_amount_out = safe_div_u256(
+            safe_mul_u256(biguint_to_u256(&amount_out), biguint_to_u256(&self.total_shares))?,
+            biguint_to_u256(&self.total_pooled_eth),
+        )?;
+
+        let amount_transferred = u256_to_biguint(safe_div_u256(
+            safe_mul_u256(shares_from_amount_out, biguint_to_u256(&self.total_pooled_eth))?,
+            biguint_to_u256(&self.total_shares),
+        )?);
+
         let new_total_wrapped_st_eth = self
             .total_wrapped_st_eth
             .as_ref()
@@ -156,7 +166,7 @@ impl LidoState {
             &amount_in;
 
         Ok(GetAmountOutResult {
-            amount: amount_out.clone(),
+            amount: amount_transferred.clone(),
             gas: BigUint::from(DEFAULT_GAS),
             new_state: Box::new(Self {
                 pool_type: self.pool_type.clone(),
