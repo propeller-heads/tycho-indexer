@@ -411,7 +411,7 @@ async fn process_update(
         let block_delay = block
             .header
             .number
-            .abs_diff(update.update.block_number_or_timestamp);
+            .saturating_sub(update.update.block_number_or_timestamp);
         metrics::record_protocol_update_block_delay(block_delay);
         // Consume messages that are older than the current block, to give the stream a chance
         // to catch up
