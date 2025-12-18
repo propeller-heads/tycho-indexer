@@ -238,15 +238,13 @@ impl QueryPoolSwapParams {
 /// To implement this trait, your type must also implement `Clone + PartialEq + Debug`, and then
 /// the implementation for `DynProtocolSim` will be derived automatically.
 pub trait ProtocolSim: Debug + Send + Sync + DynProtocolSim + 'static {
-    /// Returns the fee of the protocol as ratio
+    /// Returns the fee of the protocol as a ratio.
     ///
-    /// E.g. if the fee is 1%, the value returned would be 0.01.
+    /// E.g. if the fee is 1%, the value returned would be `Ok(0.01)`.
     ///
-    /// # Panics
-    ///
-    /// Currently panic for protocols with asymmetric fees (e.g. Rocketpool, Uniswap V4),
-    /// where a single fee value cannot represent the protocol's fee structure.
-    fn fee(&self) -> f64;
+    /// Returns an error for protocols where a single fee value is not well defined
+    /// (e.g. asymmetric fees).
+    fn fee(&self) -> Result<f64, SimulationError>;
 
     /// Returns the protocol's current spot buy price for `base` in units of `quote`.
     ///
@@ -473,8 +471,8 @@ mod tests {
     macro_rules! impl_mock_protocol_sim {
         ($t:ty) => {
             impl ProtocolSim for $t {
-                fn fee(&self) -> f64 {
-                    0.0
+                fn fee(&self) -> Result<f64, SimulationError> {
+                    Ok(0.0)
                 }
                 fn spot_price(&self, _: &Token, _: &Token) -> Result<f64, SimulationError> {
                     unimplemented!()

@@ -74,14 +74,14 @@ Please refer to the [in-code documentation](../../tycho-common/src/simulation/pr
 #### Fee
 
 `fee` returns the fee of the protocol as a ratio.\
-For example if the fee is 1%, the value returned would be 0.01.
+For example if the fee is 1%, the value returned would be `Ok(0.01)`.
 
 {% hint style="info" %}
-If the fee is dynamic, it returns the minimal fee.
+Returns an error for protocols where a single fee value is not well defined (e.g. asymmetric fees).
 {% endhint %}
 
 ```rust
-fn fee(&self) -> f64;
+fn fee(&self) -> Result<f64, SimulationError>;
 ```
 
 #### Get limits
