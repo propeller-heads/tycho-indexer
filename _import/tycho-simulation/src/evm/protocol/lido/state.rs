@@ -80,6 +80,8 @@ impl LidoState {
             biguint_to_u256(&self.total_pooled_eth),
         )?;
 
+        // During the submit step, the share count and total pooled ETH are updated,
+        // so all subsequent casts are calculated on the new values
         let new_shares = safe_add_u256(biguint_to_u256(&self.total_shares.clone()), shares)?;
         let new_total_pooled_eth = safe_add_u256(
             biguint_to_u256(&self.total_pooled_eth.clone()),
