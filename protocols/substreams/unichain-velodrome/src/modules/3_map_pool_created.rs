@@ -54,7 +54,7 @@ fn get_new_pools(
                     },
                     Attribute {
                         name: "tick".to_string(),
-                        value: BigInt::from(0).to_signed_bytes_be(),
+                        value: 0_i32.to_be_bytes().to_vec(),
                         change: ChangeType::Creation.into(),
                     },
                     Attribute {
