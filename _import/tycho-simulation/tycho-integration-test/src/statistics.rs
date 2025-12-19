@@ -190,7 +190,10 @@ impl TestStatistics {
                     // Per-protocol slippage stats
                     if !stats.slippage_values.is_empty() {
                         let mut sorted = stats.slippage_values.clone();
-                        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                        sorted.sort_by(|a, b| {
+                            a.partial_cmp(b)
+                                .expect("Failed to compare slippage values")
+                        });
                         let count = sorted.len();
                         let sum: f64 = sorted.iter().sum();
                         let avg = sum / count as f64;

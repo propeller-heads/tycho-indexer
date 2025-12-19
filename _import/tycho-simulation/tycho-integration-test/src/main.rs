@@ -276,7 +276,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
     if cli.max_blocks > 0 {
         info!("Running integration test for {} blocks", cli.max_blocks);
     } else {
-        info!("Running integration test indefinitely (stats collection disabled; use --max-blocks to enable and limit)");
+        info!("Running integration test indefinitely");
     }
     info!("Waiting for first protocol update...");
     let semaphore = Arc::new(Semaphore::new(cli.parallel_updates as usize));
@@ -338,7 +338,9 @@ async fn run(cli: Cli) -> miette::Result<()> {
                         // Check if we've reached max blocks (only when stats are enabled)
                         if cli.max_blocks > 0 {
                             if let Some(stats) = statistics.as_ref() {
-                                let stats = stats.read().unwrap();
+                                let stats = stats
+                                    .read()
+                                    .expect("Failed to get read lock for statistics (max-block check)");
                                 if stats.blocks_processed >= cli.max_blocks {
                                     drop(stats);
                                     info!("Reached max blocks ({}), stopping...", cli.max_blocks);
@@ -389,7 +391,9 @@ async fn run(cli: Cli) -> miette::Result<()> {
 
     // Print summary before exiting (only when stats were collected)
     if let Some(stats) = statistics {
-        let stats = stats.read().unwrap();
+        let stats = stats
+            .read()
+            .expect("Failed to get read lock for statistics (print summary)");
         stats.print_summary();
         drop(stats);
     }
@@ -492,7 +496,9 @@ async fn process_update(
 
         // Record block number for statistics
         if let Some(stats) = statistics.as_ref() {
-            let mut stats = stats.write().unwrap();
+            let mut stats = stats
+                .write()
+                .expect("Failed to get write lock for statistics (record block)");
             stats.record_block(update.update.block_number_or_timestamp);
         }
     }
@@ -539,7 +545,9 @@ async fn process_update(
                             "State validation passed"
                         );
                         if let Some(stats) = statistics.as_ref() {
-                            let mut stats = stats.write().unwrap();
+                            let mut stats = stats
+                                .write()
+                                .expect("Failed to get write lock for statistics (record validation success)");
                             stats.record_validation_result(protocol, true);
                         }
                     } else {
@@ -549,7 +557,9 @@ async fn process_update(
                         );
                         metrics::record_validation_failure(protocol);
                         if let Some(stats) = statistics.as_ref() {
-                            let mut stats = stats.write().unwrap();
+                            let mut stats = stats
+                                .write()
+                                .expect("Failed to get write lock for statistics (record validation failure)");
                             stats.record_validation_result(protocol, false);
                         }
                     }
@@ -562,7 +572,9 @@ async fn process_update(
                     );
                     metrics::record_validation_failure(protocol);
                     if let Some(stats) = statistics.as_ref() {
-                        let mut stats = stats.write().unwrap();
+                        let mut stats = stats.write().expect(
+                            "Failed to get write lock for statistics (record validation failure)",
+                        );
                         stats.record_validation_result(protocol, false);
                     }
                 }
@@ -649,7 +661,9 @@ async fn process_update(
         };
         // Record unique pool
         if let Some(stats) = statistics.as_ref() {
-            let mut stats = stats.write().unwrap();
+            let mut stats = stats
+                .write()
+                .expect("Failed to get write lock for statistics (record pool tested)");
             stats.record_pool_tested(&execution_info.protocol_system, &execution_info.component_id);
         }
 
@@ -667,7 +681,9 @@ async fn process_update(
 
         // Record statistics
         if let Some(stats) = statistics.as_ref() {
-            let mut stats = stats.write().unwrap();
+            let mut stats = stats
+                .write()
+                .expect("Failed to get write lock for statistics (record simulation result)");
             stats.record_simulation_result(&execution_info.protocol_system, result);
         }
     }
@@ -868,7 +884,9 @@ async fn process_state(
             Ok(limits) => {
                 metrics::record_get_limits_success(&component.protocol_system);
                 if let Some(stats) = statistics.as_ref() {
-                    let mut stats = stats.write().unwrap();
+                    let mut stats = stats.write().expect(
+                        "Failed to get write lock for statistics (record get_limits success)",
+                    );
                     stats.record_get_limits(&component.protocol_system, true);
                 }
                 limits
@@ -888,7 +906,9 @@ async fn process_state(
                 );
                 metrics::record_get_limits_failure(&component.protocol_system);
                 if let Some(stats) = statistics.as_ref() {
-                    let mut stats = stats.write().unwrap();
+                    let mut stats = stats.write().expect(
+                        "Failed to get write lock for statistics (record get_limits failure)",
+                    );
                     stats.record_get_limits(&component.protocol_system, false);
                 }
                 continue;
@@ -928,7 +948,9 @@ async fn process_state(
             Ok(res) => {
                 metrics::record_get_amount_out_success(&component.protocol_system);
                 if let Some(stats) = statistics.as_ref() {
-                    let mut stats = stats.write().unwrap();
+                    let mut stats = stats.write().expect(
+                        "Failed to get write lock for statistics (record get_amount_out success)",
+                    );
                     stats.record_get_amount_out(&component.protocol_system, true);
                 }
                 res
@@ -949,7 +971,9 @@ async fn process_state(
                 );
                 metrics::record_get_amount_out_failure(&component.protocol_system);
                 if let Some(stats) = statistics.as_ref() {
-                    let mut stats = stats.write().unwrap();
+                    let mut stats = stats.write().expect(
+                        "Failed to get write lock for statistics (record get_amount_out failure)",
+                    );
                     stats.record_get_amount_out(&component.protocol_system, false);
                 }
                 continue;
@@ -1092,7 +1116,9 @@ fn process_execution_result(
 
             // Record slippage in statistics
             if let Some(ref stats) = statistics {
-                let mut stats = stats.write().unwrap();
+                let mut stats = stats
+                    .write()
+                    .expect("Failed to get write lock for statistics (record slippage)");
                 stats.record_slippage(&execution_info.protocol_system, slippage);
             }
         }
