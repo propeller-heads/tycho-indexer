@@ -109,19 +109,23 @@ pub struct RPCArgs {
 #[derive(Args, Debug, Clone, PartialEq)]
 pub struct ServerArgs {
     /// Minimum TVL threshold for RPC responses (in chain's native token)
-    /// Components with TVL below this value or with no TVL will be rejected
+    /// Components requests with TVL below this value or with no TVL will be rejected
     #[clap(long = "rpc-min-tvl", env = "RPC_MIN_TVL")]
     pub min_tvl: Option<f64>,
 
     /// Minimum token quality threshold for RPC responses
-    /// Tokens with quality below this value will be rejected
+    /// Tokens requests with quality below this value will be rejected
     #[clap(long = "rpc-min-token-quality", env = "RPC_MIN_TOKEN_QUALITY")]
     pub min_token_quality: Option<i32>,
 
-    /// Minimum traded_n_days_ago threshold for RPC responses
-    /// Tokens that were last traded more than this many days ago will be rejected
-    #[clap(long = "rpc-min-traded-n-days-ago", env = "RPC_MIN_TRADED_N_DAYS_AGO")]
-    pub min_traded_n_days_ago: Option<u64>,
+    /// Maximum traded_n_days_ago threshold for RPC responses
+    /// Tokens requests with traded_n_days_ago above this value will be rejected
+    #[clap(
+        long = "rpc-max-traded-n-days-ago",
+        env = "RPC_MAX_TRADED_N_DAYS_AGO",
+        alias = "rpc-min-traded-n-days-ago" // to ensure backward compatibility, TODO: remove after next prod release
+    )]
+    pub max_traded_n_days_ago: Option<u64>,
 }
 
 impl From<ServerArgs> for ServerRpcConfig {
@@ -129,7 +133,7 @@ impl From<ServerArgs> for ServerRpcConfig {
         Self::new()
             .with_min_tvl(args.min_tvl)
             .with_min_quality(args.min_token_quality)
-            .with_min_traded_n_days_ago(args.min_traded_n_days_ago)
+            .with_max_traded_n_days_ago(args.max_traded_n_days_ago)
     }
 }
 
@@ -310,7 +314,7 @@ mod cli_tests {
                 server: ServerArgs {
                     min_tvl: None,
                     min_token_quality: None,
-                    min_traded_n_days_ago: None,
+                    max_traded_n_days_ago: None,
                 },
             },
             command: Command::Run(RunSpkgArgs {
@@ -375,7 +379,7 @@ mod cli_tests {
                 server: ServerArgs {
                     min_tvl: None,
                     min_token_quality: None,
-                    min_traded_n_days_ago: None,
+                    max_traded_n_days_ago: None,
                 },
             },
             command: Command::Index(IndexArgs {
