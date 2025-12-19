@@ -1,3 +1,11 @@
+## [0.125.2](https://github.com/propeller-heads/tycho-indexer/compare/0.125.1...0.125.2) (2025-12-19)
+
+
+### Bug Fixes
+
+* Update error message in query_pool_swap function ([d4b5450](https://github.com/propeller-heads/tycho-indexer/commit/d4b54505202e380c9467ef0ca5c0adc33a69861f))
+* Update error message in query_pool_swap function ([#812](https://github.com/propeller-heads/tycho-indexer/issues/812)) ([7fd85ff](https://github.com/propeller-heads/tycho-indexer/commit/7fd85ff84fda2b641310b2ff28c6e9d6d72aa228))
+
 ## [0.125.1](https://github.com/propeller-heads/tycho-indexer/compare/0.125.0...0.125.1) (2025-12-17)
 
 ## [0.125.0](https://github.com/propeller-heads/tycho-indexer/compare/0.124.0...0.125.0) (2025-12-17)
