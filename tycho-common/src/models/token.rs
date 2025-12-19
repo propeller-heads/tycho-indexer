@@ -143,15 +143,10 @@ impl TokenQuality {
 /// The `TokenOwnerStore` maintains a mapping between token addresses and their respective
 /// owner's address and balance. It can be used to quickly retrieve token owner information
 /// without needing to query external sources.
-///
-/// # Fields
-/// * `values` - A `HashMap` where:
-///   * The key is the token `Address`, representing the address of the token being tracked.
-///   * The value is a tuple containing:
-///     * The owner `Address` of the token.
-///     * The `Balance` of the owner for the token.
 #[derive(Debug)]
 pub struct TokenOwnerStore {
+    /// A `HashMap` where the key is the token address and the value is a tuple containing
+    /// the owner address and the balance of the owner for the token.
     values: HashMap<Address, (Address, Balance)>,
 }
 
