@@ -18,7 +18,7 @@ use crate::evm::protocol::{
     safe_math::{safe_add_u256, safe_sub_u256},
     u256_num::u256_to_biguint,
     utils::uniswap::{
-        i24_be_bytes_to_i32, liquidity_math,
+        liquidity_math,
         sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
         swap_math,
         tick_list::{TickInfo, TickList, TickListErrorKind},
@@ -383,23 +383,7 @@ impl ProtocolSim for VelodromeSlipstreamsState {
             .updated_attributes
             .get("liquidity")
         {
-            // This is a hotfix because if the liquidity has never been updated after creation, it's
-            // currently encoded as H256::zero(), therefore, we can't decode this as u128.
-            // We can remove this once it has been fixed on the tycho side.
-            let liq_16_bytes = if liquidity.len() == 32 {
-                // Make sure it only happens for 0 values, otherwise error.
-                if liquidity == &Bytes::zero(32) {
-                    Bytes::from([0; 16])
-                } else {
-                    return Err(TransitionError::DecodeError(format!(
-                        "Liquidity bytes too long for {liquidity}, expected 16",
-                    )));
-                }
-            } else {
-                liquidity.clone()
-            };
-
-            self.liquidity = u128::from(liq_16_bytes);
+            self.liquidity = u128::from(liquidity.clone());
         }
         if let Some(sqrt_price) = delta
             .updated_attributes
@@ -420,22 +404,7 @@ impl ProtocolSim for VelodromeSlipstreamsState {
             self.custom_fee = u32::from(custom_fee.clone());
         }
         if let Some(tick) = delta.updated_attributes.get("tick") {
-            // This is a hotfix because if the tick has never been updated after creation, it's
-            // currently encoded as H256::zero(), therefore, we can't decode this as i32.
-            // We can remove this once it has been fixed on the tycho side.
-            let ticks_4_bytes = if tick.len() == 32 {
-                // Make sure it only happens for 0 values, otherwise error.
-                if tick == &Bytes::zero(32) {
-                    Bytes::from([0; 4])
-                } else {
-                    return Err(TransitionError::DecodeError(format!(
-                        "Tick bytes too long for {tick}, expected 4"
-                    )));
-                }
-            } else {
-                tick.clone()
-            };
-            self.tick = i24_be_bytes_to_i32(&ticks_4_bytes);
+            self.tick = i32::from(tick.clone());
         }
 
         // apply tick & observations changes

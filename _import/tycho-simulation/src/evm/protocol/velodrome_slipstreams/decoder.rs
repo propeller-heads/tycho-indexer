@@ -26,14 +26,14 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for VelodromeSlipstreamsS
         _all_tokens: &HashMap<Bytes, Token>,
         _decoder_context: &DecoderContext,
     ) -> Result<Self, Self::Error> {
-        let liq = snapshot
-            .state
-            .attributes
-            .get("liquidity")
-            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("liquidity".to_string()))?
-            .clone();
-
-        let liquidity = u128::from(liq);
+        let liquidity = u128::from(
+            snapshot
+                .state
+                .attributes
+                .get("liquidity")
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("liquidity".to_string()))?
+                .clone(),
+        );
 
         let sqrt_price = U256::from_be_slice(
             snapshot
@@ -83,29 +83,14 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for VelodromeSlipstreamsS
                 .clone(),
         );
 
-        let tick = snapshot
-            .state
-            .attributes
-            .get("tick")
-            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("tick".to_string()))?
-            .clone();
-
-        // This is a hotfix because if the tick has never been updated after creation, it's
-        // currently encoded as H256::zero(), therefore, we can't decode this as i32. We can
-        // remove this this will be fixed on the tycho side.
-        let ticks_4_bytes = if tick.len() == 32 {
-            // Make sure it only happens for 0 values, otherwise error.
-            if tick == Bytes::zero(32) {
-                Bytes::from([0; 4])
-            } else {
-                return Err(InvalidSnapshotError::ValueError(format!(
-                    "Tick bytes too long for {tick}, expected 4"
-                )));
-            }
-        } else {
-            tick
-        };
-        let tick = i24_be_bytes_to_i32(&ticks_4_bytes);
+        let tick = i32::from(
+            snapshot
+                .state
+                .attributes
+                .get("tick")
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("tick".to_string()))?
+                .clone(),
+        );
 
         let ticks: Result<Vec<_>, _> = snapshot
             .state
