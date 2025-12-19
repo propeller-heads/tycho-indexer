@@ -13,7 +13,6 @@ pub struct TestStatistics {
 pub struct ProtocolStatistics {
     pub execution_simulations: u64,
     pub execution_successes: u64,
-    pub execution_failures: u64,
     pub execution_reverts: u64,
     pub execution_setup_failures: u64,
     pub validation_passed: u64,
@@ -44,31 +43,25 @@ impl TestStatistics {
             }
             TychoExecutionResult::Revert { .. } => {
                 protocol_stat.execution_reverts += 1;
-                protocol_stat.execution_failures += 1;
             }
             TychoExecutionResult::Failed { .. } => {
                 protocol_stat.execution_setup_failures += 1;
-                protocol_stat.execution_failures += 1;
             }
         }
     }
 
     pub fn record_execution_slippage(&mut self, protocol: &str, slippage: f64) {
-        let protocol_stat = self
-            .protocol_statistics
+        self.protocol_statistics
             .entry(protocol.to_string())
-            .or_default();
-        protocol_stat
+            .or_default()
             .slippage_values
             .push(slippage);
     }
 
     pub fn record_pool_tested(&mut self, protocol: &str, component_id: &str) {
-        let protocol_stat = self
-            .protocol_statistics
+        self.protocol_statistics
             .entry(protocol.to_string())
-            .or_default();
-        protocol_stat
+            .or_default()
             .unique_pools
             .insert(component_id.to_string());
     }
@@ -159,8 +152,9 @@ impl TestStatistics {
                     );
                     println!(
                         "      Failed: {} ({:.1}%)",
-                        stats.execution_failures,
-                        (stats.execution_failures as f64 / stats.execution_simulations as f64) *
+                        stats.execution_reverts + stats.execution_setup_failures,
+                        ((stats.execution_reverts + stats.execution_setup_failures) as f64 /
+                            stats.execution_simulations as f64) *
                             100.0
                     );
                     println!("        - Reverted: {}", stats.execution_reverts);
