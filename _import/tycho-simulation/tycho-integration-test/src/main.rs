@@ -684,7 +684,7 @@ async fn process_update(
             let mut stats = stats
                 .write()
                 .expect("Failed to get write lock for statistics (record simulation result)");
-            stats.record_simulation_result(&execution_info.protocol_system, result);
+            stats.record_execution_simulation_result(&execution_info.protocol_system, result);
         }
     }
     if n_reverts > 0 || n_failures > 0 {
@@ -1119,7 +1119,7 @@ fn process_execution_result(
                 let mut stats = stats
                     .write()
                     .expect("Failed to get write lock for statistics (record slippage)");
-                stats.record_slippage(&execution_info.protocol_system, slippage);
+                stats.record_execution_slippage(&execution_info.protocol_system, slippage);
             }
         }
         TychoExecutionResult::Revert { reason, state_overwrites, overwrite_metadata } => {

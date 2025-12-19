@@ -5,30 +5,17 @@ use tycho_test::execution::models::TychoExecutionResult;
 #[derive(Default, Clone)]
 pub struct TestStatistics {
     pub blocks_processed: u64,
-    pub total_simulations: u64,
-    pub successful_simulations: u64,
-    pub failed_simulations: u64,
-    pub reverted_simulations: u64,
-    pub setup_failures: u64,
-    pub validation_passed: u64,
-    pub validation_failed: u64,
-    pub get_limits_success: u64,
-    pub get_limits_failure: u64,
-    pub get_amount_out_success: u64,
-    pub get_amount_out_failure: u64,
     pub protocol_statistics: HashMap<String, ProtocolStatistics>,
     pub blocks_seen: HashSet<u64>,
-    pub unique_pools_tested: HashSet<String>,
-    pub slippage_values: Vec<f64>,
 }
 
 #[derive(Default, Clone)]
 pub struct ProtocolStatistics {
-    pub simulations: u64,
-    pub successes: u64,
-    pub failures: u64,
-    pub reverts: u64,
-    pub setup_failures: u64,
+    pub execution_simulations: u64,
+    pub execution_successes: u64,
+    pub execution_failures: u64,
+    pub execution_reverts: u64,
+    pub execution_setup_failures: u64,
     pub validation_passed: u64,
     pub validation_failed: u64,
     pub slippage_values: Vec<f64>,
@@ -40,36 +27,33 @@ pub struct ProtocolStatistics {
 }
 
 impl TestStatistics {
-    pub fn record_simulation_result(&mut self, protocol: &str, result: &TychoExecutionResult) {
+    pub fn record_execution_simulation_result(
+        &mut self,
+        protocol: &str,
+        result: &TychoExecutionResult,
+    ) {
         let protocol_stat = self
             .protocol_statistics
             .entry(protocol.to_string())
             .or_default();
-        protocol_stat.simulations += 1;
-        self.total_simulations += 1;
+        protocol_stat.execution_simulations += 1;
 
         match result {
             TychoExecutionResult::Success { .. } => {
-                protocol_stat.successes += 1;
-                self.successful_simulations += 1;
+                protocol_stat.execution_successes += 1;
             }
             TychoExecutionResult::Revert { .. } => {
-                protocol_stat.reverts += 1;
-                protocol_stat.failures += 1;
-                self.reverted_simulations += 1;
-                self.failed_simulations += 1;
+                protocol_stat.execution_reverts += 1;
+                protocol_stat.execution_failures += 1;
             }
             TychoExecutionResult::Failed { .. } => {
-                protocol_stat.setup_failures += 1;
-                protocol_stat.failures += 1;
-                self.setup_failures += 1;
-                self.failed_simulations += 1;
+                protocol_stat.execution_setup_failures += 1;
+                protocol_stat.execution_failures += 1;
             }
         }
     }
 
-    pub fn record_slippage(&mut self, protocol: &str, slippage: f64) {
-        self.slippage_values.push(slippage);
+    pub fn record_execution_slippage(&mut self, protocol: &str, slippage: f64) {
         let protocol_stat = self
             .protocol_statistics
             .entry(protocol.to_string())
@@ -80,8 +64,6 @@ impl TestStatistics {
     }
 
     pub fn record_pool_tested(&mut self, protocol: &str, component_id: &str) {
-        self.unique_pools_tested
-            .insert(component_id.to_string());
         let protocol_stat = self
             .protocol_statistics
             .entry(protocol.to_string())
@@ -98,10 +80,8 @@ impl TestStatistics {
             .or_default();
         if passed {
             protocol_stat.validation_passed += 1;
-            self.validation_passed += 1;
         } else {
             protocol_stat.validation_failed += 1;
-            self.validation_failed += 1;
         }
     }
 
@@ -112,10 +92,8 @@ impl TestStatistics {
             .or_default();
         if success {
             protocol_stat.get_limits_success += 1;
-            self.get_limits_success += 1;
         } else {
             protocol_stat.get_limits_failure += 1;
-            self.get_limits_failure += 1;
         }
     }
 
@@ -126,10 +104,8 @@ impl TestStatistics {
             .or_default();
         if success {
             protocol_stat.get_amount_out_success += 1;
-            self.get_amount_out_success += 1;
         } else {
             protocol_stat.get_amount_out_failure += 1;
-            self.get_amount_out_failure += 1;
         }
     }
 
@@ -156,13 +132,13 @@ impl TestStatistics {
             for (protocol, stats) in protocols {
                 println!("\n  {}:", protocol);
                 println!("    Unique Pools: {}", stats.unique_pools.len());
-                println!("    Simulations: {}", stats.simulations);
+                println!("    Simulations: {}", stats.execution_simulations);
 
                 // Operation statistics
-                let total_ops = stats.get_limits_success
-                    + stats.get_limits_failure
-                    + stats.get_amount_out_success
-                    + stats.get_amount_out_failure;
+                let total_ops = stats.get_limits_success +
+                    stats.get_limits_failure +
+                    stats.get_amount_out_success +
+                    stats.get_amount_out_failure;
                 if total_ops > 0 {
                     println!("    Operations:");
                     println!(
@@ -175,20 +151,22 @@ impl TestStatistics {
                     );
                 }
 
-                if stats.simulations > 0 {
+                if stats.execution_simulations > 0 {
                     println!("    Simulation Results:");
                     println!(
                         "      Success: {} ({:.1}%)",
-                        stats.successes,
-                        (stats.successes as f64 / stats.simulations as f64) * 100.0
+                        stats.execution_successes,
+                        (stats.execution_successes as f64 / stats.execution_simulations as f64) *
+                            100.0
                     );
                     println!(
                         "      Failed: {} ({:.1}%)",
-                        stats.failures,
-                        (stats.failures as f64 / stats.simulations as f64) * 100.0
+                        stats.execution_failures,
+                        (stats.execution_failures as f64 / stats.execution_simulations as f64) *
+                            100.0
                     );
-                    println!("        - Reverted: {}", stats.reverts);
-                    println!("        - Setup Failures: {}", stats.setup_failures);
+                    println!("        - Reverted: {}", stats.execution_reverts);
+                    println!("        - Setup Failures: {}", stats.execution_setup_failures);
 
                     // Per-protocol slippage stats
                     if !stats.slippage_values.is_empty() {
