@@ -49,7 +49,7 @@ fn get_new_pools(
                 attributes: vec![
                     Attribute {
                         name: "liquidity".to_string(),
-                        value: BigInt::from(0).to_signed_bytes_be(),
+                        value: 0_u128.to_be_bytes().to_vec(),
                         change: ChangeType::Creation.into(),
                     },
                     Attribute {
