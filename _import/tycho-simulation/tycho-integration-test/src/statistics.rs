@@ -109,10 +109,8 @@ impl TestStatistics {
         }
     }
 
-    pub fn record_block(&mut self, block_number: u64) {
-        if self.blocks_seen.insert(block_number) {
-            self.blocks_processed += 1;
-        }
+    pub fn record_block_processed(&mut self) {
+        self.blocks_processed += 1;
     }
 
     pub fn print_summary(&self) {

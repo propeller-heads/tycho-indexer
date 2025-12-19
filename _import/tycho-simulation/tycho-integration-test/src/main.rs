@@ -499,7 +499,7 @@ async fn process_update(
             let mut stats = stats
                 .write()
                 .expect("Failed to get write lock for statistics (record block)");
-            stats.record_block(update.update.block_number_or_timestamp);
+            stats.record_block_processed();
         }
     }
 
