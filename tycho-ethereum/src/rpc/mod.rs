@@ -35,6 +35,7 @@ use crate::{RPCError, RequestError};
 
 pub mod config;
 pub mod errors;
+mod executor;
 mod retry;
 
 use crate::{
@@ -83,6 +84,9 @@ impl EthereumRpcClient {
         // Enable batching with default settings as most RPC providers support it
         let batching = RPCBatchingConfig::enabled_with_defaults();
 
+        // Enable retry with default settings
+        // Note that we do not use the `layer` method to set the retry layer, as we want to support
+        // retrying batch requests if any individual request in the batch fails.
         let retry_policy = RPCRetryConfig::default().into();
 
         Ok(Self { inner: rpc, batching, retry_policy, url: rpc_url.to_string() })
