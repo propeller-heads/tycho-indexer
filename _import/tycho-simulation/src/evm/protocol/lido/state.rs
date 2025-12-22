@@ -80,7 +80,7 @@ impl LidoState {
             biguint_to_u256(&self.total_pooled_eth),
         )?;
 
-        // During the submit step, the share count and total pooled ETH are updated,
+        // During the lido submit step, the share count and total pooled ETH are updated,
         // so all subsequent casts are calculated on the new values
         let new_shares = safe_add_u256(biguint_to_u256(&self.total_shares.clone()), shares)?;
         let new_total_pooled_eth = safe_add_u256(
@@ -88,6 +88,7 @@ impl LidoState {
             biguint_to_u256(&amount_in),
         )?;
 
+        // Add extra casts to mirror the additional token transfer performed by the tycho router.
         let amount_from_shares = u256_to_biguint(safe_div_u256(
             safe_mul_u256(shares, new_total_pooled_eth)?,
             new_shares,
