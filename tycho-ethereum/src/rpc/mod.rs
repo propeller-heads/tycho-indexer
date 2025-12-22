@@ -858,6 +858,10 @@ impl EthereumRpcClient {
                     }
                 });
 
+                if all_failed {
+                    debug!("All slot detector test requests in batch failed, will retry the entire batch");
+                }
+
                 all_failed || some_retryable_failed
             };
 
