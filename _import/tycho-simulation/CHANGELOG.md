@@ -1,3 +1,16 @@
+## [0.222.0](https://github.com/propeller-heads/tycho-simulation/compare/0.221.0...0.222.0) (2025-12-22)
+
+
+### Features
+
+* add calculation to reflect all transfers in the execution submit ([317f68d](https://github.com/propeller-heads/tycho-simulation/commit/317f68d0f02b5246a698648ff4a8821f8d74c08f))
+
+
+### Bug Fixes
+
+* update test values to reflect influence of multiple casts ([231547e](https://github.com/propeller-heads/tycho-simulation/commit/231547e302aea0d3013b67854df3b6dba60de2ee))
+* update the math to reflect both conversions for unwrapping ([1001d11](https://github.com/propeller-heads/tycho-simulation/commit/1001d112ccb048813a5bb9a8cc5b050073b30592))
+
 ## [0.221.0](https://github.com/propeller-heads/tycho-simulation/compare/0.220.0...0.221.0) (2025-12-18)
 
 
