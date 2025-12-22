@@ -201,6 +201,24 @@ impl RetryPolicy {
         Self { inner: backoff, attempts_left: max_attempts, max_retries: max_attempts }
     }
 
+    /// Create a policy that never retries (max_attempts = 0).
+    /// Useful for tests where you want immediate failure.
+    #[cfg(test)]
+    pub(crate) fn no_retry() -> Self {
+        Self::new(ExponentialBackoffBuilder::new().build(), 0)
+    }
+
+    /// Create a policy that retries up to `n` times with minimal delays.
+    /// Uses 1ms initial/max intervals for fast test execution.
+    #[cfg(test)]
+    pub(crate) fn n_times(n: usize) -> Self {
+        let backoff = ExponentialBackoffBuilder::new()
+            .with_initial_interval(Duration::from_millis(1))
+            .with_max_interval(Duration::from_millis(1))
+            .build();
+        Self::new(backoff, n)
+    }
+
     /// Executes an RPC request with automatic retry on transient failures.
     pub(crate) async fn call_with_retry<F, Fut, T, E>(&self, mut operation: F) -> Result<T, E>
     where
