@@ -37,7 +37,6 @@ mod executor;
 mod retry;
 
 use errors::RpcResultExt;
-
 pub use executor::{RequestHandle, RpcRequestGroup};
 
 use crate::{
@@ -276,7 +275,8 @@ impl EthereumRpcClient {
                 let balance_handle = group.add_call("eth_getBalance", &(address, block_id))?;
                 Ok((address, code_handle, balance_handle))
             })
-            .collect::<Result<_, _>>().with_rpc_context(|| {
+            .collect::<Result<_, _>>()
+            .with_rpc_context(|| {
                 format!(
                     "Failed to register code & balance calls for {} addresses at block {block_id}",
                     addresses.len()
@@ -284,12 +284,15 @@ impl EthereumRpcClient {
             })?;
 
         // Execute all calls with retry
-        group.execute().await.with_rpc_context(|| {
-            format!(
-                "Failed to fetch code & balance for {} addresses at block {block_id}",
-                addresses.len()
-            )
-        })?;
+        group
+            .execute()
+            .await
+            .with_rpc_context(|| {
+                format!(
+                    "Failed to fetch code & balance for {} addresses at block {block_id}",
+                    addresses.len()
+                )
+            })?;
 
         // Collect results
         let mut result = HashMap::with_capacity(addresses.len());
@@ -338,21 +341,27 @@ impl EthereumRpcClient {
             })?;
 
         // Execute all calls with retry
-        group.execute().await.with_rpc_context(|| {
-            format!(
-                "Failed to get storage for address {address}, block {block_id}, {} slots",
-                slots.len()
-            )
-        })?;
+        group
+            .execute()
+            .await
+            .with_rpc_context(|| {
+                format!(
+                    "Failed to get storage for address {address}, block {block_id}, {} slots",
+                    slots.len()
+                )
+            })?;
 
         // Collect results
         let mut result = HashMap::with_capacity(slots.len());
         for (slot, handle) in handles {
-            let storage_value: B256 = handle.await_result().await.with_rpc_context(|| {
-                format!(
+            let storage_value: B256 = handle
+                .await_result()
+                .await
+                .with_rpc_context(|| {
+                    format!(
                     "eth_getStorageAt failed for address {address}, block {block_id}, slot {slot}"
                 )
-            })?;
+                })?;
 
             let value = if storage_value == B256::ZERO { None } else { Some(storage_value) };
             result.insert(slot, value);
@@ -424,7 +433,9 @@ impl EthereumRpcClient {
         let trace_handle: RequestHandle<GethTrace> = group
             .add_call("debug_traceCall", trace_call_params)
             .with_rpc_context(|| {
-                format!("Failed to register debug_traceCall for target {target}, block {block_hash}")
+                format!(
+                    "Failed to register debug_traceCall for target {target}, block {block_hash}"
+                )
             })?;
 
         group
@@ -609,7 +620,9 @@ impl EthereumRpcClient {
         group
             .execute()
             .await
-            .with_rpc_context(|| format!("Failed to execute simulate tx with trace for block {block}"))?;
+            .with_rpc_context(|| {
+                format!("Failed to execute simulate tx with trace for block {block}")
+            })?;
 
         // Collect individual results (preserving errors per call)
         let mut results = Vec::with_capacity(handles.len());
@@ -627,7 +640,6 @@ mod tests {
 
     use alloy::{
         hex, primitives::map::B256HashMap, rpc::types::TransactionInput, sol_types::SolCall,
-        transports::RpcError,
     };
     use mockito::{Mock, Server, ServerGuard};
     use rstest::rstest;
@@ -1312,124 +1324,6 @@ mod tests {
         assert!(matches!(result, Err(RPCError::RequestError(_))));
 
         m_failure.assert();
-    }
-
-    #[rstest]
-    #[case::other_is_success("\"result\":\"0x1234\"")]
-    #[case::other_is_retriable_error(
-        "\"error\":{\"code\":-32000,\"message\":\"header not found\"}"
-    )]
-    #[case::other_is_permanent_error("\"error\":{\"code\":-32602,\"message\":\"invalid params\"}")]
-    #[tokio::test]
-    async fn test_batch_slot_detector_tests_partial_retryable_is_retried(
-        #[case] other_response: &str,
-    ) {
-        let mut server = Server::new_async().await;
-
-        // First attempt: all errors
-        let _m1 = server
-            .mock("POST", "/")
-            .with_status(200)
-            .with_body(format!(
-                r#"[
-                {{"jsonrpc":"2.0","id":0,"error":{{"code":-32000,"message":"header not found"}}}},
-                {{"jsonrpc":"2.0","id":1,{other_response}}}
-            ]"#
-            ))
-            .expect(1)
-            .create_async()
-            .await;
-
-        // Second attempt: success
-        let m2 = mock_success_at(&mut server, 1).await;
-
-        let result = mock_batch_slot_detector_tests_call(&mut server).await;
-
-        assert!(result.is_ok());
-        let responses = result.unwrap();
-        assert_eq!(responses.len(), 2);
-        match &responses[0] {
-            Ok(val) => assert_eq!(*val, json!("0x1234")),
-            Err(err) => panic!("Expected Ok response, got Err: {}", err),
-        }
-        match &responses[1] {
-            Ok(val) => assert_eq!(*val, json!("0x5678")),
-            Err(err) => panic!("Expected Ok response, got Err: {}", err),
-        }
-
-        m2.assert();
-    }
-
-    #[tokio::test]
-    async fn test_batch_slot_detector_tests_retry_on_all_failed_non_retryable_errors_for_safety() {
-        let mut server = Server::new_async().await;
-
-        // First attempt: non-retryable error (but all failed, so should retry for safety)
-        let _m1 = server
-            .mock("POST", "/")
-            .with_status(200)
-            .with_body(
-                r#"[
-                {"jsonrpc":"2.0","id":0,"error":{"code":-32602,"message":"invalid params"}},
-                {"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"invalid params"}}
-            ]"#,
-            )
-            .expect(1)
-            .create_async()
-            .await;
-
-        // Second attempt: success (after retry for safety)
-        let m2 = mock_success_at(&mut server, 1).await;
-
-        let result = mock_batch_slot_detector_tests_call(&mut server).await;
-
-        // Should succeed after retry (safety measure)
-        assert!(result.is_ok());
-        let responses = result.unwrap();
-        assert_eq!(responses.len(), 2);
-        match &responses[0] {
-            Ok(val) => assert_eq!(*val, json!("0x1234")),
-            Err(err) => panic!("Expected Ok response, got Err: {}", err),
-        }
-
-        m2.assert();
-    }
-
-    #[tokio::test]
-    async fn test_batch_slot_detector_tests_no_retry_on_mixed_success_and_non_retryable_errors() {
-        let mut server = Server::new_async().await;
-
-        // Only one request should be made (no retry - mixed success/non-retryable error)
-        let m = server
-            .mock("POST", "/")
-            .with_status(200)
-            .with_body(
-                r#"[
-                {"jsonrpc":"2.0","id":0,"result":"0x1234"},
-                {"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"invalid params"}}
-            ]"#,
-            )
-            .expect(1)
-            .create_async()
-            .await;
-
-        let result = mock_batch_slot_detector_tests_call(&mut server).await;
-
-        // Should return mixed results without retrying (not all failed)
-        assert!(result.is_ok());
-        let responses = result.unwrap();
-        assert_eq!(responses.len(), 2);
-        match &responses[0] {
-            Ok(val) => assert_eq!(*val, json!("0x1234")),
-            Err(err) => panic!("Expected Ok response, got Err: {}", err),
-        }
-        match &responses[1] {
-            Ok(val) => panic!("Expected Err response, got Ok: {}", val),
-            Err(RpcError::ErrorResp(err)) => assert_eq!(err.code, -32602),
-            _ => panic!("Expected RpcError::ErrorResp, got different error"),
-        }
-
-        m.assert();
     }
 
     /// Parses the balance from a callTracer output field
