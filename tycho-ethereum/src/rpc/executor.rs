@@ -8,6 +8,7 @@ use backoff::backoff::Backoff;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 use tokio::sync::{oneshot, oneshot::Receiver};
+use tracing::{debug, error, warn};
 
 use crate::rpc::retry::{RetryPolicy, RetryableError};
 
@@ -171,10 +172,18 @@ impl<'a> RpcRequestGroup<'a> {
                     match policy.next_backoff() {
                         Some(base) => {
                             let wait = backoff_hint.map_or(base, |h| std::cmp::max(base, h));
+                            debug!(
+                                wait_ms = wait.as_millis() as u64,
+                                backoff_hint_ms = backoff_hint.map(|h| h.as_millis() as u64),
+                                "Waiting before RPC retry"
+                            );
                             tokio::time::sleep(wait).await;
                         }
                         None => {
                             // Exhausted retries - fail remaining calls with their last error
+                            let pending_count =
+                                calls.iter().filter(|c| matches!(c, Call::Pending(_))).count();
+                            error!(pending_calls = pending_count, "RPC retry attempts exhausted");
                             for call in &mut calls {
                                 if let Call::Pending(p) = call {
                                     let error = RpcError::local_usage_str(&format!(
@@ -245,9 +254,11 @@ impl<'a> RpcRequestGroup<'a> {
                     call.resolve(Ok(value));
                 }
                 Err(e) if e.is_retryable() => {
+                    warn!(method = method, error = %e, "RPC call failed with retryable error, will retry");
                     call.set_last_error(e);
                 }
                 Err(e) => {
+                    warn!(method = method, error = %e, "RPC call failed with non-retryable error");
                     let abort_error = RpcError::local_usage_str(&format!(
                         "Request for method {method} failed: {e}"
                     ));
@@ -340,13 +351,16 @@ impl<'a> RpcRequestGroup<'a> {
 
         // Step 2: Send batch
         if let Err(e) = batch.send().await {
+            let batch_size = waiters_with_calls.len();
             let error = format!("Batch send failed: {e}");
 
             if e.is_retryable() {
+                warn!(batch_size = batch_size, error = %e, "Batch send failed with retryable error, will retry");
                 for (_, call, _) in waiters_with_calls {
                     call.set_last_error(RpcError::local_usage_str(&error));
                 }
             } else {
+                error!(batch_size = batch_size, error = %e, "Batch send failed with non-retryable error");
                 // Non-retryable batch failure - resolve all as failed
                 for (_, call, _) in waiters_with_calls {
                     call.resolve(Err(RpcError::local_usage_str(&error)));
@@ -368,9 +382,11 @@ impl<'a> RpcRequestGroup<'a> {
                     call.resolve(Ok(value));
                 }
                 Err(e) if e.is_retryable() => {
+                    warn!(method = method, error = %e, "Batch call failed with retryable error, will retry");
                     call.set_last_error(e);
                 }
                 Err(e) => {
+                    warn!(method = method, error = %e, "Batch call failed with non-retryable error");
                     let abort_error = RpcError::local_usage_str(&format!(
                         "Request for method {method} failed: {e}"
                     ));
