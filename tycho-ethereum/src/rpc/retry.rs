@@ -89,7 +89,7 @@ pub(super) fn has_custom_retry_code<T>(e: &ErrorPayload<T>) -> bool {
         -32604 => false, // "method not supported" - not supported by this node
 
         // Other non EIP-1474 errors
-        3 => false, // "execution reverted" - non-retryable EVM execution error
+        3 => false, // "execution reverted" - special error for `eth_call` and `eth_estimateGas`
 
         // Default: retry unknown error codes (conservative approach)
         // perf: consider being less conservative to reduce unnecessary retries
