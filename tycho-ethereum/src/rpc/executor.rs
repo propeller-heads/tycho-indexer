@@ -181,8 +181,10 @@ impl<'a> RpcRequestGroup<'a> {
                         }
                         None => {
                             // Exhausted retries - fail remaining calls with their last error
-                            let pending_count =
-                                calls.iter().filter(|c| matches!(c, Call::Pending(_))).count();
+                            let pending_count = calls
+                                .iter()
+                                .filter(|c| matches!(c, Call::Pending(_)))
+                                .count();
                             error!(pending_calls = pending_count, "RPC retry attempts exhausted");
                             for call in &mut calls {
                                 if let Call::Pending(p) = call {
