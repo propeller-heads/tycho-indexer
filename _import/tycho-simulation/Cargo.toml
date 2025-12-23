@@ -1,5 +1,5 @@
 [workspace.package]
-version = "0.220.0"
+version = "0.222.0"
 
 [package]
 name = "tycho-simulation"

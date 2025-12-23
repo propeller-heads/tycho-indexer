@@ -23,6 +23,7 @@ use crate::evm::protocol::{
     },
     safe_math::{safe_add_u256, safe_sub_u256},
     u256_num::{biguint_to_u256, u256_to_biguint},
+    utils::add_fee_markup,
 };
 
 const UNISWAP_V2_FEE_BPS: u32 = 30; // 0.3% fee
@@ -53,7 +54,8 @@ impl ProtocolSim for UniswapV2State {
     }
 
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
-        cpmm_spot_price(base, quote, self.reserve0, self.reserve1)
+        let price = cpmm_spot_price(base, quote, self.reserve0, self.reserve1)?;
+        Ok(add_fee_markup(price, self.fee()))
     }
 
     fn get_amount_out(
@@ -89,7 +91,7 @@ impl ProtocolSim for UniswapV2State {
         sell_token: Bytes,
         buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
-        cpmm_get_limits(sell_token, buy_token, self.reserve0, self.reserve1)
+        cpmm_get_limits(sell_token, buy_token, self.reserve0, self.reserve1, UNISWAP_V2_FEE_BPS)
     }
 
     fn delta_transition(
@@ -309,8 +311,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case(true, 0.0008209719947624441f64)]
-    #[case(false, 1218.0683462769755f64)]
+    #[case(true, 0.000823442321727627)] // 0.0008209719947624441 / 0.997
+    #[case(false, 1221.7335469177287)] // 1218.0683462769755 / 0.997
     fn test_spot_price(#[case] zero_to_one: bool, #[case] exp: f64) {
         let state = UniswapV2State::new(
             U256::from_str("36925554990922").unwrap(),
@@ -423,22 +425,24 @@ mod tests {
         let result = state
             .get_amount_out(amount_in.clone(), &token_0, &token_1)
             .unwrap();
-        let new_state = result
-            .new_state
-            .as_any()
-            .downcast_ref::<UniswapV2State>()
-            .unwrap();
+        let new_state = result.new_state;
 
         let initial_price = state
             .spot_price(&token_0, &token_1)
             .unwrap();
         let new_price = new_state
             .spot_price(&token_0, &token_1)
-            .unwrap()
-            .floor();
+            .unwrap();
 
-        let expected_price = initial_price / 10.0;
-        assert_eq!(expected_price, new_price, "Price impact not 90%.");
+        // Price impact should be approximately 90% (new_price ≈ initial_price / 10)
+        // Due to fees being added to pool liquidity, actual impact is slightly less than 90%
+        // (see cpmm_get_limits documentation for details)
+        let price_impact = 1.0 - new_price / initial_price;
+        assert!(
+            (0.899..=0.90).contains(&price_impact),
+            "Price impact should be approximately 90%. Actual impact: {:.2}%",
+            price_impact * 100.0
+        );
     }
 
     #[test]

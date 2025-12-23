@@ -233,21 +233,27 @@ impl ProtocolSim for RocketpoolState {
         unimplemented!("Rocketpool has asymmetric fees; use spot_price or get_amount_out instead")
     }
 
-    fn spot_price(&self, base: &Token, _quote: &Token) -> Result<f64, SimulationError> {
-        let is_depositing_eth = RocketpoolState::is_depositing_eth(&base.address);
-        // As the protocol has no slippage, we can use a fixed amount for spot price calculation
+    fn spot_price(&self, _base: &Token, quote: &Token) -> Result<f64, SimulationError> {
+        // As we are computing the amount of quote needed to buy 1 base, we check the quote token.
+        let is_depositing_eth = RocketpoolState::is_depositing_eth(&quote.address);
+
+        // As the protocol has no slippage, we can use a fixed amount for spot price calculation.
+        // We compute how much base we get for 1 quote, then invert to get quote needed for 1 base.
         let amount = U256::from(1e18);
 
-        let res = if is_depositing_eth {
+        let base_per_quote = if is_depositing_eth {
+            // base=rETH, quote=ETH: compute rETH for given ETH
             self.assert_deposits_enabled()?;
             self.get_reth_value(amount)?
         } else {
+            // base=ETH, quote=rETH: compute ETH for given rETH
             self.get_eth_value(amount)?
         };
 
-        let res = u256_to_f64(res)? / 1e18;
+        let base_per_quote = u256_to_f64(base_per_quote)? / 1e18;
 
-        Ok(res)
+        // Invert to get how much quote needed to buy 1 base
+        Ok(1.0 / base_per_quote)
     }
 
     #[allow(clippy::collapsible_else_if)]
@@ -471,6 +477,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::evm::protocol::utils::add_fee_markup;
 
     /// Helper function to create a RocketpoolState with easy-to-compute defaults for testing
     /// Mutate fields for specific tests.
@@ -649,21 +656,25 @@ mod tests {
     #[test]
     fn test_spot_price_deposit() {
         let state = create_state();
-        // ETH -> rETH: (1 - 0.4 fee) * 100/200 = 0.6 * 0.5 = 0.3
+        // spot_price(ETH, rETH) = how much rETH (quote) needed to buy 1 ETH (base)
+        // Compute ETH per rETH: get_eth_value(1 rETH) = 200/100 = 2.0
+        // Invert: 1 / 2.0 = 0.5 rETH per ETH
         let price = state
             .spot_price(&eth_token(), &reth_token())
             .unwrap();
-        assert_ulps_eq!(price, 0.3);
+        assert_ulps_eq!(price, 0.5);
     }
 
     #[test]
     fn test_spot_price_withdraw() {
         let state = create_state();
-        // rETH -> ETH: 200/100 = 2.0
+        // spot_price(rETH, ETH) = how much ETH (quote) needed to buy 1 rETH (base)
+        // Compute rETH per ETH: get_reth_value(1 ETH) = (1 - 0.4 fee) * 100/200 = 0.3
+        // Invert: 1 / 0.3 = 3.333...
         let price = state
             .spot_price(&reth_token(), &eth_token())
             .unwrap();
-        assert_ulps_eq!(price, 2.0);
+        assert_ulps_eq!(price, 1.0 / 0.3);
     }
 
     /// Creates RocketpoolState from real on-chain data at block 23929406.
@@ -686,35 +697,32 @@ mod tests {
     }
 
     /// Test spot price against real getEthValue(1e18) result at block 23929406
-    /// rETH -> ETH: 1151835724202334991 wei per rETH
+    /// 0.868179358382478 rETH -> 1 ETH (no fees on withdrawal)
     #[test]
-    fn test_live_spot_price_reth_to_eth_23929406() {
+    fn test_live_spot_price_reth_to_buy_eth_23929406() {
+        let state = create_state_at_block_23929406();
+
+        let price = state
+            .spot_price(&eth_token(), &reth_token())
+            .unwrap();
+
+        let expected = 0.868179358382478;
+        assert_ulps_eq!(price, expected, max_ulps = 10);
+    }
+
+    /// Test spot price against real getRethValue(1e18) result at block 23929406:
+    /// 1.151835724202335 ETH -> 1 rETH (without accounting for deposit fee)
+    #[test]
+    fn test_live_spot_price_eth_to_buy_reth_23929406() {
         let state = create_state_at_block_23929406();
 
         let price = state
             .spot_price(&reth_token(), &eth_token())
             .unwrap();
 
-        // Expected: 1151835724202334991 / 1e18 = 1.151835724202334991
-        let expected = 1.151835724202335;
-        assert_ulps_eq!(price, expected, max_ulps = 10);
-    }
-
-    /// Test spot price against real getRethValue(1e18) result at block 23929406
-    /// ETH -> rETH: 868179358382477931 wei per ETH
-    #[test]
-    fn test_live_spot_price_eth_to_reth_23929406() {
-        let state = create_state_at_block_23929406();
-
-        // Calculate expected price considering deposit fee
-        let price = state
-            .spot_price(&eth_token(), &reth_token())
-            .unwrap();
-
-        // Expected is calculated without fee: 868179358382477931 / 1e18 = 0.868179358382477931
-        let expected_without_fee = 0.868179358382478;
+        let expected_without_fee = 1.151835724202335;
         let fee = state.deposit_fee.to_f64().unwrap() / DEPOSIT_FEE_BASE as f64;
-        let expected = expected_without_fee * (1.0 - fee);
+        let expected = add_fee_markup(expected_without_fee, fee);
 
         assert_ulps_eq!(price, expected, max_ulps = 10);
     }
