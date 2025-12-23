@@ -275,6 +275,13 @@ impl<'a> RpcRequestGroup<'a> {
 
     // ==================== Batched Execution ====================
 
+    /// Helper function to filter out processed calls.
+    /// Using a named function instead of a closure avoids HRTB lifetime issues
+    /// when this code is used through async trait methods.
+    fn is_pending(call: &&mut Call) -> bool {
+        !matches!(call, Call::Processed)
+    }
+
     /// Execute calls in batches (chunks).
     async fn execute_batched(
         client: &ReqwestClient,
@@ -283,8 +290,8 @@ impl<'a> RpcRequestGroup<'a> {
         abort_on_failure: bool,
     ) -> RoundOutcome {
         let mut pending_calls_iter = calls
-            .into_iter()
-            .filter(|call| !matches!(call, Call::Processed))
+            .iter_mut()
+            .filter(Self::is_pending)
             .peekable();
 
         while pending_calls_iter.peek().is_some() {
