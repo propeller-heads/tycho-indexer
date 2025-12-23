@@ -170,6 +170,7 @@ impl ProtocolStreamProcessor {
                     "uniswap_v3".to_string(),
                     "uniswap_v4".to_string(),
                     "uniswap_v4_hooks".to_string(),
+                    "vm:curve".to_string(),
                 ]
             }
             _ => vec![],
@@ -222,7 +223,7 @@ impl ProtocolStreamProcessor {
                 stream = stream.exchange::<EVMPoolState<PreCachedDB>>(
                     "vm:curve",
                     tvl_filter.clone(),
-                    Some(curve_pool_filter),
+                    None,
                 );
             }
             "uniswap_v4_hooks" => {
