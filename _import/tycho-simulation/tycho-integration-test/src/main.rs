@@ -411,18 +411,22 @@ async fn process_update(
             (update.received_at.as_secs_f64() - block.header.timestamp as f64).abs();
         metrics::record_block_processing_duration(latency_seconds);
 
-        let block_delay = block
-            .header
-            .number
-            .saturating_sub(update.update.block_number_or_timestamp);
-        metrics::record_protocol_update_block_delay(block_delay);
-        // Consume messages that are older than the current block, to give the stream a chance
-        // to catch up
-        if block_delay > 0 {
-            warn!(
-                "Update block ({}) is behind the current block ({}), skipping to catch up.",
-                update.update.block_number_or_timestamp, block.header.number
-            );
+        let rpc_block_number = block.header.number;
+        let update_block_number = update.update.block_number_or_timestamp;
+        let block_diff = rpc_block_number.abs_diff(update_block_number);
+
+        if block_diff > 0 {
+            if rpc_block_number > update_block_number {
+                warn!(
+                    "Update block ({update_block_number}) is behind the current block ({rpc_block_number}), skipping to catch up.",
+                );
+                metrics::record_protocol_update_block_delay(block_diff);
+            } else {
+                warn!(
+                    "Update block ({update_block_number}) is ahead of the current block ({rpc_block_number}), skipping this update.",
+                );
+                // perf: consider waiting for the block to be mined instead of skipping
+            }
             metrics::record_protocol_update_skipped();
             return Ok(());
         }
