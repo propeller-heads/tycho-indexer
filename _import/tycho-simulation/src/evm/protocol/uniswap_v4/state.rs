@@ -30,17 +30,20 @@ use crate::evm::protocol::{
             SwapParams,
         },
     },
-    utils::uniswap::{
-        i24_be_bytes_to_i32, liquidity_math, lp_fee,
-        lp_fee::is_dynamic,
-        sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
-        swap_math,
-        tick_list::{TickInfo, TickList, TickListErrorKind},
-        tick_math::{
-            get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
-            MIN_SQRT_RATIO, MIN_TICK,
+    utils::{
+        add_fee_markup,
+        uniswap::{
+            i24_be_bytes_to_i32, liquidity_math, lp_fee,
+            lp_fee::is_dynamic,
+            sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
+            swap_math,
+            tick_list::{TickInfo, TickList, TickListErrorKind},
+            tick_math::{
+                get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
+                MIN_SQRT_RATIO, MIN_TICK,
+            },
+            StepComputation, SwapResults, SwapState,
         },
-        StepComputation, SwapResults, SwapState,
     },
     vm::constants::EXTERNAL_ACCOUNT,
 };
@@ -470,12 +473,19 @@ impl ProtocolSim for UniswapV4State {
             }
         }
 
-        if base < quote {
-            sqrt_price_q96_to_f64(self.sqrt_price, base.decimals, quote.decimals)
+        let zero_for_one = base < quote;
+        let fee_pips = self
+            .fees
+            .calculate_swap_fees_pips(zero_for_one, None);
+        let fee = fee_pips as f64 / 1_000_000.0;
+
+        let price = if zero_for_one {
+            sqrt_price_q96_to_f64(self.sqrt_price, base.decimals, quote.decimals)?
         } else {
-            sqrt_price_q96_to_f64(self.sqrt_price, quote.decimals, base.decimals)
-                .map(|price| 1.0f64 / price)
-        }
+            1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, quote.decimals, base.decimals)?
+        };
+
+        Ok(add_fee_markup(price, fee))
     }
 
     fn get_amount_out(
