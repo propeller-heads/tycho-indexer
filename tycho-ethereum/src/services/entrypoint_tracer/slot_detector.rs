@@ -903,13 +903,13 @@ mod tests {
                 "result": "0x00000000000000000000000000000000000000000000000000000000000003e8"
             }
         ]);
-        let slot_test_response = json!([
+        let slot_test_response = json!(
             {
                 "jsonrpc": "2.0",
                 "id": 2,
                 "result": "0x00000000000000000000000000000000000000000000000000000000000007d0"
             }
-        ]);
+        );
 
         // First RPC call: trace + balance fetch.
         let trace_mock = server
