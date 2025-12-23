@@ -71,10 +71,9 @@ impl Call {
 /// Outcome of executing a round of calls.
 enum RoundOutcome {
     /// Round completed. Calls either succeeded, failed, or need retry.
-    /// Contains backoff hint from retryable errors (rate limits, etc.)
     Continue,
     /// Execution aborted due to a non-retryable error.
-    /// Contains the method that failed and the error for reporting.
+    /// Contains the error for reporting.
     Aborted { error: RpcError<TransportErrorKind> },
 }
 
@@ -101,20 +100,18 @@ impl<'a> RpcRequestGroup<'a> {
     }
 
     /// Register a call. Returns a handle to retrieve the result later.
+    ///
+    /// Returns an error if parameter serialization fails.
     pub fn add_call<P: Serialize, R: DeserializeOwned>(
         &mut self,
         method: &'static str,
         params: &P,
-    ) -> RequestHandle<R> {
+    ) -> TransportResult<RequestHandle<R>> {
+        let params = serde_json::to_value(params).map_err(RpcError::ser_err)?;
         let (tx, rx) = oneshot::channel();
         self.calls
-            .push(Call::Pending(PendingCall {
-                method,
-                sender: tx,
-                params: serde_json::to_value(params).expect("params must serialize"),
-                last_error: None,
-            }));
-        RequestHandle { receiver: rx, _marker: PhantomData }
+            .push(Call::Pending(PendingCall { method, sender: tx, params, last_error: None }));
+        Ok(RequestHandle { receiver: rx, _marker: PhantomData })
     }
 
     // ==================== Execution ====================
@@ -173,7 +170,7 @@ impl<'a> RpcRequestGroup<'a> {
                     // Backoff before retry
                     match policy.next_backoff() {
                         Some(base) => {
-                            let wait = backoff_hint.map_or(base, |h| std::cmp::min(base, h));
+                            let wait = backoff_hint.map_or(base, |h| std::cmp::max(base, h));
                             tokio::time::sleep(wait).await;
                         }
                         None => {
@@ -447,6 +444,12 @@ mod tests {
         ClientBuilder::default().http(url)
     }
 
+    fn add_mock_call_to_group(group: &mut RpcRequestGroup) -> RequestHandle<String> {
+        group
+            .add_call::<_, String>("eth_call", &serde_json::json!([]))
+            .unwrap()
+    }
+
     // ==================== Core Functionality Tests ====================
 
     #[rstest]
@@ -468,7 +471,7 @@ mod tests {
         let client = create_client(&server).await;
         let mut group = RpcRequestGroup::new(&client, RetryPolicy::no_retry(), batch_size);
 
-        let handle: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
+        let handle: RequestHandle<String> = add_mock_call_to_group(&mut group);
 
         let result = group.execute().await;
         assert!(result.is_ok());
@@ -519,9 +522,9 @@ mod tests {
         let client = create_client(&server).await;
         let mut group = RpcRequestGroup::new(&client, RetryPolicy::no_retry(), batch_size);
 
-        let h1: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
-        let h2: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
-        let h3: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
+        let h1: RequestHandle<String> = add_mock_call_to_group(&mut group);
+        let h2: RequestHandle<String> = add_mock_call_to_group(&mut group);
+        let h3: RequestHandle<String> = add_mock_call_to_group(&mut group);
 
         let result = group.execute().await;
         assert!(result.is_ok());
@@ -560,7 +563,7 @@ mod tests {
         let policy = RetryPolicy::n_times(2);
         let mut group = RpcRequestGroup::new(&client, policy, None);
 
-        let handle: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
+        let handle: RequestHandle<String> = add_mock_call_to_group(&mut group);
 
         let result = group.execute().await;
         assert!(result.is_ok());
@@ -587,7 +590,7 @@ mod tests {
         let policy = RetryPolicy::n_times(2);
         let mut group = RpcRequestGroup::new(&client, policy, None);
 
-        let handle: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
+        let handle: RequestHandle<String> = add_mock_call_to_group(&mut group);
 
         let result = group.execute().await;
         assert!(result.is_err());
@@ -620,7 +623,7 @@ mod tests {
         let policy = RetryPolicy::n_times(5); // Would retry 5 times if retryable
         let mut group = RpcRequestGroup::new(&client, policy, None);
 
-        let handle: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
+        let handle: RequestHandle<String> = add_mock_call_to_group(&mut group);
 
         let result = group.execute().await;
         assert!(result.is_ok()); // execute() succeeds, but the handle has error
@@ -658,9 +661,9 @@ mod tests {
         let client = create_client(&server).await;
         let mut group = RpcRequestGroup::new(&client, RetryPolicy::no_retry(), None);
 
-        let h1: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
-        let h2: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
-        let h3: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
+        let h1: RequestHandle<String> = add_mock_call_to_group(&mut group);
+        let h2: RequestHandle<String> = add_mock_call_to_group(&mut group);
+        let h3: RequestHandle<String> = add_mock_call_to_group(&mut group);
 
         let result = group.execute_abort_early().await;
         assert!(result.is_err());
@@ -713,9 +716,9 @@ mod tests {
         let client = create_client(&server).await;
         let mut group = RpcRequestGroup::new(&client, RetryPolicy::no_retry(), None);
 
-        let h1: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
-        let h2: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
-        let h3: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
+        let h1: RequestHandle<String> = add_mock_call_to_group(&mut group);
+        let h2: RequestHandle<String> = add_mock_call_to_group(&mut group);
+        let h3: RequestHandle<String> = add_mock_call_to_group(&mut group);
 
         // Use execute() not execute_abort_early()
         let result = group.execute().await;
@@ -800,7 +803,11 @@ mod tests {
         let mut group = RpcRequestGroup::new(&client, RetryPolicy::no_retry(), Some(2));
 
         let handles: Vec<RequestHandle<String>> = (0..5)
-            .map(|_| group.add_call("eth_call", &serde_json::json!([])))
+            .map(|_| {
+                group
+                    .add_call("eth_call", &serde_json::json!([]))
+                    .unwrap()
+            })
             .collect();
 
         let result = group.execute().await;
@@ -922,8 +929,8 @@ mod tests {
         let client = create_client(&server).await;
         let mut group = RpcRequestGroup::new(&client, RetryPolicy::n_times(2), Some(10));
 
-        let h1: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
-        let h2: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
+        let h1: RequestHandle<String> = add_mock_call_to_group(&mut group);
+        let h2: RequestHandle<String> = add_mock_call_to_group(&mut group);
 
         let result = group.execute().await;
         assert!(result.is_ok(), "execute() failed: {:?}", result.unwrap_err());
@@ -980,9 +987,9 @@ mod tests {
         let client = create_client(&server).await;
         let mut group = RpcRequestGroup::new(&client, RetryPolicy::n_times(2), Some(10));
 
-        let h1: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
-        let h2: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
-        let h3: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
+        let h1: RequestHandle<String> = add_mock_call_to_group(&mut group);
+        let h2: RequestHandle<String> = add_mock_call_to_group(&mut group);
+        let h3: RequestHandle<String> = add_mock_call_to_group(&mut group);
 
         let result = group.execute().await;
         assert!(result.is_ok());
@@ -1025,10 +1032,11 @@ mod tests {
         let client = create_client(&server).await;
         let mut group = RpcRequestGroup::new(&client, RetryPolicy::no_retry(), Some(2));
 
-        let h1: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
-        let h2: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
-        let h3: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
-        let h4: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
+        let h1: RequestHandle<String> = add_mock_call_to_group(&mut group);
+        let h2: RequestHandle<String> = add_mock_call_to_group(&mut group);
+        let h3: RequestHandle<String> = add_mock_call_to_group(&mut group);
+
+        let h4: RequestHandle<String> = add_mock_call_to_group(&mut group);
 
         let result = group.execute_abort_early().await;
         assert!(result.is_err());
@@ -1066,7 +1074,7 @@ mod tests {
         let client = create_client(&server).await;
         let mut group = RpcRequestGroup::new(&client, RetryPolicy::n_times(2), None);
 
-        let handle: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
+        let handle: RequestHandle<String> = add_mock_call_to_group(&mut group);
 
         let result = group.execute().await;
         assert!(result.is_ok());
@@ -1103,8 +1111,8 @@ mod tests {
         let client = create_client(&server).await;
         let mut group = RpcRequestGroup::new(&client, RetryPolicy::no_retry(), Some(0));
 
-        let h1: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
-        let h2: RequestHandle<String> = group.add_call("eth_call", &serde_json::json!([]));
+        let h1: RequestHandle<String> = add_mock_call_to_group(&mut group);
+        let h2: RequestHandle<String> = add_mock_call_to_group(&mut group);
 
         let result = group.execute().await;
         assert!(result.is_ok());
