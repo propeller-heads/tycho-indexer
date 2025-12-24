@@ -1,10 +1,10 @@
 use std::{any::Any, collections::HashMap, fmt::Debug};
 
-use alloy::primitives::{U256};
+use alloy::primitives::U256;
 use num_bigint::{BigUint, ToBigUint};
 use tycho_common::{
     dto::ProtocolStateDelta,
-    models::{token::Token},
+    models::token::Token,
     simulation::{
         errors::{SimulationError, TransitionError},
         protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
@@ -518,9 +518,9 @@ mod tests {
         str::FromStr,
     };
 
-    use alloy::primitives::{U256};
+    use alloy::primitives::U256;
     use approx::assert_ulps_eq;
-    use num_bigint::{BigUint};
+    use num_bigint::BigUint;
     use num_traits::One;
     use rstest::rstest;
     use tycho_common::{
@@ -533,7 +533,7 @@ mod tests {
     use super::*;
     use crate::evm::protocol::{
         cowamm::state::{CowAMMState, ProtocolSim},
-        u256_num::{biguint_to_u256},
+        u256_num::biguint_to_u256,
     };
     fn create_test_tokens() -> (Token, Token, Token, Token, Token) {
         let t0 = Token::new(
@@ -686,8 +686,8 @@ mod tests {
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
             t0.address.clone(), //COW
             t1.address.clone(), //wstETH
-            liq_a,                           //COW
-            liq_b,                           //wstETH
+            liq_a,              //COW
+            liq_b,              //wstETH
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
             U256::from_str("199999999999999999990").unwrap(),
             U256::from_str("1000000000000000000").unwrap(),

@@ -138,7 +138,7 @@ pub fn bmul(a: U256, b: U256) -> Result<U256, CowAMMError> {
 /// Calculates the spot price of a token in the pool.
 ///
 /// # Description
-/// Computes the spot price `sP` of an input token relative to an output token, 
+/// Computes the spot price `sP` of an input token relative to an output token,
 /// based on the current balances, weights, and swap fee.
 ///
 /// # Parameters
@@ -154,7 +154,7 @@ pub fn bmul(a: U256, b: U256) -> Result<U256, CowAMMError> {
 /// # Formula
 /// ```text
 /// sP = (bI / wI) / (bO / wO) * (1 / (1 - sF))
-/// 
+///
 /// where:
 /// bI = token_balance_in
 /// wI = token_weight_in

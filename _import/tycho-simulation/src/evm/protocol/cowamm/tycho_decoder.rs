@@ -2,14 +2,10 @@ use std::collections::HashMap;
 
 use alloy::primitives::U256;
 use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
-use tycho_common::{
-    dto::{ProtocolComponent},
-    models::token::Token,
-    Bytes,
-};
+use tycho_common::{dto::ProtocolComponent, models::token::Token, Bytes};
 
 use crate::{
-    evm::protocol::cowamm::{state::CowAMMState},
+    evm::protocol::cowamm::state::CowAMMState,
     protocol::{
         errors::InvalidSnapshotError,
         models::{DecoderContext, TryFromWithBlock},
@@ -202,7 +198,7 @@ mod tests {
             timestamp: 0,
         }
     }
-    
+
     #[tokio::test]
     async fn test_cowamm_try_from_with_block() {
         let snapshot = ComponentWithState {
@@ -219,7 +215,7 @@ mod tests {
             header(),
             &HashMap::default(),
             &HashMap::default(),
-            &decoder_context
+            &decoder_context,
         )
         .await
         .unwrap();
@@ -271,7 +267,7 @@ mod tests {
             header(),
             &HashMap::default(),
             &HashMap::default(),
-            &decoder_context
+            &decoder_context,
         )
         .await;
 
