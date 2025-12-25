@@ -7428,7 +7428,6 @@ dependencies = [
 name = "tycho-test"
 version = "0.223.0"
 dependencies = [
- "actix-web",
  "alloy",
  "alloy-chains",
  "alloy-rpc-types-trace",
@@ -7439,8 +7438,6 @@ dependencies = [
  "hex",
  "itertools 0.10.5",
  "lru 0.16.1",
- "metrics",
- "metrics-exporter-prometheus",
  "miette",
  "num-bigint",
  "num-traits",

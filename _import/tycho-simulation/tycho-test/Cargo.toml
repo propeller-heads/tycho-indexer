@@ -24,9 +24,6 @@ rand = "0.9.2"
 tokio = { workspace = true }
 tokio-retry2 = { version = "0.6.0", features = ["jitter"] }
 tracing = { workspace = true }
-metrics = "0.24.2"
-metrics-exporter-prometheus = "0.17.2"
-actix-web = "4.11.0"
 tycho-client = { workspace = true }
 tycho-common = { workspace = true }
 tycho-ethereum = { workspace = true }
