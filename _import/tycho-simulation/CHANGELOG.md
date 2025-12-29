@@ -1,3 +1,18 @@
+## [0.224.0](https://github.com/propeller-heads/tycho-simulation/compare/0.223.0...0.224.0) (2025-12-29)
+
+
+### Features
+
+* Init Velodrome Slipstreams protocol ([e093eab](https://github.com/propeller-heads/tycho-simulation/commit/e093eabcf96d34d3357003d52e1963632072c430))
+* **integration-test:** Add Curve and Velodrome to integration tests ([4ad87d1](https://github.com/propeller-heads/tycho-simulation/commit/4ad87d1a89cb16dbc82e805c6d57aaed0bba14fb))
+* Simplify Velodrome Slipstreams fee logic and remove unused modules ([67301a5](https://github.com/propeller-heads/tycho-simulation/commit/67301a50c718354ec0bb395cce663047cc8d93f2))
+
+
+### Bug Fixes
+
+* Remove hotfix for liquidity decoding ([f1dc52b](https://github.com/propeller-heads/tycho-simulation/commit/f1dc52b839c78fa234d61404945e857cb90415be))
+* Remove hotfix for tick and liquidity ([78a9923](https://github.com/propeller-heads/tycho-simulation/commit/78a9923cf30b1ad4f113339ba9924b57071412a4))
+
 ## [0.223.0](https://github.com/propeller-heads/tycho-simulation/compare/0.222.0...0.223.0) (2025-12-23)
 
 
