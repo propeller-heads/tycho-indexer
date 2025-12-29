@@ -13,7 +13,7 @@ use tycho_common::{
 };
 
 use crate::evm::protocol::{
-    safe_math::{safe_div_u256, safe_mul_u256},
+    safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256},
     u256_num::{biguint_to_u256, u256_to_biguint, u256_to_f64},
 };
 
@@ -80,18 +80,37 @@ impl LidoState {
             biguint_to_u256(&self.total_pooled_eth),
         )?;
 
-        let amount_out = safe_div_u256(
-            safe_mul_u256(shares, biguint_to_u256(&self.total_pooled_eth))?,
-            biguint_to_u256(&self.total_shares),
+        // During the lido submit step, the share count and total pooled ETH are updated,
+        // so all subsequent casts are calculated on the new values
+        let new_shares = safe_add_u256(biguint_to_u256(&self.total_shares.clone()), shares)?;
+        let new_total_pooled_eth = safe_add_u256(
+            biguint_to_u256(&self.total_pooled_eth.clone()),
+            biguint_to_u256(&amount_in),
         )?;
 
+        // Add extra casts to mirror the additional token transfer performed by the tycho router.
+        let amount_from_shares = u256_to_biguint(safe_div_u256(
+            safe_mul_u256(shares, new_total_pooled_eth)?,
+            new_shares,
+        )?);
+
+        let shares_to_transfer = safe_div_u256(
+            safe_mul_u256(biguint_to_u256(&amount_from_shares), new_shares)?,
+            new_total_pooled_eth,
+        )?;
+
+        let amount_transferred = u256_to_biguint(safe_div_u256(
+            safe_mul_u256(shares_to_transfer, new_total_pooled_eth)?,
+            new_shares,
+        )?);
+
         Ok(GetAmountOutResult {
-            amount: u256_to_biguint(amount_out),
+            amount: amount_transferred,
             gas: BigUint::from(DEFAULT_GAS),
             new_state: Box::new(Self {
                 pool_type: self.pool_type.clone(),
-                total_shares: self.total_shares.clone() + u256_to_biguint(shares),
-                total_pooled_eth: self.total_pooled_eth.clone() + amount_in,
+                total_shares: u256_to_biguint(new_shares),
+                total_pooled_eth: u256_to_biguint(new_total_pooled_eth),
                 total_wrapped_st_eth: None,
                 id: self.id.clone(),
                 native_address: self.native_address.clone(),
@@ -149,6 +168,16 @@ impl LidoState {
             biguint_to_u256(&self.total_shares),
         )?);
 
+        let shares_from_amount_out = safe_div_u256(
+            safe_mul_u256(biguint_to_u256(&amount_out), biguint_to_u256(&self.total_shares))?,
+            biguint_to_u256(&self.total_pooled_eth),
+        )?;
+
+        let amount_transferred = u256_to_biguint(safe_div_u256(
+            safe_mul_u256(shares_from_amount_out, biguint_to_u256(&self.total_pooled_eth))?,
+            biguint_to_u256(&self.total_shares),
+        )?);
+
         let new_total_wrapped_st_eth = self
             .total_wrapped_st_eth
             .as_ref()
@@ -156,7 +185,7 @@ impl LidoState {
             &amount_in;
 
         Ok(GetAmountOutResult {
-            amount: amount_out.clone(),
+            amount: amount_transferred.clone(),
             gas: BigUint::from(DEFAULT_GAS),
             new_state: Box::new(Self {
                 pool_type: self.pool_type.clone(),
@@ -642,7 +671,7 @@ mod tests {
             .get_amount_out(amount_in.clone(), &token_eth, &token_st_eth)
             .unwrap();
 
-        let exp = BigUint::from_str("9001102957532400").unwrap(); // diff in total pooled eth; rounding error
+        let exp = BigUint::from_str("9001102957532398").unwrap(); // diff in total pooled eth; rounding error because of multiple casts
         assert_eq!(res.amount, exp);
 
         let total_shares_after = from_hex_str_to_biguint(
@@ -729,7 +758,7 @@ mod tests {
         let res = state
             .get_amount_out(amount_in.clone(), &token_wst_eth, &token_st_eth)
             .unwrap();
-        let exp = BigUint::from_str("4056684499432944068").unwrap();
+        let exp = BigUint::from_str("4056684499432944067").unwrap(); // diff in total pooled eth; rounding error because of multiple casts
         assert_eq!(res.amount, exp);
 
         let total_wsteth_after = from_hex_str_to_biguint(
