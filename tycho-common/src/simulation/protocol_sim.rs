@@ -12,7 +12,7 @@ use crate::{
     Bytes,
 };
 
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 pub struct Balances {
     pub component_balances: HashMap<String, HashMap<Bytes, Bytes>>,
     pub account_balances: HashMap<Bytes, HashMap<Bytes, Bytes>>,
