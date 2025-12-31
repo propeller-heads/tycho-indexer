@@ -38,34 +38,22 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for CowAMMState {
             .ok_or_else(|| InvalidSnapshotError::MissingAttribute("token_a".to_string()))?
             .clone();
 
-        let liquidity_a = U256::from_be_bytes::<BYTES>(
+        let liquidity_a = U256::from_be_slice(
             snapshot
                 .state
                 .attributes
                 .get("liquidity_a")
                 .ok_or_else(|| InvalidSnapshotError::MissingAttribute("liquidity_a".to_string()))?
-                .as_ref()
-                .try_into()
-                .map_err(|err| {
-                    InvalidSnapshotError::ValueError(format!(
-                        "liquidity_a length mismatch: {err:?}"
-                    ))
-                })?,
+                .as_ref(),
         );
 
-        let liquidity_b = U256::from_be_bytes::<BYTES>(
+        let liquidity_b = U256::from_be_slice(
             snapshot
                 .state
                 .attributes
                 .get("liquidity_b")
                 .ok_or_else(|| InvalidSnapshotError::MissingAttribute("liquidity_b".to_string()))?
-                .as_ref()
-                .try_into()
-                .map_err(|err| {
-                    InvalidSnapshotError::ValueError(format!(
-                        "liquidity_b length mismatch: {err:?}"
-                    ))
-                })?,
+                .as_ref(),
         );
 
         let token_b = snapshot
@@ -82,7 +70,8 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for CowAMMState {
             .ok_or_else(|| InvalidSnapshotError::MissingAttribute("lp_token".to_string()))?
             .clone();
 
-        let lp_token_supply = U256::from_be_bytes::<BYTES>(
+       
+        let lp_token_supply = U256::from_be_slice(
             snapshot
                 .state
                 .attributes
@@ -90,43 +79,31 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for CowAMMState {
                 .ok_or_else(|| {
                     InvalidSnapshotError::MissingAttribute("lp_token_supply".to_string())
                 })?
-                .as_ref()
-                .try_into()
-                .map_err(|err| {
-                    InvalidSnapshotError::ValueError(format!(
-                        "lp_token_supply length mismatch: {err:?}"
-                    ))
-                })?,
+                .as_ref(),
         );
+
 
         let fee = 0u64;
 
         //weight_a and weight_b are left padded big endian numbers of 32 bytes
         //we want a U256 number from the hex representation
-        let weight_a = U256::from_be_bytes::<BYTES>(
+        // weight_a and weight_b are left-padded big-endian numbers
+        let weight_a = U256::from_be_slice(
             snapshot
                 .component
                 .static_attributes
                 .get("weight_a")
                 .ok_or_else(|| InvalidSnapshotError::MissingAttribute("weight_a".to_string()))?
-                .as_ref()
-                .try_into()
-                .map_err(|err| {
-                    InvalidSnapshotError::ValueError(format!("weight_a length mismatch: {err:?}"))
-                })?,
+                .as_ref(),
         );
 
-        let weight_b = U256::from_be_bytes::<BYTES>(
+        let weight_b = U256::from_be_slice(
             snapshot
                 .component
                 .static_attributes
                 .get("weight_b")
                 .ok_or_else(|| InvalidSnapshotError::MissingAttribute("weight_b".to_string()))?
-                .as_ref()
-                .try_into()
-                .map_err(|err| {
-                    InvalidSnapshotError::ValueError(format!("weight_b length mismatch: {err:?}"))
-                })?,
+                .as_ref(),
         );
 
         Ok(Self::new(
