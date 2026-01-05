@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "_tycho_simulation_py"
-version = "0.220.0"
+version = "0.225.0"
 dependencies = [
  "alloy",
  "num-bigint",
@@ -2887,7 +2887,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5973,7 +5973,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.11.0",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6723,7 +6723,7 @@ dependencies = [
  "getrandom 0.3.3",
  "once_cell",
  "rustix 1.1.2",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7317,9 +7317,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.145.0"
+version = "0.148.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1006af91f412293c697585ded8000a40c174ef7b77e57b8b9bdcd2581700e86f"
+checksum = "49be37ae4a3f6a85123fd7e3d93019a34ce88452e169fd471ae6b34700192426"
 dependencies = [
  "alloy",
  "chrono",
@@ -7340,7 +7340,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-integration-test"
-version = "0.220.0"
+version = "0.225.0"
 dependencies = [
  "actix-web",
  "alloy",
@@ -7369,7 +7369,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.220.0"
+version = "0.225.0"
 dependencies = [
  "alloy",
  "alloy-chains",
@@ -7426,7 +7426,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-test"
-version = "0.220.0"
+version = "0.225.0"
 dependencies = [
  "actix-web",
  "alloy",
@@ -7902,7 +7902,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

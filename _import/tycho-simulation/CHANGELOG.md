@@ -1,3 +1,63 @@
+## [0.225.0](https://github.com/propeller-heads/tycho-simulation/compare/0.224.0...0.225.0) (2025-12-30)
+
+
+### Features
+
+* update tycho-execution to version 0.148.0 ([62a1fbb](https://github.com/propeller-heads/tycho-simulation/commit/62a1fbb964de134350284fa6f5941a56f7138b54))
+
+## [0.224.0](https://github.com/propeller-heads/tycho-simulation/compare/0.223.0...0.224.0) (2025-12-29)
+
+
+### Features
+
+* Init Velodrome Slipstreams protocol ([e093eab](https://github.com/propeller-heads/tycho-simulation/commit/e093eabcf96d34d3357003d52e1963632072c430))
+* **integration-test:** Add Curve and Velodrome to integration tests ([4ad87d1](https://github.com/propeller-heads/tycho-simulation/commit/4ad87d1a89cb16dbc82e805c6d57aaed0bba14fb))
+* Simplify Velodrome Slipstreams fee logic and remove unused modules ([67301a5](https://github.com/propeller-heads/tycho-simulation/commit/67301a50c718354ec0bb395cce663047cc8d93f2))
+
+
+### Bug Fixes
+
+* Remove hotfix for liquidity decoding ([f1dc52b](https://github.com/propeller-heads/tycho-simulation/commit/f1dc52b839c78fa234d61404945e857cb90415be))
+* Remove hotfix for tick and liquidity ([78a9923](https://github.com/propeller-heads/tycho-simulation/commit/78a9923cf30b1ad4f113339ba9924b57071412a4))
+
+## [0.223.0](https://github.com/propeller-heads/tycho-simulation/compare/0.222.0...0.223.0) (2025-12-23)
+
+
+### Features
+
+* add Curve protocol to VM stream processor and remove filter ([2dcadb8](https://github.com/propeller-heads/tycho-simulation/commit/2dcadb8c2e02d61e50bba7bd81253e3677838412))
+
+
+### Bug Fixes
+
+* Remove curve pool filter ([0e23166](https://github.com/propeller-heads/tycho-simulation/commit/0e23166a5822d6899136d6d110023bb2dbee0b8f))
+
+## [0.222.0](https://github.com/propeller-heads/tycho-simulation/compare/0.221.0...0.222.0) (2025-12-22)
+
+
+### Features
+
+* add calculation to reflect all transfers in the execution submit ([317f68d](https://github.com/propeller-heads/tycho-simulation/commit/317f68d0f02b5246a698648ff4a8821f8d74c08f))
+
+
+### Bug Fixes
+
+* update test values to reflect influence of multiple casts ([231547e](https://github.com/propeller-heads/tycho-simulation/commit/231547e302aea0d3013b67854df3b6dba60de2ee))
+* update the math to reflect both conversions for unwrapping ([1001d11](https://github.com/propeller-heads/tycho-simulation/commit/1001d112ccb048813a5bb9a8cc5b050073b30592))
+
+## [0.221.0](https://github.com/propeller-heads/tycho-simulation/compare/0.220.0...0.221.0) (2025-12-18)
+
+
+### Features
+
+* add fees to uni v2 and pakcakeswap v2 and improve price impact calculations by incorporating fee adjustments in CPMM functions ([2b8d667](https://github.com/propeller-heads/tycho-simulation/commit/2b8d66727b40ac2537e7381ff806efbaf783fa5a))
+* adjust fee application logic to reflect the amount needed to purchase original amount after fees ([1791784](https://github.com/propeller-heads/tycho-simulation/commit/179178413ad2c1d9c3d7b716e07237a2dcb95511))
+* implement fee application in spot price calculations fro uni v3, ekubo and aerodrome ([82bc950](https://github.com/propeller-heads/tycho-simulation/commit/82bc950171b94c4f0b4b99ed7ce3cff8cd3ee7d2))
+* incorporate fee calculations into price conversion logic for uni v4 when no hooks are enabled ([bf46637](https://github.com/propeller-heads/tycho-simulation/commit/bf46637d8ef2fa1a4b58425a7d42390eb5081872))
+* update spot price calculations to accurately compute the amount needed to **buy** one base, instead of the amount that we get for **selling** one base. ([ab9110f](https://github.com/propeller-heads/tycho-simulation/commit/ab9110f38ca1ed139120160eb5ff2f89232961df))
+* update the spot price fee application to Fluid to reflect that the output is the amount we need to buy 1 base, which needs to be then scales by the fee that will be applied. Additionally, fix the fee fn ([9e2d301](https://github.com/propeller-heads/tycho-simulation/commit/9e2d3014fe8d2a483691165368f1bc52535dddcd))
+* update the spot price fee application to reflect that the output is the amount we need to buy 1 base, which needs to be then scales by the fee that will be applied ([aa458b2](https://github.com/propeller-heads/tycho-simulation/commit/aa458b2fe50b05c9559ce93ebaae585a4283f10a))
+
 ## [0.220.0](https://github.com/propeller-heads/tycho-simulation/compare/0.219.0...0.220.0) (2025-12-17)
 
 

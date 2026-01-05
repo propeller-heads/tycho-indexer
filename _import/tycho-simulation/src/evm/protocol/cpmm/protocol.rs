@@ -81,11 +81,25 @@ pub fn cpmm_get_amount_out(
     safe_div_u256(numerator, denominator)
 }
 
+/// Returns the soft limit for amount_in to achieve approximately 90% price impact.
+///
+/// This calculation assumes a fee-less constant product formula:
+/// - 90% price impact: `(reserve_out - y) / (reserve_in + x) = 0.1 × (reserve_out / reserve_in)`
+/// - Constant product: `(reserve_in + x) × (reserve_out - y) = reserve_in × reserve_out`
+///
+/// However, in practice, swaps apply fees to the input amount, with the fee portion then added to
+/// the pool's liquidity. So the constant formula becomes:
+/// - `(reserve_in + x × (1 - fee)) × (reserve_out - y) = reserve_in × reserve_out`
+///
+/// This asymmetry (full `x` added to reserves, but `y` based on fee-adjusted input) causes
+/// the actual price impact to be slightly less than 90%. For typical fees (0.25%-0.3%), the
+/// actual price impact is approximately 89.9% instead of exactly 90%.
 pub fn cpmm_get_limits(
     sell_token: Bytes,
     buy_token: Bytes,
     reserve0: U256,
     reserve1: U256,
+    fee_bps: u32,
 ) -> Result<(BigUint, BigUint), SimulationError> {
     if reserve0 == U256::from(0u64) || reserve1 == U256::from(0u64) {
         return Ok((BigUint::zero(), BigUint::zero()));
@@ -95,25 +109,18 @@ pub fn cpmm_get_limits(
     let (reserve_in, reserve_out) =
         if zero_for_one { (reserve0, reserve1) } else { (reserve1, reserve0) };
 
-    // Soft limit for amount in is the amount to get a 90% price impact.
-    // The two equations to resolve are:
-    // - 90% price impact: (reserve1 - y)/(reserve0 + x) = 0.1 × (reserve1/reserve0)
-    // - Maintain constant product: (reserve0 + x) × (reserve1 - y) = reserve0 * reserve1
-    //
-    // This resolves into x = (√10 - 1) × reserve0 = 2.16 × reserve0
-    let amount_in = safe_div_u256(safe_mul_u256(reserve_in, U256::from(216))?, U256::from(100))?;
+    // Soft limit for amount in is the amount to get approximately 90% price impact.
+    // Solving the fee-less equations yields: x = (√10 - 1) × reserve_in ≈ 2.162 × reserve_in
+    let amount_in = mul_div(reserve_in, U256::from(2162u128), U256::from(1e3))?;
 
-    // Calculate amount_out using the constant product formula
-    // The constant product formula requires:
-    // (reserve_in + amount_in) × (reserve_out - amount_out) = reserve_in * reserve_out
-    // Solving for amount_out:
-    // amount_out = reserve_out - (reserve_in * reserve_out) (reserve_in + amount_in)
-    // which simplifies to:
-    // amount_out = (reserve_out * amount_in) / (reserve_in + amount_in)
-    let amount_out = safe_div_u256(
-        safe_mul_u256(reserve_out, amount_in)?,
-        safe_add_u256(reserve_in, amount_in)?,
-    )?;
+    // Calculate amount_out using the actual swap formula that accounts for fees
+    // amount_in_with_fee = amount_in * (10000 - fee_bps) / 10000
+    // amount_out = (amount_in_with_fee * reserve_out) / (reserve_in + amount_in_with_fee)
+    let fee_multiplier = U256::from(10000 - fee_bps);
+    let amount_in_with_fee = safe_mul_u256(amount_in, fee_multiplier)?;
+
+    let amount_out =
+        mul_div(reserve_out, amount_in_with_fee, safe_add_u256(reserve_in, amount_in)?)?;
 
     Ok((u256_to_biguint(amount_in), u256_to_biguint(amount_out)))
 }

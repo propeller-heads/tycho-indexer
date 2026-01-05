@@ -1,8 +1,8 @@
 use std::{any::Any, collections::HashMap};
 
 use alloy::primitives::{Sign, I256, U256};
-use num_bigint::{BigInt, BigUint};
-use num_traits::{ToPrimitive, Zero};
+use num_bigint::BigUint;
+use num_traits::Zero;
 use tracing::trace;
 use tycho_common::{
     dto::ProtocolStateDelta,
@@ -17,98 +17,69 @@ use tycho_common::{
 use crate::evm::protocol::{
     safe_math::{safe_add_u256, safe_sub_u256},
     u256_num::u256_to_biguint,
-    utils::{
-        add_fee_markup,
-        slipstreams::{
-            dynamic_fee_module::{get_dynamic_fee, DynamicFeeConfig},
-            observations::{Observation, Observations},
+    utils::uniswap::{
+        liquidity_math,
+        sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
+        swap_math,
+        tick_list::{TickInfo, TickList, TickListErrorKind},
+        tick_math::{
+            get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
+            MIN_SQRT_RATIO, MIN_TICK,
         },
-        uniswap::{
-            i24_be_bytes_to_i32, liquidity_math,
-            sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
-            swap_math,
-            tick_list::{TickInfo, TickList, TickListErrorKind},
-            tick_math::{
-                get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
-                MIN_SQRT_RATIO, MIN_TICK,
-            },
-            StepComputation, SwapResults, SwapState,
-        },
+        StepComputation, SwapResults, SwapState,
     },
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AerodromeSlipstreamsState {
-    block_timestamp: u64,
+pub struct VelodromeSlipstreamsState {
     liquidity: u128,
     sqrt_price: U256,
-    observation_index: u16,
-    observation_cardinality: u16,
     default_fee: u32,
+    custom_fee: u32,
     tick_spacing: i32,
     tick: i32,
     ticks: TickList,
-    observations: Observations,
-    dfc: DynamicFeeConfig,
 }
 
-impl AerodromeSlipstreamsState {
+impl VelodromeSlipstreamsState {
     /// Creates a new instance of `AerodromeSlipstreamsState`.
     ///
     /// # Arguments
-    /// - `block_timestamp`: The timestamp of the block.
     /// - `liquidity`: The initial liquidity of the pool.
     /// - `sqrt_price`: The square root of the current price.
-    /// - `observation_index`: The index of the current observation.
-    /// - `observation_cardinality`: The cardinality of the observation.
     /// - `default_fee`: The default fee for the pool.
+    /// - `custom_fee`: The custom fee for the pool.
     /// - `tick_spacing`: The tick spacing for the pool.
     /// - `tick`: The current tick of the pool.
     /// - `ticks`: A vector of `TickInfo` representing the tick information for the pool.
-    /// - `observations`: A vector of `Observation` representing the observation information for the
-    ///   pool.
-    /// - `dfc`: The dynamic fee configuration for the pool.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        block_timestamp: u64,
         liquidity: u128,
         sqrt_price: U256,
-        observation_index: u16,
-        observation_cardinality: u16,
         default_fee: u32,
+        custom_fee: u32,
         tick_spacing: i32,
         tick: i32,
         ticks: Vec<TickInfo>,
-        observations: Vec<Observation>,
-        dfc: DynamicFeeConfig,
     ) -> Result<Self, SimulationError> {
         let tick_list = TickList::from(tick_spacing as u16, ticks)?;
-        Ok(AerodromeSlipstreamsState {
-            block_timestamp,
+        Ok(VelodromeSlipstreamsState {
             liquidity,
             sqrt_price,
-            observation_index,
-            observation_cardinality,
             default_fee,
+            custom_fee,
             tick_spacing,
             tick,
             ticks: tick_list,
-            observations: Observations::new(observations),
-            dfc,
         })
     }
 
     fn get_fee(&self) -> u32 {
-        get_dynamic_fee(
-            &self.dfc,
-            self.default_fee,
-            self.tick,
-            self.liquidity,
-            self.observation_index,
-            self.observation_cardinality,
-            &self.observations,
-            self.block_timestamp as u32,
-        )
+        if self.custom_fee > 0 {
+            self.custom_fee
+        } else {
+            self.default_fee
+        }
     }
 
     fn swap(
@@ -180,7 +151,7 @@ impl AerodromeSlipstreamsState {
             let sqrt_price_next = get_sqrt_ratio_at_tick(next_tick)?;
             let (sqrt_price, amount_in, amount_out, fee_amount) = swap_math::compute_swap_step(
                 state.sqrt_price,
-                AerodromeSlipstreamsState::get_sqrt_ratio_target(
+                VelodromeSlipstreamsState::get_sqrt_ratio_target(
                     sqrt_price_next,
                     price_limit,
                     zero_for_one,
@@ -264,18 +235,18 @@ impl AerodromeSlipstreamsState {
     }
 }
 
-impl ProtocolSim for AerodromeSlipstreamsState {
+impl ProtocolSim for VelodromeSlipstreamsState {
     fn fee(&self) -> f64 {
         self.get_fee() as f64 / 1_000_000.0
     }
 
     fn spot_price(&self, a: &Token, b: &Token) -> Result<f64, SimulationError> {
-        let price = if a < b {
-            sqrt_price_q96_to_f64(self.sqrt_price, a.decimals, b.decimals)?
+        if a < b {
+            sqrt_price_q96_to_f64(self.sqrt_price, a.decimals, b.decimals)
         } else {
-            1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, b.decimals, a.decimals)?
-        };
-        Ok(add_fee_markup(price, self.fee()))
+            sqrt_price_q96_to_f64(self.sqrt_price, b.decimals, a.decimals)
+                .map(|price| 1.0f64 / price)
+        }
     }
 
     fn get_amount_out(
@@ -407,36 +378,12 @@ impl ProtocolSim for AerodromeSlipstreamsState {
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
-        if let Some(block_timestamp) = delta
-            .updated_attributes
-            .get("block_timestamp")
-        {
-            self.block_timestamp = BigInt::from_signed_bytes_be(block_timestamp)
-                .to_u64()
-                .unwrap();
-        }
         // apply attribute changes
         if let Some(liquidity) = delta
             .updated_attributes
             .get("liquidity")
         {
-            // This is a hotfix because if the liquidity has never been updated after creation, it's
-            // currently encoded as H256::zero(), therefore, we can't decode this as u128.
-            // We can remove this once it has been fixed on the tycho side.
-            let liq_16_bytes = if liquidity.len() == 32 {
-                // Make sure it only happens for 0 values, otherwise error.
-                if liquidity == &Bytes::zero(32) {
-                    Bytes::from([0; 16])
-                } else {
-                    return Err(TransitionError::DecodeError(format!(
-                        "Liquidity bytes too long for {liquidity}, expected 16",
-                    )));
-                }
-            } else {
-                liquidity.clone()
-            };
-
-            self.liquidity = u128::from(liq_16_bytes);
+            self.liquidity = u128::from(liquidity.clone());
         }
         if let Some(sqrt_price) = delta
             .updated_attributes
@@ -444,62 +391,20 @@ impl ProtocolSim for AerodromeSlipstreamsState {
         {
             self.sqrt_price = U256::from_be_slice(sqrt_price);
         }
-        if let Some(observation_index) = delta
-            .updated_attributes
-            .get("observationIndex")
-        {
-            self.observation_index = u16::from(observation_index.clone());
-        }
-        if let Some(observation_cardinality) = delta
-            .updated_attributes
-            .get("observationCardinality")
-        {
-            self.observation_cardinality = u16::from(observation_cardinality.clone());
-        }
         if let Some(default_fee) = delta
             .updated_attributes
             .get("default_fee")
         {
             self.default_fee = u32::from(default_fee.clone());
         }
-        if let Some(dfc_base_fee) = delta
+        if let Some(custom_fee) = delta
             .updated_attributes
-            .get("dfc_baseFee")
+            .get("custom_fee")
         {
-            self.dfc
-                .update_base_fee(u32::from(dfc_base_fee.clone()));
-        }
-        if let Some(dfc_fee_cap) = delta
-            .updated_attributes
-            .get("dfc_feeCap")
-        {
-            self.dfc
-                .update_fee_cap(u32::from(dfc_fee_cap.clone()));
-        }
-        if let Some(dfc_scaling_factor) = delta
-            .updated_attributes
-            .get("dfc_scalingFactor")
-        {
-            self.dfc
-                .update_scaling_factor(u64::from(dfc_scaling_factor.clone()));
+            self.custom_fee = u32::from(custom_fee.clone());
         }
         if let Some(tick) = delta.updated_attributes.get("tick") {
-            // This is a hotfix because if the tick has never been updated after creation, it's
-            // currently encoded as H256::zero(), therefore, we can't decode this as i32.
-            // We can remove this once it has been fixed on the tycho side.
-            let ticks_4_bytes = if tick.len() == 32 {
-                // Make sure it only happens for 0 values, otherwise error.
-                if tick == &Bytes::zero(32) {
-                    Bytes::from([0; 4])
-                } else {
-                    return Err(TransitionError::DecodeError(format!(
-                        "Tick bytes too long for {tick}, expected 4"
-                    )));
-                }
-            } else {
-                tick.clone()
-            };
-            self.tick = i24_be_bytes_to_i32(&ticks_4_bytes);
+            self.tick = i32::from(tick.clone());
         }
 
         // apply tick & observations changes
@@ -516,15 +421,6 @@ impl ProtocolSim for AerodromeSlipstreamsState {
                     )
                     .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
             }
-
-            // observations keys are in the format "observations/{observation_index}"
-            if let Some(idx_str) = key.strip_prefix("observations/") {
-                if let Ok(idx) = idx_str.parse::<i32>() {
-                    let _ = self
-                        .observations
-                        .upsert_observation(idx, value);
-                }
-            }
         }
         // delete ticks - ignores deletes for attributes other than tick liquidity
         for key in delta.deleted_attributes.iter() {
@@ -539,15 +435,6 @@ impl ProtocolSim for AerodromeSlipstreamsState {
                         0,
                     )
                     .map_err(|err| TransitionError::DecodeError(err.to_string()))?;
-            }
-
-            // observations keys are in the format "observations/{observation_index}"
-            if let Some(idx_str) = key.strip_prefix("observations/") {
-                if let Ok(idx) = idx_str.parse::<i32>() {
-                    let _ = self
-                        .observations
-                        .upsert_observation(idx, &[]);
-                }
             }
         }
         Ok(())
@@ -568,7 +455,7 @@ impl ProtocolSim for AerodromeSlipstreamsState {
     fn eq(&self, other: &dyn ProtocolSim) -> bool {
         if let Some(other_state) = other
             .as_any()
-            .downcast_ref::<AerodromeSlipstreamsState>()
+            .downcast_ref::<VelodromeSlipstreamsState>()
         {
             self.liquidity == other_state.liquidity &&
                 self.sqrt_price == other_state.sqrt_price &&
@@ -578,12 +465,5 @@ impl ProtocolSim for AerodromeSlipstreamsState {
         } else {
             false
         }
-    }
-
-    fn query_pool_swap(
-        &self,
-        params: &tycho_common::simulation::protocol_sim::QueryPoolSwapParams,
-    ) -> Result<tycho_common::simulation::protocol_sim::PoolSwap, SimulationError> {
-        crate::evm::query_pool_swap::query_pool_swap(self, params)
     }
 }

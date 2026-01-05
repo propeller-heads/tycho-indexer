@@ -17,13 +17,14 @@ use tycho_simulation::{
             aerodrome_slipstreams::state::AerodromeSlipstreamsState,
             ekubo::state::EkuboState,
             erc4626::state::ERC4626State,
-            filters::{balancer_v2_pool_filter, curve_pool_filter, fluid_v1_paused_pools_filter},
+            filters::{balancer_v2_pool_filter, fluid_v1_paused_pools_filter},
             fluid::FluidV1,
             pancakeswap_v2::state::PancakeswapV2State,
             rocketpool::state::RocketpoolState,
             uniswap_v2::state::UniswapV2State,
             uniswap_v3::state::UniswapV3State,
             uniswap_v4::state::UniswapV4State,
+            velodrome_slipstreams::state::VelodromeSlipstreamsState,
             vm::state::EVMPoolState,
         },
         stream::ProtocolStreamBuilder,
@@ -170,6 +171,8 @@ impl ProtocolStreamProcessor {
                     "uniswap_v3".to_string(),
                     "uniswap_v4".to_string(),
                     "uniswap_v4_hooks".to_string(),
+                    "velodrome_slipstreams".to_string(),
+                    "vm:curve".to_string(),
                 ]
             }
             _ => vec![],
@@ -222,7 +225,7 @@ impl ProtocolStreamProcessor {
                 stream = stream.exchange::<EVMPoolState<PreCachedDB>>(
                     "vm:curve",
                     tvl_filter.clone(),
-                    Some(curve_pool_filter),
+                    None,
                 );
             }
             "uniswap_v4_hooks" => {
@@ -255,6 +258,13 @@ impl ProtocolStreamProcessor {
             }
             "rocketpool" => {
                 stream = stream.exchange::<RocketpoolState>("rocketpool", tvl_filter.clone(), None);
+            }
+            "velodrome_slipstreams" => {
+                stream = stream.exchange::<VelodromeSlipstreamsState>(
+                    "velodrome_slipstreams",
+                    tvl_filter.clone(),
+                    None,
+                );
             }
             _ => {
                 return Err(miette::miette!("Unknown protocol: {}", protocol));

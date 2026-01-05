@@ -34,6 +34,7 @@ use crate::evm::{
     protocol::{
         fluid::{v1::constant::RESERVES_RESOLVER, vm},
         u256_num::{biguint_to_u256, u256_to_biguint, u256_to_f64},
+        utils::add_fee_markup,
     },
 };
 
@@ -186,7 +187,12 @@ impl FluidV1 {
 
 impl ProtocolSim for FluidV1 {
     fn fee(&self) -> f64 {
-        u256_to_f64(self.fee).expect("Fluid fee values are safe to convert") / 10000.0
+        let fee = u256_to_f64(self.fee).expect("Fluid fee values are safe to convert");
+        let precision =
+            u256_to_f64(constant::FEE_PERCENT_PRECISION).expect("FEE_PERCENT_PRECISION is safe");
+        // Fee is in basis points: fee / FEE_PERCENT_PRECISION / 100
+        // e.g., fee=68 means 68/10000/100 = 0.000068 = 0.0068%
+        fee / precision / 100.0
     }
 
     fn spot_price(&self, base: &Token, _quote: &Token) -> Result<f64, SimulationError> {
@@ -211,13 +217,10 @@ impl ProtocolSim for FluidV1 {
                     .token0_imaginary_reserves,
             )?
         };
-        let fee_factor =
-            1.0 - u256_to_f64(self.fee)? / u256_to_f64(constant::FEE_PERCENT_PRECISION)? / 100.0;
-        if base.address == self.token0.address {
-            Ok(price_f64 * fee_factor)
-        } else {
-            Ok(1.0 / price_f64 * fee_factor)
-        }
+        let oriented_price_f64 =
+            if base.address == self.token0.address { price_f64 } else { 1.0 / price_f64 };
+
+        Ok(add_fee_markup(oriented_price_f64, self.fee()))
     }
 
     fn get_amount_out(
@@ -2726,14 +2729,23 @@ mod test {
     fn test_spot_price() {
         let (wsteth, eth, pool) = wsteth_eth_pool_23526115();
         // derived via numerical estimates from onchain quotes
-        let exp_spot0 = 1.21511419f64;
-        let exp_spot1 = 0.82285596f64;
+        let exp_spot0 = 1.21519682; // 1.21511419 adjusted by 0.0068% fee
+        let exp_spot1 = 0.82291191; // 0.82228559 adjusted by 0.0068% fee
 
         let spot0 = pool.spot_price(&wsteth, &eth).unwrap();
         let spot1 = pool.spot_price(&eth, &wsteth).unwrap();
 
-        assert!(spot0 > exp_spot0, "FAIL: spot0 <= numerical estimate");
-        assert!(spot1 > exp_spot1, "FAIL: spot1 <= numerical estimate");
+        let rel_err0 = (spot0 - exp_spot0).abs() / exp_spot0;
+        let rel_err1 = (spot1 - exp_spot1).abs() / exp_spot1;
+
+        assert!(
+            rel_err0 < 1e-4,
+            "spot0 mismatch: got {spot0}, expected {exp_spot0}, relative error: {rel_err0}"
+        );
+        assert!(
+            rel_err1 < 1e-4,
+            "spot1 mismatch: got {spot1}, expected {exp_spot1}, relative error: {rel_err1}"
+        );
     }
 
     #[test]
