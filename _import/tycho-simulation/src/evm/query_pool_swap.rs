@@ -1,8 +1,5 @@
 //! Default `query_pool_swap` implementation for EVM protocols.
 //!
-//! Uses a history-based Brent's method adapted for AMM price curves.
-//! Combines inverse quadratic interpolation (IQI) and secant methods
-//! with bisection fallback for robust convergence.
 //!
 //! # Supported Constraints
 //!
@@ -35,14 +32,18 @@ pub type PricePoint = (BigUint, BigUint, f64);
 const MAX_ITERATIONS: u32 = 30;
 const IQI_THRESHOLD: f64 = 0.01;
 
-fn trade_price(amount_in: f64, amount_out: f64, decimals_in: u32, decimals_out: u32) -> f64 {
+/// Calculates the trade price as `amount_out / amount_in`, adjusted for decimal differences.
+#[inline]
+fn calculate_trade_price(amount_in: f64, amount_out: f64, decimals_in: u32, decimals_out: u32) -> f64 {
     if amount_in <= 0.0 {
         return f64::MAX;
     }
     (amount_out / amount_in) * 10_f64.powi(decimals_in as i32 - decimals_out as i32)
 }
 
-fn within_tolerance(actual: f64, target: f64, tolerance: f64) -> bool {
+/// Returns true if `actual` is within `[target, target * (1 + tolerance)]`.
+#[inline]
+fn is_within_tolerance(actual: f64, target: f64, tolerance: f64) -> bool {
     actual >= target && actual <= target * (1.0 + tolerance)
 }
 
@@ -62,7 +63,7 @@ fn geometric_mean(a: &BigUint, b: &BigUint) -> BigUint {
 /// quadratic interpolation which would estimate price from amount.
 ///
 /// Part of Brent's method. See: <https://en.wikipedia.org/wiki/Brent%27s_method>
-fn iqi(p: &[PricePoint], target: f64) -> Option<f64> {
+fn iqi(p: &[PricePoint], target_price: f64) -> Option<f64> {
     if p.len() != 3 {
         return None;
     }
@@ -77,9 +78,9 @@ fn iqi(p: &[PricePoint], target: f64) -> Option<f64> {
     let d2 = (pr1 - pr0) * (pr1 - pr2);
     let d3 = (pr2 - pr0) * (pr2 - pr1);
 
-    let result = a0 * (target - pr1) * (target - pr2) / d1 +
-        a1 * (target - pr0) * (target - pr2) / d2 +
-        a2 * (target - pr0) * (target - pr1) / d3;
+    let result = a0 * (target_price - pr1) * (target_price - pr2) / d1 +
+        a1 * (target_price - pr0) * (target_price - pr2) / d2 +
+        a2 * (target_price - pr0) * (target_price - pr1) / d3;
 
     (result.is_finite() && result > 0.0).then_some(result)
 }
@@ -87,32 +88,31 @@ fn iqi(p: &[PricePoint], target: f64) -> Option<f64> {
 /// Secant method - linear interpolation to estimate amount for target price.
 ///
 /// Uses 2 points to draw a line and find where it crosses the target price.
-/// Faster than bisection but less robust than IQI for nonlinear curves.
-fn secant(p: &[PricePoint], target: f64) -> Option<f64> {
+fn secant(p: &[PricePoint], target_price: f64) -> Option<f64> {
     if p.len() != 2 {
         return None;
     }
     let (a0, a1) = (p[0].0.to_f64().unwrap_or(0.0), p[1].0.to_f64().unwrap_or(0.0));
     let (pr0, pr1) = (p[0].2, p[1].2);
     let dp = pr1 - pr0;
-    let result = a1 - (pr1 - target) * (a1 - a0) / dp;
+    let result = a1 - (pr1 - target_price) * (a1 - a0) / dp;
     (result.is_finite() && result > 0.0).then_some(result)
 }
 
-/// Select next amount to evaluate using Brent's method heuristics.
+/// Select next amount to evaluate using heuristics.
 ///
 /// Tries methods in order of convergence speed:
 /// 1. IQI (if 3+ points and estimate improves bracket by >1%)
 /// 2. Secant (if 2+ points and estimate is within bracket)
 /// 3. Geometric mean bisection (fallback)
-fn next_amount(history: &[PricePoint], low: &BigUint, high: &BigUint, target: f64) -> BigUint {
+fn next_amount(history: &[PricePoint], low: &BigUint, high: &BigUint, target_price: f64) -> BigUint {
     let low_f64 = low.to_f64().unwrap_or(0.0);
     let high_f64 = high.to_f64().unwrap_or(f64::MAX);
     let bracket = high_f64 - low_f64;
     let len = history.len();
 
     if len >= 3 {
-        if let Some(est) = iqi(&history[len - 3..], target) {
+        if let Some(est) = iqi(&history[len - 3..], target_price) {
             if est > low_f64 && est < high_f64 {
                 let improvement = (est - low_f64).min(high_f64 - est);
                 if improvement > bracket * IQI_THRESHOLD {
@@ -127,7 +127,7 @@ fn next_amount(history: &[PricePoint], low: &BigUint, high: &BigUint, target: f6
     }
 
     if len >= 2 {
-        if let Some(est) = secant(&history[len - 2..], target) {
+        if let Some(est) = secant(&history[len - 2..], target_price) {
             if est > low_f64 && est < high_f64 {
                 if let Some(amt) = BigUint::from_f64(est) {
                     if &amt > low && &amt < high {
@@ -170,7 +170,7 @@ fn search(
     let limit_result = state.get_amount_out(max_in.clone(), token_in, token_out)?;
 
     let limit_price = if use_trade_price {
-        trade_price(
+        calculate_trade_price(
             max_in.to_f64().unwrap_or(f64::MAX),
             limit_result
                 .amount
@@ -212,7 +212,7 @@ fn search(
         let result = state.get_amount_out(amount.clone(), token_in, token_out)?;
 
         let price = if use_trade_price {
-            trade_price(
+            calculate_trade_price(
                 amount.to_f64().unwrap_or(0.0),
                 result.amount.to_f64().unwrap_or(0.0),
                 token_in.decimals,
@@ -239,7 +239,7 @@ fn search(
             }
         }
 
-        if within_tolerance(price, target_price, tolerance) {
+        if is_within_tolerance(price, target_price, tolerance) {
             return Ok(PoolSwap::new(amount, result.amount, result.new_state, Some(price_points)));
         }
 
@@ -260,6 +260,12 @@ fn search(
 }
 
 /// Find the swap amount to reach a target price.
+/// 
+/// Uses a history-based Brent's method adapted for AMM price curves.
+/// Combines inverse quadratic interpolation (IQI) and secant methods
+/// with bisection fallback for robust convergence. The criteria for 
+/// choosing IQI over secant has been changed to a heuristic that performs 
+/// best for the VM protocols based on internal benchmark testing.
 ///
 /// See [`ProtocolSim::query_pool_swap`] for the trait method this implements.
 ///
@@ -366,37 +372,37 @@ mod tests {
 
     #[test]
     fn test_within_tolerance_exact() {
-        assert!(within_tolerance(1.0, 1.0, 0.001));
-        assert!(within_tolerance(1000.0, 1000.0, 0.001));
-        assert!(within_tolerance(0.001, 0.001, 0.001));
+        assert!(is_within_tolerance(1.0, 1.0, 0.001));
+        assert!(is_within_tolerance(1000.0, 1000.0, 0.001));
+        assert!(is_within_tolerance(0.001, 0.001, 0.001));
     }
 
     #[test]
     fn test_within_tolerance_above_within_range() {
         let tolerance = 0.001;
-        assert!(within_tolerance(1.0005, 1.0, tolerance));
-        assert!(within_tolerance(1.001, 1.0, tolerance));
+        assert!(is_within_tolerance(1.0005, 1.0, tolerance));
+        assert!(is_within_tolerance(1.001, 1.0, tolerance));
     }
 
     #[test]
     fn test_within_tolerance_above_out_of_range() {
         let tolerance = 0.001;
-        assert!(!within_tolerance(1.002, 1.0, tolerance));
-        assert!(!within_tolerance(1.01, 1.0, tolerance));
+        assert!(!is_within_tolerance(1.002, 1.0, tolerance));
+        assert!(!is_within_tolerance(1.01, 1.0, tolerance));
     }
 
     #[test]
     fn test_within_tolerance_below_target() {
         let tolerance = 0.001;
-        assert!(!within_tolerance(0.999, 1.0, tolerance));
-        assert!(!within_tolerance(0.9999, 1.0, tolerance));
-        assert!(!within_tolerance(0.0, 1.0, tolerance));
+        assert!(!is_within_tolerance(0.999, 1.0, tolerance));
+        assert!(!is_within_tolerance(0.9999, 1.0, tolerance));
+        assert!(!is_within_tolerance(0.0, 1.0, tolerance));
     }
 
     #[test]
     fn test_within_tolerance_zero_tolerance() {
-        assert!(within_tolerance(1.0, 1.0, 0.0));
-        assert!(!within_tolerance(1.0001, 1.0, 0.0));
+        assert!(is_within_tolerance(1.0, 1.0, 0.0));
+        assert!(!is_within_tolerance(1.0001, 1.0, 0.0));
     }
 
     // =========================================================================
@@ -444,30 +450,30 @@ mod tests {
 
     #[test]
     fn test_trade_price_basic() {
-        let price = trade_price(50.0, 100.0, 18, 18);
+        let price = calculate_trade_price(50.0, 100.0, 18, 18);
         assert!((price - 2.0).abs() < 0.001);
     }
 
     #[test]
     fn test_trade_price_decimal_adjustment() {
-        let price = trade_price(50.0, 100.0, 6, 18);
+        let price = calculate_trade_price(50.0, 100.0, 6, 18);
         assert!((price - 2e-12).abs() < 1e-18);
     }
 
     #[test]
     fn test_trade_price_reverse_decimal_adjustment() {
-        let price = trade_price(50.0, 100.0, 18, 6);
+        let price = calculate_trade_price(50.0, 100.0, 18, 6);
         assert!((price - 2e12).abs() < 1.0);
     }
 
     #[test]
     fn test_trade_price_zero_input() {
-        assert_eq!(trade_price(0.0, 100.0, 18, 18), f64::MAX);
+        assert_eq!(calculate_trade_price(0.0, 100.0, 18, 18), f64::MAX);
     }
 
     #[test]
     fn test_trade_price_negative_input() {
-        assert_eq!(trade_price(-1.0, 100.0, 18, 18), f64::MAX);
+        assert_eq!(calculate_trade_price(-1.0, 100.0, 18, 18), f64::MAX);
     }
 
     // =========================================================================
@@ -750,7 +756,7 @@ mod tests {
         assert!(pool_swap.amount_in() > &BigUint::zero());
         assert!(pool_swap.amount_out() > &BigUint::zero());
 
-        let actual_trade_price = trade_price(
+        let actual_trade_price = calculate_trade_price(
             pool_swap.amount_in().to_f64().unwrap(),
             pool_swap.amount_out().to_f64().unwrap(),
             dai.decimals,
@@ -800,7 +806,7 @@ mod tests {
 
         let pool_swap = result.unwrap();
 
-        let actual_trade_price = trade_price(
+        let actual_trade_price = calculate_trade_price(
             pool_swap.amount_in().to_f64().unwrap(),
             pool_swap.amount_out().to_f64().unwrap(),
             usdc.decimals,
