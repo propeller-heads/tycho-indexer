@@ -1,3 +1,10 @@
+## [0.225.1](https://github.com/propeller-heads/tycho-simulation/compare/0.225.0...0.225.1) (2026-01-05)
+
+
+### Bug Fixes
+
+* change error message ([23a85e1](https://github.com/propeller-heads/tycho-simulation/commit/23a85e1b52a97e403fe9941779be7c9f0215863b))
+
 ## [0.225.0](https://github.com/propeller-heads/tycho-simulation/compare/0.224.0...0.225.0) (2025-12-30)
 
 
