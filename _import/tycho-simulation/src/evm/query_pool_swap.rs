@@ -22,7 +22,7 @@ use tycho_common::{
     models::token::Token,
     simulation::{
         errors::SimulationError,
-        protocol_sim::{PoolSwap, ProtocolSim, QueryPoolSwapParams, SwapConstraint},
+        protocol_sim::{PoolSwap, Price, ProtocolSim, QueryPoolSwapParams, SwapConstraint},
     },
 };
 
@@ -45,6 +45,48 @@ fn calculate_trade_price(amount_in: f64, amount_out: f64, decimals_in: u32, deci
 #[inline]
 fn is_within_tolerance(actual: f64, target: f64, tolerance: f64) -> bool {
     actual >= target && actual <= target * (1.0 + tolerance)
+}
+
+/// Converts a Price to f64 with decimal adjustment for token pairs.
+///
+/// Applies decimal scaling in integer arithmetic before converting to f64 to preserve
+/// precision for large numerator/denominator values.
+///
+/// # Arguments
+/// * `price` - The price as a fraction (numerator/denominator)
+/// * `decimals_in` - Decimals of the input token
+/// * `decimals_out` - Decimals of the output token
+///
+/// # Returns
+/// The price as f64, adjusted for decimal differences: `(num/den) * 10^(decimals_in - decimals_out)`
+fn price_to_f64_with_decimals(
+    price: &Price,
+    decimals_in: u32,
+    decimals_out: u32,
+) -> Result<f64, SimulationError> {
+    let (scaled_num, scaled_den) = if decimals_in >= decimals_out {
+        let scale = BigUint::from(10u64).pow(decimals_in - decimals_out);
+        (&price.numerator * scale, price.denominator.clone())
+    } else {
+        let scale = BigUint::from(10u64).pow(decimals_out - decimals_in);
+        (price.numerator.clone(), &price.denominator * scale)
+    };
+
+    let num_f64 = scaled_num.to_f64().ok_or_else(|| {
+        SimulationError::InvalidInput("Price numerator too large for f64".into(), None)
+    })?;
+    let den_f64 = scaled_den.to_f64().ok_or_else(|| {
+        SimulationError::InvalidInput("Price denominator too large for f64".into(), None)
+    })?;
+
+    if den_f64 == 0.0 {
+        return Err(SimulationError::InvalidInput(
+            "Price denominator is zero".into(),
+            None,
+        ));
+    }
+
+    Ok(num_f64 / den_f64)
 }
 
 fn geometric_mean(a: &BigUint, b: &BigUint) -> BigUint {
@@ -297,41 +339,15 @@ pub fn query_pool_swap(
 
     match params.swap_constraint() {
         SwapConstraint::TradeLimitPrice { limit, tolerance, .. } => {
-            let num = limit
-                .numerator
-                .to_f64()
-                .ok_or_else(|| {
-                    SimulationError::InvalidInput("Invalid limit numerator".into(), None)
-                })?;
-            let den = limit
-                .denominator
-                .to_f64()
-                .ok_or_else(|| {
-                    SimulationError::InvalidInput("Invalid limit denominator".into(), None)
-                })?;
-            let decimal_adj = 10_f64.powi(token_in.decimals as i32 - token_out.decimals as i32);
-            let target = (num / den) * decimal_adj;
-
-            search(state, target, *tolerance, token_in, token_out, true)
+            let scaled_trade_limit_price =
+                price_to_f64_with_decimals(limit, token_in.decimals, token_out.decimals)?;
+            search(state, scaled_trade_limit_price, *tolerance, token_in, token_out, true)
         }
 
         SwapConstraint::PoolTargetPrice { target, tolerance, .. } => {
-            let num = target
-                .numerator
-                .to_f64()
-                .ok_or_else(|| {
-                    SimulationError::InvalidInput("Invalid target numerator".into(), None)
-                })?;
-            let den = target
-                .denominator
-                .to_f64()
-                .ok_or_else(|| {
-                    SimulationError::InvalidInput("Invalid target denominator".into(), None)
-                })?;
-            let decimal_adj = 10_f64.powi(token_in.decimals as i32 - token_out.decimals as i32);
-            let target_price = (num / den) * decimal_adj;
-
-            search(state, target_price, *tolerance, token_in, token_out, false)
+            let scaled_pool_target_price =
+                price_to_f64_with_decimals(target, token_in.decimals, token_out.decimals)?;
+            search(state, scaled_pool_target_price, *tolerance, token_in, token_out, false)
         }
     }
 }
