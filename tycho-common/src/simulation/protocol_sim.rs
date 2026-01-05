@@ -106,6 +106,28 @@ impl Price {
     }
 }
 
+/// A point on the AMM price curve.
+///
+/// Collected during iterative numerical search algorithms.
+/// These points can be reused as bounds for subsequent searches, improving convergence speed.
+#[derive(Debug, Clone)]
+pub struct PricePoint {
+    /// The amount of token_in in atomic units (wei).
+    pub amount_in: BigUint,
+    /// The amount of token_out in atomic units (wei).
+    pub amount_out: BigUint,
+    /// The price in units of `[token_out/token_in]` scaled by decimals.
+    ///
+    /// Computed as `(amount_out / 10^token_out_decimals) / (amount_in / 10^token_in_decimals)`.
+    pub price: f64,
+}
+
+impl PricePoint {
+    pub fn new(amount_in: BigUint, amount_out: BigUint, price: f64) -> Self {
+        Self { amount_in, amount_out, price }
+    }
+}
+
 /// Represents a pool swap between two tokens at a given price on a pool.
 #[derive(Debug, Clone)]
 pub struct PoolSwap {
@@ -116,9 +138,8 @@ pub struct PoolSwap {
     /// The new state of the pool after the swap
     new_state: Box<dyn ProtocolSim>,
     /// Optional price points that the pool was transitioned through while computing this swap.
-    /// The values are tuples of (amount_in, amount_out, price). This is useful for repeated calls
-    /// by providing good bounds for the next call.
-    price_points: Option<Vec<(BigUint, BigUint, f64)>>,
+    /// Useful for providing good bounds for repeated calls.
+    price_points: Option<Vec<PricePoint>>,
 }
 
 impl PoolSwap {
@@ -126,7 +147,7 @@ impl PoolSwap {
         amount_in: BigUint,
         amount_out: BigUint,
         new_state: Box<dyn ProtocolSim>,
-        price_points: Option<Vec<(BigUint, BigUint, f64)>>,
+        price_points: Option<Vec<PricePoint>>,
     ) -> Self {
         Self { amount_in, amount_out, new_state, price_points }
     }
@@ -143,7 +164,7 @@ impl PoolSwap {
         self.new_state.as_ref()
     }
 
-    pub fn price_points(&self) -> &Option<Vec<(BigUint, BigUint, f64)>> {
+    pub fn price_points(&self) -> &Option<Vec<PricePoint>> {
         &self.price_points
     }
 }
