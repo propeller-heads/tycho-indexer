@@ -357,6 +357,7 @@ mod tests {
     use std::str::FromStr;
 
     use alloy::primitives::U256;
+    use rstest::rstest;
     use tycho_common::{hex_bytes::Bytes, models::Chain, simulation::protocol_sim::Price};
 
     use super::*;
@@ -607,30 +608,253 @@ mod tests {
     }
 
     // =========================================================================
-    // Integration tests with UniswapV2State - PoolTargetPrice
+    // Integration tests - Pool setup helpers
     // =========================================================================
 
-    #[test]
-    fn test_query_pool_swap_pool_target_price_same_decimals() {
-        let state = UniswapV2State::new(
-            U256::from(1000u64) * U256::from(10u64).pow(U256::from(18u64)),
-            U256::from(2_000_000u64) * U256::from(10u64).pow(U256::from(18u64)),
-        );
+    mod pool_setup {
+        use std::collections::HashMap;
 
-        let weth = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
-        let dai = create_token("0x0000000000000000000000000000000000000001", "DAI", 18);
+        use revm::{
+            primitives::KECCAK_EMPTY,
+            state::{AccountInfo, Bytecode},
+        };
+        use serde_json::Value;
+        use tycho_client::feed::BlockHeader;
 
-        let spot_price = state.spot_price(&dai, &weth).unwrap();
-        let target_price_f64 = spot_price * 0.99;
-        let target_price = Price::new(
-            BigUint::from((target_price_f64 * 1e18) as u128),
+        use super::*;
+        use crate::evm::{
+            engine_db::{
+                create_engine, engine_db_interface::EngineDatabaseInterface,
+                tycho_db::PreCachedDB, SHARED_TYCHO_DB,
+            },
+            protocol::{
+                uniswap_v3::{enums::FeeAmount, state::UniswapV3State},
+                utils::{bytes_to_address, uniswap::tick_list::TickInfo},
+                vm::{
+                    constants::{BALANCER_V2, ERC20_PROXY_BYTECODE},
+                    state::EVMPoolState,
+                    state_builder::EVMPoolStateBuilder,
+                },
+            },
+            simulation::SimulationEngine,
+            tycho_models::AccountUpdate,
+        };
+
+        pub async fn v2_same_decimals() -> (Box<dyn ProtocolSim>, Token, Token) {
+            let state = UniswapV2State::new(
+                U256::from(1000u64) * U256::from(10u64).pow(U256::from(18u64)),
+                U256::from(2_000_000u64) * U256::from(10u64).pow(U256::from(18u64)),
+            );
+            let token_in = create_token("0x0000000000000000000000000000000000000001", "DAI", 18);
+            let token_out = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
+            (Box::new(state), token_in, token_out)
+        }
+
+        pub async fn v2_different_decimals() -> (Box<dyn ProtocolSim>, Token, Token) {
+            let state = UniswapV2State::new(
+                U256::from(1000u64) * U256::from(10u64).pow(U256::from(18u64)),
+                U256::from(2_000_000u64) * U256::from(10u64).pow(U256::from(6u64)),
+            );
+            let token_in = create_token("0x0000000000000000000000000000000000000001", "USDC", 6);
+            let token_out = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
+            (Box::new(state), token_in, token_out)
+        }
+
+        pub async fn v3_different_decimals() -> (Box<dyn ProtocolSim>, Token, Token) {
+            let state = UniswapV3State::new(
+                377952820878029838,
+                U256::from_str("28437325270877025820973479874632004").unwrap(),
+                FeeAmount::Low,
+                255830,
+                vec![
+                    TickInfo::new(255760, 1759015528199933i128).unwrap(),
+                    TickInfo::new(255770, 6393138051835308i128).unwrap(),
+                    TickInfo::new(255780, 228206673808681i128).unwrap(),
+                    TickInfo::new(255820, 1319490609195820i128).unwrap(),
+                    TickInfo::new(255830, 678916926147901i128).unwrap(),
+                    TickInfo::new(255840, 12208947683433103i128).unwrap(),
+                    TickInfo::new(255850, 1177970713095301i128).unwrap(),
+                    TickInfo::new(255860, 8752304680520407i128).unwrap(),
+                    TickInfo::new(255880, 1486478248067104i128).unwrap(),
+                    TickInfo::new(255890, 1878744276123248i128).unwrap(),
+                    TickInfo::new(255900, 77340284046725227i128).unwrap(),
+                ],
+            )
+            .unwrap();
+            let token_in = create_token("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", "WBTC", 8);
+            let token_out = create_token("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", "WETH", 18);
+            (Box::new(state), token_in, token_out)
+        }
+
+        fn balancer_dai() -> Token {
+            create_token("0x6b175474e89094c44da98b954eedeac495271d0f", "DAI", 18)
+        }
+
+        fn balancer_bal() -> Token {
+            create_token("0xba100000625a3754423978a60c9317c58a424e3d", "BAL", 18)
+        }
+
+        async fn setup_balancer_pool() -> EVMPoolState<PreCachedDB> {
+            SHARED_TYCHO_DB.clear().expect("Failed to clear SHARED TX");
+
+            let data_str =
+                include_str!("protocol/vm/assets/balancer_contract_storage_block_20463609.json");
+            let data: Value = serde_json::from_str(data_str).expect("Failed to parse JSON");
+
+            let accounts: Vec<AccountUpdate> = serde_json::from_value(data["accounts"].clone())
+                .expect("Expected accounts to match AccountUpdate structure");
+
+            let db = SHARED_TYCHO_DB.clone();
+            let engine: SimulationEngine<_> = create_engine(db.clone(), false).unwrap();
+
+            let block = BlockHeader {
+                number: 20463609,
+                hash: Bytes::from_str(
+                    "0x4315fd1afc25cc2ebc72029c543293f9fd833eeb305e2e30159459c827733b1b",
+                )
+                .unwrap(),
+                timestamp: 1722875891,
+                ..Default::default()
+            };
+
+            for account in accounts.clone() {
+                engine
+                    .state
+                    .init_account(
+                        account.address,
+                        AccountInfo {
+                            balance: account.balance.unwrap_or_default(),
+                            nonce: 0u64,
+                            code_hash: KECCAK_EMPTY,
+                            code: account
+                                .code
+                                .clone()
+                                .map(|arg0: Vec<u8>| Bytecode::new_raw(arg0.into())),
+                        },
+                        None,
+                        false,
+                    )
+                    .expect("Failed to initialize account");
+            }
+            db.update(accounts, Some(block)).unwrap();
+
+            let tokens = vec![balancer_dai().address, balancer_bal().address];
+            for token in &tokens {
+                engine
+                    .state
+                    .init_account(
+                        bytes_to_address(token).unwrap(),
+                        AccountInfo {
+                            balance: U256::from(0),
+                            nonce: 0,
+                            code_hash: KECCAK_EMPTY,
+                            code: Some(Bytecode::new_raw(ERC20_PROXY_BYTECODE.into())),
+                        },
+                        None,
+                        true,
+                    )
+                    .expect("Failed to initialize account");
+            }
+
+            let block = BlockHeader {
+                number: 18485417,
+                hash: Bytes::from_str(
+                    "0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",
+                )
+                .expect("Invalid block hash"),
+                timestamp: 0,
+                ..Default::default()
+            };
+            db.update(vec![], Some(block.clone())).unwrap();
+
+            let pool_id: String =
+                "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
+
+            let stateless_contracts = HashMap::from([(
+                String::from("0x3de27efa2f1aa663ae5d458857e731c129069f29"),
+                Some(Vec::new()),
+            )]);
+
+            let dai_addr = bytes_to_address(&balancer_dai().address).unwrap();
+            let bal_addr = bytes_to_address(&balancer_bal().address).unwrap();
+            let balances = HashMap::from([
+                (dai_addr, U256::from_str("178754012737301807104").unwrap()),
+                (bal_addr, U256::from_str("91082987763369885696").unwrap()),
+            ]);
+            let adapter_address =
+                alloy::primitives::Address::from_str("0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270")
+                    .unwrap();
+
+            #[allow(deprecated)]
+            EVMPoolStateBuilder::new(pool_id, tokens, adapter_address)
+                .balances(balances)
+                .balance_owner(
+                    alloy::primitives::Address::from_str(
+                        "0xBA12222222228d8Ba445958a75a0704d566BF2C8",
+                    )
+                    .unwrap(),
+                )
+                .adapter_contract_bytecode(Bytecode::new_raw(BALANCER_V2.into()))
+                .stateless_contracts(stateless_contracts)
+                .build(SHARED_TYCHO_DB.clone())
+                .await
+                .expect("Failed to build pool state")
+        }
+
+        pub async fn balancer_same_decimals() -> (Box<dyn ProtocolSim>, Token, Token) {
+            let token_in = balancer_dai();
+            let token_out = balancer_bal();
+            let state = setup_balancer_pool().await;
+
+            let prime_result = state
+                .get_amount_out(BigUint::from(1_000_000_000_000_000_000u128), &token_in, &token_out)
+                .expect("Failed to prime spot prices");
+            let primed_state = prime_result
+                .new_state
+                .as_any()
+                .downcast_ref::<EVMPoolState<PreCachedDB>>()
+                .unwrap()
+                .clone();
+
+            (Box::new(primed_state), token_in, token_out)
+        }
+    }
+
+    fn to_price(price_f64: f64, token_in: &Token, token_out: &Token) -> Price {
+        let decimal_adj = 10_f64.powi(token_in.decimals as i32 - token_out.decimals as i32);
+        let price_no_decimals = price_f64 / decimal_adj;
+        Price::new(
+            BigUint::from((price_no_decimals * 1e18) as u128),
             BigUint::from(10u128.pow(18)),
-        );
+        )
+    }
 
+    // =========================================================================
+    // Integration tests - PoolTargetPrice (all pool types)
+    // =========================================================================
+
+    #[rstest]
+    #[case::v2_same_decimals(pool_setup::v2_same_decimals(), 0.99)]
+    #[case::v2_different_decimals(pool_setup::v2_different_decimals(), 0.95)]
+    #[case::v3_different_decimals(pool_setup::v3_different_decimals(), 0.998)]
+    #[case::balancer_same_decimals(pool_setup::balancer_same_decimals(), 0.98)]
+    #[tokio::test]
+    async fn test_query_pool_swap_pool_target_price(
+        #[case]
+        #[future]
+        pool: (Box<dyn ProtocolSim>, Token, Token),
+        #[case] price_multiplier: f64,
+    ) {
+        let (state, token_in, token_out) = pool.await;
         let tolerance_bps = 10f64;
+
+        let spot_price = state.spot_price(&token_in, &token_out).unwrap();
+        let target_price_f64 = spot_price * price_multiplier;
+        let target_price = to_price(target_price_f64, &token_in, &token_out);
+
         let params = QueryPoolSwapParams::new(
-            dai.clone(),
-            weth.clone(),
+            token_in.clone(),
+            token_out.clone(),
             SwapConstraint::PoolTargetPrice {
                 target: target_price,
                 tolerance: tolerance_bps / 10000.0,
@@ -639,16 +863,13 @@ mod tests {
             },
         );
 
-        let result = query_pool_swap(&state, &params);
+        let result = query_pool_swap(state.as_ref(), &params);
         assert!(result.is_ok(), "query_pool_swap failed: {:?}", result.err());
 
         let pool_swap = result.unwrap();
-        assert!(pool_swap.amount_in() > &BigUint::zero());
+        assert!(pool_swap.amount_in() > &BigUint::zero(), "amount_in should be > 0");
 
-        let new_spot = pool_swap
-            .new_state()
-            .spot_price(&dai, &weth)
-            .unwrap();
+        let new_spot = pool_swap.new_state().spot_price(&token_in, &token_out).unwrap();
         let error_bps = ((new_spot - target_price_f64) / target_price_f64).abs() * 10000.0;
         assert!(
             error_bps < tolerance_bps,
@@ -660,59 +881,67 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_query_pool_swap_pool_target_price_different_decimals() {
-        let state = UniswapV2State::new(
-            U256::from(1000u64) * U256::from(10u64).pow(U256::from(18u64)),
-            U256::from(2_000_000u64) * U256::from(10u64).pow(U256::from(6u64)),
-        );
+    // =========================================================================
+    // Integration tests - TradeLimitPrice (all pool types)
+    // =========================================================================
 
-        let weth = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
-        let usdc = create_token("0x0000000000000000000000000000000000000001", "USDC", 6);
+    #[rstest]
+    #[case::v2_same_decimals(pool_setup::v2_same_decimals(), 0.99)]
+    #[case::v2_different_decimals(pool_setup::v2_different_decimals(), 0.95)]
+    #[case::v3_different_decimals(pool_setup::v3_different_decimals(), 0.998)]
+    #[case::balancer_same_decimals(pool_setup::balancer_same_decimals(), 0.98)]
+    #[tokio::test]
+    async fn test_query_pool_swap_trade_limit_price(
+        #[case]
+        #[future]
+        pool: (Box<dyn ProtocolSim>, Token, Token),
+        #[case] price_multiplier: f64,
+    ) {
+        let (state, token_in, token_out) = pool.await;
 
-        let spot_price = state.spot_price(&usdc, &weth).unwrap();
-        let target_price_f64 = spot_price * 0.95;
+        let spot_price = state.spot_price(&token_in, &token_out).unwrap();
+        let limit_price_f64 = spot_price * price_multiplier;
+        let limit_price = to_price(limit_price_f64, &token_in, &token_out);
 
-        let decimal_adj = 10_f64.powi(usdc.decimals as i32 - weth.decimals as i32);
-        let price_no_decimals = target_price_f64 / decimal_adj;
-        let target_price = Price::new(
-            BigUint::from((price_no_decimals * 1e12) as u128),
-            BigUint::from(10u128.pow(12)),
-        );
-
-        let tolerance_bps = 10f64;
         let params = QueryPoolSwapParams::new(
-            usdc.clone(),
-            weth.clone(),
-            SwapConstraint::PoolTargetPrice {
-                target: target_price,
-                tolerance: tolerance_bps / 10000.0,
+            token_in.clone(),
+            token_out.clone(),
+            SwapConstraint::TradeLimitPrice {
+                limit: limit_price,
+                tolerance: 0.001,
                 min_amount_in: None,
                 max_amount_in: None,
             },
         );
 
-        let result = query_pool_swap(&state, &params);
+        let result = query_pool_swap(state.as_ref(), &params);
         assert!(result.is_ok(), "query_pool_swap failed: {:?}", result.err());
 
         let pool_swap = result.unwrap();
-        let new_spot = pool_swap
-            .new_state()
-            .spot_price(&usdc, &weth)
-            .unwrap();
-        let error_bps = ((new_spot - target_price_f64) / target_price_f64).abs() * 10000.0;
+        assert!(pool_swap.amount_in() > &BigUint::zero(), "amount_in should be > 0");
+        assert!(pool_swap.amount_out() > &BigUint::zero(), "amount_out should be > 0");
+
+        let actual_trade_price = calculate_trade_price(
+            pool_swap.amount_in().to_f64().unwrap(),
+            pool_swap.amount_out().to_f64().unwrap(),
+            token_in.decimals,
+            token_out.decimals,
+        );
         assert!(
-            error_bps < tolerance_bps,
-            "Error should be <{}bps, got {}bps",
-            tolerance_bps,
-            error_bps
+            actual_trade_price >= limit_price_f64,
+            "Trade price {} should be >= limit {}",
+            actual_trade_price,
+            limit_price_f64
         );
     }
+
+    // =========================================================================
+    // Edge cases and algorithm tests (V2 only - not pool-specific)
+    // =========================================================================
 
     #[test]
     fn test_query_pool_swap_pool_target_price_unreachable() {
         let state = UniswapV2State::new(U256::from(2_000_000u32), U256::from(1_000_000u32));
-
         let token_in = token_0();
         let token_out = token_1();
 
@@ -733,132 +962,24 @@ mod tests {
         assert!(result.is_err(), "Should return error for unreachable price");
     }
 
-    // =========================================================================
-    // Integration tests with UniswapV2State - TradeLimitPrice
-    // =========================================================================
-
-    #[test]
-    fn test_query_pool_swap_trade_limit_price_same_decimals() {
-        let state = UniswapV2State::new(
-            U256::from(1000u64) * U256::from(10u64).pow(U256::from(18u64)),
-            U256::from(2_000_000u64) * U256::from(10u64).pow(U256::from(18u64)),
-        );
-
-        let weth = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
-        let dai = create_token("0x0000000000000000000000000000000000000001", "DAI", 18);
-
-        let spot_price = state.spot_price(&dai, &weth).unwrap();
-        let limit_price_f64 = spot_price * 0.99;
-        let limit_price = Price::new(
-            BigUint::from((limit_price_f64 * 1e18) as u128),
-            BigUint::from(10u128.pow(18)),
-        );
-
-        let params = QueryPoolSwapParams::new(
-            dai.clone(),
-            weth.clone(),
-            SwapConstraint::TradeLimitPrice {
-                limit: limit_price,
-                tolerance: 0.001,
-                min_amount_in: None,
-                max_amount_in: None,
-            },
-        );
-
-        let result = query_pool_swap(&state, &params);
-        assert!(result.is_ok(), "query_pool_swap failed: {:?}", result.err());
-
-        let pool_swap = result.unwrap();
-        assert!(pool_swap.amount_in() > &BigUint::zero());
-        assert!(pool_swap.amount_out() > &BigUint::zero());
-
-        let actual_trade_price = calculate_trade_price(
-            pool_swap.amount_in().to_f64().unwrap(),
-            pool_swap.amount_out().to_f64().unwrap(),
-            dai.decimals,
-            weth.decimals,
-        );
-        assert!(
-            actual_trade_price >= limit_price_f64,
-            "Trade price {} should be >= limit {}",
-            actual_trade_price,
-            limit_price_f64
-        );
-    }
-
-    #[test]
-    fn test_query_pool_swap_trade_limit_price_different_decimals() {
-        let state = UniswapV2State::new(
-            U256::from(1000u64) * U256::from(10u64).pow(U256::from(18u64)),
-            U256::from(2_000_000u64) * U256::from(10u64).pow(U256::from(6u64)),
-        );
-
-        let weth = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
-        let usdc = create_token("0x0000000000000000000000000000000000000001", "USDC", 6);
-
-        let spot_price = state.spot_price(&usdc, &weth).unwrap();
-        let limit_price_f64 = spot_price * 0.95;
-
-        let decimal_adj = 10_f64.powi(usdc.decimals as i32 - weth.decimals as i32);
-        let price_no_decimals = limit_price_f64 / decimal_adj;
-        let limit_price = Price::new(
-            BigUint::from((price_no_decimals * 1e12) as u128),
-            BigUint::from(10u128.pow(12)),
-        );
-
-        let params = QueryPoolSwapParams::new(
-            usdc.clone(),
-            weth.clone(),
-            SwapConstraint::TradeLimitPrice {
-                limit: limit_price,
-                tolerance: 0.001,
-                min_amount_in: None,
-                max_amount_in: None,
-            },
-        );
-
-        let result = query_pool_swap(&state, &params);
-        assert!(result.is_ok(), "query_pool_swap failed: {:?}", result.err());
-
-        let pool_swap = result.unwrap();
-
-        let actual_trade_price = calculate_trade_price(
-            pool_swap.amount_in().to_f64().unwrap(),
-            pool_swap.amount_out().to_f64().unwrap(),
-            usdc.decimals,
-            weth.decimals,
-        );
-        assert!(
-            actual_trade_price >= limit_price_f64,
-            "Trade price {} should be >= limit {}",
-            actual_trade_price,
-            limit_price_f64
-        );
-    }
-
     #[test]
     fn test_query_pool_swap_trade_limit_price_maximizes_trade() {
         let state = UniswapV2State::new(
             U256::from(1000u64) * U256::from(10u64).pow(U256::from(18u64)),
             U256::from(2_000_000u64) * U256::from(10u64).pow(U256::from(18u64)),
         );
-
-        let weth = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
-        let dai = create_token("0x0000000000000000000000000000000000000001", "DAI", 18);
-
-        let spot_price = state.spot_price(&dai, &weth).unwrap();
+        let token_in = create_token("0x0000000000000000000000000000000000000001", "DAI", 18);
+        let token_out = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
+        let spot_price = state.spot_price(&token_in, &token_out).unwrap();
 
         let mut prev_amount = BigUint::zero();
         for multiplier in [0.99, 0.95, 0.90, 0.80] {
             let limit_price_f64 = spot_price * multiplier;
-            let limit_price = Price::new(
-                BigUint::from((limit_price_f64 * 1e18) as u128),
-                BigUint::from(10u128.pow(18)),
-            );
+            let limit_price = to_price(limit_price_f64, &token_in, &token_out);
 
             let params = QueryPoolSwapParams::new(
-                dai.clone(),
-                weth.clone(),
+                token_in.clone(),
+                token_out.clone(),
                 SwapConstraint::TradeLimitPrice {
                     limit: limit_price,
                     tolerance: 0.001,
@@ -881,22 +1002,14 @@ mod tests {
         }
     }
 
-    // =========================================================================
-    // Edge cases
-    // =========================================================================
-
     #[test]
     fn test_query_pool_swap_at_spot_price() {
         let state = UniswapV2State::new(U256::from(2_000_000u32), U256::from(1_000_000u32));
-
         let token_in = token_0();
         let token_out = token_1();
 
-        let spot = state
-            .spot_price(&token_in, &token_out)
-            .unwrap();
-        let target_price =
-            Price::new(BigUint::from((spot * 1e18) as u128), BigUint::from(10u128.pow(18)));
+        let spot = state.spot_price(&token_in, &token_out).unwrap();
+        let target_price = to_price(spot, &token_in, &token_out);
 
         let params = QueryPoolSwapParams::new(
             token_in,
@@ -924,19 +1037,15 @@ mod tests {
             U256::from(1000u64) * U256::from(10u64).pow(U256::from(18u64)),
             U256::from(2_000_000u64) * U256::from(10u64).pow(U256::from(18u64)),
         );
+        let token_in = create_token("0x0000000000000000000000000000000000000001", "DAI", 18);
+        let token_out = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
 
-        let weth = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
-        let dai = create_token("0x0000000000000000000000000000000000000001", "DAI", 18);
-
-        let spot_price = state.spot_price(&dai, &weth).unwrap();
-        let target_price = Price::new(
-            BigUint::from((spot_price * 0.95 * 1e18) as u128),
-            BigUint::from(10u128.pow(18)),
-        );
+        let spot_price = state.spot_price(&token_in, &token_out).unwrap();
+        let target_price = to_price(spot_price * 0.95, &token_in, &token_out);
 
         let params = QueryPoolSwapParams::new(
-            dai,
-            weth,
+            token_in,
+            token_out,
             SwapConstraint::PoolTargetPrice {
                 target: target_price,
                 tolerance: 0.001,
@@ -947,7 +1056,7 @@ mod tests {
 
         let result = query_pool_swap(&state, &params).unwrap();
         let price_points = result.price_points();
-        assert!(price_points.is_some());
+        assert!(price_points.is_some(), "should have price_points");
         let pp = price_points.as_ref().unwrap();
         assert!(pp.len() >= 2, "Should have at least 2 boundary points");
     }
@@ -958,19 +1067,15 @@ mod tests {
             U256::from_str("1000000000000000000000000").unwrap(),
             U256::from_str("2000000000000000000000000000").unwrap(),
         );
+        let token_in = create_token("0x0000000000000000000000000000000000000001", "DAI", 18);
+        let token_out = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
 
-        let weth = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
-        let dai = create_token("0x0000000000000000000000000000000000000001", "DAI", 18);
-
-        let spot_price = state.spot_price(&dai, &weth).unwrap();
-        let target_price = Price::new(
-            BigUint::from((spot_price * 0.90 * 1e18) as u128),
-            BigUint::from(10u128.pow(18)),
-        );
+        let spot_price = state.spot_price(&token_in, &token_out).unwrap();
+        let target_price = to_price(spot_price * 0.90, &token_in, &token_out);
 
         let params = QueryPoolSwapParams::new(
-            dai.clone(),
-            weth.clone(),
+            token_in.clone(),
+            token_out.clone(),
             SwapConstraint::PoolTargetPrice {
                 target: target_price,
                 tolerance: 0.001,
@@ -983,10 +1088,7 @@ mod tests {
         assert!(result.is_ok(), "Should handle large reserves");
 
         let pool_swap = result.unwrap();
-        let new_spot = pool_swap
-            .new_state()
-            .spot_price(&dai, &weth)
-            .unwrap();
+        let new_spot = pool_swap.new_state().spot_price(&token_in, &token_out).unwrap();
         let target_f64 = spot_price * 0.90;
         let error_bps = ((new_spot - target_f64) / target_f64).abs() * 10000.0;
         assert!(error_bps < 10.0, "Error should be <10bps for large reserves");
