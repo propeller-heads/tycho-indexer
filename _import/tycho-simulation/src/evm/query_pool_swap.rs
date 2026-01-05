@@ -94,7 +94,8 @@ pub fn query_pool_swap(
 /// * `decimals_out` - Decimals of the output token
 ///
 /// # Returns
-/// The price as f64, adjusted for decimal differences: `(num/den) * 10^(decimals_in - decimals_out)`
+/// The price as f64, adjusted for decimal differences: `(num/den) * 10^(decimals_in -
+/// decimals_out)`
 fn price_to_f64_with_decimals(
     price: &Price,
     decimals_in: u32,
@@ -116,10 +117,7 @@ fn price_to_f64_with_decimals(
     })?;
 
     if den_f64 == 0.0 {
-        return Err(SimulationError::InvalidInput(
-            "Price denominator is zero".into(),
-            None,
-        ));
+        return Err(SimulationError::InvalidInput("Price denominator is zero".into(), None));
     }
 
     Ok(num_f64 / den_f64)
@@ -245,7 +243,12 @@ fn search(
 
 /// Calculates the trade price as `amount_out / amount_in`, adjusted for decimal differences.
 #[inline]
-fn calculate_trade_price(amount_in: f64, amount_out: f64, decimals_in: u32, decimals_out: u32) -> f64 {
+fn calculate_trade_price(
+    amount_in: f64,
+    amount_out: f64,
+    decimals_in: u32,
+    decimals_out: u32,
+) -> f64 {
     if amount_in <= 0.0 {
         return f64::MAX;
     }
@@ -264,7 +267,12 @@ fn is_within_tolerance(actual: f64, target: f64, tolerance: f64) -> bool {
 /// 1. IQI (if 3+ points and estimate improves bracket by >1%)
 /// 2. Secant (if 2+ points and estimate is within bracket)
 /// 3. Geometric mean bisection (fallback)
-fn next_amount(history: &[PricePoint], low: &BigUint, high: &BigUint, target_price: f64) -> BigUint {
+fn next_amount(
+    history: &[PricePoint],
+    low: &BigUint,
+    high: &BigUint,
+    target_price: f64,
+) -> BigUint {
     let low_f64 = low.to_f64().unwrap_or(0.0);
     let high_f64 = high.to_f64().unwrap_or(f64::MAX);
     let bracket = high_f64 - low_f64;
@@ -624,8 +632,8 @@ mod tests {
         use super::*;
         use crate::evm::{
             engine_db::{
-                create_engine, engine_db_interface::EngineDatabaseInterface,
-                tycho_db::PreCachedDB, SHARED_TYCHO_DB,
+                create_engine, engine_db_interface::EngineDatabaseInterface, tycho_db::PreCachedDB,
+                SHARED_TYCHO_DB,
             },
             protocol::{
                 uniswap_v3::{enums::FeeAmount, state::UniswapV3State},
@@ -695,7 +703,9 @@ mod tests {
         }
 
         async fn setup_balancer_pool() -> EVMPoolState<PreCachedDB> {
-            SHARED_TYCHO_DB.clear().expect("Failed to clear SHARED TX");
+            SHARED_TYCHO_DB
+                .clear()
+                .expect("Failed to clear SHARED TX");
 
             let data_str =
                 include_str!("protocol/vm/assets/balancer_contract_storage_block_20463609.json");
@@ -736,7 +746,8 @@ mod tests {
                     )
                     .expect("Failed to initialize account");
             }
-            db.update(accounts, Some(block)).unwrap();
+            db.update(accounts, Some(block))
+                .unwrap();
 
             let tokens = vec![balancer_dai().address, balancer_bal().address];
             for token in &tokens {
@@ -765,7 +776,8 @@ mod tests {
                 timestamp: 0,
                 ..Default::default()
             };
-            db.update(vec![], Some(block.clone())).unwrap();
+            db.update(vec![], Some(block.clone()))
+                .unwrap();
 
             let pool_id: String =
                 "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
@@ -823,10 +835,7 @@ mod tests {
     fn to_price(price_f64: f64, token_in: &Token, token_out: &Token) -> Price {
         let decimal_adj = 10_f64.powi(token_in.decimals as i32 - token_out.decimals as i32);
         let price_no_decimals = price_f64 / decimal_adj;
-        Price::new(
-            BigUint::from((price_no_decimals * 1e18) as u128),
-            BigUint::from(10u128.pow(18)),
-        )
+        Price::new(BigUint::from((price_no_decimals * 1e18) as u128), BigUint::from(10u128.pow(18)))
     }
 
     // =========================================================================
@@ -848,7 +857,9 @@ mod tests {
         let (state, token_in, token_out) = pool.await;
         let tolerance_bps = 10f64;
 
-        let spot_price = state.spot_price(&token_in, &token_out).unwrap();
+        let spot_price = state
+            .spot_price(&token_in, &token_out)
+            .unwrap();
         let target_price_f64 = spot_price * price_multiplier;
         let target_price = to_price(target_price_f64, &token_in, &token_out);
 
@@ -869,7 +880,10 @@ mod tests {
         let pool_swap = result.unwrap();
         assert!(pool_swap.amount_in() > &BigUint::zero(), "amount_in should be > 0");
 
-        let new_spot = pool_swap.new_state().spot_price(&token_in, &token_out).unwrap();
+        let new_spot = pool_swap
+            .new_state()
+            .spot_price(&token_in, &token_out)
+            .unwrap();
         let error_bps = ((new_spot - target_price_f64) / target_price_f64).abs() * 10000.0;
         assert!(
             error_bps < tolerance_bps,
@@ -899,7 +913,9 @@ mod tests {
     ) {
         let (state, token_in, token_out) = pool.await;
 
-        let spot_price = state.spot_price(&token_in, &token_out).unwrap();
+        let spot_price = state
+            .spot_price(&token_in, &token_out)
+            .unwrap();
         let limit_price_f64 = spot_price * price_multiplier;
         let limit_price = to_price(limit_price_f64, &token_in, &token_out);
 
@@ -970,7 +986,9 @@ mod tests {
         );
         let token_in = create_token("0x0000000000000000000000000000000000000001", "DAI", 18);
         let token_out = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
-        let spot_price = state.spot_price(&token_in, &token_out).unwrap();
+        let spot_price = state
+            .spot_price(&token_in, &token_out)
+            .unwrap();
 
         let mut prev_amount = BigUint::zero();
         for multiplier in [0.99, 0.95, 0.90, 0.80] {
@@ -1008,7 +1026,9 @@ mod tests {
         let token_in = token_0();
         let token_out = token_1();
 
-        let spot = state.spot_price(&token_in, &token_out).unwrap();
+        let spot = state
+            .spot_price(&token_in, &token_out)
+            .unwrap();
         let target_price = to_price(spot, &token_in, &token_out);
 
         let params = QueryPoolSwapParams::new(
@@ -1040,7 +1060,9 @@ mod tests {
         let token_in = create_token("0x0000000000000000000000000000000000000001", "DAI", 18);
         let token_out = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
 
-        let spot_price = state.spot_price(&token_in, &token_out).unwrap();
+        let spot_price = state
+            .spot_price(&token_in, &token_out)
+            .unwrap();
         let target_price = to_price(spot_price * 0.95, &token_in, &token_out);
 
         let params = QueryPoolSwapParams::new(
@@ -1070,7 +1092,9 @@ mod tests {
         let token_in = create_token("0x0000000000000000000000000000000000000001", "DAI", 18);
         let token_out = create_token("0x0000000000000000000000000000000000000000", "WETH", 18);
 
-        let spot_price = state.spot_price(&token_in, &token_out).unwrap();
+        let spot_price = state
+            .spot_price(&token_in, &token_out)
+            .unwrap();
         let target_price = to_price(spot_price * 0.90, &token_in, &token_out);
 
         let params = QueryPoolSwapParams::new(
@@ -1088,7 +1112,10 @@ mod tests {
         assert!(result.is_ok(), "Should handle large reserves");
 
         let pool_swap = result.unwrap();
-        let new_spot = pool_swap.new_state().spot_price(&token_in, &token_out).unwrap();
+        let new_spot = pool_swap
+            .new_state()
+            .spot_price(&token_in, &token_out)
+            .unwrap();
         let target_f64 = spot_price * 0.90;
         let error_bps = ((new_spot - target_f64) / target_f64).abs() * 10000.0;
         assert!(error_bps < 10.0, "Error should be <10bps for large reserves");
