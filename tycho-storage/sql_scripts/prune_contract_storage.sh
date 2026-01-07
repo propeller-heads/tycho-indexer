@@ -136,7 +136,7 @@ echo "Detected Slots from Tracing Results:"
 echo "--------------------------------"
 if ! valid_slots=$(psql -d "$db_name" -h localhost -p "$port_number" -U "$db_user" -t -A 2>&1 <<EOF
 \set address '0x$display_address'
-SELECT COUNT(DISTINCT slot_bytea)::text
+SELECT COUNT(slot_bytea)::text
 FROM (
     SELECT DISTINCT
         decode(
