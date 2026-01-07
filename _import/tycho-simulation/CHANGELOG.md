@@ -1,3 +1,10 @@
+## [0.226.0](https://github.com/propeller-heads/tycho-simulation/compare/0.225.2...0.226.0) (2026-01-07)
+
+
+### Features
+
+* Update tycho-execution to remove SwapBuilder ([0857c0d](https://github.com/propeller-heads/tycho-simulation/commit/0857c0d1d7eb5074dde3ed86695c95a02f91f46b))
+
 ## [0.225.2](https://github.com/propeller-heads/tycho-simulation/compare/0.225.1...0.225.2) (2026-01-05)
 
 ## [0.225.1](https://github.com/propeller-heads/tycho-simulation/compare/0.225.0...0.225.1) (2026-01-05)
