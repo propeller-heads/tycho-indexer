@@ -32,7 +32,7 @@ use tycho_execution::encoding::{
     errors::EncodingError,
     evm::{approvals::permit2::PermitSingle, encoder_builders::TychoRouterEncoderBuilder},
     models,
-    models::{EncodedSolution, Solution, SwapBuilder, Transaction, UserTransferType},
+    models::{EncodedSolution, Solution, Swap, Transaction, UserTransferType},
 };
 use tycho_simulation::{
     evm::{
@@ -607,8 +607,7 @@ fn create_solution(
     expected_amount: BigUint,
 ) -> Solution {
     // Prepare data to encode. First we need to create a swap object
-    let simple_swap =
-        SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone()).build();
+    let simple_swap = Swap::new(component, sell_token.address.clone(), buy_token.address.clone());
 
     // Compute a minimum amount out
     //

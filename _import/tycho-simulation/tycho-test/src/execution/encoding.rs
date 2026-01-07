@@ -16,7 +16,7 @@ use tycho_common::{
 };
 use tycho_execution::encoding::{
     evm::encoder_builders::TychoRouterEncoderBuilder,
-    models::{EncodedSolution, Solution, SwapBuilder, Transaction, UserTransferType},
+    models::{EncodedSolution, Solution, Swap, Transaction, UserTransferType},
 };
 use tycho_simulation::{
     evm::protocol::u256_num::biguint_to_u256, protocol::models::ProtocolComponent,
@@ -93,15 +93,13 @@ fn create_solution(
 
     // Prepare data to encode. First we need to create a swap object
     let simple_swap = {
-        let mut builder =
-            SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone())
-                .estimated_amount_in(amount_in.clone());
+        let mut swap = Swap::new(component, sell_token.address.clone(), buy_token.address.clone())
+            .estimated_amount_in(amount_in.clone());
 
         if let Some(state) = state {
-            builder = builder.protocol_state(state);
+            swap = swap.protocol_state(state);
         }
-
-        builder.build()
+        swap
     };
 
     Ok(Solution {
