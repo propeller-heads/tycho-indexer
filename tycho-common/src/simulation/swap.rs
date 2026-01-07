@@ -159,6 +159,14 @@ impl<'a> LimitsParams<'a> {
     pub fn new(token_in: &'a TokenAddress, token_out: &'a TokenAddress) -> Self {
         Self { context: Context::default(), token_in, token_out }
     }
+
+    pub fn token_in(&self) -> &TokenAddress {
+        self.token_in
+    }
+
+    pub fn token_out(&self) -> &TokenAddress {
+        self.token_out
+    }
 }
 
 params_with_context! {
@@ -180,6 +188,13 @@ impl<'a> MarginalPriceParams<'a> {
     /// * `token_out` - The output token address
     pub fn new(token_in: &'a TokenAddress, token_out: &'a TokenAddress) -> Self {
         Self { context: Context::default(), token_in, token_out }
+    }
+    pub fn token_in(&self) -> &TokenAddress {
+        self.token_in
+    }
+
+    pub fn token_out(&self) -> &TokenAddress {
+        self.token_out
     }
 }
 
