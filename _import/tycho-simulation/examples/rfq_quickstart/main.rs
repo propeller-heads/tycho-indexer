@@ -28,7 +28,7 @@ use tycho_execution::encoding::{
     errors::EncodingError,
     evm::{approvals::permit2::PermitSingle, encoder_builders::TychoRouterEncoderBuilder},
     models,
-    models::{EncodedSolution, Solution, SwapBuilder, Transaction, UserTransferType},
+    models::{EncodedSolution, Solution, Swap, Transaction, UserTransferType},
 };
 use tycho_simulation::{
     evm::protocol::u256_num::biguint_to_u256,
@@ -721,11 +721,9 @@ fn create_solution(
     expected_amount: BigUint,
 ) -> Solution {
     // Prepare data to encode. First we need to create a swap object
-    let simple_swap =
-        SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone())
-            .protocol_state(state)
-            .estimated_amount_in(sell_amount.clone())
-            .build();
+    let simple_swap = Swap::new(component, sell_token.address.clone(), buy_token.address.clone())
+        .protocol_state(state)
+        .estimated_amount_in(sell_amount.clone());
 
     // Compute a minimum amount out
     //
