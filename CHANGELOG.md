@@ -1,3 +1,28 @@
+## [0.126.0](https://github.com/propeller-heads/tycho-indexer/compare/0.125.2...0.126.0) (2026-01-08)
+
+
+### Features
+
+* **migrations:** add SQL migrations for `pg_stat_statements` extension ([#820](https://github.com/propeller-heads/tycho-indexer/issues/820)) ([06599da](https://github.com/propeller-heads/tycho-indexer/commit/06599da112f3d06aa40e779404411e7cf2a86faf))
+* **migrations:** add SQL scripts to create and drop pg_stat_statements extension ([4850934](https://github.com/propeller-heads/tycho-indexer/commit/4850934f9daa147ed31abecbbc7c94d05d798272))
+
+## [0.125.2](https://github.com/propeller-heads/tycho-indexer/compare/0.125.1...0.125.2) (2025-12-19)
+
+
+### Bug Fixes
+
+* Update error message in query_pool_swap function ([d4b5450](https://github.com/propeller-heads/tycho-indexer/commit/d4b54505202e380c9467ef0ca5c0adc33a69861f))
+* Update error message in query_pool_swap function ([#812](https://github.com/propeller-heads/tycho-indexer/issues/812)) ([7fd85ff](https://github.com/propeller-heads/tycho-indexer/commit/7fd85ff84fda2b641310b2ff28c6e9d6d72aa228))
+
+## [0.125.1](https://github.com/propeller-heads/tycho-indexer/compare/0.125.0...0.125.1) (2025-12-17)
+
+## [0.125.0](https://github.com/propeller-heads/tycho-indexer/compare/0.124.0...0.125.0) (2025-12-17)
+
+
+### Features
+
+* restore higher pagination limits ([#813](https://github.com/propeller-heads/tycho-indexer/issues/813)) ([5f33369](https://github.com/propeller-heads/tycho-indexer/commit/5f33369021d8259ce252843247b2a63db98feed5))
+
 ## [0.124.0](https://github.com/propeller-heads/tycho-indexer/compare/0.123.0...0.124.0) (2025-12-16)
 
 

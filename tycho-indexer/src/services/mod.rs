@@ -281,15 +281,15 @@ pub struct ServerRpcConfig {
     /// When set, clients must provide a `min_quality` parameter at least this high,
     /// unless querying specific `token_addresses`.
     min_token_quality: Option<i32>,
-    /// Minimum traded_n_days_ago threshold for filtering tokens.
+    /// Maximum traded_n_days_ago threshold for filtering tokens.
     /// When set, clients must provide a `traded_n_days_ago` parameter at most this value,
     /// unless querying specific `token_addresses`.
-    min_traded_n_days_ago: Option<u64>,
+    max_traded_n_days_ago: Option<u64>,
 }
 
 impl ServerRpcConfig {
     pub fn new() -> Self {
-        Self { min_component_tvl: None, min_token_quality: None, min_traded_n_days_ago: None }
+        Self { min_component_tvl: None, min_token_quality: None, max_traded_n_days_ago: None }
     }
 
     pub fn with_min_tvl(mut self, min_tvl: Option<f64>) -> Self {
@@ -302,8 +302,8 @@ impl ServerRpcConfig {
         self
     }
 
-    pub fn with_min_traded_n_days_ago(mut self, min_traded_n_days_ago: Option<u64>) -> Self {
-        self.min_traded_n_days_ago = min_traded_n_days_ago;
+    pub fn with_max_traded_n_days_ago(mut self, max_traded_n_days_ago: Option<u64>) -> Self {
+        self.max_traded_n_days_ago = max_traded_n_days_ago;
         self
     }
 
@@ -315,7 +315,7 @@ impl ServerRpcConfig {
         self.min_token_quality
     }
 
-    pub fn min_traded_n_days_ago(&self) -> Option<u64> {
-        self.min_traded_n_days_ago
+    pub fn max_traded_n_days_ago(&self) -> Option<u64> {
+        self.max_traded_n_days_ago
     }
 }
