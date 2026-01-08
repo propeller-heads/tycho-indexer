@@ -1,3 +1,41 @@
+## [0.226.0](https://github.com/propeller-heads/tycho-simulation/compare/0.225.2...0.226.0) (2026-01-07)
+
+
+### Features
+
+* Update tycho-execution to remove SwapBuilder ([0857c0d](https://github.com/propeller-heads/tycho-simulation/commit/0857c0d1d7eb5074dde3ed86695c95a02f91f46b))
+
+## [0.225.2](https://github.com/propeller-heads/tycho-simulation/compare/0.225.1...0.225.2) (2026-01-05)
+
+## [0.225.1](https://github.com/propeller-heads/tycho-simulation/compare/0.225.0...0.225.1) (2026-01-05)
+
+
+### Bug Fixes
+
+* change error message ([23a85e1](https://github.com/propeller-heads/tycho-simulation/commit/23a85e1b52a97e403fe9941779be7c9f0215863b))
+
+## [0.225.0](https://github.com/propeller-heads/tycho-simulation/compare/0.224.0...0.225.0) (2025-12-30)
+
+
+### Features
+
+* update tycho-execution to version 0.148.0 ([62a1fbb](https://github.com/propeller-heads/tycho-simulation/commit/62a1fbb964de134350284fa6f5941a56f7138b54))
+
+## [0.224.0](https://github.com/propeller-heads/tycho-simulation/compare/0.223.0...0.224.0) (2025-12-29)
+
+
+### Features
+
+* Init Velodrome Slipstreams protocol ([e093eab](https://github.com/propeller-heads/tycho-simulation/commit/e093eabcf96d34d3357003d52e1963632072c430))
+* **integration-test:** Add Curve and Velodrome to integration tests ([4ad87d1](https://github.com/propeller-heads/tycho-simulation/commit/4ad87d1a89cb16dbc82e805c6d57aaed0bba14fb))
+* Simplify Velodrome Slipstreams fee logic and remove unused modules ([67301a5](https://github.com/propeller-heads/tycho-simulation/commit/67301a50c718354ec0bb395cce663047cc8d93f2))
+
+
+### Bug Fixes
+
+* Remove hotfix for liquidity decoding ([f1dc52b](https://github.com/propeller-heads/tycho-simulation/commit/f1dc52b839c78fa234d61404945e857cb90415be))
+* Remove hotfix for tick and liquidity ([78a9923](https://github.com/propeller-heads/tycho-simulation/commit/78a9923cf30b1ad4f113339ba9924b57071412a4))
+
 ## [0.223.0](https://github.com/propeller-heads/tycho-simulation/compare/0.222.0...0.223.0) (2025-12-23)
 
 

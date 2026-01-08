@@ -1,5 +1,5 @@
 [workspace.package]
-version = "0.223.0"
+version = "0.226.0"
 
 [package]
 name = "tycho-simulation"
@@ -44,7 +44,7 @@ async-trait = "0.1.88"
 tycho-client = ">=0.123.0"
 tycho-common = ">=0.123.0"
 tycho-ethereum = ">=0.123.0"
-tycho-execution = ">=0.143.0"
+tycho-execution = ">=0.150.0"
 
 # EVM dependencies
 # Alloy's dyn-abi 1.4.0 has a security vulnerability, so we require at least 1.4.1
