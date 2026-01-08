@@ -1,3 +1,11 @@
+## [0.126.0](https://github.com/propeller-heads/tycho-indexer/compare/0.125.2...0.126.0) (2026-01-08)
+
+
+### Features
+
+* **migrations:** add SQL migrations for `pg_stat_statements` extension ([#820](https://github.com/propeller-heads/tycho-indexer/issues/820)) ([06599da](https://github.com/propeller-heads/tycho-indexer/commit/06599da112f3d06aa40e779404411e7cf2a86faf))
+* **migrations:** add SQL scripts to create and drop pg_stat_statements extension ([4850934](https://github.com/propeller-heads/tycho-indexer/commit/4850934f9daa147ed31abecbbc7c94d05d798272))
+
 ## [0.125.2](https://github.com/propeller-heads/tycho-indexer/compare/0.125.1...0.125.2) (2025-12-19)
 
 
