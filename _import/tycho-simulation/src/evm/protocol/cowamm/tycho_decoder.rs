@@ -12,8 +12,6 @@ use crate::{
     },
 };
 
-const BYTES: usize = 32;
-
 impl TryFromWithBlock<ComponentWithState, BlockHeader> for CowAMMState {
     type Error = InvalidSnapshotError;
 
