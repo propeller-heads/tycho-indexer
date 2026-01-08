@@ -32,7 +32,7 @@ After implementing your `SwapEncoder` , you need to:
 
 <summary>Protocols Supporting Consecutive Swap Optimizations</summary>
 
-As described in the [Swap Group](../../../for-solvers/execution/encoding.md#swap-group) section, our encoding supports protocols which save token transfers between consecutive swaps using systems such as flash accounting. In such cases, as shown in the diagram below using Uniswap V4 as an example, the `SwapEncoder` is still only in charge of encoding a **single swap**. These swaps will then be concatenated at the `StrategyEncoder` level as a single executor call.&#x20;
+As described in the [Swap Group](../../../for-solvers/execution/encoding.md#swap-group) section, our encoding supports protocols which save token transfers between consecutive swaps using systems such as flash accounting. In such cases, as shown in the diagram below using Uniswap V4 as an example, the `SwapEncoder` is still only in charge of encoding a **single swap**. These swaps will then be concatenated at the `StrategyEncoder` level as a single executor call.
 
 Depending on the index of the swap in the swap group, the encoder may be responsible for adding additional information which is not necessary in other swaps of the sequence (see the first swap in the diagram below).
 
@@ -103,10 +103,10 @@ Each executor must inherit from the `RestrictTransferFrom` contract, which enabl
 
 Two key constants are used in encoding to configure protocol-specific behavior:
 
-| Constant                         | Description                                                                                                                                                                                                                                              |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `IN_TRANSFER_REQUIRED_PROTOCOLS` | A list of protocols that require tokens to be transferred into the pool prior to swapping. These protocols do not perform a `transferFrom` during the `swap` themselves, and therefore require tokens to be transferred beforehand or during a callback. |
-| `CALLBACK_CONSTRAINED_PROTOCOLS` | Protocols that require owed tokens to be transferred during a callback. In these cases, tokens cannot be transferred directly from the previous pool before the current swap begins.                                                                     |
+| Constant                         | Description                                                                                                                                                                                                                       |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FUNDS_IN_ROUTER_PROTOCOLS`      | A list of protocols that perform a `transferFrom` during the `swap` themselves. These protocols do not need tokens to be transferred into the pool prior to swapping, and therefore require tokens to be available in the Router. |
+| `CALLBACK_CONSTRAINED_PROTOCOLS` | Protocols that require owed tokens to be transferred during a callback. In these cases, tokens cannot be transferred directly from the previous pool before the current swap begins.                                              |
 
 Include your protocol in these constants if necessary.
 

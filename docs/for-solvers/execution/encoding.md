@@ -1,6 +1,6 @@
 # Encoding
 
-first step to execute a trade on chain is encoding.
+First step to execute a trade on chain is encoding.
 
 Our Rust [crate](https://github.com/propeller-heads/tycho-execution/tree/main/src) offers functionality to convert your trades into calldata, which the Tycho contracts can execute.
 
@@ -8,15 +8,15 @@ See this [Quickstart](../../#id-4.-encode-a-swap) section for an example of how 
 
 ## Models
 
-These are the models used as input and output of the encoding crate.&#x20;
+These are the models used as input and output of the encoding crate.
 
 ### Solution Struct
 
-The `Solution` struct specifies the details of your order and how it should be filled. This is the input of the encoding module.&#x20;
+The `Solution` struct specifies the details of your order and how it should be filled. This is the input of the encoding module.
 
 The `Solution` struct consists of the following attributes:
 
-<table><thead><tr><th width="190" align="center">Attribute</th><th width="218.13671875" align="center">Type</th><th>Description</th></tr></thead><tbody><tr><td align="center"><strong>given_token</strong></td><td align="center"><code>Bytes</code></td><td>The token being sold (exact in) or bought (exact out)</td></tr><tr><td align="center"><strong>given_amount</strong></td><td align="center"><code>BigUint</code></td><td>Amount of the given token</td></tr><tr><td align="center"><strong>checked_token</strong></td><td align="center"><code>Bytes</code></td><td>The token being bought. This token's final balance will be checked by the router using  <code>checked_amount</code>.</td></tr><tr><td align="center"><strong>sender</strong></td><td align="center"><code>Bytes</code></td><td>Address of the sender of the given token</td></tr><tr><td align="center"><strong>receiver</strong></td><td align="center"><code>Bytes</code></td><td>Address of the receiver of the checked token</td></tr><tr><td align="center"><strong>exact_out</strong></td><td align="center"><code>bool</code></td><td>False if the solution is an exact input solution (i.e. solves a sell order). <strong>Currently only exact input solutions are supported</strong>.</td></tr><tr><td align="center"><strong>router_address</strong></td><td align="center"><code>Bytes</code></td><td>Address of the router contract to be used. See Tycho addresses <a href="contract-addresses.md">here</a>.</td></tr><tr><td align="center"><strong>swaps</strong></td><td align="center"><code>Vec&#x3C;Swap></code></td><td>List of swaps to fulfil the solution.</td></tr><tr><td align="center"><strong>checked_amount</strong></td><td align="center"><code>BigUint</code></td><td>Minimum amount out to be checked for the solution to be valid if passing through the <code>TychoRouter</code>. </td></tr><tr><td align="center"><strong>native_action</strong></td><td align="center"><code>Option&#x3C;NativeAction></code></td><td>If set, the native token will be wrapped before the swap or unwrapped after the swap (more <a href="encoding.md#wrapping-and-unwrapping">here</a>).</td></tr><tr><td align="center"><strong>user_data</strong></td><td align="center"><code>Option&#x3C;Bytes></code></td><td>Additional user data that can be passed to encoding.</td></tr></tbody></table>
+<table><thead><tr><th width="190" align="center">Attribute</th><th width="218.13671875" align="center">Type</th><th>Description</th></tr></thead><tbody><tr><td align="center"><strong>given_token</strong></td><td align="center"><code>Bytes</code></td><td>The token being sold (exact in) or bought (exact out)</td></tr><tr><td align="center"><strong>given_amount</strong></td><td align="center"><code>BigUint</code></td><td>Amount of the given token</td></tr><tr><td align="center"><strong>checked_token</strong></td><td align="center"><code>Bytes</code></td><td>The token being bought. This token's final balance will be checked by the router using <code>checked_amount</code>.</td></tr><tr><td align="center"><strong>sender</strong></td><td align="center"><code>Bytes</code></td><td>Address of the sender of the given token</td></tr><tr><td align="center"><strong>receiver</strong></td><td align="center"><code>Bytes</code></td><td>Address of the receiver of the checked token</td></tr><tr><td align="center"><strong>exact_out</strong></td><td align="center"><code>bool</code></td><td>False if the solution is an exact input solution (i.e. solves a sell order). <strong>Currently only exact input solutions are supported</strong>.</td></tr><tr><td align="center"><strong>router_address</strong></td><td align="center"><code>Bytes</code></td><td>Address of the router contract to be used. See Tycho addresses <a href="contract-addresses.md">here</a>.</td></tr><tr><td align="center"><strong>swaps</strong></td><td align="center"><code>Vec&#x3C;Swap></code></td><td>List of swaps to fulfil the solution.</td></tr><tr><td align="center"><strong>checked_amount</strong></td><td align="center"><code>BigUint</code></td><td>Minimum amount out to be checked for the solution to be valid if passing through the <code>TychoRouter</code>.</td></tr><tr><td align="center"><strong>native_action</strong></td><td align="center"><code>Option&#x3C;NativeAction></code></td><td>If set, the native token will be wrapped before the swap or unwrapped after the swap (more <a href="encoding.md#wrapping-and-unwrapping">here</a>).</td></tr><tr><td align="center"><strong>user_data</strong></td><td align="center"><code>Option&#x3C;Bytes></code></td><td>Additional user data that can be passed to encoding.</td></tr></tbody></table>
 
 #### Wrapping and Unwrapping
 
@@ -50,8 +50,6 @@ The `Swap` struct has the following attributes:
 | **protocol\_state** | `Option<Arc<dyn ProtocolSim>>` |                                      Optional protocol state used to perform the swap                                     |
 | **protocol\_state** |        `Option<BigUint>`       | Optional estimated amount in for this Swap. This is necessary for RFQ protocols. This value is used to request the quote. |
 
-To create a `Swap`, use the [SwapBuilder](https://github.com/propeller-heads/tycho-execution/blob/6d88d0a1444da2e3d951b11257c322c62c3dd6f5/src/encoding/models.rs#L130) where you can pass any struct that implements `Into<ProtocolComponent>`.
-
 #### Split Swaps
 
 Solutions can have **splits** where one or more token hops are split between two or more pools. This means that the output of one swap can be split into several parts, each used as the input for subsequent swaps. The following are examples of different split configurations:
@@ -60,7 +58,7 @@ Solutions can have **splits** where one or more token hops are split between two
 
 By combining splits creatively, you can build highly customized and complex trade paths.
 
-We perform internal validation on split swaps. A split swap is considered valid if:   &#x20;
+We perform internal validation on split swaps. A split swap is considered valid if:
 
 1. The checked token is reachable from the given token through the swap path
 2. There are no tokens that are unconnected
@@ -182,10 +180,9 @@ Both encoders have the following options:
 
 The router builder includes the following configuration options:
 
-* `user_transfer_type: UserTransferType` Defines how the funds will be transferred from the user. The options are `TransferFromPermit2`, `TransferFrom` and `None`  (see more about token transfers [here](./#token-allowances)).
+* `user_transfer_type: UserTransferType` Defines how the funds will be transferred from the user. The options are `TransferFromPermit2`, `TransferFrom` and `None` (see more about token transfers [here](./#token-allowances)).
 * `router_address` Router address to use for execution (defaults to the address corresponding to the given chain in `config/router_addresses.json`). See Tycho addresses [here](contract-addresses.md).
-
-- ~~`swapper_pk: String`~~ (deprecated and will be removed soon) Used only for permit2 transfers. The private key is used to sign the permit object. This is only necessary when you want to retrieve the full calldata directly (which is not recommended - see more in the next section).
+* ~~`swapper_pk: String`~~ (deprecated and will be removed soon) Used only for permit2 transfers. The private key is used to sign the permit object. This is only necessary when you want to retrieve the full calldata directly (which is not recommended - see more in the next section).
 
 Use these options to customize how token movement and permissions are handled during encoding.
 
@@ -216,7 +213,7 @@ let encoder = TychoExecutorEncoderBuilder::new()
 
 ### Encode
 
-You can convert solutions into calldata using:&#x20;
+You can convert solutions into calldata using:
 
 ```rust
 let encoded_solutions = encoder.encode_solutions(solutions);
@@ -230,7 +227,7 @@ The full method call includes the following parameters, which act as **execution
 * `minAmountOut` and `tokenOut` – the minimum amount you want to receive of token out. For maximum security, this min amount should be determined from a **third party source**.
 * `receiver` – who receives the final output
 * `wrap/unwrap` flags – if native token wrapping is needed
-* `isTransferFromAllowed` – if this should perform a `transferFrom` to retrieve the input funds. This will be false if you send tokens to the router in the same transaction before the swap. &#x20;
+* `isTransferFromAllowed` – if this should perform a `transferFrom` to retrieve the input funds. This will be false if you send tokens to the router in the same transaction before the swap.
 
 These **execution guardrails** protect against exploits such as MEV. Correctly setting these guardrails yourself gives you full control over your swap security and ensures that the transaction cannot be exploited in any way.
 
@@ -265,14 +262,14 @@ cargo build --release
 cargo install --path .
 ```
 
-After installation, you can use the `tycho-encode` command from any directory in your terminal.&#x20;
+After installation, you can use the `tycho-encode` command from any directory in your terminal.
 
 ### Commands
 
-The command lets you choose the encoder:&#x20;
+The command lets you choose the encoder:
 
-* `tycho-router`: Encodes a transaction using the `TychoRouterEncoder`.&#x20;
-* `tycho-execution`: Encodes a transaction using the `TychoExecutorEncoder`.&#x20;
+* `tycho-router`: Encodes a transaction using the `TychoRouterEncoder`.
+* `tycho-execution`: Encodes a transaction using the `TychoExecutorEncoder`.
 
 The commands accept the same options as the builders (more [here](encoding.md#builder-options)).
 
@@ -283,4 +280,3 @@ Here's a complete example that encodes a swap from WETH to DAI using Uniswap V2 
 ```bash
 echo '{"sender":"0x1234567890123456789012345678901234567890","receiver":"0x1234567890123456789012345678901234567890","given_token":"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2","given_amount":"1000000000000000000","checked_token":"0x6B175474E89094C44Da98b954EedeAC495271d0F","exact_out":false,"checked_amount":"990000000000000000","swaps":[{"component":{"id":"0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640","protocol_system":"uniswap_v2","protocol_type_name":"UniswapV2Pool","contract_addresses":[], "chain":"ethereum","tokens":["0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"],"contract_ids":["0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"],"static_attributes":{"factory":"0x5c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f"},"change":"Update","creation_tx":"0x0000000000000000000000000000000000000000000000000000000000000000","created_at":"2024-02-28T12:00:00"},"token_in":"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2","token_out":"0x6B175474E89094C44Da98b954EedeAC495271d0F","split":0.0}],"direct_execution":true}' | tycho-encode --chain ethereum --user-transfer-type transfer-from-permit2 tycho-router
 ```
-

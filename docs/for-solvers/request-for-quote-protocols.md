@@ -126,10 +126,9 @@ For maximum security, you should determine the minimum amount from a **third-par
 Build the Swap and Solution:
 
 <pre class="language-rust"><code class="lang-rust">let swap =
-    SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone())
+    Swap::new(component, sell_token.address.clone(), buy_token.address.clone())
         .protocol_state(state)
-        .estimated_amount_in(sell_amount.clone())
-        .build();
+        .estimated_amount_in(sell_amount.clone());
 
 <strong>let solution = Solution {
 </strong>    sender: user_address.clone(),

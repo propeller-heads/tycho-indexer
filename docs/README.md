@@ -185,7 +185,7 @@ After this, you can create the Swap and Solution objects. For more info about th
 
 ```rust
 let simple_swap =
-    SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone()).build();
+    Swap::new(component, sell_token.address.clone(), buy_token.address.clone());
 
 // Then we create a solution object with the previous swap
 let solution = Solution {
