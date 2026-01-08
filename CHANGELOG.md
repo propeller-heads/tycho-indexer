@@ -1,3 +1,11 @@
+## [0.127.0](https://github.com/propeller-heads/tycho-indexer/compare/0.126.0...0.127.0) (2026-01-08)
+
+
+### Features
+
+* add typetag derive to `ProtocolSim` trait ([425c194](https://github.com/propeller-heads/tycho-indexer/commit/425c194a731df998ff94fb6610616b27cc75d969))
+* add typetag derive to `ProtocolSim` trait ([#811](https://github.com/propeller-heads/tycho-indexer/issues/811)) ([bdbdf71](https://github.com/propeller-heads/tycho-indexer/commit/bdbdf713787dd76a1a228203c105391ae359da8d))
+
 ## [0.126.0](https://github.com/propeller-heads/tycho-indexer/compare/0.125.2...0.126.0) (2026-01-08)
 
 
