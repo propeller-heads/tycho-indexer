@@ -1,3 +1,13 @@
+## [0.226.1](https://github.com/propeller-heads/tycho-simulation/compare/0.226.0...0.226.1) (2026-01-08)
+
+
+### Bug Fixes
+
+* handle panics in `run` by wrapping in `tokio::spawn` and adding error propagation ([e2b8969](https://github.com/propeller-heads/tycho-simulation/commit/e2b8969b2dbad7d8b5af57ee29772c03a0268c5a))
+* replace `abs_diff` with `saturating_sub` in block delay calculation ([bd713c2](https://github.com/propeller-heads/tycho-simulation/commit/bd713c26890f6b1fce7f7d3d4a10a7f5102c36b7))
+* skip protocol update if the RPC is behind the substream ([88c2a60](https://github.com/propeller-heads/tycho-simulation/commit/88c2a60fa991b671e4af2d38ca702f37de8ffa21))
+* use default value for `load_all_tokens` pagination limit, that will adjust based on compression enabled/disabled ([37f431e](https://github.com/propeller-heads/tycho-simulation/commit/37f431e036692b23166bd3b05a8bbfce2a26810e))
+
 ## [0.226.0](https://github.com/propeller-heads/tycho-simulation/compare/0.225.2...0.226.0) (2026-01-07)
 
 
