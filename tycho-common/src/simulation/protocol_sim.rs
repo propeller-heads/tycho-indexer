@@ -231,7 +231,6 @@ impl QueryPoolSwapParams {
 /// ProtocolSim trait
 /// This trait defines the methods that a protocol state must implement in order to be used
 /// in the trade simulation.
-#[typetag::serde(tag = "protocol", content = "state")]
 pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     /// Returns the fee of the protocol as ratio
     ///
@@ -379,90 +378,5 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
 impl Clone for Box<dyn ProtocolSim> {
     fn clone(&self) -> Box<dyn ProtocolSim> {
         self.clone_box()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-
-    use super::*;
-
-    #[test]
-    fn serde() {
-        use serde::{Deserialize, Serialize};
-
-        #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-        struct DummyProtocol {
-            reserve_0: u64,
-            reserve_1: u64,
-        }
-
-        #[typetag::serde]
-        impl ProtocolSim for DummyProtocol {
-            fn clone_box(&self) -> Box<dyn ProtocolSim> {
-                todo!()
-            }
-
-            fn as_any(&self) -> &dyn Any {
-                self
-            }
-
-            fn as_any_mut(&mut self) -> &mut dyn Any {
-                todo!()
-            }
-
-            fn eq(&self, other: &dyn ProtocolSim) -> bool {
-                if let Some(other) = other.as_any().downcast_ref::<Self>() {
-                    self.reserve_0 == other.reserve_0 && self.reserve_1 == other.reserve_1
-                } else {
-                    false
-                }
-            }
-
-            fn fee(&self) -> f64 {
-                todo!()
-            }
-            fn spot_price(&self, _base: &Token, _quote: &Token) -> Result<f64, SimulationError> {
-                todo!()
-            }
-            fn get_amount_out(
-                &self,
-                _amount_in: BigUint,
-                _token_in: &Token,
-                _token_out: &Token,
-            ) -> Result<GetAmountOutResult, SimulationError> {
-                todo!()
-            }
-            fn get_limits(
-                &self,
-                _sell_token: Bytes,
-                _buy_token: Bytes,
-            ) -> Result<(BigUint, BigUint), SimulationError> {
-                todo!()
-            }
-            fn delta_transition(
-                &mut self,
-                _delta: ProtocolStateDelta,
-                _tokens: &HashMap<Bytes, Token>,
-                _balances: &Balances,
-            ) -> Result<(), TransitionError<String>> {
-                todo!()
-            }
-        }
-
-        let state = DummyProtocol { reserve_0: 1, reserve_1: 2 };
-
-        assert_eq!(serde_json::to_string(&state).unwrap(), r#"{"reserve_0":1,"reserve_1":2}"#);
-        assert_eq!(
-            serde_json::to_string(&state as &dyn ProtocolSim).unwrap(),
-            r#"{"protocol":"DummyProtocol","state":{"reserve_0":1,"reserve_1":2}}"#
-        );
-
-        let deserialized: Box<dyn ProtocolSim> = serde_json::from_str(
-            r#"{"protocol":"DummyProtocol","state":{"reserve_0":1,"reserve_1":2}}"#,
-        )
-        .unwrap();
-
-        assert!(deserialized.eq(&state));
     }
 }
