@@ -17,7 +17,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EtherfiState {
 
     async fn try_from_with_header(
         snapshot: ComponentWithState,
-        _block: BlockHeader,
+        block: BlockHeader,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
         _decoder_context: &DecoderContext,
@@ -62,40 +62,50 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EtherfiState {
                 })?,
         );
 
-        let eeth_pc_id = Bytes::from_str("0x35fA164735182de50811E8e2E824cFb9B6118ac2").unwrap();
-        let eth_address = Bytes::from(ETH_ADDRESS);
-        let liquidity_pool_native_balance = account_balances
-            .get(&eeth_pc_id)
-            .and_then(|balances| balances.get(&eth_address))
-            .map(|bytes| U256::from_be_slice(bytes))
-            .ok_or_else(|| {
-                InvalidSnapshotError::MissingAttribute("liquidity_pool_native_balance".to_string())
-            })?;
+        let mut liquidity_pool_native_balance: Option<U256> = None;
+        let mut eth_redemption_info: Option<RedemptionInfo> = None;
 
-        let eth_bucket_limiter_raw = snapshot
-            .state
-            .attributes
-            .get("ethBucketLimiter")
-            .ok_or_else(|| {
-                InvalidSnapshotError::MissingAttribute("ethBucketLimiter".to_string())
-            })?;
-        let eth_bucket_limiter_value = U256::from_be_slice(eth_bucket_limiter_raw);
+        if snapshot.component.id == format!("0x{}", hex::encode(ETH_ADDRESS)) {
+            let id_bytes =
+                Bytes::from_str(&snapshot.component.id).expect("Invalid ProtocolComponent.ID");
+            liquidity_pool_native_balance = Some(
+                account_balances
+                    .get(&id_bytes)
+                    .and_then(|balances| balances.get(&Bytes::from(ETH_ADDRESS)))
+                    .map(|bytes| U256::from_be_slice(bytes))
+                    .ok_or_else(|| {
+                        InvalidSnapshotError::MissingAttribute(
+                            "liquidity_pool_native_balance".to_string(),
+                        )
+                    })?,
+            );
 
-        let eth_redemption_info_raw = snapshot
-            .state
-            .attributes
-            .get("ethRedemptionInfo")
-            .ok_or_else(|| {
-                InvalidSnapshotError::MissingAttribute("ethRedemptionInfo".to_string())
-            })?;
-        let eth_redemption_info_value = U256::from_be_slice(eth_redemption_info_raw);
+            let eth_bucket_limiter_raw = snapshot
+                .state
+                .attributes
+                .get("ethBucketLimiter")
+                .ok_or_else(|| {
+                    InvalidSnapshotError::MissingAttribute("ethBucketLimiter".to_string())
+                })?;
+            let eth_bucket_limiter_value = U256::from_be_slice(eth_bucket_limiter_raw);
 
-        let eth_redemption_info = RedemptionInfo::from_u256(
-            BucketLimit::from_u256(eth_bucket_limiter_value),
-            eth_redemption_info_value,
-        );
+            let eth_redemption_info_raw = snapshot
+                .state
+                .attributes
+                .get("ethRedemptionInfo")
+                .ok_or_else(|| {
+                    InvalidSnapshotError::MissingAttribute("ethRedemptionInfo".to_string())
+                })?;
+            let eth_redemption_info_value = U256::from_be_slice(eth_redemption_info_raw);
+
+            eth_redemption_info = Some(RedemptionInfo::from_u256(
+                BucketLimit::from_u256(eth_bucket_limiter_value),
+                eth_redemption_info_value,
+            ));
+        }
 
         Ok(EtherfiState::new(
+            block.timestamp,
             total_value_out_of_lp,
             total_value_in_lp,
             total_shares,

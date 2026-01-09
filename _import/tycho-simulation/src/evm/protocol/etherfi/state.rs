@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 use alloy::primitives::U256;
 use hex_literal::hex;
-use num_bigint::BigUint;
+use num_bigint::{BigInt, BigUint};
+use num_traits::ToPrimitive;
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -22,18 +23,20 @@ pub const EETH_ADDRESS: [u8; 20] = hex!("35fA164735182de50811E8e2E824cFb9B6118ac
 pub const WEETH_ADDRESS: [u8; 20] = hex!("Cd5fE23C85820F7B72D0926FC9b05b43E359b7ee");
 pub const ETH_ADDRESS: [u8; 20] = hex!("EeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE");
 pub const BASIS_POINT_SCALE: u64 = 10000;
+pub const BUCKET_UNIT_SCALE: u64 = 1_000_000_000_000;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EtherfiState {
+    block_timestamp: u64,
     total_value_out_of_lp: U256,
     total_value_in_lp: U256,
     total_shares: U256,
     eth_amount_locked_for_withdrawl: U256,
-    liquidity_pool_native_balance: U256,
-    eth_redemption_info: RedemptionInfo,
+    liquidity_pool_native_balance: Option<U256>,
+    eth_redemption_info: Option<RedemptionInfo>,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub struct RedemptionInfo {
     limit: BucketLimit,
     exit_fee_split_to_treasury_in_bps: u16,
@@ -41,7 +44,7 @@ pub struct RedemptionInfo {
     low_watermark_in_bps_of_tvl: u16,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub struct BucketLimit {
     // The maximum capacity of the bucket, in consumable units (eg. tokens)
     capacity: u64,
@@ -55,14 +58,16 @@ pub struct BucketLimit {
 
 impl EtherfiState {
     pub fn new(
+        block_timestamp: u64,
         total_value_out_of_lp: U256,
         total_value_in_lp: U256,
         total_shares: U256,
         eth_amount_locked_for_withdrawl: U256,
-        eth_redemption_info: RedemptionInfo,
-        liquidity_pool_native_balance: U256,
+        eth_redemption_info: Option<RedemptionInfo>,
+        liquidity_pool_native_balance: Option<U256>,
     ) -> Self {
         EtherfiState {
+            block_timestamp,
             total_value_out_of_lp,
             total_value_in_lp,
             total_shares,
@@ -70,6 +75,18 @@ impl EtherfiState {
             liquidity_pool_native_balance,
             eth_redemption_info,
         }
+    }
+
+    fn require_redemption_info(&self) -> Result<RedemptionInfo, SimulationError> {
+        self.eth_redemption_info
+            .ok_or_else(|| SimulationError::FatalError("missing eth redemption info".to_string()))
+    }
+
+    fn require_liquidity_balance(&self) -> Result<U256, SimulationError> {
+        self.liquidity_pool_native_balance
+            .ok_or_else(|| {
+                SimulationError::FatalError("missing liquidity pool native balance".to_string())
+            })
     }
 
     fn shares_for_amount(&self, amount: U256) -> Result<U256, SimulationError> {
@@ -87,6 +104,15 @@ impl EtherfiState {
         let total_pooled_ether = self.total_value_in_lp + self.total_value_out_of_lp;
         Ok(share * total_pooled_ether / self.total_shares)
     }
+
+    fn shares_for_withdrawal_amount(&self, amount: U256) -> Result<U256, SimulationError> {
+        let total_pooled_ether = self.total_value_in_lp + self.total_value_out_of_lp;
+        if total_pooled_ether == U256::ZERO {
+            return Ok(U256::ZERO)
+        }
+        let numerator = amount * self.total_shares;
+        Ok(numerator + total_pooled_ether - U256::ONE / total_pooled_ether)
+    }
 }
 
 impl BucketLimit {
@@ -99,6 +125,41 @@ impl BucketLimit {
             refill_rate: ((value >> 192u32) & mask).to::<u64>(),
         }
     }
+
+    // Apply time-based refill to remaining capacity.
+    fn refill(mut self, now: u64) -> Self {
+        if now <= self.last_refill {
+            return self;
+        }
+        let delta = now - self.last_refill;
+        let tokens = (delta as u128) * (self.refill_rate as u128);
+        let new_remaining = (self.remaining as u128) + tokens;
+        if new_remaining > self.capacity as u128 {
+            self.remaining = self.capacity;
+        } else {
+            self.remaining = new_remaining as u64;
+        }
+        self.last_refill = now;
+        self
+    }
+}
+
+// Convert wei amount to bucket units with optional rounding up.
+fn convert_to_bucket_unit(amount: U256, rounding_up: bool) -> Result<u64, SimulationError> {
+    let scale = U256::from(BUCKET_UNIT_SCALE);
+    let max_amount = U256::from(u64::MAX) * scale;
+    if amount >= max_amount {
+        return Err(SimulationError::FatalError(
+            "EtherFiRedemptionManager: Amount too large".to_string(),
+        ));
+    }
+    let bucket = if rounding_up { (amount + scale - U256::ONE) / scale } else { amount / scale };
+    if bucket > U256::from(u64::MAX) {
+        return Err(SimulationError::FatalError(
+            "EtherFiRedemptionManager: Amount too large".to_string(),
+        ));
+    }
+    Ok(bucket.to::<u64>())
 }
 
 impl RedemptionInfo {
@@ -124,27 +185,19 @@ impl ProtocolSim for EtherfiState {
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
         let base_unit = U256::from(10).pow(U256::from(base.decimals));
         let quote_unit = U256::from(10).pow(U256::from(quote.decimals));
+        let quote_unit_f64 = u256_to_f64(quote_unit)?;
+        let to_price = |amount_out: U256| -> Result<f64, SimulationError> {
+            Ok(u256_to_f64(amount_out)? / quote_unit_f64)
+        };
 
         if base.address.as_ref() == EETH_ADDRESS && quote.address.as_ref() == WEETH_ADDRESS {
-            let amount_out = self.shares_for_amount(base_unit)?;
-            let amount_out_f64 = u256_to_f64(amount_out)?;
-            let quote_unit_f64 = u256_to_f64(quote_unit)?;
-            Ok(amount_out_f64 / quote_unit_f64)
+            to_price(self.shares_for_amount(base_unit)?)
         } else if base.address.as_ref() == WEETH_ADDRESS && quote.address.as_ref() == EETH_ADDRESS {
-            let amount_out = self.amount_for_share(base_unit)?;
-            let amount_out_f64 = u256_to_f64(amount_out)?;
-            let quote_unit_f64 = u256_to_f64(quote_unit)?;
-            Ok(amount_out_f64 / quote_unit_f64)
+            to_price(self.amount_for_share(base_unit)?)
         } else if base.address.as_ref() == ETH_ADDRESS && quote.address.as_ref() == EETH_ADDRESS {
-            let amount_out = self.shares_for_amount(base_unit)?;
-            let amount_out_f64 = u256_to_f64(amount_out)?;
-            let quote_unit_f64 = u256_to_f64(quote_unit)?;
-            Ok(amount_out_f64 / quote_unit_f64)
+            to_price(self.shares_for_amount(base_unit)?)
         } else if base.address.as_ref() == EETH_ADDRESS && quote.address.as_ref() == ETH_ADDRESS {
-            let amount_out = self.amount_for_share(base_unit)?;
-            let amount_out_f64 = u256_to_f64(amount_out)?;
-            let quote_unit_f64 = u256_to_f64(quote_unit)?;
-            Ok(amount_out_f64 / quote_unit_f64)
+            to_price(self.amount_for_share(base_unit)?)
         } else {
             Err(SimulationError::FatalError("unsupported spot price".to_string()))
         }
@@ -156,38 +209,57 @@ impl ProtocolSim for EtherfiState {
         token_in: &Token,
         token_out: &Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
-        let new_state = self.clone();
+        let mut new_state = self.clone();
         let amount_in = biguint_to_u256(&amount_in);
         if token_in.address.as_ref() == ETH_ADDRESS && token_out.address.as_ref() == EETH_ADDRESS {
             // eth --> eeth
-            let amount_out = u256_to_biguint(self.shares_for_amount(amount_in)?);
-            return Ok(GetAmountOutResult::new(amount_out, BigUint::ZERO, Box::new(new_state)))
+            let amount_out = self.shares_for_amount(amount_in)?;
+            new_state.total_shares += amount_out;
+            new_state.total_value_in_lp += amount_in;
+            return Ok(GetAmountOutResult::new(
+                u256_to_biguint(amount_out),
+                BigUint::ZERO,
+                Box::new(new_state),
+            ))
         }
 
         if token_in.address.as_ref() == EETH_ADDRESS && token_out.address.as_ref() == ETH_ADDRESS {
             // eeth --> eth
+            let liquidity_pool_native_balance = self.require_liquidity_balance()?;
+            let eth_redemption_info = self.require_redemption_info()?;
             let liquid_eth_amount =
-                self.liquidity_pool_native_balance - self.eth_amount_locked_for_withdrawl;
+                liquidity_pool_native_balance - self.eth_amount_locked_for_withdrawl;
             let low_watermark = mul_div(
                 self.total_value_in_lp + self.total_value_out_of_lp,
-                U256::from(
-                    self.eth_redemption_info
-                        .low_watermark_in_bps_of_tvl,
-                ),
+                U256::from(eth_redemption_info.low_watermark_in_bps_of_tvl),
                 U256::from(BASIS_POINT_SCALE),
             )?;
             if liquid_eth_amount < low_watermark || liquid_eth_amount - low_watermark < amount_in {
                 return Err(SimulationError::FatalError("Exceeded total redeemable amount".into()))
             } else {
-                // BucketLimiter.canConsume
+                let bucket_unit = convert_to_bucket_unit(amount_in, true)?;
+                let mut limit = eth_redemption_info
+                    .limit
+                    .refill(self.block_timestamp);
+                if limit.remaining < bucket_unit {
+                    return Err(SimulationError::FatalError("Exceeded rate limit".into()))
+                }
+                limit.remaining -= bucket_unit;
+                limit.last_refill = self.block_timestamp;
+                let mut updated_info = eth_redemption_info;
+                updated_info.limit = limit;
+                new_state.eth_redemption_info = Some(updated_info);
             }
             let eeth_shares = self.shares_for_amount(amount_in)?;
             let eth_amount_out = self.amount_for_share(mul_div(
                 eeth_shares,
-                U256::from(BASIS_POINT_SCALE) -
-                    U256::from(self.eth_redemption_info.exit_fee_in_bps),
+                U256::from(BASIS_POINT_SCALE) - U256::from(eth_redemption_info.exit_fee_in_bps),
                 U256::from(BASIS_POINT_SCALE),
             )?)?;
+            new_state.total_value_in_lp -= eth_amount_out;
+            new_state.total_shares -= self.shares_for_withdrawal_amount(eth_amount_out)?;
+            new_state.liquidity_pool_native_balance =
+                Some(liquidity_pool_native_balance - eth_amount_out);
             let amount_out = u256_to_biguint(eth_amount_out);
             return Ok(GetAmountOutResult::new(amount_out, BigUint::ZERO, Box::new(new_state)))
         }
@@ -221,14 +293,13 @@ impl ProtocolSim for EtherfiState {
         }
 
         if sell_token.as_ref() == EETH_ADDRESS && buy_token.as_ref() == ETH_ADDRESS {
+            let liquidity_pool_native_balance = self.require_liquidity_balance()?;
+            let eth_redemption_info = self.require_redemption_info()?;
             let liquid_eth_amount =
-                self.liquidity_pool_native_balance - self.eth_amount_locked_for_withdrawl;
+                liquidity_pool_native_balance - self.eth_amount_locked_for_withdrawl;
             let low_watermark = mul_div(
                 self.total_value_in_lp + self.total_value_out_of_lp,
-                U256::from(
-                    self.eth_redemption_info
-                        .low_watermark_in_bps_of_tvl,
-                ),
+                U256::from(eth_redemption_info.low_watermark_in_bps_of_tvl),
                 U256::from(BASIS_POINT_SCALE),
             )?;
             if liquid_eth_amount < low_watermark {
@@ -238,8 +309,7 @@ impl ProtocolSim for EtherfiState {
             let eeth_shares = self.shares_for_amount(max_eeth_amount)?;
             let eth_amount_out = self.amount_for_share(mul_div(
                 eeth_shares,
-                U256::from(BASIS_POINT_SCALE) -
-                    U256::from(self.eth_redemption_info.exit_fee_in_bps),
+                U256::from(BASIS_POINT_SCALE) - U256::from(eth_redemption_info.exit_fee_in_bps),
                 U256::from(BASIS_POINT_SCALE),
             )?)?;
             return Ok((u256_to_biguint(max_eeth_amount), u256_to_biguint(eth_amount_out)));
@@ -264,6 +334,14 @@ impl ProtocolSim for EtherfiState {
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
+        if let Some(block_timestamp) = delta
+            .updated_attributes
+            .get("block_timestamp")
+        {
+            self.block_timestamp = BigInt::from_signed_bytes_be(block_timestamp)
+                .to_u64()
+                .unwrap();
+        }
         if let Some(total_value_out_of_lp) = delta
             .updated_attributes
             .get("totalValueOutOfLp")
@@ -293,7 +371,8 @@ impl ProtocolSim for EtherfiState {
             .updated_attributes
             .get("liquidity_pool_native_balance")
         {
-            self.liquidity_pool_native_balance = U256::from_be_slice(liquidity_pool_native_balance);
+            self.liquidity_pool_native_balance =
+                Some(U256::from_be_slice(liquidity_pool_native_balance));
         }
         let eth_bucket_limiter = delta
             .updated_attributes
@@ -303,13 +382,32 @@ impl ProtocolSim for EtherfiState {
             .updated_attributes
             .get("ethRedemptionInfo")
             .map(|value| U256::from_be_slice(value));
-        if let (Some(eth_bucket_limiter), Some(eth_redemption_info)) =
-            (eth_bucket_limiter, eth_redemption_info)
-        {
-            self.eth_redemption_info = RedemptionInfo::from_u256(
-                BucketLimit::from_u256(eth_bucket_limiter),
-                eth_redemption_info,
-            );
+        if eth_bucket_limiter.is_some() || eth_redemption_info.is_some() {
+            let existing = self
+                .eth_redemption_info
+                .unwrap_or_default();
+            let mut limit = existing.limit;
+            let mut exit_fee_split = existing.exit_fee_split_to_treasury_in_bps;
+            let mut exit_fee = existing.exit_fee_in_bps;
+            let mut low_watermark = existing.low_watermark_in_bps_of_tvl;
+
+            if let Some(eth_bucket_limiter) = eth_bucket_limiter {
+                limit = BucketLimit::from_u256(eth_bucket_limiter);
+            }
+            if let Some(eth_redemption_info) = eth_redemption_info {
+                let parsed = RedemptionInfo::from_u256(limit, eth_redemption_info);
+                limit = parsed.limit;
+                exit_fee_split = parsed.exit_fee_split_to_treasury_in_bps;
+                exit_fee = parsed.exit_fee_in_bps;
+                low_watermark = parsed.low_watermark_in_bps_of_tvl;
+            }
+
+            self.eth_redemption_info = Some(RedemptionInfo {
+                limit,
+                exit_fee_split_to_treasury_in_bps: exit_fee_split,
+                exit_fee_in_bps: exit_fee,
+                low_watermark_in_bps_of_tvl: low_watermark,
+            });
         }
 
         Ok(())
@@ -333,5 +431,102 @@ impl ProtocolSim for EtherfiState {
         } else {
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bucket_limit_from_u256_parses_fields() {
+        let capacity = 2_000_000_000u64;
+        let remaining = 1_999_995_000u64;
+        let last_refill = 1_767_694_523u64;
+        let refill_rate = 23_148u64;
+
+        let value = U256::from(capacity) |
+            (U256::from(remaining) << 64u32) |
+            (U256::from(last_refill) << 128u32) |
+            (U256::from(refill_rate) << 192u32);
+
+        let limit = BucketLimit::from_u256(value);
+        assert_eq!(limit.capacity, capacity);
+        assert_eq!(limit.remaining, remaining);
+        assert_eq!(limit.last_refill, last_refill);
+        assert_eq!(limit.refill_rate, refill_rate);
+    }
+
+    #[test]
+    fn redemption_info_from_u256_parses_fields() {
+        let limit = BucketLimit { capacity: 1, remaining: 2, last_refill: 3, refill_rate: 4 };
+        let exit_fee_split = 1000u16;
+        let exit_fee = 30u16;
+        let low_watermark = 100u16;
+
+        let value = U256::from(u64::from(exit_fee_split)) |
+            (U256::from(u64::from(exit_fee)) << 16u32) |
+            (U256::from(u64::from(low_watermark)) << 32u32);
+
+        let info = RedemptionInfo::from_u256(limit, value);
+        assert_eq!(info.limit, limit);
+        assert_eq!(info.exit_fee_split_to_treasury_in_bps, exit_fee_split);
+        assert_eq!(info.exit_fee_in_bps, exit_fee);
+        assert_eq!(info.low_watermark_in_bps_of_tvl, low_watermark);
+    }
+
+    #[test]
+    fn convert_to_bucket_unit_rounds_up() {
+        let amount = U256::from(BUCKET_UNIT_SCALE - 1);
+        let bucket = convert_to_bucket_unit(amount, true).expect("bucket");
+        assert_eq!(bucket, 1);
+
+        let exact = U256::from(BUCKET_UNIT_SCALE * 2);
+        let bucket_exact = convert_to_bucket_unit(exact, true).expect("bucket");
+        assert_eq!(bucket_exact, 2);
+    }
+
+    #[test]
+    fn convert_to_bucket_unit_rounds_down() {
+        let amount = U256::from(BUCKET_UNIT_SCALE - 1);
+        let bucket = convert_to_bucket_unit(amount, false).expect("bucket");
+        assert_eq!(bucket, 0);
+
+        let exact = U256::from(BUCKET_UNIT_SCALE * 3);
+        let bucket_exact = convert_to_bucket_unit(exact, false).expect("bucket");
+        assert_eq!(bucket_exact, 3);
+    }
+
+    #[test]
+    fn convert_to_bucket_unit_rejects_large_amounts() {
+        let scale = U256::from(BUCKET_UNIT_SCALE);
+        let max_amount = U256::from(u64::MAX) * scale;
+        let err = convert_to_bucket_unit(max_amount, true).unwrap_err();
+        match err {
+            SimulationError::FatalError(msg) => {
+                assert!(msg.contains("Amount too large"));
+            }
+            _ => panic!("unexpected error type"),
+        }
+    }
+
+    #[test]
+    fn bucket_limit_refill_caps_at_capacity() {
+        let limit = BucketLimit { capacity: 10, remaining: 1, last_refill: 100, refill_rate: 5 };
+        let refilled = limit.refill(103);
+        assert_eq!(refilled.remaining, 10);
+        assert_eq!(refilled.last_refill, 103);
+    }
+
+    #[test]
+    fn bucket_limit_refill_noop_same_or_older_time() {
+        let limit = BucketLimit { capacity: 10, remaining: 4, last_refill: 100, refill_rate: 5 };
+        let same = limit.refill(100);
+        assert_eq!(same.remaining, 4);
+        assert_eq!(same.last_refill, 100);
+
+        let older = limit.refill(99);
+        assert_eq!(older.remaining, 4);
+        assert_eq!(older.last_refill, 100);
     }
 }
