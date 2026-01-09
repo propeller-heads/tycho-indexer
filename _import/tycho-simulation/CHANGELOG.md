@@ -1,3 +1,10 @@
+## [0.227.0](https://github.com/propeller-heads/tycho-simulation/compare/0.226.1...0.227.0) (2026-01-09)
+
+
+### Features
+
+* Update tycho-execution with SwapEncoderRegistry changes ([84cf6cb](https://github.com/propeller-heads/tycho-simulation/commit/84cf6cbda086f37521f3bc795939354afaaf2f7e))
+
 ## [0.226.1](https://github.com/propeller-heads/tycho-simulation/compare/0.226.0...0.226.1) (2026-01-08)
 
 
