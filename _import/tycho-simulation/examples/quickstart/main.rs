@@ -30,7 +30,10 @@ use tracing_subscriber::EnvFilter;
 use tycho_common::{models::token::Token, Bytes};
 use tycho_execution::encoding::{
     errors::EncodingError,
-    evm::{approvals::permit2::PermitSingle, encoder_builders::TychoRouterEncoderBuilder},
+    evm::{
+        approvals::permit2::PermitSingle, encoder_builders::TychoRouterEncoderBuilder,
+        swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
+    },
     models,
     models::{EncodedSolution, Solution, Swap, Transaction, UserTransferType},
 };
@@ -218,9 +221,13 @@ async fn main() {
         .expect("Failed building protocol stream");
 
     // Initialize the encoder
+    let swap_encoder_registry = SwapEncoderRegistry::new(chain)
+        .add_default_encoders(None)
+        .expect("Failed to get default SwapEncoderRegistry");
     let encoder = TychoRouterEncoderBuilder::new()
         .chain(chain)
         .user_transfer_type(UserTransferType::TransferFromPermit2)
+        .swap_encoder_registry(swap_encoder_registry)
         .build()
         .expect("Failed to build encoder");
 

@@ -15,7 +15,10 @@ use tycho_common::{
     Bytes,
 };
 use tycho_execution::encoding::{
-    evm::encoder_builders::TychoRouterEncoderBuilder,
+    evm::{
+        encoder_builders::TychoRouterEncoderBuilder,
+        swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
+    },
     models::{EncodedSolution, Solution, Swap, Transaction, UserTransferType},
 };
 use tycho_simulation::{
@@ -54,14 +57,15 @@ pub fn encode_swap(
         buy_token.clone(),
         amount_in.clone(),
     )?;
+    let swap_encoder_registry = SwapEncoderRegistry::new(chain)
+        .add_default_encoders(executors_json)
+        .into_diagnostic()?;
     let encoded_solution = {
         let mut builder = TychoRouterEncoderBuilder::new()
             .chain(chain)
-            .user_transfer_type(UserTransferType::TransferFrom);
+            .user_transfer_type(UserTransferType::TransferFrom)
+            .swap_encoder_registry(swap_encoder_registry);
 
-        if let Some(executors) = executors_json {
-            builder = builder.executors_addresses(executors);
-        }
         if historical_trade {
             builder = builder.historical_trade();
         }
