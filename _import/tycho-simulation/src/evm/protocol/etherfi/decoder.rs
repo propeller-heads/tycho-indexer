@@ -1,11 +1,11 @@
-use std::{collections::HashMap, str::FromStr};
+use std::collections::HashMap;
 
 use alloy::primitives::U256;
 use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
 use tycho_common::{models::token::Token, Bytes};
 
 use crate::{
-    evm::protocol::etherfi::state::{BucketLimit, EtherfiState, RedemptionInfo, ETH_ADDRESS},
+    evm::protocol::etherfi::state::{BucketLimit, EtherfiState, RedemptionInfo, EETH_ADDRESS},
     protocol::{
         errors::InvalidSnapshotError,
         models::{DecoderContext, TryFromWithBlock},
@@ -18,7 +18,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EtherfiState {
     async fn try_from_with_header(
         snapshot: ComponentWithState,
         block: BlockHeader,
-        account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
+        _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
         _decoder_context: &DecoderContext,
     ) -> Result<Self, Self::Error> {
@@ -50,35 +50,33 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EtherfiState {
                 .ok_or_else(|| InvalidSnapshotError::MissingAttribute("totalShares".to_string()))?,
         );
 
-        let eth_amount_locked_for_withdrawl = U256::from_be_slice(
-            snapshot
-                .state
-                .attributes
-                .get("ethAmountLockedForWithdrawl")
-                .ok_or_else(|| {
-                    InvalidSnapshotError::MissingAttribute(
-                        "ethAmountLockedForWithdrawl".to_string(),
-                    )
-                })?,
-        );
-
         let mut liquidity_pool_native_balance: Option<U256> = None;
+        let mut eth_amount_locked_for_withdrawl: Option<U256> = None;
         let mut eth_redemption_info: Option<RedemptionInfo> = None;
 
-        if snapshot.component.id == format!("0x{}", hex::encode(ETH_ADDRESS)) {
-            let id_bytes =
-                Bytes::from_str(&snapshot.component.id).expect("Invalid ProtocolComponent.ID");
-            liquidity_pool_native_balance = Some(
-                account_balances
-                    .get(&id_bytes)
-                    .and_then(|balances| balances.get(&Bytes::from(ETH_ADDRESS)))
-                    .map(|bytes| U256::from_be_slice(bytes))
+        if snapshot.component.id == format!("0x{}", hex::encode(EETH_ADDRESS)) {
+            liquidity_pool_native_balance = Some(U256::from_be_slice(
+                snapshot
+                    .state
+                    .attributes
+                    .get("liquidityPoolNativeBalance")
                     .ok_or_else(|| {
                         InvalidSnapshotError::MissingAttribute(
-                            "liquidity_pool_native_balance".to_string(),
+                            "liquidityPoolNativeBalance".to_string(),
                         )
                     })?,
-            );
+            ));
+            eth_amount_locked_for_withdrawl = Some(U256::from_be_slice(
+                snapshot
+                    .state
+                    .attributes
+                    .get("ethAmountLockedForWithdrawl")
+                    .ok_or_else(|| {
+                        InvalidSnapshotError::MissingAttribute(
+                            "ethAmountLockedForWithdrawl".to_string(),
+                        )
+                    })?,
+            ));
 
             let eth_bucket_limiter_raw = snapshot
                 .state

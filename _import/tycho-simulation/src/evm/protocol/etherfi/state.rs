@@ -31,7 +31,7 @@ pub struct EtherfiState {
     total_value_out_of_lp: U256,
     total_value_in_lp: U256,
     total_shares: U256,
-    eth_amount_locked_for_withdrawl: U256,
+    eth_amount_locked_for_withdrawl: Option<U256>,
     liquidity_pool_native_balance: Option<U256>,
     eth_redemption_info: Option<RedemptionInfo>,
 }
@@ -62,7 +62,7 @@ impl EtherfiState {
         total_value_out_of_lp: U256,
         total_value_in_lp: U256,
         total_shares: U256,
-        eth_amount_locked_for_withdrawl: U256,
+        eth_amount_locked_for_withdrawl: Option<U256>,
         eth_redemption_info: Option<RedemptionInfo>,
         liquidity_pool_native_balance: Option<U256>,
     ) -> Self {
@@ -86,6 +86,13 @@ impl EtherfiState {
         self.liquidity_pool_native_balance
             .ok_or_else(|| {
                 SimulationError::FatalError("missing liquidity pool native balance".to_string())
+            })
+    }
+
+    fn require_eth_amount_locked_for_withdrawl(&self) -> Result<U256, SimulationError> {
+        self.eth_amount_locked_for_withdrawl
+            .ok_or_else(|| {
+                SimulationError::FatalError("missing eth amount locked for withdrawal".to_string())
             })
     }
 
@@ -226,9 +233,9 @@ impl ProtocolSim for EtherfiState {
         if token_in.address.as_ref() == EETH_ADDRESS && token_out.address.as_ref() == ETH_ADDRESS {
             // eeth --> eth
             let liquidity_pool_native_balance = self.require_liquidity_balance()?;
+            let eth_amount_locked_for_withdrawl = self.require_eth_amount_locked_for_withdrawl()?;
             let eth_redemption_info = self.require_redemption_info()?;
-            let liquid_eth_amount =
-                liquidity_pool_native_balance - self.eth_amount_locked_for_withdrawl;
+            let liquid_eth_amount = liquidity_pool_native_balance - eth_amount_locked_for_withdrawl;
             let low_watermark = mul_div(
                 self.total_value_in_lp + self.total_value_out_of_lp,
                 U256::from(eth_redemption_info.low_watermark_in_bps_of_tvl),
@@ -294,9 +301,9 @@ impl ProtocolSim for EtherfiState {
 
         if sell_token.as_ref() == EETH_ADDRESS && buy_token.as_ref() == ETH_ADDRESS {
             let liquidity_pool_native_balance = self.require_liquidity_balance()?;
+            let eth_amount_locked_for_withdrawl = self.require_eth_amount_locked_for_withdrawl()?;
             let eth_redemption_info = self.require_redemption_info()?;
-            let liquid_eth_amount =
-                liquidity_pool_native_balance - self.eth_amount_locked_for_withdrawl;
+            let liquid_eth_amount = liquidity_pool_native_balance - eth_amount_locked_for_withdrawl;
             let low_watermark = mul_div(
                 self.total_value_in_lp + self.total_value_out_of_lp,
                 U256::from(eth_redemption_info.low_watermark_in_bps_of_tvl),
@@ -365,7 +372,7 @@ impl ProtocolSim for EtherfiState {
             .get("ethAmountLockedForWithdrawl")
         {
             self.eth_amount_locked_for_withdrawl =
-                U256::from_be_slice(eth_amount_locked_for_withdrawl);
+                Some(U256::from_be_slice(eth_amount_locked_for_withdrawl));
         }
         if let Some(liquidity_pool_native_balance) = delta
             .updated_attributes
