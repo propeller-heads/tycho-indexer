@@ -8,7 +8,7 @@ How to swap on-chain with Tycho. This quickstart will help you:
 * Simulate or execute the best trade using Tycho Execution.
 
 {% hint style="success" %}
-Want to chat with our docs? Download an LLM-friendly [text file of the full Tycho docs](https://llm.txt).
+Want to chat with our docs? Download an LLM-friendly [text file of the full Tycho docs](https://docs.propellerheads.xyz/tycho/llms-full.txt).
 {% endhint %}
 
 ## Run the Quickstart
