@@ -19,14 +19,14 @@ fn encode_swap(
 ) -> Result<Vec<u8>, EncodingError>;
 ```
 
-This function encodes a swap and its relevant context information into calldata that is compatible with the `Executor` contract. The output of the `SwapEncoder` is the input of the `Executor` (see next section). See current implementations [here](https://github.com/propeller-heads/tycho-execution/blob/main/src/encoding/evm/swap_encoder/swap_encoders.rs).
+This function encodes a swap and its relevant context information into calldata that is compatible with the `Executor` contract. The output of the `SwapEncoder` is the input of the `Executor` (see next section). See current implementations [here](https://github.com/propeller-heads/tycho-execution/tree/main/src/encoding/evm/swap_encoder).
 
 If your protocol needs some specific constant addresses please add them in [config/protocol\_specific\_addresses.json](https://github.com/propeller-heads/tycho-execution/blob/main/config/protocol_specific_addresses.json).
 
 After implementing your `SwapEncoder` , you need to:
 
 * Add your protocol with a placeholder address in: [config/executor\_addresses.json](https://github.com/propeller-heads/tycho-execution/blob/main/config/executor_addresses.json) and [config/test\_executor\_addresses.json](https://github.com/propeller-heads/tycho-execution/blob/main/config/test_executor_addresses.json)
-* Add your protocol in the [`SwapEncoderBuilder`](https://github.com/propeller-heads/tycho-execution/blob/main/src/encoding/evm/swap_encoder/builder.rs#L36) .
+* Add your protocol in the [`SwapEncoderRegister`](https://github.com/propeller-heads/tycho-execution/blob/main/src/encoding/evm/swap_encoder/swap_encoder_registry.rs#L95) (if you want it to be one of the default protocols)
 
 <details>
 

@@ -161,6 +161,20 @@ Tycho Execution provides two main encoder types:
 
 Choose the encoder that aligns with how you plan to route and execute trades.
 
+### Swap Encoders
+
+Each protocol needs its own `SwapEncoder` to define how the protocol encodes swaps into calldata.
+
+The `SwapEncoderRegistry` manages these encoders. You can use the default implementations that tycho-execution provides by calling `add_default_encoders()` on the registry. This method accepts an optional `executors_addresses` JSON string with the executor addresses to use during encoding. If you pass `None`, it defaults to the values in `config/executor_addresses.json`.
+
+If you need to add custom protocol support, register your own encoder implementation:
+
+```rust
+registry.register_encoder("my_protocol", Box::new(MyCustomEncoder));
+```
+
+Both `TychoRouterEncoderBuilder` and `TychoExecutorEncoderBuilder` require a `SwapEncoderRegistry` configured with the protocols you plan to use.
+
 ### Builder
 
 For each encoder, there is a corresponding builder:
@@ -174,9 +188,9 @@ Both builders require the target **chain** to be set.
 
 <summary><strong>Builder Options</strong></summary>
 
-Both encoders have the following options:
+Both encoders have the following option:
 
-* `executors_addresses` JSON string with the executor addresses to be used during encoding (defaults to the values in `config/executor_addresses.json`)
+* `swap_encoder_registry` Registry containing all the `SwapEncoder` s needed for your application (protocol specific encoding).
 
 The router builder includes the following configuration options:
 
@@ -193,9 +207,14 @@ Use these options to customize how token movement and permissions are handled du
 {% tabs %}
 {% tab title="RouterEncoder" %}
 ```rust
+let swap_encoder_registry = SwapEncoderRegistry::new(Chain::Ethereum)
+    .add_default_encoders(None)
+    .expect("Failed to get default SwapEncoderRegistry");
+        
 let encoder = TychoRouterEncoderBuilder::new()
     .chain(Chain::Ethereum)
     .user_transfer_type(UserTransferType::TransferFromPermit2)
+    .swap_encoder_registry(swap_encoder_registry)
     .build()
     .expect("Failed to build encoder");
 ```
@@ -203,8 +222,12 @@ let encoder = TychoRouterEncoderBuilder::new()
 
 {% tab title="ExecutorEncoder" %}
 ```rust
+let swap_encoder_registry = SwapEncoderRegistry::new(Chain::Ethereum)    
+    .add_default_encoders(None)
+    .expect("Failed to get default SwapEncoderRegistry");
+
 let encoder = TychoExecutorEncoderBuilder::new()
-    .chain(Chain::Ethereum)
+    .swap_encoder_registry(swap_encoder_registry)
     .build()
     .expect("Failed to build encoder");
 ```
