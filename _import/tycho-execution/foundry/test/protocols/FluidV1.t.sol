@@ -239,8 +239,4 @@ contract TychoRouterForFluidV1Test is TychoRouterTestSetup {
         assertEq(sUSDe.balanceOf(tychoRouterAddr), 0);
         assertEq(USDC.balanceOf(tychoRouterAddr), 0);
     }
-
-    function testExportContract() public {
-        exportRuntimeBytecode(address(fluidV1Executor), "FluidV1");
-    }
 }

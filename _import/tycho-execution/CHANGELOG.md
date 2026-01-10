@@ -1,3 +1,71 @@
+## [0.153.0](https://github.com/propeller-heads/tycho-execution/compare/0.152.0...0.153.0) (2026-01-09)
+
+
+### Features
+
+* Add a script to export run time bytecode ([9692bc3](https://github.com/propeller-heads/tycho-execution/commit/9692bc351411c0413567e67913175a8727e8d25b))
+
+## [0.152.0](https://github.com/propeller-heads/tycho-execution/compare/0.151.0...0.152.0) (2026-01-09)
+
+
+### Features
+
+* Use CREATE2 in deployment scripts ([56e1e0f](https://github.com/propeller-heads/tycho-execution/commit/56e1e0f397354b73a8d9854bcb65b95548c6fbe3))
+
+## [0.151.0](https://github.com/propeller-heads/tycho-execution/compare/0.150.0...0.151.0) (2026-01-09)
+
+
+### Features
+
+* Add ability to register external encoders to SwapEncoderRegistry ([ccb8556](https://github.com/propeller-heads/tycho-execution/commit/ccb8556eb5fa9b4f188da95f647a9499d7a3344d))
+
+
+### Bug Fixes
+
+* Move SwapEncoderBuilder logic to SwapEncoderRegistry ([e701e02](https://github.com/propeller-heads/tycho-execution/commit/e701e02e1f1bb97bb8e050d5d151f7cd8ad3d10e))
+
+## [0.150.0](https://github.com/propeller-heads/tycho-execution/compare/0.149.0...0.150.0) (2026-01-07)
+
+
+### Features
+
+* Get rid of SwapBuider and improve Swap ([8bf1573](https://github.com/propeller-heads/tycho-execution/commit/8bf1573b5a3af9efce93cd212475dd60fcf847f2))
+
+## [0.149.0](https://github.com/propeller-heads/tycho-execution/compare/0.148.1...0.149.0) (2026-01-07)
+
+
+### Features
+
+* Inverse IN_TRANSFER_REQUIRED_PROTOCOLS to FUNDS_IN_ROUTER_PROTOCOLS ([9d9f501](https://github.com/propeller-heads/tycho-execution/commit/9d9f5014735d06df5240af5185740c0039c74cfa))
+
+## [0.148.1](https://github.com/propeller-heads/tycho-execution/compare/0.148.0...0.148.1) (2026-01-05)
+
+
+### Bug Fixes
+
+* set approval flag when allowance is below half of max ([bff9ac9](https://github.com/propeller-heads/tycho-execution/commit/bff9ac9cfcb920f5febfe39fdcb4d4dc1930e4f8))
+
+## [0.148.0](https://github.com/propeller-heads/tycho-execution/compare/0.147.0...0.148.0) (2025-12-30)
+
+
+### Features
+
+* Add Unichain curve factory addresses to CurveSwapEncoder ([08ac8b0](https://github.com/propeller-heads/tycho-execution/commit/08ac8b01ad7b18df970777c16f79907f0a807a8f))
+
+## [0.147.0](https://github.com/propeller-heads/tycho-execution/compare/0.146.0...0.147.0) (2025-12-29)
+
+
+### Features
+
+* add native token address for Curve on Unichain ([b63cd49](https://github.com/propeller-heads/tycho-execution/commit/b63cd49e46be193b5b7b8f3336f09116941c09cf))
+
+## [0.146.0](https://github.com/propeller-heads/tycho-execution/compare/0.145.0...0.146.0) (2025-12-29)
+
+
+### Features
+
+* deploy executors for Velodrome Slipstreams and Curve on Unichain ([1b3b071](https://github.com/propeller-heads/tycho-execution/commit/1b3b07108055467f1430c4aedd2d3ba5623dc12f))
+
 ## [0.145.0](https://github.com/propeller-heads/tycho-execution/compare/0.144.1...0.145.0) (2025-12-15)
 
 

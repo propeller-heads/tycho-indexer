@@ -65,7 +65,8 @@ For each of the following, you must select one of `tenderly_ethereum`, `tenderly
 1. If the wallet that has the role, is a Gnosis Safe, you need to set the `SAFE_ADDRESS` env var.
 2. The scripts deploy-executors, remove-executor, set-roles and revoke-role all support this.
     1. If `SAFE_ADDRESS` is set, then it will propose a transaction to the safe wallet and later on it needs to be
-       approved in their UI to execute on chain. Be sure to change the PRIVATE_KEY to that which has permissions on the safe wallet.
+       approved in their UI to execute on chain. Be sure to change the PRIVATE_KEY to that which has permissions on the
+       safe wallet.
     2. If it's not set, it will submit the transaction directly to the chain.
 
 ## Deploy Uniswap X filler
@@ -86,3 +87,37 @@ export BLOCKCHAIN_EXPLORER_API_KEY=<blockchain-explorer-api-key>
 2. Confirm that the variables `tychoRouter`, `uniswapXReactor` and `nativeToken` are correctly set in the script. Make
    sure that the Uniswap X Reactor address matches the reactor you are targeting.
 3. Run `npx hardhat run scripts/deploy-uniswap-x-filler.js --network NETWORK`.
+
+## Export Runtime Bytecode
+
+The `export-runtime-bytecode.js` script allows you to export the runtime bytecode of any executor contract for use in
+SDK testing.
+
+### Prerequisites
+
+1. Ensure the contract is compiled: `forge build`
+2. Start a local blockchain: `anvil` (or `anvil &` to run in background)
+
+### Usage
+
+```bash
+node scripts/export-runtime-bytecode.js <ContractName> [constructorArg1] [constructorArg2] ...
+```
+
+### Example
+
+```bash
+# Export BalancerV2Executor (requires permit2 address)
+node scripts/export-runtime-bytecode.js BalancerV2Executor 0x000000000022D473030F116dDEE9F6B43aC78BA3
+```
+
+### Output
+
+The script will:
+
+1. Deploy the contract with the provided constructor arguments to your local fork
+2. Extract the runtime bytecode (including immutables)
+3. Save it to `test/{ContractName}.runtime.json`
+
+The generated JSON file contains the runtime bytecode in the format expected by the SDK and should be copied to the
+appropriate SDK repository for testing. **Do not commit these files to this repository.**

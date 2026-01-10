@@ -78,69 +78,26 @@ pub enum NativeAction {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Swap {
     /// Protocol component from tycho indexer
-    pub component: ProtocolComponent,
+    component: ProtocolComponent,
     /// Token being input into the pool.
-    pub token_in: Bytes,
+    token_in: Bytes,
     /// Token being output from the pool.
-    pub token_out: Bytes,
+    token_out: Bytes,
     /// Decimal of the amount to be swapped in this operation (for example, 0.5 means 50%)
     #[serde(default)]
-    pub split: f64,
+    split: f64,
     /// Optional user data to be passed to encoding.
-    pub user_data: Option<Bytes>,
+    user_data: Option<Bytes>,
     /// Optional protocol state used to perform the swap.
     #[serde(skip)]
-    pub protocol_state: Option<Arc<dyn ProtocolSim>>,
+    protocol_state: Option<Arc<dyn ProtocolSim>>,
     /// Optional estimated amount in for this Swap. This is necessary for RFQ protocols. This value
     /// is used to request the quote
-    pub estimated_amount_in: Option<BigUint>,
-}
-
-impl Swap {
-    pub fn new<T: Into<ProtocolComponent>>(
-        component: T,
-        token_in: Bytes,
-        token_out: Bytes,
-        split: f64,
-        user_data: Option<Bytes>,
-        protocol_state: Option<Arc<dyn ProtocolSim>>,
-        estimated_amount_in: Option<BigUint>,
-    ) -> Self {
-        Self {
-            component: component.into(),
-            token_in,
-            token_out,
-            split,
-            user_data,
-            protocol_state,
-            estimated_amount_in,
-        }
-    }
-}
-
-impl PartialEq for Swap {
-    fn eq(&self, other: &Self) -> bool {
-        self.component == other.component &&
-            self.token_in == other.token_in &&
-            self.token_out == other.token_out &&
-            self.split == other.split &&
-            self.user_data == other.user_data &&
-            self.estimated_amount_in == other.estimated_amount_in
-        // Skip protocol_state comparison since trait objects don't implement PartialEq
-    }
-}
-
-pub struct SwapBuilder {
-    component: ProtocolComponent,
-    token_in: Bytes,
-    token_out: Bytes,
-    split: f64,
-    user_data: Option<Bytes>,
-    protocol_state: Option<Arc<dyn ProtocolSim>>,
     estimated_amount_in: Option<BigUint>,
 }
 
-impl SwapBuilder {
+impl Swap {
+    /// Creates a new Swap with the required fields. Optional fields are set to their defaults.
     pub fn new<T: Into<ProtocolComponent>>(
         component: T,
         token_in: Bytes,
@@ -157,36 +114,68 @@ impl SwapBuilder {
         }
     }
 
+    /// Sets the split value (percentage of the amount to be swapped)
     pub fn split(mut self, split: f64) -> Self {
         self.split = split;
         self
     }
 
+    /// Sets the user data to be passed to encoding
     pub fn user_data(mut self, user_data: Bytes) -> Self {
         self.user_data = Some(user_data);
         self
     }
 
+    /// Sets the protocol state used to perform the swap
     pub fn protocol_state(mut self, protocol_state: Arc<dyn ProtocolSim>) -> Self {
         self.protocol_state = Some(protocol_state);
         self
     }
 
+    /// Sets the estimated amount in for RFQ protocols
     pub fn estimated_amount_in(mut self, estimated_amount_in: BigUint) -> Self {
         self.estimated_amount_in = Some(estimated_amount_in);
         self
     }
 
-    pub fn build(self) -> Swap {
-        Swap {
-            component: self.component,
-            token_in: self.token_in,
-            token_out: self.token_out,
-            split: self.split,
-            user_data: self.user_data,
-            protocol_state: self.protocol_state,
-            estimated_amount_in: self.estimated_amount_in,
-        }
+    // Getter methods for accessing private fields
+    pub fn component(&self) -> &ProtocolComponent {
+        &self.component
+    }
+
+    pub fn token_in(&self) -> &Bytes {
+        &self.token_in
+    }
+
+    pub fn token_out(&self) -> &Bytes {
+        &self.token_out
+    }
+
+    pub fn get_split(&self) -> f64 {
+        self.split
+    }
+
+    pub fn get_user_data(&self) -> &Option<Bytes> {
+        &self.user_data
+    }
+
+    pub fn get_protocol_state(&self) -> &Option<Arc<dyn ProtocolSim>> {
+        &self.protocol_state
+    }
+
+    pub fn get_estimated_amount_in(&self) -> &Option<BigUint> {
+        &self.estimated_amount_in
+    }
+}
+
+impl PartialEq for Swap {
+    fn eq(&self, other: &Self) -> bool {
+        self.component() == other.component() &&
+            self.token_in() == other.token_in() &&
+            self.token_out() == other.token_out() &&
+            self.get_split() == other.get_split() &&
+            self.get_user_data() == other.get_user_data() &&
+            self.get_estimated_amount_in() == other.get_estimated_amount_in()
     }
 }
 
@@ -332,21 +321,16 @@ mod tests {
             id: "i-am-an-id".to_string(),
             protocol_system: "uniswap_v2".to_string(),
         };
-        let user_data = Some(Bytes::from("0x1234"));
-        let swap = Swap::new(
-            component,
-            Bytes::from("0x12"),
-            Bytes::from("34"),
-            0.5,
-            user_data.clone(),
-            None,
-            None,
-        );
-        assert_eq!(swap.token_in, Bytes::from("0x12"));
-        assert_eq!(swap.token_out, Bytes::from("0x34"));
-        assert_eq!(swap.component.protocol_system, "uniswap_v2");
-        assert_eq!(swap.component.id, "i-am-an-id");
-        assert_eq!(swap.split, 0.5);
-        assert_eq!(swap.user_data, user_data);
+        let user_data = Bytes::from("0x1234");
+        let swap = Swap::new(component, Bytes::from("0x12"), Bytes::from("0x34"))
+            .split(0.5)
+            .user_data(user_data.clone());
+
+        assert_eq!(swap.token_in(), &Bytes::from("0x12"));
+        assert_eq!(swap.token_out(), &Bytes::from("0x34"));
+        assert_eq!(swap.component().protocol_system, "uniswap_v2");
+        assert_eq!(swap.component().id, "i-am-an-id");
+        assert_eq!(swap.get_split(), 0.5);
+        assert_eq!(swap.get_user_data(), &Some(user_data));
     }
 }

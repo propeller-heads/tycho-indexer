@@ -263,8 +263,4 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         assertEq(IERC20(BASE_MAG7).balanceOf(BOB), 1379830606);
     }
-
-    function testExportContract() public {
-        exportRuntimeBytecode(address(uniswapV2Exposed), "UniswapV2");
-    }
 }

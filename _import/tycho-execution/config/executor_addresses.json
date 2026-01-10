@@ -31,6 +31,8 @@
     "uniswap_v2": "0x00C1b81e3C8f6347E69e2DDb90454798A6Be975E",
     "uniswap_v3": "0xD26A838A41af3d4815DfD745a080B2062c4124d1",
     "uniswap_v4": "0x052a40Ab2875437e0fF7f68976954AD62aB1f235",
-    "uniswap_v4_hooks": "0x052a40Ab2875437e0fF7f68976954AD62aB1f235"
+    "uniswap_v4_hooks": "0x052a40Ab2875437e0fF7f68976954AD62aB1f235",
+    "velodrome_slipstreams": "0x772f58a21a1e64c5677cdf16630205264cad2b6a",
+    "vm:curve": "0x21A97f2Aa8D9AE7144BfD080266Ee87cC2369656"
   }
 }

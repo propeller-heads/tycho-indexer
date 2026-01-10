@@ -393,10 +393,6 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             metaRegistry.get_coin_indices(pool, tokenIn, tokenOut);
         return (coinInIndex, coinOutIndex);
     }
-
-    function testExportContract() public {
-        exportRuntimeBytecode(address(curveExecutorExposed), "Curve");
-    }
 }
 
 contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {

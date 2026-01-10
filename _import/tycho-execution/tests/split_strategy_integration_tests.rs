@@ -7,7 +7,7 @@ use num_bigint::{BigInt, BigUint};
 use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 use tycho_execution::encoding::{
     evm::utils::write_calldata_to_file,
-    models::{Solution, SwapBuilder, UserTransferType},
+    models::{Solution, Swap, UserTransferType},
 };
 
 use crate::common::{
@@ -32,7 +32,7 @@ fn test_split_swap_strategy_encoder() {
     let wbtc = wbtc();
     let usdc = usdc();
 
-    let swap_weth_dai = SwapBuilder::new(
+    let swap_weth_dai = Swap::new(
         ProtocolComponent {
             id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
             protocol_system: "uniswap_v2".to_string(),
@@ -41,9 +41,8 @@ fn test_split_swap_strategy_encoder() {
         weth.clone(),
         dai.clone(),
     )
-    .split(0.5f64)
-    .build();
-    let swap_weth_wbtc = SwapBuilder::new(
+    .split(0.5f64);
+    let swap_weth_wbtc = Swap::new(
         ProtocolComponent {
             id: "0xBb2b8038a1640196FbE3e38816F3e67Cba72D940".to_string(),
             protocol_system: "uniswap_v2".to_string(),
@@ -51,9 +50,8 @@ fn test_split_swap_strategy_encoder() {
         },
         weth.clone(),
         wbtc.clone(),
-    )
-    .build();
-    let swap_dai_usdc = SwapBuilder::new(
+    );
+    let swap_dai_usdc = Swap::new(
         ProtocolComponent {
             id: "0xAE461cA67B15dc8dc81CE7615e0320dA1A9aB8D5".to_string(),
             protocol_system: "uniswap_v2".to_string(),
@@ -61,9 +59,8 @@ fn test_split_swap_strategy_encoder() {
         },
         dai.clone(),
         usdc.clone(),
-    )
-    .build();
-    let swap_wbtc_usdc = SwapBuilder::new(
+    );
+    let swap_wbtc_usdc = Swap::new(
         ProtocolComponent {
             id: "0x004375Dff511095CC5A197A54140a24eFEF3A416".to_string(),
             protocol_system: "uniswap_v2".to_string(),
@@ -71,8 +68,7 @@ fn test_split_swap_strategy_encoder() {
         },
         wbtc.clone(),
         usdc.clone(),
-    )
-    .build();
+    );
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
     let solution = Solution {
@@ -121,7 +117,7 @@ fn test_split_input_cyclic_swap() {
     let usdc = usdc();
 
     // USDC -> WETH (Pool 1) - 60% of input
-    let swap_usdc_weth_pool1 = SwapBuilder::new(
+    let swap_usdc_weth_pool1 = Swap::new(
         ProtocolComponent {
             id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(), /* USDC-WETH USV3
                                                                            * Pool 1 */
@@ -138,10 +134,10 @@ fn test_split_input_cyclic_swap() {
         weth.clone(),
     )
     .split(0.6f64) // 60% of input
-    .build();
+    ;
 
     // USDC -> WETH (Pool 2) - 40% of input (remaining)
-    let swap_usdc_weth_pool2 = SwapBuilder::new(
+    let swap_usdc_weth_pool2 = Swap::new(
         ProtocolComponent {
             id: "0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8".to_string(), /* USDC-WETH USV3
                                                                            * Pool 2 */
@@ -158,11 +154,10 @@ fn test_split_input_cyclic_swap() {
         },
         usdc.clone(),
         weth.clone(),
-    )
-    .build();
+    );
 
     // WETH -> USDC (Pool 2)
-    let swap_weth_usdc_pool2 = SwapBuilder::new(
+    let swap_weth_usdc_pool2 = Swap::new(
         ProtocolComponent {
             id: "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc".to_string(), /* USDC-WETH USV2
                                                                            * Pool 2 */
@@ -179,8 +174,7 @@ fn test_split_input_cyclic_swap() {
         },
         weth.clone(),
         usdc.clone(),
-    )
-    .build();
+    );
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
@@ -284,7 +278,7 @@ fn test_split_output_cyclic_swap() {
     let weth = weth();
     let usdc = usdc();
 
-    let swap_usdc_weth_v2 = SwapBuilder::new(
+    let swap_usdc_weth_v2 = Swap::new(
         ProtocolComponent {
             id: "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc".to_string(), /* USDC-WETH USV2 */
             protocol_system: "uniswap_v2".to_string(),
@@ -298,10 +292,9 @@ fn test_split_output_cyclic_swap() {
         },
         usdc.clone(),
         weth.clone(),
-    )
-    .build();
+    );
 
-    let swap_weth_usdc_v3_pool1 = SwapBuilder::new(
+    let swap_weth_usdc_v3_pool1 = Swap::new(
         ProtocolComponent {
             id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(), /* USDC-WETH USV3
                                                                            * Pool 1 */
@@ -317,10 +310,9 @@ fn test_split_output_cyclic_swap() {
         weth.clone(),
         usdc.clone(),
     )
-    .split(0.6f64)
-    .build();
+    .split(0.6f64);
 
-    let swap_weth_usdc_v3_pool2 = SwapBuilder::new(
+    let swap_weth_usdc_v3_pool2 = Swap::new(
         ProtocolComponent {
             id: "0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8".to_string(), /* USDC-WETH USV3
                                                                            * Pool 2 */
@@ -337,8 +329,7 @@ fn test_split_output_cyclic_swap() {
         },
         weth.clone(),
         usdc.clone(),
-    )
-    .build();
+    );
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 

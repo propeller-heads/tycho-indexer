@@ -1,3 +1,16 @@
-mod builder;
+mod balancer_v2;
+mod balancer_v3;
+mod bebop;
+mod curve;
+mod ekubo;
+mod erc_4626;
+mod fluid_v1;
+mod hashflow;
+mod lido;
+mod maverick_v2;
+mod rocketpool;
+mod slipstreams;
 pub mod swap_encoder_registry;
-mod swap_encoders;
+mod uniswap_v2;
+mod uniswap_v3;
+mod uniswap_v4;

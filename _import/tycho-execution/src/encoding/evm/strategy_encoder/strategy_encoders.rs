@@ -132,7 +132,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
         let mut initial_protocol_data: Vec<u8> = vec![];
         for swap in grouped_swap.swaps.iter() {
             let protocol_data = swap_encoder.encode_swap(swap, &encoding_context)?;
-            if encoding_context.group_token_in == swap.token_in {
+            if encoding_context.group_token_in == *swap.token_in() {
                 initial_protocol_data = protocol_data;
             } else {
                 grouped_protocol_data.push(protocol_data);
@@ -301,7 +301,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
             let mut initial_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
                 let protocol_data = swap_encoder.encode_swap(swap, &encoding_context)?;
-                if encoding_context.group_token_in == swap.token_in {
+                if encoding_context.group_token_in == *swap.token_in() {
                     initial_protocol_data = protocol_data;
                 } else {
                     grouped_protocol_data.push(protocol_data);
@@ -509,7 +509,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             let mut initial_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
                 let protocol_data = swap_encoder.encode_swap(swap, &encoding_context)?;
-                if encoding_context.group_token_in == swap.token_in {
+                if encoding_context.group_token_in == *swap.token_in() {
                     initial_protocol_data = protocol_data;
                 } else {
                     grouped_protocol_data.push(protocol_data);
@@ -586,7 +586,10 @@ mod tests {
         let executors_addresses =
             fs::read_to_string("config/test_executor_addresses.json").unwrap();
         let eth_chain = eth_chain();
-        SwapEncoderRegistry::new(Some(executors_addresses), eth_chain).unwrap()
+        let registry = SwapEncoderRegistry::new(eth_chain);
+        registry
+            .add_default_encoders(Some(executors_addresses))
+            .unwrap()
     }
 
     fn router_address() -> Bytes {
@@ -595,7 +598,7 @@ mod tests {
 
     mod single {
         use super::*;
-        use crate::encoding::models::SwapBuilder;
+        use crate::encoding::models::Swap;
         #[test]
         fn test_single_swap_strategy_encoder() {
             // Performs a single swap from WETH to DAI on a USV2 pool, with no grouping
@@ -604,7 +607,7 @@ mod tests {
             let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
             let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
-            let swap = SwapBuilder::new(
+            let swap = Swap::new(
                 ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
@@ -612,8 +615,7 @@ mod tests {
                 },
                 weth.clone(),
                 dai.clone(),
-            )
-            .build();
+            );
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
@@ -665,7 +667,7 @@ mod tests {
 
             let checked_amount = BigUint::from_str("1_640_000000000000000000").unwrap();
 
-            let swap = SwapBuilder::new(
+            let swap = Swap::new(
                 ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
@@ -673,8 +675,7 @@ mod tests {
                 },
                 weth.clone(),
                 dai.clone(),
-            )
-            .build();
+            );
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
@@ -725,7 +726,7 @@ mod tests {
 
     mod sequential {
         use super::*;
-        use crate::encoding::models::SwapBuilder;
+        use crate::encoding::models::Swap;
 
         #[test]
         fn test_sequential_swap_strategy_encoder_no_permit2() {
@@ -737,7 +738,7 @@ mod tests {
             let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
             let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
 
-            let swap_weth_wbtc = SwapBuilder::new(
+            let swap_weth_wbtc = Swap::new(
                 ProtocolComponent {
                     id: "0xBb2b8038a1640196FbE3e38816F3e67Cba72D940".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
@@ -745,9 +746,8 @@ mod tests {
                 },
                 weth.clone(),
                 wbtc.clone(),
-            )
-            .build();
-            let swap_wbtc_usdc = SwapBuilder::new(
+            );
+            let swap_wbtc_usdc = Swap::new(
                 ProtocolComponent {
                     id: "0x004375Dff511095CC5A197A54140a24eFEF3A416".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
@@ -755,8 +755,7 @@ mod tests {
                 },
                 wbtc.clone(),
                 usdc.clone(),
-            )
-            .build();
+            );
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SequentialSwapStrategyEncoder::new(
                 eth_chain(),
@@ -815,7 +814,7 @@ mod tests {
 
     mod split {
         use super::*;
-        use crate::encoding::models::SwapBuilder;
+        use crate::encoding::models::Swap;
 
         #[test]
         fn test_split_input_cyclic_swap() {
@@ -831,7 +830,7 @@ mod tests {
             let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
 
             // USDC -> WETH (Pool 1) - 60% of input
-            let swap_usdc_weth_pool1 = SwapBuilder::new(
+            let swap_usdc_weth_pool1 = Swap::new(
                 ProtocolComponent {
                     id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(), /* USDC-WETH USV3
                                                                                    * Pool 1 */
@@ -849,11 +848,10 @@ mod tests {
                 usdc.clone(),
                 weth.clone(),
             )
-            .split(0.6f64)
-            .build();
+            .split(0.6f64);
 
             // USDC -> WETH (Pool 2) - 40% of input (remaining)
-            let swap_usdc_weth_pool2 = SwapBuilder::new(
+            let swap_usdc_weth_pool2 = Swap::new(
                 ProtocolComponent {
                     id: "0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8".to_string(), /* USDC-WETH USV3
                                                                                    * Pool 2 */
@@ -870,11 +868,10 @@ mod tests {
                 },
                 usdc.clone(),
                 weth.clone(),
-            )
-            .build();
+            );
 
             // WETH -> USDC (Pool 2)
-            let swap_weth_usdc_pool2 = SwapBuilder::new(
+            let swap_weth_usdc_pool2 = Swap::new(
                 ProtocolComponent {
                     id: "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc".to_string(), /* USDC-WETH USV2
                                                                                    * Pool 2 */
@@ -891,8 +888,7 @@ mod tests {
                 },
                 weth.clone(),
                 usdc.clone(),
-            )
-            .build();
+            );
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SplitSwapStrategyEncoder::new(
                 eth_chain(),
@@ -982,7 +978,7 @@ mod tests {
             let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
             let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
 
-            let swap_usdc_weth_v2 = SwapBuilder::new(
+            let swap_usdc_weth_v2 = Swap::new(
                 ProtocolComponent {
                     id: "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc".to_string(), // USDC-WETH USV2
                     protocol_system: "uniswap_v2".to_string(),
@@ -998,10 +994,9 @@ mod tests {
                 },
                 usdc.clone(),
                 weth.clone(),
-            )
-            .build();
+            );
 
-            let swap_weth_usdc_v3_pool1 = SwapBuilder::new(
+            let swap_weth_usdc_v3_pool1 = Swap::new(
                 ProtocolComponent {
                     id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(), /* USDC-WETH USV3
                                                                                    * Pool 1 */
@@ -1019,10 +1014,9 @@ mod tests {
                 weth.clone(),
                 usdc.clone(),
             )
-            .split(0.6f64)
-            .build();
+            .split(0.6f64);
 
-            let swap_weth_usdc_v3_pool2 = SwapBuilder::new(
+            let swap_weth_usdc_v3_pool2 = Swap::new(
                 ProtocolComponent {
                     id: "0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8".to_string(), /* USDC-WETH USV3
                                                                                    * Pool 1 */
@@ -1039,8 +1033,7 @@ mod tests {
                 },
                 weth.clone(),
                 usdc.clone(),
-            )
-            .build();
+            );
 
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SplitSwapStrategyEncoder::new(

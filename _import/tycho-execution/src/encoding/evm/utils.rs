@@ -82,7 +82,7 @@ pub fn pad_or_truncate_to_size<const N: usize>(input: &[u8]) -> Result<[u8; N], 
 /// Extracts a static attribute from a swap.
 pub fn get_static_attribute(swap: &Swap, attribute_name: &str) -> Result<Vec<u8>, EncodingError> {
     Ok(swap
-        .component
+        .component()
         .static_attributes
         .get(attribute_name)
         .ok_or_else(|| EncodingError::FatalError(format!("Attribute {attribute_name} not found")))?

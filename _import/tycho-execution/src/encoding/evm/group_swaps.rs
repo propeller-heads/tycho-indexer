@@ -41,7 +41,7 @@ pub fn group_swaps(swaps: &Vec<Swap>) -> Vec<SwapGroup> {
     let mut groupable_protocol;
     let mut last_swap_out_token = Bytes::default();
     for swap in swaps {
-        let mut current_swap_protocol = swap.component.protocol_system.clone();
+        let mut current_swap_protocol = swap.component().protocol_system.clone();
         // Normalize uniswap_v4_hooks to uniswap_v4 for grouping (same PoolManager)
         if current_swap_protocol == "uniswap_v4_hooks" {
             current_swap_protocol = "uniswap_v4".to_string();
@@ -50,7 +50,7 @@ pub fn group_swaps(swaps: &Vec<Swap>) -> Vec<SwapGroup> {
 
         // Split 0 can also mean that the swap is the remaining part of a branch of splits,
         // so we need to check the last swap's out token as well
-        let no_split = swap.split == 0.0 && swap.token_in == last_swap_out_token;
+        let no_split = swap.get_split() == 0.0 && *swap.token_in() == last_swap_out_token;
 
         if current_swap_protocol == last_swap_protocol && groupable_protocol && no_split {
             // Second or later groupable pool in a sequence of groupable pools. Merge to the
@@ -58,7 +58,7 @@ pub fn group_swaps(swaps: &Vec<Swap>) -> Vec<SwapGroup> {
             if let Some(group) = current_group.as_mut() {
                 group.swaps.push(swap.clone());
                 // Update the output token of the current group.
-                group.token_out = swap.token_out.clone();
+                group.token_out = swap.token_out().clone();
             }
         } else {
             // Not second or later USV4 pool. Push the current group (if it exists) and then
@@ -67,15 +67,15 @@ pub fn group_swaps(swaps: &Vec<Swap>) -> Vec<SwapGroup> {
                 grouped_swaps.push(group.clone());
             }
             current_group = Some(SwapGroup {
-                token_in: swap.token_in.clone(),
-                token_out: swap.token_out.clone(),
+                token_in: swap.token_in().clone(),
+                token_out: swap.token_out().clone(),
                 protocol_system: current_swap_protocol.clone(),
                 swaps: vec![swap.clone()],
-                split: swap.split,
+                split: swap.get_split(),
             });
         }
         last_swap_protocol = current_swap_protocol;
-        last_swap_out_token = swap.token_out.clone();
+        last_swap_out_token = swap.token_out().clone();
     }
     if let Some(group) = current_group.as_mut() {
         grouped_swaps.push(group.clone());
@@ -91,7 +91,7 @@ mod tests {
     use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 
     use super::*;
-    use crate::encoding::models::SwapBuilder;
+    use crate::encoding::models::Swap;
 
     fn weth() -> Bytes {
         Bytes::from(hex!("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").to_vec())
@@ -109,26 +109,23 @@ mod tests {
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
-        let swap_weth_wbtc = SwapBuilder::new(
+        let swap_weth_wbtc = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
             weth.clone(),
             wbtc.clone(),
-        )
-        .build();
+        );
 
-        let swap_wbtc_usdc = SwapBuilder::new(
+        let swap_wbtc_usdc = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
             wbtc.clone(),
             usdc.clone(),
-        )
-        .build();
+        );
 
-        let swap_usdc_dai = SwapBuilder::new(
+        let swap_usdc_dai = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v2".to_string(), ..Default::default() },
             usdc.clone(),
             dai.clone(),
-        )
-        .build();
+        );
         let swaps = vec![swap_weth_wbtc.clone(), swap_wbtc_usdc.clone(), swap_usdc_dai.clone()];
         let grouped_swaps = group_swaps(&swaps);
 
@@ -168,34 +165,30 @@ mod tests {
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
-        let swap_wbtc_weth = SwapBuilder::new(
+        let swap_wbtc_weth = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
             wbtc.clone(),
             weth.clone(),
-        )
-        .build();
-        let swap_weth_usdc = SwapBuilder::new(
+        );
+        let swap_weth_usdc = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
             weth.clone(),
             usdc.clone(),
         )
-        .split(0.5f64)
-        .build();
-        let swap_weth_dai = SwapBuilder::new(
+        .split(0.5f64);
+        let swap_weth_dai = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
             weth.clone(),
             dai.clone(),
-        )
-        .build();
+        );
         // Split 0 represents the remaining 50%, but to avoid any rounding errors we set this to
         // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
 
-        let swap_dai_usdc = SwapBuilder::new(
+        let swap_dai_usdc = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
             dai.clone(),
             usdc.clone(),
-        )
-        .build();
+        );
         let swaps = vec![
             swap_wbtc_weth.clone(),
             swap_weth_usdc.clone(),
@@ -246,7 +239,7 @@ mod tests {
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
-        let swap_weth_wbtc = SwapBuilder::new(
+        let swap_weth_wbtc = Swap::new(
             ProtocolComponent {
                 protocol_system: "vm:balancer_v3".to_string(),
                 ..Default::default()
@@ -254,30 +247,26 @@ mod tests {
             weth.clone(),
             wbtc.clone(),
         )
-        .split(0.5f64)
-        .build();
+        .split(0.5f64);
 
-        let swap_wbtc_usdc = SwapBuilder::new(
+        let swap_wbtc_usdc = Swap::new(
             ProtocolComponent {
                 protocol_system: "vm:balancer_v3".to_string(),
                 ..Default::default()
             },
             wbtc.clone(),
             usdc.clone(),
-        )
-        .build();
-        let swap_weth_dai = SwapBuilder::new(
+        );
+        let swap_weth_dai = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
             weth.clone(),
             dai.clone(),
-        )
-        .build();
-        let swap_dai_usdc = SwapBuilder::new(
+        );
+        let swap_dai_usdc = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
             dai.clone(),
             usdc.clone(),
-        )
-        .build();
+        );
 
         let swaps = vec![
             swap_weth_wbtc.clone(),
@@ -320,29 +309,26 @@ mod tests {
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
-        let swap_weth_wbtc = SwapBuilder::new(
+        let swap_weth_wbtc = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
             weth.clone(),
             wbtc.clone(),
-        )
-        .build();
+        );
 
-        let swap_wbtc_usdc = SwapBuilder::new(
+        let swap_wbtc_usdc = Swap::new(
             ProtocolComponent {
                 protocol_system: "uniswap_v4_hooks".to_string(),
                 ..Default::default()
             },
             wbtc.clone(),
             usdc.clone(),
-        )
-        .build();
+        );
 
-        let swap_usdc_dai = SwapBuilder::new(
+        let swap_usdc_dai = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v2".to_string(), ..Default::default() },
             usdc.clone(),
             dai.clone(),
-        )
-        .build();
+        );
         let swaps = vec![swap_weth_wbtc.clone(), swap_wbtc_usdc.clone(), swap_usdc_dai.clone()];
         let grouped_swaps = group_swaps(&swaps);
 
