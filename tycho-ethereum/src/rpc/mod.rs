@@ -6,22 +6,24 @@ use std::{
 };
 
 use alloy::{
-    primitives::{private::serde, Address, B256, U256},
+    primitives::{map::AddressHashMap, private::serde, Address, B256, U256},
     rpc::{
         client::{ClientBuilder, ReqwestClient},
         types::{
             debug::{StorageMap, StorageRangeResult, StorageResult},
+            state::AccountOverride,
             trace::{
-                geth::GethTrace,
+                geth::{
+                    GethDebugBuiltInTracerType, GethDebugTracerType, GethDebugTracingCallOptions,
+                    GethDebugTracingOptions, GethTrace,
+                },
                 parity::{TraceResults, TraceType},
             },
             AccessListResult, Block, BlockId, BlockNumberOrTag, TransactionRequest,
         },
     },
-    transports::{http::reqwest, RpcError, TransportErrorKind, TransportResult},
+    transports::{http::reqwest, TransportResult},
 };
-use backoff::backoff::Backoff;
-use futures::future::join_all;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tracing::{debug, info, instrument, trace, Span};
@@ -31,12 +33,16 @@ use crate::{RPCError, RequestError};
 
 pub mod config;
 pub mod errors;
+mod executor;
 mod retry;
+
+use errors::RpcResultExt;
+pub use executor::{RequestHandle, RpcRequestGroup};
 
 use crate::{
     rpc::{
         config::{RPCBatchingConfig, RPCRetryConfig},
-        retry::{has_custom_retry_code, RetryPolicy, RetryableError},
+        retry::RetryPolicy,
     },
     services::entrypoint_tracer::slot_detector::{
         SlotDetectorSlotTestRequest, SlotDetectorValueRequest,
@@ -79,6 +85,9 @@ impl EthereumRpcClient {
         // Enable batching with default settings as most RPC providers support it
         let batching = RPCBatchingConfig::enabled_with_defaults();
 
+        // Enable retry with default settings
+        // Note that we do not use the `layer` method to set the retry layer, as we want to support
+        // retrying batch requests if any individual request in the batch fails.
         let retry_policy = RPCRetryConfig::default().into();
 
         Ok(Self { inner: rpc, batching, retry_policy, url: rpc_url.to_string() })
@@ -102,17 +111,34 @@ impl EthereumRpcClient {
         self
     }
 
+    /// Creates a new request group for batching multiple RPC calls.
+    /// Uses the default `max_batch_size` from batching config.
+    fn new_request_group(&self) -> RpcRequestGroup<'_> {
+        RpcRequestGroup::new(&self.inner, self.retry_policy.clone(), self.batching.max_batch_size())
+    }
+
+    /// Creates a new request group optimized for storage slot queries.
+    /// Uses `storage_slot_max_batch_size` which is typically larger than the default.
+    fn new_storage_request_group(&self) -> RpcRequestGroup<'_> {
+        RpcRequestGroup::new(
+            &self.inner,
+            self.retry_policy.clone(),
+            self.batching
+                .storage_slot_max_batch_size(),
+        )
+    }
+
     #[instrument(level = "debug", skip(self))]
     pub async fn get_block_number(&self) -> Result<u64, RPCError> {
         let block_number = self
             .retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request_noparams("eth_blockNumber")
                     .await
             })
             .await
-            .map_err(|e| RPCError::from_alloy("Failed to get block number", e))?;
+            .rpc_context("Failed to get block number")?;
 
         if let BlockNumberOrTag::Number(num) = block_number {
             Ok(num)
@@ -132,61 +158,17 @@ impl EthereumRpcClient {
 
         let result: Option<Block> = self
             .retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request("eth_getBlockByNumber", (block_id, full_tx_objects))
                     .await
             })
             .await
-            .map_err(|e| {
-                RPCError::from_alloy(format!("Failed to get block for block id {block_id}"), e)
-            })?;
+            .with_rpc_context(|| format!("Failed to get block for block id {block_id}"))?;
 
         result.ok_or(RPCError::RequestError(RequestError::Other(format!(
             "Failed to get block for block id {block_id}: Block not found"
         ))))
-    }
-
-    #[instrument(level = "debug", skip(self))]
-    pub(crate) async fn eth_get_balance(
-        &self,
-        block_id: BlockNumberOrTag,
-        address: Address,
-    ) -> Result<U256, RPCError> {
-        self.retry_policy
-            .retry_request(|| async {
-                self.inner
-                    .request("eth_getBalance", (address, block_id))
-                    .await
-            })
-            .await
-            .map_err(|e| {
-                RPCError::from_alloy(
-                    format!("Failed to get balance for address {address}, block {block_id}"),
-                    e,
-                )
-            })
-    }
-
-    #[instrument(level = "debug", skip(self))]
-    pub(crate) async fn eth_get_code(
-        &self,
-        block_id: BlockNumberOrTag,
-        address: Address,
-    ) -> Result<Bytes, RPCError> {
-        self.retry_policy
-            .retry_request(|| async {
-                self.inner
-                    .request("eth_getCode", (address, block_id))
-                    .await
-            })
-            .await
-            .map_err(|e| {
-                RPCError::from_alloy(
-                    format!("Failed to get code for address {address}, block {block_id}"),
-                    e,
-                )
-            })
     }
 
     #[instrument(level = "debug", skip(self))]
@@ -227,17 +209,14 @@ impl EthereumRpcClient {
         // Use the wrapper type to handle nodes that return null instead of {} for empty storage
         let wrapper: StorageRangeResultWrapper = self
             .retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request("debug_storageRangeAt", params)
                     .await
             })
             .await
-            .map_err(|e| {
-                RPCError::from_alloy(
-                    format!("Failed to get storage for address {address}, block {block_hash}"),
-                    e,
-                )
+            .with_rpc_context(|| {
+                format!("Failed to get storage for address {address}, block {block_hash}")
             })?;
 
         Ok(wrapper.into())
@@ -274,127 +253,66 @@ impl EthereumRpcClient {
         Ok(all_slots)
     }
 
-    async fn non_batch_fetch_accounts_code_and_balance(
-        &self,
-        block_id: BlockNumberOrTag,
-        addresses: &[Address],
-    ) -> Result<HashMap<Address, (Bytes, U256)>, RPCError> {
-        Ok(futures::future::try_join_all(
-            addresses
-                .iter()
-                .map(|&address| async move {
-                    let (code, balance) = tokio::try_join!(
-                        self.eth_get_code(block_id, address),
-                        self.eth_get_balance(block_id, address)
-                    )?;
-                    Ok::<_, RPCError>((address, (code, balance)))
-                }),
-        )
-        .await?
-        .into_iter()
-        .collect())
-    }
-
     #[instrument(level = "debug", skip(self))]
     pub(crate) async fn fetch_accounts_code_and_balance(
         &self,
         block_id: BlockNumberOrTag,
         addresses: &[Address],
     ) -> Result<HashMap<Address, (Bytes, U256)>, RPCError> {
-        if let Some(max_batch_size) = self.batching.max_batch_size() {
-            self.batch_fetch_accounts_code_and_balance(block_id, addresses, max_batch_size)
-                .await
-        } else {
-            self.non_batch_fetch_accounts_code_and_balance(block_id, addresses)
-                .await
-        }
-    }
-
-    async fn batch_fetch_accounts_code_and_balance(
-        &self,
-        block_id: BlockNumberOrTag,
-        addresses: &[Address],
-        batch_size: usize,
-    ) -> Result<HashMap<Address, (Bytes, U256)>, RPCError> {
-        let chunk_size = batch_size / 2; // we make 2 requests in a batch call: code + balance
-        if chunk_size == 0 {
-            return Err(RPCError::SetupError(
-                "BatchingConfig max_batch_size must be at least 2".to_string(),
-            ));
-        }
-
         debug!(
-            chunk_size = chunk_size,
-            total_chunks = addresses.len() / chunk_size + 1,
+            address_count = addresses.len(),
             block_id = block_id.to_string(),
-            "Preparing batch request for account code and balance"
+            "Fetching account code and balance"
         );
 
+        let mut group = self.new_request_group();
+
+        // Register all calls (2 per address: code + balance)
+        let handles: Vec<(Address, RequestHandle<Bytes>, RequestHandle<U256>)> = addresses
+            .iter()
+            .map(|&address| {
+                let code_handle = group.add_call("eth_getCode", &(address, block_id))?;
+                let balance_handle = group.add_call("eth_getBalance", &(address, block_id))?;
+                Ok((address, code_handle, balance_handle))
+            })
+            .collect::<Result<_, _>>()
+            .with_rpc_context(|| {
+                format!(
+                    "Failed to register code & balance calls for {} addresses at block {block_id}",
+                    addresses.len()
+                )
+            })?;
+
+        // Execute all calls with retry
+        group
+            .execute()
+            .await
+            .with_rpc_context(|| {
+                format!(
+                    "Failed to fetch code & balance for {} addresses at block {block_id}",
+                    addresses.len()
+                )
+            })?;
+
+        // Collect results
         let mut result = HashMap::with_capacity(addresses.len());
-
-        // perf: consider running multiple batches in parallel using map of futures
-        for chunk_addresses in addresses.chunks(chunk_size) {
-            let batch_call = || async {
-                let mut batch = self.inner.new_batch();
-
-                let code_balance_requests = chunk_addresses
-                    .iter()
-                    .map(|&address| {
-                        Ok((
-                            batch.add_call::<_, Bytes>("eth_getCode", &(address, block_id))?,
-                            batch.add_call::<_, U256>("eth_getBalance", &(address, block_id))?,
-                        ))
-                    })
-                    .collect::<Result<Vec<_>, RpcError<TransportErrorKind>>>()?;
-
-                debug!(
-                    total_requests = chunk_size * 2, // code + balance for each batch call
-                    block_id = block_id.to_string(),
-                    "Sending batch request to RPC provider"
-                );
-
-                batch.send().await?;
-
-                info!(
-                    chunk_size = chunk_addresses.len(),
-                    block_id = block_id.to_string(),
-                    "Successfully sent batch request for account code and balance"
-                );
-
-                let mut code_balance_res = Vec::with_capacity(chunk_addresses.len());
-                for (code_fut, balance_fut) in code_balance_requests {
-                    let code = code_fut.await?;
-                    let balance = balance_fut.await?;
-                    code_balance_res.push((code, balance));
-                }
-
-                Ok(code_balance_res)
-            };
-
-            // perf: current retry logic retries the entire batch on any retriable failure. Instead:
-            // 1. Only retry failed requests, not successful ones
-            // 2. Fail fast if any request has a non-retryable error (currently we only check the
-            //    first error encountered, potentially missing fatal errors in other requests)
-            let chunk_results = self.retry_policy.retry_request(batch_call).await
-            .map_err(|e| {
-                    let printable_addresses = chunk_addresses
-                        .iter()
-                        .map(|addr| format!("{:?}", addr))
-                        .collect::<Vec<String>>()
-                        .join(", ");
-                    RPCError::from_alloy(format!(
-                        "Failed to send batch request for code & balance for block {block_id}, address count {}, addresses [{printable_addresses}]",
-                        chunk_addresses.len(),
-                    ), e)
-                })?;
-
-            for (value, &address) in chunk_results
-                .into_iter()
-                .zip(chunk_addresses.iter())
-            {
-                result.insert(address, value);
-            }
+        for (address, code_handle, balance_handle) in handles {
+            let code = code_handle
+                .await_result()
+                .await
+                .with_rpc_context(|| format!("eth_getCode failed for {address:?}"))?;
+            let balance = balance_handle
+                .await_result()
+                .await
+                .with_rpc_context(|| format!("eth_getBalance failed for {address:?}"))?;
+            result.insert(address, (code, balance));
         }
+
+        info!(
+            address_count = addresses.len(),
+            block_id = block_id.to_string(),
+            "Successfully fetched account code and balance"
+        );
 
         Ok(result)
     }
@@ -406,113 +324,47 @@ impl EthereumRpcClient {
         address: Address,
         slots: &[B256],
     ) -> Result<HashMap<B256, Option<B256>>, RPCError> {
-        if let Some(storage_slot_max_batch_size) = self
-            .batching
-            .storage_slot_max_batch_size()
-        {
-            self.batch_get_selected_storage(block_id, address, slots, storage_slot_max_batch_size)
-                .await
-        } else {
-            self.non_batch_get_selected_storage(block_id, address, slots)
-                .await
-        }
-    }
+        let mut group = self.new_storage_request_group();
 
-    async fn non_batch_get_selected_storage(
-        &self,
-        block_id: BlockNumberOrTag,
-        address: Address,
-        slots: &[B256],
-    ) -> Result<HashMap<B256, Option<B256>>, RPCError> {
-        let mut result = HashMap::with_capacity(slots.len());
-
-        for slot in slots {
-            let storage_value = self.retry_policy
-            .retry_request(|| async {
-                self
-                    .inner
-                    .request("eth_getStorageAt", (&address, slot, block_id))
-                    .await
-                                })
-            .await
-            .map_err(|e| {
-                RPCError::from_alloy(
-                    format!("Failed to get storage for address {address}, block {block_id}, slot {slot}"),
-                    e,
+        // Register all storage slot queries
+        let handles: Vec<(B256, RequestHandle<B256>)> = slots
+            .iter()
+            .map(|&slot| {
+                let handle = group.add_call("eth_getStorageAt", &(&address, slot, block_id))?;
+                Ok((slot, handle))
+            })
+            .collect::<Result<_, _>>().with_rpc_context(|| {
+                format!(
+                    "Failed to register storage calls for address {address}, block {block_id}, {} slots",
+                    slots.len()
                 )
             })?;
 
-            let value = if storage_value == [0; 32] { None } else { Some(storage_value) };
+        // Execute all calls with retry
+        group
+            .execute()
+            .await
+            .with_rpc_context(|| {
+                format!(
+                    "Failed to get storage for address {address}, block {block_id}, {} slots",
+                    slots.len()
+                )
+            })?;
 
-            result.insert(*slot, value);
-        }
-
-        Ok(result)
-    }
-
-    async fn batch_get_selected_storage(
-        &self,
-        block_id: BlockNumberOrTag,
-        address: Address,
-        slots: &[B256],
-        batch_size: usize,
-    ) -> Result<HashMap<B256, Option<B256>>, RPCError> {
+        // Collect results
         let mut result = HashMap::with_capacity(slots.len());
-
-        let chunk_size = batch_size; // we make 1 request in a batch call
-
-        // perf: consider running multiple batches in parallel using map of futures
-        for slot_batch in slots.chunks(chunk_size) {
-            let batch_call = || async {
-                let mut batch = self.inner.new_batch();
-
-                let mut storage_requests = slot_batch
-                    .iter()
-                    .map(|slot| {
-                        batch.add_call::<_, B256>("eth_getStorageAt", &(&address, slot, block_id))
-                    })
-                    .collect::<Result<Vec<_>, RpcError<TransportErrorKind>>>()?;
-
-                batch.send().await?;
-
-                let mut storage_res = Vec::with_capacity(slot_batch.len());
-                for storage_fut in storage_requests.iter_mut() {
-                    let storage_value = storage_fut.await?;
-                    storage_res.push(storage_value);
-                }
-
-                Ok(storage_res)
-            };
-
-            // perf: current retry logic retries the entire batch on any retriable failure. Instead:
-            // 1. Only retry failed requests, not successful ones
-            // 2. Fail fast if any request has a non-retryable error (currently we only check the
-            //    first error encountered, potentially missing fatal errors in other requests)
-            let chunk_res = self
-                .retry_policy
-                .retry_request(batch_call)
+        for (slot, handle) in handles {
+            let storage_value: B256 = handle
+                .await_result()
                 .await
-                .map_err(|e| {
-                    let printable_slots = slot_batch
-                        .iter()
-                        .map(|slot| format!("{:?}", slot))
-                        .collect::<Vec<String>>()
-                        .join(", ");
-                    RPCError::from_alloy(
-                        format!(
-                            "Failed to get storage for address {address}, block {block_id}, slots {printable_slots}"
-                        ),
-                        e,
-                    )
+                .with_rpc_context(|| {
+                    format!(
+                    "eth_getStorageAt failed for address {address}, block {block_id}, slot {slot}"
+                )
                 })?;
 
-            for (storage_result, &address) in chunk_res
-                .into_iter()
-                .zip(slot_batch.iter())
-            {
-                let value = if storage_result == [0; 32] { None } else { Some(storage_result) };
-                result.insert(address, value);
-            }
+            let value = if storage_value == B256::ZERO { None } else { Some(storage_value) };
+            result.insert(slot, value);
         }
 
         Ok(result)
@@ -534,15 +386,13 @@ impl EthereumRpcClient {
             .collect();
 
         self.retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request("trace_callMany", (&trace_requests, block))
                     .await
             })
             .await
-            .map_err(|e| {
-                RPCError::from_alloy(format!("Failed to get trace call many for block {block}"), e)
-            })
+            .with_rpc_context(|| format!("Failed to get trace call many for block {block}"))
     }
 
     /// Executes a new message call immediately without creating a transaction on the blockchain.
@@ -556,18 +406,13 @@ impl EthereumRpcClient {
         block: BlockNumberOrTag,
     ) -> Result<Bytes, RPCError> {
         self.retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request("eth_call", (&request, block))
                     .await
             })
             .await
-            .map_err(|e| {
-                RPCError::from_alloy(
-                    format!("Failed to send an eth_call request for block {block}"),
-                    e,
-                )
-            })
+            .with_rpc_context(|| format!("Failed to send an eth_call request for block {block}"))
     }
 
     #[instrument(level = "debug", skip(self, access_list_params, trace_call_params))]
@@ -578,72 +423,43 @@ impl EthereumRpcClient {
         access_list_params: &Value,
         trace_call_params: &Value,
     ) -> Result<(AccessListResult, GethTrace), RPCError> {
-        if let Some(max_batch_size) = self.batching.max_batch_size() {
-            self.batch_trace_and_access_list(
-                target,
-                block_hash,
-                access_list_params,
-                trace_call_params,
-                max_batch_size,
-            )
-            .await
-        } else {
-            Err(RPCError::SetupError(
-                "`trace_and_access_list` requires the `EthereumRpcClient` to have batching enabled. \
-                Either use a suitable RPC provider and enable batching in the `EthereumRpcClient`, \
-                or implement a non-batched version of this method.".to_string(),
-            ))
-        }
-    }
+        let mut group = self.new_request_group();
 
-    async fn batch_trace_and_access_list(
-        &self,
-        target: &Address,
-        block_hash: &B256,
-        access_list_params: &Value,
-        trace_call_params: &Value,
-        batch_size: usize,
-    ) -> Result<(AccessListResult, GethTrace), RPCError> {
-        if batch_size < 2 {
-            return Err(RPCError::SetupError(
-                "trace_and_access_list requires max_batch_size >= 2".to_string(),
-            ));
-        }
-
-        let batch_call = || async {
-            let mut batch = self.inner.new_batch();
-
-            // Add eth_createAccessList call
-            let access_list_future = batch
-                .add_call::<_, AccessListResult>("eth_createAccessList", &access_list_params)?;
-
-            // Add debug_traceCall call
-            let trace_future =
-                batch.add_call::<_, GethTrace>("debug_traceCall", &trace_call_params)?;
-
-            // Send batch
-            batch.send().await?;
-
-            // Await access list result
-            let access_list_data = access_list_future.await?;
-
-            // Await trace result
-            let pre_state_trace = trace_future.await?;
-
-            Ok((access_list_data, pre_state_trace))
-        };
-
-        self.retry_policy.retry_request(|| async {
-            batch_call().await
-        }).await
-        .map_err(|e| {
-            RPCError::from_alloy(
+        let access_list_handle: RequestHandle<AccessListResult> = group
+            .add_call("eth_createAccessList", access_list_params)
+            .with_rpc_context(|| {
+                format!("Failed to register eth_createAccessList for target {target}, block {block_hash}")
+            })?;
+        let trace_handle: RequestHandle<GethTrace> = group
+            .add_call("debug_traceCall", trace_call_params)
+            .with_rpc_context(|| {
                 format!(
-                    "Failed to send batch request for trace and access list for target {target}, block {block_hash}"
-                ),
-                e,
-            )
-        })
+                    "Failed to register debug_traceCall for target {target}, block {block_hash}"
+                )
+            })?;
+
+        group
+            .execute_abort_early()
+            .await
+            .with_rpc_context(|| {
+                format!("Failed to execute trace and access list for target {target}, block {block_hash}")
+            })?;
+
+        let access_list_data = access_list_handle
+            .await_result()
+            .await
+            .with_rpc_context(|| {
+                format!("eth_createAccessList failed for target {target}, block {block_hash}")
+            })?;
+
+        let pre_state_trace = trace_handle
+            .await_result()
+            .await
+            .with_rpc_context(|| {
+                format!("debug_traceCall failed for target {target}, block {block_hash}")
+            })?;
+
+        Ok((access_list_data, pre_state_trace))
     }
 
     #[instrument(level = "debug", skip(self, requests, calldata))]
@@ -653,89 +469,54 @@ impl EthereumRpcClient {
         calldata: &Bytes,
         block_hash: &B256,
     ) -> Result<Vec<(GethTrace, U256)>, RPCError> {
-        if let Some(max_batch_size) = self.batching.max_batch_size() {
-            self.batch_slot_detector_trace(requests, calldata, block_hash, max_batch_size)
-                .await
-        } else {
-            Err(RPCError::SetupError(
-                "`slot_detector_trace` requires the `EthereumRpcClient` to have batching enabled. \
-                Either use a suitable RPC provider and enable batching in the `EthereumRpcClient`, \
-                or implement a non-batched version of this method."
-                    .to_string(),
-            ))
-        }
-    }
+        let mut group = self.new_request_group();
 
-    async fn batch_slot_detector_trace(
-        &self,
-        requests: Vec<SlotDetectorValueRequest>,
-        calldata: &Bytes,
-        block_hash: &B256,
-        batch_size: usize,
-    ) -> Result<Vec<(GethTrace, U256)>, RPCError> {
-        let chunk_size = batch_size / 2; // we make 2 requests in a batch call: trace + eth_call
-        if chunk_size == 0 {
-            return Err(RPCError::SetupError(
-                "slot_detector_trace requires max_batch_size >= 2".to_string(),
-            ));
-        }
+        // Register all calls (2 per request: debug_traceCall + eth_call)
+        let handles: Vec<(RequestHandle<GethTrace>, RequestHandle<U256>)> = requests
+            .iter()
+            .map(|SlotDetectorValueRequest { token, tracer_params }| {
+                let trace_handle = group.add_call("debug_traceCall", tracer_params)?;
 
+                let eth_call_param = json!([
+                    {
+                        "to": token.to_string(),
+                        "data": calldata.to_string()
+                    },
+                    block_hash.to_string()
+                ]);
+                let eth_call_handle = group.add_call("eth_call", &eth_call_param)?;
+
+                Ok((trace_handle, eth_call_handle))
+            })
+            .collect::<Result<_, _>>()
+            .with_rpc_context(|| {
+                format!("Failed to register slot detector calls for block {block_hash}")
+            })?;
+
+        // Execute all calls with retry
+        group
+            .execute()
+            .await
+            .with_rpc_context(|| {
+                format!("Failed to execute slot detector traces for block {block_hash}")
+            })?;
+
+        // Collect results
         let mut result = Vec::with_capacity(requests.len());
-
-        for chunk_requests in requests.chunks(chunk_size) {
-            let batch_call = || async {
-                let mut batch = self.inner.new_batch();
-
-                // perf: consider limiting batch size based on config
-                let batch_calls = chunk_requests
-                    .iter()
-                    .map(|SlotDetectorValueRequest { token, tracer_params }| {
-                        let trace_call =
-                            batch.add_call::<_, GethTrace>("debug_traceCall", tracer_params)?;
-
-                        let eth_call_param = json!([
-                            {
-                                "to": token.to_string(),
-                                "data": calldata.to_string()
-                            },
-                            block_hash.to_string()
-                        ]);
-                        let eth_call = batch.add_call::<_, U256>("eth_call", &eth_call_param)?;
-
-                        Ok((trace_call, eth_call))
-                    })
-                    .collect::<Result<Vec<_>, RpcError<TransportErrorKind>>>()?;
-
-                batch.send().await?;
-
-                let mut results = Vec::with_capacity(requests.len());
-                for (trace_call_fut, eth_call_fut) in batch_calls {
-                    let trace = trace_call_fut.await?;
-                    let value = eth_call_fut.await?;
-                    results.push((trace, value));
-                }
-
-                Ok(results)
-            };
-
-            // perf: current retry logic retries the entire batch on any retriable failure. Instead:
-            // 1. Only retry failed requests, not successful ones
-            // 2. Fail fast if any request has a non-retryable error (currently we only check the
-            //    first error encountered, potentially missing fatal errors in other requests)
-            let chunk_results = self
-                .retry_policy
-                .retry_request(|| async { batch_call().await })
+        for (trace_handle, eth_call_handle) in handles {
+            let trace = trace_handle
+                .await_result()
                 .await
-                .map_err(|e| {
-                    RPCError::from_alloy(
-                        format!(
-                    "Failed to send batch request for slot detector traces for block {block_hash}"
-                ),
-                        e,
-                    )
+                .with_rpc_context(|| {
+                    format!("debug_traceCall failed for slot detector at block {block_hash}")
                 })?;
-
-            result.extend(chunk_results);
+            let value = eth_call_handle
+                .await_result()
+                .await
+                .with_rpc_context(|| {
+                    format!("eth_call failed for slot detector at block {block_hash}")
+                })?;
+            result.push((trace, value));
         }
 
         Ok(result)
@@ -750,139 +531,106 @@ impl EthereumRpcClient {
         calldata: &Bytes,
         block_hash: &B256,
     ) -> Result<Vec<TransportResult<Value>>, RPCError> {
-        if let Some(max_batch_size) = self.batching.max_batch_size() {
-            self.batch_slot_detector_tests(requests, calldata, block_hash, max_batch_size)
-                .await
-        } else {
-            Err(RPCError::SetupError(
-                "`slot_detector_tests` requires the `EthereumRpcClient` to have batching enabled. \
-                Either use a suitable RPC provider and enable batching in the `EthereumRpcClient`, \
-                or implement a non-batched version of this method."
-                    .to_string(),
-            ))
+        let mut group = self.new_request_group();
+
+        // Register all test calls
+        let handles: Vec<RequestHandle<Value>> = requests
+            .iter()
+            .map(|SlotDetectorSlotTestRequest { storage_address, slot, token, test_value }| {
+                // Format slot and value as 32-byte hex strings
+                let test_value_hex = format!("0x{:064x}", test_value);
+                let slot_hex = format!("0x{:064x}", slot);
+
+                let tracer_params = json!([
+                    {
+                        "to": token,
+                        "data": calldata
+                    },
+                    block_hash.to_string(),
+                    {
+                        storage_address.to_string(): {
+                            "stateDiff": {
+                                slot_hex: test_value_hex
+                            }
+                        }
+                    }
+                ]);
+                group.add_call("eth_call", &tracer_params)
+            })
+            .collect::<Result<_, _>>()
+            .with_rpc_context(|| {
+                format!("Failed to register slot detector tests for block {block_hash}")
+            })?;
+
+        // Execute all calls with retry (use execute, not execute_abort_early,
+        // as we want to preserve individual errors in the result)
+        group
+            .execute()
+            .await
+            .with_rpc_context(|| {
+                format!("Failed to execute slot detector tests for block {block_hash}")
+            })?;
+
+        // Collect individual results (preserving errors per call)
+        let mut results = Vec::with_capacity(handles.len());
+        for handle in handles {
+            results.push(handle.await_raw().await);
         }
+
+        Ok(results)
     }
 
-    async fn batch_slot_detector_tests(
+    #[instrument(level = "debug", skip(self, tx_with_overrides), fields(tx_count = tx_with_overrides.len()))]
+    pub async fn simulate_txs_with_trace(
         &self,
-        requests: &[SlotDetectorSlotTestRequest],
-        calldata: &Bytes,
-        block_hash: &B256,
-        batch_size: usize,
+        block: BlockNumberOrTag,
+        tx_with_overrides: Vec<(TransactionRequest, Option<AddressHashMap<AccountOverride>>)>,
     ) -> Result<Vec<TransportResult<Value>>, RPCError> {
-        let chunk_size = batch_size; // we make 1 request per test
-        let mut result = Vec::with_capacity(requests.len());
+        // use callTracer for better formatted results
+        let tracing_options = GethDebugTracingOptions {
+            tracer: Some(GethDebugTracerType::BuiltInTracer(
+                GethDebugBuiltInTracerType::CallTracer,
+            )),
+            config: Default::default(),
+            tracer_config: Default::default(),
+            timeout: None,
+        };
 
-        for chunk_requests in requests.chunks(chunk_size) {
-            let batch_call = || async {
-                let mut batch = self.inner.new_batch();
+        let mut group = self.new_request_group();
 
-                let batch_calls = chunk_requests
-                    .iter()
-                    .map(
-                        |SlotDetectorSlotTestRequest {
-                             storage_address,
-                             slot,
-                             token,
-                             test_value,
-                         }| {
-                            // Format slot and value as 32-byte hex strings
-                            let test_value_hex = format!("0x{:064x}", test_value);
-                            let slot_hex = format!("0x{:064x}", slot);
-
-                            let tracer_params = json!([
-                                {
-                                    "to": token,
-                                    "data": calldata
-                                },
-                                block_hash.to_string(),
-                                {
-                                    storage_address.to_string(): {
-                                        "stateDiff": {
-                                            slot_hex: test_value_hex
-                                        }
-                                    }
-                                }
-                            ]);
-                            batch.add_call::<_, Value>("eth_call", &tracer_params)
-                        },
-                    )
-                    .collect::<Result<Vec<_>, RpcError<TransportErrorKind>>>()?;
-
-                batch.send().await?;
-
-                // We do not check individual results for errors here, instead we handle that
-                // in the consumer.
-                Ok(join_all(batch_calls).await)
-            };
-
-            // Send the initial batch call
-            let mut last_batch_result: Result<_, RpcError<TransportErrorKind>> = batch_call().await;
-
-            let mut policy = self.retry_policy.clone();
-
-            // Retries the batch if:
-            // - The RPC call itself fails with a retryable error
-            // - Any batched request fails with a retryable error
-            // - All batched requests fail (regardless of error type)
-            //
-            // This uses a more aggressive retry strategy than other batch methods as slot detector
-            // tests expect some requests to fail, so we retry in the described manner
-            // to maximize successful results. This is also why we need a custom retry closure here.
-            let should_retry = |batch_result: &Result<
-                Vec<TransportResult<Value>>,
-                RpcError<TransportErrorKind>,
-            >| {
-                let batch_result = match batch_result {
-                    Ok(res) => res,
-                    Err(err) => {
-                        return err.is_retryable();
-                    }
+        // Register all calls
+        let handles: Vec<RequestHandle<Value>> = tx_with_overrides
+            .iter()
+            .map(|(tx, overrides)| {
+                let trace_options = GethDebugTracingCallOptions {
+                    tracing_options: tracing_options.clone(),
+                    state_overrides: overrides.clone(),
+                    block_overrides: None,
+                    tx_index: None,
                 };
+                group.add_call("debug_traceCall", &(tx.clone(), block, trace_options))
+            })
+            .collect::<Result<_, _>>()
+            .with_rpc_context(|| {
+                format!("Failed to register simulate tx with trace for block {block}")
+            })?;
 
-                // Check if all requests failed or some requests failed with retryable errors
-                // If so, we retry the entire batch
-                let all_failed = batch_result
-                    .iter()
-                    .all(|res| res.is_err());
-                let some_retryable_failed = batch_result.iter().any(|res| {
-                    if let Err(RpcError::ErrorResp(e)) = res {
-                        e.is_retry_err() || has_custom_retry_code(e)
-                    } else {
-                        false
-                    }
-                });
+        // Execute all calls with retry (use execute, not execute_abort_early,
+        // as we want to preserve individual errors in the result)
+        group
+            .execute()
+            .await
+            .with_rpc_context(|| {
+                format!("Failed to execute simulate tx with trace for block {block}")
+            })?;
 
-                all_failed || some_retryable_failed
-            };
-
-            loop {
-                if !should_retry(&last_batch_result) {
-                    break;
-                }
-
-                if let Some(backoff_duration) = policy.next_backoff() {
-                    tokio::time::sleep(backoff_duration).await;
-                    last_batch_result = batch_call().await;
-                } else {
-                    // We have exhausted all retries
-                    break;
-                }
-            }
-
-            let chunk_results = last_batch_result.map_err(|e| {
-                    RPCError::from_alloy(
-                        format!(
-                            "Failed to send batch request for slot detector tests for block {block_hash}"
-                        ),
-                        e,
-                    )
-                })?;
-
-            result.extend(chunk_results);
+        // Collect individual results (preserving errors per call)
+        let mut results = Vec::with_capacity(handles.len());
+        for handle in handles {
+            results.push(handle.await_raw().await);
         }
 
-        Ok(result)
+        Ok(results)
     }
 }
 
@@ -890,7 +638,9 @@ impl EthereumRpcClient {
 mod tests {
     use std::str::FromStr;
 
-    use alloy::{rpc::types::TransactionInput, sol_types::SolCall};
+    use alloy::{
+        hex, primitives::map::B256HashMap, rpc::types::TransactionInput, sol_types::SolCall,
+    };
     use mockito::{Mock, Server, ServerGuard};
     use rstest::rstest;
     use tracing::warn;
@@ -997,79 +747,6 @@ mod tests {
             block_number > TEST_BLOCK_NUMBER,
             "Block number seems too low for Ethereum mainnet: {}",
             block_number
-        );
-
-        Ok(())
-    }
-
-    #[rstest]
-    #[case(BALANCER_VAULT_STR, U256::ZERO)]
-    #[case(STETH_STR, U256::from_str("8158647137036262954484").unwrap())]
-    #[tokio::test]
-    #[ignore = "require RPC connection"]
-    async fn test_get_balance(
-        #[case] address_str: &str,
-        #[case] expected_balance: U256,
-    ) -> Result<(), RPCError> {
-        let fixture = TestFixture::new();
-        let client = fixture.create_rpc_client(false);
-
-        let address = Address::from_str(address_str).expect("failed to parse address");
-        let block_id = BlockNumberOrTag::Number(TEST_BLOCK_NUMBER);
-
-        let balance = client
-            .eth_get_balance(block_id, address)
-            .await
-            .expect("Failed to get balance");
-
-        assert_eq!(
-            balance, expected_balance,
-            "Balance mismatch for address {}. Expected: {}, Got: {}",
-            address_str, expected_balance, balance
-        );
-
-        Ok(())
-    }
-
-    #[rstest]
-    #[case(BALANCER_VAULT_STR, 24512, "0x60806040526004361061")]
-    #[case(STETH_STR, 1035, "0x60806040526004361061")]
-    #[case("0x0000000000000000000000000000000000000000", 0, "0x")]
-    #[tokio::test]
-    #[ignore = "require RPC connection"]
-    async fn test_get_code(
-        #[case] address_str: &str,
-        #[case] expected_length: usize,
-        #[case] expected_prefix: &str,
-    ) -> Result<(), RPCError> {
-        let fixture = TestFixture::new();
-        let client = fixture.create_rpc_client(false);
-
-        let address = parse_address(address_str);
-        let block_id = BlockNumberOrTag::Number(TEST_BLOCK_NUMBER);
-
-        let code = client
-            .eth_get_code(block_id, address)
-            .await?;
-
-        assert_eq!(
-            code.len(),
-            expected_length,
-            "{} code length mismatch. Expected: {}, Got: {}",
-            address_str,
-            expected_length,
-            code.len()
-        );
-
-        // Adjust the code prefix check to match the expected prefix length
-        // As we are not checking the full code, just the beginning
-        let mut code_string = code.to_string();
-        code_string.truncate(22);
-
-        assert_eq!(
-            code_string, expected_prefix,
-            "{} code prefix mismatch. Expected: {}, Got: {}",
-            address_str, expected_prefix, code_string
         );
 
         Ok(())
@@ -1649,121 +1326,78 @@ mod tests {
         m_failure.assert();
     }
 
-    #[rstest]
-    #[case::other_is_success("\"result\":\"0x1234\"")]
-    #[case::other_is_retriable_error(
-        "\"error\":{\"code\":-32000,\"message\":\"header not found\"}"
-    )]
-    #[case::other_is_permanent_error("\"error\":{\"code\":-32602,\"message\":\"invalid params\"}")]
-    #[tokio::test]
-    async fn test_batch_slot_detector_tests_partial_retryable_is_retried(
-        #[case] other_response: &str,
-    ) {
-        let mut server = Server::new_async().await;
-
-        // First attempt: all errors
-        let _m1 = server
-            .mock("POST", "/")
-            .with_status(200)
-            .with_body(format!(
-                r#"[
-                {{"jsonrpc":"2.0","id":0,"error":{{"code":-32000,"message":"header not found"}}}},
-                {{"jsonrpc":"2.0","id":1,{other_response}}}
-            ]"#
-            ))
-            .expect(1)
-            .create_async()
-            .await;
-
-        // Second attempt: success
-        let m2 = mock_success_at(&mut server, 1).await;
-
-        let result = mock_batch_slot_detector_tests_call(&mut server).await;
-
-        assert!(result.is_ok());
-        let responses = result.unwrap();
-        assert_eq!(responses.len(), 2);
-        match &responses[0] {
-            Ok(val) => assert_eq!(*val, json!("0x1234")),
-            Err(err) => panic!("Expected Ok response, got Err: {}", err),
-        }
-        match &responses[1] {
-            Ok(val) => assert_eq!(*val, json!("0x5678")),
-            Err(err) => panic!("Expected Ok response, got Err: {}", err),
-        }
-
-        m2.assert();
+    /// Parses the balance from a callTracer output field
+    fn parse_balance_from_trace(trace_value: &Value) -> U256 {
+        let output = trace_value
+            .as_object()
+            .and_then(|obj| obj.get("output"))
+            .and_then(|v| v.as_str())
+            .expect("trace should have output field");
+        let balance_bytes = hex::decode(&output[2..]).expect("output should be valid hex");
+        U256::from_be_slice(&balance_bytes)
     }
 
     #[tokio::test]
-    async fn test_batch_slot_detector_tests_retry_on_all_failed_non_retryable_errors_for_safety() {
-        let mut server = Server::new_async().await;
+    #[ignore = "require RPC connection"]
+    async fn test_simulate_txs_with_trace_state_override() -> Result<(), RPCError> {
+        let fixture = TestFixture::new();
+        let client = fixture.create_rpc_client(true);
 
-        // First attempt: non-retryable error (but all failed, so should retry for safety)
-        let _m1 = server
-            .mock("POST", "/")
-            .with_status(200)
-            .with_body(
-                r#"[
-                {"jsonrpc":"2.0","id":0,"error":{"code":-32602,"message":"invalid params"}},
-                {"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"invalid params"}}
-            ]"#,
+        let usdc = parse_address(USDC_STR);
+        let balance_holder = parse_address(USDC_HOLDER_ADDR);
+
+        // USDC balance storage slot for USDC_HOLDER_ADDR (from test_batch_slot_detector_tests)
+        let balance_slot = B256::from(
+            U256::from_str(
+                "27200642610643119904443225166668021742846989772583561028640892867511244344442",
             )
-            .expect(1)
-            .create_async()
-            .await;
+            .unwrap(),
+        );
 
-        // Second attempt: success (after retry for safety)
-        let m2 = mock_success_at(&mut server, 1).await;
+        // Our test override value - a distinctive balance we can verify
+        let override_balance = B256::from(U256::from_str("123456789000000").unwrap()); // 123,456,789 USDC
 
-        let result = mock_batch_slot_detector_tests_call(&mut server).await;
+        // Create calldata for balanceOf
+        let calldata: alloy::primitives::Bytes = balanceOfCall { _owner: balance_holder }
+            .abi_encode()
+            .into();
 
-        // Should succeed after retry (safety measure)
-        assert!(result.is_ok());
-        let responses = result.unwrap();
-        assert_eq!(responses.len(), 2);
-        match &responses[0] {
-            Ok(val) => assert_eq!(*val, json!("0x1234")),
-            Err(err) => panic!("Expected Ok response, got Err: {}", err),
-        }
+        let base_tx = TransactionRequest::default()
+            .to(usdc)
+            .input(TransactionInput::both(calldata));
 
-        m2.assert();
-    }
+        // Create state override for the balance slot
+        let mut state_diff = B256HashMap::default();
+        state_diff.insert(balance_slot, override_balance);
+        let mut overrides = AddressHashMap::default();
+        overrides
+            .insert(usdc, AccountOverride { state_diff: Some(state_diff), ..Default::default() });
 
-    #[tokio::test]
-    async fn test_batch_slot_detector_tests_no_retry_on_mixed_success_and_non_retryable_errors() {
-        let mut server = Server::new_async().await;
+        // Two requests: without override, with override
+        let tx_requests = vec![(base_tx.clone(), None), (base_tx.clone(), Some(overrides))];
 
-        // Only one request should be made (no retry - mixed success/non-retryable error)
-        let m = server
-            .mock("POST", "/")
-            .with_status(200)
-            .with_body(
-                r#"[
-                {"jsonrpc":"2.0","id":0,"result":"0x1234"},
-                {"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"invalid params"}}
-            ]"#,
-            )
-            .expect(1)
-            .create_async()
-            .await;
+        let results = client
+            .simulate_txs_with_trace(BlockNumberOrTag::Number(TEST_BLOCK_NUMBER), tx_requests)
+            .await?;
 
-        let result = mock_batch_slot_detector_tests_call(&mut server).await;
+        assert_eq!(results.len(), 2);
 
-        // Should return mixed results without retrying (not all failed)
-        assert!(result.is_ok());
-        let responses = result.unwrap();
-        assert_eq!(responses.len(), 2);
-        match &responses[0] {
-            Ok(val) => assert_eq!(*val, json!("0x1234")),
-            Err(err) => panic!("Expected Ok response, got Err: {}", err),
-        }
-        match &responses[1] {
-            Ok(val) => panic!("Expected Err response, got Ok: {}", val),
-            Err(RpcError::ErrorResp(err)) => assert_eq!(err.code, -32602),
-            _ => panic!("Expected RpcError::ErrorResp, got different error"),
-        }
+        // First call: should return real balance
+        let real_balance = parse_balance_from_trace(results[0].as_ref().unwrap());
+        assert_eq!(
+            real_balance,
+            U256::from(USDC_HOLDER_BALANCE),
+            "Without override should return real balance"
+        );
 
-        m.assert();
+        // Second call: should return overridden balance
+        let overridden_balance = parse_balance_from_trace(results[1].as_ref().unwrap());
+        assert_eq!(
+            B256::from(overridden_balance),
+            override_balance,
+            "With override should return overridden balance"
+        );
+
+        Ok(())
     }
 }
