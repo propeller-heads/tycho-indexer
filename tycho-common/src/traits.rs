@@ -215,6 +215,19 @@ pub trait AllowanceSlotDetector: Send + Sync {
     ) -> HashMap<Address, Result<(Address, Bytes), Self::Error>>;
 }
 
+/// Trait for getting the gas price from the node.
+#[cfg_attr(feature = "test-utils", mockall::automock(type Error = String;))]
+#[async_trait]
+pub trait GasPriceGetter: Send + Sync {
+    type Error: Debug;
+
+    /// Get the latest gas price in the chain unit.
+    ///
+    /// # Returns
+    /// Gas price in the chain unit (usually wei) as u128
+    async fn get_latest_gas_price(&self) -> Result<u128, Self::Error>;
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
