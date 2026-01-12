@@ -1,3 +1,16 @@
+## [0.228.0](https://github.com/propeller-heads/tycho-simulation/compare/0.227.0...0.228.0) (2026-01-12)
+
+
+### Features
+
+* Add the default implementation for multiple protocols ([91c47d0](https://github.com/propeller-heads/tycho-simulation/commit/91c47d0bd25a0e1b54336bb07c0ac87f011cf9c0))
+* Implement query_pool_swap ([81045e5](https://github.com/propeller-heads/tycho-simulation/commit/81045e5d2fd425dcc903f4507fb2a0eae1afe4b7))
+
+
+### Bug Fixes
+
+* Address PR review issues ([c6b6ff4](https://github.com/propeller-heads/tycho-simulation/commit/c6b6ff4e5e8235a931478f07201830202aca2adf))
+
 ## [0.227.0](https://github.com/propeller-heads/tycho-simulation/compare/0.226.1...0.227.0) (2026-01-09)
 
 
