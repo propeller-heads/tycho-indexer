@@ -40,7 +40,7 @@ const config = {
                     'echo "NEXT_RELEASE_VERSION=${nextRelease.version}" >> $GITHUB_OUTPUT',
                 prepareCmd: [
                     "toml set --toml-path Cargo.toml package.version ${nextRelease.version}",
-                    "cargo update -p tycho-execution",
+                    "cargo update -p tycho-contracts",
                 ].join(" && "),
             },
         ],

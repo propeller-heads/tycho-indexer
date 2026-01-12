@@ -5,7 +5,7 @@ use tycho_common::{
     models::{protocol::ProtocolComponent, Chain},
     Bytes,
 };
-use tycho_execution::encoding::{
+use tycho_contracts::encoding::{
     evm::{
         encoder_builders::TychoRouterEncoderBuilder,
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,

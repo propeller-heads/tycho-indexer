@@ -3,7 +3,7 @@ use std::{collections::HashMap, str::FromStr, sync::Arc};
 use alloy::hex::encode;
 use num_bigint::{BigInt, BigUint};
 use tycho_common::{models::protocol::ProtocolComponent, Bytes};
-use tycho_execution::encoding::{
+use tycho_contracts::encoding::{
     evm::{
         testing_utils::MockRFQState,
         utils::{biguint_to_u256, write_calldata_to_file},
