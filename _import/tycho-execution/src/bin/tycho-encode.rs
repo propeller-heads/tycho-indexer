@@ -11,6 +11,7 @@ use tycho_execution::encoding::{
     evm::{
         approvals::permit2::PermitSingle,
         encoder_builders::{TychoExecutorEncoderBuilder, TychoRouterEncoderBuilder},
+        swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
     },
     models::{Solution, UserTransferType},
     tycho_encoder::TychoEncoder,
@@ -86,14 +87,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let encoder: Box<dyn TychoEncoder> = match cli.command {
         Commands::TychoRouter => {
             let mut builder = TychoRouterEncoderBuilder::new().chain(chain);
-            if let Some(config_path) = cli.executors_file_path {
-                let executors_addresses = fs::read_to_string(&config_path).map_err(|e| {
-                    EncodingError::FatalError(format!(
-                        "Error reading executors file from {config_path:?}: {e}",
-                    ))
-                })?;
-                builder = builder.executors_addresses(executors_addresses);
-            }
+            let executors_addresses: Option<String> =
+                if let Some(config_path) = cli.executors_file_path {
+                    Some(fs::read_to_string(&config_path).map_err(|e| {
+                        EncodingError::FatalError(format!(
+                            "Error reading executors file from {config_path:?}: {e}",
+                        ))
+                    })?)
+                } else {
+                    None
+                };
+            let swap_encoder_registry = SwapEncoderRegistry::new(Chain::Ethereum)
+                .add_default_encoders(executors_addresses)?;
+            builder = builder.swap_encoder_registry(swap_encoder_registry);
             if let Some(router_address) = cli.router_address {
                 builder = builder.router_address(router_address);
             }
@@ -106,9 +112,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             builder.build()?
         }
-        Commands::TychoExecutor => TychoExecutorEncoderBuilder::new()
-            .chain(chain)
-            .build()?,
+        Commands::TychoExecutor => TychoExecutorEncoderBuilder::new().build()?,
     };
 
     let encoded_solutions = encoder.encode_solutions(vec![solution])?;

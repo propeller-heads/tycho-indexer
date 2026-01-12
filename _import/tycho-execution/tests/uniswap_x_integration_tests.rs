@@ -8,7 +8,7 @@ use tycho_execution::encoding::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,
         utils::{bytes_to_address, write_calldata_to_file},
     },
-    models::{Solution, SwapBuilder, UserTransferType},
+    models::{Solution, Swap, UserTransferType},
 };
 
 use crate::common::{
@@ -35,7 +35,7 @@ fn test_sequential_swap_usx() {
     let usdc = usdc();
     let usdt = usdt();
 
-    let swap_dai_usdc = SwapBuilder::new(
+    let swap_dai_usdc = Swap::new(
         ProtocolComponent {
             id: "0x5777d92f208679DB4b9778590Fa3CAB3aC9e2168".to_string(),
             protocol_system: "uniswap_v3".to_string(),
@@ -49,9 +49,8 @@ fn test_sequential_swap_usx() {
         },
         dai.clone(),
         usdc.clone(),
-    )
-    .build();
-    let swap_usdc_usdt = SwapBuilder::new(
+    );
+    let swap_usdc_usdt = Swap::new(
         ProtocolComponent {
             id: "0x3416cF6C708Da44DB2624D63ea0AAef7113527C6".to_string(),
             protocol_system: "uniswap_v3".to_string(),
@@ -65,8 +64,7 @@ fn test_sequential_swap_usx() {
         },
         usdc.clone(),
         usdt.clone(),
-    )
-    .build();
+    );
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
     let solution = Solution {

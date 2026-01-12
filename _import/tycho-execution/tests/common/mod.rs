@@ -9,7 +9,11 @@ use alloy::{
 };
 use tycho_common::{models::Chain, Bytes};
 use tycho_execution::encoding::{
-    evm::encoder_builders::TychoRouterEncoderBuilder, models::UserTransferType,
+    evm::{
+        encoder_builders::TychoRouterEncoderBuilder,
+        swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
+    },
+    models::UserTransferType,
     tycho_encoder::TychoEncoder,
 };
 
@@ -72,10 +76,13 @@ pub fn get_signer() -> PrivateKeySigner {
 
 pub fn get_tycho_router_encoder(user_transfer_type: UserTransferType) -> Box<dyn TychoEncoder> {
     let executors_addresses = fs::read_to_string("config/test_executor_addresses.json").unwrap();
+    let swap_encoder_registry = SwapEncoderRegistry::new(Chain::Ethereum)
+        .add_default_encoders(Some(executors_addresses))
+        .unwrap();
     TychoRouterEncoderBuilder::new()
         .chain(Chain::Ethereum)
         .user_transfer_type(user_transfer_type)
-        .executors_addresses(executors_addresses)
+        .swap_encoder_registry(swap_encoder_registry)
         .router_address(router_address())
         .build()
         .expect("Failed to build encoder")
@@ -85,10 +92,13 @@ pub fn get_base_tycho_router_encoder(
     user_transfer_type: UserTransferType,
 ) -> Box<dyn TychoEncoder> {
     let executors_addresses = fs::read_to_string("config/test_executor_addresses.json").unwrap();
+    let swap_encoder_registry = SwapEncoderRegistry::new(Chain::Base)
+        .add_default_encoders(Some(executors_addresses))
+        .unwrap();
     TychoRouterEncoderBuilder::new()
         .chain(Chain::Base)
         .user_transfer_type(user_transfer_type)
-        .executors_addresses(executors_addresses)
+        .swap_encoder_registry(swap_encoder_registry)
         .router_address(router_address())
         .build()
         .expect("Failed to build encoder")

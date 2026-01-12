@@ -6,7 +6,7 @@ use num_bigint::{BigInt, BigUint};
 use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 use tycho_execution::encoding::{
     evm::utils::write_calldata_to_file,
-    models::{NativeAction, Solution, SwapBuilder, UserTransferType},
+    models::{NativeAction, Solution, Swap, UserTransferType},
 };
 
 use crate::common::{
@@ -27,7 +27,7 @@ fn test_sequential_swap_strategy_encoder() {
     let wbtc = wbtc();
     let usdc = usdc();
 
-    let swap_weth_wbtc = SwapBuilder::new(
+    let swap_weth_wbtc = Swap::new(
         ProtocolComponent {
             id: "0xBb2b8038a1640196FbE3e38816F3e67Cba72D940".to_string(),
             protocol_system: "uniswap_v2".to_string(),
@@ -35,9 +35,8 @@ fn test_sequential_swap_strategy_encoder() {
         },
         weth.clone(),
         wbtc.clone(),
-    )
-    .build();
-    let swap_wbtc_usdc = SwapBuilder::new(
+    );
+    let swap_wbtc_usdc = Swap::new(
         ProtocolComponent {
             id: "0x004375Dff511095CC5A197A54140a24eFEF3A416".to_string(),
             protocol_system: "uniswap_v2".to_string(),
@@ -45,8 +44,7 @@ fn test_sequential_swap_strategy_encoder() {
         },
         wbtc.clone(),
         usdc.clone(),
-    )
-    .build();
+    );
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
     let solution = Solution {
@@ -91,7 +89,7 @@ fn test_sequential_swap_strategy_encoder_no_permit2() {
     let wbtc = wbtc();
     let usdc = usdc();
 
-    let swap_weth_wbtc = SwapBuilder::new(
+    let swap_weth_wbtc = Swap::new(
         ProtocolComponent {
             id: "0xBb2b8038a1640196FbE3e38816F3e67Cba72D940".to_string(),
             protocol_system: "uniswap_v2".to_string(),
@@ -99,9 +97,8 @@ fn test_sequential_swap_strategy_encoder_no_permit2() {
         },
         weth.clone(),
         wbtc.clone(),
-    )
-    .build();
-    let swap_wbtc_usdc = SwapBuilder::new(
+    );
+    let swap_wbtc_usdc = Swap::new(
         ProtocolComponent {
             id: "0x004375Dff511095CC5A197A54140a24eFEF3A416".to_string(),
             protocol_system: "uniswap_v2".to_string(),
@@ -109,8 +106,7 @@ fn test_sequential_swap_strategy_encoder_no_permit2() {
         },
         wbtc.clone(),
         usdc.clone(),
-    )
-    .build();
+    );
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
     let solution = Solution {
@@ -194,7 +190,7 @@ fn test_sequential_strategy_cyclic_swap() {
 
     // Create two Uniswap V3 pools for the cyclic swap
     // USDC -> WETH (Pool 1)
-    let swap_usdc_weth = SwapBuilder::new(
+    let swap_usdc_weth = Swap::new(
         ProtocolComponent {
             id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(), /* USDC-WETH USV3
                                                                            * Pool 1 */
@@ -209,11 +205,10 @@ fn test_sequential_strategy_cyclic_swap() {
         },
         usdc.clone(),
         weth.clone(),
-    )
-    .build();
+    );
 
     // WETH -> USDC (Pool 2)
-    let swap_weth_usdc = SwapBuilder::new(
+    let swap_weth_usdc = Swap::new(
         ProtocolComponent {
             id: "0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8".to_string(), /* USDC-WETH USV3
                                                                            * Pool 2 */
@@ -230,8 +225,7 @@ fn test_sequential_strategy_cyclic_swap() {
         },
         weth.clone(),
         usdc.clone(),
-    )
-    .build();
+    );
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
@@ -319,7 +313,7 @@ fn test_sequential_swap_strategy_encoder_unwrap() {
     let wbtc = wbtc();
     let usdc = usdc();
 
-    let swap_usdc_wbtc = SwapBuilder::new(
+    let swap_usdc_wbtc = Swap::new(
         ProtocolComponent {
             id: "0x004375Dff511095CC5A197A54140a24eFEF3A416".to_string(),
             protocol_system: "uniswap_v2".to_string(),
@@ -327,9 +321,8 @@ fn test_sequential_swap_strategy_encoder_unwrap() {
         },
         usdc.clone(),
         wbtc.clone(),
-    )
-    .build();
-    let swap_wbtc_weth = SwapBuilder::new(
+    );
+    let swap_wbtc_weth = Swap::new(
         ProtocolComponent {
             id: "0xBb2b8038a1640196FbE3e38816F3e67Cba72D940".to_string(),
             protocol_system: "uniswap_v2".to_string(),
@@ -337,8 +330,7 @@ fn test_sequential_swap_strategy_encoder_unwrap() {
         },
         wbtc.clone(),
         weth.clone(),
-    )
-    .build();
+    );
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
     let solution = Solution {

@@ -27,5 +27,9 @@
       "native_token_address": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
     }
   },
-  "unichain": {}
+  "unichain": {
+    "vm:curve": {
+      "native_token_address": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
+    }
+  }
 }

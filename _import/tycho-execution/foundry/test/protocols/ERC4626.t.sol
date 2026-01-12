@@ -112,10 +112,6 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
     }
-
-    function testExportContract() public {
-        exportRuntimeBytecode(address(ERC4626Exposed), "ERC4626");
-    }
 }
 
 contract TychoRouterForERC4626Test is TychoRouterTestSetup {

@@ -262,10 +262,6 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         );
         assertTrue(IERC20(WETH_ADDR).balanceOf(ALICE) == amountOut);
     }
-
-    function testExportContract() public {
-        exportRuntimeBytecode(address(uniswapV4Exposed), "UniswapV4");
-    }
 }
 
 contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {

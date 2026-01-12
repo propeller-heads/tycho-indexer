@@ -126,10 +126,6 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
     }
-
-    function testExportContract() public {
-        exportRuntimeBytecode(address(maverickV2Exposed), "MaverickV2");
-    }
 }
 
 contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {

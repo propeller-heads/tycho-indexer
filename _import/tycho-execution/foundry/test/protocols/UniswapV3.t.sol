@@ -215,10 +215,6 @@ contract UniswapV3ExecutorTest is
             transferType
         );
     }
-
-    function testExportContract() public {
-        exportRuntimeBytecode(address(uniswapV3Exposed), "UniswapV3");
-    }
 }
 
 contract TychoRouterForUniswapV3Test is TychoRouterTestSetup {

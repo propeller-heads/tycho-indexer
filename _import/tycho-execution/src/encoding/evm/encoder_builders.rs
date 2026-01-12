@@ -20,7 +20,7 @@ use crate::encoding::{
 pub struct TychoRouterEncoderBuilder {
     chain: Option<Chain>,
     user_transfer_type: Option<UserTransferType>,
-    executors_addresses: Option<String>,
+    swap_encoder_registry: Option<SwapEncoderRegistry>,
     router_address: Option<Bytes>,
     swapper_pk: Option<String>,
     historical_trade: bool,
@@ -36,7 +36,7 @@ impl TychoRouterEncoderBuilder {
     pub fn new() -> Self {
         TychoRouterEncoderBuilder {
             chain: None,
-            executors_addresses: None,
+            swap_encoder_registry: None,
             router_address: None,
             swapper_pk: None,
             user_transfer_type: None,
@@ -53,10 +53,8 @@ impl TychoRouterEncoderBuilder {
         self
     }
 
-    /// Sets the `executors_addresses` manually.
-    /// If it's not set, the default value will be used (contents of config/executor_addresses.json)
-    pub fn executors_addresses(mut self, executors_addresses: String) -> Self {
-        self.executors_addresses = Some(executors_addresses);
+    pub fn swap_encoder_registry(mut self, swap_encoder_registry: SwapEncoderRegistry) -> Self {
+        self.swap_encoder_registry = Some(swap_encoder_registry);
         self
     }
 
@@ -91,7 +89,9 @@ impl TychoRouterEncoderBuilder {
     /// Builds the `TychoRouterEncoder` instance using the configured chain.
     /// Returns an error if either the chain has not been set.
     pub fn build(self) -> Result<Box<dyn TychoEncoder>, EncodingError> {
-        if let (Some(chain), Some(user_transfer_type)) = (self.chain, self.user_transfer_type) {
+        if let (Some(chain), Some(user_transfer_type), Some(swap_encoder_registry)) =
+            (self.chain, self.user_transfer_type, self.swap_encoder_registry)
+        {
             let tycho_router_address;
             if let Some(address) = self.router_address {
                 tycho_router_address = address;
@@ -105,9 +105,6 @@ impl TychoRouterEncoderBuilder {
                     ))?
                     .to_owned();
             }
-
-            let swap_encoder_registry =
-                SwapEncoderRegistry::new(self.executors_addresses.clone(), chain)?;
 
             let signer = if let Some(pk) = self.swapper_pk {
                 let pk = B256::from_str(&pk).map_err(|_| {
@@ -130,7 +127,7 @@ impl TychoRouterEncoderBuilder {
             )?))
         } else {
             Err(EncodingError::FatalError(
-                "Please set the chain and user transfer type before building the encoder"
+                "Please set the chain, user transfer type and swap encoder registry before building the encoder"
                     .to_string(),
             ))
         }
@@ -139,8 +136,7 @@ impl TychoRouterEncoderBuilder {
 
 /// Builder pattern for constructing a `TychoExecutorEncoder` with customizable options.
 pub struct TychoExecutorEncoderBuilder {
-    chain: Option<Chain>,
-    executors_addresses: Option<String>,
+    swap_encoder_registry: Option<SwapEncoderRegistry>,
 }
 
 impl Default for TychoExecutorEncoderBuilder {
@@ -151,30 +147,22 @@ impl Default for TychoExecutorEncoderBuilder {
 
 impl TychoExecutorEncoderBuilder {
     pub fn new() -> Self {
-        TychoExecutorEncoderBuilder { chain: None, executors_addresses: None }
-    }
-    pub fn chain(mut self, chain: Chain) -> Self {
-        self.chain = Some(chain);
-        self
+        TychoExecutorEncoderBuilder { swap_encoder_registry: None }
     }
 
-    /// Sets the `executors_addresses` manually.
-    /// If it's not set, the default path will be used (config/executor_addresses.json)
-    pub fn executors_addresses(mut self, executors_addresses: String) -> Self {
-        self.executors_addresses = Some(executors_addresses);
+    pub fn swap_encoder_registry(mut self, swap_encoder_registry: SwapEncoderRegistry) -> Self {
+        self.swap_encoder_registry = Some(swap_encoder_registry);
         self
     }
 
     /// Builds the `TychoExecutorEncoder` instance using the configured chain and strategy.
     /// Returns an error if either the chain or strategy has not been set.
     pub fn build(self) -> Result<Box<dyn TychoEncoder>, EncodingError> {
-        if let Some(chain) = self.chain {
-            let swap_encoder_registry =
-                SwapEncoderRegistry::new(self.executors_addresses.clone(), chain)?;
+        if let Some(swap_encoder_registry) = self.swap_encoder_registry {
             Ok(Box::new(TychoExecutorEncoder::new(swap_encoder_registry)?))
         } else {
             Err(EncodingError::FatalError(
-                "Please set the chain and strategy before building the encoder".to_string(),
+                "Please set the swap encoder registry before building the encoder".to_string(),
             ))
         }
     }

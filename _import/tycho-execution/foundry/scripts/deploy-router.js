@@ -29,18 +29,39 @@ async function main() {
     console.log(`Deploying with account: ${deployer.address}`);
     console.log(`Account balance: ${ethers.utils.formatEther(await deployer.getBalance())} ETH`);
 
-    const TychoRouter = await ethers.getContractFactory("TychoRouter");
-    const router = await TychoRouter.deploy(permit2, weth);
+    // Deterministic Deployment Proxy
+    // More info: https://getfoundry.sh/guides/deterministic-deployments-using-create2/
+    const create2FactoryAddress = "0x4e59b44847b379578588920cA78FbF26c0B4956C";
+    console.log(`Using CREATE2 factory at: ${create2FactoryAddress}`);
 
-    await router.deployed();
-    console.log(`TychoRouter deployed to: ${router.address}`);
+    // Get TychoRouter bytecode with constructor arguments
+    const TychoRouter = await ethers.getContractFactory("TychoRouter");
+    const deployTx = TychoRouter.getDeployTransaction(permit2, weth);
+    const bytecode = deployTx.data;
+
+    // Use a salt based on network and contract name for deterministic addresses
+    const salt = ethers.utils.id(`TychoRouter-${network}`);
+
+    // Compute the address where the contract will be deployed
+    // CREATE2 address = keccak256(0xff ++ factory_address ++ salt ++ keccak256(bytecode))[12:]
+    const bytecodeHash = ethers.utils.keccak256(bytecode);
+    const computedAddress = ethers.utils.getCreate2Address(create2FactoryAddress, salt, bytecodeHash);
+    console.log(`TychoRouter will be deployed to: ${computedAddress}`);
+
+    const deploymentData = ethers.utils.concat([salt, bytecode]);
+    const tx = await deployer.sendTransaction({
+        to: create2FactoryAddress,
+        data: deploymentData,
+    });
+    await tx.wait();
+    console.log(`TychoRouter deployed to: ${computedAddress}`);
 
     // Verify on Tenderly
     try {
         console.log("Verifying contract on Tenderly...");
         await hre.tenderly.verify({
             name: "TychoRouter",
-            address: router.address,
+            address: computedAddress,
         });
         console.log("Contract verified successfully on Tenderly");
     } catch (error) {
@@ -53,7 +74,7 @@ async function main() {
     // Verify on Etherscan
     try {
         await hre.run("verify:verify", {
-            address: router.address,
+            address: computedAddress,
             constructorArguments: [permit2, weth],
         });
         console.log(`TychoRouter verified successfully on blockchain explorer!`);

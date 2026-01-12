@@ -228,10 +228,6 @@ contract SlipstreamsExecutorTest is
             zero2one
         );
     }
-
-    function testExportContract() public {
-        exportRuntimeBytecode(address(slipstreamsExposed), "Slipstreams");
-    }
 }
 
 contract TychoRouterForSlipstreamsTest is TychoRouterTestSetup {
