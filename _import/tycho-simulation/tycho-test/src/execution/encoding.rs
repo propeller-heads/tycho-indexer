@@ -15,8 +15,11 @@ use tycho_common::{
     Bytes,
 };
 use tycho_execution::encoding::{
-    evm::encoder_builders::TychoRouterEncoderBuilder,
-    models::{EncodedSolution, Solution, SwapBuilder, Transaction, UserTransferType},
+    evm::{
+        encoder_builders::TychoRouterEncoderBuilder,
+        swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
+    },
+    models::{EncodedSolution, Solution, Swap, Transaction, UserTransferType},
 };
 use tycho_simulation::{
     evm::protocol::u256_num::biguint_to_u256, protocol::models::ProtocolComponent,
@@ -54,14 +57,15 @@ pub fn encode_swap(
         buy_token.clone(),
         amount_in.clone(),
     )?;
+    let swap_encoder_registry = SwapEncoderRegistry::new(chain)
+        .add_default_encoders(executors_json)
+        .into_diagnostic()?;
     let encoded_solution = {
         let mut builder = TychoRouterEncoderBuilder::new()
             .chain(chain)
-            .user_transfer_type(UserTransferType::TransferFrom);
+            .user_transfer_type(UserTransferType::TransferFrom)
+            .swap_encoder_registry(swap_encoder_registry);
 
-        if let Some(executors) = executors_json {
-            builder = builder.executors_addresses(executors);
-        }
         if historical_trade {
             builder = builder.historical_trade();
         }
@@ -93,15 +97,13 @@ fn create_solution(
 
     // Prepare data to encode. First we need to create a swap object
     let simple_swap = {
-        let mut builder =
-            SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone())
-                .estimated_amount_in(amount_in.clone());
+        let mut swap = Swap::new(component, sell_token.address.clone(), buy_token.address.clone())
+            .estimated_amount_in(amount_in.clone());
 
         if let Some(state) = state {
-            builder = builder.protocol_state(state);
+            swap = swap.protocol_state(state);
         }
-
-        builder.build()
+        swap
     };
 
     Ok(Solution {

@@ -1,3 +1,36 @@
+## [0.227.0](https://github.com/propeller-heads/tycho-simulation/compare/0.226.1...0.227.0) (2026-01-09)
+
+
+### Features
+
+* Update tycho-execution with SwapEncoderRegistry changes ([84cf6cb](https://github.com/propeller-heads/tycho-simulation/commit/84cf6cbda086f37521f3bc795939354afaaf2f7e))
+
+## [0.226.1](https://github.com/propeller-heads/tycho-simulation/compare/0.226.0...0.226.1) (2026-01-08)
+
+
+### Bug Fixes
+
+* handle panics in `run` by wrapping in `tokio::spawn` and adding error propagation ([e2b8969](https://github.com/propeller-heads/tycho-simulation/commit/e2b8969b2dbad7d8b5af57ee29772c03a0268c5a))
+* replace `abs_diff` with `saturating_sub` in block delay calculation ([bd713c2](https://github.com/propeller-heads/tycho-simulation/commit/bd713c26890f6b1fce7f7d3d4a10a7f5102c36b7))
+* skip protocol update if the RPC is behind the substream ([88c2a60](https://github.com/propeller-heads/tycho-simulation/commit/88c2a60fa991b671e4af2d38ca702f37de8ffa21))
+* use default value for `load_all_tokens` pagination limit, that will adjust based on compression enabled/disabled ([37f431e](https://github.com/propeller-heads/tycho-simulation/commit/37f431e036692b23166bd3b05a8bbfce2a26810e))
+
+## [0.226.0](https://github.com/propeller-heads/tycho-simulation/compare/0.225.2...0.226.0) (2026-01-07)
+
+
+### Features
+
+* Update tycho-execution to remove SwapBuilder ([0857c0d](https://github.com/propeller-heads/tycho-simulation/commit/0857c0d1d7eb5074dde3ed86695c95a02f91f46b))
+
+## [0.225.2](https://github.com/propeller-heads/tycho-simulation/compare/0.225.1...0.225.2) (2026-01-05)
+
+## [0.225.1](https://github.com/propeller-heads/tycho-simulation/compare/0.225.0...0.225.1) (2026-01-05)
+
+
+### Bug Fixes
+
+* change error message ([23a85e1](https://github.com/propeller-heads/tycho-simulation/commit/23a85e1b52a97e403fe9941779be7c9f0215863b))
+
 ## [0.225.0](https://github.com/propeller-heads/tycho-simulation/compare/0.224.0...0.225.0) (2025-12-30)
 
 

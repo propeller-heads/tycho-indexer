@@ -117,7 +117,7 @@ pub async fn simulate_swap_transaction(
         // Add protocol-specific overwrites for Angstrom hooks
         if let Some(first_swap) = info.solution.swaps.first() {
             if let Some(hook_identifier) = first_swap
-                .component
+                .component()
                 .static_attributes
                 .get("hook_identifier")
             {

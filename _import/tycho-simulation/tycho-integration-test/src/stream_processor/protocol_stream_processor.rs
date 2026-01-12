@@ -17,7 +17,7 @@ use tycho_simulation::{
             aerodrome_slipstreams::state::AerodromeSlipstreamsState,
             ekubo::state::EkuboState,
             erc4626::state::ERC4626State,
-            filters::{balancer_v2_pool_filter, fluid_v1_paused_pools_filter},
+            filters::{balancer_v2_pool_filter, erc4626_filter, fluid_v1_paused_pools_filter},
             fluid::FluidV1,
             pancakeswap_v2::state::PancakeswapV2State,
             rocketpool::state::RocketpoolState,
@@ -157,6 +157,7 @@ impl ProtocolStreamProcessor {
                 "vm:maverick_v2".to_string(),
                 "fluid_v1".to_string(),
                 "rocketpool".to_string(),
+                "erc4626".to_string(),
             ],
             Chain::Base => vec![
                 "uniswap_v2".to_string(),
@@ -254,7 +255,11 @@ impl ProtocolStreamProcessor {
                 );
             }
             "erc4626" => {
-                stream = stream.exchange::<ERC4626State>("erc4626", tvl_filter.clone(), None);
+                stream = stream.exchange::<ERC4626State>(
+                    "erc4626",
+                    tvl_filter.clone(),
+                    Some(erc4626_filter),
+                );
             }
             "rocketpool" => {
                 stream = stream.exchange::<RocketpoolState>("rocketpool", tvl_filter.clone(), None);
