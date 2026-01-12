@@ -28,16 +28,6 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
     // Vault balances - using our own mapping to avoid expensive Transfer events from ERC6909
     mapping(address => mapping(uint256 => uint256)) private _vaultBalances;
 
-    // Transient storage slots for tracking deltas during swap sequences
-    // keccak256("TychoVault#NEGATIVE_DELTA_COUNT")
-    uint256 private constant _NEGATIVE_DELTA_COUNT_SLOT =
-        0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b;
-
-    event Deposit(address indexed user, address indexed token, uint256 amount);
-    event Withdrawal(
-        address indexed user, address indexed token, uint256 amount
-    );
-
     // ============ ERC6909 Overrides ============
 
     /**
@@ -143,19 +133,5 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      */
     function _toId(address token) internal view virtual returns (uint256) {
         return uint256(uint160(token));
-    }
-
-    /**
-     * @dev Gets balance of a token for a given address. Supports both native ETH and ERC20 tokens.
-     */
-    function _balanceOf(address token, address owner)
-        internal
-        view
-        virtual
-        returns (uint256)
-    {
-        return token == address(0)
-            ? owner.balance
-            : IERC20(token).balanceOf(owner);
     }
 }
