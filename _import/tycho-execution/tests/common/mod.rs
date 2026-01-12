@@ -8,7 +8,7 @@ use alloy::{
     signers::local::PrivateKeySigner,
 };
 use tycho_common::{models::Chain, Bytes};
-use tycho_execution::encoding::{
+use tycho_contracts::encoding::{
     evm::{
         encoder_builders::TychoRouterEncoderBuilder,
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,

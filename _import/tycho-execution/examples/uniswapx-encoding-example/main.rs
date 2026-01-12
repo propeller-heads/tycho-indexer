@@ -10,7 +10,7 @@ use tycho_common::{
     models::{protocol::ProtocolComponent, Chain},
     Bytes,
 };
-use tycho_execution::encoding::{
+use tycho_contracts::encoding::{
     evm::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,
         encoder_builders::TychoRouterEncoderBuilder,
