@@ -153,28 +153,6 @@ contract TychoRouterTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
-    function testWrapETH() public {
-        uint256 amount = 1 ether;
-        vm.deal(BOB, amount);
-
-        vm.startPrank(BOB);
-        tychoRouter.wrapETH{value: amount}(amount);
-        vm.stopPrank();
-
-        assertEq(tychoRouterAddr.balance, 0);
-        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), amount);
-    }
-
-    function testUnwrapETH() public {
-        uint256 amount = 1 ether;
-        deal(WETH_ADDR, tychoRouterAddr, amount);
-
-        tychoRouter.unwrapETH(amount);
-
-        assertEq(tychoRouterAddr.balance, amount);
-        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
-    }
-
     function testEmptySwapsRevert() public {
         uint256 amountIn = 10 ** 18;
         bytes memory swaps = "";
