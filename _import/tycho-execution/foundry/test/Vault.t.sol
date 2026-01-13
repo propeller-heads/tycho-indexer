@@ -5,6 +5,24 @@ import "@src/Vault.sol";
 import {TestUtils} from "./TestUtils.sol";
 import {Constants} from "./Constants.sol";
 
+contract TestVault is Vault {
+    function applyDelta(address token, int256 initialDelta, int256 change)
+        external
+        returns (int256 beforeChange, int256 afterChange, uint256 negativeCount)
+    {
+        _setDelta(token, initialDelta);
+        if (initialDelta < 0) {
+            _setNegativeDeltaCount(_getNegativeDeltaCount() + 1);
+        }
+        beforeChange = _getDelta(token);
+
+        _updateDeltaAccounting(token, change);
+
+        afterChange = _getDelta(token);
+
+        negativeCount = _getNegativeDeltaCount();
+    }
+
     function creditVaultForTest(address user, address token, uint256 amount)
         external
     {
