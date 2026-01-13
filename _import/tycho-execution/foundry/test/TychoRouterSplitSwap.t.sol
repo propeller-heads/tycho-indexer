@@ -28,7 +28,12 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             (0xffffff * 60) / 100, // 60%
             address(usv2Executor),
             encodeUniswapV2Swap(
-                WETH_ADDR, WETH_WBTC_POOL, tychoRouterAddr, false, transferType
+                WETH_ADDR,
+                WETH_WBTC_POOL,
+                WBTC_ADDR,
+                tychoRouterAddr,
+                false,
+                transferType
             )
         );
         // WBTC -> USDC
@@ -40,6 +45,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             encodeUniswapV2Swap(
                 WBTC_ADDR,
                 USDC_WBTC_POOL,
+                USDC_ADDR,
                 ALICE,
                 true,
                 RestrictTransferFrom.TransferType.Transfer
@@ -52,7 +58,12 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             uint24(0),
             address(usv2Executor),
             encodeUniswapV2Swap(
-                WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false, transferType
+                WETH_ADDR,
+                WETH_DAI_POOL,
+                DAI_ADDR,
+                tychoRouterAddr,
+                false,
+                transferType
             )
         );
 
@@ -65,6 +76,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             encodeUniswapV2Swap(
                 DAI_ADDR,
                 DAI_USDC_POOL,
+                USDC_ADDR,
                 ALICE,
                 true,
                 RestrictTransferFrom.TransferType.Transfer
@@ -273,6 +285,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         bytes memory wethUsdcV2OneZeroData = encodeUniswapV2Swap(
             WETH_ADDR,
             USDC_WETH_USV2,
+            USDC_ADDR,
             tychoRouterAddr,
             false,
             RestrictTransferFrom.TransferType.Transfer
@@ -382,6 +395,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         bytes memory usdcWethV2Data = encodeUniswapV2Swap(
             USDC_ADDR,
             USDC_WETH_USV2,
+            WETH_ADDR,
             tychoRouterAddr,
             true,
             RestrictTransferFrom.TransferType.Transfer
@@ -443,6 +457,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         bytes memory protocolData = encodeUniswapV2Swap(
             BASE_USDC,
             USDC_MAG7_POOL,
+            BASE_MAG7,
             tychoRouterAddr,
             true,
             RestrictTransferFrom.TransferType.Transfer
