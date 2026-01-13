@@ -15,7 +15,6 @@ use crate::encoding::{
 #[derive(Clone)]
 pub struct TransferOptimization {
     native_token: Bytes,
-    wrapped_token: Bytes,
     user_transfer_type: UserTransferType,
     router_address: Bytes,
 }
@@ -23,11 +22,10 @@ pub struct TransferOptimization {
 impl TransferOptimization {
     pub fn new(
         native_token: Bytes,
-        wrapped_token: Bytes,
         user_transfer_type: UserTransferType,
         router_address: Bytes,
     ) -> Self {
-        TransferOptimization { native_token, wrapped_token, user_transfer_type, router_address }
+        TransferOptimization { native_token, user_transfer_type, router_address }
     }
 
     /// Returns the transfer type that should be used for the current transfer.
@@ -35,7 +33,6 @@ impl TransferOptimization {
         &self,
         swap: &SwapGroup,
         given_token: &Bytes,
-        wrap: bool,
         in_between_swap_optimization: bool,
     ) -> TransferType {
         let is_first_swap = swap.token_in == *given_token;
@@ -45,9 +42,6 @@ impl TransferOptimization {
         if swap.token_in == self.native_token {
             // Funds are already in router. All protocols currently take care of native transfers.
             TransferType::None
-        } else if (swap.token_in == self.wrapped_token) && wrap {
-            // Wrapping already happened in the router so, we just do a normal transfer.
-            TransferType::Transfer
         } else if is_first_swap {
             if in_transfer_required {
                 if self.user_transfer_type == UserTransferType::None {
@@ -82,7 +76,6 @@ impl TransferOptimization {
         &self,
         solution_receiver: &Bytes,
         next_swap: Option<&SwapGroup>,
-        unwrap: bool,
     ) -> Result<(Bytes, bool), EncodingError> {
         if let Some(next) = next_swap {
             // if the protocol of the next swap supports transfer in optimization
@@ -105,11 +98,7 @@ impl TransferOptimization {
             }
         } else {
             // last swap - there is no next swap
-            if unwrap {
-                Ok((self.router_address.clone(), false))
-            } else {
-                Ok((solution_receiver.clone(), false))
-            }
+            Ok((solution_receiver.clone(), false))
         }
     }
 }
@@ -146,29 +135,25 @@ mod tests {
     #[rstest]
     // First swap tests
     // WETH -(univ2)-> DAI we expect a transfer from the user to the protocol
-    #[case(weth(), weth(), "uniswap_v2".to_string(), false, UserTransferType::TransferFrom,false, TransferType::TransferFrom)]
+    #[case(weth(), weth(), "uniswap_v2".to_string(), UserTransferType::TransferFrom,false, TransferType::TransferFrom)]
     // Native token swap. No transfer is needed
-    #[case(eth(), eth(),  "uniswap_v2".to_string(),false, UserTransferType::TransferFrom,false, TransferType::None)]
-    // ETH -(wrap)-> WETH -(univ2)-> DAI. Only a transfer from the router into the protocol is
-    // needed
-    #[case(eth(), weth(),  "uniswap_v2".to_string(),true, UserTransferType::TransferFrom,false,TransferType::Transfer)]
+    #[case(eth(), eth(),  "uniswap_v2".to_string(), UserTransferType::TransferFrom,false, TransferType::None)]
     // USDC -(univ2)-> DAI and the tokens are already in the router. Only a transfer from the router
     // to the protocol is needed
-    #[case(usdc(), usdc(), "uniswap_v2".to_string(),false, UserTransferType::None,false, TransferType::Transfer)]
+    #[case(usdc(), usdc(), "uniswap_v2".to_string(), UserTransferType::None,false, TransferType::Transfer)]
     // USDC -(curve)-> DAI and the tokens are already in the router. No transfer is needed
-    #[case(usdc(), usdc(), "vm:curve".to_string(),false, UserTransferType::None, false,TransferType::None)]
+    #[case(usdc(), usdc(), "vm:curve".to_string(), UserTransferType::None, false,TransferType::None)]
     // other swaps tests
     // tokens need to be transferred into the pool
-    #[case(weth(), usdc(), "uniswap_v2".to_string(), false, UserTransferType::TransferFrom,false, TransferType::Transfer)]
+    #[case(weth(), usdc(), "uniswap_v2".to_string(), UserTransferType::TransferFrom,false, TransferType::Transfer)]
     // tokens are already in the pool (optimization)
-    #[case(weth(), usdc(), "uniswap_v2".to_string(), false, UserTransferType::TransferFrom, true, TransferType::None)]
+    #[case(weth(), usdc(), "uniswap_v2".to_string(), UserTransferType::TransferFrom, true, TransferType::None)]
     // tokens are already in the router and don't need a transfer
-    #[case(weth(), usdc(), "vm:curve".to_string(), false, UserTransferType::TransferFrom, false, TransferType::None)]
+    #[case(weth(), usdc(), "vm:curve".to_string(), UserTransferType::TransferFrom, false, TransferType::None)]
     fn test_get_transfers(
         #[case] given_token: Bytes,
         #[case] swap_token_in: Bytes,
         #[case] protocol: String,
-        #[case] wrap: bool,
         #[case] user_transfer_type: UserTransferType,
         #[case] in_between_swap_optimization: bool,
         #[case] expected_transfer: TransferType,
@@ -190,10 +175,9 @@ mod tests {
             split: 0f64,
             swaps,
         };
-        let optimization =
-            TransferOptimization::new(eth(), weth(), user_transfer_type, router_address());
+        let optimization = TransferOptimization::new(eth(), user_transfer_type, router_address());
         let transfer =
-            optimization.get_transfers(&swap, &given_token, wrap, in_between_swap_optimization);
+            optimization.get_transfers(&swap, &given_token, in_between_swap_optimization);
         assert_eq!(transfer, expected_transfer);
     }
 
@@ -206,28 +190,21 @@ mod tests {
     }
 
     #[rstest]
-    // there is no next swap but there is an unwrap -> receiver is the router
-    #[case(None, true, router_address(), false)]
-    // there is no next swap and no unwrap -> receiver is the solution receiver
-    #[case(None, false, receiver(), false)]
+    // there is no next swap -> receiver is the solution receiver
+    #[case(None, receiver(), false)]
     // protocol of next swap supports transfer in optimization
-    #[case(Some("uniswap_v2"), false, component_id(), true)]
+    #[case(Some("uniswap_v2"), component_id(), true)]
     // protocol of next swap supports transfer in optimization but is callback constrained
-    #[case(Some("uniswap_v3"), false, router_address(), false)]
+    #[case(Some("uniswap_v3"), router_address(), false)]
     // protocol of next swap does not support transfer in optimization
-    #[case(Some("vm:curve"), false, router_address(), false)]
+    #[case(Some("vm:curve"), router_address(), false)]
     fn test_get_receiver(
         #[case] protocol: Option<&str>,
-        #[case] unwrap: bool,
         #[case] expected_receiver: Bytes,
         #[case] expected_optimization: bool,
     ) {
-        let optimization = TransferOptimization::new(
-            eth(),
-            weth(),
-            UserTransferType::TransferFrom,
-            router_address(),
-        );
+        let optimization =
+            TransferOptimization::new(eth(), UserTransferType::TransferFrom, router_address());
 
         let next_swap = if protocol.is_none() {
             None
@@ -249,7 +226,7 @@ mod tests {
             })
         };
 
-        let result = optimization.get_receiver(&receiver(), next_swap.as_ref(), unwrap);
+        let result = optimization.get_receiver(&receiver(), next_swap.as_ref());
 
         assert!(result.is_ok());
         let (actual_receiver, optimization_flag) = result.unwrap();

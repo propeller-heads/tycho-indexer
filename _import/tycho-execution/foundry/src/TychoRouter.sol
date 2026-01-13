@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "../lib/IWETH.sol";
 import "../lib/bytes/LibPrefixLengthEncodedByteArray.sol";
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
@@ -62,7 +61,6 @@ error TychoRouter__NegativeSlippage(uint256 amount, uint256 minAmount);
 error TychoRouter__AmountOutNotFullyReceived(
     uint256 amountIn, uint256 amountConsumed
 );
-error TychoRouter__MessageValueMismatch(uint256 value, uint256 amount);
 error TychoRouter__InvalidDataLength();
 error TychoRouter__UndefinedMinAmountOut();
 
@@ -73,8 +71,6 @@ contract TychoRouter is
     ReentrancyGuard,
     RestrictTransferFrom
 {
-    IWETH private immutable _weth;
-
     using SafeERC20 for IERC20;
     using LibPrefixLengthEncodedByteArray for bytes;
     using LibSwap for bytes;
@@ -93,23 +89,19 @@ contract TychoRouter is
         address indexed token, uint256 amount, address indexed receiver
     );
 
-    constructor(address _permit2, address weth) RestrictTransferFrom(_permit2) {
-        if (_permit2 == address(0) || weth == address(0)) {
+    constructor(address _permit2) RestrictTransferFrom(_permit2) {
+        if (_permit2 == address(0)) {
             revert TychoRouter__AddressZero();
         }
         permit2 = IAllowanceTransfer(_permit2);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _weth = IWETH(weth);
     }
 
     /**
      * @notice Executes a swap operation based on a predefined swap graph, supporting internal token amount splits.
-     *         This function enables multi-step swaps, optional ETH wrapping/unwrapping, and validates the output amount
-     *         against a user-specified minimum.
+     *         This function enables multi-step swaps and validates the output amount against a user-specified minimum.
      *
      * @dev
-     * - If `wrapEth` is true, the contract wraps the provided native ETH into WETH and uses it as the sell token.
-     * - If `unwrapEth` is true, the contract converts the resulting WETH back into native ETH before sending it to the receiver.
      * - Swaps are executed sequentially using the `_swap` function.
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
      *
@@ -117,8 +109,6 @@ contract TychoRouter is
      * @param tokenIn The address of the input token. Use `address(0)` for native ETH
      * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
-     * @param wrapEth If true, wraps the input token (native ETH) into WETH.
-     * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
      * @param isTransferFromAllowed If false, the contract will assume that the input token is already transferred to the contract and don't allow any transferFroms
@@ -131,8 +121,6 @@ contract TychoRouter is
         address tokenIn,
         address tokenOut,
         uint256 minAmountOut,
-        bool wrapEth,
-        bool unwrapEth,
         uint256 nTokens,
         address receiver,
         bool isTransferFromAllowed,
@@ -147,8 +135,6 @@ contract TychoRouter is
             tokenOut,
             minAmountOut,
             initialBalanceTokenOut,
-            wrapEth,
-            unwrapEth,
             nTokens,
             receiver,
             swaps
@@ -157,12 +143,9 @@ contract TychoRouter is
 
     /**
      * @notice Executes a swap operation based on a predefined swap graph, supporting internal token amount splits.
-     *         This function enables multi-step swaps, optional ETH wrapping/unwrapping, and validates the output amount
-     *         against a user-specified minimum.
+     *         This function enables multi-step swaps and validates the output amount against a user-specified minimum.
      *
      * @dev
-     * - If `wrapEth` is true, the contract wraps the provided native ETH into WETH and uses it as the sell token.
-     * - If `unwrapEth` is true, the contract converts the resulting WETH back into native ETH before sending it to the receiver.
      * - For ERC20 tokens, Permit2 is used to approve and transfer tokens from the caller to the router.
      * - Swaps are executed sequentially using the `_swap` function.
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
@@ -171,12 +154,10 @@ contract TychoRouter is
      * @param tokenIn The address of the input token. Use `address(0)` for native ETH
      * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
-     * @param wrapEth If true, wraps the input token (native ETH) into WETH.
-     * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
-     * @param permitSingle A Permit2 structure containing token approval details for the input token. Ignored if `wrapEth` is true.
-     * @param signature A valid signature authorizing the Permit2 approval. Ignored if `wrapEth` is true.
+     * @param permitSingle A Permit2 structure containing token approval details for the input token.
+     * @param signature A valid signature authorizing the Permit2 approval.
      * @param swaps Encoded swap graph data containing details of each swap.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -186,8 +167,6 @@ contract TychoRouter is
         address tokenIn,
         address tokenOut,
         uint256 minAmountOut,
-        bool wrapEth,
-        bool unwrapEth,
         uint256 nTokens,
         address receiver,
         IAllowanceTransfer.PermitSingle calldata permitSingle,
@@ -207,8 +186,6 @@ contract TychoRouter is
             tokenOut,
             minAmountOut,
             initialBalanceTokenOut,
-            wrapEth,
-            unwrapEth,
             nTokens,
             receiver,
             swaps
@@ -217,12 +194,9 @@ contract TychoRouter is
 
     /**
      * @notice Executes a swap operation based on a predefined swap graph with no split routes.
-     *         This function enables multi-step swaps, optional ETH wrapping/unwrapping, and validates the output amount
-     *         against a user-specified minimum.
+     *         This function enables multi-step swaps and validates the output amount against a user-specified minimum.
      *
      * @dev
-     * - If `wrapEth` is true, the contract wraps the provided native ETH into WETH and uses it as the sell token.
-     * - If `unwrapEth` is true, the contract converts the resulting WETH back into native ETH before sending it to the receiver.
      * - Swaps are executed sequentially using the `_swap` function.
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
      *
@@ -230,8 +204,6 @@ contract TychoRouter is
      * @param tokenIn The address of the input token. Use `address(0)` for native ETH
      * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
-     * @param wrapEth If true, wraps the input token (native ETH) into WETH.
-     * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param receiver The address to receive the output tokens.
      * @param isTransferFromAllowed If false, the contract will assume that the input token is already transferred to the contract and don't allow any transferFroms
      * @param swaps Encoded swap graph data containing details of each swap.
@@ -243,8 +215,6 @@ contract TychoRouter is
         address tokenIn,
         address tokenOut,
         uint256 minAmountOut,
-        bool wrapEth,
-        bool unwrapEth,
         address receiver,
         bool isTransferFromAllowed,
         bytes calldata swaps
@@ -258,8 +228,6 @@ contract TychoRouter is
             tokenOut,
             minAmountOut,
             initialBalanceTokenOut,
-            wrapEth,
-            unwrapEth,
             receiver,
             swaps
         );
@@ -267,12 +235,9 @@ contract TychoRouter is
 
     /**
      * @notice Executes a swap operation based on a predefined swap graph with no split routes.
-     *         This function enables multi-step swaps, optional ETH wrapping/unwrapping, and validates the output amount
-     *         against a user-specified minimum.
+     *         This function enables multi-step swaps and validates the output amount against a user-specified minimum.
      *
      * @dev
-     * - If `wrapEth` is true, the contract wraps the provided native ETH into WETH and uses it as the sell token.
-     * - If `unwrapEth` is true, the contract converts the resulting WETH back into native ETH before sending it to the receiver.
      * - For ERC20 tokens, Permit2 is used to approve and transfer tokens from the caller to the router.
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
      *
@@ -280,11 +245,9 @@ contract TychoRouter is
      * @param tokenIn The address of the input token. Use `address(0)` for native ETH
      * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
-     * @param wrapEth If true, wraps the input token (native ETH) into WETH.
-     * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param receiver The address to receive the output tokens.
-     * @param permitSingle A Permit2 structure containing token approval details for the input token. Ignored if `wrapEth` is true.
-     * @param signature A valid signature authorizing the Permit2 approval. Ignored if `wrapEth` is true.
+     * @param permitSingle A Permit2 structure containing token approval details for the input token.
+     * @param signature A valid signature authorizing the Permit2 approval.
      * @param swaps Encoded swap graph data containing details of each swap.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -294,8 +257,6 @@ contract TychoRouter is
         address tokenIn,
         address tokenOut,
         uint256 minAmountOut,
-        bool wrapEth,
-        bool unwrapEth,
         address receiver,
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
@@ -315,8 +276,6 @@ contract TychoRouter is
             tokenOut,
             minAmountOut,
             initialBalanceTokenOut,
-            wrapEth,
-            unwrapEth,
             receiver,
             swaps
         );
@@ -324,19 +283,15 @@ contract TychoRouter is
 
     /**
      * @notice Executes a single swap operation.
-     *         This function enables optional ETH wrapping/unwrapping, and validates the output amount against a user-specified minimum.
+     *         This function validates the output amount against a user-specified minimum.
      *
      * @dev
-     * - If `wrapEth` is true, the contract wraps the provided native ETH into WETH and uses it as the sell token.
-     * - If `unwrapEth` is true, the contract converts the resulting WETH back into native ETH before sending it to the receiver.
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
      *
      * @param amountIn The input token amount to be swapped.
      * @param tokenIn The address of the input token. Use `address(0)` for native ETH
      * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
-     * @param wrapEth If true, wraps the input token (native ETH) into WETH.
-     * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param receiver The address to receive the output tokens.
      * @param isTransferFromAllowed If false, the contract will assume that the input token is already transferred to the contract and don't allow any transferFroms
      * @param swapData Encoded swap details.
@@ -348,8 +303,6 @@ contract TychoRouter is
         address tokenIn,
         address tokenOut,
         uint256 minAmountOut,
-        bool wrapEth,
-        bool unwrapEth,
         address receiver,
         bool isTransferFromAllowed,
         bytes calldata swapData
@@ -363,8 +316,6 @@ contract TychoRouter is
             tokenOut,
             minAmountOut,
             initialBalanceTokenOut,
-            wrapEth,
-            unwrapEth,
             receiver,
             swapData
         );
@@ -372,12 +323,9 @@ contract TychoRouter is
 
     /**
      * @notice Executes a single swap operation.
-     *         This function enables optional ETH wrapping/unwrapping, and validates the output amount
-     *         against a user-specified minimum.
+     *         This function validates the output amount against a user-specified minimum.
      *
      * @dev
-     * - If `wrapEth` is true, the contract wraps the provided native ETH into WETH and uses it as the sell token.
-     * - If `unwrapEth` is true, the contract converts the resulting WETH back into native ETH before sending it to the receiver.
      * - For ERC20 tokens, Permit2 is used to approve and transfer tokens from the caller to the router.
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
      *
@@ -385,11 +333,9 @@ contract TychoRouter is
      * @param tokenIn The address of the input token. Use `address(0)` for native ETH
      * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
-     * @param wrapEth If true, wraps the input token (native ETH) into WETH.
-     * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param receiver The address to receive the output tokens.
-     * @param permitSingle A Permit2 structure containing token approval details for the input token. Ignored if `wrapEth` is true.
-     * @param signature A valid signature authorizing the Permit2 approval. Ignored if `wrapEth` is true.
+     * @param permitSingle A Permit2 structure containing token approval details for the input token.
+     * @param signature A valid signature authorizing the Permit2 approval.
      * @param swapData Encoded swap details.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -399,8 +345,6 @@ contract TychoRouter is
         address tokenIn,
         address tokenOut,
         uint256 minAmountOut,
-        bool wrapEth,
-        bool unwrapEth,
         address receiver,
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
@@ -419,8 +363,6 @@ contract TychoRouter is
             tokenOut,
             minAmountOut,
             initialBalanceTokenOut,
-            wrapEth,
-            unwrapEth,
             receiver,
             swapData
         );
@@ -440,8 +382,6 @@ contract TychoRouter is
         address tokenOut,
         uint256 minAmountOut,
         uint256 initialBalanceTokenOut,
-        bool wrapEth,
-        bool unwrapEth,
         uint256 nTokens,
         address receiver,
         bytes calldata swaps
@@ -453,21 +393,10 @@ contract TychoRouter is
             revert TychoRouter__UndefinedMinAmountOut();
         }
 
-        // Assume funds are already in the router.
-        if (wrapEth) {
-            _wrapETH(amountIn);
-            tokenIn = address(_weth);
-        }
-
         amountOut = _splitSwap(amountIn, nTokens, swaps);
 
         if (amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
-        }
-
-        if (unwrapEth) {
-            _unwrapETH(amountOut);
-            Address.sendValue(payable(receiver), amountOut);
         }
 
         _verifyAmountOutWasReceived(
@@ -494,8 +423,6 @@ contract TychoRouter is
         address tokenOut,
         uint256 minAmountOut,
         uint256 initialBalanceTokenOut,
-        bool wrapEth,
-        bool unwrapEth,
         address receiver,
         bytes calldata swap_
     ) internal returns (uint256 amountOut) {
@@ -506,12 +433,6 @@ contract TychoRouter is
             revert TychoRouter__UndefinedMinAmountOut();
         }
 
-        // Assume funds are already in the router.
-        if (wrapEth) {
-            _wrapETH(amountIn);
-            tokenIn = address(_weth);
-        }
-
         (address executor, bytes calldata protocolData) =
             swap_.decodeSingleSwap();
 
@@ -519,11 +440,6 @@ contract TychoRouter is
 
         if (amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
-        }
-
-        if (unwrapEth) {
-            _unwrapETH(amountOut);
-            Address.sendValue(payable(receiver), amountOut);
         }
 
         _verifyAmountOutWasReceived(
@@ -550,8 +466,6 @@ contract TychoRouter is
         address tokenOut,
         uint256 minAmountOut,
         uint256 initialBalanceTokenOut,
-        bool wrapEth,
-        bool unwrapEth,
         address receiver,
         bytes calldata swaps
     ) internal returns (uint256 amountOut) {
@@ -562,22 +476,12 @@ contract TychoRouter is
             revert TychoRouter__UndefinedMinAmountOut();
         }
 
-        // Assume funds are already in the router.
-        if (wrapEth) {
-            _wrapETH(amountIn);
-            tokenIn = address(_weth);
-        }
-
         amountOut = _sequentialSwap(amountIn, swaps);
 
         if (amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
         }
 
-        if (unwrapEth) {
-            _unwrapETH(amountOut);
-            Address.sendValue(payable(receiver), amountOut);
-        }
         _verifyAmountOutWasReceived(
             tokenIn,
             tokenOut,
@@ -775,25 +679,6 @@ contract TychoRouter is
             emit Withdrawal(address(0), amount, receiver);
             Address.sendValue(payable(receiver), amount);
         }
-    }
-
-    /**
-     * @dev Wraps a defined amount of ETH.
-     * @param amount of native ETH to wrap.
-     */
-    function _wrapETH(uint256 amount) internal {
-        if (msg.value != amount) {
-            revert TychoRouter__MessageValueMismatch(msg.value, amount);
-        }
-        _weth.deposit{value: amount}();
-    }
-
-    /**
-     * @dev Unwraps a defined amount of WETH.
-     * @param amount of WETH to unwrap.
-     */
-    function _unwrapETH(uint256 amount) internal {
-        _weth.withdraw(amount);
     }
 
     /**

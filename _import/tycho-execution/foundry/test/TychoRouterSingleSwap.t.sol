@@ -35,8 +35,6 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             WETH_ADDR,
             DAI_ADDR,
             2008817438608734439722,
-            false,
-            false,
             ALICE,
             permitSingle,
             signature,
@@ -73,15 +71,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
 
         uint256 minAmountOut = 2000 * 1e18;
         uint256 amountOut = tychoRouter.singleSwap(
-            amountIn,
-            WETH_ADDR,
-            DAI_ADDR,
-            minAmountOut,
-            false,
-            false,
-            ALICE,
-            true,
-            swap
+            amountIn, WETH_ADDR, DAI_ADDR, minAmountOut, ALICE, true, swap
         );
 
         uint256 expectedAmount = 2018817438608734439722;
@@ -115,7 +105,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
 
         vm.expectRevert(TychoRouter__UndefinedMinAmountOut.selector);
         tychoRouter.singleSwap(
-            amountIn, WETH_ADDR, DAI_ADDR, 0, false, false, ALICE, true, swap
+            amountIn, WETH_ADDR, DAI_ADDR, 0, ALICE, true, swap
         );
     }
 
@@ -142,15 +132,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         uint256 minAmountOut = 2600 * 1e18;
         vm.expectRevert();
         tychoRouter.singleSwap(
-            amountIn,
-            WETH_ADDR,
-            DAI_ADDR,
-            minAmountOut,
-            false,
-            false,
-            ALICE,
-            true,
-            swap
+            amountIn, WETH_ADDR, DAI_ADDR, minAmountOut, ALICE, true, swap
         );
     }
 
@@ -185,104 +167,8 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             )
         );
         tychoRouter.singleSwap(
-            amountIn,
-            WETH_ADDR,
-            DAI_ADDR,
-            minAmountOut,
-            false,
-            false,
-            ALICE,
-            true,
-            swap
+            amountIn, WETH_ADDR, DAI_ADDR, minAmountOut, ALICE, true, swap
         );
-    }
-
-    function testSingleSwapWrapETH() public {
-        uint256 amountIn = 1 ether;
-        deal(ALICE, amountIn);
-        vm.startPrank(ALICE);
-
-        IAllowanceTransfer.PermitSingle memory emptyPermitSingle =
-            IAllowanceTransfer.PermitSingle({
-                details: IAllowanceTransfer.PermitDetails({
-                    token: address(0), amount: 0, expiration: 0, nonce: 0
-                }),
-                spender: address(0),
-                sigDeadline: 0
-            });
-
-        bytes memory protocolData = encodeUniswapV2Swap(
-            WETH_ADDR,
-            WETH_DAI_POOL,
-            ALICE,
-            false,
-            RestrictTransferFrom.TransferType.Transfer // ETH has already been transferred to router
-        );
-
-        bytes memory swap =
-            encodeSingleSwap(address(usv2Executor), protocolData);
-
-        uint256 amountOut = tychoRouter.singleSwapPermit2{value: amountIn}(
-            amountIn,
-            address(0),
-            DAI_ADDR,
-            1000_000000,
-            true,
-            false,
-            ALICE,
-            emptyPermitSingle,
-            "",
-            swap
-        );
-        uint256 expectedAmount = 2018817438608734439722;
-        assertEq(amountOut, expectedAmount);
-        uint256 daiBalance = IERC20(DAI_ADDR).balanceOf(ALICE);
-        assertEq(daiBalance, expectedAmount);
-        assertEq(ALICE.balance, 0);
-
-        vm.stopPrank();
-    }
-
-    function testSingleSwapUnwrapETH() public {
-        // DAI -> WETH with unwrapping to ETH
-        uint256 amountIn = 3000 ether;
-        deal(DAI_ADDR, ALICE, amountIn);
-
-        vm.startPrank(ALICE);
-        (
-            IAllowanceTransfer.PermitSingle memory permitSingle,
-            bytes memory signature
-        ) = handlePermit2Approval(DAI_ADDR, tychoRouterAddr, amountIn);
-
-        bytes memory protocolData = encodeUniswapV2Swap(
-            DAI_ADDR,
-            WETH_DAI_POOL,
-            tychoRouterAddr,
-            true,
-            RestrictTransferFrom.TransferType.TransferFrom
-        );
-
-        bytes memory swap =
-            encodeSingleSwap(address(usv2Executor), protocolData);
-
-        uint256 amountOut = tychoRouter.singleSwapPermit2(
-            amountIn,
-            DAI_ADDR,
-            address(0),
-            1000_000000,
-            false,
-            true,
-            ALICE,
-            permitSingle,
-            signature,
-            swap
-        );
-
-        uint256 expectedAmount = 1475644707225677606;
-        assertEq(amountOut, expectedAmount);
-        assertEq(ALICE.balance, expectedAmount);
-
-        vm.stopPrank();
     }
 
     function testSingleSwapNoTransferNeededIllegalTransfer() public {
@@ -314,15 +200,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             )
         );
         tychoRouter.singleSwap(
-            amountIn,
-            WETH_ADDR,
-            DAI_ADDR,
-            2000 * 1e18,
-            false,
-            false,
-            ALICE,
-            false,
-            swap
+            amountIn, WETH_ADDR, DAI_ADDR, 2000 * 1e18, ALICE, false, swap
         );
 
         vm.stopPrank();
@@ -363,47 +241,6 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         uint256 balanceAfter = IERC20(DAI_ADDR).balanceOf(ALICE);
         assertTrue(success, "Call Failed");
         assertEq(balanceAfter - balanceBefore, 2018817438608734439722);
-    }
-
-    function testSingleSwapWithWrapIntegration() public {
-        // Tests swapping WETH -> DAI on a USV2 pool, but ETH is received from the user
-        // and wrapped before the swap
-        deal(ALICE, 1 ether);
-        uint256 balanceBefore = IERC20(DAI_ADDR).balanceOf(ALICE);
-
-        // Approve permit2
-        vm.startPrank(ALICE);
-        bytes memory callData =
-            loadCallDataFromFile("test_single_swap_strategy_encoder_wrap");
-        (bool success,) = tychoRouterAddr.call{value: 1 ether}(callData);
-
-        vm.stopPrank();
-
-        uint256 balanceAfter = IERC20(DAI_ADDR).balanceOf(ALICE);
-
-        assertTrue(success, "Call Failed");
-        assertEq(balanceAfter - balanceBefore, 2018817438608734439722);
-    }
-
-    function testSingleSwapWithUnwrapIntegration() public {
-        // Tests swapping DAI -> WETH on a USV2 pool, and WETH is unwrapped to ETH
-        // before sending back to the user
-        deal(DAI_ADDR, ALICE, 3000 ether);
-        uint256 balanceBefore = ALICE.balance;
-
-        // Approve permit2
-        vm.startPrank(ALICE);
-        IERC20(DAI_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
-        bytes memory callData =
-            loadCallDataFromFile("test_single_swap_strategy_encoder_unwrap");
-        (bool success,) = tychoRouterAddr.call(callData);
-
-        vm.stopPrank();
-
-        uint256 balanceAfter = ALICE.balance;
-
-        assertTrue(success, "Call Failed");
-        assertEq(balanceAfter - balanceBefore, 1475644707225677606);
     }
 
     function testSingleSwapIntegrationNoTransferIn() public {

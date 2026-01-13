@@ -17,8 +17,7 @@ use crate::encoding::{
         utils::ple_encode,
     },
     models::{
-        EncodedSolution, EncodingContext, NativeAction, Solution, Transaction, TransferType,
-        UserTransferType,
+        EncodedSolution, EncodingContext, Solution, Transaction, TransferType, UserTransferType,
     },
     strategy_encoder::StrategyEncoder,
     tycho_encoder::TychoEncoder,
@@ -176,10 +175,6 @@ impl TychoEncoder for TychoRouterEncoder {
     /// A solution is considered valid if all the following conditions are met:
     /// * The solution is not exact out.
     /// * The solution has at least one swap.
-    /// * If the solution is wrapping, the given token is the chain's native token and the first
-    ///   swap's input is the chain's wrapped token.
-    /// * If the solution is unwrapping, the checked token is the chain's native token and the last
-    ///   swap's output is the chain's wrapped token.
     /// * The token cannot appear more than once in the solution unless it is the first and last
     ///   token (i.e. a true cyclical swap).
     fn validate_solution(&self, solution: &Solution) -> Result<(), EncodingError> {
@@ -190,42 +185,6 @@ impl TychoEncoder for TychoRouterEncoder {
         }
         if solution.swaps.is_empty() {
             return Err(EncodingError::FatalError("No swaps found in solution".to_string()));
-        }
-        let native_address = self.chain.native_token().address;
-        let wrapped_address = self
-            .chain
-            .wrapped_native_token()
-            .address;
-        if let Some(native_action) = &solution.native_action {
-            if native_action == &NativeAction::Wrap {
-                if solution.given_token != native_address {
-                    return Err(EncodingError::FatalError(
-                        "Native token must be the input token in order to wrap".to_string(),
-                    ));
-                }
-                if let Some(first_swap) = solution.swaps.first() {
-                    if *first_swap.token_in() != wrapped_address {
-                        return Err(EncodingError::FatalError(
-                            "Wrapped token must be the first swap's input in order to wrap"
-                                .to_string(),
-                        ));
-                    }
-                }
-            } else if native_action == &NativeAction::Unwrap {
-                if solution.checked_token != native_address {
-                    return Err(EncodingError::FatalError(
-                        "Native token must be the output token in order to unwrap".to_string(),
-                    ));
-                }
-                if let Some(last_swap) = solution.swaps.last() {
-                    if *last_swap.token_out() != wrapped_address {
-                        return Err(EncodingError::FatalError(
-                            "Wrapped token must be the last swap's output in order to unwrap"
-                                .to_string(),
-                        ));
-                    }
-                }
-            }
         }
 
         let mut solution_tokens = vec![];
@@ -260,14 +219,6 @@ impl TychoEncoder for TychoRouterEncoder {
                     return Err(EncodingError::FatalError(
                         "Cyclical swaps are only allowed if they are the first and last token of a solution".to_string(),
                     ));
-                } else {
-                    // it is a valid cyclical swap
-                    // we don't support any wrapping or unwrapping in this case
-                    if let Some(_native_action) = &solution.native_action {
-                        return Err(EncodingError::FatalError(
-                            "Wrapping/Unwrapping is not available in cyclical swaps".to_string(),
-                        ));
-                    }
                 }
             }
         }
@@ -510,7 +461,7 @@ mod tests {
         #[allow(deprecated)]
         fn test_encode_router_calldata_single_swap() {
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let eth_amount_in = BigUint::from(1000u32);
+            let weth_amount_in = BigUint::from(1000u32);
             let swap = Swap::new(
                 ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
@@ -523,12 +474,11 @@ mod tests {
 
             let solution = Solution {
                 exact_out: false,
-                given_amount: eth_amount_in.clone(),
-                given_token: eth(),
+                given_amount: weth_amount_in.clone(),
+                given_token: weth(),
                 checked_token: dai(),
                 swaps: vec![swap],
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                native_action: Some(NativeAction::Wrap),
                 ..Default::default()
             };
 
@@ -536,13 +486,13 @@ mod tests {
             assert!(transactions.is_ok());
             let transactions = transactions.unwrap();
             assert_eq!(transactions.len(), 1);
-            assert_eq!(transactions[0].value, eth_amount_in);
+            assert_eq!(transactions[0].value, BigUint::ZERO);
             assert_eq!(
                 transactions[0].to,
                 Bytes::from_str("0x3ede3eca2a72b3aecc820e955b36f38437d01395").unwrap()
             );
             // single swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "5c4b639c");
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "51cebf92");
         }
 
         #[test]
@@ -558,7 +508,6 @@ mod tests {
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_eth_univ4(), swap_eth_pepe_univ4()],
-                ..Default::default()
             };
 
             let transactions = encoder.encode_full_calldata(vec![solution]);
@@ -566,14 +515,14 @@ mod tests {
             let transactions = transactions.unwrap();
             assert_eq!(transactions.len(), 1);
             // single swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "5c4b639c");
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "51cebf92");
         }
 
         #[test]
         #[allow(deprecated)]
         fn test_encode_router_calldata_sequential_swap() {
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let eth_amount_in = BigUint::from(1000u32);
+            let weth_amount_in = BigUint::from(1000u32);
             let swap_weth_dai = Swap::new(
                 ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
@@ -596,12 +545,11 @@ mod tests {
 
             let solution = Solution {
                 exact_out: false,
-                given_amount: eth_amount_in.clone(),
-                given_token: eth(),
+                given_amount: weth_amount_in.clone(),
+                given_token: weth(),
                 checked_token: usdc(),
                 swaps: vec![swap_weth_dai, swap_dai_usdc],
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                native_action: Some(NativeAction::Wrap),
                 checked_amount: BigUint::from(1000u32),
                 ..Default::default()
             };
@@ -610,9 +558,9 @@ mod tests {
             assert!(transactions.is_ok());
             let transactions = transactions.unwrap();
             assert_eq!(transactions.len(), 1);
-            assert_eq!(transactions[0].value, eth_amount_in);
+            assert_eq!(transactions[0].value, BigUint::ZERO);
             // sequential swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "e21dd0d3");
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "adccf472");
         }
 
         #[test]
@@ -629,7 +577,6 @@ mod tests {
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_eth, swap_usdc_eth_univ4()],
-                ..Default::default()
             };
 
             let encoded_solution_res = encoder.encode_solution(&solution);
@@ -660,104 +607,12 @@ mod tests {
         }
 
         #[test]
-        fn test_validate_passes_for_wrap() {
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let swap = Swap::new(
-                ProtocolComponent {
-                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                weth().clone(),
-                dai().clone(),
-            );
-
-            let solution = Solution {
-                exact_out: false,
-                given_token: eth(),
-                checked_token: dai(),
-                swaps: vec![swap],
-                native_action: Some(NativeAction::Wrap),
-                ..Default::default()
-            };
-
-            let result = encoder.validate_solution(&solution);
-
-            assert!(result.is_ok());
-        }
-
-        #[test]
-        fn test_validate_fails_for_wrap_wrong_input() {
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let swap = Swap::new(
-                ProtocolComponent {
-                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                weth().clone(),
-                dai().clone(),
-            );
-
-            let solution = Solution {
-                exact_out: false,
-                given_token: weth(),
-                swaps: vec![swap],
-                native_action: Some(NativeAction::Wrap),
-                ..Default::default()
-            };
-
-            let result = encoder.validate_solution(&solution);
-
-            assert!(result.is_err());
-            assert_eq!(
-                result.err().unwrap(),
-                EncodingError::FatalError(
-                    "Native token must be the input token in order to wrap".to_string()
-                )
-            );
-        }
-
-        #[test]
-        fn test_validate_fails_for_wrap_wrong_first_swap() {
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let swap = Swap::new(
-                ProtocolComponent {
-                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                eth().clone(),
-                dai().clone(),
-            );
-
-            let solution = Solution {
-                exact_out: false,
-                given_token: eth(),
-                swaps: vec![swap],
-                native_action: Some(NativeAction::Wrap),
-                ..Default::default()
-            };
-
-            let result = encoder.validate_solution(&solution);
-
-            assert!(result.is_err());
-            assert_eq!(
-                result.err().unwrap(),
-                EncodingError::FatalError(
-                    "Wrapped token must be the first swap's input in order to wrap".to_string()
-                )
-            );
-        }
-
-        #[test]
         fn test_validate_fails_no_swaps() {
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
             let solution = Solution {
                 exact_out: false,
                 given_token: eth(),
                 swaps: vec![],
-                native_action: Some(NativeAction::Wrap),
                 ..Default::default()
             };
 
@@ -767,97 +622,6 @@ mod tests {
             assert_eq!(
                 result.err().unwrap(),
                 EncodingError::FatalError("No swaps found in solution".to_string())
-            );
-        }
-
-        #[test]
-        fn test_validate_passes_for_unwrap() {
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let swap = Swap::new(
-                ProtocolComponent {
-                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                dai().clone(),
-                weth().clone(),
-            );
-
-            let solution = Solution {
-                exact_out: false,
-                checked_token: eth(),
-                swaps: vec![swap],
-                native_action: Some(NativeAction::Unwrap),
-                ..Default::default()
-            };
-
-            let result = encoder.validate_solution(&solution);
-
-            assert!(result.is_ok());
-        }
-
-        #[test]
-        fn test_validate_fails_for_unwrap_wrong_output() {
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let swap = Swap::new(
-                ProtocolComponent {
-                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                dai().clone(),
-                weth().clone(),
-            );
-
-            let solution = Solution {
-                exact_out: false,
-                given_token: dai(),
-                checked_token: weth(),
-                swaps: vec![swap],
-                native_action: Some(NativeAction::Unwrap),
-                ..Default::default()
-            };
-
-            let result = encoder.validate_solution(&solution);
-
-            assert!(result.is_err());
-            assert_eq!(
-                result.err().unwrap(),
-                EncodingError::FatalError(
-                    "Native token must be the output token in order to unwrap".to_string()
-                )
-            );
-        }
-
-        #[test]
-        fn test_validate_fails_for_unwrap_wrong_last_swap() {
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let swap = Swap::new(
-                ProtocolComponent {
-                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                dai().clone(),
-                eth().clone(),
-            );
-
-            let solution = Solution {
-                exact_out: false,
-                checked_token: eth(),
-                swaps: vec![swap],
-                native_action: Some(NativeAction::Unwrap),
-                ..Default::default()
-            };
-
-            let result = encoder.validate_solution(&solution);
-
-            assert!(result.is_err());
-            assert_eq!(
-                result.err().unwrap(),
-                EncodingError::FatalError(
-                    "Wrapped token must be the last swap's output in order to unwrap".to_string()
-                )
             );
         }
 
@@ -1026,55 +790,6 @@ mod tests {
 
             assert!(result.is_ok());
         }
-
-        #[test]
-        fn test_validate_cyclical_swap_native_action_fail() {
-            // This validation fails because there is a native action with a valid cyclical swap
-            // ETH -> WETH -> DAI -> WETH
-            // (some of the pool addresses in this test are fake)
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let swaps = vec![
-                Swap::new(
-                    ProtocolComponent {
-                        id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
-                        protocol_system: "uniswap_v2".to_string(),
-                        ..Default::default()
-                    },
-                    weth(),
-                    dai(),
-                ),
-                Swap::new(
-                    ProtocolComponent {
-                        id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
-                        protocol_system: "uniswap_v2".to_string(),
-                        ..Default::default()
-                    },
-                    dai(),
-                    weth(),
-                ),
-            ];
-
-            let solution = Solution {
-                exact_out: false,
-                given_token: eth(),
-                checked_token: weth(),
-                swaps,
-                native_action: Some(NativeAction::Wrap),
-                ..Default::default()
-            };
-
-            let result = encoder.validate_solution(&solution);
-
-            assert!(result.is_err());
-            assert_eq!(
-                result.err().unwrap(),
-                EncodingError::FatalError(
-                    "Wrapping/Unwrapping is not available in cyclical swaps"
-                        .to_string()
-                        .to_string()
-                )
-            );
-        }
     }
 
     mod executor_encoder {
@@ -1115,7 +830,6 @@ mod tests {
                 // The receiver was generated with `makeAddr("bob") using forge`
                 receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
                 swaps: vec![swap],
-                native_action: None,
             };
 
             let encoded_solutions = encoder
@@ -1173,7 +887,6 @@ mod tests {
                 sender: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
                 receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
                 swaps: vec![swap.clone(), swap],
-                native_action: None,
             };
 
             let result = encoder.encode_solutions(vec![solution]);
@@ -1197,7 +910,6 @@ mod tests {
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_eth_univ4(), swap_eth_pepe_univ4()],
-                ..Default::default()
             };
 
             let encoded_solutions = encoder

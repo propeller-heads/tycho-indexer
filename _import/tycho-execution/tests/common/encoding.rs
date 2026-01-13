@@ -14,7 +14,7 @@ use tycho_contracts::encoding::{
         utils::{biguint_to_u256, bytes_to_address},
     },
     models,
-    models::{EncodedSolution, NativeAction, Solution, Transaction, UserTransferType},
+    models::{EncodedSolution, Solution, Transaction, UserTransferType},
 };
 
 /// Encodes a transaction for the Tycho Router using one of its supported swap methods.
@@ -30,8 +30,8 @@ use tycho_contracts::encoding::{
 /// - `splitSwap`
 /// - `splitSwapPermit2`
 ///
-/// The encoding includes handling of native asset wrapping/unwrapping, permit2 support,
-/// and proper input argument formatting based on the function signature string.
+/// The encoding includes permit2 support and proper input argument formatting based on the
+/// function signature string.
 ///
 /// # ⚠️ Important Responsibility Note
 ///
@@ -78,14 +78,6 @@ pub fn encode_tycho_router_call(
     native_address: &Bytes,
     signer: Option<PrivateKeySigner>,
 ) -> Result<Transaction, EncodingError> {
-    let (mut unwrap, mut wrap) = (false, false);
-    if let Some(action) = solution.native_action.clone() {
-        match action {
-            NativeAction::Wrap => wrap = true,
-            NativeAction::Unwrap => unwrap = true,
-        }
-    }
-
     let given_amount = biguint_to_u256(&solution.given_amount);
     let min_amount_out = biguint_to_u256(&solution.checked_amount);
     let given_token = bytes_to_address(&solution.given_token)?;
@@ -114,8 +106,6 @@ pub fn encode_tycho_router_call(
             given_token,
             checked_token,
             min_amount_out,
-            wrap,
-            unwrap,
             receiver,
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
@@ -133,8 +123,6 @@ pub fn encode_tycho_router_call(
             given_token,
             checked_token,
             min_amount_out,
-            wrap,
-            unwrap,
             receiver,
             *user_transfer_type == UserTransferType::TransferFrom,
             encoded_solution.swaps,
@@ -149,8 +137,6 @@ pub fn encode_tycho_router_call(
             given_token,
             checked_token,
             min_amount_out,
-            wrap,
-            unwrap,
             receiver,
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
@@ -168,8 +154,6 @@ pub fn encode_tycho_router_call(
             given_token,
             checked_token,
             min_amount_out,
-            wrap,
-            unwrap,
             receiver,
             *user_transfer_type == UserTransferType::TransferFrom,
             encoded_solution.swaps,
@@ -184,8 +168,6 @@ pub fn encode_tycho_router_call(
             given_token,
             checked_token,
             min_amount_out,
-            wrap,
-            unwrap,
             n_tokens,
             receiver,
             permit.ok_or(EncodingError::FatalError(
@@ -204,8 +186,6 @@ pub fn encode_tycho_router_call(
             given_token,
             checked_token,
             min_amount_out,
-            wrap,
-            unwrap,
             n_tokens,
             receiver,
             *user_transfer_type == UserTransferType::TransferFrom,
