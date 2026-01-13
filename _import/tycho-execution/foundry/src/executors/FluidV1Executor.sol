@@ -51,11 +51,12 @@ contract FluidV1Executor is IExecutor, ICallback, RestrictTransferFrom {
     {
         IFluidV1Dex dex;
         bool zero2one;
+        address tokenOut;
         address receiver;
         TransferType transferType;
         bool isNativeSell;
 
-        (dex, zero2one, receiver, transferType, isNativeSell) =
+        (dex, zero2one, tokenOut, receiver, transferType, isNativeSell) =
             _decodeData(data);
 
         if (!isNativeSell) {
@@ -107,6 +108,7 @@ contract FluidV1Executor is IExecutor, ICallback, RestrictTransferFrom {
         returns (
             IFluidV1Dex dex,
             bool zero2one,
+            address tokenOut,
             address receiver,
             TransferType transferType,
             bool isNativeSell
@@ -116,18 +118,20 @@ contract FluidV1Executor is IExecutor, ICallback, RestrictTransferFrom {
         // ---------------------
         // 0  | dex address
         // 20 | zero2one
-        // 21 | receiver
-        // 41 | transferType
-        // 42 | is_native
-        // 43 | EOF
-        if (data.length != 43) {
+        // 21 | tokenOut
+        // 41 | receiver
+        // 61 | transferType
+        // 62 | is_native
+        // 63 | EOF
+        if (data.length != 63) {
             revert FluidV1Executor__InvalidDataLength();
         }
         dex = IFluidV1Dex(address(bytes20(data[0:20])));
         zero2one = uint8(data[20]) > 0;
-        receiver = address(bytes20(data[21:41]));
-        transferType = TransferType(uint8(data[41]));
-        isNativeSell = uint8(data[42]) > 0;
+        tokenOut = address(bytes20(data[21:41]));
+        receiver = address(bytes20(data[41:61]));
+        transferType = TransferType(uint8(data[61]));
+        isNativeSell = uint8(data[62]) > 0;
     }
 
     function handleCallback(bytes calldata data)
