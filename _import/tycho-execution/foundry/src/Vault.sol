@@ -8,7 +8,10 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC6909/ERC6909.sol";
 
 error Vault__InsufficientBalance(
-    address user, address token, uint256 requested, uint256 available
+    address user,
+    address token,
+    uint256 requested,
+    uint256 available
 );
 error Vault__AmountZero();
 error Vault__UnexpectedNegativeDelta(uint256 negativeCount);
@@ -26,19 +29,21 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
     // Vault balances - using our own mapping to avoid expensive Transfer events from ERC6909
     mapping(address => mapping(uint256 => uint256)) private _vaultBalances;
 
+    // Transient storage slots for tracking deltas during swap sequences
+    // keccak256("TychoVault#NEGATIVE_DELTA_COUNT")
+    uint256 private constant _NEGATIVE_DELTA_COUNT_SLOT =
+        0x675e351c150ddfdbd3bc96ad8c0c5cc3e6f0d3c18723512ac3c7dfed159e94d5;
+
     // ============ ERC6909 Overrides and Extensions ============
 
     /**
      * @dev Override balanceOf to use our own mapping instead of ERC6909's
      *
      */
-    function balanceOf(address owner, uint256 id)
-        public
-        view
-        virtual
-        override
-        returns (uint256)
-    {
+    function balanceOf(
+        address owner,
+        uint256 id
+    ) public view virtual override returns (uint256) {
         return _vaultBalances[owner][id];
     }
 
@@ -54,7 +59,12 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
         if (from != address(0)) {
             uint256 fromBalance = _vaultBalances[from][id];
             if (fromBalance < amount) {
-                revert ERC6909InsufficientBalance(from, fromBalance, amount, id);
+                revert ERC6909InsufficientBalance(
+                    from,
+                    fromBalance,
+                    amount,
+                    id
+                );
             }
             unchecked {
                 // Overflow not possible: amount <= fromBalance.
@@ -71,11 +81,12 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      * @dev Override _update to use our own mapping and emit Transfer events
      * This is called by all balance-changing operations (transfer, mint, etc.)
      */
-    function _update(address from, address to, uint256 id, uint256 amount)
-        internal
-        virtual
-        override
-    {
+    function _update(
+        address from,
+        address to,
+        uint256 id,
+        uint256 amount
+    ) internal virtual override {
         _updateWithoutEvent(from, to, id, amount);
         emit Transfer(msg.sender, from, to, id, amount);
     }
@@ -86,9 +97,11 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      */
     // TODO: remove this once used
     // slither-disable-next-line dead-code
-    function _mintWithoutEvent(address to, uint256 id, uint256 amount)
-        internal
-    {
+    function _mintWithoutEvent(
+        address to,
+        uint256 id,
+        uint256 amount
+    ) internal {
         if (to == address(0)) {
             revert ERC6909InvalidReceiver(address(0));
         }
@@ -101,9 +114,11 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      */
     // TODO: remove this once used
     // slither-disable-next-line dead-code
-    function _burnWithoutEvent(address from, uint256 id, uint256 amount)
-        internal
-    {
+    function _burnWithoutEvent(
+        address from,
+        uint256 id,
+        uint256 amount
+    ) internal {
         if (from == address(0)) {
             revert ERC6909InvalidSender(address(0));
         }
@@ -117,11 +132,10 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      * @param token The token address to deposit (use address(0) for native ETH)
      * @param amount The amount to deposit
      */
-    function deposit(address token, uint256 amount)
-        external
-        payable
-        nonReentrant
-    {
+    function deposit(
+        address token,
+        uint256 amount
+    ) external payable nonReentrant {
         if (amount == 0) {
             revert Vault__AmountZero();
         }
@@ -153,7 +167,10 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
         uint256 balance = balanceOf(msg.sender, id);
         if (balance < amount) {
             revert Vault__InsufficientBalance(
-                msg.sender, token, amount, balance
+                msg.sender,
+                token,
+                amount,
+                balance
             );
         }
 
@@ -165,6 +182,128 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
         } else {
             IERC20(token).safeTransfer(msg.sender, amount);
         }
+    }
+
+    /**
+     * @dev Internal helper to get transient storage slot for a token delta
+     * @notice Only needs token since transient storage is scoped to current transaction's sender
+     */
+    function _getDeltaSlot(address token) private pure returns (uint256 slot) {
+        // Generate unique slot: keccak256(token, "TychoVault#DELTA")
+        slot = uint256(keccak256(abi.encodePacked(token, "TychoVault#DELTA")));
+        return slot;
+    }
+
+    /**
+     * @dev Get the current delta from transient storage
+     * @notice Retrieves delta for current transaction's sender
+     */
+    // Assembly required for transient storage operations (tload)
+    // slither-disable-next-line assembly
+    function _getDelta(address token) internal view returns (int256 delta) {
+        uint256 slot = _getDeltaSlot(token);
+        assembly {
+            delta := tload(slot)
+        }
+    }
+
+    /**
+     * @dev Set the delta in transient storage
+     * @notice Sets delta for current transaction's sender
+     */
+    // Assembly required for transient storage operations (tstore)
+    // slither-disable-next-line assembly
+    function _setDelta(address token, int256 delta) internal {
+        uint256 slot = _getDeltaSlot(token);
+        assembly {
+            tstore(slot, delta)
+        }
+    }
+
+    /**
+     * @dev Get negative delta count from transient storage
+     */
+    // Assembly required for transient storage operations (tload)
+    // slither-disable-next-line assembly
+    function _getNegativeDeltaCount() internal view returns (uint256 count) {
+        assembly {
+            count := tload(_NEGATIVE_DELTA_COUNT_SLOT)
+        }
+    }
+
+    /**
+     * @dev Set negative delta count in transient storage
+     */
+    // Assembly required for transient storage operations (tstore)
+    // slither-disable-next-line assembly
+    function _setNegativeDeltaCount(uint256 count) internal {
+        assembly {
+            tstore(_NEGATIVE_DELTA_COUNT_SLOT, count)
+        }
+    }
+
+    /**
+     * @dev Update delta accounting (transient storage)
+     * @notice This updates the transient delta for the current sender, not the persistent vault balance
+     * @param token The token to update
+     * @param deltaChange The change to apply (positive to credit, negative to debit)
+     */
+    function _updateDeltaAccounting(
+        address token,
+        int256 deltaChange
+    ) internal virtual {
+        if (deltaChange == 0) return;
+
+        int256 oldDelta = _getDelta(token);
+        int256 newDelta = oldDelta + deltaChange;
+
+        // Update negative delta counter based on transitions
+        if (oldDelta < 0 && newDelta >= 0) {
+            // Was negative, now non-negative: decrement counter
+            _setNegativeDeltaCount(_getNegativeDeltaCount() - 1);
+        } else if (oldDelta >= 0 && newDelta < 0) {
+            // Was non-negative, now negative: increment counter
+            _setNegativeDeltaCount(_getNegativeDeltaCount() + 1);
+        }
+
+        _setDelta(token, newDelta);
+    }
+
+    /**
+     * @dev Internal helper to debit user's actual vault balance (persistent storage)
+     * @notice This debits the persistent vault balance, not the transient delta
+     */
+    function _debitVault(
+        address user,
+        address token,
+        uint256 amount
+    ) internal virtual {
+        if (amount == 0) return;
+
+        uint256 id = uint256(uint160(token));
+        uint256 balance = balanceOf(user, id);
+
+        if (balance < amount) {
+            revert TychoVault__InsufficientBalance(
+                user,
+                token,
+                amount,
+                balance
+            );
+        }
+        _burn(user, id, amount);
+    }
+
+    function _creditVault(
+        address user,
+        address token,
+        uint256 amount
+    ) internal virtual {
+        if (amount == 0) return;
+
+        uint256 id = uint256(uint160(token));
+
+        _mint(user, id, amount);
     }
 
     // ============ Utils methods ============
