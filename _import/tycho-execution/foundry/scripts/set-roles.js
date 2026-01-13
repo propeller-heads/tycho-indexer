@@ -27,8 +27,7 @@ async function main() {
     const roles = {
         EXECUTOR_SETTER_ROLE: "0x6a1dd52dcad5bd732e45b6af4e7344fa284e2d7d4b23b5b09cb55d36b0685c87",
         PAUSER_ROLE: "0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a",
-        UNPAUSER_ROLE: "0x427da25fe773164f88948d3e215c94b6554e2ed5e5f203a821c9f2f6131cf75a",
-        FUND_RESCUER_ROLE: "0x912e45d663a6f4cc1d0491d8f046e06c616f40352565ea1cdb86a0e1aaefa41b"
+        UNPAUSER_ROLE: "0x427da25fe773164f88948d3e215c94b6554e2ed5e5f203a821c9f2f6131cf75a"
     };
 
     // Iterate through roles and grant them to the corresponding addresses

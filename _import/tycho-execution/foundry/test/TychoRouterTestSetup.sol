@@ -108,7 +108,6 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     function deployRouter() public returns (TychoRouterExposed) {
         tychoRouter = new TychoRouterExposed(PERMIT2_ADDRESS);
         tychoRouterAddr = address(tychoRouter);
-        tychoRouter.grantRole(keccak256("FUND_RESCUER_ROLE"), FUND_RESCUER);
         tychoRouter.grantRole(keccak256("PAUSER_ROLE"), PAUSER);
         tychoRouter.grantRole(keccak256("UNPAUSER_ROLE"), UNPAUSER);
         tychoRouter.grantRole(
