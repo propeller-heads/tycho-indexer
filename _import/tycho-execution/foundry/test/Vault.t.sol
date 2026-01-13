@@ -104,4 +104,141 @@ contract VaultTest is Constants, TestUtils {
             amountToWithdraw
         );
     }
+
+    function testUpdateDeltaZero() public {
+        (int256 beforeChange, int256 afterChange, uint256 negativeCount) =
+            vault.applyDelta(address(0), 100, 0);
+        assertEq(beforeChange, afterChange);
+        assertEq(negativeCount, 0);
+    }
+
+    function testUpdateDeltaZeroInNegative() public {
+        (int256 beforeChange, int256 afterChange, uint256 negativeCount) =
+            vault.applyDelta(address(0), -100, 0);
+        assertEq(beforeChange, afterChange);
+        assertEq(negativeCount, 1);
+    }
+
+    function testUpdateDeltaIncreaseInPositive() public {
+        (int256 beforeChange, int256 afterChange, uint256 negativeCount) =
+            vault.applyDelta(address(0), 100, 200);
+        assertEq(beforeChange, 100);
+        assertEq(afterChange, 300);
+        assertEq(negativeCount, 0);
+    }
+
+    function testUpdateDeltaIncreaseInNegative() public {
+        (int256 beforeChange, int256 afterChange, uint256 negativeCount) =
+            vault.applyDelta(address(0), -100, 15);
+        assertEq(beforeChange, -100);
+        assertEq(afterChange, -85);
+        assertEq(negativeCount, 1);
+    }
+
+    function testUpdateDeltaIncreaseToPositive() public {
+        (int256 beforeChange, int256 afterChange, uint256 negativeCount) =
+            vault.applyDelta(address(0), -100, 200);
+        assertEq(beforeChange, -100);
+        assertEq(afterChange, 100);
+        assertEq(negativeCount, 0);
+    }
+
+    function testUpdateDeltaDecreaseInPositive() public {
+        (int256 beforeChange, int256 afterChange, uint256 negativeCount) =
+            vault.applyDelta(address(0), 300, -100);
+        assertEq(beforeChange, 300);
+        assertEq(afterChange, 200);
+        assertEq(negativeCount, 0);
+    }
+
+    function testUpdateDeltaDecreaseToNegative() public {
+        (int256 beforeChange, int256 afterChange, uint256 negativeCount) =
+            vault.applyDelta(address(0), 50, -120);
+        assertEq(beforeChange, 50);
+        assertEq(afterChange, -70);
+        assertEq(negativeCount, 1);
+    }
+
+    function testUpdateDeltaDecreaseInNegative() public {
+        (int256 beforeChange, int256 afterChange, uint256 negativeCount) =
+            vault.applyDelta(address(0), -50, -120);
+        assertEq(beforeChange, -50);
+        assertEq(afterChange, -170);
+        assertEq(negativeCount, 1);
+    }
+
+    function testCreditVault() public {
+        address user = makeAddr("brand-new-user");
+        uint256 amount = 1_000_000_000;
+
+        uint256 id = uint256(uint160(USDC_ADDR));
+
+        uint256 balanceBefore = vault.balanceOf(user, id);
+        vault.creditVaultForTest(user, USDC_ADDR, amount);
+
+        uint256 balance = vault.balanceOf(user, id);
+
+        assertEq(balance, amount);
+        assertEq(balance - balanceBefore, amount);
+    }
+
+    function testCreditVaultNonEmpty() public {
+        address user = makeAddr("brand-new-user");
+        uint256 amount = 1_000_000_000;
+
+        uint256 id = uint256(uint160(USDC_ADDR));
+
+        vault.creditVaultForTest(user, USDC_ADDR, amount);
+
+        uint256 balanceBefore = vault.balanceOf(user, id);
+        vault.creditVaultForTest(user, USDC_ADDR, amount);
+
+        uint256 balance = vault.balanceOf(user, id);
+
+        assertEq(balance, 2_000_000_000);
+        assertEq(balance - balanceBefore, amount);
+    }
+
+    function testDebit() public {
+        address user = makeAddr("brand-new-user");
+        uint256 amount = 1_000_000_000;
+        uint256 amount_to_debit = 2_000_000;
+
+        uint256 id = uint256(uint160(USDC_ADDR));
+
+        vault.creditVaultForTest(user, USDC_ADDR, amount);
+
+        uint256 balanceBefore = vault.balanceOf(user, id);
+        vault.debitVaultForTest(user, USDC_ADDR, amount_to_debit);
+
+        uint256 balance = vault.balanceOf(user, id);
+
+        assertEq(balance, 998_000_000);
+        assertEq(balanceBefore - balance, amount_to_debit);
+    }
+
+    function testDebitTooHigh() public {
+        address user = makeAddr("brand-new-user");
+        uint256 amount = 900_000_000;
+        uint256 amount_to_debit = 1_000_000_000;
+
+        uint256 id = uint256(uint160(USDC_ADDR));
+
+        vault.creditVaultForTest(user, USDC_ADDR, amount);
+
+        uint256 balanceBefore = vault.balanceOf(user, id);
+        // vault.debitVaultForTest(user, USDC_ADDR, amount_to_debit);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TychoVault__InsufficientBalance.selector,
+                user,
+                USDC_ADDR,
+                amount_to_debit,
+                balanceBefore
+            )
+        );
+
+        vault.debitVaultForTest(user, USDC_ADDR, amount_to_debit);
+    }
 }
