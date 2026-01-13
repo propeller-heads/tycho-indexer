@@ -47,23 +47,26 @@ contract UniswapV2Executor is IExecutor, RestrictTransferFrom {
         payable
         returns (uint256 calculatedAmount)
     {
-        IERC20 tokenIn;
-        address tokenOut;
         address target;
         address receiver;
         bool zeroForOne;
         TransferType transferType;
 
-        (tokenIn, target, tokenOut, receiver, zeroForOne, transferType) =
-            _decodeData(data);
+        (target, receiver, zeroForOne, transferType) = _decodeData(data);
 
-        _verifyPairAddress(target);
+        // Get token0 and token1 once to avoid redundant external calls
+        IUniswapV2Pair pool = IUniswapV2Pair(target);
+        address token0 = pool.token0();
+        address token1 = pool.token1();
+
+        _verifyPairAddress(target, token0, token1);
 
         calculatedAmount = _getAmountOut(target, givenAmount, zeroForOne);
 
-        _transfer(target, transferType, address(tokenIn), givenAmount);
+        // Infer tokenIn from zeroForOne
+        address tokenIn = zeroForOne ? token0 : token1;
+        _transfer(target, transferType, tokenIn, givenAmount);
 
-        IUniswapV2Pair pool = IUniswapV2Pair(target);
         if (zeroForOne) {
             pool.swap(0, calculatedAmount, receiver, "");
         } else {
@@ -75,23 +78,19 @@ contract UniswapV2Executor is IExecutor, RestrictTransferFrom {
         internal
         pure
         returns (
-            IERC20 inToken,
             address target,
-            address tokenOut,
             address receiver,
             bool zeroForOne,
             TransferType transferType
         )
     {
-        if (data.length != 82) {
+        if (data.length != 42) {
             revert UniswapV2Executor__InvalidDataLength();
         }
-        inToken = IERC20(address(bytes20(data[0:20])));
-        target = address(bytes20(data[20:40]));
-        tokenOut = address(bytes20(data[40:60]));
-        receiver = address(bytes20(data[60:80]));
-        zeroForOne = data[80] != 0;
-        transferType = TransferType(uint8(data[81]));
+        target = address(bytes20(data[0:20]));
+        receiver = address(bytes20(data[20:40]));
+        zeroForOne = data[40] != 0;
+        transferType = TransferType(uint8(data[41]));
     }
 
     function _getAmountOut(address target, uint256 amountIn, bool zeroForOne)
@@ -117,9 +116,10 @@ contract UniswapV2Executor is IExecutor, RestrictTransferFrom {
         amount = numerator / denominator;
     }
 
-    function _verifyPairAddress(address target) internal view {
-        address token0 = IUniswapV2Pair(target).token0();
-        address token1 = IUniswapV2Pair(target).token1();
+    function _verifyPairAddress(address target, address token0, address token1)
+        internal
+        view
+    {
         bytes32 salt = keccak256(abi.encodePacked(token0, token1));
         address pair = address(
             uint160(
