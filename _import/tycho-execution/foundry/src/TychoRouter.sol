@@ -106,8 +106,8 @@ contract TychoRouter is
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
      *
      * @param amountIn The input token amount to be swapped.
-     * @param tokenIn The address of the input token.
-     * @param tokenOut The address of the output token.
+     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
+     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
@@ -151,8 +151,8 @@ contract TychoRouter is
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
      *
      * @param amountIn The input token amount to be swapped.
-     * @param tokenIn The address of the input token.
-     * @param tokenOut The address of the output token.
+     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
+     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
@@ -201,8 +201,8 @@ contract TychoRouter is
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
      *
      * @param amountIn The input token amount to be swapped.
-     * @param tokenIn The address of the input token.
-     * @param tokenOut The address of the output token.
+     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
+     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
      * @param isTransferFromAllowed If false, the contract will assume that the input token is already transferred to the contract and don't allow any transferFroms
@@ -242,8 +242,8 @@ contract TychoRouter is
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
      *
      * @param amountIn The input token amount to be swapped.
-     * @param tokenIn The address of the input token.
-     * @param tokenOut The address of the output token.
+     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
+     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
      * @param permitSingle A Permit2 structure containing token approval details for the input token.
@@ -289,8 +289,8 @@ contract TychoRouter is
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
      *
      * @param amountIn The input token amount to be swapped.
-     * @param tokenIn The address of the input token.
-     * @param tokenOut The address of the output token.
+     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
+     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
      * @param isTransferFromAllowed If false, the contract will assume that the input token is already transferred to the contract and don't allow any transferFroms
@@ -330,8 +330,8 @@ contract TychoRouter is
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
      *
      * @param amountIn The input token amount to be swapped.
-     * @param tokenIn The address of the input token.
-     * @param tokenOut The address of the output token.
+     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
+     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
      * @param permitSingle A Permit2 structure containing token approval details for the input token.
