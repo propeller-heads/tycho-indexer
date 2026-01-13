@@ -7,15 +7,13 @@ import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC6909/ERC6909.sol";
 
-error TychoVault__InsufficientBalance(
+error Vault__InsufficientBalance(
     address user, address token, uint256 requested, uint256 available
 );
-error TychoVault__AmountZero();
-error TychoVault__UnexpectedNegativeDelta(uint256 negativeCount);
-error TychoVault__InvalidInputDelta(
-    address token, int256 expected, int256 actual
-);
-error TychoVault__UnexpectedInputDelta(int256 inputDelta);
+error Vault__AmountZero();
+error Vault__UnexpectedNegativeDelta(uint256 negativeCount);
+error Vault__InvalidInputDelta(address token, int256 expected, int256 actual);
+error Vault__UnexpectedInputDelta(int256 inputDelta);
 
 /**
  * @title Vault - ERC6909-compliant multi-token vault
@@ -28,7 +26,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
     // Vault balances - using our own mapping to avoid expensive Transfer events from ERC6909
     mapping(address => mapping(uint256 => uint256)) private _vaultBalances;
 
-    // ============ ERC6909 Overrides ============
+    // ============ ERC6909 Overrides and Extensions ============
 
     /**
      * @dev Override balanceOf to use our own mapping instead of ERC6909's
@@ -45,14 +43,14 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
     }
 
     /**
-     * @dev Override _update to use our own mapping and avoid emitting Transfer events
-     * This is called by all balance-changing operations (transfer, approve, etc.)
+     * @dev Rewrite _update to use our own mapping and avoid emitting Transfer events
      */
-    function _update(address from, address to, uint256 id, uint256 amount)
-        internal
-        virtual
-        override
-    {
+    function _updateWithoutEvent(
+        address from,
+        address to,
+        uint256 id,
+        uint256 amount
+    ) internal virtual {
         if (from != address(0)) {
             uint256 fromBalance = _vaultBalances[from][id];
             if (fromBalance < amount) {
@@ -69,6 +67,49 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
         // Note: We intentionally do NOT emit Transfer events to save gas
     }
 
+    /**
+     * @dev Override _update to use our own mapping and avoid emitting Transfer events
+     * This is called by all balance-changing operations (transfer, mint, etc.)
+     */
+    function _update(address from, address to, uint256 id, uint256 amount)
+        internal
+        virtual
+        override
+    {
+        _updateWithoutEvent(from, to, id, amount);
+        emit Transfer(msg.sender, from, to, id, amount);
+    }
+
+    /**
+     * @dev Create new _mint that does not emit a Transfer event. This should be used by inner methods of the
+     * TychoRouter to save gas during swapping.
+     */
+    // TODO: remove this once used
+    // slither-disable-next-line dead-code
+    function _mintWithoutEvent(address to, uint256 id, uint256 amount)
+        internal
+    {
+        if (to == address(0)) {
+            revert ERC6909InvalidReceiver(address(0));
+        }
+        _updateWithoutEvent(address(0), to, id, amount);
+    }
+
+    /**
+     * @dev Create new _burn that does not emit a Transfer event. This should be used by inner methods of the
+     * TychoRouter to save gas during swapping.
+     */
+    // TODO: remove this once used
+    // slither-disable-next-line dead-code
+    function _burnWithoutEvent(address from, uint256 id, uint256 amount)
+        internal
+    {
+        if (from == address(0)) {
+            revert ERC6909InvalidSender(address(0));
+        }
+        _updateWithoutEvent(from, address(0), id, amount);
+    }
+
     // ============ ERC6909 Vault Functions ============
 
     /**
@@ -82,7 +123,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
         nonReentrant
     {
         if (amount == 0) {
-            revert TychoVault__AmountZero();
+            revert Vault__AmountZero();
         }
 
         uint256 id = _toId(token);
@@ -105,13 +146,13 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      */
     function withdraw(address token, uint256 amount) external nonReentrant {
         if (amount == 0) {
-            revert TychoVault__AmountZero();
+            revert Vault__AmountZero();
         }
 
         uint256 id = _toId(token);
         uint256 balance = balanceOf(msg.sender, id);
         if (balance < amount) {
-            revert TychoVault__InsufficientBalance(
+            revert Vault__InsufficientBalance(
                 msg.sender, token, amount, balance
             );
         }
