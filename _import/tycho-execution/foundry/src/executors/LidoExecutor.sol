@@ -67,8 +67,11 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
         (receiver, transferType, pool, direction, approvalNeeded) =
             _decodeData(data);
 
+        address tokenOut;
+
         if (pool == LidoPoolType.stETH && direction == LidoPoolDirection.Stake)
         {
+            tokenOut = stETHAddress;
             // stETH staking: ETH -> stETH
             // stETH is a rebasing token where balances are calculated from shares
             // Measure actual balance changes to account for rounding in share conversions
@@ -96,6 +99,7 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
         } else if (
             pool == LidoPoolType.wstETH && direction == LidoPoolDirection.Wrap
         ) {
+            tokenOut = wstETH;
             // wstETH wrapping: stETH -> wstETH
             _transfer(address(this), transferType, stETHAddress, givenAmount);
 
@@ -110,6 +114,7 @@ contract LidoExecutor is IExecutor, RestrictTransferFrom {
         } else if (
             pool == LidoPoolType.wstETH && direction == LidoPoolDirection.Unwrap
         ) {
+            tokenOut = stETHAddress;
             // wstETH unwrapping: wstETH -> stETH
             _transfer(address(this), transferType, wstETH, givenAmount);
             calculatedAmount = LidoWrappedPool(wstETH).unwrap(givenAmount);
