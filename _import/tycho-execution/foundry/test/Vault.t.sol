@@ -5,7 +5,18 @@ import "@src/Vault.sol";
 import {TestUtils} from "./TestUtils.sol";
 import {Constants} from "./Constants.sol";
 
-contract TestVault is Vault {}
+    function creditVaultForTest(address user, address token, uint256 amount)
+        external
+    {
+        _creditVault(user, token, amount);
+    }
+
+    function debitVaultForTest(address user, address token, uint256 amount)
+        external
+    {
+        _debitVault(user, token, amount);
+    }
+}
 
 contract VaultTest is Constants, TestUtils {
     TestVault public vault;
