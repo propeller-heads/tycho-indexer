@@ -82,8 +82,6 @@ contract TychoRouter is
         0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a;
     bytes32 public constant UNPAUSER_ROLE =
         0x427da25fe773164f88948d3e215c94b6554e2ed5e5f203a821c9f2f6131cf75a;
-    bytes32 public constant FUND_RESCUER_ROLE =
-        0x912e45d663a6f4cc1d0491d8f046e06c616f40352565ea1cdb86a0e1aaefa41b;
 
     event Withdrawal(
         address indexed token, uint256 amount, address indexed receiver
@@ -643,42 +641,6 @@ contract TychoRouter is
         onlyRole(EXECUTOR_SETTER_ROLE)
     {
         _removeExecutor(target);
-    }
-
-    /**
-     * @dev Allows withdrawing any ERC20 funds if funds get stuck in case of a bug.
-     */
-    function withdraw(IERC20[] memory tokens, address receiver)
-        external
-        onlyRole(FUND_RESCUER_ROLE)
-    {
-        if (receiver == address(0)) revert TychoRouter__AddressZero();
-
-        for (uint256 i = 0; i < tokens.length; i++) {
-            // slither-disable-next-line calls-loop
-            uint256 tokenBalance = tokens[i].balanceOf(address(this));
-            if (tokenBalance > 0) {
-                emit Withdrawal(address(tokens[i]), tokenBalance, receiver);
-                tokens[i].safeTransfer(receiver, tokenBalance);
-            }
-        }
-    }
-
-    /**
-     * @dev Allows withdrawing any NATIVE funds if funds get stuck in case of a bug.
-     * The contract should never hold any NATIVE tokens for security reasons.
-     */
-    function withdrawNative(address receiver)
-        external
-        onlyRole(FUND_RESCUER_ROLE)
-    {
-        if (receiver == address(0)) revert TychoRouter__AddressZero();
-
-        uint256 amount = address(this).balance;
-        if (amount > 0) {
-            emit Withdrawal(address(0), amount, receiver);
-            Address.sendValue(payable(receiver), amount);
-        }
     }
 
     /**
