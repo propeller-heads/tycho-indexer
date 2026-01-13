@@ -20,12 +20,13 @@ use alloy::{
     },
     transports::{http::reqwest, RpcError, TransportErrorKind, TransportResult},
 };
+use async_trait::async_trait;
 use backoff::backoff::Backoff;
 use futures::future::join_all;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tracing::{debug, info, instrument, trace, Span};
-use tycho_common::Bytes;
+use tycho_common::{traits::GasPriceGetter, Bytes};
 
 use crate::{RPCError, RequestError};
 
@@ -121,6 +122,24 @@ impl EthereumRpcClient {
                 "Failed to get block number: Unexpected block tag returned".to_string(),
             )))
         }
+    }
+
+    /// Gets the gas price from the node using eth_gasPrice RPC method.
+    ///
+    /// Returns the gas price in wei as a u128.
+    #[instrument(level = "debug", skip(self))]
+    pub async fn get_gas_price(&self) -> Result<u128, RPCError> {
+        let gas_price: U256 = self
+            .retry_policy
+            .retry_request(|| async {
+                self.inner
+                    .request_noparams("eth_gasPrice")
+                    .await
+            })
+            .await
+            .map_err(|e| RPCError::from_alloy("Failed to get gas price", e))?;
+
+        Ok(gas_price.to::<u128>())
     }
 
     #[instrument(level = "debug", skip(self))]
@@ -883,6 +902,16 @@ impl EthereumRpcClient {
         }
 
         Ok(result)
+    }
+}
+
+// Implement the GasPriceGetter trait for EthereumRpcClient
+#[async_trait]
+impl GasPriceGetter for EthereumRpcClient {
+    type Error = RPCError;
+
+    async fn get_latest_gas_price(&self) -> Result<u128, Self::Error> {
+        self.get_gas_price().await
     }
 }
 
@@ -1765,5 +1794,46 @@ mod tests {
         }
 
         m.assert();
+    }
+
+    #[tokio::test]
+    async fn test_get_gas_price_mocked() {
+        let mut server = Server::new_async().await;
+
+        let m = server
+            .mock("POST", "/")
+            .with_status(200)
+            .with_body("{\"jsonrpc\":\"2.0\",\"id\":0,\"result\":\"0x1234\"}")
+            .expect(1)
+            .create_async()
+            .await;
+
+        let client =
+            EthereumRpcClient::new(&server.url()).expect("Failed to create EthereumRpcClient");
+
+        let gas_price = client
+            .get_gas_price()
+            .await
+            .expect("Failed to get gas price");
+        assert_eq!(gas_price, 0x1234);
+
+        m.assert();
+    }
+
+    #[tokio::test]
+    #[ignore = "require RPC connection"]
+    async fn test_get_gas_price() -> Result<(), RPCError> {
+        use tycho_common::traits::GasPriceGetter;
+
+        let fixture = TestFixture::new();
+        let client = fixture.create_rpc_client(false);
+
+        let gas_price = client.get_gas_price().await?;
+        assert!(gas_price > 0, "Gas price should be positive");
+
+        let gas_price_via_trait = client.get_latest_gas_price().await?;
+        assert!(gas_price_via_trait > 0, "Gas price from trait should be positive");
+
+        Ok(())
     }
 }
