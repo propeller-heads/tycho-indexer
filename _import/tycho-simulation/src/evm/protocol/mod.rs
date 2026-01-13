@@ -1,6 +1,6 @@
 pub mod aerodrome_slipstreams;
-pub mod cowamm;
 mod clmm;
+pub mod cowamm;
 mod cpmm;
 pub mod ekubo;
 pub mod erc4626;

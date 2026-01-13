@@ -68,7 +68,6 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for CowAMMState {
             .ok_or_else(|| InvalidSnapshotError::MissingAttribute("lp_token".to_string()))?
             .clone();
 
-       
         let lp_token_supply = U256::from_be_slice(
             snapshot
                 .state
@@ -79,7 +78,6 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for CowAMMState {
                 })?
                 .as_ref(),
         );
-
 
         let fee = 0u64;
 
