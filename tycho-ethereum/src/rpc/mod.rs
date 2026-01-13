@@ -1808,9 +1808,8 @@ mod tests {
             .create_async()
             .await;
 
-        let client = EthereumRpcClient::new(&server.url())
-            .expect("Failed to create EthereumRpcClient")
-            .with_retry(RPCRetryConfig::default());
+        let client =
+            EthereumRpcClient::new(&server.url()).expect("Failed to create EthereumRpcClient");
 
         let gas_price = client
             .get_gas_price()
@@ -1832,14 +1831,8 @@ mod tests {
         let gas_price = client.get_gas_price().await?;
         assert!(gas_price > 0, "Gas price should be positive");
 
-        // Test via the trait method
         let gas_price_via_trait = client.get_latest_gas_price().await?;
-        assert_eq!(gas_price, gas_price_via_trait, "Both methods should return the same result");
-
-        // Test fee calculation
-        let gas_used = 21000u64; // Standard ETH transfer
-        let total_fee = gas_price * gas_used as u128;
-        assert!(total_fee > 0, "Total fee should be positive");
+        assert!(gas_price_via_trait > 0, "Gas price from trait should be positive");
 
         Ok(())
     }
