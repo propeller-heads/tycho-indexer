@@ -1,3 +1,10 @@
+## [0.3.0](https://github.com/propeller-heads/tycho-contracts/compare/0.2.0...0.3.0) (2026-01-13)
+
+
+### Features
+
+* Remove fund rescuer role ([3ec7477](https://github.com/propeller-heads/tycho-contracts/commit/3ec7477f3f58af64a17bde907950280dd82a74e3))
+
 ## [0.2.0](https://github.com/propeller-heads/tycho-contracts/compare/0.1.0...0.2.0) (2026-01-13)
 
 
