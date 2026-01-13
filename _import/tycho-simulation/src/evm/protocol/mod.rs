@@ -1,8 +1,12 @@
 pub mod aerodrome_slipstreams;
+mod clmm;
+mod cpmm;
 pub mod ekubo;
 pub mod ekubo_v3;
+pub mod erc4626;
 pub mod filters;
 pub mod fluid;
+pub mod lido;
 pub mod pancakeswap_v2;
 pub mod rocketpool;
 pub mod safe_math;
@@ -11,6 +15,5 @@ pub mod uniswap_v2;
 pub mod uniswap_v3;
 pub mod uniswap_v4;
 pub mod utils;
+pub mod velodrome_slipstreams;
 pub mod vm;
-
-mod cpmm;

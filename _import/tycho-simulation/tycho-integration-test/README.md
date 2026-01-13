@@ -32,6 +32,7 @@ This test runs continuously in the cluster but it can also be run locally for de
 | Argument                     | Default    | Description                                                          |
 |------------------------------|------------|----------------------------------------------------------------------|
 | `--chain`                    | `ethereum` | Blockchain to test against                                           |
+| `--protocols`                | -          | Comma-separated list of protocols to test. Defaults to all protocols |
 | `--max-simulations`          | `10`       | Maximum simulations (of updated states) per update                   |
 | `--max-simulations-stale`    | `10`       | Maximum simulations (of stale states) per update per protocol        |
 | `--parallel-simulations`     | `5`        | Number of concurrent simulations                                     |
@@ -58,6 +59,7 @@ cargo run --package tycho-integration-test
 # Run with custom parameters
 cargo run --package tycho-integration-test -- \
   --chain ethereum \
+  --protocols uniswap_v2 \
   --max-simulations 20 \
   --parallel-simulations 10
 

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use alloy::{
-    primitives::{Address, U256},
+    primitives::{map::AddressHashMap, Address, U256},
     rpc::types::{state::AccountOverride, Block},
     sol_types::SolValue,
 };
@@ -11,9 +11,7 @@ use tokio_retry2::{
     Retry, RetryError,
 };
 use tycho_execution::encoding::evm::utils::bytes_to_address;
-use tycho_simulation::{
-    evm::protocol::u256_num::u256_to_biguint, foundry_evm::revm::primitives::map::AddressHashMap,
-};
+use tycho_simulation::evm::protocol::u256_num::u256_to_biguint;
 
 use crate::{
     execution::{
@@ -119,14 +117,14 @@ pub async fn simulate_swap_transaction(
         // Add protocol-specific overwrites for Angstrom hooks
         if let Some(first_swap) = info.solution.swaps.first() {
             if let Some(hook_identifier) = first_swap
-                .component
+                .component()
                 .static_attributes
                 .get("hook_identifier")
             {
                 if let Ok(hook_id_str) = std::str::from_utf8(hook_identifier) {
                     if hook_id_str == "angstrom_v1" {
                         let angstrom_address =
-                            Address::from_str("0x0000000AA8c2Fb9b232F78D2B286dC2aE53BfAD4")
+                            Address::from_str("0x0000000aa232009084Bd71A5797d089AA4Edfad4")
                                 .map_err(|e| {
                                     (miette!("Invalid Angstrom address: {e}"), None, None)
                                 })?;

@@ -1,8 +1,6 @@
-use std::{clone::Clone, collections::HashMap, default::Default, fmt::Debug};
+use std::{clone::Clone, collections::HashMap, default::Default, env, fmt::Debug};
 
 use alloy::primitives::{Address, Bytes, U256};
-use foundry_config::{Chain, Config};
-use foundry_evm::traces::{SparsedTraceArena, TraceKind};
 use revm::{
     context::{
         result::{EVMError, ExecutionResult, Output, ResultAndState},
@@ -76,6 +74,10 @@ where
     ///
     /// * `state` - Database reference to be used for simulation
     /// * `trace` - Whether to print the entire execution trace
+    ///
+    /// # Notes
+    /// If you set traces to true, consider setting the ETHERSCAN_API_KEY env variable
+    /// so the tracer can pull contract metadata from etherscan.
     pub fn new(state: D, trace: bool) -> Self {
         Self { state, trace }
     }
@@ -211,18 +213,19 @@ where
 
         let trace_res = TraceResult {
             success: matches!(exit_reason, return_ok!()),
-            traces: Some(vec![(
-                TraceKind::Execution,
-                SparsedTraceArena { arena: tracer.into_traces(), ignored: HashMap::default() },
-            )]),
+            traces: Some(vec![tracer.into_traces()]),
             gas_used,
         };
 
         tokio::task::block_in_place(|| -> Result<(), SimulationEngineError> {
             let future = async {
-                handle_traces(trace_res, &Config::default(), Some(Chain::default()), true)
-                    .await
-                    .map_err(|err| SimulationEngineError::TraceError(err.to_string()))
+                handle_traces(
+                    trace_res,
+                    env::var("ETHERSCAN_API_KEY").ok(),
+                    tycho_common::models::Chain::Ethereum,
+                )
+                .await
+                .map_err(|err| SimulationEngineError::TraceError(err.to_string()))
             };
             if let Ok(handle) = Handle::try_current() {
                 // If successful, use the existing runtime to block on the future

@@ -7,7 +7,7 @@ use tycho_common::{
     models::token::Token,
     simulation::{
         errors::{SimulationError, TransitionError},
-        protocol_sim::{Price, Trade},
+        protocol_sim::Price,
     },
     Bytes,
 };
@@ -17,6 +17,7 @@ use crate::{
     evm::protocol::{
         safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256, sqrt_u512},
         u256_num::{biguint_to_u256, u256_to_biguint},
+        utils::solidity_math::mul_div,
     },
     protocol::errors::InvalidSnapshotError,
 };
@@ -61,35 +62,44 @@ pub fn cpmm_spot_price(
 
 pub fn cpmm_get_amount_out(
     amount_in: U256,
-    zero2one: bool,
-    reserve0: U256,
-    reserve1: U256,
-    fee_bps: u32,
+    reserve_in: U256,
+    reserve_out: U256,
+    fee: ProtocolFee,
 ) -> Result<U256, SimulationError> {
     if amount_in == U256::from(0u64) {
         return Err(SimulationError::InvalidInput("Amount in cannot be zero".to_string(), None));
     }
-    let reserve_sell = if zero2one { reserve0 } else { reserve1 };
-    let reserve_buy = if zero2one { reserve1 } else { reserve0 };
 
-    if reserve_sell == U256::from(0u64) || reserve_buy == U256::from(0u64) {
+    if reserve_in == U256::from(0u64) || reserve_out == U256::from(0u64) {
         return Err(SimulationError::RecoverableError("No liquidity".to_string()));
     }
 
-    let fee_multiplier = U256::from(10000 - fee_bps);
-    let amount_in_with_fee = safe_mul_u256(amount_in, fee_multiplier)?;
-    let numerator = safe_mul_u256(amount_in_with_fee, reserve_buy)?;
-    let denominator =
-        safe_add_u256(safe_mul_u256(reserve_sell, U256::from(10000))?, amount_in_with_fee)?;
+    let amount_in_with_fee = safe_mul_u256(amount_in, fee.numerator)?;
+    let numerator = safe_mul_u256(amount_in_with_fee, reserve_out)?;
+    let denominator = safe_add_u256(safe_mul_u256(reserve_in, fee.precision)?, amount_in_with_fee)?;
 
     safe_div_u256(numerator, denominator)
 }
 
+/// Returns the soft limit for amount_in to achieve approximately 90% price impact.
+///
+/// This calculation assumes a fee-less constant product formula:
+/// - 90% price impact: `(reserve_out - y) / (reserve_in + x) = 0.1 × (reserve_out / reserve_in)`
+/// - Constant product: `(reserve_in + x) × (reserve_out - y) = reserve_in × reserve_out`
+///
+/// However, in practice, swaps apply fees to the input amount, with the fee portion then added to
+/// the pool's liquidity. So the constant formula becomes:
+/// - `(reserve_in + x × (1 - fee)) × (reserve_out - y) = reserve_in × reserve_out`
+///
+/// This asymmetry (full `x` added to reserves, but `y` based on fee-adjusted input) causes
+/// the actual price impact to be slightly less than 90%. For typical fees (0.25%-0.3%), the
+/// actual price impact is approximately 89.9% instead of exactly 90%.
 pub fn cpmm_get_limits(
     sell_token: Bytes,
     buy_token: Bytes,
     reserve0: U256,
     reserve1: U256,
+    fee_bps: u32,
 ) -> Result<(BigUint, BigUint), SimulationError> {
     if reserve0 == U256::from(0u64) || reserve1 == U256::from(0u64) {
         return Ok((BigUint::zero(), BigUint::zero()));
@@ -99,25 +109,18 @@ pub fn cpmm_get_limits(
     let (reserve_in, reserve_out) =
         if zero_for_one { (reserve0, reserve1) } else { (reserve1, reserve0) };
 
-    // Soft limit for amount in is the amount to get a 90% price impact.
-    // The two equations to resolve are:
-    // - 90% price impact: (reserve1 - y)/(reserve0 + x) = 0.1 × (reserve1/reserve0)
-    // - Maintain constant product: (reserve0 + x) × (reserve1 - y) = reserve0 * reserve1
-    //
-    // This resolves into x = (√10 - 1) × reserve0 = 2.16 × reserve0
-    let amount_in = safe_div_u256(safe_mul_u256(reserve_in, U256::from(216))?, U256::from(100))?;
+    // Soft limit for amount in is the amount to get approximately 90% price impact.
+    // Solving the fee-less equations yields: x = (√10 - 1) × reserve_in ≈ 2.162 × reserve_in
+    let amount_in = mul_div(reserve_in, U256::from(2162u128), U256::from(1e3))?;
 
-    // Calculate amount_out using the constant product formula
-    // The constant product formula requires:
-    // (reserve_in + amount_in) × (reserve_out - amount_out) = reserve_in * reserve_out
-    // Solving for amount_out:
-    // amount_out = reserve_out - (reserve_in * reserve_out) (reserve_in + amount_in)
-    // which simplifies to:
-    // amount_out = (reserve_out * amount_in) / (reserve_in + amount_in)
-    let amount_out = safe_div_u256(
-        safe_mul_u256(reserve_out, amount_in)?,
-        safe_add_u256(reserve_in, amount_in)?,
-    )?;
+    // Calculate amount_out using the actual swap formula that accounts for fees
+    // amount_in_with_fee = amount_in * (10000 - fee_bps) / 10000
+    // amount_out = (amount_in_with_fee * reserve_out) / (reserve_in + amount_in_with_fee)
+    let fee_multiplier = U256::from(10000 - fee_bps);
+    let amount_in_with_fee = safe_mul_u256(amount_in, fee_multiplier)?;
+
+    let amount_out =
+        mul_div(reserve_out, amount_in_with_fee, safe_add_u256(reserve_in, amount_in)?)?;
 
     Ok((u256_to_biguint(amount_in), u256_to_biguint(amount_out)))
 }
@@ -161,8 +164,6 @@ impl ProtocolFee {
 /// Calculates the exact amount of token_in required to move the pool's marginal price down to
 /// a target price.
 ///
-/// See [`ProtocolSim::swap_to_price`] for the trait documentation.
-///
 /// # Algorithm
 ///
 /// Derives how much to swap to reach a target price using the constant product formula.
@@ -173,14 +174,14 @@ impl ProtocolFee {
 /// ## Base equations
 /// 1. Constant product: `x * y = k` where x = reserve_in, y = reserve_out
 /// 2. Swap with 0.3% fee: Only 99.7% of input affects price
-/// 3. Marginal price after swap: `price = (x' * 1000) / (y' * 997)`
+/// 3. Marginal price after swap: `price = (x' * 10000) / (y' * 9970)`
 ///
 /// ## Derivation
 /// We want the pool to reach target price: `price = sell_price / buy_price`
 ///
 /// From marginal price formula:
 /// ```text,no_run
-/// x' / y' = (sell_price * 997) / (buy_price * 1000)  [call this target_price_w_fee]
+/// x' / y' = (sell_price * 9970) / (buy_price * 10000)  [call this target_price_w_fee]
 /// ```
 ///
 /// From constant product:
@@ -209,14 +210,23 @@ impl ProtocolFee {
 /// amount_in = x' - x = sqrt(k * target_price_w_fee) - reserve_in
 /// ```
 ///
-/// where `target_price_w_fee = (sell_price * 997) / (buy_price * 1000)`
+/// where `target_price_w_fee = (sell_price * 9970) / (buy_price * 10000)`
 /// Then swap to get amount_out.
+///
+/// # Returns
+/// * `Ok((amount_in, implied_amount_out))` - The implied amount out is computed analytically and
+///   will be smaller than actually swapping against the pool.
+/// * `Err(SimulationError)` - If an error occurs during calculation.
 pub fn cpmm_swap_to_price(
     reserve_in: U256,
     reserve_out: U256,
-    target_price: Price,
+    target_price: &Price,
     fee: ProtocolFee,
-) -> Result<Trade, SimulationError> {
+) -> Result<(BigUint, BigUint), SimulationError> {
+    if reserve_in == U256::ZERO || reserve_out == U256::ZERO {
+        return Err(SimulationError::FatalError("Reserves cannot be zero".to_string()));
+    }
+
     // Flip target pool price to swap price
     let swap_price_num = biguint_to_u256(&target_price.denominator);
     let swap_price_den = biguint_to_u256(&target_price.numerator);
@@ -226,17 +236,21 @@ pub fn cpmm_swap_to_price(
     // FEE_NUMERATOR)
     // Cross-multiply to avoid division: swap_price_num * reserve_out * FEE_NUMERATOR >=
     // swap_price_den * reserve_in * FEE_PRECISION
-    let target_price_cross_mult = swap_price_num
-        .checked_mul(reserve_out)
-        .and_then(|x| x.checked_mul(fee.numerator))
+    // Use U512 precision to match the calculation of new reserves
+    let target_price_cross_mult = U512::from(swap_price_num)
+        .checked_mul(U512::from(reserve_out))
+        .and_then(|x| x.checked_mul(U512::from(fee.numerator)))
         .ok_or_else(|| SimulationError::FatalError("Overflow in price check".to_string()))?;
-    let current_price_cross_mult = swap_price_den
-        .checked_mul(reserve_in)
-        .and_then(|x| x.checked_mul(fee.precision))
+    let current_price_cross_mult = U512::from(swap_price_den)
+        .checked_mul(U512::from(reserve_in))
+        .and_then(|x| x.checked_mul(U512::from(fee.precision)))
         .ok_or_else(|| SimulationError::FatalError("Overflow in price check".to_string()))?;
 
     if target_price_cross_mult < current_price_cross_mult {
-        return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
+        return Err(SimulationError::InvalidInput(
+            "Target price is unreachable (already below current spot price)".to_string(),
+            None,
+        ));
     }
 
     // Calculate new reserve_in: x' = sqrt(k * price_num * FEE_NUMERATOR / (price_den *
@@ -251,22 +265,15 @@ pub fn cpmm_swap_to_price(
     let x_prime = U256::from_limbs([limbs[0], limbs[1], limbs[2], limbs[3]]);
 
     if x_prime <= reserve_in {
-        return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
+        return Ok((BigUint::ZERO, BigUint::ZERO));
     }
+
     let amount_in = safe_sub_u256(x_prime, reserve_in)?;
-
     if amount_in == U256::ZERO {
-        return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
+        return Ok((BigUint::ZERO, BigUint::ZERO));
     }
 
-    let implied_amount_out = (amount_in * swap_price_den)
-        .checked_div(swap_price_num)
-        .ok_or_else(|| {
-            SimulationError::FatalError("Division by zero in implied_amount_out".to_string())
-        })?;
+    let implied_amount_out = mul_div(amount_in, swap_price_den, swap_price_num)?;
 
-    if implied_amount_out == U256::ZERO {
-        return Ok(Trade::new(BigUint::ZERO, BigUint::ZERO));
-    }
-    Ok(Trade::new(u256_to_biguint(amount_in), u256_to_biguint(implied_amount_out)))
+    Ok((u256_to_biguint(amount_in), u256_to_biguint(implied_amount_out)))
 }

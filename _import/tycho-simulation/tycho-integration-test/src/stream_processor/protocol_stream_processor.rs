@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use futures::{Stream, StreamExt};
 use miette::{miette, IntoDiagnostic, WrapErr};
@@ -17,12 +17,15 @@ use tycho_simulation::{
             aerodrome_slipstreams::state::AerodromeSlipstreamsState,
             ekubo::state::EkuboState,
             ekubo_v3::state::EkuboV3State,
-            filters::{balancer_v2_pool_filter, curve_pool_filter, fluid_v1_paused_pools_filter},
+            erc4626::state::ERC4626State,
+            filters::{balancer_v2_pool_filter, erc4626_filter, fluid_v1_paused_pools_filter},
             fluid::FluidV1,
             pancakeswap_v2::state::PancakeswapV2State,
+            rocketpool::state::RocketpoolState,
             uniswap_v2::state::UniswapV2State,
             uniswap_v3::state::UniswapV3State,
             uniswap_v4::state::UniswapV4State,
+            velodrome_slipstreams::state::VelodromeSlipstreamsState,
             vm::state::EVMPoolState,
         },
         stream::ProtocolStreamBuilder,
@@ -130,6 +133,7 @@ impl ProtocolStreamProcessor {
         protocol_stream
             .auth_key(Some(self.tycho_api_key.clone()))
             .skip_state_decode_failures(true)
+            .startup_timeout(Duration::from_secs(500))
             .set_tokens(all_tokens.clone())
             .await
             .build()
@@ -153,6 +157,8 @@ impl ProtocolStreamProcessor {
                 "uniswap_v4_hooks".to_string(),
                 "vm:maverick_v2".to_string(),
                 "fluid_v1".to_string(),
+                "rocketpool".to_string(),
+                "erc4626".to_string(),
             ],
             Chain::Base => vec![
                 "uniswap_v2".to_string(),
@@ -162,7 +168,14 @@ impl ProtocolStreamProcessor {
                 "aerodrome_slipstreams".to_string(),
             ],
             Chain::Unichain => {
-                vec!["uniswap_v2".to_string(), "uniswap_v3".to_string(), "uniswap_v4".to_string()]
+                vec![
+                    "uniswap_v2".to_string(),
+                    "uniswap_v3".to_string(),
+                    "uniswap_v4".to_string(),
+                    "uniswap_v4_hooks".to_string(),
+                    "velodrome_slipstreams".to_string(),
+                    "vm:curve".to_string(),
+                ]
             }
             _ => vec![],
         }
@@ -217,7 +230,7 @@ impl ProtocolStreamProcessor {
                 stream = stream.exchange::<EVMPoolState<PreCachedDB>>(
                     "vm:curve",
                     tvl_filter.clone(),
-                    Some(curve_pool_filter),
+                    None,
                 );
             }
             "uniswap_v4_hooks" => {
@@ -241,6 +254,23 @@ impl ProtocolStreamProcessor {
             "aerodrome_slipstreams" => {
                 stream = stream.exchange::<AerodromeSlipstreamsState>(
                     "aerodrome_slipstreams",
+                    tvl_filter.clone(),
+                    None,
+                );
+            }
+            "erc4626" => {
+                stream = stream.exchange::<ERC4626State>(
+                    "erc4626",
+                    tvl_filter.clone(),
+                    Some(erc4626_filter),
+                );
+            }
+            "rocketpool" => {
+                stream = stream.exchange::<RocketpoolState>("rocketpool", tvl_filter.clone(), None);
+            }
+            "velodrome_slipstreams" => {
+                stream = stream.exchange::<VelodromeSlipstreamsState>(
+                    "velodrome_slipstreams",
                     tvl_filter.clone(),
                     None,
                 );

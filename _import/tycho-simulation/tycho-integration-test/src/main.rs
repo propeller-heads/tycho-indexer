@@ -171,7 +171,10 @@ async fn main() -> miette::Result<()> {
 
     // Run main application with signal support
     let result = tokio::select! {
-        result = run(cli) => result,
+        result = tokio::spawn(run(cli)) => match result {
+          Ok(inner) => inner,
+          Err(e) => Err(miette!("run() panicked: {:?}", e)),
+        },
         _ = async {
             loop {
                 if shutdown_requested.load(std::sync::atomic::Ordering::SeqCst) {
@@ -216,7 +219,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
     )
     .await
     .map_err(|e| miette!("Failed to load tokens: {e:?}"))?;
-    info!(%cli.tycho_url, "Loaded tokens");
+    info!("Loaded {} tokens", all_tokens.len());
 
     // Run streams in background tasks
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
@@ -408,18 +411,22 @@ async fn process_update(
             (update.received_at.as_secs_f64() - block.header.timestamp as f64).abs();
         metrics::record_block_processing_duration(latency_seconds);
 
-        let block_delay = block
-            .header
-            .number
-            .abs_diff(update.update.block_number_or_timestamp);
-        metrics::record_protocol_update_block_delay(block_delay);
-        // Consume messages that are older than the current block, to give the stream a chance
-        // to catch up
-        if block_delay > 0 {
-            warn!(
-                "Update block ({}) is behind the current block ({}), skipping to catch up.",
-                update.update.block_number_or_timestamp, block.header.number
-            );
+        let rpc_block_number = block.header.number;
+        let update_block_number = update.update.block_number_or_timestamp;
+        let block_diff = rpc_block_number.abs_diff(update_block_number);
+
+        if block_diff > 0 {
+            if rpc_block_number > update_block_number {
+                warn!(
+                    "Update block ({update_block_number}) is behind the current block ({rpc_block_number}), skipping to catch up.",
+                );
+                metrics::record_protocol_update_block_delay(block_diff);
+            } else {
+                warn!(
+                    "Update block ({update_block_number}) is ahead of the current block ({rpc_block_number}), skipping this update.",
+                );
+                // perf: consider waiting for the block to be mined instead of skipping
+            }
             metrics::record_protocol_update_skipped();
             return Ok(());
         }
@@ -594,6 +601,8 @@ fn select_components_to_process(
         Vec::new();
 
     // Collect updated components
+    // As the component ordering is semi-random, it is safe to just take the first N components and
+    // have a good coverage
     for (id, state) in update
         .update
         .states
@@ -793,26 +802,21 @@ async fn process_state(
             token_in.symbol, token_out.symbol
         );
 
-        // Calculate amount_in as 0.1% of max_input
-        // For precision, multiply by 1000 then divide by 1000
-        let percentage = 0.001;
-        let percentage_biguint = BigUint::from((percentage * 1000.0) as u32);
-        let thousand = BigUint::from(1000u32);
-        let mut amount_in = (&max_input * &percentage_biguint) / &thousand;
+        // Calculate amount_in as percentage of max_input
+        const PERCENTAGE: f64 = 0.001; // 0.1%
+        const PRECISION: u64 = 1_000; // Supports up to 3 decimal places
+        let numerator = (PERCENTAGE * PRECISION as f64) as u64;
+        let mut amount_in = (&max_input * numerator) / PRECISION;
         if amount_in.is_zero() {
             debug!("Calculated amount_in is zero, skipping...");
             continue;
         }
-        if min_amount != BigUint::ZERO && amount_in < min_amount {
-            amount_in = min_amount.clone();
-        }
+        amount_in = amount_in.max(min_amount.clone());
 
         // Cap amount_in to avoid "amount exceeds 96 bits" error (it happens for uniswap v3 and v4
         // sometimes because the returned limits can be very high)
         let max_96_bit = BigUint::from(2u128.pow(96) - 1);
-        if amount_in > max_96_bit {
-            amount_in = max_96_bit - BigUint::from(1u32);
-        }
+        amount_in = amount_in.min(max_96_bit);
 
         // Get expected amount out using tycho-simulation and measure duration
         let start_time = std::time::Instant::now();
@@ -821,7 +825,7 @@ async fn process_state(
             .into_diagnostic()
             .wrap_err(format!(
                 "Error calculating amount out at {:.1}% with input of {amount_in} {}.",
-                percentage * 100.0,
+                PERCENTAGE * 100.0,
                 token_in.symbol,
             )) {
             Ok(res) => {
@@ -1013,7 +1017,7 @@ fn process_execution_result(
             };
             let error_category = categorize_error(revert_reason);
             error!(
-                event_type = "simulation_execution_failure",
+                event_type = "simulation_execution_revert",
                 error_message = %revert_reason,
                 error_name = %error_name,
                 error_category = %error_category,
@@ -1024,10 +1028,10 @@ fn process_execution_result(
                 overwrites = %overwrites_string,
                 "Failed to simulate swap: {error_msg}"
             );
-            debug!(event_type = "simulation_execution_failure",
+            debug!(event_type = "simulation_execution_revert",
                 state = ?state_str,
                 "State of failed swap: {error_msg}");
-            metrics::record_simulation_execution_failure(
+            metrics::record_simulation_execution_revert(
                 &execution_info.protocol_system,
                 error_category,
             );
@@ -1089,7 +1093,7 @@ fn categorize_error(error_message: &str) -> &'static str {
 
 /// Generate a unique simulation ID based on protocol system and state ID
 fn generate_simulation_id(protocol_system: &str, state_id: &str) -> String {
-    let random_number: u32 = rand::random::<u32>() % 90000 + 10000; // Range 10000-99999
+    let random_number: u32 = rand::random_range(10000..=99999);
     let component_prefix = state_id
         .chars()
         .take(8)

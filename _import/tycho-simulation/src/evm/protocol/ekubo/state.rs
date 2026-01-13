@@ -14,7 +14,7 @@ use tycho_common::{
     models::token::Token,
     simulation::{
         errors::{SimulationError, TransitionError},
-        protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
+        protocol_sim::{Balances, GetAmountOutResult, PoolSwap, ProtocolSim, QueryPoolSwapParams},
     },
     Bytes,
 };
@@ -22,7 +22,9 @@ use tycho_common::{
 use super::pool::{
     base::BasePool, full_range::FullRangePool, oracle::OraclePool, twamm::TwammPool, EkuboPool,
 };
-use crate::evm::protocol::{ekubo::pool::mev_resist::MevResistPool, u256_num::u256_to_f64};
+use crate::evm::protocol::{
+    ekubo::pool::mev_resist::MevResistPool, u256_num::u256_to_f64, utils::add_fee_markup,
+};
 
 #[enum_delegate::implement(EkuboPool)]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,12 +55,12 @@ impl ProtocolSim for EkuboState {
         let sqrt_ratio = self.sqrt_ratio();
         let (base_decimals, quote_decimals) = (base.decimals as usize, quote.decimals as usize);
 
-        if base < quote {
-            sqrt_price_q128_to_f64(sqrt_ratio, (base_decimals, quote_decimals))
+        let price = if base < quote {
+            sqrt_price_q128_to_f64(sqrt_ratio, (base_decimals, quote_decimals))?
         } else {
-            sqrt_price_q128_to_f64(sqrt_ratio, (quote_decimals, base_decimals))
-                .map(|price| 1.0f64 / price)
-        }
+            1.0f64 / sqrt_price_q128_to_f64(sqrt_ratio, (quote_decimals, base_decimals))?
+        };
+        Ok(add_fee_markup(price, self.fee()))
     }
 
     fn get_amount_out(
@@ -156,6 +158,10 @@ impl ProtocolSim for EkuboState {
             })?,
             BigUint::ZERO,
         ))
+    }
+
+    fn query_pool_swap(&self, params: &QueryPoolSwapParams) -> Result<PoolSwap, SimulationError> {
+        crate::evm::query_pool_swap::query_pool_swap(self, params)
     }
 }
 

@@ -20,9 +20,9 @@ use alloy::{
     signers::{local::PrivateKeySigner, SignerSync},
     sol_types::{eip712_domain, SolStruct, SolValue},
 };
+use alloy_chains::NamedChain;
 use clap::Parser;
 use dialoguer::{theme::ColorfulTheme, Select};
-use foundry_config::NamedChain;
 use futures::StreamExt;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
@@ -30,9 +30,12 @@ use tracing_subscriber::EnvFilter;
 use tycho_common::{models::token::Token, Bytes};
 use tycho_execution::encoding::{
     errors::EncodingError,
-    evm::{approvals::permit2::PermitSingle, encoder_builders::TychoRouterEncoderBuilder},
+    evm::{
+        approvals::permit2::PermitSingle, encoder_builders::TychoRouterEncoderBuilder,
+        swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
+    },
     models,
-    models::{EncodedSolution, Solution, SwapBuilder, Transaction, UserTransferType},
+    models::{EncodedSolution, Solution, Swap, Transaction, UserTransferType},
 };
 use tycho_simulation::{
     evm::{
@@ -220,9 +223,13 @@ async fn main() {
         .expect("Failed building protocol stream");
 
     // Initialize the encoder
+    let swap_encoder_registry = SwapEncoderRegistry::new(chain)
+        .add_default_encoders(None)
+        .expect("Failed to get default SwapEncoderRegistry");
     let encoder = TychoRouterEncoderBuilder::new()
         .chain(chain)
         .user_transfer_type(UserTransferType::TransferFromPermit2)
+        .swap_encoder_registry(swap_encoder_registry)
         .build()
         .expect("Failed to build encoder");
 
@@ -609,8 +616,7 @@ fn create_solution(
     expected_amount: BigUint,
 ) -> Solution {
     // Prepare data to encode. First we need to create a swap object
-    let simple_swap =
-        SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone()).build();
+    let simple_swap = Swap::new(component, sell_token.address.clone(), buy_token.address.clone());
 
     // Compute a minimum amount out
     //

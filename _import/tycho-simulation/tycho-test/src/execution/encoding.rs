@@ -1,7 +1,7 @@
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use alloy::{
-    primitives::{keccak256, FixedBytes},
+    primitives::{keccak256, map::AddressHashMap, Address, FixedBytes, Keccak256, U256},
     rpc::types::{state::AccountOverride, Block, TransactionRequest},
     sol_types::SolValue,
 };
@@ -15,15 +15,14 @@ use tycho_common::{
     Bytes,
 };
 use tycho_execution::encoding::{
-    evm::encoder_builders::TychoRouterEncoderBuilder,
-    models::{EncodedSolution, Solution, SwapBuilder, Transaction, UserTransferType},
+    evm::{
+        encoder_builders::TychoRouterEncoderBuilder,
+        swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
+    },
+    models::{EncodedSolution, Solution, Swap, Transaction, UserTransferType},
 };
 use tycho_simulation::{
-    evm::protocol::u256_num::biguint_to_u256,
-    foundry_evm::revm::primitives::{
-        alloy_primitives::Keccak256, map::AddressHashMap, Address, U256,
-    },
-    protocol::models::ProtocolComponent,
+    evm::protocol::u256_num::biguint_to_u256, protocol::models::ProtocolComponent,
 };
 
 use crate::{execution::tenderly::OverwriteMetadata, rpc_tools::RPCTools};
@@ -58,14 +57,15 @@ pub fn encode_swap(
         buy_token.clone(),
         amount_in.clone(),
     )?;
+    let swap_encoder_registry = SwapEncoderRegistry::new(chain)
+        .add_default_encoders(executors_json)
+        .into_diagnostic()?;
     let encoded_solution = {
         let mut builder = TychoRouterEncoderBuilder::new()
             .chain(chain)
-            .user_transfer_type(UserTransferType::TransferFrom);
+            .user_transfer_type(UserTransferType::TransferFrom)
+            .swap_encoder_registry(swap_encoder_registry);
 
-        if let Some(executors) = executors_json {
-            builder = builder.executors_addresses(executors);
-        }
         if historical_trade {
             builder = builder.historical_trade();
         }
@@ -97,15 +97,13 @@ fn create_solution(
 
     // Prepare data to encode. First we need to create a swap object
     let simple_swap = {
-        let mut builder =
-            SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone())
-                .estimated_amount_in(amount_in.clone());
+        let mut swap = Swap::new(component, sell_token.address.clone(), buy_token.address.clone())
+            .estimated_amount_in(amount_in.clone());
 
         if let Some(state) = state {
-            builder = builder.protocol_state(state);
+            swap = swap.protocol_state(state);
         }
-
-        builder.build()
+        swap
     };
 
     Ok(Solution {
@@ -429,11 +427,13 @@ pub fn setup_angstrom_overwrites(
         0, 3,
     ]);
 
-    // Set the current block number in the first 8 bytes (big-endian)
-    let mut storage_value = [0u8; 32];
+    // Use the actual storage pattern and only update the block number at the end
+    // Pattern: 0x00000000e40df67976149fe316ca8437300da6fec92629ea00000000016d620b
+    let mut storage_value =
+        hex::decode("00000000e40df67976149fe316ca8437300da6fec92629ea00000000016d620b").unwrap();
     storage_value[24..32].copy_from_slice(&current_block_number.to_be_bytes());
-    let storage_value_b256 = alloy::primitives::B256::from(storage_value);
 
+    let storage_value_b256 = alloy::primitives::B256::from_slice(&storage_value);
     overwrites.insert(
         angstrom_address,
         AccountOverride::default().with_state_diff(vec![(storage_slot, storage_value_b256)]),

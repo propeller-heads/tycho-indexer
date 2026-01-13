@@ -26,24 +26,17 @@ pub fn get_client(rpc_url: Option<String>) -> Result<Arc<EVMProvider>, Simulatio
         "A Tokio runtime is required to create the EVM client".to_string(),
     ))?;
 
-    let url = match rpc_url {
-        Some(r) => r,
-        None => match env::var("RPC_URL") {
-            Ok(v) => v,
-            Err(_) => {
-                dotenv().map_err(|e| {
-                    SimulationError::FatalError(format!("Failed to load .env file: {e}"))
-                })?;
-                env::var("RPC_URL").map_err(|_| {
-                    SimulationError::InvalidInput(
-                        "RPC_URL environment variable is required when no RPC URL is provided"
-                            .to_string(),
-                        None,
-                    )
-                })?
-            }
-        },
-    };
+    let url = rpc_url
+        .or_else(|| env::var("RPC_URL").ok())
+        .or_else(|| {
+            dotenv().ok()?;
+            env::var("RPC_URL").ok()
+        })
+        .ok_or_else(|| {
+            SimulationError::FatalError(
+                "Please provide RPC_URL environment variable or add it to .env file.".to_string(),
+            )
+        })?;
 
     let connect_future = async {
         ProviderBuilder::new()

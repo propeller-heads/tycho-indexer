@@ -181,3 +181,22 @@ pub fn fluid_v1_paused_pools_filter(component: &ComponentWithState) -> bool {
     }
     true
 }
+
+pub fn erc4626_filter(component: &ComponentWithState) -> bool {
+    const UNSUPPORTED_POOLS: [&str; 4] = [
+        "0x28B3a8fb53B741A8Fd78c0fb9A6B2393d896a43d",
+        "0xe2e7a17dff93280dec073c995595155283e3c372",
+        "0xfE6eb3b609a7C8352A241f7F3A21CEA4e9209B8f",
+        "0x83f20f44975d03b1b09e64809b757c47f942beea",
+    ];
+    if UNSUPPORTED_POOLS.contains(
+        &component
+            .component
+            .id
+            .to_lowercase()
+            .as_str(),
+    ) {
+        return false;
+    }
+    true
+}

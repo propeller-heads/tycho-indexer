@@ -5,13 +5,13 @@ pub mod account_storage;
 pub mod decoder;
 pub mod engine_db;
 pub mod protocol;
+pub mod query_pool_swap;
 pub mod simulation;
 pub mod stream;
 pub mod traces;
 pub mod tycho_models;
 
 pub type SlotId = U256;
-
 /// Enum representing the type of contract compiler.
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum ContractCompiler {

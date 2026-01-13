@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::{fs, panic, path::Path};
 
 use tracing_subscriber::{fmt, EnvFilter};
 
@@ -18,6 +18,25 @@ pub fn setup_tracing() {
 
     // Set the subscriber as the global default
     tracing::subscriber::set_global_default(subscriber).unwrap();
+
+    // Set up panic hook to log panics
+    panic::set_hook(Box::new(|panic_info| {
+        let message = if let Some(s) = panic_info
+            .payload()
+            .downcast_ref::<&str>()
+        {
+            s.to_string()
+        } else if let Some(s) = panic_info
+            .payload()
+            .downcast_ref::<String>()
+        {
+            s.clone()
+        } else {
+            "Unknown panic".to_string()
+        };
+
+        tracing::error!(message = %message);
+    }));
 }
 
 fn archive_existing_log() {

@@ -102,9 +102,10 @@ async fn main() {
         env::var("TYCHO_API_KEY").unwrap_or_else(|_| "sampletoken".to_string());
 
     // Perform an early check to ensure `RPC_URL` is set.
-    // This prevents errors from occurring later during UI interactions.
-    // Can be commented out if only using the example with uniswap_v2, uniswap_v3 and balancer_v2.
-    env::var("RPC_URL").expect("RPC_URL env variable should be set");
+    // This prevents errors from occurring later during UI interactions for curve.
+    if chain == Chain::Ethereum {
+        env::var("RPC_URL").expect("RPC_URL env variable should be set");
+    }
 
     // Create communication channels for inter-thread communication
     let (tick_tx, tick_rx) = mpsc::channel::<Update>(12);
