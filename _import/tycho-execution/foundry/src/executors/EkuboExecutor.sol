@@ -62,8 +62,9 @@ contract EkuboExecutor is
         if (data.length < 92) revert EkuboExecutor__InvalidDataLength();
 
         // amountIn must be at most type(int128).MAX
-        calculatedAmount =
-            uint256(_lock(bytes.concat(bytes16(uint128(amountIn)), data)));
+        address tokenOut;
+        (calculatedAmount, tokenOut) =
+            _lock(bytes.concat(bytes16(uint128(amountIn)), data));
     }
 
     function handleCallback(bytes calldata raw)
@@ -78,9 +79,10 @@ contract EkuboExecutor is
         bytes4 selector = bytes4(raw[:4]);
 
         bytes memory result = "";
+        // Lido performs two callbacks: One on locked and one on pay
         if (selector == LOCKED_SELECTOR) {
-            int128 calculatedAmount = _locked(stripped);
-            result = abi.encodePacked(calculatedAmount);
+            (int128 calculatedAmount, address tokenOut) = _locked(stripped);
+            result = abi.encodePacked(calculatedAmount, tokenOut);
         } else if (selector == PAY_CALLBACK_SELECTOR) {
             _payCallback(stripped);
         } else {
@@ -94,11 +96,13 @@ contract EkuboExecutor is
 
     function locked(uint256) external coreOnly {
         // Without selector and locker id
-        int128 calculatedAmount = _locked(msg.data[36:]);
+        (int128 calculatedAmount, address tokenOut) = _locked(msg.data[36:]);
         // slither-disable-next-line assembly
         assembly ("memory-safe") {
-            mstore(0, calculatedAmount)
-            return(0x10, 16)
+            // Pack: 16 bytes int128 + 20 bytes address = 36 bytes total
+            mstore(0, shl(128, calculatedAmount)) // Store int128 in upper 16 bytes
+            mstore(16, shl(96, tokenOut)) // Store address in upper 20 bytes (of next word)
+            return(0, 36)
         }
     }
 
@@ -113,7 +117,10 @@ contract EkuboExecutor is
         _payCallback(msg.data[36:]);
     }
 
-    function _lock(bytes memory data) internal returns (uint128 swappedAmount) {
+    function _lock(bytes memory data)
+        internal
+        returns (uint128 swappedAmount, address tokenOut)
+    {
         address target = address(core);
 
         // slither-disable-next-line assembly
@@ -133,12 +140,17 @@ contract EkuboExecutor is
                 revert(0, returndatasize())
             }
 
-            returndatacopy(0, 0, 16)
+            // Copy 36 bytes: 16 bytes for amount + 20 bytes for address
+            returndatacopy(0, 0, 36)
             swappedAmount := shr(128, mload(0))
+            tokenOut := shr(96, mload(16))
         }
     }
 
-    function _locked(bytes calldata swapData) internal returns (int128) {
+    function _locked(bytes calldata swapData)
+        internal
+        returns (int128, address)
+    {
         int128 nextAmountIn = int128(uint128(bytes16(swapData[0:16])));
         uint128 tokenInDebtAmount = uint128(nextAmountIn);
         TransferType transferType = TransferType(uint8(swapData[16]));
@@ -146,13 +158,14 @@ contract EkuboExecutor is
         address tokenIn = address(bytes20(swapData[37:57]));
 
         address nextTokenIn = tokenIn;
+        address nextTokenOut = address(0);
 
         uint256 hopsLength = (swapData.length - POOL_DATA_OFFSET) / HOP_BYTE_LEN;
 
         uint256 offset = POOL_DATA_OFFSET;
 
         for (uint256 i = 0; i < hopsLength; i++) {
-            address nextTokenOut =
+            nextTokenOut =
                 address(bytes20(LibBytes.loadCalldata(swapData, offset)));
             Config poolConfig =
                 Config.wrap(LibBytes.loadCalldata(swapData, offset + 20));
@@ -198,9 +211,12 @@ contract EkuboExecutor is
             offset += HOP_BYTE_LEN;
         }
 
+        // After the loop, nextTokenOut is the final output token
+        address tokenOut = nextTokenOut;
+
         _pay(tokenIn, tokenInDebtAmount, transferType);
         core.withdraw(nextTokenIn, receiver, uint128(nextAmountIn));
-        return nextAmountIn;
+        return (nextAmountIn, tokenOut);
     }
 
     function _forward(address to, bytes memory data)
