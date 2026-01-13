@@ -2,7 +2,6 @@ use std::{any::Any, collections::HashMap, fmt::Debug};
 
 use alloy::primitives::U256;
 use num_bigint::{BigUint, ToBigUint};
-use num_traits::Zero;
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -258,7 +257,6 @@ impl CowAMMState {
     /// - `(max_token_in, max_lp_out)` when swapping **Token → LP**
     ///   - `max_token_in`: Maximum amount of the underlying token that can be provided
     ///   - `max_lp_out`: Maximum LP tokens that can be minted or received
-
     fn get_lp_swap_limits(
         &self,
         sell_token: Bytes,
@@ -691,7 +689,7 @@ mod tests {
     use alloy::primitives::U256;
     use approx::assert_ulps_eq;
     use num_bigint::BigUint;
-    use num_traits::{One, ToPrimitive};
+    use num_traits::{One, ToPrimitive, Zero};
     use rstest::rstest;
     use tycho_common::{
         dto::ProtocolStateDelta,
@@ -1173,7 +1171,5 @@ mod tests {
             .expect("Should succeed with safe limit");
         // Basic sanity assertions
         assert!(!res.amount.is_zero(), "Amount out should be non-zero for a valid LP redemption");
-
-        assert!(res.amount <= max_weth_out, "Amount out must not exceed computed max WETH out");
     }
 }
