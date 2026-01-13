@@ -1,3 +1,15 @@
+## [0.2.0](https://github.com/propeller-heads/tycho-contracts/compare/0.1.0...0.2.0) (2026-01-13)
+
+
+### Features
+
+* **TychoRouter:** Remove built-in wrap/unwrap mechanism ([c8c948b](https://github.com/propeller-heads/tycho-contracts/commit/c8c948b9101fc2d295b3f41dff8c3cb6f50052a1))
+
+
+### Bug Fixes
+
+* Remove weth from router deployment script ([68c2a51](https://github.com/propeller-heads/tycho-contracts/commit/68c2a516c7b887e4849067173c079c5e32b1d1fd))
+
 ## 1.0.0 (2026-01-13)
 
 
