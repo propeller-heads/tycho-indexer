@@ -17,6 +17,7 @@ contract MaverickV2ExecutorExposed is MaverickV2Executor {
         returns (
             IERC20 tokenIn,
             address target,
+            address tokenOut,
             address receiver,
             RestrictTransferFrom.TransferType transferType
         )
@@ -43,6 +44,7 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         bytes memory params = abi.encodePacked(
             GHO_ADDR,
             GHO_USDC_POOL,
+            USDC_ADDR,
             address(2),
             RestrictTransferFrom.TransferType.Transfer
         );
@@ -50,12 +52,14 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         (
             IERC20 tokenIn,
             address target,
+            address tokenOut,
             address receiver,
             RestrictTransferFrom.TransferType transferType
         ) = maverickV2Exposed.decodeParams(params);
 
         assertEq(address(tokenIn), GHO_ADDR);
         assertEq(target, GHO_USDC_POOL);
+        assertEq(tokenOut, USDC_ADDR);
         assertEq(receiver, address(2));
         assertEq(
             uint8(transferType),
@@ -76,6 +80,7 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         bytes memory protocolData = abi.encodePacked(
             GHO_ADDR,
             GHO_USDC_POOL,
+            USDC_ADDR,
             BOB,
             RestrictTransferFrom.TransferType.Transfer
         );
@@ -98,12 +103,14 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         (
             IERC20 tokenIn,
             address pool,
+            address tokenOut,
             address receiver,
             RestrictTransferFrom.TransferType transferType
         ) = maverickV2Exposed.decodeParams(protocolData);
 
         assertEq(address(tokenIn), GHO_ADDR);
         assertEq(pool, GHO_USDC_POOL);
+        assertEq(tokenOut, USDC_ADDR);
         assertEq(receiver, BOB);
         assertEq(
             uint8(transferType),
