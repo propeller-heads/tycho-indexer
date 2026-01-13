@@ -26,6 +26,7 @@ contract ERC4626Executor is IExecutor, RestrictTransferFrom {
         IERC20 tokenIn;
         TransferType transferType;
         bool approvalNeeded;
+        address tokenOut;
 
         (tokenIn, target, receiver, transferType, approvalNeeded) =
             _decodeData(data);
@@ -37,10 +38,12 @@ contract ERC4626Executor is IExecutor, RestrictTransferFrom {
 
         if (address(tokenIn) == target) {
             // shares --> asset
+            tokenOut = IERC4626(target).asset();
             calculatedAmount =
                 IERC4626(target).redeem(givenAmount, receiver, address(this));
         } else if (address(tokenIn) == IERC4626(target).asset()) {
             // asset --> shares
+            tokenOut = target;
             calculatedAmount = IERC4626(target).deposit(givenAmount, receiver);
         } else {
             revert ERC4626Executor__InvalidTarget();
