@@ -1,3 +1,11 @@
+## [0.129.0](https://github.com/propeller-heads/tycho-indexer/compare/0.128.0...0.129.0) (2026-01-13)
+
+
+### Features
+
+* add GasPriceGetter trait and implement gas price retrieval in EthereumRpcClient ([a276cc1](https://github.com/propeller-heads/tycho-indexer/commit/a276cc1f2e6187c65851753ac9259557c9393814))
+* add GasPriceGetter trait and implement gas price retrieval in EthereumRpcClient ([#823](https://github.com/propeller-heads/tycho-indexer/issues/823)) ([ca96929](https://github.com/propeller-heads/tycho-indexer/commit/ca96929a425084d1d3fb8b8f9c99d4a65f0a26f8))
+
 ## [0.128.0](https://github.com/propeller-heads/tycho-indexer/compare/0.127.0...0.128.0) (2026-01-09)
 
 
