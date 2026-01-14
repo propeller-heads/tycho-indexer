@@ -6,21 +6,34 @@ import {TestUtils} from "./TestUtils.sol";
 import {Constants} from "./Constants.sol";
 
 contract TestVault is Vault {
-    function applyDelta(address token, int256 initialDelta, int256 change)
-        external
-        returns (int256 beforeChange, int256 afterChange, uint256 negativeCount)
-    {
+    function setDeltaForTest(address token, int256 initialDelta) external {
         _setDelta(token, initialDelta);
-        if (initialDelta < 0) {
-            _setNegativeDeltaCount(_getNegativeDeltaCount() + 1);
-        }
-        beforeChange = _getDelta(token);
+    }
 
+    function getDeltaForTest(address token)
+        external
+        view
+        returns (int256 delta)
+    {
+        delta = _getDelta(token);
+    }
+
+    function getNegativeDeltaCountForTest()
+        external
+        view
+        returns (uint256 count)
+    {
+        count = _getNegativeDeltaCount();
+    }
+
+    function setNegativeDeltaCountForTest(uint256 count) external {
+        _setNegativeDeltaCount(count);
+    }
+
+    function updateDeltaAccountingForTest(address token, int256 change)
+        external
+    {
         _updateDeltaAccounting(token, change);
-
-        afterChange = _getDelta(token);
-
-        negativeCount = _getNegativeDeltaCount();
     }
 
     function creditVaultForTest(address user, address token, uint256 amount)
@@ -106,62 +119,165 @@ contract VaultTest is Constants, TestUtils {
     }
 
     function testUpdateDeltaZero() public {
-        (int256 beforeChange, int256 afterChange, uint256 negativeCount) =
-            vault.applyDelta(address(0), 100, 0);
+        address token = address(0);
+        int256 initialDelta = 100;
+        int256 change = 0;
+        uint256 negativeCountInitial = 0;
+
+        vault.setDeltaForTest(token, initialDelta);
+        vault.setNegativeDeltaCountForTest(negativeCountInitial);
+        int256 beforeChange = vault.getDeltaForTest(token);
+
+        vault.updateDeltaAccountingForTest(token, change);
+
+        int256 afterChange = vault.getDeltaForTest(token);
+        uint256 negativeCount = vault.getNegativeDeltaCountForTest();
+
         assertEq(beforeChange, afterChange);
         assertEq(negativeCount, 0);
     }
 
     function testUpdateDeltaZeroInNegative() public {
-        (int256 beforeChange, int256 afterChange, uint256 negativeCount) =
-            vault.applyDelta(address(0), -100, 0);
+        address token = address(0);
+        int256 initialDelta = -100;
+        int256 change = 0;
+        uint256 negativeCountInitial = 1;
+
+        vault.setDeltaForTest(token, initialDelta);
+        vault.setNegativeDeltaCountForTest(negativeCountInitial);
+
+        int256 beforeChange = vault.getDeltaForTest(token);
+
+        vault.updateDeltaAccountingForTest(token, change);
+
+        int256 afterChange = vault.getDeltaForTest(token);
+        uint256 negativeCount = vault.getNegativeDeltaCountForTest();
+
         assertEq(beforeChange, afterChange);
         assertEq(negativeCount, 1);
     }
 
     function testUpdateDeltaIncreaseInPositive() public {
-        (int256 beforeChange, int256 afterChange, uint256 negativeCount) =
-            vault.applyDelta(address(0), 100, 200);
+        address token = address(0);
+        int256 initialDelta = 100;
+        int256 change = 200;
+        uint256 negativeCountInitial = 0;
+
+        vault.setDeltaForTest(token, initialDelta);
+        vault.setNegativeDeltaCountForTest(negativeCountInitial);
+
+        int256 beforeChange = vault.getDeltaForTest(token);
+
+        vault.updateDeltaAccountingForTest(token, change);
+
+        int256 afterChange = vault.getDeltaForTest(token);
+        uint256 negativeCount = vault.getNegativeDeltaCountForTest();
+
         assertEq(beforeChange, 100);
         assertEq(afterChange, 300);
         assertEq(negativeCount, 0);
     }
 
     function testUpdateDeltaIncreaseInNegative() public {
-        (int256 beforeChange, int256 afterChange, uint256 negativeCount) =
-            vault.applyDelta(address(0), -100, 15);
+        address token = address(0);
+        int256 initialDelta = -100;
+        int256 change = 15;
+        uint256 negativeCountInitial = 1;
+
+        vault.setDeltaForTest(token, initialDelta);
+        vault.setNegativeDeltaCountForTest(negativeCountInitial);
+
+        int256 beforeChange = vault.getDeltaForTest(token);
+
+        vault.updateDeltaAccountingForTest(token, change);
+
+        int256 afterChange = vault.getDeltaForTest(token);
+        uint256 negativeCount = vault.getNegativeDeltaCountForTest();
+
         assertEq(beforeChange, -100);
         assertEq(afterChange, -85);
         assertEq(negativeCount, 1);
     }
 
     function testUpdateDeltaIncreaseToPositive() public {
-        (int256 beforeChange, int256 afterChange, uint256 negativeCount) =
-            vault.applyDelta(address(0), -100, 200);
+        address token = address(0);
+        int256 initialDelta = -100;
+        int256 change = 200;
+        uint256 negativeCountInitial = 1;
+
+        vault.setDeltaForTest(token, initialDelta);
+        vault.setNegativeDeltaCountForTest(negativeCountInitial);
+
+        int256 beforeChange = vault.getDeltaForTest(token);
+
+        vault.updateDeltaAccountingForTest(token, change);
+
+        int256 afterChange = vault.getDeltaForTest(token);
+        uint256 negativeCount = vault.getNegativeDeltaCountForTest();
+
         assertEq(beforeChange, -100);
         assertEq(afterChange, 100);
         assertEq(negativeCount, 0);
     }
 
     function testUpdateDeltaDecreaseInPositive() public {
-        (int256 beforeChange, int256 afterChange, uint256 negativeCount) =
-            vault.applyDelta(address(0), 300, -100);
+        address token = address(0);
+        int256 initialDelta = 300;
+        int256 change = -100;
+        uint256 negativeCountInitial = 0;
+
+        vault.setDeltaForTest(token, initialDelta);
+        vault.setNegativeDeltaCountForTest(negativeCountInitial);
+
+        int256 beforeChange = vault.getDeltaForTest(token);
+
+        vault.updateDeltaAccountingForTest(token, change);
+
+        int256 afterChange = vault.getDeltaForTest(token);
+        uint256 negativeCount = vault.getNegativeDeltaCountForTest();
+
         assertEq(beforeChange, 300);
         assertEq(afterChange, 200);
         assertEq(negativeCount, 0);
     }
 
     function testUpdateDeltaDecreaseToNegative() public {
-        (int256 beforeChange, int256 afterChange, uint256 negativeCount) =
-            vault.applyDelta(address(0), 50, -120);
+        address token = address(0);
+        int256 initialDelta = 50;
+        int256 change = -120;
+        uint256 negativeCountInitial = 0;
+
+        vault.setDeltaForTest(token, initialDelta);
+        vault.setNegativeDeltaCountForTest(negativeCountInitial);
+
+        int256 beforeChange = vault.getDeltaForTest(token);
+
+        vault.updateDeltaAccountingForTest(token, change);
+
+        int256 afterChange = vault.getDeltaForTest(token);
+        uint256 negativeCount = vault.getNegativeDeltaCountForTest();
+
         assertEq(beforeChange, 50);
         assertEq(afterChange, -70);
         assertEq(negativeCount, 1);
     }
 
     function testUpdateDeltaDecreaseInNegative() public {
-        (int256 beforeChange, int256 afterChange, uint256 negativeCount) =
-            vault.applyDelta(address(0), -50, -120);
+        address token = address(0);
+        int256 initialDelta = -50;
+        int256 change = -120;
+        uint256 negativeCountInitial = 1;
+
+        vault.setDeltaForTest(token, initialDelta);
+        vault.setNegativeDeltaCountForTest(negativeCountInitial);
+
+        int256 beforeChange = vault.getDeltaForTest(token);
+
+        vault.updateDeltaAccountingForTest(token, change);
+
+        int256 afterChange = vault.getDeltaForTest(token);
+        uint256 negativeCount = vault.getNegativeDeltaCountForTest();
+
         assertEq(beforeChange, -50);
         assertEq(afterChange, -170);
         assertEq(negativeCount, 1);
