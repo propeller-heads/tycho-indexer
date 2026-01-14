@@ -188,9 +188,9 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      * @notice Retrieves delta for current transaction's sender
      */
     // Assembly required for transient storage operations (tload)
-    // slither-disable-next-line assembly
     function _getDelta(address token) internal view returns (int256 delta) {
         uint256 slot = _getDeltaSlot(token);
+        // slither-disable-next-line assembly
         assembly {
             delta := tload(slot)
         }
@@ -200,9 +200,9 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      * @dev Set the delta in transient storage
      */
     // Assembly required for transient storage operations (tstore)
-    // slither-disable-next-line assembly
     function _setDelta(address token, int256 delta) internal {
         uint256 slot = _getDeltaSlot(token);
+        // slither-disable-next-line assembly
         assembly {
             tstore(slot, delta)
         }
@@ -212,8 +212,8 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      * @dev Get negative delta count from transient storage
      */
     // Assembly required for transient storage operations (tload)
-    // slither-disable-next-line assembly
     function _getNegativeDeltaCount() internal view returns (uint256 count) {
+        // slither-disable-next-line assembly
         assembly {
             count := tload(_NEGATIVE_DELTA_COUNT_SLOT)
         }
@@ -223,8 +223,8 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      * @dev Set negative delta count in transient storage
      */
     // Assembly required for transient storage operations (tstore)
-    // slither-disable-next-line assembly
     function _setNegativeDeltaCount(uint256 count) internal {
+        // slither-disable-next-line assembly
         assembly {
             tstore(_NEGATIVE_DELTA_COUNT_SLOT, count)
         }
