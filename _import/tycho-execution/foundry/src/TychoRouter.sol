@@ -71,7 +71,12 @@ error TychoRouter__AmountOutNotFullyReceived(
 error TychoRouter__InvalidDataLength();
 error TychoRouter__UndefinedMinAmountOut();
 
-contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
+contract TychoRouter is
+    AccessControl,
+    Dispatcher,
+    Pausable,
+    ReentrancyGuard
+{
     uint16 private _routerFeeOnOutputBps; // Router fee on output amount in basis points
     uint16 private _routerFeeOnSolverFeeBps; // Router fee on solver fee in basis points
     address private _feeTaker; // Address of the fee taker contract
@@ -86,6 +91,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     // If set, this will override the default router fee on the solver fee for the user
     mapping(address => bool) private _hasCustomRouterFeeOnSolverFee;
     mapping(address => uint16) private _customRouterFeeOnSolverFee;
+
     using SafeERC20 for IERC20;
     using LibPrefixLengthEncodedByteArray for bytes;
     using LibSwap for bytes;
