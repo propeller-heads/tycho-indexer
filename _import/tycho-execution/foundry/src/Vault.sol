@@ -291,7 +291,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
                 balance
             );
         }
-        _burn(user, id, amount);
+        _burnWithoutEvent(user, id, amount);
     }
 
     /**
@@ -307,7 +307,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
 
         uint256 id = uint256(uint160(token));
 
-        _mint(user, id, amount);
+        _mintWithoutEvent(user, id, amount);
     }
 
     // slither-disable-end dead-code
