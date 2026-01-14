@@ -184,6 +184,8 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
         }
     }
 
+    // TODO: remove dead-code once used
+    // slither-disable-start dead-code
     /**
      * @dev Internal helper to get transient storage slot for a token delta
      * @notice Only needs token since transient storage is scoped to current transaction's sender
@@ -308,6 +310,8 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
 
         _mint(user, id, amount);
     }
+
+    // slither-disable-end dead-code
 
     // ============ Utils methods ============
 
