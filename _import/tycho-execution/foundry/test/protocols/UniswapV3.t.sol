@@ -9,8 +9,8 @@ import {Permit2TestHelper} from "../Permit2TestHelper.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
 
 contract UniswapV3ExecutorExposed is UniswapV3Executor {
-    constructor(address _factory, bytes32 _initCode, address _permit2)
-        UniswapV3Executor(_factory, _initCode, _permit2)
+    constructor(address _factory, bytes32 _initCode)
+        UniswapV3Executor(_factory, _initCode)
     {}
 
     function decodeData(bytes calldata data)
@@ -37,34 +37,55 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
     ) external view {
         _verifyPairAddress(tokenA, tokenB, fee, target);
     }
+
+    function uniswapV3SwapCallback(
+        int256, /* amount0Delta */
+        int256, /* amount1Delta */
+        bytes calldata /* data */
+    )
+        external
+    {
+        // Use delegatecall to preserve msg.sender
+        bytes memory callData =
+            abi.encodeWithSignature("getCallbackTransferData(bytes)", msg.data);
+        (bool success, bytes memory result) =
+            address(this).delegatecall(callData);
+        require(success, "Delegatecall failed");
+
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            uint256 amount
+        ) = abi.decode(
+            result,
+            (RestrictTransferFrom.TransferType, address, address, uint256)
+        );
+
+        if (transferType == RestrictTransferFrom.TransferType.Transfer) {
+            IERC20(tokenIn).transfer(receiver, amount);
+        }
+        handleCallback(msg.data);
+    }
 }
 
-contract UniswapV3ExecutorTest is
-    Test,
-    TestUtils,
-    Constants,
-    Permit2TestHelper
-{
+contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
     using SafeERC20 for IERC20;
 
     UniswapV3ExecutorExposed uniswapV3Exposed;
     UniswapV3ExecutorExposed pancakeV3Exposed;
     IERC20 DAI = IERC20(DAI_ADDR);
-    IAllowanceTransfer permit2;
 
     function setUp() public {
         uint256 forkBlock = 17323404;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
 
         uniswapV3Exposed = new UniswapV3ExecutorExposed(
-            USV3_FACTORY_ETHEREUM, USV3_POOL_CODE_INIT_HASH, PERMIT2_ADDRESS
+            USV3_FACTORY_ETHEREUM, USV3_POOL_CODE_INIT_HASH
         );
         pancakeV3Exposed = new UniswapV3ExecutorExposed(
-            PANCAKESWAPV3_DEPLOYER_ETHEREUM,
-            PANCAKEV3_POOL_CODE_INIT_HASH,
-            PERMIT2_ADDRESS
+            PANCAKESWAPV3_DEPLOYER_ETHEREUM, PANCAKEV3_POOL_CODE_INIT_HASH
         );
-        permit2 = IAllowanceTransfer(PERMIT2_ADDRESS);
     }
 
     function testDecodeParams() public view {
@@ -101,6 +122,8 @@ contract UniswapV3ExecutorTest is
         );
     }
 
+    // TODO: add get transfer data and callback data tests
+
     function testSwapIntegration() public {
         uint256 amountIn = 10 ** 18;
         deal(WETH_ADDR, address(uniswapV3Exposed), amountIn);
@@ -117,7 +140,8 @@ contract UniswapV3ExecutorTest is
             RestrictTransferFrom.TransferType.Transfer
         );
 
-        uint256 amountOut = uniswapV3Exposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            uniswapV3Exposed.swap(amountIn, data);
 
         assertGe(amountOut, expAmountOut);
         assertEq(IERC20(WETH_ADDR).balanceOf(address(uniswapV3Exposed)), 0);
@@ -150,7 +174,6 @@ contract UniswapV3ExecutorTest is
         deal(WETH_ADDR, address(uniswapV3Exposed), amountOwed);
         uint256 initialPoolReserve = IERC20(WETH_ADDR).balanceOf(DAI_WETH_USV3);
 
-        vm.startPrank(DAI_WETH_USV3);
         bytes memory protocolData = abi.encodePacked(
             WETH_ADDR,
             DAI_ADDR,
@@ -169,6 +192,11 @@ contract UniswapV3ExecutorTest is
             dataLength,
             protocolData
         );
+
+        // transfer funds into the pool - this is taken cared of by the Dispatcher now
+        vm.prank(address(uniswapV3Exposed));
+        IERC20(WETH_ADDR).transfer(DAI_WETH_USV3, amountOwed);
+        vm.startPrank(DAI_WETH_USV3);
         uniswapV3Exposed.handleCallback(callbackData);
         vm.stopPrank();
 
@@ -271,9 +299,7 @@ contract TychoRouterForUniswapV3Test is TychoRouterTestSetup {
 
         // Deploy the executor specifically on this Base fork
         UniswapV3ExecutorExposed basePancakeV3Exposed = new UniswapV3ExecutorExposed(
-            PANCAKESWAPV3_DEPLOYER,
-            PANCAKEV3_POOL_CODE_INIT_HASH,
-            PERMIT2_ADDRESS
+            PANCAKESWAPV3_DEPLOYER, PANCAKEV3_POOL_CODE_INIT_HASH
         );
 
         uint256 amountIn = 1000 * 10 ** 6;

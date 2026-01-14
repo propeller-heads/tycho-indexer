@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "@interfaces/IExecutor.sol";
+import {IExecutor} from "@interfaces/IExecutor.sol";
 import {
     IERC20,
     SafeERC20
@@ -14,33 +14,29 @@ import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 
 error BalancerV2Executor__InvalidDataLength();
 
-contract BalancerV2Executor is IExecutor, RestrictTransferFrom {
+contract BalancerV2Executor is IExecutor {
     using SafeERC20 for IERC20;
 
     address private constant VAULT = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
 
-    constructor(address _permit2) RestrictTransferFrom(_permit2) {}
+    constructor() {}
 
     // slither-disable-next-line locked-ether
-    function swap(uint256 givenAmount, bytes calldata data)
+    function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256 calculatedAmount)
+        returns (uint256 calculatedAmount, address tokenOut, address receiver)
     {
-        (
-            IERC20 tokenIn,
-            IERC20 tokenOut,
-            bytes32 poolId,
-            address receiver,
-            bool approvalNeeded,
-            TransferType transferType
-        ) = _decodeData(data);
+        address tokenIn;
+        bytes32 poolId;
+        bool approvalNeeded;
 
-        _transfer(address(this), transferType, address(tokenIn), givenAmount);
+        (tokenIn, tokenOut, poolId, receiver, approvalNeeded) =
+            _decodeData(data);
 
         if (approvalNeeded) {
             // slither-disable-next-line unused-return
-            tokenIn.forceApprove(VAULT, type(uint256).max);
+            IERC20(tokenIn).forceApprove(VAULT, type(uint256).max);
         }
 
         IVault.SingleSwap memory singleSwap = IVault.SingleSwap({
@@ -48,7 +44,7 @@ contract BalancerV2Executor is IExecutor, RestrictTransferFrom {
             kind: IVault.SwapKind.GIVEN_IN,
             assetIn: IAsset(address(tokenIn)),
             assetOut: IAsset(address(tokenOut)),
-            amount: givenAmount,
+            amount: amountIn,
             userData: ""
         });
 
@@ -69,23 +65,41 @@ contract BalancerV2Executor is IExecutor, RestrictTransferFrom {
         internal
         pure
         returns (
-            IERC20 tokenIn,
-            IERC20 tokenOut,
+            address tokenIn,
+            address tokenOut,
             bytes32 poolId,
             address receiver,
-            bool approvalNeeded,
-            TransferType transferType
+            bool approvalNeeded
         )
     {
         if (data.length != 94) {
             revert BalancerV2Executor__InvalidDataLength();
         }
 
-        tokenIn = IERC20(address(bytes20(data[0:20])));
-        tokenOut = IERC20(address(bytes20(data[20:40])));
+        tokenIn = address(bytes20(data[0:20]));
+        tokenOut = address(bytes20(data[20:40]));
         poolId = bytes32(data[40:72]);
         receiver = address(bytes20(data[72:92]));
         approvalNeeded = data[92] != 0;
-        transferType = TransferType(uint8(data[93]));
+    }
+
+    function getTransferData(bytes calldata data)
+        external
+        payable
+        returns (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        )
+    {
+        if (data.length != 94) {
+            revert BalancerV2Executor__InvalidDataLength();
+        }
+
+        tokenIn = address(bytes20(data[0:20]));
+        // Since the Balancer Vault withdraws the funds from the msg.sender, the user's funds need to sent to the
+        // TychoRouter initially (address(this))
+        receiver = address(this);
+        transferType = RestrictTransferFrom.TransferType(uint8(data[93]));
     }
 }

@@ -1,19 +1,26 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "../lib/IWETH.sol";
-import "../lib/bytes/LibPrefixLengthEncodedByteArray.sol";
+import {IWETH} from "../lib/IWETH.sol";
+import {
+    LibPrefixLengthEncodedByteArray
+} from "../lib/bytes/LibPrefixLengthEncodedByteArray.sol";
 
-import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/Pausable.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
-import "@permit2/src/interfaces/IAllowanceTransfer.sol";
-import "./Dispatcher.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {
+    SafeERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {
+    ReentrancyGuard
+} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {
+    IAllowanceTransfer
+} from "@permit2/src/interfaces/IAllowanceTransfer.sol";
+import {Dispatcher} from "./Dispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
-import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {RestrictTransferFrom} from "./RestrictTransferFrom.sol";
 
 //                                         ✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷
@@ -66,14 +73,8 @@ error TychoRouter__MessageValueMismatch(uint256 value, uint256 amount);
 error TychoRouter__InvalidDataLength();
 error TychoRouter__UndefinedMinAmountOut();
 
-contract TychoRouter is
-    AccessControl,
-    Dispatcher,
-    Pausable,
-    ReentrancyGuard,
-    RestrictTransferFrom
-{
-    IWETH private immutable _weth;
+contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
+    IWETH private immutable _WETH;
 
     using SafeERC20 for IERC20;
     using LibPrefixLengthEncodedByteArray for bytes;
@@ -93,13 +94,13 @@ contract TychoRouter is
         address indexed token, uint256 amount, address indexed receiver
     );
 
-    constructor(address _permit2, address weth) RestrictTransferFrom(_permit2) {
+    constructor(address _permit2, address weth) Dispatcher(_permit2) {
         if (_permit2 == address(0) || weth == address(0)) {
             revert TychoRouter__AddressZero();
         }
-        permit2 = IAllowanceTransfer(_permit2);
+        PERMIT2 = IAllowanceTransfer(_permit2);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _weth = IWETH(weth);
+        _WETH = IWETH(weth);
     }
 
     /**
@@ -197,7 +198,7 @@ contract TychoRouter is
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
-            permit2.permit(msg.sender, permitSingle, signature);
+            PERMIT2.permit(msg.sender, permitSingle, signature);
         }
         _tstoreTransferFromInfo(tokenIn, amountIn, true, true);
 
@@ -304,7 +305,7 @@ contract TychoRouter is
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
-            permit2.permit(msg.sender, permitSingle, signature);
+            PERMIT2.permit(msg.sender, permitSingle, signature);
         }
 
         _tstoreTransferFromInfo(tokenIn, amountIn, true, true);
@@ -409,7 +410,7 @@ contract TychoRouter is
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
-            permit2.permit(msg.sender, permitSingle, signature);
+            PERMIT2.permit(msg.sender, permitSingle, signature);
         }
         _tstoreTransferFromInfo(tokenIn, amountIn, true, true);
 
@@ -456,7 +457,7 @@ contract TychoRouter is
         // Assume funds are already in the router.
         if (wrapEth) {
             _wrapETH(amountIn);
-            tokenIn = address(_weth);
+            tokenIn = address(_WETH);
         }
 
         amountOut = _splitSwap(amountIn, nTokens, swaps);
@@ -509,7 +510,7 @@ contract TychoRouter is
         // Assume funds are already in the router.
         if (wrapEth) {
             _wrapETH(amountIn);
-            tokenIn = address(_weth);
+            tokenIn = address(_WETH);
         }
 
         (address executor, bytes calldata protocolData) =
@@ -565,7 +566,7 @@ contract TychoRouter is
         // Assume funds are already in the router.
         if (wrapEth) {
             _wrapETH(amountIn);
-            tokenIn = address(_weth);
+            tokenIn = address(_WETH);
         }
 
         amountOut = _sequentialSwap(amountIn, swaps);
@@ -785,7 +786,7 @@ contract TychoRouter is
         if (msg.value != amount) {
             revert TychoRouter__MessageValueMismatch(msg.value, amount);
         }
-        _weth.deposit{value: amount}();
+        _WETH.deposit{value: amount}();
     }
 
     /**
@@ -793,7 +794,7 @@ contract TychoRouter is
      * @param amount of WETH to unwrap.
      */
     function _unwrapETH(uint256 amount) internal {
-        _weth.withdraw(amount);
+        _WETH.withdraw(amount);
     }
 
     /**

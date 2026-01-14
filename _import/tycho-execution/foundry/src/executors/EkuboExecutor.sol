@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.26;
 
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {
+    SafeERC20,
+    IERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IExecutor} from "@interfaces/IExecutor.sol";
 import {ICallback} from "@interfaces/ICallback.sol";
 import {ICore} from "@ekubo/interfaces/ICore.sol";
@@ -16,22 +19,16 @@ import {
     SqrtRatio
 } from "@ekubo/types/sqrtRatio.sol";
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
-contract EkuboExecutor is
-    IExecutor,
-    ILocker,
-    IPayer,
-    ICallback,
-    RestrictTransferFrom
-{
+contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
     error EkuboExecutor__AddressZero();
     error EkuboExecutor__InvalidDataLength();
     error EkuboExecutor__CoreOnly();
     error EkuboExecutor__UnknownCallback();
 
-    ICore immutable core;
-    address immutable mevResist;
+    ICore immutable CORE;
+    address immutable MEV_RESIST;
 
     uint256 constant POOL_DATA_OFFSET = 57;
     uint256 constant HOP_BYTE_LEN = 52;
@@ -43,27 +40,30 @@ contract EkuboExecutor is
 
     using SafeERC20 for IERC20;
 
-    constructor(address _core, address _mevResist, address _permit2)
-        RestrictTransferFrom(_permit2)
-    {
-        core = ICore(_core);
+    constructor(address _core, address _mevResist) {
+        CORE = ICore(_core);
 
         if (_mevResist == address(0)) {
             revert EkuboExecutor__AddressZero();
         }
-        mevResist = _mevResist;
+        MEV_RESIST = _mevResist;
     }
 
     function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256 calculatedAmount)
+        returns (uint256 calculatedAmount, address tokenOut, address receiver)
     {
-        if (data.length < 92) revert EkuboExecutor__InvalidDataLength();
+        if (data.length < 92) {
+            revert EkuboExecutor__InvalidDataLength();
+        }
 
         // amountIn must be at most type(int128).MAX
         calculatedAmount =
             uint256(_lock(bytes.concat(bytes16(uint128(amountIn)), data)));
+        // TODO: fix callback
+        tokenOut = address(0);
+        receiver = address(0);
     }
 
     function handleCallback(bytes calldata raw)
@@ -90,9 +90,9 @@ contract EkuboExecutor is
         return result;
     }
 
-    function verifyCallback(bytes calldata) public view coreOnly {}
+    function verifyCallback(bytes calldata) public view COREOnly {}
 
-    function locked(uint256) external coreOnly {
+    function locked(uint256) external COREOnly {
         // Without selector and locker id
         int128 calculatedAmount = _locked(msg.data[36:]);
         // slither-disable-next-line assembly
@@ -107,14 +107,14 @@ contract EkuboExecutor is
         address /*token*/
     )
         external
-        coreOnly
+        COREOnly
     {
         // Without selector and locker id
         _payCallback(msg.data[36:]);
     }
 
     function _lock(bytes memory data) internal returns (uint128 swappedAmount) {
-        address target = address(core);
+        address target = address(CORE);
 
         // slither-disable-next-line assembly
         assembly ("memory-safe") {
@@ -141,7 +141,8 @@ contract EkuboExecutor is
     function _locked(bytes calldata swapData) internal returns (int128) {
         int128 nextAmountIn = int128(uint128(bytes16(swapData[0:16])));
         uint128 tokenInDebtAmount = uint128(nextAmountIn);
-        TransferType transferType = TransferType(uint8(swapData[16]));
+        RestrictTransferFrom.TransferType transferType =
+            RestrictTransferFrom.TransferType(uint8(swapData[16]));
         address receiver = address(bytes20(swapData[17:37]));
         address tokenIn = address(bytes20(swapData[37:57]));
 
@@ -171,10 +172,10 @@ contract EkuboExecutor is
             int128 delta0;
             int128 delta1;
 
-            if (poolConfig.extension() == mevResist) {
+            if (poolConfig.extension() == MEV_RESIST) {
                 (delta0, delta1) = abi.decode(
                     _forward(
-                        mevResist,
+                        MEV_RESIST,
                         abi.encode(
                             pk,
                             nextAmountIn,
@@ -187,7 +188,7 @@ contract EkuboExecutor is
                 );
             } else {
                 // slither-disable-next-line calls-loop
-                (delta0, delta1) = core.swap_611415377(
+                (delta0, delta1) = CORE.swap_611415377(
                     pk, nextAmountIn, isToken1, sqrtRatioLimit, SKIP_AHEAD
                 );
             }
@@ -199,7 +200,7 @@ contract EkuboExecutor is
         }
 
         _pay(tokenIn, tokenInDebtAmount, transferType);
-        core.withdraw(nextTokenIn, receiver, uint128(nextAmountIn));
+        CORE.withdraw(nextTokenIn, receiver, uint128(nextAmountIn));
         return nextAmountIn;
     }
 
@@ -207,7 +208,7 @@ contract EkuboExecutor is
         internal
         returns (bytes memory result)
     {
-        address target = address(core);
+        address target = address(CORE);
 
         // slither-disable-next-line assembly
         assembly ("memory-safe") {
@@ -242,10 +243,12 @@ contract EkuboExecutor is
         }
     }
 
-    function _pay(address token, uint128 amount, TransferType transferType)
-        internal
-    {
-        address target = address(core);
+    function _pay(
+        address token,
+        uint128 amount,
+        RestrictTransferFrom.TransferType transferType
+    ) internal {
+        address target = address(CORE);
 
         if (token == NATIVE_TOKEN_ADDRESS) {
             SafeTransferLib.safeTransferETH(target, amount);
@@ -269,17 +272,55 @@ contract EkuboExecutor is
     }
 
     function _payCallback(bytes calldata payData) internal {
-        address token = address(bytes20(payData[12:32])); // This arg is abi-encoded
-        uint128 amount = uint128(bytes16(payData[32:48]));
-        TransferType transferType = TransferType(uint8(payData[48]));
-        _transfer(address(core), transferType, token, amount);
+        // TODO: now this method does nothing?? or can this be simplified?
     }
 
     // To receive withdrawals from Core
     receive() external payable {}
 
-    modifier coreOnly() {
-        if (msg.sender != address(core)) revert EkuboExecutor__CoreOnly();
+    modifier COREOnly() {
+        if (msg.sender != address(CORE)) revert EkuboExecutor__CoreOnly();
         _;
+    }
+
+    function getTransferData(
+        bytes calldata /* data */
+    )
+        external
+        payable
+        returns (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        )
+    {
+        return (RestrictTransferFrom.TransferType.None, address(0), address(0));
+    }
+
+    function getCallbackTransferData(bytes calldata data)
+        external
+        payable
+        returns (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            uint256 amount
+        )
+    {
+        bytes4 selector = bytes4(data[:4]);
+
+        if (selector == PAY_CALLBACK_SELECTOR) {
+            bytes calldata payData = data[36:];
+
+            tokenIn = address(bytes20(payData[12:32]));
+            amount = uint256(uint128(bytes16(payData[32:48])));
+            transferType = RestrictTransferFrom.TransferType(uint8(payData[48]));
+            receiver = address(CORE);
+        } else {
+            transferType = RestrictTransferFrom.TransferType.None;
+            receiver = address(0);
+            tokenIn = address(0);
+            amount = 0;
+        }
     }
 }

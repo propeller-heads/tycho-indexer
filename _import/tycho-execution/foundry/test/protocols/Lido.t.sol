@@ -9,18 +9,15 @@ import {Test} from "../../lib/forge-std/src/Test.sol";
 import "../TychoRouterTestSetup.sol";
 
 contract LidoExecutorExposed is LidoExecutor {
-    constructor(
-        address _st_eth_address,
-        address _wst_eth_address,
-        address _permit2
-    ) LidoExecutor(_st_eth_address, _wst_eth_address, _permit2) {}
+    constructor(address _st_eth_address, address _wst_eth_address)
+        LidoExecutor(_st_eth_address, _wst_eth_address)
+    {}
 
     function decodeParams(bytes calldata data)
         external
         pure
         returns (
             address receiver,
-            TransferType transferType,
             LidoPoolType pool,
             LidoPoolDirection direction,
             bool approvalNeeded
@@ -38,8 +35,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
     function setUp() public {
         uint256 forkBlock = 23934489;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        LidoExposed =
-            new LidoExecutorExposed(STETH_ADDR, WSTETH_ADDR, PERMIT2_ADDRESS);
+        LidoExposed = new LidoExecutorExposed(STETH_ADDR, WSTETH_ADDR);
     }
 
     function testDecodeParams() public view {
@@ -53,16 +49,12 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         (
             address receiver,
-            RestrictTransferFrom.TransferType transferType,
             LidoPoolType pool,
             LidoPoolDirection direction,
             bool approvalNeeded
         ) = LidoExposed.decodeParams(params);
 
         assertEq(receiver, BOB);
-        assertEq(
-            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
-        );
         assertEq(uint8(pool), uint8(LidoPoolType.stETH));
         assertEq(uint8(direction), uint8(LidoPoolDirection.Stake));
     }
@@ -76,6 +68,29 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
         LidoExposed.decodeParams(invalidParams);
     }
 
+    function testGetTransferData() public {
+        bytes memory params = abi.encodePacked(
+            BOB,
+            RestrictTransferFrom.TransferType.None,
+            LidoPoolType.stETH,
+            LidoPoolDirection.Stake,
+            false
+        );
+
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        ) = LidoExposed.getTransferData(params);
+
+        assertEq(
+            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
+        );
+        assertEq(receiver, address(LidoExposed));
+        assertEq(tokenIn, address(0));
+    }
+    // TODO: add tests for the other 2 cases
+
     function testStaking() public {
         uint256 amountIn = 1 ether;
         uint256 expectedAmountOut = 999999999999999998;
@@ -88,15 +103,16 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
             false
         );
 
-        deal(BOB, amountIn);
-        vm.prank(BOB);
-        uint256 calculatedAmount =
+        deal(address(LidoExposed), amountIn);
+        (uint256 amountOut, address tokenOut, address receiver) =
             LidoExposed.swap{value: amountIn}(amountIn, protocolData);
 
         uint256 finalBalance = IERC20(STETH_ADDR).balanceOf(BOB);
-        assertEq(calculatedAmount, finalBalance);
+        assertEq(amountOut, finalBalance);
         assertEq(finalBalance, expectedAmountOut);
         assertEq(BOB.balance, 0);
+        assertEq(tokenOut, STETH_ADDR);
+        assertEq(receiver, BOB);
     }
 
     function testWrapping() public {
@@ -118,14 +134,16 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
             true
         );
 
-        uint256 amountOut = LidoExposed.swap(stETHAmount, protocolData);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            LidoExposed.swap(stETHAmount, protocolData);
 
         uint256 finalBalance = IERC20(WSTETH_ADDR).balanceOf(BOB);
         assertEq(amountOut, expectedAmountOut);
         assertEq(finalBalance, expectedAmountOut);
         // there is 1 wei left in the contract
         assertEq(IERC20(STETH_ADDR).balanceOf(address(LidoExposed)), 1);
-
+        assertEq(tokenOut, WSTETH_ADDR);
+        assertEq(receiver, BOB);
         vm.stopPrank();
     }
 
@@ -142,12 +160,15 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
             false
         );
         vm.startPrank(address(LidoExposed));
-        uint256 amountOut = LidoExposed.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            LidoExposed.swap(amountIn, protocolData);
 
         uint256 finalBalance = IERC20(STETH_ADDR).balanceOf(BOB);
         assertEq(amountOut, expectedAmountOut);
         assertEq(finalBalance, expectedAmountOut);
         assertEq(IERC20(WSTETH_ADDR).balanceOf(address(LidoExposed)), 0);
+        assertEq(tokenOut, STETH_ADDR);
+        assertEq(receiver, BOB);
         vm.stopPrank();
     }
 }

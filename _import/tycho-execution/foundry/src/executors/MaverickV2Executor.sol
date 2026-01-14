@@ -1,41 +1,42 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "@interfaces/IExecutor.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
+import {IExecutor} from "@interfaces/IExecutor.sol";
+import {
+    SafeERC20,
+    IERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 
 error MaverickV2Executor__InvalidDataLength();
 error MaverickV2Executor__InvalidTarget();
 error MaverickV2Executor__InvalidFactory();
 
-contract MaverickV2Executor is IExecutor, RestrictTransferFrom {
+contract MaverickV2Executor is IExecutor {
     using SafeERC20 for IERC20;
 
-    address public immutable factory;
+    address public immutable FACTORY;
 
-    constructor(address _factory, address _permit2)
-        RestrictTransferFrom(_permit2)
-    {
+    constructor(address _factory) {
         if (_factory == address(0)) {
             revert MaverickV2Executor__InvalidFactory();
         }
-        factory = _factory;
+        FACTORY = _factory;
     }
 
     // slither-disable-next-line locked-ether
-    function swap(uint256 givenAmount, bytes calldata data)
+    function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256 calculatedAmount)
+        returns (uint256 calculatedAmount, address tokenOut, address receiver)
     {
         address target;
-        address receiver;
         IERC20 tokenIn;
-        TransferType transferType;
+        // TODO: we need the tokenOut for this swap
+        tokenOut = address(0);
 
-        (tokenIn, target, receiver, transferType) = _decodeData(data);
+        (tokenIn, target, receiver) = _decodeData(data);
 
         _verifyPairAddress(target);
         IMaverickV2Pool pool = IMaverickV2Pool(target);
@@ -43,13 +44,11 @@ contract MaverickV2Executor is IExecutor, RestrictTransferFrom {
         bool isTokenAIn = pool.tokenA() == tokenIn;
         int32 tickLimit = isTokenAIn ? type(int32).max : type(int32).min;
         IMaverickV2Pool.SwapParams memory swapParams = IMaverickV2Pool.SwapParams({
-            amount: givenAmount,
+            amount: amountIn,
             tokenAIn: isTokenAIn,
             exactOutput: false,
             tickLimit: tickLimit
         });
-
-        _transfer(target, transferType, address(tokenIn), givenAmount);
 
         // slither-disable-next-line unused-return
         (, calculatedAmount) = pool.swap(receiver, swapParams, "");
@@ -58,12 +57,7 @@ contract MaverickV2Executor is IExecutor, RestrictTransferFrom {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (
-            IERC20 inToken,
-            address target,
-            address receiver,
-            TransferType transferType
-        )
+        returns (IERC20 inToken, address target, address receiver)
     {
         if (data.length != 61) {
             revert MaverickV2Executor__InvalidDataLength();
@@ -71,14 +65,30 @@ contract MaverickV2Executor is IExecutor, RestrictTransferFrom {
         inToken = IERC20(address(bytes20(data[0:20])));
         target = address(bytes20(data[20:40]));
         receiver = address(bytes20(data[40:60]));
-        transferType = TransferType(uint8(data[60]));
     }
 
     function _verifyPairAddress(address target) internal view {
-        if (!IMaverickV2Factory(factory).isFactoryPool(IMaverickV2Pool(target)))
+        if (!IMaverickV2Factory(FACTORY).isFactoryPool(IMaverickV2Pool(target)))
         {
             revert MaverickV2Executor__InvalidTarget();
         }
+    }
+
+    function getTransferData(bytes calldata data)
+        external
+        payable
+        returns (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        )
+    {
+        if (data.length != 61) {
+            revert MaverickV2Executor__InvalidDataLength();
+        }
+        tokenIn = address(bytes20(data[0:20]));
+        receiver = address(bytes20(data[20:40]));
+        transferType = RestrictTransferFrom.TransferType(uint8(data[60]));
     }
 }
 

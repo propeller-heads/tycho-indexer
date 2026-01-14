@@ -23,9 +23,7 @@ interface MetaRegistry {
 }
 
 contract CurveExecutorExposed is CurveExecutor {
-    constructor(address _nativeToken, address _permit2)
-        CurveExecutor(_nativeToken, _permit2)
-    {}
+    constructor(address _nativeToken) CurveExecutor(_nativeToken) {}
 
     function decodeData(bytes calldata data)
         external
@@ -38,7 +36,6 @@ contract CurveExecutorExposed is CurveExecutor {
             int128 i,
             int128 j,
             bool tokenApprovalNeeded,
-            RestrictTransferFrom.TransferType transferType,
             address receiver
         )
     {
@@ -55,8 +52,7 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
     function setUp() public {
         uint256 forkBlock = 22031795;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        curveExecutorExposed =
-            new CurveExecutorExposed(ETH_ADDR_FOR_CURVE, PERMIT2_ADDRESS);
+        curveExecutorExposed = new CurveExecutorExposed(ETH_ADDR_FOR_CURVE);
         metaRegistry = MetaRegistry(CURVE_META_REGISTRY);
     }
 
@@ -81,7 +77,6 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             int128 i,
             int128 j,
             bool tokenApprovalNeeded,
-            RestrictTransferFrom.TransferType transferType,
             address receiver
         ) = curveExecutorExposed.decodeData(data);
 
@@ -91,11 +86,33 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         assertEq(poolType, 3);
         assertEq(i, 2);
         assertEq(j, 0);
-        assertEq(tokenApprovalNeeded, true);
+        assertEq(receiver, ALICE);
+    }
+
+    function testGetTransferData() public {
+        bytes memory data = abi.encodePacked(
+            WETH_ADDR,
+            USDC_ADDR,
+            TRICRYPTO_POOL,
+            uint8(3),
+            uint8(2),
+            uint8(0),
+            true,
+            RestrictTransferFrom.TransferType.None,
+            ALICE
+        );
+
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        ) = curveExecutorExposed.getTransferData(data);
+
+        assertEq(tokenIn, WETH_ADDR);
         assertEq(
             uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
         );
-        assertEq(receiver, ALICE);
+        assertEq(receiver, address(curveExecutorExposed));
     }
 
     function testTriPool() public {
@@ -112,10 +129,13 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
-        uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            curveExecutorExposed.swap(amountIn, data);
 
         assertEq(amountOut, 999797);
         assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), amountOut);
+        assertEq(tokenOut, USDC_ADDR);
+        assertEq(receiver, ALICE);
     }
 
     function testStEthPool() public {
@@ -132,13 +152,16 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
-        uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            curveExecutorExposed.swap(amountIn, data);
 
         assertEq(amountOut, 1001072414418410897);
         assertEq(
             IERC20(STETH_ADDR).balanceOf(ALICE),
             amountOut - 1 // there is something weird in this pool, but won't investigate for now because we don't currently support it in the simulation
         );
+        assertEq(tokenOut, STETH_ADDR);
+        assertEq(receiver, ALICE);
     }
 
     function testTricrypto2Pool() public {
@@ -155,10 +178,13 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
-        uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            curveExecutorExposed.swap(amountIn, data);
 
         assertEq(amountOut, 2279618);
         assertEq(IERC20(WBTC_ADDR).balanceOf(ALICE), amountOut);
+        assertEq(tokenOut, WBTC_ADDR);
+        assertEq(receiver, ALICE);
     }
 
     function testSUSDPool() public {
@@ -175,10 +201,13 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
-        uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            curveExecutorExposed.swap(amountIn, data);
 
         assertEq(amountOut, 100488101605550214590);
         assertEq(IERC20(SUSD_ADDR).balanceOf(ALICE), amountOut);
+        assertEq(tokenOut, SUSD_ADDR);
+        assertEq(receiver, ALICE);
     }
 
     function testFraxUsdcPool() public {
@@ -195,10 +224,13 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
-        uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            curveExecutorExposed.swap(amountIn, data);
 
         assertEq(amountOut, 998097);
         assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), amountOut);
+        assertEq(tokenOut, USDC_ADDR);
+        assertEq(receiver, ALICE);
     }
 
     function testUsdeUsdcPool() public {
@@ -215,10 +247,13 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
-        uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            curveExecutorExposed.swap(amountIn, data);
 
         assertEq(amountOut, 100064812138999986170);
         assertEq(IERC20(USDE_ADDR).balanceOf(ALICE), amountOut);
+        assertEq(tokenOut, USDE_ADDR);
+        assertEq(receiver, ALICE);
     }
 
     function testDolaFraxPyusdPool() public {
@@ -235,10 +270,13 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
-        uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            curveExecutorExposed.swap(amountIn, data);
 
         assertEq(amountOut, 99688992);
         assertEq(IERC20(FRAXPYUSD_POOL).balanceOf(ALICE), amountOut);
+        assertEq(tokenOut, FRAXPYUSD_POOL);
+        assertEq(receiver, ALICE);
     }
 
     function testCryptoPoolWithETH() public {
@@ -256,10 +294,13 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
-        uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            curveExecutorExposed.swap(amountIn, data);
 
         assertEq(amountOut, 6081816039338);
         assertEq(ALICE.balance, initialBalance + amountOut);
+        assertEq(tokenOut, address(0));
+        assertEq(receiver, ALICE);
     }
 
     function testCryptoPool() public {
@@ -276,10 +317,13 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
-        uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            curveExecutorExposed.swap(amountIn, data);
 
         assertEq(amountOut, 23429);
         assertEq(IERC20(USDT_ADDR).balanceOf(ALICE), amountOut);
+        assertEq(tokenOut, USDT_ADDR);
+        assertEq(receiver, ALICE);
     }
 
     function testTricryptoPool() public {
@@ -296,10 +340,13 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
-        uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            curveExecutorExposed.swap(amountIn, data);
 
         assertEq(amountOut, 1861130974);
         assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), amountOut);
+        assertEq(tokenOut, USDC_ADDR);
+        assertEq(receiver, ALICE);
     }
 
     function testTwoCryptoPool() public {
@@ -316,10 +363,13 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
-        uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            curveExecutorExposed.swap(amountIn, data);
 
         assertEq(amountOut, 2873786684675);
         assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), amountOut);
+        assertEq(tokenOut, WETH_ADDR);
+        assertEq(receiver, ALICE);
     }
 
     function testStableSwapPool() public {
@@ -336,10 +386,13 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
-        uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            curveExecutorExposed.swap(amountIn, data);
 
         assertEq(amountOut, 10436946786333182306400100);
         assertEq(IERC20(CRVUSD_ADDR).balanceOf(ALICE), amountOut);
+        assertEq(tokenOut, CRVUSD_ADDR);
+        assertEq(receiver, ALICE);
     }
 
     function testMetaPool() public {
@@ -356,10 +409,13 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
-        uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            curveExecutorExposed.swap(amountIn, data);
 
         assertEq(amountOut, 32797923610);
         assertEq(IERC20(WSTTAO_ADDR).balanceOf(ALICE), amountOut);
+        assertEq(tokenOut, WSTTAO_ADDR);
+        assertEq(receiver, ALICE);
     }
 
     function _getData(

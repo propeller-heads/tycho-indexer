@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "@interfaces/IExecutor.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
+import {IExecutor} from "@interfaces/IExecutor.sol";
+import {
+    SafeERC20,
+    IERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 
 error CurveExecutor__AddressZero();
@@ -11,14 +14,14 @@ error CurveExecutor__InvalidDataLength();
 
 interface CryptoPool {
     // slither-disable-next-line naming-convention
-    function exchange(uint256 i, uint256 j, uint256 dx, uint256 min_dy)
+    function exchange(uint256 i, uint256 j, uint256 dx, uint256 minDy)
         external
         payable;
 }
 
 interface StablePool {
     // slither-disable-next-line naming-convention
-    function exchange(int128 i, int128 j, uint256 dx, uint256 min_dy)
+    function exchange(int128 i, int128 j, uint256 dx, uint256 minDy)
         external
         payable;
 }
@@ -29,59 +32,52 @@ interface CryptoPoolETH {
         uint256 i,
         uint256 j,
         uint256 dx,
-        uint256 min_dy,
-        bool use_eth
+        uint256 minDy,
+        bool useEth
     ) external payable;
     // slither-disable-end naming-convention
 }
 
-contract CurveExecutor is IExecutor, RestrictTransferFrom {
+contract CurveExecutor is IExecutor {
     using SafeERC20 for IERC20;
 
-    address public immutable nativeToken;
+    address public immutable NATIVE_TOKEN;
 
-    constructor(address _nativeToken, address _permit2)
-        RestrictTransferFrom(_permit2)
-    {
+    constructor(address _nativeToken) {
         if (_nativeToken == address(0)) {
             revert CurveExecutor__AddressZero();
         }
-        nativeToken = _nativeToken;
+        NATIVE_TOKEN = _nativeToken;
     }
 
     // slither-disable-next-line locked-ether
     function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256)
+        returns (uint256 calculatedAmount, address tokenOut, address receiver)
     {
         if (data.length != 85) {
             revert CurveExecutor__InvalidDataLength();
         }
+        address tokenIn;
+        address pool;
+        uint8 poolType;
+        int128 i;
+        int128 j;
+        bool approvalNeeded;
+        (tokenIn, tokenOut, pool, poolType, i, j, approvalNeeded, receiver) =
+            _decodeData(data);
 
-        (
-            address tokenIn,
-            address tokenOut,
-            address pool,
-            uint8 poolType,
-            int128 i,
-            int128 j,
-            bool approvalNeeded,
-            TransferType transferType,
-            address receiver
-        ) = _decodeData(data);
-
-        if (approvalNeeded && tokenIn != nativeToken) {
+        if (approvalNeeded && tokenIn != NATIVE_TOKEN) {
             // slither-disable-next-line unused-return
             IERC20(tokenIn).forceApprove(address(pool), type(uint256).max);
         }
-        _transfer(address(this), transferType, tokenIn, amountIn);
 
         /// Inspired by Curve's router contract: https://github.com/curvefi/curve-router-ng/blob/9ab006ca848fc7f1995b6fbbecfecc1e0eb29e2a/contracts/Router.vy#L44
         uint256 balanceBefore = _balanceOf(tokenOut);
 
         uint256 ethAmount = 0;
-        if (tokenIn == nativeToken) {
+        if (tokenIn == NATIVE_TOKEN) {
             ethAmount = amountIn;
         }
 
@@ -91,7 +87,7 @@ contract CurveExecutor is IExecutor, RestrictTransferFrom {
             StablePool(pool).exchange{value: ethAmount}(i, j, amountIn, 0);
         } else {
             // crypto or llamma
-            if (tokenIn == nativeToken || tokenOut == nativeToken) {
+            if (tokenIn == NATIVE_TOKEN || tokenOut == NATIVE_TOKEN) {
                 // slither-disable-next-line arbitrary-send-eth
                 CryptoPoolETH(pool).exchange{value: ethAmount}(
                     uint256(int256(i)), uint256(int256(j)), amountIn, 0, true
@@ -108,13 +104,16 @@ contract CurveExecutor is IExecutor, RestrictTransferFrom {
         uint256 amountOut = balanceAfter - balanceBefore;
 
         if (receiver != address(this)) {
-            if (tokenOut == nativeToken) {
+            if (tokenOut == NATIVE_TOKEN) {
                 Address.sendValue(payable(receiver), amountOut);
             } else {
                 IERC20(tokenOut).safeTransfer(receiver, amountOut);
             }
         }
-        return amountOut;
+        calculatedAmount = amountOut;
+        if (tokenOut == NATIVE_TOKEN) {
+            tokenOut = address(0);
+        }
     }
 
     function _decodeData(bytes calldata data)
@@ -128,7 +127,6 @@ contract CurveExecutor is IExecutor, RestrictTransferFrom {
             int128 i,
             int128 j,
             bool approvalNeeded,
-            TransferType transferType,
             address receiver
         )
     {
@@ -139,7 +137,6 @@ contract CurveExecutor is IExecutor, RestrictTransferFrom {
         i = int128(uint128(uint8(data[61])));
         j = int128(uint128(uint8(data[62])));
         approvalNeeded = data[63] != 0;
-        transferType = TransferType(uint8(data[64]));
         receiver = address(bytes20(data[65:85]));
     }
 
@@ -153,8 +150,24 @@ contract CurveExecutor is IExecutor, RestrictTransferFrom {
     }
 
     function _balanceOf(address token) internal view returns (uint256 balance) {
-        balance = token == nativeToken
+        balance = token == NATIVE_TOKEN
             ? address(this).balance
             : IERC20(token).balanceOf(address(this));
+    }
+
+    function getTransferData(bytes calldata data)
+        external
+        payable
+        returns (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        )
+    {
+        tokenIn = address(bytes20(data[0:20]));
+        transferType = RestrictTransferFrom.TransferType(uint8(data[64]));
+        // Since the curve pool withdraws the funds from the msg.sender, the user's funds need to sent to the
+        // TychoRouter initially (address(this))
+        receiver = address(this);
     }
 }

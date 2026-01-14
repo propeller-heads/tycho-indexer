@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import "../../src/executors/UniswapV4Executor.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "../TestUtils.sol";
 import "../TychoRouterTestSetup.sol";
 import "./UniswapV4Utils.sol";
@@ -11,11 +12,10 @@ import {SafeCallback} from "@uniswap/v4-periphery/src/base/SafeCallback.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
 
 contract UniswapV4ExecutorExposed is UniswapV4Executor {
-    constructor(
-        IPoolManager _POOL_MANAGER,
-        address _ANGSTROM_HOOK,
-        address _permit2
-    ) UniswapV4Executor(_POOL_MANAGER, _ANGSTROM_HOOK, _permit2) {}
+    using SafeERC20 for IERC20;
+    constructor(IPoolManager _POOL_MANAGER, address _ANGSTROM_HOOK)
+        UniswapV4Executor(_POOL_MANAGER, _ANGSTROM_HOOK)
+    {}
 
     function decodeData(bytes calldata data)
         external
@@ -31,6 +31,20 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
     {
         return _decodeData(data);
     }
+
+    fallback(bytes calldata data) external returns (bytes memory) {
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            uint256 amount
+        ) = this.getCallbackTransferData(msg.data);
+        if (transferType == RestrictTransferFrom.TransferType.Transfer) {
+            IERC20(tokenIn).safeTransfer(receiver, amount);
+        }
+        bytes calldata stripped = msg.data[68:];
+        return abi.encode(_unlockCallback(stripped));
+    }
 }
 
 contract UniswapV4ExecutorTest is Constants, TestUtils {
@@ -45,7 +59,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         uint256 forkBlock = 22689128;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
         uniswapV4Exposed = new UniswapV4ExecutorExposed(
-            IPoolManager(POOL_MANAGER), ANGSTROM_HOOK, PERMIT2_ADDRESS
+            IPoolManager(POOL_MANAGER), ANGSTROM_HOOK
         );
     }
 
@@ -110,7 +124,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         assertEq(decodedPools[1].hookData, bytes("0x12345"));
     }
 
-    function testSingleSwap() public {
+    function testSingleSwapUniq() public {
         uint256 amountIn = 100 ether;
         deal(USDE_ADDR, address(uniswapV4Exposed), amountIn);
         uint256 usdeBalanceBeforePool = USDE.balanceOf(POOL_MANAGER);
@@ -136,13 +150,16 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             pools
         );
 
-        uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            uniswapV4Exposed.swap(amountIn, data);
         assertEq(USDE.balanceOf(POOL_MANAGER), usdeBalanceBeforePool + amountIn);
         assertEq(
             USDE.balanceOf(address(uniswapV4Exposed)),
             usdeBalanceBeforeSwapExecutor - amountIn
         );
         assertTrue(USDT.balanceOf(ALICE) == amountOut);
+        assertEq(tokenOut, USDT_ADDR);
+        assertEq(receiver, ALICE);
     }
 
     function testSingleSwapIntegration() public {
@@ -155,12 +172,15 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         uint256 usdeBalanceBeforeSwapExecutor =
             USDE.balanceOf(address(uniswapV4Exposed));
 
-        uint256 amountOut = uniswapV4Exposed.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            uniswapV4Exposed.swap(amountIn, protocolData);
         assertEq(USDE.balanceOf(POOL_MANAGER), usdeBalanceBeforePool + amountIn);
         assertEq(
             USDE.balanceOf(ALICE), usdeBalanceBeforeSwapExecutor - amountIn
         );
         assertTrue(USDT.balanceOf(ALICE) == amountOut);
+        assertEq(tokenOut, USDT_ADDR);
+        assertEq(receiver, ALICE);
     }
 
     function testMultipleSwap() public {
@@ -197,13 +217,16 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             pools
         );
 
-        uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            uniswapV4Exposed.swap(amountIn, data);
         assertEq(USDE.balanceOf(POOL_MANAGER), usdeBalanceBeforePool + amountIn);
         assertEq(
             USDE.balanceOf(address(uniswapV4Exposed)),
             usdeBalanceBeforeSwapExecutor - amountIn
         );
         assertTrue(IERC20(WBTC_ADDR).balanceOf(ALICE) == amountOut);
+        assertEq(tokenOut, WBTC_ADDR);
+        assertEq(receiver, ALICE);
     }
 
     function testMultipleSwapIntegration() public {
@@ -217,13 +240,16 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         uint256 usdeBalanceBeforeSwapExecutor =
             USDE.balanceOf(address(uniswapV4Exposed));
 
-        uint256 amountOut = uniswapV4Exposed.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            uniswapV4Exposed.swap(amountIn, protocolData);
         assertEq(USDE.balanceOf(POOL_MANAGER), usdeBalanceBeforePool + amountIn);
         assertEq(
             USDE.balanceOf(address(uniswapV4Exposed)),
             usdeBalanceBeforeSwapExecutor - amountIn
         );
         assertTrue(IERC20(WBTC_ADDR).balanceOf(ALICE) == amountOut);
+        assertEq(tokenOut, WBTC_ADDR);
+        assertEq(receiver, ALICE);
     }
 
     function testSingleSwapEulerHook() public {
@@ -254,13 +280,16 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             pools
         );
 
-        uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            uniswapV4Exposed.swap(amountIn, data);
         assertEq(amountOut, 2681115183499232721);
         assertEq(
             USDC.balanceOf(address(uniswapV4Exposed)),
             usdcBalanceBeforeSwapExecutor - amountIn
         );
         assertTrue(IERC20(WETH_ADDR).balanceOf(ALICE) == amountOut);
+        assertEq(tokenOut, WETH_ADDR);
+        assertEq(receiver, ALICE);
     }
 }
 
@@ -287,7 +316,7 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
         uint256 forkBlock = 23535338;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
         uniswapV4Exposed = new UniswapV4ExecutorExposed(
-            IPoolManager(POOL_MANAGER), ANGSTROM_HOOK, PERMIT2_ADDRESS
+            IPoolManager(POOL_MANAGER), ANGSTROM_HOOK
         );
     }
 
@@ -316,11 +345,14 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
             pools
         );
 
-        uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            uniswapV4Exposed.swap(amountIn, data);
         assertEq(
             RLUSD.balanceOf(eulerProxy), rlusdEulerBalanceBefore + amountIn
         );
         assertTrue(USDT.balanceOf(ALICE) == amountOut);
+        assertEq(tokenOut, USDT_ADDR);
+        assertEq(receiver, ALICE);
     }
 
     function testMultipleSwapEulerLowBalance() public {
@@ -356,11 +388,14 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
             pools
         );
 
-        uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            uniswapV4Exposed.swap(amountIn, data);
         assertEq(
             RLUSD.balanceOf(eulerProxy), rlusdEulerBalanceBefore + amountIn
         );
         assertTrue(WBTC.balanceOf(ALICE) == amountOut);
+        assertEq(tokenOut, WBTC_ADDR);
+        assertEq(receiver, ALICE);
     }
 
     function testDoubleEulerSwapLowBalance() public {
@@ -401,9 +436,12 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
             pools
         );
 
-        uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            uniswapV4Exposed.swap(amountIn, data);
         assertEq(USDC.balanceOf(eulerProxy), usdcEulerBalanceBefore + amountIn);
         assertTrue(USDT.balanceOf(ALICE) == amountOut);
+        assertEq(tokenOut, USDT_ADDR);
+        assertEq(receiver, ALICE);
     }
 
     function testMultipleSwapLastSwapEuler() public {
@@ -438,8 +476,11 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
             pools
         );
 
-        uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            uniswapV4Exposed.swap(amountIn, data);
         assertTrue(USDT.balanceOf(ALICE) == amountOut);
+        assertEq(tokenOut, USDT_ADDR);
+        assertEq(receiver, ALICE);
     }
 }
 
@@ -616,7 +657,6 @@ contract TychoRouterForUniswapV4Test is TychoRouterTestSetup {
         uint256 balanceAfter = ALICE.balance;
 
         assertTrue(success, "Call Failed");
-        console.logUint(balanceAfter - balanceBefore);
         assertEq(balanceAfter - balanceBefore, 1474406268748155809);
     }
 }

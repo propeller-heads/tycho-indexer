@@ -6,18 +6,17 @@ import "@src/executors/BalancerV2Executor.sol";
 import {Constants} from "../Constants.sol";
 
 contract BalancerV2ExecutorExposed is BalancerV2Executor {
-    constructor(address _permit2) BalancerV2Executor(_permit2) {}
+    constructor() BalancerV2Executor() {}
 
     function decodeParams(bytes calldata data)
         external
         pure
         returns (
-            IERC20 tokenIn,
-            IERC20 tokenOut,
+            address tokenIn,
+            address tokenOut,
             bytes32 poolId,
             address receiver,
-            bool needsApproval,
-            TransferType transferType
+            bool needsApproval
         )
     {
         return _decodeData(data);
@@ -36,7 +35,7 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
     function setUp() public {
         uint256 forkBlock = 17323404;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        balancerV2Exposed = new BalancerV2ExecutorExposed(PERMIT2_ADDRESS);
+        balancerV2Exposed = new BalancerV2ExecutorExposed();
     }
 
     function testDecodeParams() public view {
@@ -50,19 +49,38 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
         );
 
         (
-            IERC20 tokenIn,
-            IERC20 tokenOut,
+            address tokenIn,
+            address tokenOut,
             bytes32 poolId,
             address receiver,
-            bool needsApproval,
-            RestrictTransferFrom.TransferType transferType
+            bool needsApproval
         ) = balancerV2Exposed.decodeParams(params);
 
-        assertEq(address(tokenIn), WETH_ADDR);
-        assertEq(address(tokenOut), BAL_ADDR);
+        assertEq(tokenIn, WETH_ADDR);
+        assertEq(tokenOut, BAL_ADDR);
         assertEq(poolId, WETH_BAL_POOL_ID);
         assertEq(receiver, address(2));
         assertEq(needsApproval, true);
+    }
+
+    function testGetTransferData() public {
+        bytes memory params = abi.encodePacked(
+            WETH_ADDR,
+            BAL_ADDR,
+            WETH_BAL_POOL_ID,
+            address(2),
+            true,
+            RestrictTransferFrom.TransferType.None
+        );
+
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        ) = balancerV2Exposed.getTransferData(params);
+
+        assertEq(address(tokenIn), WETH_ADDR);
+        assertEq(receiver, address(balancerV2Exposed));
         assertEq(
             uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
         );
@@ -90,33 +108,32 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
         deal(WETH_ADDR, address(balancerV2Exposed), amountIn);
         uint256 balanceBefore = BAL.balanceOf(BOB);
 
-        uint256 amountOut = balancerV2Exposed.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            balancerV2Exposed.swap(amountIn, protocolData);
 
         uint256 balanceAfter = BAL.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
+        assertEq(tokenOut, BAL_ADDR);
+        assertEq(receiver, BOB);
     }
 
     function testDecodeIntegration() public view {
         bytes memory protocolData =
             loadCallDataFromFile("test_encode_balancer_v2");
         (
-            IERC20 tokenIn,
-            IERC20 tokenOut,
+            address tokenIn,
+            address tokenOut,
             bytes32 poolId,
             address receiver,
-            bool needsApproval,
-            RestrictTransferFrom.TransferType transferType
+            bool needsApproval
         ) = balancerV2Exposed.decodeParams(protocolData);
 
-        assertEq(address(tokenIn), WETH_ADDR);
-        assertEq(address(tokenOut), BAL_ADDR);
+        assertEq(tokenIn, WETH_ADDR);
+        assertEq(tokenOut, BAL_ADDR);
         assertEq(poolId, WETH_BAL_POOL_ID);
         assertEq(receiver, BOB);
         assertEq(needsApproval, true);
-        assertEq(
-            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
-        );
     }
 
     function testSwapIntegration() public {
@@ -128,10 +145,13 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
         deal(WETH_ADDR, address(balancerV2Exposed), amountIn);
         uint256 balanceBefore = BAL.balanceOf(BOB);
 
-        uint256 amountOut = balancerV2Exposed.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            balancerV2Exposed.swap(amountIn, protocolData);
 
         uint256 balanceAfter = BAL.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
+        assertEq(tokenOut, BAL_ADDR);
+        assertEq(receiver, BOB);
     }
 }

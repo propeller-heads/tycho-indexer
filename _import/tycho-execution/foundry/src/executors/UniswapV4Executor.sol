@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "@interfaces/IExecutor.sol";
+import {IExecutor} from "@interfaces/IExecutor.sol";
 import {ICallback} from "@interfaces/ICallback.sol";
 import {
     IERC20,
@@ -28,9 +28,11 @@ import {
 import {
     TransientStateLibrary
 } from "@uniswap/v4-core/src/libraries/TransientStateLibrary.sol";
-import "../RestrictTransferFrom.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
-import "../../lib/bytes/LibPrefixLengthEncodedByteArray.sol";
+import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {
+    LibPrefixLengthEncodedByteArray
+} from "../../lib/bytes/LibPrefixLengthEncodedByteArray.sol";
 
 error UniswapV4Executor__InvalidDataLength();
 error UniswapV4Executor__NotPoolManager();
@@ -43,24 +45,19 @@ error UniswapV4Executor__V4TooMuchRequested(
 error UniswapV4Executor__InvalidAngstromAttestationDataLength(uint256 length);
 error UniswapV4Executor__ZeroAddressAngstromHook();
 
-contract UniswapV4Executor is
-    IExecutor,
-    IUnlockCallback,
-    ICallback,
-    RestrictTransferFrom
-{
+contract UniswapV4Executor is IExecutor, ICallback {
     using SafeERC20 for IERC20;
     using CurrencyLibrary for Currency;
     using V4SafeCast for *;
     using TransientStateLibrary for IPoolManager;
     using LibPrefixLengthEncodedByteArray for bytes;
 
-    IPoolManager public immutable poolManager;
-    address private immutable _angstromHookAddress;
-    address private immutable _self;
+    bytes4 private constant SWAP_EXACT_INPUT_SELECTOR = 0xae17ced7;
+    bytes4 private constant SWAP_EXACT_INPUT_SINGLE_SELECTOR = 0x6022fbcd;
 
-    bytes4 constant SWAP_EXACT_INPUT_SINGLE_SELECTOR = 0x6022fbcd;
-    bytes4 constant SWAP_EXACT_INPUT_SELECTOR = 0x044f0d3d;
+    IPoolManager public immutable POOL_MANAGER;
+    address private immutable _ANGSTROM_HOOK_ADDRESS;
+    address private immutable _SELF;
 
     struct UniswapV4Pool {
         address intermediaryToken;
@@ -70,24 +67,20 @@ contract UniswapV4Executor is
         bytes hookData;
     }
 
-    constructor(
-        IPoolManager _poolManager,
-        address _angstromHook,
-        address _permit2
-    ) RestrictTransferFrom(_permit2) {
+    constructor(IPoolManager _poolManager, address _angstromHook) {
         if (_angstromHook == address(0)) {
             revert UniswapV4Executor__ZeroAddressAngstromHook();
         }
-        poolManager = _poolManager;
-        _angstromHookAddress = _angstromHook;
-        _self = address(this);
+        POOL_MANAGER = _poolManager;
+        _ANGSTROM_HOOK_ADDRESS = _angstromHook;
+        _SELF = address(this);
     }
 
     /**
      * @dev Modifier to restrict access to only the pool manager.
      */
     modifier poolManagerOnly() virtual {
-        if (msg.sender != address(poolManager)) {
+        if (msg.sender != address(POOL_MANAGER)) {
             revert UniswapV4Executor__NotPoolManager();
         }
         _;
@@ -96,17 +89,14 @@ contract UniswapV4Executor is
     function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        virtual
-        returns (uint256 calculatedAmount)
+        returns (uint256 calculatedAmount, address tokenOut, address receiver)
     {
-        (
-            address tokenIn,
-            address tokenOut,
-            bool zeroForOne,
-            TransferType transferType,
-            address receiver,
-            UniswapV4Executor.UniswapV4Pool[] memory pools
-        ) = _decodeData(data);
+        address tokenIn;
+        bool zeroForOne;
+        RestrictTransferFrom.TransferType transferType;
+        UniswapV4Executor.UniswapV4Pool[] memory pools;
+        (tokenIn, tokenOut, zeroForOne, transferType, receiver, pools) =
+            _decodeData(data);
         bytes memory swapData;
         if (pools.length == 1) {
             PoolKey memory key = PoolKey({
@@ -143,17 +133,17 @@ contract UniswapV4Executor is
             swapData = abi.encodeWithSelector(
                 this.swapExactInput.selector,
                 currencyIn,
-                path,
                 amountIn,
                 transferType,
-                receiver
+                receiver,
+                path
             );
         }
-
-        bytes memory result = poolManager.unlock(swapData);
+        POOL_MANAGER.sync(Currency.wrap(tokenIn));
+        bytes memory result = POOL_MANAGER.unlock(swapData);
         uint128 amountOut = abi.decode(result, (uint128));
 
-        return amountOut;
+        calculatedAmount = amountOut;
     }
 
     // slither-disable-next-line dead-code
@@ -165,7 +155,7 @@ contract UniswapV4Executor is
             address tokenIn,
             address tokenOut,
             bool zeroForOne,
-            TransferType transferType,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             UniswapV4Pool[] memory pools
         )
@@ -177,7 +167,7 @@ contract UniswapV4Executor is
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
         zeroForOne = data[40] != 0;
-        transferType = TransferType(uint8(data[41]));
+        transferType = RestrictTransferFrom.TransferType(uint8(data[41]));
         receiver = address(bytes20(data[42:62]));
 
         bytes calldata remaining = data[62:];
@@ -200,7 +190,7 @@ contract UniswapV4Executor is
         }
 
         bytes memory firstHookData;
-        if (firstHook == _angstromHookAddress) {
+        if (firstHook == _ANGSTROM_HOOK_ADDRESS) {
             // Select attestation from first pool's hook data
             // Convert calldata to memory since _selectAttestation requires bytes memory
             firstHookData = _selectAttestation(
@@ -252,7 +242,7 @@ contract UniswapV4Executor is
             }
 
             bytes memory hookData;
-            if (hook == _angstromHookAddress) {
+            if (hook == _ANGSTROM_HOOK_ADDRESS) {
                 // Select attestation from hookData
                 hookData = _selectAttestation(rawHookData);
             } else {
@@ -284,13 +274,13 @@ contract UniswapV4Executor is
     /**
      * @notice Handles the unlock callback from the pool manager. This is used for swaps against the executor directly (bypassing the router).
      */
-    function unlockCallback(bytes calldata data)
-        external
-        poolManagerOnly
-        returns (bytes memory)
-    {
-        return _unlockCallback(data);
-    }
+    //    function unlockCallback(bytes calldata data)
+    //        external
+    //        poolManagerOnly
+    //        returns (bytes memory)
+    //    {
+    //        return _unlockCallback(data);
+    //    }
 
     /**
      * @dev Internal function to handle the unlock callback.
@@ -309,7 +299,7 @@ contract UniswapV4Executor is
 
         // here we expect to call either `swapExactInputSingle` or `swapExactInput`. See `swap` to see how we encode the selector and the calldata
         // slither-disable-next-line low-level-calls
-        (bool success, bytes memory returnData) = _self.delegatecall(data);
+        (bool success, bytes memory returnData) = _SELF.delegatecall(data);
         if (!success) {
             revert(
                 string(
@@ -335,7 +325,7 @@ contract UniswapV4Executor is
         PoolKey memory poolKey,
         bool zeroForOne,
         uint128 amountIn,
-        TransferType transferType,
+        RestrictTransferFrom.TransferType transferType,
         address receiver,
         bytes calldata hookData
     ) external returns (uint128) {
@@ -361,10 +351,10 @@ contract UniswapV4Executor is
      */
     function swapExactInput(
         Currency currencyIn,
-        PathKey[] calldata path,
         uint128 amountIn,
-        TransferType transferType,
-        address receiver
+        RestrictTransferFrom.TransferType transferType,
+        address receiver,
+        PathKey[] calldata path
     ) external returns (uint128) {
         uint128 amountOut = 0;
         Currency swapCurrencyIn = currencyIn;
@@ -407,7 +397,7 @@ contract UniswapV4Executor is
     ) private returns (int128 reciprocalAmount) {
         unchecked {
             // slither-disable-next-line calls-loop
-            BalanceDelta delta = poolManager.swap(
+            BalanceDelta delta = POOL_MANAGER.swap(
                 poolKey,
                 SwapParams(
                     zeroForOne,
@@ -435,7 +425,7 @@ contract UniswapV4Executor is
         view
         returns (uint256 amount)
     {
-        int256 _amount = poolManager.currencyDelta(address(this), currency);
+        int256 _amount = POOL_MANAGER.currencyDelta(address(this), currency);
         // If the amount is negative, it should be settled not taken.
         if (_amount < 0) revert UniswapV4Executor__DeltaNotPositive(currency);
         amount = uint256(_amount);
@@ -452,22 +442,15 @@ contract UniswapV4Executor is
     function _settle(
         Currency currency,
         uint256 amount,
-        TransferType transferType
+        RestrictTransferFrom.TransferType transferType
     ) internal {
         if (amount == 0) return;
-        poolManager.sync(currency);
         if (currency.isAddressZero()) {
             // slither-disable-next-line unused-return
-            poolManager.settle{value: amount}();
+            POOL_MANAGER.settle{value: amount}();
         } else {
-            _transfer(
-                address(poolManager),
-                transferType,
-                Currency.unwrap(currency),
-                amount
-            );
             // slither-disable-next-line unused-return
-            poolManager.settle();
+            POOL_MANAGER.settle();
         }
     }
 
@@ -482,7 +465,7 @@ contract UniswapV4Executor is
         internal
     {
         if (amount == 0) return;
-        poolManager.take(currency, recipient, amount);
+        POOL_MANAGER.take(currency, recipient, amount);
     }
 
     function _mapTakeAmount(uint256 amount, Currency currency)
@@ -506,18 +489,18 @@ contract UniswapV4Executor is
         view
         returns (bytes memory)
     {
-        uint256 TOTAL_LENGTH = 93;
+        uint256 totalLength = 93;
         bytes memory attestation = new bytes(85);
 
         // Calculate number of attestations from data length
-        if (attestationData.length % TOTAL_LENGTH != 0) {
+        if (attestationData.length % totalLength != 0) {
             revert UniswapV4Executor__InvalidAngstromAttestationDataLength(attestationData.length);
         }
 
-        uint256 attestationCount = attestationData.length / TOTAL_LENGTH;
+        uint256 attestationCount = attestationData.length / totalLength;
 
         for (uint256 i = 0; i < attestationCount; i++) {
-            uint256 offset = i * TOTAL_LENGTH;
+            uint256 offset = i * totalLength;
 
             // Assembly is used because attestationData is bytes memory
             uint64 blockNumber;
@@ -550,5 +533,66 @@ contract UniswapV4Executor is
         // All attestations decoded and no attestation found for the current block.
         // Return empty bytes instead of reverting
         return "";
+    }
+
+    function getTransferData(
+        bytes calldata /* data */
+    )
+        external
+        payable
+        returns (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        )
+    {
+        return (RestrictTransferFrom.TransferType.None, address(0), address(0));
+    }
+
+    function getCallbackTransferData(bytes calldata data)
+        external
+        payable
+        returns (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            uint256 amount
+        )
+    {
+        bytes calldata stripped = data[68:];
+        bytes4 selector = bytes4(stripped[:4]);
+        receiver = address(POOL_MANAGER);
+        if (selector == SWAP_EXACT_INPUT_SINGLE_SELECTOR) {
+            // swapExactInputSingle(PoolKey memory poolKey, bool zeroForOne, uint128 amountIn, RestrictTransferFrom.TransferType transferType, address receiver, bytes calldata hookData)
+            // Data layout: selector(4) + PoolKey(160) + bool(32) + uint128(32) + TransferType(32) + address(32) + hookData(variable)
+
+            // PoolKey starts at offset 4, each field is 32 bytes:
+            // currency0: data[4:36], currency1: data[36:68], fee: data[68:100], tickSpacing: data[100:132], hooks: data[132:164]
+            // zeroForOne: data[164:196]
+            // amountIn: data[196:228]
+            // transferType: data[228:260]
+            // receiver: data[260:292]
+
+            bool zeroForOne = uint8(stripped[195]) != 0; // Last byte of the 32-byte bool
+            amount = uint128(bytes16(stripped[212:228])); // uint128 is 16 bytes, starts at offset 212
+            transferType =
+                RestrictTransferFrom.TransferType(uint8(stripped[259])); // Last byte of the 32-byte transferType
+            // Extract tokenIn from PoolKey based on zeroForOne
+            if (zeroForOne) {
+                tokenIn = address(bytes20(stripped[16:36])); // currency0
+            } else {
+                tokenIn = address(bytes20(stripped[48:68])); // currency1
+            }
+        } else if (selector == SWAP_EXACT_INPUT_SELECTOR) {
+            // swapExactInput(Currency currencyIn, uint128 amountIn, RestrictTransferFrom.TransferType transferType, address receiver, PathKey[] calldata path)
+            // Data layout: selector(4) + Currency(32) + uint128(32) + TransferType(32) + address(32) + PathKey[](variable)
+
+            tokenIn = address(bytes20(stripped[16:36])); // Currency is padded to 32 bytes
+            amount = uint128(bytes16(stripped[52:68])); // uint128 is 16 bytes, but padded to 32
+            transferType =
+                RestrictTransferFrom.TransferType(uint8(stripped[99])); // Last byte of the 32-byte transferType
+        } else {
+            revert UniswapV4Executor__UnknownCallback(selector);
+        }
     }
 }

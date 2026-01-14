@@ -1,9 +1,14 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "@interfaces/IExecutor.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@uniswap-v2/contracts/interfaces/IUniswapV2Pair.sol";
+import {IExecutor} from "@interfaces/IExecutor.sol";
+import {
+    SafeERC20,
+    IERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {
+    IUniswapV2Pair
+} from "@uniswap-v2/contracts/interfaces/IUniswapV2Pair.sol";
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 
 error UniswapV2Executor__InvalidDataLength();
@@ -12,55 +17,46 @@ error UniswapV2Executor__InvalidFactory();
 error UniswapV2Executor__InvalidInitCode();
 error UniswapV2Executor__InvalidFee();
 
-contract UniswapV2Executor is IExecutor, RestrictTransferFrom {
+contract UniswapV2Executor is IExecutor {
     using SafeERC20 for IERC20;
 
-    address public immutable factory;
-    bytes32 public immutable initCode;
-    address private immutable self;
-    uint256 public immutable feeBps;
+    address public immutable FACTORY;
+    bytes32 public immutable INIT_CODE;
+    address private immutable SELF;
+    uint256 public immutable FEE_BPS;
 
-    constructor(
-        address _factory,
-        bytes32 _initCode,
-        address _permit2,
-        uint256 _feeBps
-    ) RestrictTransferFrom(_permit2) {
+    constructor(address _factory, bytes32 _initCode, uint256 _feeBps) {
         if (_factory == address(0)) {
             revert UniswapV2Executor__InvalidFactory();
         }
         if (_initCode == bytes32(0)) {
             revert UniswapV2Executor__InvalidInitCode();
         }
-        factory = _factory;
-        initCode = _initCode;
+        FACTORY = _factory;
+        INIT_CODE = _initCode;
         if (_feeBps > 30) {
             revert UniswapV2Executor__InvalidFee();
         }
-        feeBps = _feeBps;
-        self = address(this);
+        FEE_BPS = _feeBps;
+        SELF = address(this);
     }
 
     // slither-disable-next-line locked-ether
-    function swap(uint256 givenAmount, bytes calldata data)
+    function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256 calculatedAmount)
+        returns (uint256 calculatedAmount, address tokenOut, address receiver)
     {
-        IERC20 tokenIn;
         address target;
-        address receiver;
         bool zeroForOne;
-        TransferType transferType;
+        // TODO: we need the tokenOut for this swap
+        tokenOut = address(0);
 
-        (tokenIn, target, receiver, zeroForOne, transferType) =
-            _decodeData(data);
+        (target, receiver, zeroForOne) = _decodeData(data);
 
         _verifyPairAddress(target);
 
-        calculatedAmount = _getAmountOut(target, givenAmount, zeroForOne);
-
-        _transfer(target, transferType, address(tokenIn), givenAmount);
+        calculatedAmount = _getAmountOut(target, amountIn, zeroForOne);
 
         IUniswapV2Pair pool = IUniswapV2Pair(target);
         if (zeroForOne) {
@@ -73,22 +69,14 @@ contract UniswapV2Executor is IExecutor, RestrictTransferFrom {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (
-            IERC20 inToken,
-            address target,
-            address receiver,
-            bool zeroForOne,
-            TransferType transferType
-        )
+        returns (address target, address receiver, bool zeroForOne)
     {
         if (data.length != 62) {
             revert UniswapV2Executor__InvalidDataLength();
         }
-        inToken = IERC20(address(bytes20(data[0:20])));
         target = address(bytes20(data[20:40]));
         receiver = address(bytes20(data[40:60]));
         zeroForOne = data[60] != 0;
-        transferType = TransferType(uint8(data[61]));
     }
 
     function _getAmountOut(address target, uint256 amountIn, bool zeroForOne)
@@ -108,7 +96,7 @@ contract UniswapV2Executor is IExecutor, RestrictTransferFrom {
         }
 
         require(reserveIn > 0 && reserveOut > 0, "L");
-        uint256 amountInWithFee = amountIn * (10000 - feeBps);
+        uint256 amountInWithFee = amountIn * (10000 - FEE_BPS);
         uint256 numerator = amountInWithFee * uint256(reserveOut);
         uint256 denominator = (uint256(reserveIn) * 10000) + amountInWithFee;
         amount = numerator / denominator;
@@ -122,7 +110,7 @@ contract UniswapV2Executor is IExecutor, RestrictTransferFrom {
             uint160(
                 uint256(
                     keccak256(
-                        abi.encodePacked(hex"ff", factory, salt, initCode)
+                        abi.encodePacked(hex"ff", FACTORY, salt, INIT_CODE)
                     )
                 )
             )
@@ -130,5 +118,22 @@ contract UniswapV2Executor is IExecutor, RestrictTransferFrom {
         if (pair != target) {
             revert UniswapV2Executor__InvalidTarget();
         }
+    }
+
+    function getTransferData(bytes calldata data)
+        external
+        payable
+        returns (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        )
+    {
+        if (data.length != 62) {
+            revert UniswapV2Executor__InvalidDataLength();
+        }
+        tokenIn = address(bytes20(data[0:20]));
+        receiver = address(bytes20(data[20:40]));
+        transferType = RestrictTransferFrom.TransferType(uint8(data[61]));
     }
 }

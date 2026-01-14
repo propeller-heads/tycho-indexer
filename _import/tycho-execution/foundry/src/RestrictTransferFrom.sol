@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "@interfaces/IExecutor.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@permit2/src/interfaces/IAllowanceTransfer.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
+import {
+    SafeERC20,
+    IERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {
+    IAllowanceTransfer
+} from "@permit2/src/interfaces/IAllowanceTransfer.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 error RestrictTransferFrom__AddressZero();
 error RestrictTransferFrom__ExceededTransferFromAllowance(
@@ -26,7 +30,7 @@ error RestrictTransferFrom__UnknownTransferType();
 contract RestrictTransferFrom {
     using SafeERC20 for IERC20;
 
-    IAllowanceTransfer public immutable permit2;
+    IAllowanceTransfer public immutable PERMIT2;
     // keccak256("RestrictTransferFrom#TOKEN_IN_SLOT")
     uint256 private constant _TOKEN_IN_SLOT =
         0x25712b2458c26c244401cacab2c4d40a337e6c15af51d98c87ca8c05ed74935f;
@@ -44,7 +48,7 @@ contract RestrictTransferFrom {
         if (_permit2 == address(0)) {
             revert RestrictTransferFrom__AddressZero();
         }
-        permit2 = IAllowanceTransfer(_permit2);
+        PERMIT2 = IAllowanceTransfer(_permit2);
     }
 
     enum TransferType {
@@ -117,7 +121,7 @@ contract RestrictTransferFrom {
             }
             if (isPermit2) {
                 // Permit2.permit is already called from the TychoRouter
-                permit2.transferFrom(sender, receiver, uint160(amount), tokenIn);
+                PERMIT2.transferFrom(sender, receiver, uint160(amount), tokenIn);
             } else {
                 // slither-disable-next-line arbitrary-send-erc20
                 IERC20(tokenIn).safeTransferFrom(sender, receiver, amount);

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
+import "../src/RestrictTransferFrom.sol";
+
 interface ICallback {
     /**
      * @notice Handles callback data from a protocol or contract interaction.
@@ -22,4 +24,16 @@ interface ICallback {
      * @param data The encoded callback data to verify.
      */
     function verifyCallback(bytes calldata data) external view;
+
+
+    // TODO: add docs
+    function getCallbackTransferData(bytes calldata data)
+    external
+    payable
+    returns (
+        RestrictTransferFrom.TransferType transferType,
+        address receiver,
+        address tokenIn,
+        uint256 amountIn
+    );
 }

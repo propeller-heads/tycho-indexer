@@ -474,7 +474,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         deal(WETH_ADDR, ALICE, 1 ether);
         uint256 balanceBefore = IERC20(USDT_ADDR).balanceOf(ALICE);
 
-        // Approve permit2
+        // Approve
         vm.startPrank(ALICE);
         IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
         bytes memory callData =
