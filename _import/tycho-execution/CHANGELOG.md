@@ -1,3 +1,10 @@
+## [0.3.1](https://github.com/propeller-heads/tycho-contracts/compare/0.3.0...0.3.1) (2026-01-14)
+
+
+### Bug Fixes
+
+* Add mint and burn that don't emit an event ([694bfb6](https://github.com/propeller-heads/tycho-contracts/commit/694bfb6f20ba9bebe52a5ebe98a19e47cd2786f2))
+
 ## [0.3.0](https://github.com/propeller-heads/tycho-contracts/compare/0.2.0...0.3.0) (2026-01-13)
 
 
