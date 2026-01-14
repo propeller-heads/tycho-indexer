@@ -1,3 +1,16 @@
+## [0.4.0](https://github.com/propeller-heads/tycho-contracts/compare/0.3.1...0.4.0) (2026-01-14)
+
+
+### Features
+
+* **Ekubo:** Bring tokenOut to highest (swap) level ([230a6a5](https://github.com/propeller-heads/tycho-contracts/commit/230a6a586004dd29c0f00feb92b571905988ef49))
+* **ERC4636:** infer tokenOut from target and asset ([1e0897f](https://github.com/propeller-heads/tycho-contracts/commit/1e0897f370b6563b203ad16d94f3f9145474281e))
+* **FluidV1:** Add tokenOut to executor ([6c9b441](https://github.com/propeller-heads/tycho-contracts/commit/6c9b44131d3d0e7f8905b519120ee90668f0bfda))
+* **Lido:** Infer tokenOut in executor ([67a3d19](https://github.com/propeller-heads/tycho-contracts/commit/67a3d19924fd5a8d4964b1f9967640431c8ebcc6))
+* **Maverick:** Add tokenOut to executor ([4558e06](https://github.com/propeller-heads/tycho-contracts/commit/4558e06894c3064dafbe49da3e2a2b4ead0968a5))
+* **Rocketpool:** Infer tokenOut in executor ([8d087be](https://github.com/propeller-heads/tycho-contracts/commit/8d087be93106f398caa4162e2954dff6a631407e))
+* **UniswapV2:** Add tokenOut to executor calldata ([a290e1a](https://github.com/propeller-heads/tycho-contracts/commit/a290e1a9f92eaff5d275ca05adfb0d048a7aceca))
+
 ## [0.3.1](https://github.com/propeller-heads/tycho-contracts/compare/0.3.0...0.3.1) (2026-01-14)
 
 
