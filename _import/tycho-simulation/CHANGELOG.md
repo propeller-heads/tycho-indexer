@@ -1,3 +1,10 @@
+## [0.228.1](https://github.com/propeller-heads/tycho-simulation/compare/0.228.0...0.228.1) (2026-01-14)
+
+
+### Bug Fixes
+
+* use correct "ticks/" prefix when handling deleted tick attributes ([287f3e1](https://github.com/propeller-heads/tycho-simulation/commit/287f3e19478fa60563a213739c1c7d37188f7b13))
+
 ## [0.228.0](https://github.com/propeller-heads/tycho-simulation/compare/0.227.0...0.228.0) (2026-01-12)
 
 
