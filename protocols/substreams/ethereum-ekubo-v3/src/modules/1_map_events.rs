@@ -10,7 +10,7 @@ use substreams_ethereum::{
 
 use crate::{
     abi::{core::events as core_events, twamm::events as twamm_events},
-    deployment_config::DeploymentConfig,
+    addresses::{CORE_ADDRESS, MEV_CAPTURE_ADDRESS, ORACLE_ADDRESS, TWAMM_ADDRESS},
     pb::ekubo::{
         block_transaction_events::{
             transaction_events::{
@@ -27,16 +27,14 @@ use crate::{
 };
 
 #[substreams::handlers::map]
-fn map_events(params: String, block: eth::v2::Block) -> BlockTransactionEvents {
-    let config: DeploymentConfig = serde_qs::from_str(&params).unwrap();
-
+fn map_events(block: eth::v2::Block) -> BlockTransactionEvents {
     BlockTransactionEvents {
         block_transaction_events: block
             .transactions()
             .flat_map(|trace| {
                 let pool_logs = trace
                     .logs_with_calls()
-                    .filter_map(|(log, _)| maybe_pool_log(log, &config))
+                    .filter_map(|(log, _)| maybe_pool_log(log))
                     .collect_vec();
 
                 (!pool_logs.is_empty())
@@ -56,10 +54,10 @@ fn map_events(params: String, block: eth::v2::Block) -> BlockTransactionEvents {
     }
 }
 
-fn maybe_pool_log(log: &Log, config: &DeploymentConfig) -> Option<PoolLog> {
+fn maybe_pool_log(log: &Log) -> Option<PoolLog> {
     let emitter = Address::from_slice(&log.address);
 
-    let (pool_id, ev) = if emitter == config.core {
+    let (pool_id, ev) = if emitter == CORE_ADDRESS {
         if log.topics.is_empty() {
             let data = &log.data;
 
@@ -111,11 +109,11 @@ fn maybe_pool_log(log: &Log, config: &DeploymentConfig) -> Option<PoolLog> {
 
                 if extension.is_zero() {
                     Extension::Base
-                } else if extension == config.oracle {
+                } else if extension == ORACLE_ADDRESS {
                     Extension::Oracle
-                } else if extension == config.twamm {
+                } else if extension == TWAMM_ADDRESS {
                     Extension::Twamm
-                } else if extension == config.mev_capture {
+                } else if extension == MEV_CAPTURE_ADDRESS {
                     Extension::MevCapture
                 } else {
                     Extension::Unknown
@@ -139,7 +137,7 @@ fn maybe_pool_log(log: &Log, config: &DeploymentConfig) -> Option<PoolLog> {
         } else {
             return None;
         }
-    } else if emitter == config.twamm.as_slice() {
+    } else if emitter == TWAMM_ADDRESS {
         if log.topics.is_empty() {
             let data = &log.data;
 

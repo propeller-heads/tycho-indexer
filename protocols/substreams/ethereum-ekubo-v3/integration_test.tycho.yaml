@@ -1,9 +1,23 @@
 substreams_yaml_path: ./substreams.yaml
 protocol_system: "ekubo_v3"
-module_name: "map_protocol_changes"
-adapter_build_signature: "constructor(address)" # TODO
-adapter_build_args: "0x16e186ecdc94083fff53ef2a41d46b92a54f61e2" # TODO
 skip_balance_check: true # Fails because the pool id is not the owner of the tokens. Needs to be address in the testing framework.
 protocol_type_names:
   - "ekubo_v3_pool"
-tests: # TODO
+tests:
+  - name: test_pool_creation
+    start_block: 24169200
+    stop_block: 24169200
+    expected_components:
+      - id: "0x8d04fa3b0df99076064daf0511006a8a06b0f988922db81c1e596ddfd1f3da12"
+        tokens:
+          - "0x0000000000000000000000000000000000000000"
+          - "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        static_attributes:
+          token0: "0x0000000000000000000000000000000000000000"
+          token1: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+          extension: "0xd4f1060cb9c1a13e1d2d20379b8aa2cf7541ed9b"
+          fee: "0x00c49ba5e353f7ce"
+          pool_type_config: "0x00000000"
+          extension_id: "0x00000003"
+        creation_tx: "0xa0460837160c3e74c14a56fe8af78ea81458c11f44bf23b317123e6629f9c529"
+        skip_simulation: true # Not integrated into tycho-simulation yet

@@ -1,17 +1,20 @@
 use itertools::Itertools;
-use substreams::{hex, scalar::BigInt};
+use substreams::scalar::BigInt;
 use substreams_helper::hex::Hexable;
 use tycho_substreams::models::{
     Attribute, BalanceChange, BlockChanges, ChangeType, EntityChanges, FinancialType,
     ImplementationType, ProtocolComponent, ProtocolType, TransactionChanges,
 };
 
-use crate::pb::ekubo::{
-    block_transaction_events::transaction_events::{
-        pool_log::{pool_initialized::Extension, Event},
-        PoolLog,
+use crate::{
+    addresses::CORE_ADDRESS,
+    pb::ekubo::{
+        block_transaction_events::transaction_events::{
+            pool_log::{pool_initialized::Extension, Event},
+            PoolLog,
+        },
+        BlockTransactionEvents,
     },
-    BlockTransactionEvents,
 };
 
 #[substreams::handlers::map]
@@ -92,7 +95,7 @@ fn maybe_create_component(
                     change: ChangeType::Creation.into(),
                     name: "balance_owner".to_string(), /* TODO: We should use AccountBalances
                                                         * instead */
-                    value: hex!("e0e0e08A6A4b9Dc7bD67BCB7aadE5cF48157d444").to_vec(),
+                    value: CORE_ADDRESS.to_vec(),
                 },
             ])
             .collect();

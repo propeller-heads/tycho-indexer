@@ -118,6 +118,8 @@ pub struct PoolDetails {
     pub token1: ::prost::alloc::vec::Vec<u8>,
     #[prost(fixed64, tag="3")]
     pub fee: u64,
+    #[prost(bool, tag="4")]
+    pub is_stableswap: bool,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

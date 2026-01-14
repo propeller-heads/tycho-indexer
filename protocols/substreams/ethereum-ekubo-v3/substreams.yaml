@@ -22,19 +22,16 @@ binaries:
     type: wasm/rust-v1
     file: ../target/wasm32-unknown-unknown/release/ethereum_ekubo_v3.wasm
 
-network: sepolia
+network: mainnet
 networks:
-  sepolia:
+  mainnet:
     initialBlock:
-      map_events: 9739898 # Core deployment https://sepolia.etherscan.io/tx/0x3c3d1f0249781a60f90fad1d4c2f1a79b10b8cd205196df10ba2f94c48321c97
-    params:
-      map_events: "core=0x7dced58f40d871ab5d67689c35586a327116eb7f&oracle=0x518187914f592ac397654abb965d71389219a5b7&twamm=0xd483d0468db3336b9f64535ac675c7593d18789d&mev_capture=0x55ac4030e1d9b51f17207ce08b09ff27ead3098f"
+      map_events: 24134506 # First pool creation
 
 modules:
   - name: map_events
     kind: map
     inputs:
-      - params: string
       - source: sf.ethereum.type.v2.Block
     output:
       type: proto:ekubo.BlockTransactionEvents
@@ -74,14 +71,6 @@ modules:
     inputs:
       - map: map_events
 
-  - name: map_liquidity_changes
-    kind: map
-    inputs:
-      - map: map_events
-      - store: store_active_ticks
-    output:
-      type: proto:ekubo.LiquidityChanges
-
   - name: store_active_sale_rates
     kind: store
     valueType: bigint
@@ -117,6 +106,15 @@ modules:
       - store: store_pool_details
     output:
       type: proto:tycho.evm.v1.BlockBalanceDeltas
+
+  - name: map_liquidity_changes
+    kind: map
+    inputs:
+      - map: map_events
+      - store: store_pool_details
+      - store: store_active_ticks
+    output:
+      type: proto:ekubo.LiquidityChanges
 
   - name: store_active_liquidities
     kind: store

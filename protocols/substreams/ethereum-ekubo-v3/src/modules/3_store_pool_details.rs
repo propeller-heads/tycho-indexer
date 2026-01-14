@@ -24,6 +24,7 @@ fn store_pool_details(changes: BlockChanges, store: StoreSetIfNotExistsProto<Poo
                         .try_into()
                         .unwrap(),
                 ),
+                is_stableswap: attrs[3].value[0] & 0x80 == 0,
             };
 
             store.set_if_not_exists(0, component.id, &pool_details);

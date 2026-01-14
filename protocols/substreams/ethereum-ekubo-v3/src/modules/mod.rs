@@ -16,8 +16,6 @@ mod map_tick_deltas;
 #[path = "2_store_active_ticks.rs"]
 mod store_active_ticks;
 
-#[path = "3_map_liquidity_changes.rs"]
-mod map_liquidity_changes;
 #[path = "3_store_active_sale_rates.rs"]
 mod store_active_sale_rates;
 #[path = "3_store_order_sale_rates.rs"]
@@ -29,9 +27,11 @@ mod store_tick_liquidities;
 
 #[path = "4_map_balance_changes.rs"]
 mod map_balance_changes;
-#[path = "4_store_active_liquidities.rs"]
-mod store_active_liquidities;
+#[path = "4_map_liquidity_changes.rs"]
+mod map_liquidity_changes;
 
+#[path = "5_store_active_liquidities.rs"]
+mod store_active_liquidities;
 #[path = "5_store_balance_changes.rs"]
 mod store_balance_changes;
 
