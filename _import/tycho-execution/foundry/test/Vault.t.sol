@@ -168,77 +168,72 @@ contract VaultTest is Constants, TestUtils {
     }
 
     function testCreditVault() public {
-        address user = makeAddr("brand-new-user");
         uint256 amount = 1_000_000_000;
 
         uint256 id = uint256(uint160(USDC_ADDR));
 
-        uint256 balanceBefore = vault.balanceOf(user, id);
-        vault.creditVaultForTest(user, USDC_ADDR, amount);
+        uint256 balanceBefore = vault.balanceOf(BOB, id);
+        vault.creditVaultForTest(BOB, USDC_ADDR, amount);
 
-        uint256 balance = vault.balanceOf(user, id);
+        uint256 balance = vault.balanceOf(BOB, id);
 
         assertEq(balance, amount);
         assertEq(balance - balanceBefore, amount);
     }
 
     function testCreditVaultNonEmpty() public {
-        address user = makeAddr("brand-new-user");
         uint256 amount = 1_000_000_000;
 
         uint256 id = uint256(uint160(USDC_ADDR));
 
-        vault.creditVaultForTest(user, USDC_ADDR, amount);
+        vault.creditVaultForTest(BOB, USDC_ADDR, amount);
 
-        uint256 balanceBefore = vault.balanceOf(user, id);
-        vault.creditVaultForTest(user, USDC_ADDR, amount);
+        uint256 balanceBefore = vault.balanceOf(BOB, id);
+        vault.creditVaultForTest(BOB, USDC_ADDR, amount);
 
-        uint256 balance = vault.balanceOf(user, id);
+        uint256 balance = vault.balanceOf(BOB, id);
 
         assertEq(balance, 2_000_000_000);
         assertEq(balance - balanceBefore, amount);
     }
 
-    function testDebit() public {
-        address user = makeAddr("brand-new-user");
+    function testDebitVault() public {
         uint256 amount = 1_000_000_000;
         uint256 amount_to_debit = 2_000_000;
 
         uint256 id = uint256(uint160(USDC_ADDR));
 
-        vault.creditVaultForTest(user, USDC_ADDR, amount);
+        vault.creditVaultForTest(BOB, USDC_ADDR, amount);
 
-        uint256 balanceBefore = vault.balanceOf(user, id);
-        vault.debitVaultForTest(user, USDC_ADDR, amount_to_debit);
+        uint256 balanceBefore = vault.balanceOf(BOB, id);
+        vault.debitVaultForTest(BOB, USDC_ADDR, amount_to_debit);
 
-        uint256 balance = vault.balanceOf(user, id);
+        uint256 balance = vault.balanceOf(BOB, id);
 
         assertEq(balance, 998_000_000);
         assertEq(balanceBefore - balance, amount_to_debit);
     }
 
-    function testDebitTooHigh() public {
-        address user = makeAddr("brand-new-user");
+    function testDebitVaultTooHigh() public {
         uint256 amount = 900_000_000;
         uint256 amount_to_debit = 1_000_000_000;
 
         uint256 id = uint256(uint160(USDC_ADDR));
 
-        vault.creditVaultForTest(user, USDC_ADDR, amount);
+        vault.creditVaultForTest(BOB, USDC_ADDR, amount);
 
-        uint256 balanceBefore = vault.balanceOf(user, id);
-        // vault.debitVaultForTest(user, USDC_ADDR, amount_to_debit);
+        uint256 balanceBefore = vault.balanceOf(BOB, id);
 
         vm.expectRevert(
             abi.encodeWithSelector(
                 TychoVault__InsufficientBalance.selector,
-                user,
+                BOB,
                 USDC_ADDR,
                 amount_to_debit,
                 balanceBefore
             )
         );
 
-        vault.debitVaultForTest(user, USDC_ADDR, amount_to_debit);
+        vault.debitVaultForTest(BOB, USDC_ADDR, amount_to_debit);
     }
 }

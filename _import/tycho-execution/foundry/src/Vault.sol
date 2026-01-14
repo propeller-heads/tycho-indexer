@@ -209,7 +209,6 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
 
     /**
      * @dev Set the delta in transient storage
-     * @notice Sets delta for current transaction's sender
      */
     // Assembly required for transient storage operations (tstore)
     // slither-disable-next-line assembly
@@ -294,6 +293,10 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
         _burn(user, id, amount);
     }
 
+    /**
+     * @dev Internal helper to credit user's actual vault balance (persistent storage)
+     * @notice This credits the persistent vault balance, not the transient delta
+     */
     function _creditVault(
         address user,
         address token,
