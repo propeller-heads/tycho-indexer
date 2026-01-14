@@ -68,7 +68,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
     }
 
     /**
-     * @dev Override _update to use our own mapping and avoid emitting Transfer events
+     * @dev Override _update to use our own mapping and emit Transfer events
      * This is called by all balance-changing operations (transfer, mint, etc.)
      */
     function _update(address from, address to, uint256 id, uint256 amount)
