@@ -5,57 +5,43 @@ import "@src/Vault.sol";
 import {TestUtils} from "./TestUtils.sol";
 import {Constants} from "./Constants.sol";
 
-contract TestVault is Vault {
-    function setDeltaForTest(address token, int256 initialDelta) external {
+contract VaultExposed is Vault {
+    function setDelta(address token, int256 initialDelta) external {
         _setDelta(token, initialDelta);
     }
 
-    function getDeltaForTest(address token)
-        external
-        view
-        returns (int256 delta)
-    {
+    function getDelta(address token) external view returns (int256 delta) {
         delta = _getDelta(token);
     }
 
-    function getNegativeDeltaCountForTest()
-        external
-        view
-        returns (uint256 count)
-    {
+    function getNegativeDeltaCount() external view returns (uint256 count) {
         count = _getNegativeDeltaCount();
     }
 
-    function setNegativeDeltaCountForTest(uint256 count) external {
+    function setNegativeDeltaCount(uint256 count) external {
         _setNegativeDeltaCount(count);
     }
 
-    function updateDeltaAccountingForTest(address token, int256 change)
-        external
-    {
+    function updateDeltaAccounting(address token, int256 change) external {
         _updateDeltaAccounting(token, change);
     }
 
-    function creditVaultForTest(address user, address token, uint256 amount)
-        external
-    {
+    function creditVault(address user, address token, uint256 amount) external {
         _creditVault(user, token, amount);
     }
 
-    function debitVaultForTest(address user, address token, uint256 amount)
-        external
-    {
+    function debitVault(address user, address token, uint256 amount) external {
         _debitVault(user, token, amount);
     }
 }
 
 contract VaultTest is Constants, TestUtils {
-    TestVault public vault;
+    VaultExposed public vault;
 
     function setUp() public {
         uint256 forkBlock = 24218176;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        vault = new TestVault();
+        vault = new VaultExposed();
     }
 
     function testDepositERC20() public {
@@ -124,14 +110,14 @@ contract VaultTest is Constants, TestUtils {
         int256 change = 0;
         uint256 negativeCountInitial = 0;
 
-        vault.setDeltaForTest(token, initialDelta);
-        vault.setNegativeDeltaCountForTest(negativeCountInitial);
-        int256 beforeChange = vault.getDeltaForTest(token);
+        vault.setDelta(token, initialDelta);
+        vault.setNegativeDeltaCount(negativeCountInitial);
+        int256 beforeChange = vault.getDelta(token);
 
-        vault.updateDeltaAccountingForTest(token, change);
+        vault.updateDeltaAccounting(token, change);
 
-        int256 afterChange = vault.getDeltaForTest(token);
-        uint256 negativeCount = vault.getNegativeDeltaCountForTest();
+        int256 afterChange = vault.getDelta(token);
+        uint256 negativeCount = vault.getNegativeDeltaCount();
 
         assertEq(beforeChange, afterChange);
         assertEq(negativeCount, 0);
@@ -143,15 +129,15 @@ contract VaultTest is Constants, TestUtils {
         int256 change = 0;
         uint256 negativeCountInitial = 1;
 
-        vault.setDeltaForTest(token, initialDelta);
-        vault.setNegativeDeltaCountForTest(negativeCountInitial);
+        vault.setDelta(token, initialDelta);
+        vault.setNegativeDeltaCount(negativeCountInitial);
 
-        int256 beforeChange = vault.getDeltaForTest(token);
+        int256 beforeChange = vault.getDelta(token);
 
-        vault.updateDeltaAccountingForTest(token, change);
+        vault.updateDeltaAccounting(token, change);
 
-        int256 afterChange = vault.getDeltaForTest(token);
-        uint256 negativeCount = vault.getNegativeDeltaCountForTest();
+        int256 afterChange = vault.getDelta(token);
+        uint256 negativeCount = vault.getNegativeDeltaCount();
 
         assertEq(beforeChange, afterChange);
         assertEq(negativeCount, 1);
@@ -163,15 +149,15 @@ contract VaultTest is Constants, TestUtils {
         int256 change = 200;
         uint256 negativeCountInitial = 0;
 
-        vault.setDeltaForTest(token, initialDelta);
-        vault.setNegativeDeltaCountForTest(negativeCountInitial);
+        vault.setDelta(token, initialDelta);
+        vault.setNegativeDeltaCount(negativeCountInitial);
 
-        int256 beforeChange = vault.getDeltaForTest(token);
+        int256 beforeChange = vault.getDelta(token);
 
-        vault.updateDeltaAccountingForTest(token, change);
+        vault.updateDeltaAccounting(token, change);
 
-        int256 afterChange = vault.getDeltaForTest(token);
-        uint256 negativeCount = vault.getNegativeDeltaCountForTest();
+        int256 afterChange = vault.getDelta(token);
+        uint256 negativeCount = vault.getNegativeDeltaCount();
 
         assertEq(beforeChange, 100);
         assertEq(afterChange, 300);
@@ -184,15 +170,15 @@ contract VaultTest is Constants, TestUtils {
         int256 change = 15;
         uint256 negativeCountInitial = 1;
 
-        vault.setDeltaForTest(token, initialDelta);
-        vault.setNegativeDeltaCountForTest(negativeCountInitial);
+        vault.setDelta(token, initialDelta);
+        vault.setNegativeDeltaCount(negativeCountInitial);
 
-        int256 beforeChange = vault.getDeltaForTest(token);
+        int256 beforeChange = vault.getDelta(token);
 
-        vault.updateDeltaAccountingForTest(token, change);
+        vault.updateDeltaAccounting(token, change);
 
-        int256 afterChange = vault.getDeltaForTest(token);
-        uint256 negativeCount = vault.getNegativeDeltaCountForTest();
+        int256 afterChange = vault.getDelta(token);
+        uint256 negativeCount = vault.getNegativeDeltaCount();
 
         assertEq(beforeChange, -100);
         assertEq(afterChange, -85);
@@ -205,15 +191,15 @@ contract VaultTest is Constants, TestUtils {
         int256 change = 200;
         uint256 negativeCountInitial = 1;
 
-        vault.setDeltaForTest(token, initialDelta);
-        vault.setNegativeDeltaCountForTest(negativeCountInitial);
+        vault.setDelta(token, initialDelta);
+        vault.setNegativeDeltaCount(negativeCountInitial);
 
-        int256 beforeChange = vault.getDeltaForTest(token);
+        int256 beforeChange = vault.getDelta(token);
 
-        vault.updateDeltaAccountingForTest(token, change);
+        vault.updateDeltaAccounting(token, change);
 
-        int256 afterChange = vault.getDeltaForTest(token);
-        uint256 negativeCount = vault.getNegativeDeltaCountForTest();
+        int256 afterChange = vault.getDelta(token);
+        uint256 negativeCount = vault.getNegativeDeltaCount();
 
         assertEq(beforeChange, -100);
         assertEq(afterChange, 100);
@@ -226,15 +212,15 @@ contract VaultTest is Constants, TestUtils {
         int256 change = -100;
         uint256 negativeCountInitial = 0;
 
-        vault.setDeltaForTest(token, initialDelta);
-        vault.setNegativeDeltaCountForTest(negativeCountInitial);
+        vault.setDelta(token, initialDelta);
+        vault.setNegativeDeltaCount(negativeCountInitial);
 
-        int256 beforeChange = vault.getDeltaForTest(token);
+        int256 beforeChange = vault.getDelta(token);
 
-        vault.updateDeltaAccountingForTest(token, change);
+        vault.updateDeltaAccounting(token, change);
 
-        int256 afterChange = vault.getDeltaForTest(token);
-        uint256 negativeCount = vault.getNegativeDeltaCountForTest();
+        int256 afterChange = vault.getDelta(token);
+        uint256 negativeCount = vault.getNegativeDeltaCount();
 
         assertEq(beforeChange, 300);
         assertEq(afterChange, 200);
@@ -247,15 +233,15 @@ contract VaultTest is Constants, TestUtils {
         int256 change = -120;
         uint256 negativeCountInitial = 0;
 
-        vault.setDeltaForTest(token, initialDelta);
-        vault.setNegativeDeltaCountForTest(negativeCountInitial);
+        vault.setDelta(token, initialDelta);
+        vault.setNegativeDeltaCount(negativeCountInitial);
 
-        int256 beforeChange = vault.getDeltaForTest(token);
+        int256 beforeChange = vault.getDelta(token);
 
-        vault.updateDeltaAccountingForTest(token, change);
+        vault.updateDeltaAccounting(token, change);
 
-        int256 afterChange = vault.getDeltaForTest(token);
-        uint256 negativeCount = vault.getNegativeDeltaCountForTest();
+        int256 afterChange = vault.getDelta(token);
+        uint256 negativeCount = vault.getNegativeDeltaCount();
 
         assertEq(beforeChange, 50);
         assertEq(afterChange, -70);
@@ -268,15 +254,15 @@ contract VaultTest is Constants, TestUtils {
         int256 change = -120;
         uint256 negativeCountInitial = 1;
 
-        vault.setDeltaForTest(token, initialDelta);
-        vault.setNegativeDeltaCountForTest(negativeCountInitial);
+        vault.setDelta(token, initialDelta);
+        vault.setNegativeDeltaCount(negativeCountInitial);
 
-        int256 beforeChange = vault.getDeltaForTest(token);
+        int256 beforeChange = vault.getDelta(token);
 
-        vault.updateDeltaAccountingForTest(token, change);
+        vault.updateDeltaAccounting(token, change);
 
-        int256 afterChange = vault.getDeltaForTest(token);
-        uint256 negativeCount = vault.getNegativeDeltaCountForTest();
+        int256 afterChange = vault.getDelta(token);
+        uint256 negativeCount = vault.getNegativeDeltaCount();
 
         assertEq(beforeChange, -50);
         assertEq(afterChange, -170);
@@ -289,7 +275,7 @@ contract VaultTest is Constants, TestUtils {
         uint256 id = uint256(uint160(USDC_ADDR));
 
         uint256 balanceBefore = vault.balanceOf(BOB, id);
-        vault.creditVaultForTest(BOB, USDC_ADDR, amount);
+        vault.creditVault(BOB, USDC_ADDR, amount);
 
         uint256 balance = vault.balanceOf(BOB, id);
 
@@ -302,10 +288,10 @@ contract VaultTest is Constants, TestUtils {
 
         uint256 id = uint256(uint160(USDC_ADDR));
 
-        vault.creditVaultForTest(BOB, USDC_ADDR, amount);
+        vault.creditVault(BOB, USDC_ADDR, amount);
 
         uint256 balanceBefore = vault.balanceOf(BOB, id);
-        vault.creditVaultForTest(BOB, USDC_ADDR, amount);
+        vault.creditVault(BOB, USDC_ADDR, amount);
 
         uint256 balance = vault.balanceOf(BOB, id);
 
@@ -319,10 +305,10 @@ contract VaultTest is Constants, TestUtils {
 
         uint256 id = uint256(uint160(USDC_ADDR));
 
-        vault.creditVaultForTest(BOB, USDC_ADDR, amount);
+        vault.creditVault(BOB, USDC_ADDR, amount);
 
         uint256 balanceBefore = vault.balanceOf(BOB, id);
-        vault.debitVaultForTest(BOB, USDC_ADDR, amount_to_debit);
+        vault.debitVault(BOB, USDC_ADDR, amount_to_debit);
 
         uint256 balance = vault.balanceOf(BOB, id);
 
@@ -336,7 +322,7 @@ contract VaultTest is Constants, TestUtils {
 
         uint256 id = uint256(uint160(USDC_ADDR));
 
-        vault.creditVaultForTest(BOB, USDC_ADDR, amount);
+        vault.creditVault(BOB, USDC_ADDR, amount);
 
         uint256 balanceBefore = vault.balanceOf(BOB, id);
 
@@ -350,6 +336,6 @@ contract VaultTest is Constants, TestUtils {
             )
         );
 
-        vault.debitVaultForTest(BOB, USDC_ADDR, amount_to_debit);
+        vault.debitVault(BOB, USDC_ADDR, amount_to_debit);
     }
 }
