@@ -284,12 +284,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
         uint256 balance = balanceOf(user, id);
 
         if (balance < amount) {
-            revert TychoVault__InsufficientBalance(
-                user,
-                token,
-                amount,
-                balance
-            );
+            revert Vault__InsufficientBalance(user, token, amount, balance);
         }
         _burnWithoutEvent(user, id, amount);
     }

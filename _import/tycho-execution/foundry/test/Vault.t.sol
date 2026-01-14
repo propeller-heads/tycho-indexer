@@ -226,7 +226,7 @@ contract VaultTest is Constants, TestUtils {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                TychoVault__InsufficientBalance.selector,
+                Vault__InsufficientBalance.selector,
                 BOB,
                 USDC_ADDR,
                 amount_to_debit,
