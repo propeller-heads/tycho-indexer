@@ -79,7 +79,6 @@ contract EkuboExecutor is
         bytes4 selector = bytes4(raw[:4]);
 
         bytes memory result = "";
-        // Lido performs two callbacks: One on locked and one on pay
         if (selector == LOCKED_SELECTOR) {
             (int128 calculatedAmount, address tokenOut) = _locked(stripped);
             result = abi.encodePacked(calculatedAmount, tokenOut);
