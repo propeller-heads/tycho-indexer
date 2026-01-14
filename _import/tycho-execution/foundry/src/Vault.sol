@@ -8,10 +8,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC6909/ERC6909.sol";
 
 error Vault__InsufficientBalance(
-    address user,
-    address token,
-    uint256 requested,
-    uint256 available
+    address user, address token, uint256 requested, uint256 available
 );
 error Vault__AmountZero();
 error Vault__UnexpectedNegativeDelta(uint256 negativeCount);
@@ -40,10 +37,13 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      * @dev Override balanceOf to use our own mapping instead of ERC6909's
      *
      */
-    function balanceOf(
-        address owner,
-        uint256 id
-    ) public view virtual override returns (uint256) {
+    function balanceOf(address owner, uint256 id)
+        public
+        view
+        virtual
+        override
+        returns (uint256)
+    {
         return _vaultBalances[owner][id];
     }
 
@@ -59,12 +59,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
         if (from != address(0)) {
             uint256 fromBalance = _vaultBalances[from][id];
             if (fromBalance < amount) {
-                revert ERC6909InsufficientBalance(
-                    from,
-                    fromBalance,
-                    amount,
-                    id
-                );
+                revert ERC6909InsufficientBalance(from, fromBalance, amount, id);
             }
             unchecked {
                 // Overflow not possible: amount <= fromBalance.
@@ -81,12 +76,11 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      * @dev Override _update to use our own mapping and emit Transfer events
      * This is called by all balance-changing operations (transfer, mint, etc.)
      */
-    function _update(
-        address from,
-        address to,
-        uint256 id,
-        uint256 amount
-    ) internal virtual override {
+    function _update(address from, address to, uint256 id, uint256 amount)
+        internal
+        virtual
+        override
+    {
         _updateWithoutEvent(from, to, id, amount);
         emit Transfer(msg.sender, from, to, id, amount);
     }
@@ -97,11 +91,9 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      */
     // TODO: remove this once used
     // slither-disable-next-line dead-code
-    function _mintWithoutEvent(
-        address to,
-        uint256 id,
-        uint256 amount
-    ) internal {
+    function _mintWithoutEvent(address to, uint256 id, uint256 amount)
+        internal
+    {
         if (to == address(0)) {
             revert ERC6909InvalidReceiver(address(0));
         }
@@ -114,11 +106,9 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      */
     // TODO: remove this once used
     // slither-disable-next-line dead-code
-    function _burnWithoutEvent(
-        address from,
-        uint256 id,
-        uint256 amount
-    ) internal {
+    function _burnWithoutEvent(address from, uint256 id, uint256 amount)
+        internal
+    {
         if (from == address(0)) {
             revert ERC6909InvalidSender(address(0));
         }
@@ -132,10 +122,11 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      * @param token The token address to deposit (use address(0) for native ETH)
      * @param amount The amount to deposit
      */
-    function deposit(
-        address token,
-        uint256 amount
-    ) external payable nonReentrant {
+    function deposit(address token, uint256 amount)
+        external
+        payable
+        nonReentrant
+    {
         if (amount == 0) {
             revert Vault__AmountZero();
         }
@@ -167,10 +158,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
         uint256 balance = balanceOf(msg.sender, id);
         if (balance < amount) {
             revert Vault__InsufficientBalance(
-                msg.sender,
-                token,
-                amount,
-                balance
+                msg.sender, token, amount, balance
             );
         }
 
@@ -248,10 +236,10 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      * @param token The token to update
      * @param deltaChange The change to apply (positive to credit, negative to debit)
      */
-    function _updateDeltaAccounting(
-        address token,
-        int256 deltaChange
-    ) internal virtual {
+    function _updateDeltaAccounting(address token, int256 deltaChange)
+        internal
+        virtual
+    {
         if (deltaChange == 0) return;
 
         int256 oldDelta = _getDelta(token);
@@ -273,11 +261,10 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      * @dev Internal helper to debit user's actual vault balance (persistent storage)
      * @notice This debits the persistent vault balance, not the transient delta
      */
-    function _debitVault(
-        address user,
-        address token,
-        uint256 amount
-    ) internal virtual {
+    function _debitVault(address user, address token, uint256 amount)
+        internal
+        virtual
+    {
         if (amount == 0) return;
 
         uint256 id = uint256(uint160(token));
@@ -293,11 +280,10 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      * @dev Internal helper to credit user's actual vault balance (persistent storage)
      * @notice This credits the persistent vault balance, not the transient delta
      */
-    function _creditVault(
-        address user,
-        address token,
-        uint256 amount
-    ) internal virtual {
+    function _creditVault(address user, address token, uint256 amount)
+        internal
+        virtual
+    {
         if (amount == 0) return;
 
         uint256 id = uint256(uint160(token));
