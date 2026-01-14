@@ -191,7 +191,6 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      * @notice Only needs token since transient storage is scoped to current transaction's sender
      */
     function _getDeltaSlot(address token) private pure returns (uint256 slot) {
-        // Generate unique slot: keccak256(token, "TychoVault#DELTA")
         slot = uint256(keccak256(abi.encodePacked(token, "TychoVault#DELTA")));
         return slot;
     }
