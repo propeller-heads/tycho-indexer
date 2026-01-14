@@ -30,7 +30,10 @@ contract RocketpoolExecutor is IExecutor, RestrictTransferFrom {
         (bool isDeposit, TransferType transferType, address receiver) =
             _decodeData(data);
 
+        address tokenOut;
+
         if (isDeposit) {
+            tokenOut = address(RETH);
             // ETH -> rETH: Deposit ETH to Rocketpool to receive rETH
             // We don't need to _transfer ETH into this contract since it must be sent along with the call
             uint256 rethBefore = RETH.balanceOf(address(this));
@@ -41,6 +44,7 @@ contract RocketpoolExecutor is IExecutor, RestrictTransferFrom {
                 RETH.safeTransfer(receiver, calculatedAmount);
             }
         } else {
+            tokenOut = address(0);
             // rETH -> ETH: Burn rETH to receive ETH
             // Use _transfer to get rETH into this contract based on transferType
             _transfer(address(this), transferType, address(RETH), givenAmount);

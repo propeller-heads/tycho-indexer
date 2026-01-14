@@ -218,7 +218,7 @@ fn test_split_input_cyclic_swap() {
     ]
     .join("");
     let expected_swaps = [
-        "0000000000000000000000000000000000000000000000000000000000000139", // length of ple encoded swaps without padding
+        "000000000000000000000000000000000000000000000000000000000000014d", // length of ple encoded swaps without padding
         "006e", // ple encoded swaps
         "00", // token in index
         "01", // token out index
@@ -243,17 +243,18 @@ fn test_split_input_cyclic_swap() {
         "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
         "01", // zero2one
         "00", // transfer type TransferFrom
-        "0057", // ple encoded swaps
+        "006b", // ple encoded swaps
         "01", // token in index
         "00", // token out index
         "000000", // split
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address,
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id,
+        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
         "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "00", // zero2one
         "01", // transfer type Transfer
-        "00000000000000" // padding
+        "00000000000000000000000000000000000000" // padding
     ]
         .join("");
     assert_eq!(hex_calldata[..392], expected_input);
@@ -371,14 +372,15 @@ fn test_split_output_cyclic_swap() {
     .join("");
 
     let expected_swaps = [
-        "0000000000000000000000000000000000000000000000000000000000000139", // length of ple encoded swaps without padding
-        "0057", // ple encoded swaps
+        "000000000000000000000000000000000000000000000000000000000000014d", // length of ple encoded swaps without padding
+        "006b", // ple encoded swaps
         "00", // token in index
         "01", // token out index
         "000000", // split
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
         "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id
+        "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
         "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
         "01", // zero2one
         "00", // transfer type TransferFrom
@@ -406,7 +408,7 @@ fn test_split_output_cyclic_swap() {
         "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
         "00", // zero2one
         "01", // transfer type Transfer
-        "00000000000000" // padding
+        "00000000000000000000000000000000000000" // padding
     ]
         .join("");
 

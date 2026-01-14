@@ -31,11 +31,12 @@ contract MaverickV2Executor is IExecutor, RestrictTransferFrom {
         returns (uint256 calculatedAmount)
     {
         address target;
+        address tokenOut;
         address receiver;
         IERC20 tokenIn;
         TransferType transferType;
 
-        (tokenIn, target, receiver, transferType) = _decodeData(data);
+        (tokenIn, target, tokenOut, receiver, transferType) = _decodeData(data);
 
         _verifyPairAddress(target);
         IMaverickV2Pool pool = IMaverickV2Pool(target);
@@ -61,17 +62,19 @@ contract MaverickV2Executor is IExecutor, RestrictTransferFrom {
         returns (
             IERC20 inToken,
             address target,
+            address tokenOut,
             address receiver,
             TransferType transferType
         )
     {
-        if (data.length != 61) {
+        if (data.length != 81) {
             revert MaverickV2Executor__InvalidDataLength();
         }
         inToken = IERC20(address(bytes20(data[0:20])));
         target = address(bytes20(data[20:40]));
-        receiver = address(bytes20(data[40:60]));
-        transferType = TransferType(uint8(data[60]));
+        tokenOut = address(bytes20(data[40:60]));
+        receiver = address(bytes20(data[60:80]));
+        transferType = TransferType(uint8(data[80]));
     }
 
     function _verifyPairAddress(address target) internal view {

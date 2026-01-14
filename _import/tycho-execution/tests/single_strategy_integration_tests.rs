@@ -76,15 +76,16 @@ fn test_single_swap_strategy_encoder() {
 
     let expected_swap = String::from(concat!(
         // length of encoded swap without padding
-        "0000000000000000000000000000000000000000000000000000000000000052",
+        "0000000000000000000000000000000000000000000000000000000000000066",
         // Swap data
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
+        "6b175474e89094c44da98b954eedeac495271d0f", // token out
         "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "00",                                       // zero2one
         "00",                                       // transfer type TransferFrom
-        "0000000000000000000000000000",             // padding
+        "0000000000000000000000000000000000000000000000000000", // padding
     ));
     let hex_calldata = encode(&calldata);
 
@@ -150,15 +151,16 @@ fn test_single_swap_strategy_encoder_no_permit2() {
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "0000000000000000000000000000000000000000000000000000000000000001", // transfer from needed
         "00000000000000000000000000000000000000000000000000000000000000e0", // offset of swap bytes
-        "0000000000000000000000000000000000000000000000000000000000000052", // len swap w/o padding
+        "0000000000000000000000000000000000000000000000000000000000000066", // len swap w/o padding
         // Swap data
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
+        "6b175474e89094c44da98b954eedeac495271d0f", // token out
         "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "00",                                       // zero2one
         "00",                                       // transfer type TransferFrom
-        "0000000000000000000000000000",             // padding
+        "0000000000000000000000000000000000000000000000000000", // padding
     ]
     .join("");
 

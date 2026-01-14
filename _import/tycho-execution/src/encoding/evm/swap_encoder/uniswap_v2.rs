@@ -49,6 +49,7 @@ impl SwapEncoder for UniswapV2SwapEncoder {
         let args = (
             token_in_address,
             component_id,
+            token_out_address,
             bytes_to_address(&encoding_context.receiver)?,
             zero_to_one,
             (encoding_context.transfer_type as u8).to_be_bytes(),
@@ -112,6 +113,8 @@ mod tests {
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                 // component id
                 "a478c2975ab1ea89e8196811f51a7b7ade33eb11",
+                // out token
+                "6b175474e89094c44da98b954eedeac495271d0f",
                 // receiver
                 "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
                 // zero for one

@@ -39,6 +39,7 @@ impl SwapEncoder for MaverickV2SwapEncoder {
         let args = (
             bytes_to_address(swap.token_in())?,
             component_id,
+            bytes_to_address(swap.token_out())?,
             bytes_to_address(&encoding_context.receiver)?,
             (encoding_context.transfer_type as u8).to_be_bytes(),
         );
@@ -103,6 +104,8 @@ mod tests {
                 "40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f",
                 // pool
                 "14Cf6D2Fe3E1B326114b07d22A6F6bb59e346c67",
+                // token out
+                "A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
                 // receiver
                 "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
                 // transfer type

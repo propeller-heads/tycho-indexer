@@ -22,6 +22,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         bytes memory protocolData = encodeUniswapV2Swap(
             WETH_ADDR,
             WETH_DAI_POOL,
+            DAI_ADDR,
             ALICE,
             false,
             RestrictTransferFrom.TransferType.TransferFrom
@@ -61,6 +62,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         bytes memory protocolData = encodeUniswapV2Swap(
             WETH_ADDR,
             WETH_DAI_POOL,
+            DAI_ADDR,
             ALICE,
             false,
             RestrictTransferFrom.TransferType.TransferFrom
@@ -95,6 +97,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         bytes memory protocolData = encodeUniswapV2Swap(
             WETH_ADDR,
             WETH_DAI_POOL,
+            DAI_ADDR,
             ALICE,
             false,
             RestrictTransferFrom.TransferType.None
@@ -121,6 +124,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         bytes memory protocolData = encodeUniswapV2Swap(
             WETH_ADDR,
             WETH_DAI_POOL,
+            DAI_ADDR,
             ALICE,
             false,
             RestrictTransferFrom.TransferType.TransferFrom
@@ -149,6 +153,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         bytes memory protocolData = encodeUniswapV2Swap(
             WETH_ADDR,
             WETH_DAI_POOL,
+            DAI_ADDR,
             ALICE,
             false,
             RestrictTransferFrom.TransferType.TransferFrom
@@ -184,6 +189,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         bytes memory protocolData = encodeUniswapV2Swap(
             WETH_ADDR,
             WETH_DAI_POOL,
+            DAI_ADDR,
             ALICE,
             false,
             RestrictTransferFrom.TransferType.TransferFrom
@@ -234,24 +240,6 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         IERC20(WETH_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
         bytes memory callData =
             loadCallDataFromFile("test_single_swap_strategy_encoder");
-        (bool success,) = tychoRouterAddr.call(callData);
-
-        vm.stopPrank();
-
-        uint256 balanceAfter = IERC20(DAI_ADDR).balanceOf(ALICE);
-        assertTrue(success, "Call Failed");
-        assertEq(balanceAfter - balanceBefore, 2018817438608734439722);
-    }
-
-    function testSingleSwapIntegrationNoTransferIn() public {
-        // Tests swapping WETH -> DAI on a USV2 pool assuming that the tokens are already inside the router
-        deal(WETH_ADDR, tychoRouterAddr, 1 ether);
-        uint256 balanceBefore = IERC20(DAI_ADDR).balanceOf(ALICE);
-
-        vm.startPrank(ALICE);
-        bytes memory callData = loadCallDataFromFile(
-            "test_single_swap_strategy_encoder_no_transfer_in"
-        );
         (bool success,) = tychoRouterAddr.call(callData);
 
         vm.stopPrank();

@@ -48,12 +48,13 @@ contract UniswapV2Executor is IExecutor, RestrictTransferFrom {
         returns (uint256 calculatedAmount)
     {
         IERC20 tokenIn;
+        address tokenOut;
         address target;
         address receiver;
         bool zeroForOne;
         TransferType transferType;
 
-        (tokenIn, target, receiver, zeroForOne, transferType) =
+        (tokenIn, target, tokenOut, receiver, zeroForOne, transferType) =
             _decodeData(data);
 
         _verifyPairAddress(target);
@@ -76,19 +77,21 @@ contract UniswapV2Executor is IExecutor, RestrictTransferFrom {
         returns (
             IERC20 inToken,
             address target,
+            address tokenOut,
             address receiver,
             bool zeroForOne,
             TransferType transferType
         )
     {
-        if (data.length != 62) {
+        if (data.length != 82) {
             revert UniswapV2Executor__InvalidDataLength();
         }
         inToken = IERC20(address(bytes20(data[0:20])));
         target = address(bytes20(data[20:40]));
-        receiver = address(bytes20(data[40:60]));
-        zeroForOne = data[60] != 0;
-        transferType = TransferType(uint8(data[61]));
+        tokenOut = address(bytes20(data[40:60]));
+        receiver = address(bytes20(data[60:80]));
+        zeroForOne = data[80] != 0;
+        transferType = TransferType(uint8(data[81]));
     }
 
     function _getAmountOut(address target, uint256 amountIn, bool zeroForOne)
