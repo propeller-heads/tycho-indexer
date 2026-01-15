@@ -57,6 +57,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
         assertEq(receiver, BOB);
         assertEq(uint8(pool), uint8(LidoPoolType.stETH));
         assertEq(uint8(direction), uint8(LidoPoolDirection.Stake));
+        assertEq(approvalNeeded, false);
     }
 
     function testDecodeParamsInvalidDataLength() public {
@@ -68,7 +69,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
         LidoExposed.decodeParams(invalidParams);
     }
 
-    function testGetTransferData() public {
+    function testGetTransferDataStaking() public {
         bytes memory params = abi.encodePacked(
             BOB,
             RestrictTransferFrom.TransferType.None,
@@ -89,7 +90,50 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
         assertEq(receiver, address(LidoExposed));
         assertEq(tokenIn, address(0));
     }
-    // TODO: add tests for the other 2 cases
+
+    function testGetTransferDataWrapping() public {
+        bytes memory params = abi.encodePacked(
+            BOB,
+            RestrictTransferFrom.TransferType.None,
+            LidoPoolType.wstETH,
+            LidoPoolDirection.Wrap,
+            false
+        );
+
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        ) = LidoExposed.getTransferData(params);
+
+        assertEq(
+            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
+        );
+        assertEq(receiver, address(LidoExposed));
+        assertEq(tokenIn, STETH_ADDR);
+    }
+
+    function testGetTransferDataUnwrapping() public {
+        bytes memory params = abi.encodePacked(
+            BOB,
+            RestrictTransferFrom.TransferType.None,
+            LidoPoolType.wstETH,
+            LidoPoolDirection.Unwrap,
+            false
+        );
+
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        ) = LidoExposed.getTransferData(params);
+
+        assertEq(
+            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
+        );
+        assertEq(receiver, address(LidoExposed));
+        assertEq(tokenIn, WSTETH_ADDR);
+    }
 
     function testStaking() public {
         uint256 amountIn = 1 ether;

@@ -92,6 +92,7 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
 
     function handleCallback(bytes calldata msgData)
         public
+        view
         returns (bytes memory result)
     {
         // The data has the following layout:

@@ -86,6 +86,7 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         assertEq(poolType, 3);
         assertEq(i, 2);
         assertEq(j, 0);
+        assertEq(tokenApprovalNeeded, true);
         assertEq(receiver, ALICE);
     }
 

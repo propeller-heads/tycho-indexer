@@ -29,7 +29,17 @@ interface IExecutor {
         payable
         returns (uint256 calculatedAmount, address tokenOut, address receiver);
 
-    // TODO: add docs
+    /**
+     * @notice Gets transfer data for pre-swap token transfers.
+     * @dev Used by the Dispatcher to determine if tokens need to be transferred
+     * before executing the protocol's swap code. Some protocols require tokens
+     * to be transferred upfront, while others handle transfers in callbacks.
+     *
+     * @param data The encoded swap data.
+     * @return transferType The type of transfer to perform before the swap.
+     * @return receiver The address that should receive the tokens.
+     * @return tokenIn The address of the input token to transfer.
+     */
     function getTransferData(bytes calldata data)
         external
         payable

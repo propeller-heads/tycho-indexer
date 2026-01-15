@@ -63,7 +63,7 @@ contract Dispatcher is RestrictTransferFrom {
      * @dev Calls an executor, assumes swap.protocolData contains
      *  protocol-specific data required by the executor.
      */
-    // slither-disable-next-line delegatecall-loop,assembly
+    // slither-disable-next-line delegatecall-loop,assembly,controlled-delegatecall
     function _callSwapOnExecutor(
         address executor,
         uint256 amount,

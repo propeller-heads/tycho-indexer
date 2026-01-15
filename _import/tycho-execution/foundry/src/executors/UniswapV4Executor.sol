@@ -317,7 +317,6 @@ contract UniswapV4Executor is IExecutor, ICallback {
      * @param poolKey The key of the pool to swap in.
      * @param zeroForOne Whether the swap is from token0 to token1 (true) or vice versa (false).
      * @param amountIn The amount of tokens to swap in.
-     * @param transferType The type of action necessary to pay back the pool.
      * @param receiver The address of the receiver.
      * @param hookData Additional data for hook contracts.
      */
@@ -325,12 +324,13 @@ contract UniswapV4Executor is IExecutor, ICallback {
         PoolKey memory poolKey,
         bool zeroForOne,
         uint128 amountIn,
-        RestrictTransferFrom.TransferType transferType,
+        RestrictTransferFrom.TransferType,
+        /*transferType*/
         address receiver,
         bytes calldata hookData
     ) external returns (uint128) {
         Currency currencyIn = zeroForOne ? poolKey.currency0 : poolKey.currency1;
-        _settle(currencyIn, amountIn, transferType);
+        _settle(currencyIn, amountIn);
         uint128 amountOut = _swap(
                 poolKey, zeroForOne, -int256(uint256(amountIn)), hookData
             ).toUint128();
@@ -344,22 +344,22 @@ contract UniswapV4Executor is IExecutor, ICallback {
     /**
      * @notice Performs an exact input swap along a path. It settles and takes the tokens after the swap.
      * @param currencyIn The currency of the input token.
-     * @param path The path to swap along.
      * @param amountIn The amount of tokens to swap in.
-     * @param transferType The type of action necessary to pay back the pool.
      * @param receiver The address of the receiver.
+     * @param path The path to swap along.
      */
     function swapExactInput(
         Currency currencyIn,
         uint128 amountIn,
-        RestrictTransferFrom.TransferType transferType,
+        RestrictTransferFrom.TransferType,
+        /*transferType*/
         address receiver,
         PathKey[] calldata path
     ) external returns (uint128) {
         uint128 amountOut = 0;
         Currency swapCurrencyIn = currencyIn;
         uint256 swapAmountIn = amountIn;
-        _settle(currencyIn, amountIn, transferType);
+        _settle(currencyIn, amountIn);
         unchecked {
             uint256 pathLength = path.length;
             PathKey calldata pathKey;
@@ -436,14 +436,9 @@ contract UniswapV4Executor is IExecutor, ICallback {
      * @dev The implementing contract must ensure that the `payer` is a secure address.
      * @param currency The currency to settle.
      * @param amount The amount to send.
-     * @param transferType The type of action necessary to pay back the pool.
      * @dev Returns early if the amount is 0.
      */
-    function _settle(
-        Currency currency,
-        uint256 amount,
-        RestrictTransferFrom.TransferType transferType
-    ) internal {
+    function _settle(Currency currency, uint256 amount) internal {
         if (amount == 0) return;
         if (currency.isAddressZero()) {
             // slither-disable-next-line unused-return

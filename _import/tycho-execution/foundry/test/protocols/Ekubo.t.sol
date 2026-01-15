@@ -60,7 +60,6 @@ contract EkuboExecutorTest is Constants, TestUtils {
             ORACLE_CONFIG // poolConfig
         );
 
-        uint256 gasBefore = gasleft();
         (uint256 amountOut, address tokenOut, address receiver) =
             executor.swap(amountIn, data);
 
@@ -74,8 +73,7 @@ contract EkuboExecutorTest is Constants, TestUtils {
             USDC.balanceOf(address(executor)),
             usdcBalanceBeforeExecutor + amountOut
         );
-        // TODO: update this when we fix the callback
-        assertEq(receiver, address(0));
+        assertEq(receiver, address(executor));
         assertEq(tokenOut, USDC_ADDR);
     }
 
@@ -91,7 +89,6 @@ contract EkuboExecutorTest is Constants, TestUtils {
         uint256 usdtBalanceBeforeCore = USDT.balanceOf(CORE_ADDRESS);
         uint256 usdtBalanceBeforeExecutor = USDT.balanceOf(address(executor));
 
-        uint256 gasBefore = gasleft();
         (uint256 amountOut, address tokenOut, address receiver) =
             executor.swap(amountIn, data);
 
@@ -105,8 +102,7 @@ contract EkuboExecutorTest is Constants, TestUtils {
             USDT.balanceOf(address(executor)),
             usdtBalanceBeforeExecutor + amountOut
         );
-        // TODO: update this when we fix the callback
-        assertEq(receiver, address(0));
+        assertEq(receiver, address(executor));
         assertEq(tokenOut, USDT_ADDR);
     }
 

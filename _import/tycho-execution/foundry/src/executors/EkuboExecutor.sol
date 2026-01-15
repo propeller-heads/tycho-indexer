@@ -59,10 +59,8 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         }
 
         // amountIn must be at most type(int128).MAX
-        (calculatedAmount, tokenOut) =
+        (calculatedAmount, tokenOut, receiver) =
             _lock(bytes.concat(bytes16(uint128(amountIn)), data));
-        // TODO: fix callback
-        receiver = address(0);
     }
 
     function handleCallback(bytes calldata raw)
@@ -78,10 +76,11 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
 
         bytes memory result = "";
         if (selector == LOCKED_SELECTOR) {
-            (int128 calculatedAmount, address tokenOut) = _locked(stripped);
-            result = abi.encodePacked(calculatedAmount, tokenOut);
+            (int128 calculatedAmount, address tokenOut, address receiver) =
+                _locked(stripped);
+            result = abi.encodePacked(calculatedAmount, tokenOut, receiver);
         } else if (selector == PAY_CALLBACK_SELECTOR) {
-            _payCallback(stripped);
+            // The paying is done in the Dispatcher using getCallbackTransferData. Nothing to do here
         } else {
             revert EkuboExecutor__UnknownCallback();
         }
@@ -93,13 +92,15 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
 
     function locked(uint256) external COREOnly {
         // Without selector and locker id
-        (int128 calculatedAmount, address tokenOut) = _locked(msg.data[36:]);
+        (int128 calculatedAmount, address tokenOut, address receiver) =
+            _locked(msg.data[36:]);
         // slither-disable-next-line assembly
         assembly ("memory-safe") {
-            // Pack: 16 bytes int128 + 20 bytes address = 36 bytes total
+            // Pack: 16 bytes int128 + 20 bytes address + 20 bytes address = 56 bytes total
             mstore(0, shl(128, calculatedAmount)) // Store int128 in upper 16 bytes
             mstore(16, shl(96, tokenOut)) // Store address in upper 20 bytes (of next word)
-            return(0, 36)
+            mstore(36, shl(96, receiver)) // Store address in upper 20 bytes (of next word)
+            return(0, 56)
         }
     }
 
@@ -110,13 +111,12 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         external
         COREOnly
     {
-        // Without selector and locker id
-        _payCallback(msg.data[36:]);
+        // The paying is done in the Dispatcher using getCallbackTransferData. Nothing to do here
     }
 
     function _lock(bytes memory data)
         internal
-        returns (uint128 swappedAmount, address tokenOut)
+        returns (uint128 swappedAmount, address tokenOut, address receiver)
     {
         address target = address(CORE);
 
@@ -137,16 +137,17 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
                 revert(0, returndatasize())
             }
 
-            // Copy 36 bytes: 16 bytes for amount + 20 bytes for address
-            returndatacopy(0, 0, 36)
+            // Copy 56 bytes: 16 bytes for amount + 20 bytes for address (tokenOut) + 20 bytes for address (receiver)
+            returndatacopy(0, 0, 56)
             swappedAmount := shr(128, mload(0))
             tokenOut := shr(96, mload(16))
+            receiver := shr(96, mload(36))
         }
     }
 
     function _locked(bytes calldata swapData)
         internal
-        returns (int128, address)
+        returns (int128, address, address)
     {
         int128 nextAmountIn = int128(uint128(bytes16(swapData[0:16])));
         uint128 tokenInDebtAmount = uint128(nextAmountIn);
@@ -214,7 +215,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
 
         _pay(tokenIn, tokenInDebtAmount, transferType);
         CORE.withdraw(nextTokenIn, receiver, uint128(nextAmountIn));
-        return (nextAmountIn, tokenOut);
+        return (nextAmountIn, tokenOut, receiver);
     }
 
     function _forward(address to, bytes memory data)
@@ -282,10 +283,6 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
                 }
             }
         }
-    }
-
-    function _payCallback(bytes calldata payData) internal {
-        // TODO: now this method does nothing?? or can this be simplified?
     }
 
     // To receive withdrawals from Core

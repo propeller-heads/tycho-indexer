@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {
-LibPrefixLengthEncodedByteArray
+    LibPrefixLengthEncodedByteArray
 } from "../lib/bytes/LibPrefixLengthEncodedByteArray.sol";
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
@@ -72,7 +72,6 @@ error TychoRouter__InvalidDataLength();
 error TychoRouter__UndefinedMinAmountOut();
 
 contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
-
     using SafeERC20 for IERC20;
     using LibPrefixLengthEncodedByteArray for bytes;
     using LibSwap for bytes;

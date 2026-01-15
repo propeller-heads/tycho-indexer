@@ -117,7 +117,59 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             uint8(RestrictTransferFrom.TransferType.Transfer)
         );
     }
-    // TODO: add get transfer data and callback data tests
+
+    function testGetTransferData() public {
+        bytes memory params = "";
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        ) = slipstreamsExposed.getTransferData(params);
+
+        assertEq(
+            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
+        );
+        assertEq(receiver, address(0));
+        assertEq(tokenIn, address(0));
+    }
+
+    function testGetCallbackTransferData() public {
+        uint24 poolTickSpacing = 100;
+        uint256 amountOwed = 1000000000000000000;
+
+        bytes memory protocolData = abi.encodePacked(
+            BASE_WETH,
+            BASE_USDC,
+            poolTickSpacing,
+            RestrictTransferFrom.TransferType.Transfer,
+            address(slipstreamsExposed)
+        );
+        uint256 dataOffset = 3; // some offset
+        uint256 dataLength = protocolData.length;
+
+        bytes memory callbackData = abi.encodePacked(
+            bytes4(0xfa461e33),
+            int256(amountOwed), // amount0Delta
+            int256(0), // amount1Delta
+            dataOffset,
+            dataLength,
+            protocolData
+        );
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            uint256 amount
+        ) = slipstreamsExposed.getCallbackTransferData(callbackData);
+
+        assertEq(
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.Transfer)
+        );
+        assertEq(receiver, address(this));
+        assertEq(tokenIn, BASE_WETH);
+        assertEq(amount, amountOwed);
+    }
 
     function testSwap() public {
         uint256 amountIn = 10 ** 18;

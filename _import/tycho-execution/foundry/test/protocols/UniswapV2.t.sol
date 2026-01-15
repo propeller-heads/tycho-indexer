@@ -24,8 +24,12 @@ contract UniswapV2ExecutorExposed is UniswapV2Executor {
     function decodeParams(bytes calldata data)
         external
         pure
-        returns (address target, address tokenOut,
-            address receiver, bool zeroForOne)
+        returns (
+            address target,
+            address tokenOut,
+            address receiver,
+            bool zeroForOne
+        )
     {
         return _decodeData(data);
     }
@@ -86,8 +90,7 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
             RestrictTransferFrom.TransferType.Transfer
         );
 
-        (address target, address tokenOut,
-            address receiver, bool zeroForOne) =
+        (address target, address tokenOut, address receiver, bool zeroForOne) =
             uniswapV2Exposed.decodeParams(params);
 
         assertEq(target, address(2));
@@ -213,8 +216,7 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
         bytes memory protocolData =
             hex"c02aaa39b223fe8d0a0e5c4f27ead9083c756cc288e6a0c2ddd26feeb64f039a2c41296fcb3f56406b175474e89094c44da98b954eedeac495271d0f00000000000000000000000000000000000000010001";
 
-        (address target, address tokenOut,
-            address receiver, bool zeroForOne) =
+        (address target, address tokenOut, address receiver, bool zeroForOne) =
             uniswapV2Exposed.decodeParams(protocolData);
 
         assertEq(target, 0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640);

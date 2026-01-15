@@ -34,16 +34,10 @@ contract BalancerV3Executor is IExecutor, ICallback {
         if (data.length != 81) {
             revert BalancerV3Executor__InvalidDataLength();
         }
-        bytes memory result = VAULT.unlock(
-            abi.encodeCall(
-                BalancerV3Executor.swapCallback,
-                abi.encodePacked(amountIn, data)
-            )
+        bytes memory result = VAULT.unlock(abi.encodePacked(amountIn, data));
+        (calculatedAmount, tokenOut, receiver) = abi.decode(
+            abi.decode(result, (bytes)), (uint256, address, address)
         );
-        calculatedAmount = abi.decode(abi.decode(result, (bytes)), (uint256));
-        // TODO: fix callback return
-        tokenOut = address(0);
-        receiver = address(0);
     }
 
     function verifyCallback(
@@ -88,7 +82,7 @@ contract BalancerV3Executor is IExecutor, ICallback {
         // slither-disable-next-line unused-return
         VAULT.settle(tokenIn, amountIn);
         VAULT.sendTo(tokenOut, receiver, amountOut);
-        return abi.encode(amountCalculated);
+        return abi.encode(amountCalculated, tokenOut, receiver);
     }
 
     function handleCallback(bytes calldata data)
@@ -96,18 +90,10 @@ contract BalancerV3Executor is IExecutor, ICallback {
         returns (bytes memory result)
     {
         verifyCallback(data);
-        // Remove the first 68 bytes 4 selector + 32 dataOffset + 32 dataLength and extra padding at the end
-        result = _swapCallback(data[68:181]);
+        result = _swapCallback(data);
         // Our general callback logic returns a not ABI encoded result (see Dispatcher._callHandleCallbackOnExecutor).
         // However, the Vault expects the result to be ABI encoded. That is why we need to encode it here again.
         return abi.encode(result);
-    }
-
-    function swapCallback(bytes calldata data)
-        external
-        returns (bytes memory result)
-    {
-        return _swapCallback(data);
     }
 
     function _decodeData(bytes calldata data)
@@ -153,8 +139,8 @@ contract BalancerV3Executor is IExecutor, ICallback {
         )
     {
         receiver = address(VAULT);
-        amount = uint256(bytes32(data[68:32 + 68]));
-        tokenIn = address(bytes20(data[68 + 32:68 + 52]));
+        amount = uint256(bytes32(data[0:32]));
+        tokenIn = address(bytes20(data[32:52]));
         transferType = RestrictTransferFrom.TransferType(uint8(data[92]));
     }
 }

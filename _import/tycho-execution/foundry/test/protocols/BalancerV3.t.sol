@@ -22,6 +22,19 @@ contract BalancerV3ExecutorExposed is BalancerV3Executor {
     {
         return _decodeData(data);
     }
+
+    fallback(bytes calldata data) external returns (bytes memory) {
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            uint256 amount
+        ) = this.getCallbackTransferData(data);
+        if (transferType == RestrictTransferFrom.TransferType.Transfer) {
+            IERC20(tokenIn).transfer(receiver, amount);
+        }
+        return abi.encode(_swapCallback(data));
+    }
 }
 
 contract BalancerV3ExecutorTest is Constants, TestUtils {
@@ -66,14 +79,7 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
     }
 
     function testGetTransferData() public {
-        bytes memory params = abi.encodePacked(
-            uint256(1 ether),
-            osETH_ADDR,
-            waEthWETH_ADDR,
-            WETH_osETH_pool,
-            RestrictTransferFrom.TransferType.TransferFrom,
-            BOB
-        );
+        bytes memory params = "";
 
         (
             RestrictTransferFrom.TransferType transferType,
@@ -88,7 +94,29 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
         );
     }
 
-    // TODO: add testGetCallbackTransferData with correct calldata
+    function testGetCallbackTransferData() public {
+        uint256 amountOwed = 1 ether;
+        bytes memory params = abi.encodePacked(
+            amountOwed,
+            WBTC_ADDR,
+            address(0),
+            address(0),
+            RestrictTransferFrom.TransferType.Transfer
+        );
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            uint256 amount
+        ) = balancerV3Exposed.getCallbackTransferData(params);
+        assertEq(
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.Transfer)
+        );
+        assertEq(receiver, 0xbA1333333333a1BA1108E8412f11850A5C319bA9);
+        assertEq(tokenIn, WBTC_ADDR);
+        assertEq(amount, amountOwed);
+    }
 
     function testSwapInvalidDataLength() public {
         bytes memory invalidParams = abi.encodePacked(
@@ -122,9 +150,8 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
         uint256 balanceAfter = IERC20(waEthWETH_ADDR).balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
-        // TODO: update this once we fixed callback
-        assertEq(tokenOut, address(0));
-        assertEq(receiver, address(0));
+        assertEq(tokenOut, waEthWETH_ADDR);
+        assertEq(receiver, BOB);
     }
 
     function testSwapIntegration() public {
@@ -145,9 +172,8 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
         uint256 balanceAfter = IERC20(aaveGHO_ADDR).balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
-        // TODO: update this once we fixed callback
-        assertEq(tokenOut, address(0));
-        assertEq(receiver, address(0));
+        assertEq(tokenOut, aaveGHO_ADDR);
+        assertEq(receiver, BOB);
     }
 }
 

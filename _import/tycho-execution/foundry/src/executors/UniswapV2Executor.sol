@@ -67,8 +67,12 @@ contract UniswapV2Executor is IExecutor {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (address target, address tokenOut,
-            address receiver, bool zeroForOne)
+        returns (
+            address target,
+            address tokenOut,
+            address receiver,
+            bool zeroForOne
+        )
     {
         if (data.length != 82) {
             revert UniswapV2Executor__InvalidDataLength();

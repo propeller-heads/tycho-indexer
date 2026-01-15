@@ -12,8 +12,12 @@ contract MaverickV2ExecutorExposed is MaverickV2Executor {
     function decodeParams(bytes calldata data)
         external
         pure
-        returns (IERC20 tokenIn, address target, address tokenOut,
-            address receiver)
+        returns (
+            IERC20 tokenIn,
+            address target,
+            address tokenOut,
+            address receiver
+        )
     {
         return _decodeData(data);
     }
@@ -41,8 +45,7 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
             RestrictTransferFrom.TransferType.Transfer
         );
 
-        (IERC20 tokenIn, address target, address tokenOut,
-            address receiver) =
+        (IERC20 tokenIn, address target, address tokenOut, address receiver) =
             maverickV2Exposed.decodeParams(params);
 
         assertEq(address(tokenIn), GHO_ADDR);
@@ -114,8 +117,7 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         bytes memory protocolData =
             loadCallDataFromFile("test_encode_maverick_v2");
 
-        (IERC20 tokenIn, address pool, address tokenOut,
-            address receiver) =
+        (IERC20 tokenIn, address pool, address tokenOut, address receiver) =
             maverickV2Exposed.decodeParams(protocolData);
 
         assertEq(address(tokenIn), GHO_ADDR);

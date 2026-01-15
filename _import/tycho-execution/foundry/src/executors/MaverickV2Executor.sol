@@ -8,9 +8,11 @@ import {
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
-import {RefundEscrow} from "../../lib/permit2/lib/openzeppelin-contracts/contracts/utils/escrow/RefundEscrow.sol";
+import {
+    RefundEscrow
+} from "../../lib/permit2/lib/openzeppelin-contracts/contracts/utils/escrow/RefundEscrow.sol";
 
-    error MaverickV2Executor__InvalidDataLength();
+error MaverickV2Executor__InvalidDataLength();
 error MaverickV2Executor__InvalidTarget();
 error MaverickV2Executor__InvalidFactory();
 
@@ -56,8 +58,12 @@ contract MaverickV2Executor is IExecutor {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (IERC20 inToken, address target, address tokenOut,
-            address receiver)
+        returns (
+            IERC20 inToken,
+            address target,
+            address tokenOut,
+            address receiver
+        )
     {
         if (data.length != 81) {
             revert MaverickV2Executor__InvalidDataLength();

@@ -32,7 +32,12 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
         return _decodeData(data);
     }
 
-    fallback(bytes calldata data) external returns (bytes memory) {
+    fallback(
+        bytes calldata /*data*/
+    )
+        external
+        returns (bytes memory)
+    {
         (
             RestrictTransferFrom.TransferType transferType,
             address receiver,

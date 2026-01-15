@@ -25,7 +25,6 @@ contract ERC4626Executor is IExecutor {
         returns (uint256 calculatedAmount, address tokenOut, address receiver)
     {
         address target;
-        receiver;
         IERC20 tokenIn;
         bool approvalNeeded;
 

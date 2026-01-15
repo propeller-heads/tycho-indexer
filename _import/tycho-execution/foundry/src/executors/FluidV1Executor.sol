@@ -138,6 +138,7 @@ contract FluidV1Executor is IExecutor, ICallback {
 
     function handleCallback(bytes calldata data)
         public
+        view
         returns (bytes memory result)
     {
         verifyCallback(data);

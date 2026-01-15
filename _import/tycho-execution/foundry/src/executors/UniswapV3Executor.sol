@@ -61,7 +61,6 @@ contract UniswapV3Executor is IExecutor, ICallback {
         int256 amount1;
         IUniswapV3Pool pool = IUniswapV3Pool(target);
 
-        // TODO: can this be improved? no need to decode to encode again?
         bytes memory callbackData =
             _makeV3CallbackData(tokenIn, tokenOut, fee, transferType);
 
@@ -87,6 +86,7 @@ contract UniswapV3Executor is IExecutor, ICallback {
 
     function handleCallback(bytes calldata msgData)
         public
+        view
         returns (bytes memory result)
     {
         // The data has the following layout:

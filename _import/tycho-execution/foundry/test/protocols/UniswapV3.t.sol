@@ -122,7 +122,57 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
         );
     }
 
-    // TODO: add get transfer data and callback data tests
+    function testGetTransferData() public {
+        bytes memory params = "";
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        ) = uniswapV3Exposed.getTransferData(params);
+
+        assertEq(
+            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
+        );
+        assertEq(receiver, address(0));
+        assertEq(tokenIn, address(0));
+    }
+
+    function testGetCallbackTransferData() public {
+        uint24 poolFee = 3000;
+        uint256 amountOwed = 1000000000000000000;
+        bytes memory protocolData = abi.encodePacked(
+            WETH_ADDR,
+            DAI_ADDR,
+            poolFee,
+            RestrictTransferFrom.TransferType.Transfer,
+            address(uniswapV3Exposed)
+        );
+        uint256 dataOffset = 3; // some offset
+        uint256 dataLength = protocolData.length;
+
+        bytes memory callbackData = abi.encodePacked(
+            bytes4(0xfa461e33),
+            int256(amountOwed), // amount0Delta
+            int256(0), // amount1Delta
+            dataOffset,
+            dataLength,
+            protocolData
+        );
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            uint256 amount
+        ) = uniswapV3Exposed.getCallbackTransferData(callbackData);
+
+        assertEq(
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.Transfer)
+        );
+        assertEq(receiver, address(this));
+        assertEq(tokenIn, WETH_ADDR);
+        assertEq(amount, amountOwed);
+    }
 
     function testSwapIntegration() public {
         uint256 amountIn = 10 ** 18;
@@ -146,6 +196,8 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
         assertGe(amountOut, expAmountOut);
         assertEq(IERC20(WETH_ADDR).balanceOf(address(uniswapV3Exposed)), 0);
         assertGe(IERC20(DAI_ADDR).balanceOf(address(this)), expAmountOut);
+        assertEq(tokenOut, DAI_ADDR);
+        assertEq(receiver, address(this));
     }
 
     function testDecodeParamsInvalidDataLength() public {

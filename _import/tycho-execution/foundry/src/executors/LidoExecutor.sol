@@ -73,9 +73,8 @@ contract LidoExecutor is IExecutor {
             // Measure actual balance changes to account for rounding in share conversions
             uint256 balanceBefore = ST_ETH.balanceOf(address(this));
 
-            // slither-disable-next-line arbitrary-send-eth
-            uint256 shares =
-                LidoPool(ST_ETH_ADDRESS).submit{value: amountIn}(address(this));
+            // slither-disable-next-line arbitrary-send-eth,unused-return
+            LidoPool(ST_ETH_ADDRESS).submit{value: amountIn}(address(this));
 
             uint256 balanceAfter = ST_ETH.balanceOf(address(this));
             calculatedAmount = balanceAfter - balanceBefore;

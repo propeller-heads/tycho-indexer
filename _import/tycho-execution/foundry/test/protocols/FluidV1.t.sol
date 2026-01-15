@@ -106,14 +106,7 @@ contract FluidV1ExecutorTest is Test, Constants {
     }
 
     function testGetTransferData() public {
-        address dex = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
-        bytes memory params = abi.encodePacked(
-            dex,
-            true,
-            address(this),
-            RestrictTransferFrom.TransferType.Transfer,
-            false
-        );
+        bytes memory params = "";
 
         (
             RestrictTransferFrom.TransferType transferType,
@@ -127,7 +120,31 @@ contract FluidV1ExecutorTest is Test, Constants {
             uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
         );
     }
-    // TODO: add test for callback get transfer data
+
+    function testGetCallbackTransferData() public {
+        uint256 amountOwed = 1000000000000000000;
+        bytes memory data =
+            abi.encodeWithSelector(hex"12345678", DAI_ADDR, amountOwed);
+        address dexAddress = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
+        executor.setSwapParams(
+            IFluidV1Dex(dexAddress), RestrictTransferFrom.TransferType.Transfer
+        );
+
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            uint256 amount
+        ) = executor.getCallbackTransferData(data);
+
+        assertEq(
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.Transfer)
+        );
+        assertEq(receiver, FLUIDV1_LIQUIDITY);
+        assertEq(tokenIn, DAI_ADDR);
+        assertEq(amount, amountOwed);
+    }
 
     function testSwapParamsRoundtrip() public {
         address dexAddress = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
@@ -251,7 +268,6 @@ contract FluidV1ExecutorTest is Test, Constants {
         uint256 balanceAfter = BOB.balance;
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertEq(receiver, BOB);
-        // TODO: update this when we have the tokenOut
         assertEq(tokenOut, address(0));
     }
 }

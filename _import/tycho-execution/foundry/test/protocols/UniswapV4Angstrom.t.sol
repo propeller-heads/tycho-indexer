@@ -23,7 +23,12 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
         return _selectAttestation(attestationData);
     }
 
-    fallback(bytes calldata data) external returns (bytes memory) {
+    fallback(
+        bytes calldata /*data*/
+    )
+        external
+        returns (bytes memory)
+    {
         (
             RestrictTransferFrom.TransferType transferType,
             address receiver,
@@ -91,7 +96,7 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
         assertEq(selected, "");
     }
 
-    function testSelectAttestationEmptyAttestations() public {
+    function testSelectAttestationEmptyAttestations() public view {
         // Encode empty attestations - should return empty bytes
         bytes memory encodedAttestations;
         bytes memory selected =

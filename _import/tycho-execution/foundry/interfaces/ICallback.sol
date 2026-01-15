@@ -26,7 +26,18 @@ interface ICallback {
     function verifyCallback(bytes calldata data) external view;
 
 
-    // TODO: add docs
+    /**
+     * @notice Gets transfer data for callback-based token transfers.
+     * @dev Used by the Dispatcher during protocol callbacks to determine
+     * if and how to transfer tokens. Some protocols require all token transfers
+     * to happen within the callback context rather than before swap execution.
+     *
+     * @param data The encoded callback data.
+     * @return transferType The type of transfer to perform during the callback.
+     * @return receiver The address that should receive the tokens.
+     * @return tokenIn The address of the input token to transfer.
+     * @return amountIn The amount of tokens to transfer.
+     */
     function getCallbackTransferData(bytes calldata data)
     external
     payable
