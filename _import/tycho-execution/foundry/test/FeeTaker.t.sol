@@ -280,37 +280,14 @@ contract FeeTakerTest is Constants {
         assertEq(feeTakerExposed.getDelta(token), int256(0.9751 ether));
     }
 
-    function testTakeFeeSolverFeeTooHigh() public {
-        // Test with solver fee > 100%
+    function testTakeFeeCombinedFeeTooHigh() public {
+        // Test with solver fee + router fee on output > 100%
         uint256 amountIn = 1 ether;
-        uint16 solverFeeBps = 10001; // 100.01% - too high
+        uint16 solverFeeBps = 5001; // 50.01%
         address solverFeeReceiver = ALICE;
-        uint16 routerFeeOnOutputBps = 0;
+        uint16 routerFeeOnOutputBps = 5000; // 50% - combined this should make 100.01%
         uint16 routerFeeOnSolverFeeBps = 0;
         address routerFeeReceiver = address(0);
-        address token = WETH_ADDR;
-
-        bytes memory data = abi.encodePacked(
-            solverFeeBps,
-            solverFeeReceiver,
-            routerFeeOnOutputBps,
-            routerFeeOnSolverFeeBps,
-            routerFeeReceiver,
-            token
-        );
-
-        vm.expectRevert(abi.encodeWithSelector(FeeTaker__FeeTooHigh.selector));
-        feeTakerExposed.takeFee(amountIn, data);
-    }
-
-    function testTakeFeeRouterFeeOnOutputTooHigh() public {
-        // Test with router fee on output > 100%
-        uint256 amountIn = 1 ether;
-        uint16 solverFeeBps = 0;
-        address solverFeeReceiver = address(0);
-        uint16 routerFeeOnOutputBps = 10001; // 100.01% - too high
-        uint16 routerFeeOnSolverFeeBps = 0;
-        address routerFeeReceiver = BOB;
         address token = WETH_ADDR;
 
         bytes memory data = abi.encodePacked(

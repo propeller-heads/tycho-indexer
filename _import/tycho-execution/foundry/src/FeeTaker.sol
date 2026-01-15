@@ -47,7 +47,7 @@ contract FeeTaker is Vault {
         ) = _decodeFeeData(data);
 
         if (
-            solverFeeBps > MAX_FEE_BPS || routerFeeOnOutputBps > MAX_FEE_BPS
+            (solverFeeBps + routerFeeOnOutputBps > MAX_FEE_BPS)
                 || routerFeeOnSolverFeeBps > MAX_FEE_BPS
         ) {
             revert FeeTaker__FeeTooHigh();
