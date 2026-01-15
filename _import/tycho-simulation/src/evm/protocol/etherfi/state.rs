@@ -101,6 +101,7 @@ impl EtherfiState {
         if total_pooled_ether == U256::ZERO {
             return Ok(U256::ZERO)
         }
+        // Pro-rata shares for a given pooled ETH amount.
         Ok(amount * self.total_shares / total_pooled_ether)
     }
 
@@ -108,6 +109,7 @@ impl EtherfiState {
         if self.total_shares == U256::ZERO {
             return Ok(U256::ZERO)
         }
+        // Pro-rata ETH amount for a given share count.
         let total_pooled_ether = self.total_value_in_lp + self.total_value_out_of_lp;
         Ok(share * total_pooled_ether / self.total_shares)
     }
@@ -160,6 +162,7 @@ fn convert_to_bucket_unit(amount: U256, rounding_up: bool) -> Result<u64, Simula
             "EtherFiRedemptionManager: Amount too large".to_string(),
         ));
     }
+    // Convert wei to rate-limit bucket units with optional ceil/floor.
     let bucket = if rounding_up { (amount + scale - U256::ONE) / scale } else { amount / scale };
     if bucket > U256::from(u64::MAX) {
         return Err(SimulationError::FatalError(
@@ -225,7 +228,7 @@ impl ProtocolSim for EtherfiState {
             new_state.total_value_in_lp += amount_in;
             return Ok(GetAmountOutResult::new(
                 u256_to_biguint(amount_out),
-                BigUint::ZERO,
+                BigUint::from(46_886u32), // LiquidityPool.deposit function gas used
                 Box::new(new_state),
             ))
         }
@@ -244,6 +247,7 @@ impl ProtocolSim for EtherfiState {
             if liquid_eth_amount < low_watermark || liquid_eth_amount - low_watermark < amount_in {
                 return Err(SimulationError::FatalError("Exceeded total redeemable amount".into()))
             } else {
+                // Enforce the rate-limit bucket before applying exit fees and balances.
                 let bucket_unit = convert_to_bucket_unit(amount_in, true)?;
                 let mut limit = eth_redemption_info
                     .limit
@@ -268,21 +272,34 @@ impl ProtocolSim for EtherfiState {
             new_state.liquidity_pool_native_balance =
                 Some(liquidity_pool_native_balance - eth_amount_out);
             let amount_out = u256_to_biguint(eth_amount_out);
-            return Ok(GetAmountOutResult::new(amount_out, BigUint::ZERO, Box::new(new_state)))
+            return Ok(GetAmountOutResult::new(
+                amount_out,
+                BigUint::from(151_676u32), /* EtherFiRedemptionManager._redeemEEth function gas
+                                            * used */
+                Box::new(new_state),
+            ))
         }
 
         if token_in.address.as_ref() == EETH_ADDRESS && token_out.address.as_ref() == WEETH_ADDRESS
         {
             // eeth --> weeth
             let amount_out = u256_to_biguint(self.shares_for_amount(amount_in)?);
-            return Ok(GetAmountOutResult::new(amount_out, BigUint::ZERO, Box::new(new_state)))
+            return Ok(GetAmountOutResult::new(
+                amount_out,
+                BigUint::from(70_489u32), // weeth.wrap function gas used
+                Box::new(new_state),
+            ))
         }
 
         if token_in.address.as_ref() == WEETH_ADDRESS && token_out.address.as_ref() == EETH_ADDRESS
         {
             // weeth --> eeth
             let amount_out = u256_to_biguint(self.amount_for_share(amount_in)?);
-            return Ok(GetAmountOutResult::new(amount_out, BigUint::ZERO, Box::new(new_state)))
+            return Ok(GetAmountOutResult::new(
+                amount_out,
+                BigUint::from(60_182u32), // weeth.unwrap function gas used
+                Box::new(new_state),
+            ))
         }
 
         Err(SimulationError::FatalError("unsupported swap".to_string()))
@@ -312,7 +329,15 @@ impl ProtocolSim for EtherfiState {
             if liquid_eth_amount < low_watermark {
                 return Ok((u256_to_biguint(liquid_eth_amount), BigUint::ZERO));
             }
-            let max_eeth_amount = self.total_value_in_lp + self.total_value_out_of_lp;
+            let mut max_eeth_amount = self.total_value_in_lp + self.total_value_out_of_lp;
+            let limit = eth_redemption_info
+                .limit
+                .refill(self.block_timestamp);
+            // Cap max sell amount by the rate-limit bucket, in wei.
+            let bucket_unit = convert_to_bucket_unit(max_eeth_amount, true)?;
+            if limit.remaining < bucket_unit {
+                max_eeth_amount = U256::from(limit.remaining) * U256::from(BUCKET_UNIT_SCALE);
+            }
             let eeth_shares = self.shares_for_amount(max_eeth_amount)?;
             let eth_amount_out = self.amount_for_share(mul_div(
                 eeth_shares,
@@ -323,13 +348,11 @@ impl ProtocolSim for EtherfiState {
         }
 
         if sell_token.as_ref() == EETH_ADDRESS && buy_token.as_ref() == WEETH_ADDRESS {
-            let max = U256::from(1) << 256;
-            return Ok((u256_to_biguint(max), u256_to_biguint(max)));
+            return Ok((u256_to_biguint(U256::MAX), u256_to_biguint(U256::MAX)));
         }
 
         if sell_token.as_ref() == ETH_ADDRESS && buy_token.as_ref() == EETH_ADDRESS {
-            let max = U256::from(1) << 256;
-            return Ok((u256_to_biguint(max), u256_to_biguint(max)));
+            return Ok((u256_to_biguint(U256::MAX), u256_to_biguint(U256::MAX)));
         }
 
         Err(SimulationError::FatalError("unsupported swap".to_string()))
@@ -445,6 +468,32 @@ impl ProtocolSim for EtherfiState {
 mod tests {
     use super::*;
 
+    fn u256_dec(value: &str) -> U256 {
+        U256::from_str_radix(value, 10).expect("valid base-10 U256")
+    }
+
+    fn sample_state() -> EtherfiState {
+        EtherfiState {
+            block_timestamp: 1_764_901_727,
+            total_value_out_of_lp: u256_dec("2649956291248983147816190"),
+            total_value_in_lp: u256_dec("35878437939234433682319"),
+            total_shares: u256_dec("2479957712837255941780080"),
+            eth_amount_locked_for_withdrawl: Some(u256_dec("5572247384784800483589")),
+            liquidity_pool_native_balance: Some(u256_dec("35878437939234433682319")),
+            eth_redemption_info: Some(RedemptionInfo {
+                limit: BucketLimit {
+                    capacity: 2_000_000_000,
+                    remaining: 1_998_993_391,
+                    last_refill: 1_764_901_727,
+                    refill_rate: 23_148,
+                },
+                exit_fee_split_to_treasury_in_bps: 1000,
+                exit_fee_in_bps: 30,
+                low_watermark_in_bps_of_tvl: 100,
+            }),
+        }
+    }
+
     #[test]
     fn bucket_limit_from_u256_parses_fields() {
         let capacity = 2_000_000_000u64;
@@ -535,5 +584,74 @@ mod tests {
         let older = limit.refill(99);
         assert_eq!(older.remaining, 4);
         assert_eq!(older.last_refill, 100);
+    }
+
+    #[test]
+    fn get_limits_eeth_to_eth_caps_by_bucket_remaining() {
+        let state = sample_state();
+        let info = state
+            .eth_redemption_info
+            .expect("redemption info");
+        let limit = info.limit.refill(state.block_timestamp);
+        let expected_max_in = U256::from(limit.remaining) * U256::from(BUCKET_UNIT_SCALE);
+
+        let (max_in, max_out) = state
+            .get_limits(Bytes::from(EETH_ADDRESS), Bytes::from(ETH_ADDRESS))
+            .expect("limits");
+
+        assert_eq!(max_in, u256_to_biguint(expected_max_in));
+        let eeth_shares = state
+            .shares_for_amount(expected_max_in)
+            .expect("shares");
+        let net_shares = mul_div(
+            eeth_shares,
+            U256::from(BASIS_POINT_SCALE) - U256::from(info.exit_fee_in_bps),
+            U256::from(BASIS_POINT_SCALE),
+        )
+        .expect("mul_div");
+        let expected_out = state
+            .amount_for_share(net_shares)
+            .expect("amount");
+        assert_eq!(max_out, u256_to_biguint(expected_out));
+    }
+
+    #[test]
+    fn get_limits_eeth_to_eth_returns_liquid_amount_when_below_low_watermark() {
+        let mut state = sample_state();
+        let info = state
+            .eth_redemption_info
+            .expect("redemption info");
+        let total_pooled = state.total_value_in_lp + state.total_value_out_of_lp;
+        let low_watermark = mul_div(
+            total_pooled,
+            U256::from(info.low_watermark_in_bps_of_tvl),
+            U256::from(BASIS_POINT_SCALE),
+        )
+        .expect("low watermark");
+        let locked = state
+            .eth_amount_locked_for_withdrawl
+            .expect("locked");
+        state.liquidity_pool_native_balance = Some(locked + low_watermark - U256::ONE);
+
+        let (max_in, max_out) = state
+            .get_limits(Bytes::from(EETH_ADDRESS), Bytes::from(ETH_ADDRESS))
+            .expect("limits");
+
+        assert_eq!(max_in, u256_to_biguint(low_watermark - U256::ONE));
+        assert_eq!(max_out, BigUint::ZERO);
+    }
+
+    #[test]
+    fn get_limits_weeth_to_eeth_uses_total_shares() {
+        let state = sample_state();
+        let max_weeth = state
+            .shares_for_amount(state.total_shares)
+            .expect("shares");
+        let (max_in, max_out) = state
+            .get_limits(Bytes::from(WEETH_ADDRESS), Bytes::from(EETH_ADDRESS))
+            .expect("limits");
+
+        assert_eq!(max_in, u256_to_biguint(max_weeth));
+        assert_eq!(max_out, u256_to_biguint(state.total_shares));
     }
 }
