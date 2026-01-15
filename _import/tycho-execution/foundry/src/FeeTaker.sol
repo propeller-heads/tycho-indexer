@@ -54,31 +54,35 @@ contract FeeTaker is Vault {
         }
 
         amountOut = amountIn;
-        uint256 solverFee = 0;
+        uint256 routerFeeOnSolverFee = 0;
 
-        // Deduct solution fee if > 0
+        // Calculate and deduct solver fee if > 0
         if (solverFeeBps > 0) {
-            solverFee = (amountOut * solverFeeBps) / 10000;
+            uint256 solverFee = (amountOut * solverFeeBps) / 10000;
             amountOut -= solverFee;
-            _updateDeltaAccounting(token, -int256(solverFee));
-            _creditVault(solverFeeReceiver, token, solverFee);
+
+            // Calculate router's cut of the solver fee
+            if (routerFeeOnSolverFeeBps > 0) {
+                routerFeeOnSolverFee =
+                    (solverFee * routerFeeOnSolverFeeBps) / 10000;
+            }
+
+            // Credit solver with their portion (after router's cut)
+            uint256 solverPortion = solverFee - routerFeeOnSolverFee;
+            if (solverPortion > 0) {
+                _updateDeltaAccounting(token, -int256(solverPortion));
+                _creditVault(solverFeeReceiver, token, solverPortion);
+            }
         }
 
-        uint256 totalRouterFeesTaken = 0;
+        uint256 totalRouterFeesTaken = routerFeeOnSolverFee;
+
         // Deduct router fee on output amount if > 0
         if (routerFeeOnOutputBps > 0) {
             uint256 routerFeeOnOutput =
                 (amountOut * routerFeeOnOutputBps) / 10000;
             amountOut -= routerFeeOnOutput;
             totalRouterFeesTaken += routerFeeOnOutput;
-        }
-
-        // Deduct router fee on solver fee if > 0 (calculated from solution fee)
-        if (routerFeeOnSolverFeeBps > 0 && solverFee > 0) {
-            uint256 routerFeeOnSolverFee =
-                (solverFee * routerFeeOnSolverFeeBps) / 10000;
-            amountOut -= routerFeeOnSolverFee;
-            totalRouterFeesTaken += routerFeeOnSolverFee;
         }
 
         if (totalRouterFeesTaken > 0) {

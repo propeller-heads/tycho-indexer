@@ -154,17 +154,17 @@ contract FeeTakerTest is Constants {
         uint256 amountOut = feeTakerExposed.takeFee(amountIn, data);
 
         // solverFee = 1 ether * 200 / 10000 = 0.02 ether
-        // amountAfterSolverFee = 1 ether - 0.02 ether = 0.98 ether
         // routerFeeOnSolverFee = 0.02 ether * 1000 / 10000 = 0.002 ether
-        // amountOut = 0.98 ether - 0.002 ether = 0.978 ether
-        assertEq(amountOut, 0.978 ether);
+        // solverPortion = 0.02 - 0.002 = 0.018 ether
+        // amountOut = 1 ether - 0.02 ether = 0.98 ether
+        assertEq(amountOut, 0.98 ether);
 
-        // Check vault balance of the solver fee receiver - this should now include the solver fee
+        // Check vault balance of the solver fee receiver - should get solver fee minus router's cut
         uint256 solverFeeReceiverBalanceAfter =
             feeTakerExposed.balanceOf(solverFeeReceiver, tokenId);
         assertEq(
             solverFeeReceiverBalanceAfter,
-            solverFeeReceiverBalanceBefore + 0.02 ether
+            solverFeeReceiverBalanceBefore + 0.018 ether
         );
         // Check vault balance of the router fee receiver - this should now include the router fee on solver fee
         uint256 routerFeeReceiverBalanceAfter =
@@ -175,7 +175,7 @@ contract FeeTakerTest is Constants {
         );
 
         // Check delta accounting - should be amountOut remaining
-        assertEq(feeTakerExposed.getDelta(token), int256(0.978 ether));
+        assertEq(feeTakerExposed.getDelta(token), int256(0.98 ether));
     }
 
     function testTakeFeeOnlySolverFee() public {
@@ -254,19 +254,19 @@ contract FeeTakerTest is Constants {
         uint256 amountOut = feeTakerExposed.takeFee(amountIn, data);
 
         // 1. solverFee = 1 ether * 200 / 10000 = 0.02 ether
+        //    routerFeeOnSolverFee = 0.02 ether * 500 / 10000 = 0.001 ether
+        //    solverPortion = 0.02 - 0.001 = 0.019 ether
         //    amountAfterSolverFee = 1 ether - 0.02 ether = 0.98 ether
         // 2. routerFeeOnOutput = 0.98 ether * 50 / 10000 = 0.0049 ether
-        //    amountAfterRouterFeeOnOutput = 0.98 ether - 0.0049 ether = 0.9751 ether
-        // 3. routerFeeOnSolverFee = 0.02 ether * 500 / 10000 = 0.001 ether
-        //    amountOut = 0.9751 ether - 0.001 ether = 0.9741 ether
-        assertEq(amountOut, 0.9741 ether);
+        //    amountOut = 0.98 ether - 0.0049 ether = 0.9751 ether
+        assertEq(amountOut, 0.9751 ether);
 
-        // Check vault balance of the solver fee receiver - this should now include the solver fee
+        // Check vault balance of the solver fee receiver - should get solver fee minus router's cut
         uint256 solverFeeReceiverBalanceAfter =
             feeTakerExposed.balanceOf(solverFeeReceiver, tokenId);
         assertEq(
             solverFeeReceiverBalanceAfter,
-            solverFeeReceiverBalanceBefore + 0.02 ether
+            solverFeeReceiverBalanceBefore + 0.019 ether
         );
         // Check vault balance of the router fee receiver - this should now include both router fees
         uint256 routerFeeReceiverBalanceAfter =
@@ -277,7 +277,7 @@ contract FeeTakerTest is Constants {
         );
 
         // Check delta accounting - should be amountOut remaining
-        assertEq(feeTakerExposed.getDelta(token), int256(0.9741 ether));
+        assertEq(feeTakerExposed.getDelta(token), int256(0.9751 ether));
     }
 
     function testTakeFeeSolverFeeTooHigh() public {
