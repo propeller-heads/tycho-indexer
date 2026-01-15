@@ -61,8 +61,8 @@ contract UniswapV2Executor is IExecutor {
 
         calculatedAmount = _getAmountOut(target, amountIn, zeroForOne);
 
-        // Infer tokenIn from zeroForOne
-        address tokenIn = zeroForOne ? token0 : token1;
+        // Infer tokenOut from zeroForOne
+        tokenOut = zeroForOne ? token1 : token0;
 
         if (zeroForOne) {
             pool.swap(0, calculatedAmount, receiver, "");
@@ -74,11 +74,7 @@ contract UniswapV2Executor is IExecutor {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (
-            address target,
-            address receiver,
-            bool zeroForOne
-        )
+        returns (address target, address receiver, bool zeroForOne)
     {
         if (data.length != 42) {
             revert UniswapV2Executor__InvalidDataLength();
@@ -150,7 +146,7 @@ contract UniswapV2Executor is IExecutor {
         address token1 = pool.token1();
         tokenIn = zeroForOne ? token0 : token1;
 
-        receiver = address(bytes20(data[20:40]));
+        receiver = target;
         transferType = RestrictTransferFrom.TransferType(uint8(data[41]));
     }
 }

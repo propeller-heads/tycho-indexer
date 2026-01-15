@@ -51,7 +51,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             uint24(0),
             address(usv2Executor),
             encodeUniswapV2Swap(
-                WETH_DAI_POOL, tychoRouterAddr, false, transferType
+                DAI_WETH_UNIV2_POOL, tychoRouterAddr, false, transferType
             )
         );
 
