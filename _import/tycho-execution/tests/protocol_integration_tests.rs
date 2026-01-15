@@ -125,12 +125,11 @@ fn test_single_encoding_strategy_ekubo_erc20() {
         &eth(),
         None,
     )
-        .unwrap()
-        .data;
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_ekubo_erc20", hex_calldata.as_str());
 }
-
 
 #[test]
 fn test_single_encoding_strategy_ekubo_mev_resist() {
@@ -183,12 +182,11 @@ fn test_single_encoding_strategy_ekubo_mev_resist() {
         &eth(),
         None,
     )
-        .unwrap()
-        .data;
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_ekubo_mev_resist", hex_calldata.as_str());
 }
-
 
 #[test]
 fn test_single_encoding_strategy_maverick() {
