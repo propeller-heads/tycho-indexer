@@ -58,13 +58,16 @@ contract FeeTaker is Vault {
 
         // Calculate and deduct solver fee if > 0
         if (solverFeeBps > 0) {
-            uint256 solverFee = (amountOut * solverFeeBps) / 10000;
+            // Save numerator for later routerFeeOnSolverFee calculation to avoid
+            // divide-before-multiply precision loss and warning
+            uint256 solverFeeNumerator = amountOut * solverFeeBps;
+            uint256 solverFee = solverFeeNumerator / 10_000;
             amountOut -= solverFee;
 
             // Calculate router's cut of the solver fee
             if (routerFeeOnSolverFeeBps > 0) {
                 routerFeeOnSolverFee =
-                    (solverFee * routerFeeOnSolverFeeBps) / 10000;
+                    (solverFeeNumerator * routerFeeOnSolverFeeBps) / 100_000_000;
             }
 
             // Credit solver with their portion (after router's cut)
