@@ -25,7 +25,7 @@ contract RocketpoolExecutor is IExecutor {
     function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256 calculatedAmount, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut, address receiver)
     {
         bool isDeposit;
         (isDeposit, receiver) = _decodeData(data);
@@ -36,10 +36,10 @@ contract RocketpoolExecutor is IExecutor {
             // We don't need to _transfer ETH into this contract since it must be sent along with the call
             uint256 rethBefore = RETH.balanceOf(address(this));
             ROCKET_DEPOSIT_POOL.deposit{value: amountIn}();
-            calculatedAmount = RETH.balanceOf(address(this)) - rethBefore;
+            amountOut = RETH.balanceOf(address(this)) - rethBefore;
 
             if (receiver != address(this)) {
-                RETH.safeTransfer(receiver, calculatedAmount);
+                RETH.safeTransfer(receiver, amountOut);
             }
             tokenOut = address(RETH);
         } else {
@@ -47,12 +47,11 @@ contract RocketpoolExecutor is IExecutor {
             // rETH -> ETH: Burn rETH to receive ETH
             uint256 ethBefore = address(this).balance;
             RETH.burn(amountIn);
-            calculatedAmount = address(this).balance - ethBefore;
+            amountOut = address(this).balance - ethBefore;
 
             if (receiver != address(this)) {
-                Address.sendValue(payable(receiver), calculatedAmount);
+                Address.sendValue(payable(receiver), amountOut);
             }
-            tokenOut = address(0);
         }
     }
 
@@ -86,6 +85,7 @@ contract RocketpoolExecutor is IExecutor {
         }
 
         bool isDeposit = uint8(data[0]) == 1;
+        // TODO: hardcode the transferType in ENG-4881
         transferType = RestrictTransferFrom.TransferType(uint8(data[1]));
         if (isDeposit) {
             tokenIn = address(0);

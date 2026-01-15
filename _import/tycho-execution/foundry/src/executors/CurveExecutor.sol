@@ -8,26 +8,24 @@ import {
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {TychoRouter} from "../TychoRouter.sol";
 
 error CurveExecutor__AddressZero();
 error CurveExecutor__InvalidDataLength();
 
 interface CryptoPool {
-    // slither-disable-next-line naming-convention
     function exchange(uint256 i, uint256 j, uint256 dx, uint256 minDy)
         external
         payable;
 }
 
 interface StablePool {
-    // slither-disable-next-line naming-convention
     function exchange(int128 i, int128 j, uint256 dx, uint256 minDy)
         external
         payable;
 }
 
 interface CryptoPoolETH {
-    // slither-disable-start naming-convention
     function exchange(
         uint256 i,
         uint256 j,
@@ -35,7 +33,6 @@ interface CryptoPoolETH {
         uint256 minDy,
         bool useEth
     ) external payable;
-    // slither-disable-end naming-convention
 }
 
 contract CurveExecutor is IExecutor {
@@ -54,7 +51,7 @@ contract CurveExecutor is IExecutor {
     function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256 calculatedAmount, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut, address receiver)
     {
         if (data.length != 85) {
             revert CurveExecutor__InvalidDataLength();
@@ -101,7 +98,7 @@ contract CurveExecutor is IExecutor {
         }
 
         uint256 balanceAfter = _balanceOf(tokenOut);
-        uint256 amountOut = balanceAfter - balanceBefore;
+        amountOut = balanceAfter - balanceBefore;
 
         if (receiver != address(this)) {
             if (tokenOut == nativeToken) {
@@ -110,7 +107,10 @@ contract CurveExecutor is IExecutor {
                 IERC20(tokenOut).safeTransfer(receiver, amountOut);
             }
         }
-        calculatedAmount = amountOut;
+
+        // This is necessary because Curve's native token is 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE and TychoRouter
+        // uses the address(0) instead. The tokenOut is then later used on some internal accounting across the entire
+        // swap by the TychoRouter, so it is relevant that we are consistent.
         if (tokenOut == nativeToken) {
             tokenOut = address(0);
         }

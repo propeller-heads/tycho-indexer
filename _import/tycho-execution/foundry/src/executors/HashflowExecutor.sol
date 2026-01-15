@@ -50,7 +50,7 @@ contract HashflowExecutor is IExecutor {
     function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256 calculatedAmount, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut, address receiver)
     {
         (IHashflowRouter.RFQTQuote memory quote, bool approvalNeeded) =
             _decodeData(data);
@@ -76,7 +76,7 @@ contract HashflowExecutor is IExecutor {
         uint256 balanceBefore = _balanceOf(quote.trader, quote.quoteToken);
         IHashflowRouter(hashflowRouter).tradeRFQT{value: ethValue}(quote);
         uint256 balanceAfter = _balanceOf(quote.trader, quote.quoteToken);
-        calculatedAmount = balanceAfter - balanceBefore;
+        amountOut = balanceAfter - balanceBefore;
         tokenOut = quote.quoteToken;
         receiver = quote.trader;
     }

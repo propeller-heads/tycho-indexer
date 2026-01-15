@@ -52,14 +52,14 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
     function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256 calculatedAmount, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut, address receiver)
     {
         if (data.length < 92) {
             revert EkuboExecutor__InvalidDataLength();
         }
 
         // amountIn must be at most type(int128).MAX
-        (calculatedAmount, tokenOut, receiver) =
+        (amountOut, tokenOut, receiver) =
             _lock(bytes.concat(bytes16(uint128(amountIn)), data));
     }
 
@@ -76,9 +76,9 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
 
         bytes memory result = "";
         if (selector == LOCKED_SELECTOR) {
-            (int128 calculatedAmount, address tokenOut, address receiver) =
+            (int128 amountOut, address tokenOut, address receiver) =
                 _locked(stripped);
-            result = abi.encodePacked(calculatedAmount, tokenOut, receiver);
+            result = abi.encodePacked(amountOut, tokenOut, receiver);
         } else if (selector == PAY_CALLBACK_SELECTOR) {
             // The paying is done in the Dispatcher using getCallbackTransferData. Nothing to do here
         } else {
@@ -92,12 +92,12 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
 
     function locked(uint256) external coreOnly {
         // Without selector and locker id
-        (int128 calculatedAmount, address tokenOut, address receiver) =
+        (int128 amountOut, address tokenOut, address receiver) =
             _locked(msg.data[36:]);
         // slither-disable-next-line assembly
         assembly ("memory-safe") {
             // Pack: 16 bytes int128 + 20 bytes address + 20 bytes address = 56 bytes total
-            mstore(0, shl(128, calculatedAmount)) // Store int128 in upper 16 bytes
+            mstore(0, shl(128, amountOut)) // Store int128 in upper 16 bytes
             mstore(16, shl(96, tokenOut)) // Store address in upper 20 bytes (of next word)
             mstore(36, shl(96, receiver)) // Store address in upper 20 bytes (of next word)
             return(0, 56)

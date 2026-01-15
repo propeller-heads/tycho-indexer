@@ -57,7 +57,7 @@ contract LidoExecutor is IExecutor {
     function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256 calculatedAmount, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut, address receiver)
     {
         LidoPoolType pool;
         LidoPoolDirection direction;
@@ -77,18 +77,18 @@ contract LidoExecutor is IExecutor {
             LidoPool(stEthAddress).submit{value: amountIn}(address(this));
 
             uint256 balanceAfter = stEth.balanceOf(address(this));
-            calculatedAmount = balanceAfter - balanceBefore;
+            amountOut = balanceAfter - balanceBefore;
 
             // submit() sends ST_ETH to this contract, transfer to receiver if needed
             if (receiver != address(this)) {
                 uint256 receiverBalanceBefore = stEth.balanceOf(receiver);
 
-                stEth.safeTransfer(receiver, calculatedAmount);
+                stEth.safeTransfer(receiver, amountOut);
 
                 uint256 receiverBalanceAfter = stEth.balanceOf(receiver);
-                // Update calculatedAmount to reflect actual tokens received after transfer
+                // Update amountOut to reflect actual tokens received after transfer
                 // (accounts for additional rounding during transfer)
-                calculatedAmount = receiverBalanceAfter - receiverBalanceBefore;
+                amountOut = receiverBalanceAfter - receiverBalanceBefore;
             }
             tokenOut = stEthAddress;
         } else if (
@@ -99,10 +99,10 @@ contract LidoExecutor is IExecutor {
             if (approvalNeeded) {
                 stEth.forceApprove(wstEth, type(uint256).max - 1);
             }
-            calculatedAmount = LidoWrappedPool(wstEth).wrap(amountIn);
+            amountOut = LidoWrappedPool(wstEth).wrap(amountIn);
 
             if (receiver != address(this)) {
-                IERC20(wstEth).safeTransfer(receiver, calculatedAmount);
+                IERC20(wstEth).safeTransfer(receiver, amountOut);
             }
             tokenOut = wstEth;
         } else if (
@@ -110,14 +110,14 @@ contract LidoExecutor is IExecutor {
         ) {
             tokenOut = stEthAddress;
             // WST_ETH unwrapping: WST_ETH -> ST_ETH
-            calculatedAmount = LidoWrappedPool(wstEth).unwrap(amountIn);
+            amountOut = LidoWrappedPool(wstEth).unwrap(amountIn);
             if (receiver != address(this)) {
                 uint256 receiverBalanceBefore = stEth.balanceOf(receiver);
-                stEth.safeTransfer(receiver, calculatedAmount);
+                stEth.safeTransfer(receiver, amountOut);
                 uint256 receiverBalanceAfter = stEth.balanceOf(receiver);
-                // Update calculatedAmount to reflect actual tokens received after transfer
+                // Update amountOut to reflect actual tokens received after transfer
                 // (accounts for additional rounding during transfer)
-                calculatedAmount = receiverBalanceAfter - receiverBalanceBefore;
+                amountOut = receiverBalanceAfter - receiverBalanceBefore;
                 tokenOut = stEthAddress;
             }
         } else {
@@ -158,6 +158,7 @@ contract LidoExecutor is IExecutor {
             revert LidoExecutor__InvalidDataLength();
         }
 
+        // TODO: hardcode the transferType in ENG-4881
         transferType = RestrictTransferFrom.TransferType(uint8(data[20]));
         LidoPoolType pool = LidoPoolType(uint8(data[21]));
         LidoPoolDirection direction = LidoPoolDirection(uint8(data[22]));

@@ -25,7 +25,7 @@ contract BalancerV2Executor is IExecutor {
     function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256 calculatedAmount, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut, address receiver)
     {
         address tokenIn;
         bytes32 poolId;
@@ -57,7 +57,7 @@ contract BalancerV2Executor is IExecutor {
 
         uint256 limit = 0;
 
-        calculatedAmount =
+        amountOut =
             IVault(VAULT).swap(singleSwap, funds, limit, block.timestamp);
     }
 

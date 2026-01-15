@@ -34,7 +34,7 @@ interface ICallback {
      *
      * @param data The encoded callback data.
      * @return transferType The type of transfer to perform during the callback.
-     * @return receiver The address that should receive the tokens.
+     * @return receiver The address that should receive the pre swap tokens (usually a pool or the TychoRouter - depending on the protocol)
      * @return tokenIn The address of the input token to transfer.
      * @return amountIn The amount of tokens to transfer.
      */

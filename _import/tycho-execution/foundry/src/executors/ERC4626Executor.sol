@@ -22,7 +22,7 @@ contract ERC4626Executor is IExecutor {
     function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256 calculatedAmount, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut, address receiver)
     {
         address target;
         IERC20 tokenIn;
@@ -37,12 +37,12 @@ contract ERC4626Executor is IExecutor {
         if (address(tokenIn) == target) {
             // shares --> asset
             tokenOut = IERC4626(target).asset();
-            calculatedAmount =
+            amountOut =
                 IERC4626(target).redeem(amountIn, receiver, address(this));
         } else if (address(tokenIn) == IERC4626(target).asset()) {
             // asset --> shares
             tokenOut = target;
-            calculatedAmount = IERC4626(target).deposit(amountIn, receiver);
+            amountOut = IERC4626(target).deposit(amountIn, receiver);
         } else {
             revert ERC4626Executor__InvalidTarget();
         }

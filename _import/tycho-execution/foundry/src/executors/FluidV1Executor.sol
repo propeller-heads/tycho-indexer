@@ -45,7 +45,7 @@ contract FluidV1Executor is IExecutor, ICallback {
     function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256 calculatedAmount, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut, address receiver)
     {
         IFluidV1Dex dex;
         bool zero2one;
@@ -57,12 +57,11 @@ contract FluidV1Executor is IExecutor, ICallback {
 
         if (!isNativeSell) {
             _setSwapParams(dex, transferType);
-            calculatedAmount =
-                dex.swapInWithCallback(zero2one, amountIn, 0, receiver);
+            amountOut = dex.swapInWithCallback(zero2one, amountIn, 0, receiver);
         } else {
             // This is safe since the router asserts that we received the required output token in return
             // slither-disable-next-line arbitrary-send-eth
-            calculatedAmount =
+            amountOut =
                 dex.swapIn{value: amountIn}(zero2one, amountIn, 0, receiver);
         }
     }
@@ -178,6 +177,7 @@ contract FluidV1Executor is IExecutor, ICallback {
         )
     {
         (tokenIn, amount) = abi.decode(data[4:68], (address, uint256));
+        // TODO: hardcode the transferType in ENG-4881
         transferType = _getTransferType();
         receiver = liquidity;
     }

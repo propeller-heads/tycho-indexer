@@ -56,8 +56,8 @@ contract UniswapV4Executor is IExecutor, ICallback {
     bytes4 private constant SWAP_EXACT_INPUT_SINGLE_SELECTOR = 0x6022fbcd;
 
     IPoolManager public immutable poolManager;
-    address private immutable angstromHookAddress;
-    address private immutable self;
+    address private immutable _angstromHookAddress;
+    address private immutable _self;
 
     struct UniswapV4Pool {
         address intermediaryToken;
@@ -72,8 +72,8 @@ contract UniswapV4Executor is IExecutor, ICallback {
             revert UniswapV4Executor__ZeroAddressAngstromHook();
         }
         poolManager = _poolManager;
-        angstromHookAddress = _angstromHook;
-        self = address(this);
+        _angstromHookAddress = _angstromHook;
+        _self = address(this);
     }
 
     /**
@@ -89,7 +89,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
     function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256 calculatedAmount, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut, address receiver)
     {
         address tokenIn;
         bool zeroForOne;
@@ -141,9 +141,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         }
         poolManager.sync(Currency.wrap(tokenIn));
         bytes memory result = poolManager.unlock(swapData);
-        uint128 amountOut = abi.decode(result, (uint128));
-
-        calculatedAmount = amountOut;
+        amountOut = abi.decode(result, (uint128));
     }
 
     // slither-disable-next-line dead-code
@@ -190,7 +188,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         }
 
         bytes memory firstHookData;
-        if (firstHook == angstromHookAddress) {
+        if (firstHook == _angstromHookAddress) {
             // Select attestation from first pool's hook data
             // Convert calldata to memory since _selectAttestation requires bytes memory
             firstHookData = _selectAttestation(
@@ -242,7 +240,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
             }
 
             bytes memory hookData;
-            if (hook == angstromHookAddress) {
+            if (hook == _angstromHookAddress) {
                 // Select attestation from hookData
                 hookData = _selectAttestation(rawHookData);
             } else {
@@ -288,7 +286,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
 
         // here we expect to call either `swapExactInputSingle` or `swapExactInput`. See `swap` to see how we encode the selector and the calldata
         // slither-disable-next-line low-level-calls
-        (bool success, bytes memory returnData) = self.delegatecall(data);
+        (bool success, bytes memory returnData) = _self.delegatecall(data);
         if (!success) {
             revert(
                 string(

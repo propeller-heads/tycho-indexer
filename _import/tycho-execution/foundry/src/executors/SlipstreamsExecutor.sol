@@ -53,7 +53,7 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
     function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256 calculatedAmount, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut, address receiver)
     {
         address tokenIn;
         int24 tickSpacing;
@@ -82,11 +82,9 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         }
 
         if (zeroForOne) {
-            calculatedAmount =
-                amount1 > 0 ? uint256(amount1) : uint256(-amount1);
+            amountOut = amount1 > 0 ? uint256(amount1) : uint256(-amount1);
         } else {
-            calculatedAmount =
-                amount0 > 0 ? uint256(amount0) : uint256(-amount0);
+            amountOut = amount0 > 0 ? uint256(amount0) : uint256(-amount0);
         }
     }
 

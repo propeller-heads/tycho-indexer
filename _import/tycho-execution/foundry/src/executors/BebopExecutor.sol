@@ -36,13 +36,13 @@ contract BebopExecutor is IExecutor {
     /// @notice Executes a swap through Bebop's PMM RFQ system
     /// @param amountIn The amount of input token to swap
     /// @param data Encoded swap data containing tokens and bebop calldata
-    /// @return calculatedAmount The amount of output token received
+    /// @return amountOut The amount of output token received
     /// @return tokenOut
     /// @return receiver
     function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256 calculatedAmount, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut, address receiver)
     {
         address tokenIn;
         uint8 partialFillOffset;
@@ -83,7 +83,7 @@ contract BebopExecutor is IExecutor {
         bebopSettlement.functionCallWithValue(finalCalldata, ethValue);
 
         uint256 balanceAfter = _balanceOf(tokenOut, receiver);
-        calculatedAmount = balanceAfter - balanceBefore;
+        amountOut = balanceAfter - balanceBefore;
     }
 
     /// @dev Decodes the packed calldata

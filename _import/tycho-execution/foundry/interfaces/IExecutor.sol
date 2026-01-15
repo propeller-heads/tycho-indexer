@@ -16,18 +16,18 @@ interface IExecutor {
      * Note Part of the informal interface is that the executor supports sending the received
      *  tokens to a receiver address. If the underlying smart contract does not provide this
      *  functionality consider adding an additional transfer in the implementation.
-     *
+     *Cu
      * @param amountIn The amount of the input token to swap.
      * @param data Data that holds information necessary to perform the swap.
-     * @return calculatedAmount The amount of the output token swapped, depending on
-     * the givenAmount inputted.
+     * @return amountOut The amount of the output token swapped, depending on
+     * the amountIn.
      * @return tokenOut The address of the output token.
      * @return receiver The address where the output tokens were sent.
      */
     function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256 calculatedAmount, address tokenOut, address receiver);
+        returns (uint256 amountOut, address tokenOut, address receiver);
 
     /**
      * @notice Gets transfer data for pre-swap token transfers.
@@ -37,7 +37,7 @@ interface IExecutor {
      *
      * @param data The encoded swap data.
      * @return transferType The type of transfer to perform before the swap.
-     * @return receiver The address that should receive the tokens.
+     * @return receiver The address that should receive the pre swap tokens (usually a pool or the TychoRouter - depending on the protocol).
      * @return tokenIn The address of the input token to transfer.
      */
     function getTransferData(bytes calldata data)
