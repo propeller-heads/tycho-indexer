@@ -65,8 +65,11 @@ contract LidoExecutor is IExecutor {
 
         (receiver, pool, direction, approvalNeeded) = _decodeData(data);
 
+        address tokenOut;
+
         if (pool == LidoPoolType.stETH && direction == LidoPoolDirection.Stake)
         {
+            tokenOut = stETHAddress;
             // ST_ETH staking: ETH -> ST_ETH
             // ST_ETH is a rebasing token where balances are calculated from shares
             // Measure actual balance changes to account for rounding in share conversions
@@ -94,6 +97,7 @@ contract LidoExecutor is IExecutor {
         } else if (
             pool == LidoPoolType.wstETH && direction == LidoPoolDirection.Wrap
         ) {
+            tokenOut = wstETH;
             // WST_ETH wrapping: ST_ETH -> WST_ETH
             if (approvalNeeded) {
                 ST_ETH.forceApprove(WST_ETH, type(uint256).max - 1);
@@ -107,6 +111,7 @@ contract LidoExecutor is IExecutor {
         } else if (
             pool == LidoPoolType.wstETH && direction == LidoPoolDirection.Unwrap
         ) {
+            tokenOut = stETHAddress;
             // WST_ETH unwrapping: WST_ETH -> ST_ETH
             calculatedAmount = LidoWrappedPool(WST_ETH).unwrap(amountIn);
             if (receiver != address(this)) {

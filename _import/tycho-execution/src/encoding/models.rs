@@ -58,20 +58,6 @@ pub struct Solution {
     pub checked_amount: BigUint,
     /// List of swaps to fulfill the solution.
     pub swaps: Vec<Swap>,
-    /// If set, the corresponding native action will be executed.
-    pub native_action: Option<NativeAction>,
-}
-
-/// Represents an action to be performed on the native token either before or after the swap.
-///
-/// `Wrap` means that the native token will be wrapped before the first swap, and `Unwrap`
-/// means that the native token will be unwrapped after the last swap, before being sent to the
-/// receiver.
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum NativeAction {
-    Wrap,
-    Unwrap,
 }
 
 /// Represents a swap operation to be performed on a pool.

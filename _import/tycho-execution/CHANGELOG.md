@@ -1,3 +1,57 @@
+## [0.5.0](https://github.com/propeller-heads/tycho-contracts/compare/0.4.0...0.5.0) (2026-01-15)
+
+
+### Features
+
+* add function to apply delta ([4a6108c](https://github.com/propeller-heads/tycho-contracts/commit/4a6108ccd1a1ee04fa4344d564a59225c8265a62))
+* add methods to TestVault to use internal methods for testing purposes ([c5b715a](https://github.com/propeller-heads/tycho-contracts/commit/c5b715ac7d1bdd5274b6569047ac983a0493b5f7))
+* add tests for main accounting methods ([7afb19f](https://github.com/propeller-heads/tycho-contracts/commit/7afb19ff358cee925febfb204961a90440be7d48))
+* add vault accounting methods ([6fbb988](https://github.com/propeller-heads/tycho-contracts/commit/6fbb988bd2e8d8592914c4d5db8cc1202fe6c3b9))
+
+
+### Bug Fixes
+
+* update revert reason in Vault contract to use correct error identifier ([39d3da9](https://github.com/propeller-heads/tycho-contracts/commit/39d3da9eaf5f439c632dd594b2ebbc0baf711ad0))
+
+## [0.4.0](https://github.com/propeller-heads/tycho-contracts/compare/0.3.1...0.4.0) (2026-01-14)
+
+
+### Features
+
+* **Ekubo:** Bring tokenOut to highest (swap) level ([230a6a5](https://github.com/propeller-heads/tycho-contracts/commit/230a6a586004dd29c0f00feb92b571905988ef49))
+* **ERC4636:** infer tokenOut from target and asset ([1e0897f](https://github.com/propeller-heads/tycho-contracts/commit/1e0897f370b6563b203ad16d94f3f9145474281e))
+* **FluidV1:** Add tokenOut to executor ([6c9b441](https://github.com/propeller-heads/tycho-contracts/commit/6c9b44131d3d0e7f8905b519120ee90668f0bfda))
+* **Lido:** Infer tokenOut in executor ([67a3d19](https://github.com/propeller-heads/tycho-contracts/commit/67a3d19924fd5a8d4964b1f9967640431c8ebcc6))
+* **Maverick:** Add tokenOut to executor ([4558e06](https://github.com/propeller-heads/tycho-contracts/commit/4558e06894c3064dafbe49da3e2a2b4ead0968a5))
+* **Rocketpool:** Infer tokenOut in executor ([8d087be](https://github.com/propeller-heads/tycho-contracts/commit/8d087be93106f398caa4162e2954dff6a631407e))
+* **UniswapV2:** Add tokenOut to executor calldata ([a290e1a](https://github.com/propeller-heads/tycho-contracts/commit/a290e1a9f92eaff5d275ca05adfb0d048a7aceca))
+
+## [0.3.1](https://github.com/propeller-heads/tycho-contracts/compare/0.3.0...0.3.1) (2026-01-14)
+
+
+### Bug Fixes
+
+* Add mint and burn that don't emit an event ([694bfb6](https://github.com/propeller-heads/tycho-contracts/commit/694bfb6f20ba9bebe52a5ebe98a19e47cd2786f2))
+
+## [0.3.0](https://github.com/propeller-heads/tycho-contracts/compare/0.2.0...0.3.0) (2026-01-13)
+
+
+### Features
+
+* Remove fund rescuer role ([3ec7477](https://github.com/propeller-heads/tycho-contracts/commit/3ec7477f3f58af64a17bde907950280dd82a74e3))
+
+## [0.2.0](https://github.com/propeller-heads/tycho-contracts/compare/0.1.0...0.2.0) (2026-01-13)
+
+
+### Features
+
+* **TychoRouter:** Remove built-in wrap/unwrap mechanism ([c8c948b](https://github.com/propeller-heads/tycho-contracts/commit/c8c948b9101fc2d295b3f41dff8c3cb6f50052a1))
+
+
+### Bug Fixes
+
+* Remove weth from router deployment script ([68c2a51](https://github.com/propeller-heads/tycho-contracts/commit/68c2a516c7b887e4849067173c079c5e32b1d1fd))
+
 ## 1.0.0 (2026-01-13)
 
 

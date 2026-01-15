@@ -277,8 +277,6 @@ contract TychoRouterForUniswapV3Test is TychoRouterTestSetup {
             WETH_ADDR,
             DAI_ADDR,
             expAmountOut - 1,
-            false,
-            false,
             ALICE,
             permitSingle,
             signature,

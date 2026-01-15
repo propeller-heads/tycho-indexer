@@ -31,15 +31,7 @@ import "@src/TychoRouter.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 
 contract TychoRouterExposed is TychoRouter {
-    constructor(address _permit2, address weth) TychoRouter(_permit2, weth) {}
-
-    function wrapETH(uint256 amount) external payable {
-        return _wrapETH(amount);
-    }
-
-    function unwrapETH(uint256 amount) external {
-        return _unwrapETH(amount);
-    }
+    constructor(address _permit2) TychoRouter(_permit2) {}
 
     function tstoreExposed(
         address tokenIn,
@@ -114,9 +106,8 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     }
 
     function deployRouter() public returns (TychoRouterExposed) {
-        tychoRouter = new TychoRouterExposed(PERMIT2_ADDRESS, WETH_ADDR);
+        tychoRouter = new TychoRouterExposed(PERMIT2_ADDRESS);
         tychoRouterAddr = address(tychoRouter);
-        tychoRouter.grantRole(keccak256("FUND_RESCUER_ROLE"), FUND_RESCUER);
         tychoRouter.grantRole(keccak256("PAUSER_ROLE"), PAUSER);
         tychoRouter.grantRole(keccak256("UNPAUSER_ROLE"), UNPAUSER);
         tychoRouter.grantRole(
@@ -222,12 +213,14 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     function encodeUniswapV2Swap(
         address tokenIn,
         address target,
+        address tokenOut,
         address receiver,
         bool zero2one,
         RestrictTransferFrom.TransferType transferType
     ) internal pure returns (bytes memory) {
-        return
-            abi.encodePacked(tokenIn, target, receiver, zero2one, transferType);
+        return abi.encodePacked(
+            tokenIn, target, tokenOut, receiver, zero2one, transferType
+        );
     }
 
     function encodeUniswapV3Swap(

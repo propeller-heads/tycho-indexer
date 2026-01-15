@@ -15,6 +15,7 @@ contract FluidV1ExecutorExposed is FluidV1Executor {
         returns (
             IFluidV1Dex dex,
             bool zero2one,
+            address outputToken,
             address receiver,
             RestrictTransferFrom.TransferType transferType,
             bool isNative
@@ -69,21 +70,30 @@ contract FluidV1ExecutorTest is Test, Constants {
 
     function testDecodeData() public view {
         address dex = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
+        address outputToken = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
         bytes memory params = abi.encodePacked(
             dex,
             true,
+            outputToken,
             address(this),
             RestrictTransferFrom.TransferType.Transfer,
             false
         );
         IFluidV1Dex dexVal;
         bool zero2oneVal;
+        address outputTokenVal;
         address receiverVal;
         RestrictTransferFrom.TransferType transferTypeVal;
         bool isNative;
 
-        (dexVal, zero2oneVal, receiverVal, transferTypeVal, isNative) =
-            executor.decodeData(params);
+        (
+            dexVal,
+            zero2oneVal,
+            outputTokenVal,
+            receiverVal,
+            transferTypeVal,
+            isNative
+        ) = executor.decodeData(params);
 
         assertEq(address(dexVal), dex);
         assert(zero2oneVal);
@@ -92,6 +102,7 @@ contract FluidV1ExecutorTest is Test, Constants {
             uint8(transferTypeVal),
             uint8(RestrictTransferFrom.TransferType.Transfer)
         );
+        assertEq(outputTokenVal, outputToken);
     }
 
     function testGetTransferData() public {
@@ -178,6 +189,7 @@ contract FluidV1ExecutorTest is Test, Constants {
         bytes memory params = abi.encodePacked(
             dex,
             true,
+            address(USDT),
             address(BOB),
             RestrictTransferFrom.TransferType.Transfer,
             false
@@ -202,6 +214,7 @@ contract FluidV1ExecutorTest is Test, Constants {
         bytes memory params = abi.encodePacked(
             dex,
             false,
+            address(ezETH),
             address(BOB),
             RestrictTransferFrom.TransferType.Transfer,
             true
@@ -226,6 +239,7 @@ contract FluidV1ExecutorTest is Test, Constants {
         bytes memory params = abi.encodePacked(
             dex,
             true,
+            address(0),
             address(BOB),
             RestrictTransferFrom.TransferType.Transfer,
             false

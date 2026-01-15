@@ -49,10 +49,8 @@ contract UniswapV2Executor is IExecutor {
     {
         address target;
         bool zeroForOne;
-        // TODO: we need the tokenOut for this swap
-        tokenOut = address(0);
 
-        (target, receiver, zeroForOne) = _decodeData(data);
+        (target, tokenOut, receiver, zeroForOne) = _decodeData(data);
 
         _verifyPairAddress(target);
 
@@ -69,14 +67,16 @@ contract UniswapV2Executor is IExecutor {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (address target, address receiver, bool zeroForOne)
+        returns (address target, address tokenOut,
+            address receiver, bool zeroForOne)
     {
-        if (data.length != 62) {
+        if (data.length != 82) {
             revert UniswapV2Executor__InvalidDataLength();
         }
         target = address(bytes20(data[20:40]));
-        receiver = address(bytes20(data[40:60]));
-        zeroForOne = data[60] != 0;
+        tokenOut = address(bytes20(data[40:60]));
+        receiver = address(bytes20(data[60:80]));
+        zeroForOne = data[80] != 0;
     }
 
     function _getAmountOut(address target, uint256 amountIn, bool zeroForOne)

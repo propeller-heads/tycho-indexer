@@ -28,7 +28,12 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             (0xffffff * 60) / 100, // 60%
             address(usv2Executor),
             encodeUniswapV2Swap(
-                WETH_ADDR, WETH_WBTC_POOL, tychoRouterAddr, false, transferType
+                WETH_ADDR,
+                WETH_WBTC_POOL,
+                WBTC_ADDR,
+                tychoRouterAddr,
+                false,
+                transferType
             )
         );
         // WBTC -> USDC
@@ -40,6 +45,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             encodeUniswapV2Swap(
                 WBTC_ADDR,
                 USDC_WBTC_POOL,
+                USDC_ADDR,
                 ALICE,
                 true,
                 RestrictTransferFrom.TransferType.Transfer
@@ -52,7 +58,12 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             uint24(0),
             address(usv2Executor),
             encodeUniswapV2Swap(
-                WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false, transferType
+                WETH_ADDR,
+                WETH_DAI_POOL,
+                DAI_ADDR,
+                tychoRouterAddr,
+                false,
+                transferType
             )
         );
 
@@ -65,6 +76,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             encodeUniswapV2Swap(
                 DAI_ADDR,
                 DAI_USDC_POOL,
+                USDC_ADDR,
                 ALICE,
                 true,
                 RestrictTransferFrom.TransferType.Transfer
@@ -108,8 +120,6 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             WETH_ADDR,
             USDC_ADDR,
             1, // min amount
-            false,
-            false,
             4,
             ALICE,
             permitSingle,
@@ -137,8 +147,6 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             WETH_ADDR,
             USDC_ADDR,
             1000_000000, // min amount
-            false,
-            false,
             4,
             ALICE,
             true,
@@ -166,8 +174,6 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             WETH_ADDR,
             USDC_ADDR,
             0, // min amount
-            false,
-            false,
             4,
             ALICE,
             true,
@@ -192,8 +198,6 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             WETH_ADDR,
             USDC_ADDR,
             1000_000000, // min amount
-            false,
-            false,
             2,
             ALICE,
             true,
@@ -230,114 +234,12 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             WETH_ADDR,
             DAI_ADDR,
             minAmountOut,
-            false,
-            false,
             4,
             ALICE,
             permitSingle,
             signature,
             pleEncode(swaps)
         );
-        vm.stopPrank();
-    }
-
-    function testSplitSwapWrapETH() public {
-        // Trade 1 ETH (and wrap it) for DAI with 1 swap on Uniswap V2
-
-        uint256 amountIn = 1 ether;
-        deal(ALICE, amountIn);
-
-        vm.startPrank(ALICE);
-
-        IAllowanceTransfer.PermitSingle memory emptyPermitSingle =
-            IAllowanceTransfer.PermitSingle({
-                details: IAllowanceTransfer.PermitDetails({
-                    token: address(0), amount: 0, expiration: 0, nonce: 0
-                }),
-                spender: address(0),
-                sigDeadline: 0
-            });
-        bytes memory protocolData = encodeUniswapV2Swap(
-            WETH_ADDR,
-            WETH_DAI_POOL,
-            ALICE,
-            false,
-            RestrictTransferFrom.TransferType.Transfer
-        );
-
-        bytes memory swap = encodeSplitSwap(
-            uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData
-        );
-        bytes[] memory swaps = new bytes[](1);
-        swaps[0] = swap;
-
-        uint256 amountOut = tychoRouter.splitSwapPermit2{value: amountIn}(
-            amountIn,
-            address(0),
-            DAI_ADDR,
-            2008817438608734439722,
-            true,
-            false,
-            2,
-            ALICE,
-            emptyPermitSingle,
-            "",
-            pleEncode(swaps)
-        );
-        uint256 expectedAmount = 2018817438608734439722;
-        assertEq(amountOut, expectedAmount);
-        uint256 daiBalance = IERC20(DAI_ADDR).balanceOf(ALICE);
-        assertEq(daiBalance, expectedAmount);
-        assertEq(ALICE.balance, 0);
-
-        vm.stopPrank();
-    }
-
-    function testSplitSwapUnwrapETH() public {
-        // Trade 3k DAI for WETH with 1 swap on Uniswap V2 and unwrap it at the end
-
-        uint256 amountIn = 3_000 * 10 ** 18;
-        deal(DAI_ADDR, ALICE, amountIn);
-
-        vm.startPrank(ALICE);
-
-        (
-            IAllowanceTransfer.PermitSingle memory permitSingle,
-            bytes memory signature
-        ) = handlePermit2Approval(DAI_ADDR, tychoRouterAddr, amountIn);
-
-        bytes memory protocolData = encodeUniswapV2Swap(
-            DAI_ADDR,
-            WETH_DAI_POOL,
-            tychoRouterAddr,
-            true,
-            RestrictTransferFrom.TransferType.TransferFrom
-        );
-
-        bytes memory swap = encodeSplitSwap(
-            uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData
-        );
-        bytes[] memory swaps = new bytes[](1);
-        swaps[0] = swap;
-
-        uint256 amountOut = tychoRouter.splitSwapPermit2(
-            amountIn,
-            DAI_ADDR,
-            address(0),
-            1465644707225677606,
-            false,
-            true,
-            2,
-            ALICE,
-            permitSingle,
-            signature,
-            pleEncode(swaps)
-        );
-
-        uint256 expectedAmount = 1475644707225677606; // 1.12 ETH
-        assertEq(amountOut, expectedAmount);
-        assertEq(ALICE.balance, expectedAmount);
-
         vm.stopPrank();
     }
 
@@ -383,6 +285,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         bytes memory wethUsdcV2OneZeroData = encodeUniswapV2Swap(
             WETH_ADDR,
             USDC_WETH_USV2,
+            USDC_ADDR,
             tychoRouterAddr,
             false,
             RestrictTransferFrom.TransferType.Transfer
@@ -472,16 +375,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         );
         vm.expectRevert();
         tychoRouter.splitSwap(
-            amountIn,
-            USDC_ADDR,
-            WETH_ADDR,
-            1,
-            false,
-            false,
-            2,
-            ALICE,
-            true,
-            pleEncode(swaps)
+            amountIn, USDC_ADDR, WETH_ADDR, 1, 2, ALICE, true, pleEncode(swaps)
         );
         vm.stopPrank();
     }
@@ -501,6 +395,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         bytes memory usdcWethV2Data = encodeUniswapV2Swap(
             USDC_ADDR,
             USDC_WETH_USV2,
+            WETH_ADDR,
             tychoRouterAddr,
             true,
             RestrictTransferFrom.TransferType.Transfer
@@ -562,6 +457,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         bytes memory protocolData = encodeUniswapV2Swap(
             BASE_USDC,
             USDC_MAG7_POOL,
+            BASE_MAG7,
             tychoRouterAddr,
             true,
             RestrictTransferFrom.TransferType.Transfer

@@ -28,8 +28,7 @@ contract ERC4626Executor is IExecutor {
         receiver;
         IERC20 tokenIn;
         bool approvalNeeded;
-        // TODO: we need the tokenOut for this swap
-        tokenOut = address(0);
+        address tokenOut;
 
         (tokenIn, target, receiver, approvalNeeded) = _decodeData(data);
         if (approvalNeeded) {
@@ -39,10 +38,12 @@ contract ERC4626Executor is IExecutor {
 
         if (address(tokenIn) == target) {
             // shares --> asset
+            tokenOut = IERC4626(target).asset();
             calculatedAmount =
                 IERC4626(target).redeem(amountIn, receiver, address(this));
         } else if (address(tokenIn) == IERC4626(target).asset()) {
             // asset --> shares
+            tokenOut = target;
             calculatedAmount = IERC4626(target).deposit(amountIn, receiver);
         } else {
             revert ERC4626Executor__InvalidTarget();

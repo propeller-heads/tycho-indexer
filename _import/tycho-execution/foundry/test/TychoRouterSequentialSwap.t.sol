@@ -18,6 +18,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             encodeUniswapV2Swap(
                 WETH_ADDR,
                 WETH_DAI_POOL,
+                DAI_ADDR,
                 DAI_USDC_POOL, // receiver (direct to next pool)
                 false,
                 RestrictTransferFrom.TransferType.TransferFrom // transfer to protocol from router
@@ -30,6 +31,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             encodeUniswapV2Swap(
                 DAI_ADDR,
                 DAI_USDC_POOL,
+                USDC_ADDR,
                 ALICE,
                 true,
                 RestrictTransferFrom.TransferType.None // funds already sent to pool
@@ -55,8 +57,6 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             WETH_ADDR,
             USDC_ADDR,
             1000_000000, // min amount
-            false,
-            false,
             ALICE,
             permitSingle,
             signature,
@@ -82,8 +82,6 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             WETH_ADDR,
             USDC_ADDR,
             1000_000000, // min amount
-            false,
-            false,
             ALICE,
             true,
             pleEncode(swaps)
@@ -109,8 +107,6 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             WETH_ADDR,
             USDC_ADDR,
             0, // min amount
-            false,
-            false,
             ALICE,
             true,
             pleEncode(swaps)
@@ -132,8 +128,6 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             WETH_ADDR,
             USDC_ADDR,
             0, // min amount
-            false,
-            false,
             ALICE,
             true,
             pleEncode(swaps)
@@ -167,132 +161,11 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             WETH_ADDR,
             DAI_ADDR,
             minAmountOut,
-            false,
-            false,
             ALICE,
             permitSingle,
             signature,
             pleEncode(swaps)
         );
-        vm.stopPrank();
-    }
-
-    function testSequentialSwapWrapETH() public {
-        uint256 amountIn = 1 ether;
-        deal(ALICE, amountIn);
-        vm.startPrank(ALICE);
-
-        IAllowanceTransfer.PermitSingle memory emptyPermitSingle =
-            IAllowanceTransfer.PermitSingle({
-                details: IAllowanceTransfer.PermitDetails({
-                    token: address(0), amount: 0, expiration: 0, nonce: 0
-                }),
-                spender: address(0),
-                sigDeadline: 0
-            });
-
-        bytes[] memory swaps = new bytes[](2);
-        // WETH -> DAI
-        swaps[0] = encodeSequentialSwap(
-            address(usv2Executor),
-            encodeUniswapV2Swap(
-                WETH_ADDR,
-                WETH_DAI_POOL,
-                DAI_USDC_POOL,
-                false,
-                RestrictTransferFrom.TransferType.Transfer
-            )
-        );
-
-        // DAI -> USDC
-        swaps[1] = encodeSequentialSwap(
-            address(usv2Executor),
-            encodeUniswapV2Swap(
-                DAI_ADDR,
-                DAI_USDC_POOL,
-                ALICE,
-                true,
-                RestrictTransferFrom.TransferType.None
-            )
-        );
-
-        uint256 amountOut = tychoRouter.sequentialSwapPermit2{value: amountIn}(
-            amountIn,
-            address(0),
-            USDC_ADDR,
-            1000_000000,
-            true,
-            false,
-            ALICE,
-            emptyPermitSingle,
-            "",
-            pleEncode(swaps)
-        );
-        uint256 expectedAmount = 2005810530;
-        assertEq(amountOut, expectedAmount);
-        uint256 usdcBalance = IERC20(USDC_ADDR).balanceOf(ALICE);
-        assertEq(usdcBalance, expectedAmount);
-        assertEq(ALICE.balance, 0);
-
-        vm.stopPrank();
-    }
-
-    function testSequentialSwapUnwrapETH() public {
-        // Trade 3k DAI for WETH with 1 swap on Uniswap V2 and unwrap it at the end
-
-        uint256 amountIn = 3_000 * 10 ** 6;
-        deal(USDC_ADDR, ALICE, amountIn);
-
-        vm.startPrank(ALICE);
-
-        (
-            IAllowanceTransfer.PermitSingle memory permitSingle,
-            bytes memory signature
-        ) = handlePermit2Approval(USDC_ADDR, tychoRouterAddr, amountIn);
-
-        bytes[] memory swaps = new bytes[](2);
-
-        // USDC -> DAI
-        swaps[0] = encodeSequentialSwap(
-            address(usv2Executor),
-            encodeUniswapV2Swap(
-                USDC_ADDR,
-                DAI_USDC_POOL,
-                tychoRouterAddr,
-                false,
-                RestrictTransferFrom.TransferType.TransferFrom
-            )
-        );
-
-        // DAI -> WETH
-        swaps[1] = encodeSequentialSwap(
-            address(usv2Executor),
-            encodeUniswapV2Swap(
-                DAI_ADDR,
-                WETH_DAI_POOL,
-                tychoRouterAddr,
-                true,
-                RestrictTransferFrom.TransferType.Transfer
-            )
-        );
-
-        uint256 amountOut = tychoRouter.sequentialSwapPermit2(
-            amountIn,
-            USDC_ADDR,
-            address(0),
-            1 * 10 ** 18, // min amount
-            false,
-            true,
-            ALICE,
-            permitSingle,
-            signature,
-            pleEncode(swaps)
-        );
-
-        uint256 expectedAmount = 1466332452295613768; // 1.11 ETH
-        assertEq(amountOut, expectedAmount);
-        assertEq(ALICE.balance, expectedAmount);
-
         vm.stopPrank();
     }
 
@@ -488,28 +361,6 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         assertTrue(success, "Call Failed");
         assertEq(balanceAfter - balanceBefore, 1949668893);
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
-    }
-
-    function testSequentialSwapWithUnwrapIntegration() public {
-        // Performs a sequential swap from USDC to ETH through WBTC using USV2 pools and unwrapping in
-        // the end
-        deal(USDC_ADDR, ALICE, 3_000_000_000);
-        uint256 balanceBefore = ALICE.balance;
-
-        // Approve permit2
-        vm.startPrank(ALICE);
-        IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
-        bytes memory callData = loadCallDataFromFile(
-            "test_sequential_swap_strategy_encoder_unwrap"
-        );
-        (bool success,) = tychoRouterAddr.call(callData);
-
-        vm.stopPrank();
-
-        uint256 balanceAfter = ALICE.balance;
-
-        assertTrue(success, "Call Failed");
-        assertEq(balanceAfter - balanceBefore, 1404194006633772805);
     }
 }
 

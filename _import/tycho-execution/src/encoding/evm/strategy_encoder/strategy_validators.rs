@@ -2,10 +2,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use tycho_common::Bytes;
 
-use crate::encoding::{
-    errors::EncodingError,
-    models::{NativeAction, Swap},
-};
+use crate::encoding::{errors::EncodingError, models::Swap};
 
 pub trait SwapValidator {
     /// Raises an error if swaps do not represent a valid path from the given token to the checked
@@ -14,38 +11,12 @@ pub trait SwapValidator {
     /// A path is considered valid if all the following conditions are met:
     /// * The checked token is reachable from the given token through the swap path
     /// * There are no tokens which are unconnected from the main path
-    ///
-    /// If the given token is the native token and the native action is WRAP, it will be converted
-    /// to the wrapped token before validating the swap path. The same principle applies for the
-    /// checked token and the UNWRAP action.
     fn validate_swap_path(
         &self,
         swaps: &[Swap],
         given_token: &Bytes,
         checked_token: &Bytes,
-        native_action: &Option<NativeAction>,
-        native_address: &Bytes,
-        wrapped_address: &Bytes,
     ) -> Result<(), EncodingError> {
-        // Convert ETH to WETH only if there's a corresponding wrap/unwrap action
-        let given_token = if *given_token == *native_address {
-            match native_action {
-                Some(NativeAction::Wrap) => wrapped_address,
-                _ => given_token,
-            }
-        } else {
-            given_token
-        };
-
-        let checked_token = if *checked_token == *native_address {
-            match native_action {
-                Some(NativeAction::Unwrap) => wrapped_address,
-                _ => checked_token,
-            }
-        } else {
-            checked_token
-        };
-
         // Build directed graph of token flows
         let mut graph: HashMap<&Bytes, HashSet<&Bytes>> = HashMap::new();
         let mut all_tokens = HashSet::new();
@@ -202,7 +173,6 @@ mod tests {
     #[test]
     fn test_validate_path_single_swap() {
         let validator = SplitSwapValidator;
-        let eth = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
         let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
         let swaps = vec![Swap::new(
@@ -214,14 +184,13 @@ mod tests {
             weth.clone(),
             dai.clone(),
         )];
-        let result = validator.validate_swap_path(&swaps, &weth, &dai, &None, &eth, &weth);
+        let result = validator.validate_swap_path(&swaps, &weth, &dai);
         assert_eq!(result, Ok(()));
     }
 
     #[test]
     fn test_validate_path_multiple_swaps() {
         let validator = SplitSwapValidator;
-        let eth = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
         let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
@@ -246,14 +215,13 @@ mod tests {
                 usdc.clone(),
             ),
         ];
-        let result = validator.validate_swap_path(&swaps, &weth, &usdc, &None, &eth, &weth);
+        let result = validator.validate_swap_path(&swaps, &weth, &usdc);
         assert_eq!(result, Ok(()));
     }
 
     #[test]
     fn test_validate_path_disconnected() {
         let validator = SplitSwapValidator;
-        let eth = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
         let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
@@ -281,8 +249,7 @@ mod tests {
                 usdc.clone(),
             ),
         ];
-        let result =
-            validator.validate_swap_path(&disconnected_swaps, &weth, &usdc, &None, &eth, &weth);
+        let result = validator.validate_swap_path(&disconnected_swaps, &weth, &usdc);
         assert!(matches!(
             result,
             Err(EncodingError::InvalidInput(msg)) if msg.contains("not reachable through swap path")
@@ -292,7 +259,6 @@ mod tests {
     #[test]
     fn test_validate_path_cyclic_swap() {
         let validator = SplitSwapValidator;
-        let eth = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
         let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
 
@@ -318,14 +284,13 @@ mod tests {
         ];
 
         // Test with USDC as both given token and checked token
-        let result = validator.validate_swap_path(&cyclic_swaps, &usdc, &usdc, &None, &eth, &weth);
+        let result = validator.validate_swap_path(&cyclic_swaps, &usdc, &usdc);
         assert_eq!(result, Ok(()));
     }
 
     #[test]
     fn test_validate_path_unreachable_checked_token() {
         let validator = SplitSwapValidator;
-        let eth = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
         let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
@@ -340,8 +305,7 @@ mod tests {
             dai.clone(),
         )
         .split(1.0)];
-        let result =
-            validator.validate_swap_path(&unreachable_swaps, &weth, &usdc, &None, &eth, &weth);
+        let result = validator.validate_swap_path(&unreachable_swaps, &weth, &usdc);
         assert!(matches!(
             result,
             Err(EncodingError::InvalidInput(msg)) if msg.contains("not reachable through swap path")
@@ -351,12 +315,11 @@ mod tests {
     #[test]
     fn test_validate_path_empty_swaps() {
         let validator = SplitSwapValidator;
-        let eth = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
         let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
 
         let empty_swaps: Vec<Swap> = vec![];
-        let result = validator.validate_swap_path(&empty_swaps, &weth, &usdc, &None, &eth, &weth);
+        let result = validator.validate_swap_path(&empty_swaps, &weth, &usdc);
         assert!(matches!(
             result,
             Err(EncodingError::InvalidInput(msg)) if msg.contains("not reachable through swap path")
@@ -532,61 +495,5 @@ mod tests {
             validator.validate_split_percentages(&invalid_overflow_swaps),
             Err(EncodingError::InvalidInput(msg)) if msg.contains("must be <100%")
         ));
-    }
-
-    #[test]
-    fn test_validate_path_wrap_eth_given_token() {
-        let validator = SplitSwapValidator;
-        let eth = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
-        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
-        let weth = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
-
-        let swaps = vec![Swap::new(
-            ProtocolComponent {
-                id: "pool1".to_string(),
-                protocol_system: "uniswap_v2".to_string(),
-                ..Default::default()
-            },
-            weth.clone(),
-            usdc.clone(),
-        )];
-
-        let result = validator.validate_swap_path(
-            &swaps,
-            &eth,
-            &usdc,
-            &Some(NativeAction::Wrap),
-            &eth,
-            &weth,
-        );
-        assert_eq!(result, Ok(()));
-    }
-
-    #[test]
-    fn test_validate_token_path_connectivity_wrap_eth_checked_token() {
-        let validator = SplitSwapValidator;
-        let eth = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
-        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
-        let weth = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
-
-        let swaps = vec![Swap::new(
-            ProtocolComponent {
-                id: "pool1".to_string(),
-                protocol_system: "uniswap_v2".to_string(),
-                ..Default::default()
-            },
-            usdc.clone(),
-            weth.clone(),
-        )];
-
-        let result = validator.validate_swap_path(
-            &swaps,
-            &usdc,
-            &eth,
-            &Some(NativeAction::Unwrap),
-            &eth,
-            &weth,
-        );
-        assert_eq!(result, Ok(()));
     }
 }
