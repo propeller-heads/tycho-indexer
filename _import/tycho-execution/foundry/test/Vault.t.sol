@@ -104,7 +104,7 @@ contract VaultTest is Constants, TestUtils {
         );
     }
 
-    function testUpdateDeltaZero() public {
+    function testUpdateDeltaZeroPositiveToPositive() public {
         address token = address(0);
         int256 initialDelta = 100;
         int256 change = 0;
@@ -123,7 +123,7 @@ contract VaultTest is Constants, TestUtils {
         assertEq(negativeCount, 0);
     }
 
-    function testUpdateDeltaZeroInNegative() public {
+    function testUpdateDeltaZeroNegativeToNegative() public {
         address token = address(0);
         int256 initialDelta = -100;
         int256 change = 0;
@@ -143,7 +143,7 @@ contract VaultTest is Constants, TestUtils {
         assertEq(negativeCount, 1);
     }
 
-    function testUpdateDeltaIncreaseInPositive() public {
+    function testUpdateDeltaIncreasePositiveToPositive() public {
         address token = address(0);
         int256 initialDelta = 100;
         int256 change = 200;
@@ -164,7 +164,7 @@ contract VaultTest is Constants, TestUtils {
         assertEq(negativeCount, 0);
     }
 
-    function testUpdateDeltaIncreaseInNegative() public {
+    function testUpdateDeltaIncreaseNegativeToNegative() public {
         address token = address(0);
         int256 initialDelta = -100;
         int256 change = 15;
@@ -185,7 +185,7 @@ contract VaultTest is Constants, TestUtils {
         assertEq(negativeCount, 1);
     }
 
-    function testUpdateDeltaIncreaseToPositive() public {
+    function testUpdateDeltaIncreaseNegativeToPositive() public {
         address token = address(0);
         int256 initialDelta = -100;
         int256 change = 200;
@@ -206,7 +206,7 @@ contract VaultTest is Constants, TestUtils {
         assertEq(negativeCount, 0);
     }
 
-    function testUpdateDeltaDecreaseInPositive() public {
+    function testUpdateDeltaDecreasePositiveToPositive() public {
         address token = address(0);
         int256 initialDelta = 300;
         int256 change = -100;
@@ -227,7 +227,7 @@ contract VaultTest is Constants, TestUtils {
         assertEq(negativeCount, 0);
     }
 
-    function testUpdateDeltaDecreaseToNegative() public {
+    function testUpdateDeltaDecreasePositiveToNegative() public {
         address token = address(0);
         int256 initialDelta = 50;
         int256 change = -120;
@@ -248,7 +248,7 @@ contract VaultTest is Constants, TestUtils {
         assertEq(negativeCount, 1);
     }
 
-    function testUpdateDeltaDecreaseInNegative() public {
+    function testUpdateDeltaDecreaseNegativeToNegative() public {
         address token = address(0);
         int256 initialDelta = -50;
         int256 change = -120;
