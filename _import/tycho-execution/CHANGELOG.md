@@ -1,3 +1,20 @@
+## [0.7.0](https://github.com/propeller-heads/tycho-contracts/compare/0.6.0...0.7.0) (2026-01-15)
+
+
+### Features
+
+* Move transfers to the Dispatcher ([9c5945f](https://github.com/propeller-heads/tycho-contracts/commit/9c5945fe0d56ef5d918a6e112a4fa70398c2d38f))
+
+
+### Bug Fixes
+
+* Address PR comments: ([853aaeb](https://github.com/propeller-heads/tycho-contracts/commit/853aaebfed70caef09aebdcee802b4b497b1dc29))
+* After merge with main fixes ([5228b57](https://github.com/propeller-heads/tycho-contracts/commit/5228b5726fa2065dc5c2fb1ea359067541781b42))
+* Apply slither's suggestions on variable naming ([f941924](https://github.com/propeller-heads/tycho-contracts/commit/f94192442b172dadf9d0cb24a61c577400d0f214))
+* Fix BalancerV3 and Ekubo ([a5f8422](https://github.com/propeller-heads/tycho-contracts/commit/a5f84222fad6a60b2f24107da9d020f713a6ac41))
+* Fixes after merging main (Uniswap v2 improvement) ([24a8102](https://github.com/propeller-heads/tycho-contracts/commit/24a8102e882a07ff39870950245f0223ad2002c0))
+* Remove unnecessary method from Univ4Executor ([900baa2](https://github.com/propeller-heads/tycho-contracts/commit/900baa2cee7e4a10bfe6e6dddb40a89afa5be721))
+
 ## [0.6.0](https://github.com/propeller-heads/tycho-contracts/compare/0.5.0...0.6.0) (2026-01-15)
 
 
