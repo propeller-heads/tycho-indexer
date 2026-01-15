@@ -26,6 +26,11 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
     // Vault balances - using our own mapping to avoid expensive Transfer events from ERC6909
     mapping(address => mapping(uint256 => uint256)) private _vaultBalances;
 
+    // Transient storage slots for tracking deltas during swap sequences
+    // keccak256("TychoVault#NEGATIVE_DELTA_COUNT")
+    uint256 private constant _NEGATIVE_DELTA_COUNT_SLOT =
+        0x675e351c150ddfdbd3bc96ad8c0c5cc3e6f0d3c18723512ac3c7dfed159e94d5;
+
     // ============ ERC6909 Overrides and Extensions ============
 
     /**
@@ -166,6 +171,127 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
             IERC20(token).safeTransfer(msg.sender, amount);
         }
     }
+
+    // TODO: remove dead-code once used
+    // slither-disable-start dead-code
+    /**
+     * @dev Internal helper to get transient storage slot for a token delta
+     * @notice Only needs token since transient storage is scoped to current transaction's sender
+     */
+    function _getDeltaSlot(address token) private pure returns (uint256 slot) {
+        slot = uint256(keccak256(abi.encodePacked(token, "TychoVault#DELTA")));
+        return slot;
+    }
+
+    /**
+     * @dev Get the current delta from transient storage
+     * @notice Retrieves delta for current transaction's sender
+     */
+    // Assembly required for transient storage operations (tload)
+    function _getDelta(address token) internal view returns (int256 delta) {
+        uint256 slot = _getDeltaSlot(token);
+        // slither-disable-next-line assembly
+        assembly {
+            delta := tload(slot)
+        }
+    }
+
+    /**
+     * @dev Set the delta in transient storage
+     */
+    // Assembly required for transient storage operations (tstore)
+    function _setDelta(address token, int256 delta) internal {
+        uint256 slot = _getDeltaSlot(token);
+        // slither-disable-next-line assembly
+        assembly {
+            tstore(slot, delta)
+        }
+    }
+
+    /**
+     * @dev Get negative delta count from transient storage
+     */
+    // Assembly required for transient storage operations (tload)
+    function _getNegativeDeltaCount() internal view returns (uint256 count) {
+        // slither-disable-next-line assembly
+        assembly {
+            count := tload(_NEGATIVE_DELTA_COUNT_SLOT)
+        }
+    }
+
+    /**
+     * @dev Set negative delta count in transient storage
+     */
+    // Assembly required for transient storage operations (tstore)
+    function _setNegativeDeltaCount(uint256 count) internal {
+        // slither-disable-next-line assembly
+        assembly {
+            tstore(_NEGATIVE_DELTA_COUNT_SLOT, count)
+        }
+    }
+
+    /**
+     * @dev Update delta accounting (transient storage)
+     * @notice This updates the transient delta for the current sender, not the persistent vault balance
+     * @param token The token to update
+     * @param deltaChange The change to apply (positive to credit, negative to debit)
+     */
+    function _updateDeltaAccounting(address token, int256 deltaChange)
+        internal
+        virtual
+    {
+        if (deltaChange == 0) return;
+
+        int256 oldDelta = _getDelta(token);
+        int256 newDelta = oldDelta + deltaChange;
+
+        // Update negative delta counter based on transitions
+        if (oldDelta < 0 && newDelta >= 0) {
+            // Was negative, now non-negative: decrement counter
+            _setNegativeDeltaCount(_getNegativeDeltaCount() - 1);
+        } else if (oldDelta >= 0 && newDelta < 0) {
+            // Was non-negative, now negative: increment counter
+            _setNegativeDeltaCount(_getNegativeDeltaCount() + 1);
+        }
+
+        _setDelta(token, newDelta);
+    }
+
+    /**
+     * @dev Internal helper to debit user's actual vault balance (persistent storage)
+     * @notice This debits the persistent vault balance, not the transient delta
+     */
+    function _debitVault(address user, address token, uint256 amount)
+        internal
+        virtual
+    {
+        if (amount == 0) return;
+
+        uint256 id = uint256(uint160(token));
+        uint256 balance = balanceOf(user, id);
+
+        if (balance < amount) {
+            revert Vault__InsufficientBalance(user, token, amount, balance);
+        }
+        _burnWithoutEvent(user, id, amount);
+    }
+
+    /**
+     * @dev Internal helper to credit user's actual vault balance (persistent storage)
+     * @notice This credits the persistent vault balance, not the transient delta
+     */
+    function _creditVault(address user, address token, uint256 amount)
+        internal
+        virtual
+    {
+        if (amount == 0) return;
+
+        uint256 id = uint256(uint160(token));
+
+        _mintWithoutEvent(user, id, amount);
+    }
+
+    // slither-disable-end dead-code
 
     // ============ Utils methods ============
 
