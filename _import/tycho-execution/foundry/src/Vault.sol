@@ -30,7 +30,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
     // Vault balances - using our own mapping to avoid expensive Transfer events from ERC6909
     mapping(address => mapping(uint256 => uint256)) private _vaultBalances;
 
-    // Transient storage slots for tracking deltas during swap sequences
+    // Transient storage slot for tracking deltas during swap sequences
     // keccak256("TychoVault#NEGATIVE_DELTA_COUNT")
     uint256 private constant _NEGATIVE_DELTA_COUNT_SLOT =
         0x675e351c150ddfdbd3bc96ad8c0c5cc3e6f0d3c18723512ac3c7dfed159e94d5;
@@ -178,6 +178,8 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
         }
     }
 
+    // ============ Tracking deltas methods ============
+
     // TODO: remove dead-code once used
     // slither-disable-start dead-code
     /**
@@ -191,7 +193,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
 
     /**
      * @dev Get the current delta from transient storage
-     * @notice Retrieves delta for current transaction's sender
+     * @notice Only needs token since transient storage is scoped to current transaction's sender
      */
     // Assembly required for transient storage operations (tload)
     function _getDelta(address token) internal view returns (int256 delta) {
@@ -238,7 +240,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
 
     /**
      * @dev Update delta accounting (transient storage)
-     * @notice This updates the transient delta for the current sender, not the persistent vault balance
+     * @notice Only needs token since transient storage is scoped to current transaction's sender
      * @param token The token to update
      * @param deltaChange The change to apply (positive to credit, negative to debit)
      */
@@ -262,6 +264,8 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
 
         _setDelta(token, newDelta);
     }
+
+    // ============ Vault accounting ============
 
     /**
      * @dev Internal helper to debit user's actual vault balance (persistent storage)
