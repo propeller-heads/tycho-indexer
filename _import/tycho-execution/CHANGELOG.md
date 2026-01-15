@@ -1,3 +1,18 @@
+## [0.5.0](https://github.com/propeller-heads/tycho-contracts/compare/0.4.0...0.5.0) (2026-01-15)
+
+
+### Features
+
+* add function to apply delta ([4a6108c](https://github.com/propeller-heads/tycho-contracts/commit/4a6108ccd1a1ee04fa4344d564a59225c8265a62))
+* add methods to TestVault to use internal methods for testing purposes ([c5b715a](https://github.com/propeller-heads/tycho-contracts/commit/c5b715ac7d1bdd5274b6569047ac983a0493b5f7))
+* add tests for main accounting methods ([7afb19f](https://github.com/propeller-heads/tycho-contracts/commit/7afb19ff358cee925febfb204961a90440be7d48))
+* add vault accounting methods ([6fbb988](https://github.com/propeller-heads/tycho-contracts/commit/6fbb988bd2e8d8592914c4d5db8cc1202fe6c3b9))
+
+
+### Bug Fixes
+
+* update revert reason in Vault contract to use correct error identifier ([39d3da9](https://github.com/propeller-heads/tycho-contracts/commit/39d3da9eaf5f439c632dd594b2ebbc0baf711ad0))
+
 ## [0.4.0](https://github.com/propeller-heads/tycho-contracts/compare/0.3.1...0.4.0) (2026-01-14)
 
 
