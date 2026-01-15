@@ -277,7 +277,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
     {
         if (amount == 0) return;
 
-        uint256 id = uint256(uint160(token));
+        uint256 id = _toId(token);
         uint256 balance = balanceOf(user, id);
 
         if (balance < amount) {
@@ -296,7 +296,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
     {
         if (amount == 0) return;
 
-        uint256 id = uint256(uint160(token));
+        uint256 id = _toId(token);
 
         _mintWithoutEvent(user, id, amount);
     }
@@ -323,7 +323,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
             if (inputDelta != -int256(inputAmount)) {
                 revert Vault__UnexpectedInputDelta(inputDelta);
             }
-            uint256 id = uint256(uint160(inputToken));
+            uint256 id = _toId(inputToken);
             _burnWithoutEvent(user, id, inputAmount);
         }
     }
