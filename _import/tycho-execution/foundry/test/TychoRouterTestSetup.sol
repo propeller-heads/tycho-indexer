@@ -222,16 +222,12 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     }
 
     function encodeUniswapV2Swap(
-        address tokenIn,
         address target,
-        address tokenOut,
         address receiver,
         bool zero2one,
         RestrictTransferFrom.TransferType transferType
     ) internal pure returns (bytes memory) {
-        return abi.encodePacked(
-            tokenIn, target, tokenOut, receiver, zero2one, transferType
-        );
+        return abi.encodePacked(target, receiver, zero2one, transferType);
     }
 
     function encodeUniswapV3Swap(

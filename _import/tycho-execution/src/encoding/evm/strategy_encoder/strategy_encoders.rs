@@ -580,9 +580,7 @@ mod tests {
             let expected_swap = String::from(concat!(
                 // Swap data
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
-                "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
-                "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
-                "6b175474e89094c44da98b954eedeac495271d0f", // token out
+                "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id (pool address)
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "00",                                       // zero2one
                 "00",                                       // transfer type TransferFrom
@@ -655,20 +653,16 @@ mod tests {
 
             let expected = String::from(concat!(
                 // swap 1
-                "0066",                                     // swap length
+                "003e",                                     // swap length (62 bytes)
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
-                "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
-                "bb2b8038a1640196fbe3e38816f3e67cba72d940", // component id
-                "2260fac5e5542a773aa44fbcfedf7c193bc2c599", // token out
+                "bb2b8038a1640196fbe3e38816f3e67cba72d940", // component id (pool address)
                 "004375dff511095cc5a197a54140a24efef3a416", // receiver (next pool)
                 "00",                                       // zero to one
                 "00",                                       // transfer type TransferFrom
                 // swap 2
-                "0066",                                     // swap length
+                "003e",                                     // swap length
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
-                "2260fac5e5542a773aa44fbcfedf7c193bc2c599", // token in
-                "004375dff511095cc5a197a54140a24efef3a416", // component id
-                "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
+                "004375dff511095cc5a197a54140a24efef3a416", // component id (pool address)
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver (final user)
                 "01",                                       // zero to one
                 "02",                                       // transfer type None
@@ -814,14 +808,12 @@ mod tests {
                 "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
                 "01",                                       // zero2one
                 "00",                                       // transfer type TransferFrom
-                "006b",                                     // ple encoded swaps
+                "0043",                                     // ple encoded swaps (67 bytes)
                 "01",                                       // token in index
                 "00",                                       // token out index
                 "000000",                                   // split
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address,
-                "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
-                "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id,
-                "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
+                "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id (pool address)
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "00",                                       // zero2one
                 "01",                                       // transfer type Transfer
@@ -936,14 +928,12 @@ mod tests {
             let hex_calldata = hex::encode(&encoded_solution.swaps);
 
             let expected_swaps = [
-                "006b",                                     // ple encoded swaps
+                "0043",                                     // ple encoded swaps (67 bytes)
                 "00",                                       // token in index
                 "01",                                       // token out index
                 "000000",                                   // split
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
-                "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
-                "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id
-                "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
+                "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id (pool address)
                 "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
                 "01",                                       // zero2one
                 "00",                                       // transfer type TransferFrom

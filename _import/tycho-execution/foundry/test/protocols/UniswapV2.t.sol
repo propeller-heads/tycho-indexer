@@ -19,9 +19,7 @@ contract UniswapV2ExecutorExposed is UniswapV2Executor {
         external
         pure
         returns (
-            IERC20 inToken,
             address target,
-            address tokenOut,
             address receiver,
             bool zeroForOne,
             RestrictTransferFrom.TransferType transferType
@@ -39,7 +37,9 @@ contract UniswapV2ExecutorExposed is UniswapV2Executor {
     }
 
     function verifyPairAddress(address target) external view {
-        _verifyPairAddress(target);
+        address token0 = IUniswapV2Pair(target).token0();
+        address token1 = IUniswapV2Pair(target).token1();
+        _verifyPairAddress(target, token0, token1);
     }
 }
 
@@ -84,26 +84,20 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
     function testDecodeParams() public view {
         bytes memory params = abi.encodePacked(
-            WETH_ADDR,
             address(2),
-            DAI_ADDR,
             address(3),
             false,
             RestrictTransferFrom.TransferType.Transfer
         );
 
         (
-            IERC20 tokenIn,
             address target,
-            address tokenOut,
             address receiver,
             bool zeroForOne,
             RestrictTransferFrom.TransferType transferType
         ) = uniswapV2Exposed.decodeParams(params);
 
-        assertEq(address(tokenIn), WETH_ADDR);
         assertEq(target, address(2));
-        assertEq(tokenOut, DAI_ADDR);
         assertEq(receiver, address(3));
         assertEq(zeroForOne, false);
         assertEq(
@@ -113,8 +107,7 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
     }
 
     function testDecodeParamsInvalidDataLength() public {
-        bytes memory invalidParams =
-            abi.encodePacked(WETH_ADDR, address(2), address(3));
+        bytes memory invalidParams = abi.encodePacked(address(2), address(3));
 
         vm.expectRevert(UniswapV2Executor__InvalidDataLength.selector);
         uniswapV2Exposed.decodeParams(invalidParams);
@@ -161,9 +154,7 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 amountOut = 1847751195973566072891;
         bool zeroForOne = false;
         bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR,
             WETH_DAI_POOL,
-            DAI_ADDR,
             BOB,
             zeroForOne,
             RestrictTransferFrom.TransferType.Transfer
@@ -181,9 +172,7 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 amountOut = 1847751195973566072891;
         bool zeroForOne = false;
         bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR,
             WETH_DAI_POOL,
-            DAI_ADDR,
             BOB,
             zeroForOne,
             RestrictTransferFrom.TransferType.None
@@ -199,20 +188,16 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
     function testDecodeIntegration() public view {
         bytes memory protocolData =
-            hex"c02aaa39b223fe8d0a0e5c4f27ead9083c756cc288e6a0c2ddd26feeb64f039a2c41296fcb3f56406b175474e89094c44da98b954eedeac495271d0f00000000000000000000000000000000000000010001";
+            hex"88e6a0c2ddd26feeb64f039a2c41296fcb3f564000000000000000000000000000000000000000010001";
 
         (
-            IERC20 tokenIn,
             address target,
-            address tokenOut,
             address receiver,
             bool zeroForOne,
             RestrictTransferFrom.TransferType transferType
         ) = uniswapV2Exposed.decodeParams(protocolData);
 
-        assertEq(address(tokenIn), WETH_ADDR);
         assertEq(target, 0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640);
-        assertEq(tokenOut, DAI_ADDR);
         assertEq(receiver, 0x0000000000000000000000000000000000000001);
         assertEq(zeroForOne, false);
         assertEq(
@@ -238,9 +223,7 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
         bool zeroForOne = false;
         address fakePool = address(new FakeUniswapV2Pool(WETH_ADDR, DAI_ADDR));
         bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR,
             fakePool,
-            DAI_ADDR,
             BOB,
             zeroForOne,
             RestrictTransferFrom.TransferType.Transfer
@@ -259,9 +242,7 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 amountIn = 10 * 10 ** 6;
         bool zeroForOne = true;
         bytes memory protocolData = abi.encodePacked(
-            BASE_USDC,
             USDC_MAG7_POOL,
-            BASE_MAG7,
             BOB,
             zeroForOne,
             RestrictTransferFrom.TransferType.Transfer

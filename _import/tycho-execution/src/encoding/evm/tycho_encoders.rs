@@ -846,12 +846,8 @@ mod tests {
             assert_eq!(
                 hex_protocol_data,
                 String::from(concat!(
-                    // in token
-                    "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-                    // component id
+                    // component id (pool address)
                     "a478c2975ab1ea89e8196811f51a7b7ade33eb11",
-                    // token out
-                    "6b175474e89094c44da98b954eedeac495271d0f",
                     // receiver
                     "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                     // zero for one
