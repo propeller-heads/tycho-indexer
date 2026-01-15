@@ -33,6 +33,14 @@ contract VaultExposed is Vault {
     function debitVault(address user, address token, uint256 amount) external {
         _debitVault(user, token, amount);
     }
+
+    function finalizeBalances(
+        address user,
+        address inputToken,
+        uint256 inputAmount
+    ) external {
+        _finalizeBalances(user, inputToken, inputAmount);
+    }
 }
 
 contract VaultTest is Constants, TestUtils {
@@ -337,5 +345,71 @@ contract VaultTest is Constants, TestUtils {
         );
 
         vault.debitVault(BOB, USDC_ADDR, amount_to_debit);
+    }
+
+    function testFinalizeBalancesNegativeCountTooHigh() public {
+        uint256 inputAmount = 1_000_000;
+        uint256 negativeCount = 3;
+
+        vault.setNegativeDeltaCount(negativeCount);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Vault__UnexpectedNegativeDelta.selector, negativeCount
+            )
+        );
+
+        vault.finalizeBalances(BOB, USDC_ADDR, inputAmount);
+    }
+
+    function testFinalizeBalancesNegativeCountZero() public {
+        uint256 inputAmount = 1_000_000;
+        uint256 negativeCount = 0;
+
+        vault.setNegativeDeltaCount(negativeCount);
+        vault.creditVault(BOB, USDC_ADDR, 3_000_000);
+
+        uint256 balanceStart = vault.balanceOf(BOB, uint256(uint160(USDC_ADDR)));
+
+        vault.finalizeBalances(BOB, USDC_ADDR, inputAmount);
+
+        uint256 balanceEnd = vault.balanceOf(BOB, uint256(uint160(USDC_ADDR)));
+
+        assertEq(balanceStart, balanceEnd);
+    }
+
+    function testFinalizeBalancesInputAmountDoesNotMatchDelta() public {
+        uint256 inputAmount = 1_000_000;
+        int256 inputDelta = -2_000_000;
+        uint256 negativeCount = 1;
+
+        vault.setNegativeDeltaCount(negativeCount);
+        vault.setDelta(USDC_ADDR, inputDelta);
+        vault.creditVault(BOB, USDC_ADDR, 3_000_000);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Vault__UnexpectedInputDelta.selector, inputDelta
+            )
+        );
+
+        vault.finalizeBalances(BOB, USDC_ADDR, inputAmount);
+    }
+
+    function testFinalizeBalancesSuccess() public {
+        uint256 inputAmount = 2_000_000;
+        int256 inputDelta = -2_000_000;
+        uint256 negativeCount = 1;
+
+        vault.setNegativeDeltaCount(negativeCount);
+        vault.setDelta(USDC_ADDR, inputDelta);
+        vault.creditVault(BOB, USDC_ADDR, 3_000_000);
+        uint256 balanceStart = vault.balanceOf(BOB, uint256(uint160(USDC_ADDR)));
+
+        vault.finalizeBalances(BOB, USDC_ADDR, inputAmount);
+
+        uint256 balanceEnd = vault.balanceOf(BOB, uint256(uint160(USDC_ADDR)));
+
+        assertEq(balanceStart - balanceEnd, inputAmount);
     }
 }
