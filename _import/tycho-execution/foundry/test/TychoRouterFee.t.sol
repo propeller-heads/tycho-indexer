@@ -29,20 +29,19 @@ contract TychoRouterFeeTest is TychoRouterTestSetup {
     function testSetCustomRouterFeeOnOutput() public {
         // Set default fee
         vm.prank(FEE_SETTER);
-        uint16 defaultFee = 50;
-        tychoRouter.setRouterFeeOnOutput(100);
+        uint16 defaultFee = 100;
+        tychoRouter.setRouterFeeOnOutput(defaultFee);
 
         // Set custom fee for user
         uint16 userFee = 50;
-
         vm.prank(FEE_SETTER);
         tychoRouter.setCustomRouterFeeOnOutput(BOB, userFee);
 
         // Check user gets custom fee
-        assertEq(tychoRouter.getCustomRouterFeeOnOutput(BOB), defaultFee);
+        assertEq(tychoRouter.getCustomRouterFeeOnOutput(BOB), userFee);
 
         // Check other users still get default fee
-        assertEq(tychoRouter.getCustomRouterFeeOnOutput(ALICE), 100);
+        assertEq(tychoRouter.getCustomRouterFeeOnOutput(ALICE), defaultFee);
     }
 
     function testSetCustomRouterFeeOnOutputUnauthorized() public {
@@ -62,18 +61,20 @@ contract TychoRouterFeeTest is TychoRouterTestSetup {
     function testRemoveCustomRouterFeeOnOutput() public {
         // Set default and custom fee
         vm.startPrank(FEE_SETTER);
-        tychoRouter.setRouterFeeOnOutput(100);
-        tychoRouter.setCustomRouterFeeOnOutput(ALICE, 50);
+        uint16 defaultFee = 100;
+        uint16 customFee = 50;
+        tychoRouter.setRouterFeeOnOutput(defaultFee);
+        tychoRouter.setCustomRouterFeeOnOutput(ALICE, customFee);
         vm.stopPrank();
 
-        assertEq(tychoRouter.getCustomRouterFeeOnOutput(ALICE), 50);
+        assertEq(tychoRouter.getCustomRouterFeeOnOutput(ALICE), customFee);
 
         // Remove custom fee
         vm.prank(FEE_SETTER);
         tychoRouter.removeCustomRouterFeeOnOutput(ALICE);
 
         // Should now return default fee
-        assertEq(tychoRouter.getCustomRouterFeeOnOutput(ALICE), 100);
+        assertEq(tychoRouter.getCustomRouterFeeOnOutput(ALICE), defaultFee);
     }
 
     function testRemoveCustomRouterFeeOnOutputUnauthorized() public {
@@ -90,33 +91,36 @@ contract TychoRouterFeeTest is TychoRouterTestSetup {
     }
 
     function testSetRouterFeeOnSolverFee() public {
-        // Set initial fee
+        uint16 defaultFee = 500;
+        uint16 updatedFee = 1000;
+
         vm.prank(FEE_SETTER);
-        tychoRouter.setRouterFeeOnSolverFee(500);
-        assertEq(tychoRouter.getRouterFeeOnSolverFee(), 500);
+        tychoRouter.setRouterFeeOnSolverFee(defaultFee);
+        assertEq(tychoRouter.getRouterFeeOnSolverFee(), defaultFee);
 
         // Update fee
         vm.prank(FEE_SETTER);
-        tychoRouter.setRouterFeeOnSolverFee(1000);
-        assertEq(tychoRouter.getRouterFeeOnSolverFee(), 1000);
+        tychoRouter.setRouterFeeOnSolverFee(updatedFee);
+        assertEq(tychoRouter.getRouterFeeOnSolverFee(), updatedFee);
     }
 
     function testSetCustomRouterFeeOnSolverFee() public {
         // Set default fee
         vm.prank(FEE_SETTER);
-        tychoRouter.setRouterFeeOnSolverFee(1000);
+        uint16 defaultFee = 1000;
+        tychoRouter.setRouterFeeOnSolverFee(defaultFee);
 
         // Set custom fee for user
-        uint16 userFee = 500;
+        uint16 customFee = 500;
 
         vm.prank(FEE_SETTER);
-        tychoRouter.setCustomRouterFeeOnSolverFee(BOB, userFee);
+        tychoRouter.setCustomRouterFeeOnSolverFee(BOB, customFee);
 
         // Check user gets custom fee
-        assertEq(tychoRouter.getCustomRouterFeeOnSolverFee(BOB), userFee);
+        assertEq(tychoRouter.getCustomRouterFeeOnSolverFee(BOB), customFee);
 
         // Check other users still get default fee
-        assertEq(tychoRouter.getCustomRouterFeeOnSolverFee(ALICE), 1000);
+        assertEq(tychoRouter.getCustomRouterFeeOnSolverFee(ALICE), defaultFee);
     }
 
     function testSetCustomRouterFeeOnSolverFeeUnauthorized() public {
@@ -138,18 +142,20 @@ contract TychoRouterFeeTest is TychoRouterTestSetup {
     function testRemoveCustomRouterFeeOnSolverFee() public {
         // Set default and custom fee
         vm.startPrank(FEE_SETTER);
-        tychoRouter.setRouterFeeOnSolverFee(1000);
-        tychoRouter.setCustomRouterFeeOnSolverFee(ALICE, 500);
+        uint16 defaultFee = 1000;
+        uint16 customFee = 500;
+        tychoRouter.setRouterFeeOnSolverFee(defaultFee);
+        tychoRouter.setCustomRouterFeeOnSolverFee(ALICE, customFee);
         vm.stopPrank();
 
-        assertEq(tychoRouter.getCustomRouterFeeOnSolverFee(ALICE), 500);
+        assertEq(tychoRouter.getCustomRouterFeeOnSolverFee(ALICE), customFee);
 
         // Remove custom fee
         vm.prank(FEE_SETTER);
         tychoRouter.removeCustomRouterFeeOnSolverFee(ALICE);
 
         // Should now return default fee
-        assertEq(tychoRouter.getCustomRouterFeeOnSolverFee(ALICE), 1000);
+        assertEq(tychoRouter.getCustomRouterFeeOnSolverFee(ALICE), defaultFee);
     }
 
     function testRemoveCustomRouterFeeOnSolverFeeUnauthorized() public {
@@ -227,48 +233,79 @@ contract TychoRouterFeeTest is TychoRouterTestSetup {
         address user2 = DUMMY2;
         address user3 = DUMMY3;
 
+        uint16 defaultRouterFeeOnOutput = 100;
+        uint16 defaultRouterFeeOnSolverFee = 1000;
+
+        uint16 user1FeeOnOutput = 50;
+        uint16 user1FeeOnSolverFee = 500;
+
+        uint16 user2FeeOnOutput = 150;
+        uint16 user2FeeOnSolverFee = 1500;
+
         // Set default fees
         vm.startPrank(FEE_SETTER);
-        tychoRouter.setRouterFeeOnOutput(100);
-        tychoRouter.setRouterFeeOnSolverFee(1000);
+        tychoRouter.setRouterFeeOnOutput(defaultRouterFeeOnOutput);
+        tychoRouter.setRouterFeeOnSolverFee(defaultRouterFeeOnSolverFee);
 
         // Set custom fees for different users
-        tychoRouter.setCustomRouterFeeOnOutput(user1, 50);
-        tychoRouter.setCustomRouterFeeOnSolverFee(user1, 500);
+        tychoRouter.setCustomRouterFeeOnOutput(user1, user1FeeOnOutput);
+        tychoRouter.setCustomRouterFeeOnSolverFee(user1, user1FeeOnSolverFee);
 
-        tychoRouter.setCustomRouterFeeOnOutput(user2, 150);
-        tychoRouter.setCustomRouterFeeOnSolverFee(user2, 1500);
+        tychoRouter.setCustomRouterFeeOnOutput(user2, user2FeeOnOutput);
+        tychoRouter.setCustomRouterFeeOnSolverFee(user2, user2FeeOnSolverFee);
         vm.stopPrank();
 
         // Verify each user has correct fees
-        assertEq(tychoRouter.getCustomRouterFeeOnOutput(user1), 50);
-        assertEq(tychoRouter.getCustomRouterFeeOnSolverFee(user1), 500);
+        assertEq(
+            tychoRouter.getCustomRouterFeeOnOutput(user1), user1FeeOnOutput
+        );
+        assertEq(
+            tychoRouter.getCustomRouterFeeOnSolverFee(user1),
+            user1FeeOnSolverFee
+        );
 
-        assertEq(tychoRouter.getCustomRouterFeeOnOutput(user2), 150);
-        assertEq(tychoRouter.getCustomRouterFeeOnSolverFee(user2), 1500);
+        assertEq(
+            tychoRouter.getCustomRouterFeeOnOutput(user2), user2FeeOnOutput
+        );
+        assertEq(
+            tychoRouter.getCustomRouterFeeOnSolverFee(user2),
+            user2FeeOnSolverFee
+        );
 
         // User3 should get default fees
-        assertEq(tychoRouter.getCustomRouterFeeOnOutput(user3), 100);
-        assertEq(tychoRouter.getCustomRouterFeeOnSolverFee(user3), 1000);
+        assertEq(
+            tychoRouter.getCustomRouterFeeOnOutput(user3),
+            defaultRouterFeeOnOutput
+        );
+        assertEq(
+            tychoRouter.getCustomRouterFeeOnSolverFee(user3),
+            defaultRouterFeeOnSolverFee
+        );
     }
 
     function testUpdateDefaultFeeDoesNotAffectCustomFees() public {
         // Set initial default fee
         vm.startPrank(FEE_SETTER);
-        tychoRouter.setRouterFeeOnOutput(100);
+        uint16 defaultFee = 100;
+        uint16 bobFee = 50;
+        uint16 updatedDefaultFee = 200;
+
+        tychoRouter.setRouterFeeOnOutput(defaultFee);
 
         // Set custom fee for user
-        tychoRouter.setCustomRouterFeeOnOutput(BOB, 50);
+        tychoRouter.setCustomRouterFeeOnOutput(BOB, bobFee);
 
         // Update default fee
-        tychoRouter.setRouterFeeOnOutput(200);
+        tychoRouter.setRouterFeeOnOutput(updatedDefaultFee);
         vm.stopPrank();
 
         // User should still have custom fee
-        assertEq(tychoRouter.getCustomRouterFeeOnOutput(BOB), 50);
+        assertEq(tychoRouter.getCustomRouterFeeOnOutput(BOB), bobFee);
 
         // Other users should get new default
-        assertEq(tychoRouter.getCustomRouterFeeOnOutput(ALICE), 200);
+        assertEq(
+            tychoRouter.getCustomRouterFeeOnOutput(ALICE), updatedDefaultFee
+        );
     }
 
     function testDefaultValues() public view {

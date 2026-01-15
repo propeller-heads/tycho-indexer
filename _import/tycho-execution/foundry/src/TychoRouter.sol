@@ -75,7 +75,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     uint16 private _routerFeeOnOutputBps; // Router fee on output amount in basis points
     uint16 private _routerFeeOnSolverFeeBps; // Router fee on solver fee in basis points
     address private _feeTaker; // Address of the fee taker contract
-    address private _routerFeeReceiver; // Address whose vault receives router fees
+    address private _routerFeeReceiver; // Address whose vault balance receives router fees
 
     // Per-user custom router fees on output amount
     // If set, this will override the default router fee on output for the user
@@ -83,7 +83,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     mapping(address => uint16) private _customRouterFeeOnOutput;
 
     // Per-user custom router fees on solver fee
-    // If set, this will override the default router fee on solver fee for the user
+    // If set, this will override the default router fee on the solver fee for the user
     mapping(address => bool) private _hasCustomRouterFeeOnSolverFee;
     mapping(address => uint16) private _customRouterFeeOnSolverFee;
     using SafeERC20 for IERC20;
@@ -113,7 +113,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     );
     event CustomRouterFeeOnOutputRemoved(address indexed user);
     event CustomRouterFeeOnSolverFeeRemoved(address indexed user);
-    event FeeTakerUpdated(address oldExecutor, address newExecutor);
+    event FeeTakerUpdated(address oldTaker, address newExecutor);
     event RouterFeeReceiverUpdated(address oldReceiver, address newReceiver);
 
     constructor(address _permit2) Dispatcher(_permit2) {
@@ -816,9 +816,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         if (feeTaker == address(0)) {
             revert TychoRouter__AddressZero();
         }
-        address oldExecutor = _feeTaker;
+        address oldTaker = _feeTaker;
         _feeTaker = feeTaker;
-        emit FeeTakerUpdated(oldExecutor, feeTaker);
+        emit FeeTakerUpdated(oldTaker, feeTaker);
     }
 
     /**
