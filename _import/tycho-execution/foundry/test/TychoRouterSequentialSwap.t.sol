@@ -16,9 +16,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         swaps[0] = encodeSequentialSwap(
             address(usv2Executor),
             encodeUniswapV2Swap(
-                WETH_ADDR,
                 WETH_DAI_POOL,
-                DAI_ADDR,
                 DAI_USDC_POOL, // receiver (direct to next pool)
                 false,
                 RestrictTransferFrom.TransferType.TransferFrom // transfer to protocol from router
@@ -29,9 +27,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         swaps[1] = encodeSequentialSwap(
             address(usv2Executor),
             encodeUniswapV2Swap(
-                DAI_ADDR,
                 DAI_USDC_POOL,
-                USDC_ADDR,
                 ALICE,
                 true,
                 RestrictTransferFrom.TransferType.None // funds already sent to pool

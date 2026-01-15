@@ -50,13 +50,20 @@ contract UniswapV2Executor is IExecutor {
         address target;
         bool zeroForOne;
 
-        (target, tokenOut, receiver, zeroForOne) = _decodeData(data);
+        (target, receiver, zeroForOne) = _decodeData(data);
 
-        _verifyPairAddress(target);
+        // Get token0 and token1 once to avoid redundant external calls
+        IUniswapV2Pair pool = IUniswapV2Pair(target);
+        address token0 = pool.token0();
+        address token1 = pool.token1();
+
+        _verifyPairAddress(target, token0, token1);
 
         calculatedAmount = _getAmountOut(target, amountIn, zeroForOne);
 
-        IUniswapV2Pair pool = IUniswapV2Pair(target);
+        // Infer tokenIn from zeroForOne
+        address tokenIn = zeroForOne ? token0 : token1;
+
         if (zeroForOne) {
             pool.swap(0, calculatedAmount, receiver, "");
         } else {
@@ -69,18 +76,16 @@ contract UniswapV2Executor is IExecutor {
         pure
         returns (
             address target,
-            address tokenOut,
             address receiver,
             bool zeroForOne
         )
     {
-        if (data.length != 82) {
+        if (data.length != 42) {
             revert UniswapV2Executor__InvalidDataLength();
         }
-        target = address(bytes20(data[20:40]));
-        tokenOut = address(bytes20(data[40:60]));
-        receiver = address(bytes20(data[60:80]));
-        zeroForOne = data[80] != 0;
+        target = address(bytes20(data[0:20]));
+        receiver = address(bytes20(data[20:40]));
+        zeroForOne = data[40] != 0;
     }
 
     function _getAmountOut(address target, uint256 amountIn, bool zeroForOne)
@@ -106,9 +111,10 @@ contract UniswapV2Executor is IExecutor {
         amount = numerator / denominator;
     }
 
-    function _verifyPairAddress(address target) internal view {
-        address token0 = IUniswapV2Pair(target).token0();
-        address token1 = IUniswapV2Pair(target).token1();
+    function _verifyPairAddress(address target, address token0, address token1)
+        internal
+        view
+    {
         bytes32 salt = keccak256(abi.encodePacked(token0, token1));
         address pair = address(
             uint160(
@@ -133,11 +139,18 @@ contract UniswapV2Executor is IExecutor {
             address tokenIn
         )
     {
-        if (data.length != 82) {
+        if (data.length != 42) {
             revert UniswapV2Executor__InvalidDataLength();
         }
-        tokenIn = address(bytes20(data[0:20]));
+        address target = address(bytes20(data[0:20]));
+        bool zeroForOne = data[40] != 0;
+
+        IUniswapV2Pair pool = IUniswapV2Pair(target);
+        address token0 = pool.token0();
+        address token1 = pool.token1();
+        tokenIn = zeroForOne ? token0 : token1;
+
         receiver = address(bytes20(data[20:40]));
-        transferType = RestrictTransferFrom.TransferType(uint8(data[81]));
+        transferType = RestrictTransferFrom.TransferType(uint8(data[41]));
     }
 }

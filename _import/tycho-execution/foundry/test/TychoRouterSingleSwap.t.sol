@@ -23,9 +23,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         ) = handlePermit2Approval(WETH_ADDR, tychoRouterAddr, amountIn);
 
         bytes memory protocolData = encodeUniswapV2Swap(
-            WETH_ADDR,
             WETH_DAI_POOL,
-            DAI_ADDR,
             ALICE,
             false,
             RestrictTransferFrom.TransferType.TransferFrom
@@ -63,9 +61,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
 
         bytes memory protocolData = encodeUniswapV2Swap(
-            WETH_ADDR,
             WETH_DAI_POOL,
-            DAI_ADDR,
             ALICE,
             false,
             RestrictTransferFrom.TransferType.TransferFrom
@@ -98,12 +94,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
 
         bytes memory protocolData = encodeUniswapV2Swap(
-            WETH_ADDR,
-            WETH_DAI_POOL,
-            DAI_ADDR,
-            ALICE,
-            false,
-            RestrictTransferFrom.TransferType.None
+            WETH_DAI_POOL, ALICE, false, RestrictTransferFrom.TransferType.None
         );
 
         bytes memory swap =
@@ -125,9 +116,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn - 1);
 
         bytes memory protocolData = encodeUniswapV2Swap(
-            WETH_ADDR,
             WETH_DAI_POOL,
-            DAI_ADDR,
             ALICE,
             false,
             RestrictTransferFrom.TransferType.TransferFrom
@@ -154,9 +143,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
 
         bytes memory protocolData = encodeUniswapV2Swap(
-            WETH_ADDR,
             WETH_DAI_POOL,
-            DAI_ADDR,
             ALICE,
             false,
             RestrictTransferFrom.TransferType.TransferFrom
@@ -190,9 +177,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
 
         bytes memory protocolData = encodeUniswapV2Swap(
-            WETH_ADDR,
             WETH_DAI_POOL,
-            DAI_ADDR,
             ALICE,
             false,
             RestrictTransferFrom.TransferType.TransferFrom
