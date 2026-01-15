@@ -75,6 +75,120 @@ fn test_single_encoding_strategy_ekubo() {
 }
 
 #[test]
+fn test_single_encoding_strategy_ekubo_erc20() {
+    //   USDC_ADDR ──(EKUBO)──> ETH
+
+    let token_in = usdc();
+    let token_out = eth();
+
+    let static_attributes = HashMap::from([
+        ("fee".to_string(), Bytes::from(0_u64)),
+        ("tick_spacing".to_string(), Bytes::from(0_u32)),
+        ("extension".to_string(), Bytes::from("0x51d02a5948496a67827242eabc5725531342527c")), /* Oracle */
+    ]);
+
+    let component = ProtocolComponent {
+        // All Ekubo swaps go through the core contract - not necessary to specify pool
+        // id for test
+        protocol_system: "ekubo_v2".to_string(),
+        static_attributes,
+        ..Default::default()
+    };
+
+    let swap = Swap::new(component, token_in.clone(), token_out.clone());
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: token_in,
+        given_amount: BigUint::from_str("1_000_000_000").unwrap(),
+        checked_token: token_out,
+        checked_amount: BigUint::from_str("1000").unwrap(),
+        // Alice
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFrom,
+        &eth(),
+        None,
+    )
+    .unwrap()
+    .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_single_encoding_strategy_ekubo_erc20", hex_calldata.as_str());
+}
+
+#[test]
+fn test_single_encoding_strategy_ekubo_mev_resist() {
+    //   USDC_ADDR ──(EKUBO)──> ETH
+
+    let token_in = usdc();
+    let token_out = eth();
+
+    let static_attributes = HashMap::from([
+        ("fee".to_string(), Bytes::from(0x00068db8bac710cb_u64)),
+        ("tick_spacing".to_string(), Bytes::from(200_u32)),
+        ("extension".to_string(), Bytes::from("0x553a2EFc570c9e104942cEC6aC1c18118e54C091")), /* mev resist pool */
+    ]);
+
+    let component = ProtocolComponent {
+        // All Ekubo swaps go through the core contract - not necessary to specify pool
+        // id for test
+        protocol_system: "ekubo_v2".to_string(),
+        static_attributes,
+        ..Default::default()
+    };
+
+    let swap = Swap::new(component, token_in.clone(), token_out.clone());
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: token_in,
+        given_amount: BigUint::from_str("1_000_000_000").unwrap(),
+        checked_token: token_out,
+        checked_amount: BigUint::from_str("1000").unwrap(),
+        // Alice
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFrom,
+        &eth(),
+        None,
+    )
+    .unwrap()
+    .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_single_encoding_strategy_ekubo_mev_resist", hex_calldata.as_str());
+}
+
+#[test]
 fn test_single_encoding_strategy_maverick() {
     // GHO -> (maverick) -> USDC
     let maverick_pool = ProtocolComponent {

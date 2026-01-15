@@ -17,16 +17,12 @@ import {StdUtils} from "../../lib/forge-std/src/StdUtils.sol";
 import {TestUtils} from "../TestUtils.sol";
 
 contract RocketpoolExecutorExposed is RocketpoolExecutor {
-    constructor(address _permit2) RocketpoolExecutor(_permit2) {}
+    constructor() RocketpoolExecutor() {}
 
     function decodeParams(bytes calldata data)
         external
         pure
-        returns (
-            bool isDeposit,
-            RestrictTransferFrom.TransferType transferType,
-            address receiver
-        )
+        returns (bool isDeposit, address receiver)
     {
         return _decodeData(data);
     }
@@ -37,7 +33,7 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
 
     modifier setUpFork(uint256 blockNumber) {
         vm.createSelectFork(vm.rpcUrl("mainnet"), blockNumber);
-        rocketpoolExecutor = new RocketpoolExecutorExposed(PERMIT2_ADDRESS);
+        rocketpoolExecutor = new RocketpoolExecutorExposed();
         _;
     }
 
@@ -50,17 +46,10 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
             BOB
         );
 
-        (
-            bool isDeposit,
-            RestrictTransferFrom.TransferType transferType,
-            address receiver
-        ) = rocketpoolExecutor.decodeParams(params);
+        (bool isDeposit, address receiver) =
+            rocketpoolExecutor.decodeParams(params);
 
         assertTrue(isDeposit);
-        assertEq(
-            uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.Transfer)
-        );
         assertEq(receiver, BOB);
     }
 
@@ -71,17 +60,10 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
             ALICE
         );
 
-        (
-            bool isDeposit,
-            RestrictTransferFrom.TransferType transferType,
-            address receiver
-        ) = rocketpoolExecutor.decodeParams(params);
+        (bool isDeposit, address receiver) =
+            rocketpoolExecutor.decodeParams(params);
 
         assertFalse(isDeposit);
-        assertEq(
-            uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.Transfer)
-        );
         assertEq(receiver, ALICE);
     }
 
@@ -90,6 +72,48 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
 
         vm.expectRevert(RocketpoolExecutor__InvalidDataLength.selector);
         rocketpoolExecutor.decodeParams(invalidParams);
+    }
+
+    function testGetTransferData() public {
+        bytes memory params = abi.encodePacked(
+            uint8(1), // isDeposit = true
+            RestrictTransferFrom.TransferType.Transfer,
+            BOB
+        );
+
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        ) = rocketpoolExecutor.getTransferData(params);
+
+        assertEq(receiver, address(rocketpoolExecutor));
+        assertEq(
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.Transfer)
+        );
+        assertEq(tokenIn, address(0));
+    }
+
+    function testGetTransferDataBurn() public {
+        bytes memory params = abi.encodePacked(
+            uint8(0), // isDeposit = false (burn)
+            RestrictTransferFrom.TransferType.Transfer,
+            BOB
+        );
+
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        ) = rocketpoolExecutor.getTransferData(params);
+
+        assertEq(receiver, address(rocketpoolExecutor));
+        assertEq(
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.Transfer)
+        );
+        assertEq(tokenIn, RETH_ADDR);
     }
 
     /// Test against real transaction deposit on Rocketpool
@@ -109,12 +133,15 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
         vm.deal(address(rocketpoolExecutor), amountIn);
 
         uint256 rethBalanceBefore = RETH.balanceOf(BOB);
-        uint256 amountOut = rocketpoolExecutor.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            rocketpoolExecutor.swap(amountIn, protocolData);
         uint256 rethBalanceAfter = RETH.balanceOf(BOB);
 
         // Check balances
         assertEq(rethBalanceAfter - rethBalanceBefore, amountOut);
         assertEq(amountOut, 3_905_847_020_555_141_679);
+        assertEq(tokenOut, RETH_ADDR);
+        assertEq(receiver, BOB);
     }
 
     /// Test against real transaction burn on Rocketpool
@@ -133,12 +160,15 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
         deal(RETH_ADDR, address(rocketpoolExecutor), amountIn);
 
         uint256 ethBalanceBefore = BOB.balance;
-        uint256 amountOut = rocketpoolExecutor.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            rocketpoolExecutor.swap(amountIn, protocolData);
         uint256 ethBalanceAfter = BOB.balance;
 
         // Check balances
         assertEq(ethBalanceAfter - ethBalanceBefore, amountOut);
         assertEq(amountOut, 1_151_971_256_664_605_227);
+        assertEq(tokenOut, address(0));
+        assertEq(receiver, BOB);
     }
 
     function testDecodeDepositIntegration() public view {
@@ -146,17 +176,10 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
         bytes memory protocolData =
             loadCallDataFromFile("test_encode_rocketpool_deposit");
 
-        (
-            bool isDeposit,
-            RestrictTransferFrom.TransferType transferType,
-            address receiver
-        ) = rocketpoolExecutor.decodeParams(protocolData);
+        (bool isDeposit, address receiver) =
+            rocketpoolExecutor.decodeParams(protocolData);
 
         assertTrue(isDeposit);
-        assertEq(
-            uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.Transfer)
-        );
         assertEq(receiver, BOB);
     }
 
@@ -165,17 +188,10 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
         bytes memory protocolData =
             loadCallDataFromFile("test_encode_rocketpool_burn");
 
-        (
-            bool isDeposit,
-            RestrictTransferFrom.TransferType transferType,
-            address receiver
-        ) = rocketpoolExecutor.decodeParams(protocolData);
+        (bool isDeposit, address receiver) =
+            rocketpoolExecutor.decodeParams(protocolData);
 
         assertFalse(isDeposit);
-        assertEq(
-            uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.Transfer)
-        );
         assertEq(receiver, BOB);
     }
 
@@ -194,12 +210,15 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
         vm.deal(address(rocketpoolExecutor), amountIn);
 
         uint256 rethBalanceBefore = RETH.balanceOf(BOB);
-        uint256 amountOut = rocketpoolExecutor.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            rocketpoolExecutor.swap(amountIn, protocolData);
         uint256 rethBalanceAfter = RETH.balanceOf(BOB);
 
         // Check balances
         assertEq(rethBalanceAfter - rethBalanceBefore, amountOut);
         assertEq(amountOut, 3_905_847_020_555_141_679);
+        assertEq(tokenOut, RETH_ADDR);
+        assertEq(receiver, BOB);
     }
 
     /// Test against real transaction burn on Rocketpool
@@ -216,12 +235,15 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
         deal(RETH_ADDR, address(rocketpoolExecutor), amountIn);
 
         uint256 ethBalanceBefore = BOB.balance;
-        uint256 amountOut = rocketpoolExecutor.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            rocketpoolExecutor.swap(amountIn, protocolData);
         uint256 ethBalanceAfter = BOB.balance;
 
         // Check balances
         assertEq(ethBalanceAfter - ethBalanceBefore, amountOut);
         assertEq(amountOut, 1_151_971_256_664_605_227);
+        assertEq(tokenOut, address(0));
+        assertEq(receiver, BOB);
     }
 }
 

@@ -11,7 +11,7 @@ import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 
 error RocketpoolExecutor__InvalidDataLength();
 
-contract RocketpoolExecutor is IExecutor, RestrictTransferFrom {
+contract RocketpoolExecutor is IExecutor {
     using SafeERC20 for IRocketTokenRETH;
 
     IRocketTokenRETH public constant RETH =
@@ -19,42 +19,38 @@ contract RocketpoolExecutor is IExecutor, RestrictTransferFrom {
     IRocketDepositPool public constant ROCKET_DEPOSIT_POOL =
         IRocketDepositPool(0xDD3f50F8A6CafbE9b31a427582963f465E745AF8);
 
-    constructor(address _permit2) RestrictTransferFrom(_permit2) {}
+    constructor() {}
 
     // slither-disable-next-line locked-ether
-    function swap(uint256 givenAmount, bytes calldata data)
+    function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256 calculatedAmount)
+        returns (uint256 amountOut, address tokenOut, address receiver)
     {
-        (bool isDeposit, TransferType transferType, address receiver) =
-            _decodeData(data);
-
-        address tokenOut;
+        bool isDeposit;
+        (isDeposit, receiver) = _decodeData(data);
 
         if (isDeposit) {
             tokenOut = address(RETH);
             // ETH -> rETH: Deposit ETH to Rocketpool to receive rETH
             // We don't need to _transfer ETH into this contract since it must be sent along with the call
             uint256 rethBefore = RETH.balanceOf(address(this));
-            ROCKET_DEPOSIT_POOL.deposit{value: givenAmount}();
-            calculatedAmount = RETH.balanceOf(address(this)) - rethBefore;
+            ROCKET_DEPOSIT_POOL.deposit{value: amountIn}();
+            amountOut = RETH.balanceOf(address(this)) - rethBefore;
 
             if (receiver != address(this)) {
-                RETH.safeTransfer(receiver, calculatedAmount);
+                RETH.safeTransfer(receiver, amountOut);
             }
+            tokenOut = address(RETH);
         } else {
             tokenOut = address(0);
             // rETH -> ETH: Burn rETH to receive ETH
-            // Use _transfer to get rETH into this contract based on transferType
-            _transfer(address(this), transferType, address(RETH), givenAmount);
-
             uint256 ethBefore = address(this).balance;
-            RETH.burn(givenAmount);
-            calculatedAmount = address(this).balance - ethBefore;
+            RETH.burn(amountIn);
+            amountOut = address(this).balance - ethBefore;
 
             if (receiver != address(this)) {
-                Address.sendValue(payable(receiver), calculatedAmount);
+                Address.sendValue(payable(receiver), amountOut);
             }
         }
     }
@@ -62,19 +58,45 @@ contract RocketpoolExecutor is IExecutor, RestrictTransferFrom {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (bool isDeposit, TransferType transferType, address receiver)
+        returns (bool isDeposit, address receiver)
     {
         if (data.length != 22) {
             revert RocketpoolExecutor__InvalidDataLength();
         }
 
         isDeposit = uint8(data[0]) == 1;
-        transferType = TransferType(uint8(data[1]));
         receiver = address(bytes20(data[2:22]));
     }
 
     /// @dev Required to receive ETH from RETH.burn()
     receive() external payable {}
+
+    function getTransferData(bytes calldata data)
+        external
+        payable
+        returns (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        )
+    {
+        if (data.length != 22) {
+            revert RocketpoolExecutor__InvalidDataLength();
+        }
+
+        bool isDeposit = uint8(data[0]) == 1;
+        // TODO: hardcode the transferType in ENG-4881
+        transferType = RestrictTransferFrom.TransferType(uint8(data[1]));
+        if (isDeposit) {
+            tokenIn = address(0);
+        } else {
+            tokenIn = address(RETH);
+        }
+        // Since burning withdraws the funds from the msg.sender, the user's funds need to sent to the
+        // TychoRouter initially (address(this))
+        // For depositing, theRestrictTransferFrom.TransferType should be None
+        receiver = address(this);
+    }
 }
 
 interface IRocketDepositPool {

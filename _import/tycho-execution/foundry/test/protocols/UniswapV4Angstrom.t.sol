@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "../../src/executors/UniswapV4Executor.sol";
 import "../TestUtils.sol";
 import "./UniswapV4Utils.sol";
@@ -8,11 +9,11 @@ import {Constants} from "../Constants.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
 
 contract UniswapV4ExecutorExposed is UniswapV4Executor {
-    constructor(
-        IPoolManager _POOL_MANAGER,
-        address _ANGSTROM_HOOK,
-        address _permit2
-    ) UniswapV4Executor(_POOL_MANAGER, _ANGSTROM_HOOK, _permit2) {}
+    using SafeERC20 for IERC20;
+
+    constructor(IPoolManager _POOL_MANAGER, address _ANGSTROM_HOOK)
+        UniswapV4Executor(_POOL_MANAGER, _ANGSTROM_HOOK)
+    {}
 
     function selectAttestation(bytes memory attestationData)
         external
@@ -20,6 +21,25 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
         returns (bytes memory)
     {
         return _selectAttestation(attestationData);
+    }
+
+    fallback(
+        bytes calldata /*data*/
+    )
+        external
+        returns (bytes memory)
+    {
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            uint256 amount
+        ) = this.getCallbackTransferData(msg.data);
+        if (transferType == RestrictTransferFrom.TransferType.Transfer) {
+            IERC20(tokenIn).safeTransfer(receiver, amount);
+        }
+        bytes calldata stripped = msg.data[68:];
+        return abi.encode(_unlockCallback(stripped));
     }
 }
 
@@ -34,7 +54,7 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
         uint256 forkBlock = 23873662;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
         angstromExecutor = new UniswapV4ExecutorExposed(
-            IPoolManager(POOL_MANAGER), ANGSTROM_HOOK, PERMIT2_ADDRESS
+            IPoolManager(POOL_MANAGER), ANGSTROM_HOOK
         );
     }
 
@@ -76,7 +96,7 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
         assertEq(selected, "");
     }
 
-    function testSelectAttestationEmptyAttestations() public {
+    function testSelectAttestationEmptyAttestations() public view {
         // Encode empty attestations - should return empty bytes
         bytes memory encodedAttestations;
         bytes memory selected =
@@ -122,13 +142,16 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
             firstPool
         );
 
-        uint256 amountOut = angstromExecutor.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            angstromExecutor.swap(amountIn, data);
 
         assertEq(
             USDC.balanceOf(POOL_MANAGER), poolManagerBalanceBefore + amountIn
         );
         assertTrue(WETH.balanceOf(ALICE) == amountOut);
         assertTrue(amountOut > 0);
+        assertEq(tokenOut, WETH_ADDR);
+        assertEq(receiver, ALICE);
     }
 
     function testSwapWithExpiredAttestations() public {
@@ -180,7 +203,8 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
         uint256 usdcBalanceBeforePool = USDC.balanceOf(POOL_MANAGER);
         uint256 usdcBalanceBeforeExecutor =
             USDC.balanceOf(address(angstromExecutor));
-        uint256 amountOut = angstromExecutor.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            angstromExecutor.swap(amountIn, protocolData);
 
         // Verify USDC was transferred to pool manager
         assertEq(USDC.balanceOf(POOL_MANAGER), usdcBalanceBeforePool + amountIn);
@@ -192,5 +216,7 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
         // Verify USDT was received by ALICE
         assertTrue(IERC20(USDT_ADDR).balanceOf(ALICE) == amountOut);
         assertTrue(amountOut > 0);
+        assertEq(tokenOut, USDT_ADDR);
+        assertEq(receiver, ALICE);
     }
 }

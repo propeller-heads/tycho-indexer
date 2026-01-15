@@ -16,7 +16,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         swaps[0] = encodeSequentialSwap(
             address(usv2Executor),
             encodeUniswapV2Swap(
-                WETH_DAI_POOL,
+                DAI_WETH_UNIV2_POOL,
                 DAI_USDC_POOL, // receiver (direct to next pool)
                 false,
                 RestrictTransferFrom.TransferType.TransferFrom // transfer to protocol from router
@@ -343,7 +343,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         deal(WETH_ADDR, ALICE, 1 ether);
         uint256 balanceBefore = IERC20(USDT_ADDR).balanceOf(ALICE);
 
-        // Approve permit2
+        // Approve
         vm.startPrank(ALICE);
         IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
         bytes memory callData =

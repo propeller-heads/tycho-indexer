@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "@interfaces/IExecutor.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@permit2/src/interfaces/IAllowanceTransfer.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
+import {
+    SafeERC20,
+    IERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {
+    IAllowanceTransfer
+} from "@permit2/src/interfaces/IAllowanceTransfer.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 error RestrictTransferFrom__AddressZero();
 error RestrictTransferFrom__ExceededTransferFromAllowance(
@@ -117,6 +121,7 @@ contract RestrictTransferFrom {
             }
             if (isPermit2) {
                 // Permit2.permit is already called from the TychoRouter
+                // slither-disable-next-line calls-loop
                 permit2.transferFrom(sender, receiver, uint160(amount), tokenIn);
             } else {
                 // slither-disable-next-line arbitrary-send-erc20

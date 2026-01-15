@@ -128,36 +128,25 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         address ekuboMevResist = 0x553a2EFc570c9e104942cEC6aC1c18118e54C091;
 
         IPoolManager poolManager = IPoolManager(poolManagerAddress);
-        usv2Executor =
-            new UniswapV2Executor(factoryV2, initCodeV2, PERMIT2_ADDRESS, 30);
-        usv3Executor =
-            new UniswapV3Executor(factoryV3, initCodeV3, PERMIT2_ADDRESS);
-        usv4Executor =
-            new UniswapV4Executor(poolManager, ANGSTROM_HOOK, PERMIT2_ADDRESS);
-        pancakev3Executor = new UniswapV3Executor(
-            factoryPancakeV3, initCodePancakeV3, PERMIT2_ADDRESS
-        );
-        balancerv2Executor = new BalancerV2Executor(PERMIT2_ADDRESS);
-        ekuboExecutor =
-            new EkuboExecutor(ekuboCore, ekuboMevResist, PERMIT2_ADDRESS);
-        curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE, PERMIT2_ADDRESS);
-        maverickv2Executor =
-            new MaverickV2Executor(MAVERICK_V2_FACTORY, PERMIT2_ADDRESS);
-        balancerV3Executor = new BalancerV3Executor(PERMIT2_ADDRESS);
-        bebopExecutor = new BebopExecutor(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
-        hashflowExecutor =
-            new HashflowExecutor(HASHFLOW_ROUTER, PERMIT2_ADDRESS);
-        fluidV1Executor =
-            new FluidV1Executor(FLUIDV1_LIQUIDITY, PERMIT2_ADDRESS);
+        usv2Executor = new UniswapV2Executor(factoryV2, initCodeV2, 30);
+        usv3Executor = new UniswapV3Executor(factoryV3, initCodeV3);
+        usv4Executor = new UniswapV4Executor(poolManager, ANGSTROM_HOOK);
+        pancakev3Executor =
+            new UniswapV3Executor(factoryPancakeV3, initCodePancakeV3);
+        balancerv2Executor = new BalancerV2Executor();
+        ekuboExecutor = new EkuboExecutor(ekuboCore, ekuboMevResist);
+        curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE);
+        maverickv2Executor = new MaverickV2Executor(MAVERICK_V2_FACTORY);
+        balancerV3Executor = new BalancerV3Executor();
+        bebopExecutor = new BebopExecutor(BEBOP_SETTLEMENT);
+        hashflowExecutor = new HashflowExecutor(HASHFLOW_ROUTER);
+        fluidV1Executor = new FluidV1Executor(FLUIDV1_LIQUIDITY);
         slipstreamsExecutor = new SlipstreamsExecutor(
-            SLIPSTREAMS_FACTORY_BASE,
-            SLIPSTREAMS_NEW_FACTORY_BASE,
-            PERMIT2_ADDRESS
+            SLIPSTREAMS_FACTORY_BASE, SLIPSTREAMS_NEW_FACTORY_BASE
         );
-        rocketpoolExecutor = new RocketpoolExecutor(PERMIT2_ADDRESS);
-        erc4626Executor = new ERC4626Executor(PERMIT2_ADDRESS);
-        lidoExecutor =
-            new LidoExecutor(STETH_ADDR, WSTETH_ADDR, PERMIT2_ADDRESS);
+        rocketpoolExecutor = new RocketpoolExecutor();
+        erc4626Executor = new ERC4626Executor();
+        lidoExecutor = new LidoExecutor(STETH_ADDR, WSTETH_ADDR);
 
         address[] memory executors = new address[](16);
         executors[0] = address(usv2Executor);

@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "@interfaces/IExecutor.sol";
-import "../RestrictTransferFrom.sol";
-import "@openzeppelin/contracts/utils/math/Math.sol";
+import {IExecutor} from "@interfaces/IExecutor.sol";
+import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {
     IERC20,
     SafeERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 /// @title BebopExecutor
 /// @notice Executor for Bebop PMM RFQ (Request for Quote) swaps
 /// @dev Handles Single and Aggregate RFQ swaps through Bebop settlement contract
 /// @dev Only supports single token in to single token out swaps
-contract BebopExecutor is IExecutor, RestrictTransferFrom {
+contract BebopExecutor is IExecutor {
     using Math for uint256;
     using SafeERC20 for IERC20;
     using Address for address;
@@ -26,9 +26,7 @@ contract BebopExecutor is IExecutor, RestrictTransferFrom {
     /// @notice The Bebop settlement contract address
     address public immutable bebopSettlement;
 
-    constructor(address _bebopSettlement, address _permit2)
-        RestrictTransferFrom(_permit2)
-    {
+    constructor(address _bebopSettlement) {
         if (_bebopSettlement == address(0)) {
             revert BebopExecutor__ZeroAddress();
         }
@@ -36,34 +34,36 @@ contract BebopExecutor is IExecutor, RestrictTransferFrom {
     }
 
     /// @notice Executes a swap through Bebop's PMM RFQ system
-    /// @param givenAmount The amount of input token to swap
+    /// @param amountIn The amount of input token to swap
     /// @param data Encoded swap data containing tokens and bebop calldata
-    /// @return calculatedAmount The amount of output token received
-    function swap(uint256 givenAmount, bytes calldata data)
+    /// @return amountOut The amount of output token received
+    /// @return tokenOut
+    /// @return receiver
+    function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        virtual
-        override
-        returns (uint256 calculatedAmount)
+        returns (uint256 amountOut, address tokenOut, address receiver)
     {
+        address tokenIn;
+        uint8 partialFillOffset;
+        uint256 originalFilledTakerAmount;
+        bool approvalNeeded;
+        bytes memory bebopCalldata;
         (
-            address tokenIn,
-            address tokenOut,
-            TransferType transferType,
-            uint8 partialFillOffset,
-            uint256 originalFilledTakerAmount,
-            bool approvalNeeded,
-            address receiver,
-            bytes memory bebopCalldata
+            tokenIn,
+            tokenOut,
+            partialFillOffset,
+            originalFilledTakerAmount,
+            approvalNeeded,
+            receiver,
+            bebopCalldata
         ) = _decodeData(data);
-
-        _transfer(address(this), transferType, address(tokenIn), givenAmount);
 
         // Modify the filledTakerAmount in the calldata
         // If the filledTakerAmount is the same as the original, the original calldata is returned
         bytes memory finalCalldata = _modifyFilledTakerAmount(
             bebopCalldata,
-            givenAmount,
+            amountIn,
             originalFilledTakerAmount,
             partialFillOffset
         );
@@ -75,7 +75,7 @@ contract BebopExecutor is IExecutor, RestrictTransferFrom {
         }
 
         uint256 balanceBefore = _balanceOf(tokenOut, receiver);
-        uint256 ethValue = tokenIn == address(0) ? givenAmount : 0;
+        uint256 ethValue = tokenIn == address(0) ? amountIn : 0;
 
         // Use OpenZeppelin's Address library for safe call with value
         // This will revert if the call fails
@@ -83,7 +83,7 @@ contract BebopExecutor is IExecutor, RestrictTransferFrom {
         bebopSettlement.functionCallWithValue(finalCalldata, ethValue);
 
         uint256 balanceAfter = _balanceOf(tokenOut, receiver);
-        calculatedAmount = balanceAfter - balanceBefore;
+        amountOut = balanceAfter - balanceBefore;
     }
 
     /// @dev Decodes the packed calldata
@@ -93,7 +93,6 @@ contract BebopExecutor is IExecutor, RestrictTransferFrom {
         returns (
             address tokenIn,
             address tokenOut,
-            TransferType transferType,
             uint8 partialFillOffset,
             uint256 originalFilledTakerAmount,
             bool approvalNeeded,
@@ -107,7 +106,6 @@ contract BebopExecutor is IExecutor, RestrictTransferFrom {
 
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
-        transferType = TransferType(uint8(data[40]));
         partialFillOffset = uint8(data[41]);
         originalFilledTakerAmount = uint256(bytes32(data[42:74]));
         approvalNeeded = data[74] != 0;
@@ -117,13 +115,13 @@ contract BebopExecutor is IExecutor, RestrictTransferFrom {
 
     /// @dev Modifies the filledTakerAmount in the bebop calldata to handle slippage
     /// @param bebopCalldata The original calldata for the bebop settlement
-    /// @param givenAmount The actual amount available from the router
+    /// @param amountIn The actual amount available from the router
     /// @param originalFilledTakerAmount The original amount expected when the quote was generated
     /// @param partialFillOffset The offset from Bebop API indicating where filledTakerAmount is located
     /// @return The modified calldata with updated filledTakerAmount
     function _modifyFilledTakerAmount(
         bytes memory bebopCalldata,
-        uint256 givenAmount,
+        uint256 amountIn,
         uint256 originalFilledTakerAmount,
         uint8 partialFillOffset
     ) internal pure returns (bytes memory) {
@@ -132,8 +130,8 @@ contract BebopExecutor is IExecutor, RestrictTransferFrom {
         uint256 filledTakerAmountPos = 4 + uint256(partialFillOffset) * 32;
 
         // Cap the fill amount at what we actually have available
-        uint256 newFilledTakerAmount = originalFilledTakerAmount > givenAmount
-            ? givenAmount
+        uint256 newFilledTakerAmount = originalFilledTakerAmount > amountIn
+            ? amountIn
             : originalFilledTakerAmount;
 
         // If the new filledTakerAmount is the same as the original, return the original calldata
@@ -177,5 +175,25 @@ contract BebopExecutor is IExecutor, RestrictTransferFrom {
      */
     receive() external payable {
         // Allow ETH transfers for Bebop settlement functionality
+    }
+
+    function getTransferData(bytes calldata data)
+        external
+        payable
+        returns (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        )
+    {
+        if (data.length < 95) {
+            revert BebopExecutor__InvalidDataLength();
+        }
+
+        tokenIn = address(bytes20(data[0:20]));
+        transferType = RestrictTransferFrom.TransferType(uint8(data[40]));
+        // Since the Bebop Settlement withdraws the funds from the msg.sender, the user's funds need to sent to the
+        // TychoRouter initially (address(this))
+        receiver = address(this);
     }
 }

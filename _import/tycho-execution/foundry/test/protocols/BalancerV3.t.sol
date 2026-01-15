@@ -7,7 +7,7 @@ import {
 } from "../../src/executors/BalancerV3Executor.sol";
 
 contract BalancerV3ExecutorExposed is BalancerV3Executor {
-    constructor(address _permit2) BalancerV3Executor(_permit2) {}
+    constructor() BalancerV3Executor() {}
 
     function decodeParams(bytes calldata data)
         external
@@ -17,11 +17,23 @@ contract BalancerV3ExecutorExposed is BalancerV3Executor {
             IERC20 tokenIn,
             IERC20 tokenOut,
             address poolId,
-            TransferType transferType,
             address receiver
         )
     {
         return _decodeData(data);
+    }
+
+    fallback(bytes calldata data) external returns (bytes memory) {
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            uint256 amount
+        ) = this.getCallbackTransferData(data);
+        if (transferType == RestrictTransferFrom.TransferType.Transfer) {
+            IERC20(tokenIn).transfer(receiver, amount);
+        }
+        return abi.encode(_swapCallback(data));
     }
 }
 
@@ -38,7 +50,7 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
     function setUp() public {
         uint256 forkBlock = 22625131;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        balancerV3Exposed = new BalancerV3ExecutorExposed(PERMIT2_ADDRESS);
+        balancerV3Exposed = new BalancerV3ExecutorExposed();
     }
 
     function testDecodeParams() public view {
@@ -56,7 +68,6 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
             IERC20 tokenIn,
             IERC20 tokenOut,
             address poolId,
-            RestrictTransferFrom.TransferType transferType,
             address receiver
         ) = balancerV3Exposed.decodeParams(params);
 
@@ -64,10 +75,47 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
         assertEq(address(tokenIn), osETH_ADDR);
         assertEq(address(tokenOut), waEthWETH_ADDR);
         assertEq(poolId, WETH_osETH_pool);
+        assertEq(receiver, BOB);
+    }
+
+    function testGetTransferData() public {
+        bytes memory params = "";
+
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        ) = balancerV3Exposed.getTransferData(params);
+
+        assertEq(tokenIn, address(0));
+        assertEq(receiver, address(0));
         assertEq(
             uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
         );
-        assertEq(receiver, BOB);
+    }
+
+    function testGetCallbackTransferData() public {
+        uint256 amountOwed = 1 ether;
+        bytes memory params = abi.encodePacked(
+            amountOwed,
+            WBTC_ADDR,
+            address(0),
+            address(0),
+            RestrictTransferFrom.TransferType.Transfer
+        );
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            uint256 amount
+        ) = balancerV3Exposed.getCallbackTransferData(params);
+        assertEq(
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.Transfer)
+        );
+        assertEq(receiver, 0xbA1333333333a1BA1108E8412f11850A5C319bA9);
+        assertEq(tokenIn, WBTC_ADDR);
+        assertEq(amount, amountOwed);
     }
 
     function testSwapInvalidDataLength() public {
@@ -96,11 +144,14 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
 
         uint256 balanceBefore = IERC20(waEthWETH_ADDR).balanceOf(BOB);
 
-        uint256 amountOut = balancerV3Exposed.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            balancerV3Exposed.swap(amountIn, protocolData);
 
         uint256 balanceAfter = IERC20(waEthWETH_ADDR).balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
+        assertEq(tokenOut, waEthWETH_ADDR);
+        assertEq(receiver, BOB);
     }
 
     function testSwapIntegration() public {
@@ -115,11 +166,14 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
         deal(waEthUSDT_ADDR, address(balancerV3Exposed), amountIn);
         uint256 balanceBefore = IERC20(aaveGHO_ADDR).balanceOf(BOB);
 
-        uint256 amountOut = balancerV3Exposed.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            balancerV3Exposed.swap(amountIn, protocolData);
 
         uint256 balanceAfter = IERC20(aaveGHO_ADDR).balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
+        assertEq(tokenOut, aaveGHO_ADDR);
+        assertEq(receiver, BOB);
     }
 }
 

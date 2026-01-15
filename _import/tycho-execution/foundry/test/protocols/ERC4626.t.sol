@@ -7,7 +7,7 @@ import "@src/executors/ERC4626Executor.sol";
 import {Constants} from "../Constants.sol";
 
 contract ERC4626ExecutorExposed is ERC4626Executor {
-    constructor(address _permit2) ERC4626Executor(_permit2) {}
+    constructor() ERC4626Executor() {}
 
     function decodeParams(bytes calldata data)
         external
@@ -16,7 +16,6 @@ contract ERC4626ExecutorExposed is ERC4626Executor {
             IERC20 inToken,
             address target,
             address receiver,
-            RestrictTransferFrom.TransferType transferType,
             bool approvalNeeded
         )
     {
@@ -34,7 +33,7 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
     function setUp() public {
         uint256 forkBlock = 23922291;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        ERC4626Exposed = new ERC4626ExecutorExposed(PERMIT2_ADDRESS);
+        ERC4626Exposed = new ERC4626ExecutorExposed();
     }
 
     function testDecodeParams() public view {
@@ -50,16 +49,12 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
             IERC20 inToken,
             address target,
             address receiver,
-            RestrictTransferFrom.TransferType transferType,
             bool approvalNeeded
         ) = ERC4626Exposed.decodeParams(params);
 
         assertEq(address(inToken), WETH_ADDR);
         assertEq(address(target), address(spETH));
         assertEq(receiver, address(2));
-        assertEq(
-            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
-        );
         assertEq(approvalNeeded, false);
     }
 
@@ -69,6 +64,28 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
 
         vm.expectRevert(ERC4626Executor__InvalidDataLength.selector);
         ERC4626Exposed.decodeParams(invalidParams);
+    }
+
+    function testGetTransferData() public {
+        bytes memory params = abi.encodePacked(
+            WETH_ADDR,
+            address(spETH),
+            address(2),
+            RestrictTransferFrom.TransferType.None,
+            false
+        );
+
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        ) = ERC4626Exposed.getTransferData(params);
+
+        assertEq(tokenIn, WETH_ADDR);
+        assertEq(receiver, address(ERC4626Exposed));
+        assertEq(
+            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
+        );
     }
 
     function testDeposit() public {
@@ -85,11 +102,14 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
 
         uint256 balanceBefore = spETH.balanceOf(BOB);
 
-        uint256 amountOut = ERC4626Exposed.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            ERC4626Exposed.swap(amountIn, protocolData);
 
         uint256 balanceAfter = spETH.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
+        assertEq(tokenOut, address(spETH));
+        assertEq(receiver, BOB);
     }
 
     function testRedeem() public {
@@ -106,11 +126,14 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
 
         uint256 balanceBefore = WETH.balanceOf(BOB);
 
-        uint256 amountOut = ERC4626Exposed.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            ERC4626Exposed.swap(amountIn, protocolData);
 
         uint256 balanceAfter = WETH.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
+        assertEq(tokenOut, WETH_ADDR);
+        assertEq(receiver, BOB);
     }
 }
 

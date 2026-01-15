@@ -9,8 +9,8 @@ import {Permit2TestHelper} from "../Permit2TestHelper.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
 
 contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
-    constructor(address _factory1, address _factory2, address _permit2)
-        SlipstreamsExecutor(_factory1, _factory2, _permit2)
+    constructor(address _factory1, address _factory2)
+        SlipstreamsExecutor(_factory1, _factory2)
     {}
 
     function decodeData(bytes calldata data)
@@ -37,30 +37,51 @@ contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
     ) external view {
         _verifyPairAddress(tokenA, tokenB, tick_spacing, target);
     }
+
+    function uniswapV3SwapCallback(
+        int256, /* amount0Delta */
+        int256, /* amount1Delta */
+        bytes calldata /* data */
+    )
+        external
+    {
+        // Use delegatecall to preserve msg.sender
+        bytes memory callData =
+            abi.encodeWithSignature("getCallbackTransferData(bytes)", msg.data);
+        (bool success, bytes memory result) =
+            address(this).delegatecall(callData);
+        require(success, "Delegatecall failed");
+
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            uint256 amount
+        ) = abi.decode(
+            result,
+            (RestrictTransferFrom.TransferType, address, address, uint256)
+        );
+
+        if (transferType == RestrictTransferFrom.TransferType.Transfer) {
+            IERC20(tokenIn).transfer(receiver, amount);
+        }
+        handleCallback(msg.data);
+    }
 }
 
-contract SlipstreamsExecutorTest is
-    Test,
-    TestUtils,
-    Constants,
-    Permit2TestHelper
-{
+contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
     using SafeERC20 for IERC20;
 
     SlipstreamsExecutorExposed slipstreamsExposed;
     IERC20 DAI = IERC20(DAI_ADDR);
-    IAllowanceTransfer permit2;
 
     function setUp() public {
         uint256 forkBlock = 38086214;
         vm.createSelectFork(vm.rpcUrl("base"), forkBlock);
 
         slipstreamsExposed = new SlipstreamsExecutorExposed(
-            SLIPSTREAMS_FACTORY_BASE,
-            SLIPSTREAMS_NEW_FACTORY_BASE,
-            PERMIT2_ADDRESS
+            SLIPSTREAMS_FACTORY_BASE, SLIPSTREAMS_NEW_FACTORY_BASE
         );
-        permit2 = IAllowanceTransfer(PERMIT2_ADDRESS);
     }
 
     function testDecodeParams() public view {
@@ -97,6 +118,59 @@ contract SlipstreamsExecutorTest is
         );
     }
 
+    function testGetTransferData() public {
+        bytes memory params = "";
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        ) = slipstreamsExposed.getTransferData(params);
+
+        assertEq(
+            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
+        );
+        assertEq(receiver, address(0));
+        assertEq(tokenIn, address(0));
+    }
+
+    function testGetCallbackTransferData() public {
+        uint24 poolTickSpacing = 100;
+        uint256 amountOwed = 1000000000000000000;
+
+        bytes memory protocolData = abi.encodePacked(
+            BASE_WETH,
+            BASE_USDC,
+            poolTickSpacing,
+            RestrictTransferFrom.TransferType.Transfer,
+            address(slipstreamsExposed)
+        );
+        uint256 dataOffset = 3; // some offset
+        uint256 dataLength = protocolData.length;
+
+        bytes memory callbackData = abi.encodePacked(
+            bytes4(0xfa461e33),
+            int256(amountOwed), // amount0Delta
+            int256(0), // amount1Delta
+            dataOffset,
+            dataLength,
+            protocolData
+        );
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            uint256 amount
+        ) = slipstreamsExposed.getCallbackTransferData(callbackData);
+
+        assertEq(
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.Transfer)
+        );
+        assertEq(receiver, address(this));
+        assertEq(tokenIn, BASE_WETH);
+        assertEq(amount, amountOwed);
+    }
+
     function testSwap() public {
         uint256 amountIn = 10 ** 18;
         deal(BASE_WETH, address(slipstreamsExposed), amountIn);
@@ -113,10 +187,13 @@ contract SlipstreamsExecutorTest is
             zeroForOne
         );
 
-        uint256 amountOut = slipstreamsExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            slipstreamsExposed.swap(amountIn, data);
 
         assertEq(IERC20(BASE_WETH).balanceOf(address(slipstreamsExposed)), 0);
         assertGe(IERC20(BASE_USDC).balanceOf(address(this)), amountOut);
+        assertEq(tokenOut, BASE_USDC);
+        assertEq(receiver, address(this));
     }
 
     function testSwapNewFactory() public {
@@ -135,10 +212,13 @@ contract SlipstreamsExecutorTest is
             zeroForOne
         );
 
-        uint256 amountOut = slipstreamsExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            slipstreamsExposed.swap(amountIn, data);
 
         assertEq(IERC20(BASE_WETH).balanceOf(address(slipstreamsExposed)), 0);
         assertGe(IERC20(BASE_BMI).balanceOf(address(this)), amountOut);
+        assertEq(tokenOut, BASE_BMI);
+        assertEq(receiver, address(this));
     }
 
     function testDecodeParamsInvalidDataLength() public {
@@ -162,7 +242,6 @@ contract SlipstreamsExecutorTest is
         uint256 initialPoolReserve =
             IERC20(BASE_WETH).balanceOf(SLIPSTREAMS_WETH_USDC_POOL);
 
-        vm.startPrank(SLIPSTREAMS_WETH_USDC_POOL);
         bytes memory protocolData = abi.encodePacked(
             BASE_WETH,
             BASE_USDC,
@@ -181,6 +260,10 @@ contract SlipstreamsExecutorTest is
             dataLength,
             protocolData
         );
+        // transfer funds into the pool - this is taken cared of by the Dispatcher now
+        vm.prank(address(slipstreamsExposed));
+        IERC20(BASE_WETH).transfer(SLIPSTREAMS_WETH_USDC_POOL, amountOwed);
+        vm.startPrank(SLIPSTREAMS_WETH_USDC_POOL);
         slipstreamsExposed.handleCallback(callbackData);
         vm.stopPrank();
 

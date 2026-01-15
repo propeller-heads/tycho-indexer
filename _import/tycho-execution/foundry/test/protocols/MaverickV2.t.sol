@@ -7,9 +7,7 @@ import "@src/executors/MaverickV2Executor.sol";
 import {Constants} from "../Constants.sol";
 
 contract MaverickV2ExecutorExposed is MaverickV2Executor {
-    constructor(address _factory, address _permit2)
-        MaverickV2Executor(_factory, _permit2)
-    {}
+    constructor(address _factory) MaverickV2Executor(_factory) {}
 
     function decodeParams(bytes calldata data)
         external
@@ -18,8 +16,7 @@ contract MaverickV2ExecutorExposed is MaverickV2Executor {
             IERC20 tokenIn,
             address target,
             address tokenOut,
-            address receiver,
-            RestrictTransferFrom.TransferType transferType
+            address receiver
         )
     {
         return _decodeData(data);
@@ -36,8 +33,7 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
     function setUp() public {
         uint256 forkBlock = 22096000;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        maverickV2Exposed =
-            new MaverickV2ExecutorExposed(MAVERICK_V2_FACTORY, PERMIT2_ADDRESS);
+        maverickV2Exposed = new MaverickV2ExecutorExposed(MAVERICK_V2_FACTORY);
     }
 
     function testDecodeParams() public view {
@@ -49,22 +45,13 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
             RestrictTransferFrom.TransferType.Transfer
         );
 
-        (
-            IERC20 tokenIn,
-            address target,
-            address tokenOut,
-            address receiver,
-            RestrictTransferFrom.TransferType transferType
-        ) = maverickV2Exposed.decodeParams(params);
+        (IERC20 tokenIn, address target, address tokenOut, address receiver) =
+            maverickV2Exposed.decodeParams(params);
 
         assertEq(address(tokenIn), GHO_ADDR);
         assertEq(target, GHO_USDC_POOL);
         assertEq(tokenOut, USDC_ADDR);
         assertEq(receiver, address(2));
-        assertEq(
-            uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.Transfer)
-        );
     }
 
     function testDecodeParamsInvalidDataLength() public {
@@ -73,6 +60,29 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
 
         vm.expectRevert(MaverickV2Executor__InvalidDataLength.selector);
         maverickV2Exposed.decodeParams(invalidParams);
+    }
+
+    function testGetTransferData() public {
+        bytes memory params = abi.encodePacked(
+            GHO_ADDR,
+            GHO_USDC_POOL,
+            USDC_ADDR,
+            address(2),
+            RestrictTransferFrom.TransferType.Transfer
+        );
+
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        ) = maverickV2Exposed.getTransferData(params);
+
+        assertEq(tokenIn, GHO_ADDR);
+        assertEq(receiver, GHO_USDC_POOL);
+        assertEq(
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.Transfer)
+        );
     }
 
     function testSwap() public {
@@ -88,11 +98,18 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         deal(GHO_ADDR, address(maverickV2Exposed), amountIn);
         uint256 balanceBefore = USDC.balanceOf(BOB);
 
-        uint256 amountOut = maverickV2Exposed.swap(amountIn, protocolData);
+        // transfer funds into the pool - this is taken cared of by the Dispatcher now
+        vm.prank(address(maverickV2Exposed));
+        IERC20(GHO_ADDR).transfer(GHO_USDC_POOL, amountIn);
+
+        (uint256 amountOut, address tokenOut, address receiver) =
+            maverickV2Exposed.swap(amountIn, protocolData);
 
         uint256 balanceAfter = USDC.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
+        assertEq(tokenOut, USDC_ADDR);
+        assertEq(receiver, BOB);
     }
 
     function testDecodeIntegration() public view {
@@ -100,22 +117,13 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         bytes memory protocolData =
             loadCallDataFromFile("test_encode_maverick_v2");
 
-        (
-            IERC20 tokenIn,
-            address pool,
-            address tokenOut,
-            address receiver,
-            RestrictTransferFrom.TransferType transferType
-        ) = maverickV2Exposed.decodeParams(protocolData);
+        (IERC20 tokenIn, address pool, address tokenOut, address receiver) =
+            maverickV2Exposed.decodeParams(protocolData);
 
         assertEq(address(tokenIn), GHO_ADDR);
         assertEq(pool, GHO_USDC_POOL);
         assertEq(tokenOut, USDC_ADDR);
         assertEq(receiver, BOB);
-        assertEq(
-            uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.Transfer)
-        );
     }
 
     function testSwapIntegration() public {
@@ -127,11 +135,18 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         deal(GHO_ADDR, address(maverickV2Exposed), amountIn);
         uint256 balanceBefore = USDC.balanceOf(BOB);
 
-        uint256 amountOut = maverickV2Exposed.swap(amountIn, protocolData);
+        // transfer funds into the pool - this is taken cared of by the Dispatcher now
+        vm.prank(address(maverickV2Exposed));
+        IERC20(GHO_ADDR).transfer(GHO_USDC_POOL, amountIn);
+
+        (uint256 amountOut, address tokenOut, address receiver) =
+            maverickV2Exposed.swap(amountIn, protocolData);
 
         uint256 balanceAfter = USDC.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
+        assertEq(tokenOut, USDC_ADDR);
+        assertEq(receiver, BOB);
     }
 }
 

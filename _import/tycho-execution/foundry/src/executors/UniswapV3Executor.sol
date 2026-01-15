@@ -1,19 +1,24 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "@interfaces/IExecutor.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-import "@interfaces/ICallback.sol";
+import {IExecutor} from "@interfaces/IExecutor.sol";
+import {
+    SafeERC20,
+    IERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {
+    IUniswapV3Pool
+} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import {ICallback} from "@interfaces/ICallback.sol";
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 error UniswapV3Executor__InvalidDataLength();
 error UniswapV3Executor__InvalidFactory();
 error UniswapV3Executor__InvalidTarget();
 error UniswapV3Executor__InvalidInitCode();
 
-contract UniswapV3Executor is IExecutor, ICallback, RestrictTransferFrom {
+contract UniswapV3Executor is IExecutor, ICallback {
     using SafeERC20 for IERC20;
 
     uint160 private constant MIN_SQRT_RATIO = 4295128739;
@@ -24,9 +29,7 @@ contract UniswapV3Executor is IExecutor, ICallback, RestrictTransferFrom {
     bytes32 public immutable initCode;
     address private immutable self;
 
-    constructor(address _factory, bytes32 _initCode, address _permit2)
-        RestrictTransferFrom(_permit2)
-    {
+    constructor(address _factory, bytes32 _initCode) {
         if (_factory == address(0)) {
             revert UniswapV3Executor__InvalidFactory();
         }
@@ -42,17 +45,15 @@ contract UniswapV3Executor is IExecutor, ICallback, RestrictTransferFrom {
     function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256 amountOut)
+        returns (uint256 amountOut, address tokenOut, address receiver)
     {
-        (
-            address tokenIn,
-            address tokenOut,
-            uint24 fee,
-            address receiver,
-            address target,
-            bool zeroForOne,
-            TransferType transferType
-        ) = _decodeData(data);
+        address tokenIn;
+        uint24 fee;
+        address target;
+        bool zeroForOne;
+        RestrictTransferFrom.TransferType transferType;
+        (tokenIn, tokenOut, fee, receiver, target, zeroForOne, transferType) =
+            _decodeData(data);
 
         _verifyPairAddress(tokenIn, tokenOut, fee, target);
 
@@ -83,6 +84,7 @@ contract UniswapV3Executor is IExecutor, ICallback, RestrictTransferFrom {
 
     function handleCallback(bytes calldata msgData)
         public
+        view
         returns (bytes memory result)
     {
         // The data has the following layout:
@@ -97,14 +99,11 @@ contract UniswapV3Executor is IExecutor, ICallback, RestrictTransferFrom {
             abi.decode(msgData[4:68], (int256, int256));
 
         address tokenIn = address(bytes20(msgData[132:152]));
-        TransferType transferType = TransferType(uint8(msgData[175]));
 
         verifyCallback(msgData[132:]);
 
         uint256 amountOwed =
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
-
-        _transfer(msg.sender, transferType, tokenIn, amountOwed);
 
         return abi.encode(amountOwed, tokenIn);
     }
@@ -117,26 +116,6 @@ contract UniswapV3Executor is IExecutor, ICallback, RestrictTransferFrom {
         _verifyPairAddress(tokenIn, tokenOut, poolFee, msg.sender);
     }
 
-    function uniswapV3SwapCallback(
-        int256, /* amount0Delta */
-        int256, /* amount1Delta */
-        bytes calldata /* data */
-    )
-        external
-    {
-        handleCallback(msg.data);
-    }
-
-    function pancakeV3SwapCallback(
-        int256, /* amount0Delta */
-        int256, /* amount1Delta */
-        bytes calldata /* data */
-    )
-        external
-    {
-        handleCallback(msg.data);
-    }
-
     function _decodeData(bytes calldata data)
         internal
         pure
@@ -147,7 +126,7 @@ contract UniswapV3Executor is IExecutor, ICallback, RestrictTransferFrom {
             address receiver,
             address target,
             bool zeroForOne,
-            TransferType transferType
+            RestrictTransferFrom.TransferType transferType
         )
     {
         if (data.length != 85) {
@@ -159,14 +138,14 @@ contract UniswapV3Executor is IExecutor, ICallback, RestrictTransferFrom {
         receiver = address(bytes20(data[43:63]));
         target = address(bytes20(data[63:83]));
         zeroForOne = uint8(data[83]) > 0;
-        transferType = TransferType(uint8(data[84]));
+        transferType = RestrictTransferFrom.TransferType(uint8(data[84]));
     }
 
     function _makeV3CallbackData(
         address tokenIn,
         address tokenOut,
         uint24 fee,
-        TransferType transferType
+        RestrictTransferFrom.TransferType transferType
     ) internal pure returns (bytes memory) {
         return abi.encodePacked(tokenIn, tokenOut, fee, uint8(transferType));
     }
@@ -196,5 +175,38 @@ contract UniswapV3Executor is IExecutor, ICallback, RestrictTransferFrom {
         if (pool != target) {
             revert UniswapV3Executor__InvalidTarget();
         }
+    }
+
+    function getTransferData(
+        bytes calldata /* data */
+    )
+        external
+        payable
+        returns (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        )
+    {
+        return (RestrictTransferFrom.TransferType.None, address(0), address(0));
+    }
+
+    function getCallbackTransferData(bytes calldata data)
+        external
+        payable
+        returns (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            uint256 amount
+        )
+    {
+        (int256 amount0Delta, int256 amount1Delta) =
+            abi.decode(data[4:68], (int256, int256));
+        amount =
+            amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
+        tokenIn = address(bytes20(data[132:152]));
+        transferType = RestrictTransferFrom.TransferType(uint8(data[175]));
+        receiver = msg.sender;
     }
 }

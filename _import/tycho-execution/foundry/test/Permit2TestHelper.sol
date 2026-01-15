@@ -15,21 +15,21 @@ contract Permit2TestHelper is Constants {
      * EIP-712 signature for the approval using Alice's private key.
      *
      * @param tokenIn The address of the token being approved.
-     * @param amount_in The amount of tokens to approve for transfer.
+     * @param amountIn The amount of tokens to approve for transfer.
      * @return permitSingle The `PermitSingle` struct containing the approval details.
      * @return signature The EIP-712 signature for the approval.
      */
     function handlePermit2Approval(
         address tokenIn,
         address spender,
-        uint256 amount_in
+        uint256 amountIn
     ) internal returns (IAllowanceTransfer.PermitSingle memory, bytes memory) {
-        IERC20(tokenIn).approve(PERMIT2_ADDRESS, amount_in);
+        IERC20(tokenIn).approve(PERMIT2_ADDRESS, amountIn);
         IAllowanceTransfer.PermitSingle memory permitSingle =
             IAllowanceTransfer.PermitSingle({
                 details: IAllowanceTransfer.PermitDetails({
                     token: tokenIn,
-                    amount: uint160(amount_in),
+                    amount: uint160(amountIn),
                     expiration: uint48(block.timestamp + 1 days),
                     nonce: 0
                 }),
@@ -51,10 +51,10 @@ contract Permit2TestHelper is Constants {
         IAllowanceTransfer.PermitSingle memory permit,
         uint256 privateKey
     ) internal view returns (bytes memory) {
-        bytes32 _PERMIT_DETAILS_TYPEHASH = keccak256(
+        bytes32 _permitDetailsTypehash = keccak256(
             "PermitDetails(address token,uint160 amount,uint48 expiration,uint48 nonce)"
         );
-        bytes32 _PERMIT_SINGLE_TYPEHASH = keccak256(
+        bytes32 _permitSingleTypehash = keccak256(
             "PermitSingle(PermitDetails details,address spender,uint256 sigDeadline)PermitDetails(address token,uint160 amount,uint48 expiration,uint48 nonce)"
         );
         bytes32 domainSeparator = keccak256(
@@ -68,10 +68,10 @@ contract Permit2TestHelper is Constants {
             )
         );
         bytes32 detailsHash =
-            keccak256(abi.encode(_PERMIT_DETAILS_TYPEHASH, permit.details));
+            keccak256(abi.encode(_permitDetailsTypehash, permit.details));
         bytes32 permitHash = keccak256(
             abi.encode(
-                _PERMIT_SINGLE_TYPEHASH,
+                _permitSingleTypehash,
                 detailsHash,
                 permit.spender,
                 permit.sigDeadline

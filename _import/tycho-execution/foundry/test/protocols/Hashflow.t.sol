@@ -53,17 +53,14 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
     function setUp() public {
         forkBlock = 23188416; // Using expiry date: 1755766775, ECR20
         vm.createSelectFork("mainnet", forkBlock);
-        executor = new HashflowExecutorExposed(HASHFLOW_ROUTER, PERMIT2_ADDRESS);
+        executor = new HashflowExecutorExposed(HASHFLOW_ROUTER);
     }
 
     function testDecodeParams() public view {
         IHashflowRouter.RFQTQuote memory expected_quote = rfqtQuote();
         bytes memory encodedQuote = encodeRfqtQuoteWithDefaults(expected_quote);
-        (
-            IHashflowRouter.RFQTQuote memory quote,
-            bool approvalNeeded,
-            RestrictTransferFrom.TransferType transferType
-        ) = executor.decodeData(encodedQuote);
+        (IHashflowRouter.RFQTQuote memory quote, bool approvalNeeded) =
+            executor.decodeData(encodedQuote);
 
         assertEq(quote.pool, expected_quote.pool, "pool mismatch");
         assertEq(
@@ -109,17 +106,30 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
             quote.signature, expected_quote.signature, "signature mismatch"
         );
         assertEq(approvalNeeded, true, "Approval flag mismatch");
-        assertEq(
-            uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.None),
-            "Transfer type mismatch"
-        );
     }
 
     function testDecodeParamsInvalidDataLength() public {
         bytes memory invalidData = new bytes(10);
         vm.expectRevert(HashflowExecutor__InvalidDataLength.selector);
         executor.decodeData(invalidData);
+    }
+
+    function testGetTransferData() public {
+        IHashflowRouter.RFQTQuote memory expected_quote = rfqtQuote();
+        bytes memory encodedQuote = encodeRfqtQuoteWithDefaults(expected_quote);
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        ) = executor.getTransferData(encodedQuote);
+
+        assertEq(tokenIn, expected_quote.baseToken, "baseToken mismatch");
+        assertEq(receiver, address(executor));
+        assertEq(
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.None),
+            "Transfer type mismatch"
+        );
     }
 
     function testSwapNoSlippage() public {
@@ -132,12 +142,15 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
         uint256 balanceBefore = USDC.balanceOf(trader);
 
         vm.prank(trader);
-        uint256 amountOut = executor.swap(amountIn, encodedQuote);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            executor.swap(amountIn, encodedQuote);
 
         uint256 balanceAfter = USDC.balanceOf(trader);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertEq(amountOut, quote.quoteTokenAmount);
+        assertEq(tokenOut, quote.quoteToken);
+        assertEq(receiver, trader);
     }
 
     function testSwapRouterAmountUnderQuoteAmount() public {
@@ -150,12 +163,15 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
         uint256 balanceBefore = USDC.balanceOf(trader);
 
         vm.prank(trader);
-        uint256 amountOut = executor.swap(amountIn, encodedQuote);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            executor.swap(amountIn, encodedQuote);
 
         uint256 balanceAfter = USDC.balanceOf(trader);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertLt(amountOut, quote.quoteTokenAmount);
+        assertEq(tokenOut, quote.quoteToken);
+        assertEq(receiver, trader);
     }
 
     function testSwapRouterAmountOverQuoteAmount() public {
@@ -168,12 +184,15 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
         uint256 balanceBefore = USDC.balanceOf(trader);
 
         vm.prank(trader);
-        uint256 amountOut = executor.swap(amountIn, encodedQuote);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            executor.swap(amountIn, encodedQuote);
 
         uint256 balanceAfter = USDC.balanceOf(trader);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertEq(amountOut, quote.quoteTokenAmount);
+        assertEq(tokenOut, quote.quoteToken);
+        assertEq(receiver, trader);
     }
 
     function rfqtQuote()
@@ -217,7 +236,7 @@ contract HashflowExecutorNativeTest is Constants, HashflowUtils {
     function setUp() public {
         forkBlock = 23188504; // Using expiry date: 1755767859, Native
         vm.createSelectFork("mainnet", forkBlock);
-        executor = new HashflowExecutorExposed(HASHFLOW_ROUTER, PERMIT2_ADDRESS);
+        executor = new HashflowExecutorExposed(HASHFLOW_ROUTER);
     }
 
     function testSwapNoSlippage() public {
@@ -230,12 +249,15 @@ contract HashflowExecutorNativeTest is Constants, HashflowUtils {
         uint256 balanceBefore = USDC.balanceOf(trader);
 
         vm.prank(trader);
-        uint256 amountOut = executor.swap(amountIn, encodedQuote);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            executor.swap(amountIn, encodedQuote);
 
         uint256 balanceAfter = USDC.balanceOf(trader);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertEq(amountOut, quote.quoteTokenAmount);
+        assertEq(tokenOut, quote.quoteToken);
+        assertEq(receiver, trader);
     }
 
     function rfqtQuote()
@@ -268,18 +290,12 @@ contract HashflowExecutorNativeTest is Constants, HashflowUtils {
 }
 
 contract HashflowExecutorExposed is HashflowExecutor {
-    constructor(address _hashflowRouter, address _permit2)
-        HashflowExecutor(_hashflowRouter, _permit2)
-    {}
+    constructor(address _hashflowRouter) HashflowExecutor(_hashflowRouter) {}
 
     function decodeData(bytes calldata data)
         external
         pure
-        returns (
-            IHashflowRouter.RFQTQuote memory quote,
-            bool approvalNeeded,
-            TransferType transferType
-        )
+        returns (IHashflowRouter.RFQTQuote memory quote, bool approvalNeeded)
     {
         return _decodeData(data);
     }

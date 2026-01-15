@@ -1,18 +1,25 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "../lib/bytes/LibPrefixLengthEncodedByteArray.sol";
+import {
+    LibPrefixLengthEncodedByteArray
+} from "../lib/bytes/LibPrefixLengthEncodedByteArray.sol";
 
-import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/Pausable.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
-import "@permit2/src/interfaces/IAllowanceTransfer.sol";
-import "./Dispatcher.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {
+    SafeERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {
+    ReentrancyGuard
+} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {
+    IAllowanceTransfer
+} from "@permit2/src/interfaces/IAllowanceTransfer.sol";
+import {Dispatcher} from "./Dispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
-import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {RestrictTransferFrom} from "./RestrictTransferFrom.sol";
 
 //                                         ✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷
@@ -64,13 +71,7 @@ error TychoRouter__AmountOutNotFullyReceived(
 error TychoRouter__InvalidDataLength();
 error TychoRouter__UndefinedMinAmountOut();
 
-contract TychoRouter is
-    AccessControl,
-    Dispatcher,
-    Pausable,
-    ReentrancyGuard,
-    RestrictTransferFrom
-{
+contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using LibPrefixLengthEncodedByteArray for bytes;
     using LibSwap for bytes;
@@ -87,7 +88,7 @@ contract TychoRouter is
         address indexed token, uint256 amount, address indexed receiver
     );
 
-    constructor(address _permit2) RestrictTransferFrom(_permit2) {
+    constructor(address _permit2) Dispatcher(_permit2) {
         if (_permit2 == address(0)) {
             revert TychoRouter__AddressZero();
         }

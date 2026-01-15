@@ -7,9 +7,7 @@ import {Constants} from "../Constants.sol";
 import "forge-std/Test.sol";
 
 contract FluidV1ExecutorExposed is FluidV1Executor {
-    constructor(address _liquidity, address _permit2)
-        FluidV1Executor(_liquidity, _permit2)
-    {}
+    constructor(address _liquidity) FluidV1Executor(_liquidity) {}
 
     function decodeData(bytes calldata data)
         external
@@ -19,14 +17,17 @@ contract FluidV1ExecutorExposed is FluidV1Executor {
             bool zero2one,
             address outputToken,
             address receiver,
-            TransferType transferType,
+            RestrictTransferFrom.TransferType transferType,
             bool isNative
         )
     {
         return _decodeData(data);
     }
 
-    function setSwapParams(IFluidV1Dex dex, TransferType transferType) public {
+    function setSwapParams(
+        IFluidV1Dex dex,
+        RestrictTransferFrom.TransferType transferType
+    ) public {
         _setSwapParams(dex, transferType);
     }
 
@@ -34,11 +35,24 @@ contract FluidV1ExecutorExposed is FluidV1Executor {
         return _getCurrentDex();
     }
 
-    function getTransferType() public view returns (TransferType) {
+    function getTransferType()
+        public
+        view
+        returns (RestrictTransferFrom.TransferType)
+    {
         return _getTransferType();
     }
 
     function dexCallback(address, uint256) public {
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            uint256 amount
+        ) = this.getCallbackTransferData(msg.data);
+        if (transferType == RestrictTransferFrom.TransferType.Transfer) {
+            IERC20(tokenIn).transfer(receiver, amount);
+        }
         handleCallback(msg.data);
     }
 }
@@ -51,8 +65,7 @@ contract FluidV1ExecutorTest is Test, Constants {
     function setUp() public {
         uint256 forkBlock = 23748828;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        executor =
-            new FluidV1ExecutorExposed(FLUIDV1_LIQUIDITY, PERMIT2_ADDRESS);
+        executor = new FluidV1ExecutorExposed(FLUIDV1_LIQUIDITY);
     }
 
     function testDecodeData() public view {
@@ -90,6 +103,47 @@ contract FluidV1ExecutorTest is Test, Constants {
             uint8(RestrictTransferFrom.TransferType.Transfer)
         );
         assertEq(outputTokenVal, outputToken);
+    }
+
+    function testGetTransferData() public {
+        bytes memory params = "";
+
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        ) = executor.getTransferData(params);
+
+        assertEq(tokenIn, address(0));
+        assertEq(receiver, address(0));
+        assertEq(
+            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
+        );
+    }
+
+    function testGetCallbackTransferData() public {
+        uint256 amountOwed = 1000000000000000000;
+        bytes memory data =
+            abi.encodeWithSelector(hex"12345678", DAI_ADDR, amountOwed);
+        address dexAddress = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
+        executor.setSwapParams(
+            IFluidV1Dex(dexAddress), RestrictTransferFrom.TransferType.Transfer
+        );
+
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            uint256 amount
+        ) = executor.getCallbackTransferData(data);
+
+        assertEq(
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.Transfer)
+        );
+        assertEq(receiver, FLUIDV1_LIQUIDITY);
+        assertEq(tokenIn, DAI_ADDR);
+        assertEq(amount, amountOwed);
     }
 
     function testSwapParamsRoundtrip() public {
@@ -160,10 +214,13 @@ contract FluidV1ExecutorTest is Test, Constants {
         deal(address(sUSDe), address(executor), amountIn);
         uint256 balanceBefore = USDT.balanceOf(BOB);
 
-        uint256 amountOut = executor.swap(amountIn, params);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            executor.swap(amountIn, params);
 
         uint256 balanceAfter = USDT.balanceOf(BOB);
         assertEq(balanceAfter - balanceBefore, amountOut);
+        assertEq(receiver, BOB);
+        assertEq(tokenOut, USDT_ADDR);
     }
 
     function testSellNative() public {
@@ -181,10 +238,13 @@ contract FluidV1ExecutorTest is Test, Constants {
         deal(address(executor), amountIn);
         uint256 balanceBefore = ezETH.balanceOf(BOB);
 
-        uint256 amountOut = executor.swap(amountIn, params);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            executor.swap(amountIn, params);
 
         uint256 balanceAfter = ezETH.balanceOf(BOB);
         assertEq(balanceAfter - balanceBefore, amountOut);
+        assertEq(receiver, BOB);
+        assertEq(tokenOut, address(ezETH));
     }
 
     function testBuyNative() public {
@@ -202,10 +262,13 @@ contract FluidV1ExecutorTest is Test, Constants {
         deal(address(ezETH), address(executor), amountIn);
         uint256 balanceBefore = BOB.balance;
 
-        uint256 amountOut = executor.swap(amountIn, params);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            executor.swap(amountIn, params);
 
         uint256 balanceAfter = BOB.balance;
         assertEq(balanceAfter - balanceBefore, amountOut);
+        assertEq(receiver, BOB);
+        assertEq(tokenOut, address(0));
     }
 }
 

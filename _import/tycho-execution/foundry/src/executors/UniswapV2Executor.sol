@@ -1,9 +1,14 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "@interfaces/IExecutor.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@uniswap-v2/contracts/interfaces/IUniswapV2Pair.sol";
+import {IExecutor} from "@interfaces/IExecutor.sol";
+import {
+    SafeERC20,
+    IERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {
+    IUniswapV2Pair
+} from "@uniswap-v2/contracts/interfaces/IUniswapV2Pair.sol";
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 
 error UniswapV2Executor__InvalidDataLength();
@@ -12,7 +17,7 @@ error UniswapV2Executor__InvalidFactory();
 error UniswapV2Executor__InvalidInitCode();
 error UniswapV2Executor__InvalidFee();
 
-contract UniswapV2Executor is IExecutor, RestrictTransferFrom {
+contract UniswapV2Executor is IExecutor {
     using SafeERC20 for IERC20;
 
     address public immutable factory;
@@ -20,12 +25,7 @@ contract UniswapV2Executor is IExecutor, RestrictTransferFrom {
     address private immutable self;
     uint256 public immutable feeBps;
 
-    constructor(
-        address _factory,
-        bytes32 _initCode,
-        address _permit2,
-        uint256 _feeBps
-    ) RestrictTransferFrom(_permit2) {
+    constructor(address _factory, bytes32 _initCode, uint256 _feeBps) {
         if (_factory == address(0)) {
             revert UniswapV2Executor__InvalidFactory();
         }
@@ -42,17 +42,15 @@ contract UniswapV2Executor is IExecutor, RestrictTransferFrom {
     }
 
     // slither-disable-next-line locked-ether
-    function swap(uint256 givenAmount, bytes calldata data)
+    function swap(uint256 amountIn, bytes calldata data)
         external
         payable
-        returns (uint256 calculatedAmount)
+        returns (uint256 calculatedAmount, address tokenOut, address receiver)
     {
         address target;
-        address receiver;
         bool zeroForOne;
-        TransferType transferType;
 
-        (target, receiver, zeroForOne, transferType) = _decodeData(data);
+        (target, receiver, zeroForOne) = _decodeData(data);
 
         // Get token0 and token1 once to avoid redundant external calls
         IUniswapV2Pair pool = IUniswapV2Pair(target);
@@ -61,11 +59,10 @@ contract UniswapV2Executor is IExecutor, RestrictTransferFrom {
 
         _verifyPairAddress(target, token0, token1);
 
-        calculatedAmount = _getAmountOut(target, givenAmount, zeroForOne);
+        calculatedAmount = _getAmountOut(target, amountIn, zeroForOne);
 
-        // Infer tokenIn from zeroForOne
-        address tokenIn = zeroForOne ? token0 : token1;
-        _transfer(target, transferType, tokenIn, givenAmount);
+        // Infer tokenOut from zeroForOne
+        tokenOut = zeroForOne ? token1 : token0;
 
         if (zeroForOne) {
             pool.swap(0, calculatedAmount, receiver, "");
@@ -77,12 +74,7 @@ contract UniswapV2Executor is IExecutor, RestrictTransferFrom {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (
-            address target,
-            address receiver,
-            bool zeroForOne,
-            TransferType transferType
-        )
+        returns (address target, address receiver, bool zeroForOne)
     {
         if (data.length != 42) {
             revert UniswapV2Executor__InvalidDataLength();
@@ -90,7 +82,6 @@ contract UniswapV2Executor is IExecutor, RestrictTransferFrom {
         target = address(bytes20(data[0:20]));
         receiver = address(bytes20(data[20:40]));
         zeroForOne = data[40] != 0;
-        transferType = TransferType(uint8(data[41]));
     }
 
     function _getAmountOut(address target, uint256 amountIn, bool zeroForOne)
@@ -133,5 +124,29 @@ contract UniswapV2Executor is IExecutor, RestrictTransferFrom {
         if (pair != target) {
             revert UniswapV2Executor__InvalidTarget();
         }
+    }
+
+    function getTransferData(bytes calldata data)
+        external
+        payable
+        returns (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        )
+    {
+        if (data.length != 42) {
+            revert UniswapV2Executor__InvalidDataLength();
+        }
+        address target = address(bytes20(data[0:20]));
+        bool zeroForOne = data[40] != 0;
+
+        IUniswapV2Pair pool = IUniswapV2Pair(target);
+        address token0 = pool.token0();
+        address token1 = pool.token1();
+        tokenIn = zeroForOne ? token0 : token1;
+
+        receiver = target;
+        transferType = RestrictTransferFrom.TransferType(uint8(data[41]));
     }
 }

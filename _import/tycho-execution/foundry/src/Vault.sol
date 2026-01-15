@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/token/ERC6909/ERC6909.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {
+    SafeERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {
+    ReentrancyGuard
+} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {ERC6909} from "@openzeppelin/contracts/token/ERC6909/ERC6909.sol";
 
 error Vault__InsufficientBalance(
     address user, address token, uint256 requested, uint256 available
@@ -59,7 +63,9 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
         if (from != address(0)) {
             uint256 fromBalance = _vaultBalances[from][id];
             if (fromBalance < amount) {
-                revert ERC6909InsufficientBalance(from, fromBalance, amount, id);
+                revert ERC6909.ERC6909InsufficientBalance(
+                    from, fromBalance, amount, id
+                );
             }
             unchecked {
                 // Overflow not possible: amount <= fromBalance.
