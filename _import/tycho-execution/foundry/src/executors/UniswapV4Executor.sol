@@ -557,10 +557,10 @@ contract UniswapV4Executor is IExecutor, ICallback {
             // transferType: data[228:260]
             // receiver: data[260:292]
 
-            bool zeroForOne = uint8(stripped[195]) != 0; // Last byte of the 32-byte bool
-            amount = uint128(bytes16(stripped[212:228])); // uint128 is 16 bytes, starts at offset 212
+            bool zeroForOne = uint8(stripped[195]) != 0;
+            amount = uint128(bytes16(stripped[212:228]));
             transferType =
-                RestrictTransferFrom.TransferType(uint8(stripped[259])); // Last byte of the 32-byte transferType
+                RestrictTransferFrom.TransferType(uint8(stripped[259]));
             // Extract tokenIn from PoolKey based on zeroForOne
             if (zeroForOne) {
                 tokenIn = address(bytes20(stripped[16:36])); // currency0
@@ -571,10 +571,10 @@ contract UniswapV4Executor is IExecutor, ICallback {
             // swapExactInput(Currency currencyIn, uint128 amountIn, RestrictTransferFrom.TransferType transferType, address receiver, PathKey[] calldata path)
             // Data layout: selector(4) + Currency(32) + uint128(32) + TransferType(32) + address(32) + PathKey[](variable)
 
-            tokenIn = address(bytes20(stripped[16:36])); // Currency is padded to 32 bytes
-            amount = uint128(bytes16(stripped[52:68])); // uint128 is 16 bytes, but padded to 32
+            tokenIn = address(bytes20(stripped[16:36]));
+            amount = uint128(bytes16(stripped[52:68]));
             transferType =
-                RestrictTransferFrom.TransferType(uint8(stripped[99])); // Last byte of the 32-byte transferType
+                RestrictTransferFrom.TransferType(uint8(stripped[99]));
         } else {
             revert UniswapV4Executor__UnknownCallback(selector);
         }
