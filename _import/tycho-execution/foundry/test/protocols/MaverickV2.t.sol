@@ -63,6 +63,7 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         bytes memory params = abi.encodePacked(
             GHO_ADDR,
             GHO_USDC_POOL,
+            USDC_ADDR,
             address(2),
             RestrictTransferFrom.TransferType.Transfer
         );
@@ -104,8 +105,7 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         uint256 balanceAfter = USDC.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
-        // TODO: update this once we have a tokenOut
-        assertEq(tokenOut, address(0));
+        assertEq(tokenOut, USDC_ADDR);
         assertEq(receiver, BOB);
     }
 
@@ -143,8 +143,7 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         uint256 balanceAfter = USDC.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
-        // TODO: update this once we have a tokenOut
-        assertEq(tokenOut, address(0));
+        assertEq(tokenOut, USDC_ADDR);
         assertEq(receiver, BOB);
     }
 }

@@ -129,11 +129,11 @@ contract UniswapV2Executor is IExecutor {
             address tokenIn
         )
     {
-        if (data.length != 62) {
+        if (data.length != 82) {
             revert UniswapV2Executor__InvalidDataLength();
         }
         tokenIn = address(bytes20(data[0:20]));
         receiver = address(bytes20(data[20:40]));
-        transferType = RestrictTransferFrom.TransferType(uint8(data[61]));
+        transferType = RestrictTransferFrom.TransferType(uint8(data[81]));
     }
 }

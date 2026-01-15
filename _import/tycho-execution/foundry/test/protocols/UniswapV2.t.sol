@@ -108,6 +108,7 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
         bytes memory params = abi.encodePacked(
             WETH_ADDR,
             address(2),
+            DAI_ADDR,
             address(3),
             false,
             RestrictTransferFrom.TransferType.Transfer

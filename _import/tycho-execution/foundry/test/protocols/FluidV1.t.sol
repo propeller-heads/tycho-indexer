@@ -203,8 +203,7 @@ contract FluidV1ExecutorTest is Test, Constants {
         uint256 balanceAfter = USDT.balanceOf(BOB);
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertEq(receiver, BOB);
-        // TODO: update this when we have the tokenOut
-        assertEq(tokenOut, address(0));
+        assertEq(tokenOut, USDT_ADDR);
     }
 
     function testSellNative() public {
@@ -228,8 +227,7 @@ contract FluidV1ExecutorTest is Test, Constants {
         uint256 balanceAfter = ezETH.balanceOf(BOB);
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertEq(receiver, BOB);
-        // TODO: update this when we have the tokenOut
-        assertEq(tokenOut, address(0));
+        assertEq(tokenOut, address(ezETH));
     }
 
     function testBuyNative() public {

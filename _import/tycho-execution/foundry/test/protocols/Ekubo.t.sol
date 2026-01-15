@@ -76,7 +76,7 @@ contract EkuboExecutorTest is Constants, TestUtils {
         );
         // TODO: update this when we fix the callback
         assertEq(receiver, address(0));
-        assertEq(tokenOut, address(0));
+        assertEq(tokenOut, USDC_ADDR);
     }
 
     // Expects input that encodes the same test case as swap_encoder::tests::ekubo::test_encode_swap_multi
@@ -107,7 +107,7 @@ contract EkuboExecutorTest is Constants, TestUtils {
         );
         // TODO: update this when we fix the callback
         assertEq(receiver, address(0));
-        assertEq(tokenOut, address(0));
+        assertEq(tokenOut, USDT_ADDR);
     }
 
     // Same test case as in swap_encoder::tests::ekubo::test_encode_swap_multi

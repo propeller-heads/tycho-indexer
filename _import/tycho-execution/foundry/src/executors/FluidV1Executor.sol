@@ -49,8 +49,6 @@ contract FluidV1Executor is IExecutor, ICallback {
     {
         IFluidV1Dex dex;
         bool zero2one;
-        address tokenOut;
-        address receiver;
         RestrictTransferFrom.TransferType transferType;
         bool isNativeSell;
 
@@ -67,8 +65,6 @@ contract FluidV1Executor is IExecutor, ICallback {
             calculatedAmount =
                 dex.swapIn{value: amountIn}(zero2one, amountIn, 0, receiver);
         }
-        // TODO: get token out
-        tokenOut = address(0);
     }
 
     // Stores swap parameter packed into transient storage

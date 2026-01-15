@@ -28,7 +28,6 @@ contract ERC4626Executor is IExecutor {
         receiver;
         IERC20 tokenIn;
         bool approvalNeeded;
-        address tokenOut;
 
         (tokenIn, target, receiver, approvalNeeded) = _decodeData(data);
         if (approvalNeeded) {

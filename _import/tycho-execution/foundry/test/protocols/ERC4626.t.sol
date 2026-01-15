@@ -108,8 +108,7 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
         uint256 balanceAfter = spETH.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
-        // TODO: update this once we have a tokenOut
-        assertEq(tokenOut, address(0));
+        assertEq(tokenOut, address(spETH));
         assertEq(receiver, BOB);
     }
 
@@ -133,8 +132,7 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
         uint256 balanceAfter = WETH.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
-        // TODO: update this once we have a tokenOut
-        assertEq(tokenOut, address(0));
+        assertEq(tokenOut, WETH_ADDR);
         assertEq(receiver, BOB);
     }
 }

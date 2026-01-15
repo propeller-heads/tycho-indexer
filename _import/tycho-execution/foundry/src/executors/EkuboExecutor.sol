@@ -59,11 +59,9 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         }
 
         // amountIn must be at most type(int128).MAX
-        address tokenOut;
         (calculatedAmount, tokenOut) =
             _lock(bytes.concat(bytes16(uint128(amountIn)), data));
         // TODO: fix callback
-        tokenOut = address(0);
         receiver = address(0);
     }
 

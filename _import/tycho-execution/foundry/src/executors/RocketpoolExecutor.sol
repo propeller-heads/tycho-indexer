@@ -30,8 +30,6 @@ contract RocketpoolExecutor is IExecutor {
         bool isDeposit;
         (isDeposit, receiver) = _decodeData(data);
 
-        address tokenOut;
-
         if (isDeposit) {
             tokenOut = address(RETH);
             // ETH -> rETH: Deposit ETH to Rocketpool to receive rETH

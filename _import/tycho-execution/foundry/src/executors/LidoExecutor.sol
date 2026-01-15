@@ -65,11 +65,9 @@ contract LidoExecutor is IExecutor {
 
         (receiver, pool, direction, approvalNeeded) = _decodeData(data);
 
-        address tokenOut;
-
         if (pool == LidoPoolType.stETH && direction == LidoPoolDirection.Stake)
         {
-            tokenOut = stETHAddress;
+            tokenOut = ST_ETH_ADDRESS;
             // ST_ETH staking: ETH -> ST_ETH
             // ST_ETH is a rebasing token where balances are calculated from shares
             // Measure actual balance changes to account for rounding in share conversions
@@ -93,11 +91,11 @@ contract LidoExecutor is IExecutor {
                 // (accounts for additional rounding during transfer)
                 calculatedAmount = receiverBalanceAfter - receiverBalanceBefore;
             }
-            tokenOut = address(ST_ETH);
+            tokenOut = ST_ETH_ADDRESS;
         } else if (
             pool == LidoPoolType.wstETH && direction == LidoPoolDirection.Wrap
         ) {
-            tokenOut = wstETH;
+            tokenOut = WST_ETH;
             // WST_ETH wrapping: ST_ETH -> WST_ETH
             if (approvalNeeded) {
                 ST_ETH.forceApprove(WST_ETH, type(uint256).max - 1);
@@ -107,11 +105,11 @@ contract LidoExecutor is IExecutor {
             if (receiver != address(this)) {
                 IERC20(WST_ETH).safeTransfer(receiver, calculatedAmount);
             }
-            tokenOut = address(WST_ETH);
+            tokenOut = WST_ETH;
         } else if (
             pool == LidoPoolType.wstETH && direction == LidoPoolDirection.Unwrap
         ) {
-            tokenOut = stETHAddress;
+            tokenOut = ST_ETH_ADDRESS;
             // WST_ETH unwrapping: WST_ETH -> ST_ETH
             calculatedAmount = LidoWrappedPool(WST_ETH).unwrap(amountIn);
             if (receiver != address(this)) {
@@ -121,7 +119,7 @@ contract LidoExecutor is IExecutor {
                 // Update calculatedAmount to reflect actual tokens received after transfer
                 // (accounts for additional rounding during transfer)
                 calculatedAmount = receiverBalanceAfter - receiverBalanceBefore;
-                tokenOut = address(ST_ETH);
+                tokenOut = ST_ETH_ADDRESS;
             }
         } else {
             revert LidoExecutor__InvalidSwapDirection();

@@ -8,8 +8,9 @@ import {
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {RefundEscrow} from "../../lib/permit2/lib/openzeppelin-contracts/contracts/utils/escrow/RefundEscrow.sol";
 
-error MaverickV2Executor__InvalidDataLength();
+    error MaverickV2Executor__InvalidDataLength();
 error MaverickV2Executor__InvalidTarget();
 error MaverickV2Executor__InvalidFactory();
 
@@ -83,12 +84,12 @@ contract MaverickV2Executor is IExecutor {
             address tokenIn
         )
     {
-        if (data.length != 61) {
+        if (data.length != 81) {
             revert MaverickV2Executor__InvalidDataLength();
         }
         tokenIn = address(bytes20(data[0:20]));
         receiver = address(bytes20(data[20:40]));
-        transferType = RestrictTransferFrom.TransferType(uint8(data[60]));
+        transferType = RestrictTransferFrom.TransferType(uint8(data[80]));
     }
 }
 
