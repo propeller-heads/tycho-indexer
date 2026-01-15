@@ -20,10 +20,10 @@ error UniswapV2Executor__InvalidFee();
 contract UniswapV2Executor is IExecutor {
     using SafeERC20 for IERC20;
 
-    address public immutable FACTORY;
-    bytes32 public immutable INIT_CODE;
-    address private immutable SELF;
-    uint256 public immutable FEE_BPS;
+    address public immutable factory;
+    bytes32 public immutable initCode;
+    address private immutable self;
+    uint256 public immutable feeBps;
 
     constructor(address _factory, bytes32 _initCode, uint256 _feeBps) {
         if (_factory == address(0)) {
@@ -32,13 +32,13 @@ contract UniswapV2Executor is IExecutor {
         if (_initCode == bytes32(0)) {
             revert UniswapV2Executor__InvalidInitCode();
         }
-        FACTORY = _factory;
-        INIT_CODE = _initCode;
+        factory = _factory;
+        initCode = _initCode;
         if (_feeBps > 30) {
             revert UniswapV2Executor__InvalidFee();
         }
-        FEE_BPS = _feeBps;
-        SELF = address(this);
+        feeBps = _feeBps;
+        self = address(this);
     }
 
     // slither-disable-next-line locked-ether
@@ -100,7 +100,7 @@ contract UniswapV2Executor is IExecutor {
         }
 
         require(reserveIn > 0 && reserveOut > 0, "L");
-        uint256 amountInWithFee = amountIn * (10000 - FEE_BPS);
+        uint256 amountInWithFee = amountIn * (10000 - feeBps);
         uint256 numerator = amountInWithFee * uint256(reserveOut);
         uint256 denominator = (uint256(reserveIn) * 10000) + amountInWithFee;
         amount = numerator / denominator;
@@ -114,7 +114,7 @@ contract UniswapV2Executor is IExecutor {
             uint160(
                 uint256(
                     keccak256(
-                        abi.encodePacked(hex"ff", FACTORY, salt, INIT_CODE)
+                        abi.encodePacked(hex"ff", factory, salt, initCode)
                     )
                 )
             )

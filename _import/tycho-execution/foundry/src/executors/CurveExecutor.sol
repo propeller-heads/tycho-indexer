@@ -41,13 +41,13 @@ interface CryptoPoolETH {
 contract CurveExecutor is IExecutor {
     using SafeERC20 for IERC20;
 
-    address public immutable NATIVE_TOKEN;
+    address public immutable nativeToken;
 
     constructor(address _nativeToken) {
         if (_nativeToken == address(0)) {
             revert CurveExecutor__AddressZero();
         }
-        NATIVE_TOKEN = _nativeToken;
+        nativeToken = _nativeToken;
     }
 
     // slither-disable-next-line locked-ether
@@ -68,7 +68,7 @@ contract CurveExecutor is IExecutor {
         (tokenIn, tokenOut, pool, poolType, i, j, approvalNeeded, receiver) =
             _decodeData(data);
 
-        if (approvalNeeded && tokenIn != NATIVE_TOKEN) {
+        if (approvalNeeded && tokenIn != nativeToken) {
             // slither-disable-next-line unused-return
             IERC20(tokenIn).forceApprove(address(pool), type(uint256).max);
         }
@@ -77,7 +77,7 @@ contract CurveExecutor is IExecutor {
         uint256 balanceBefore = _balanceOf(tokenOut);
 
         uint256 ethAmount = 0;
-        if (tokenIn == NATIVE_TOKEN) {
+        if (tokenIn == nativeToken) {
             ethAmount = amountIn;
         }
 
@@ -87,7 +87,7 @@ contract CurveExecutor is IExecutor {
             StablePool(pool).exchange{value: ethAmount}(i, j, amountIn, 0);
         } else {
             // crypto or llamma
-            if (tokenIn == NATIVE_TOKEN || tokenOut == NATIVE_TOKEN) {
+            if (tokenIn == nativeToken || tokenOut == nativeToken) {
                 // slither-disable-next-line arbitrary-send-eth
                 CryptoPoolETH(pool).exchange{value: ethAmount}(
                     uint256(int256(i)), uint256(int256(j)), amountIn, 0, true
@@ -104,14 +104,14 @@ contract CurveExecutor is IExecutor {
         uint256 amountOut = balanceAfter - balanceBefore;
 
         if (receiver != address(this)) {
-            if (tokenOut == NATIVE_TOKEN) {
+            if (tokenOut == nativeToken) {
                 Address.sendValue(payable(receiver), amountOut);
             } else {
                 IERC20(tokenOut).safeTransfer(receiver, amountOut);
             }
         }
         calculatedAmount = amountOut;
-        if (tokenOut == NATIVE_TOKEN) {
+        if (tokenOut == nativeToken) {
             tokenOut = address(0);
         }
     }
@@ -150,7 +150,7 @@ contract CurveExecutor is IExecutor {
     }
 
     function _balanceOf(address token) internal view returns (uint256 balance) {
-        balance = token == NATIVE_TOKEN
+        balance = token == nativeToken
             ? address(this).balance
             : IERC20(token).balanceOf(address(this));
     }

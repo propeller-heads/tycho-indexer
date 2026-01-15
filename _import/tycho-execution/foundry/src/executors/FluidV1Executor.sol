@@ -33,13 +33,13 @@ contract FluidV1Executor is IExecutor, ICallback {
     // dexCallback(address,amount)
     bytes4 private constant CALLBACK_SELECTOR = 0x9410ae88;
 
-    address public immutable LIQUIDITY;
+    address public immutable liquidity;
 
     constructor(address _liquidity) {
         if (_liquidity == address(0)) {
             revert FluidV1Executor__ZeroLiquidityAddress();
         }
-        LIQUIDITY = _liquidity;
+        liquidity = _liquidity;
     }
 
     function swap(uint256 amountIn, bytes calldata data)
@@ -179,6 +179,6 @@ contract FluidV1Executor is IExecutor, ICallback {
     {
         (tokenIn, amount) = abi.decode(data[4:68], (address, uint256));
         transferType = _getTransferType();
-        receiver = LIQUIDITY;
+        receiver = liquidity;
     }
 }

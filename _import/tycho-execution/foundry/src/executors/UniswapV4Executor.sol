@@ -55,9 +55,9 @@ contract UniswapV4Executor is IExecutor, ICallback {
     bytes4 private constant SWAP_EXACT_INPUT_SELECTOR = 0xae17ced7;
     bytes4 private constant SWAP_EXACT_INPUT_SINGLE_SELECTOR = 0x6022fbcd;
 
-    IPoolManager public immutable POOL_MANAGER;
-    address private immutable _ANGSTROM_HOOK_ADDRESS;
-    address private immutable _SELF;
+    IPoolManager public immutable poolManager;
+    address private immutable angstromHookAddress;
+    address private immutable self;
 
     struct UniswapV4Pool {
         address intermediaryToken;
@@ -71,16 +71,16 @@ contract UniswapV4Executor is IExecutor, ICallback {
         if (_angstromHook == address(0)) {
             revert UniswapV4Executor__ZeroAddressAngstromHook();
         }
-        POOL_MANAGER = _poolManager;
-        _ANGSTROM_HOOK_ADDRESS = _angstromHook;
-        _SELF = address(this);
+        poolManager = _poolManager;
+        angstromHookAddress = _angstromHook;
+        self = address(this);
     }
 
     /**
      * @dev Modifier to restrict access to only the pool manager.
      */
     modifier poolManagerOnly() virtual {
-        if (msg.sender != address(POOL_MANAGER)) {
+        if (msg.sender != address(poolManager)) {
             revert UniswapV4Executor__NotPoolManager();
         }
         _;
@@ -139,8 +139,8 @@ contract UniswapV4Executor is IExecutor, ICallback {
                 path
             );
         }
-        POOL_MANAGER.sync(Currency.wrap(tokenIn));
-        bytes memory result = POOL_MANAGER.unlock(swapData);
+        poolManager.sync(Currency.wrap(tokenIn));
+        bytes memory result = poolManager.unlock(swapData);
         uint128 amountOut = abi.decode(result, (uint128));
 
         calculatedAmount = amountOut;
@@ -190,7 +190,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         }
 
         bytes memory firstHookData;
-        if (firstHook == _ANGSTROM_HOOK_ADDRESS) {
+        if (firstHook == angstromHookAddress) {
             // Select attestation from first pool's hook data
             // Convert calldata to memory since _selectAttestation requires bytes memory
             firstHookData = _selectAttestation(
@@ -242,7 +242,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
             }
 
             bytes memory hookData;
-            if (hook == _ANGSTROM_HOOK_ADDRESS) {
+            if (hook == angstromHookAddress) {
                 // Select attestation from hookData
                 hookData = _selectAttestation(rawHookData);
             } else {
@@ -288,7 +288,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
 
         // here we expect to call either `swapExactInputSingle` or `swapExactInput`. See `swap` to see how we encode the selector and the calldata
         // slither-disable-next-line low-level-calls
-        (bool success, bytes memory returnData) = _SELF.delegatecall(data);
+        (bool success, bytes memory returnData) = self.delegatecall(data);
         if (!success) {
             revert(
                 string(
@@ -386,7 +386,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
     ) private returns (int128 reciprocalAmount) {
         unchecked {
             // slither-disable-next-line calls-loop
-            BalanceDelta delta = POOL_MANAGER.swap(
+            BalanceDelta delta = poolManager.swap(
                 poolKey,
                 SwapParams(
                     zeroForOne,
@@ -414,7 +414,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         view
         returns (uint256 amount)
     {
-        int256 _amount = POOL_MANAGER.currencyDelta(address(this), currency);
+        int256 _amount = poolManager.currencyDelta(address(this), currency);
         // If the amount is negative, it should be settled not taken.
         if (_amount < 0) revert UniswapV4Executor__DeltaNotPositive(currency);
         amount = uint256(_amount);
@@ -431,10 +431,10 @@ contract UniswapV4Executor is IExecutor, ICallback {
         if (amount == 0) return;
         if (currency.isAddressZero()) {
             // slither-disable-next-line unused-return
-            POOL_MANAGER.settle{value: amount}();
+            poolManager.settle{value: amount}();
         } else {
             // slither-disable-next-line unused-return
-            POOL_MANAGER.settle();
+            poolManager.settle();
         }
     }
 
@@ -449,7 +449,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         internal
     {
         if (amount == 0) return;
-        POOL_MANAGER.take(currency, recipient, amount);
+        poolManager.take(currency, recipient, amount);
     }
 
     function _mapTakeAmount(uint256 amount, Currency currency)
@@ -545,7 +545,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
     {
         bytes calldata stripped = data[68:];
         bytes4 selector = bytes4(stripped[:4]);
-        receiver = address(POOL_MANAGER);
+        receiver = address(poolManager);
         if (selector == SWAP_EXACT_INPUT_SINGLE_SELECTOR) {
             // swapExactInputSingle(PoolKey memory poolKey, bool zeroForOne, uint128 amountIn, RestrictTransferFrom.TransferType transferType, address receiver, bytes calldata hookData)
             // Data layout: selector(4) + PoolKey(160) + bool(32) + uint128(32) + TransferType(32) + address(32) + hookData(variable)

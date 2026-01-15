@@ -25,9 +25,9 @@ contract UniswapV3Executor is IExecutor, ICallback {
     uint160 private constant MAX_SQRT_RATIO =
         1461446703485210103287273052203988822378723970342;
 
-    address public immutable FACTORY;
-    bytes32 public immutable INIT_CODE;
-    address private immutable SELF;
+    address public immutable factory;
+    bytes32 public immutable initCode;
+    address private immutable self;
 
     constructor(address _factory, bytes32 _initCode) {
         if (_factory == address(0)) {
@@ -36,9 +36,9 @@ contract UniswapV3Executor is IExecutor, ICallback {
         if (_initCode == bytes32(0)) {
             revert UniswapV3Executor__InvalidInitCode();
         }
-        FACTORY = _factory;
-        INIT_CODE = _initCode;
-        SELF = address(this);
+        factory = _factory;
+        initCode = _initCode;
+        self = address(this);
     }
 
     // slither-disable-next-line locked-ether
@@ -166,9 +166,9 @@ contract UniswapV3Executor is IExecutor, ICallback {
                     keccak256(
                         abi.encodePacked(
                             hex"ff",
-                            FACTORY,
+                            factory,
                             keccak256(abi.encode(token0, token1, fee)),
-                            INIT_CODE
+                            initCode
                         )
                     )
                 )

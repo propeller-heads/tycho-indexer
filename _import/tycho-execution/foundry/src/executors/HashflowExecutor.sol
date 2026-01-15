@@ -38,13 +38,13 @@ contract HashflowExecutor is IExecutor {
         0x0000000000000000000000000000000000000000;
 
     /// @notice The Hashflow router address
-    address public immutable HASHFLOW_ROUTER;
+    address public immutable hashflowRouter;
 
     constructor(address _hashflowRouter) {
         if (_hashflowRouter == address(0)) {
             revert HashflowExecutor__InvalidHashflowRouter();
         }
-        HASHFLOW_ROUTER = _hashflowRouter;
+        hashflowRouter = _hashflowRouter;
     }
 
     function swap(uint256 amountIn, bytes calldata data)
@@ -65,7 +65,7 @@ contract HashflowExecutor is IExecutor {
         if (approvalNeeded && quote.baseToken != NATIVE_TOKEN) {
             // slither-disable-next-line unused-return
             IERC20(quote.baseToken)
-                .forceApprove(HASHFLOW_ROUTER, type(uint256).max);
+                .forceApprove(hashflowRouter, type(uint256).max);
         }
 
         uint256 ethValue = 0;
@@ -74,7 +74,7 @@ contract HashflowExecutor is IExecutor {
         }
 
         uint256 balanceBefore = _balanceOf(quote.trader, quote.quoteToken);
-        IHashflowRouter(HASHFLOW_ROUTER).tradeRFQT{value: ethValue}(quote);
+        IHashflowRouter(hashflowRouter).tradeRFQT{value: ethValue}(quote);
         uint256 balanceAfter = _balanceOf(quote.trader, quote.quoteToken);
         calculatedAmount = balanceAfter - balanceBefore;
         tokenOut = quote.quoteToken;

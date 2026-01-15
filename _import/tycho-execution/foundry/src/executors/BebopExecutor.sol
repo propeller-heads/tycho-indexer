@@ -24,13 +24,13 @@ contract BebopExecutor is IExecutor {
     error BebopExecutor__ZeroAddress();
 
     /// @notice The Bebop settlement contract address
-    address public immutable BEBOP_SETTLEMENT;
+    address public immutable bebopSettlement;
 
     constructor(address _bebopSettlement) {
         if (_bebopSettlement == address(0)) {
             revert BebopExecutor__ZeroAddress();
         }
-        BEBOP_SETTLEMENT = _bebopSettlement;
+        bebopSettlement = _bebopSettlement;
     }
 
     /// @notice Executes a swap through Bebop's PMM RFQ system
@@ -71,7 +71,7 @@ contract BebopExecutor is IExecutor {
         // Approve Bebop settlement to spend tokens if needed
         if (approvalNeeded) {
             // slither-disable-next-line unused-return
-            IERC20(tokenIn).forceApprove(BEBOP_SETTLEMENT, type(uint256).max);
+            IERC20(tokenIn).forceApprove(bebopSettlement, type(uint256).max);
         }
 
         uint256 balanceBefore = _balanceOf(tokenOut, receiver);
@@ -80,7 +80,7 @@ contract BebopExecutor is IExecutor {
         // Use OpenZeppelin's Address library for safe call with value
         // This will revert if the call fails
         // slither-disable-next-line unused-return
-        BEBOP_SETTLEMENT.functionCallWithValue(finalCalldata, ethValue);
+        bebopSettlement.functionCallWithValue(finalCalldata, ethValue);
 
         uint256 balanceAfter = _balanceOf(tokenOut, receiver);
         calculatedAmount = balanceAfter - balanceBefore;

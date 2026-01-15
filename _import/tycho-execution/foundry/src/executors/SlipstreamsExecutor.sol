@@ -29,9 +29,9 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
     uint160 private constant MAX_SQRT_RATIO =
         1461446703485210103287273052203988822378723970342;
 
-    address public immutable FACTORY1;
-    address public immutable FACTORY2;
-    address private immutable SELF;
+    address public immutable factory1;
+    address public immutable factory2;
+    address private immutable self;
 
     /// @notice The identifying key of the pool
     struct PoolKey {
@@ -44,9 +44,9 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         if (_factory1 == address(0) || _factory2 == address(0)) {
             revert SlipstreamsExecutor__InvalidFactory();
         }
-        FACTORY1 = _factory1;
-        FACTORY2 = _factory2;
-        SELF = address(this);
+        factory1 = _factory1;
+        factory2 = _factory2;
+        self = address(this);
     }
 
     // slither-disable-next-line locked-ether
@@ -178,8 +178,8 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         address target
     ) internal view {
         PoolKey memory key = getPoolKey(tokenA, tokenB, tickSpacing);
-        address pool1 = computeAddress(key, FACTORY1);
-        address pool2 = computeAddress(key, FACTORY2);
+        address pool1 = computeAddress(key, factory1);
+        address pool2 = computeAddress(key, factory2);
         if (pool1 != target && pool2 != target) {
             revert SlipstreamsExecutor__InvalidTarget();
         }

@@ -92,7 +92,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         if (_permit2 == address(0)) {
             revert TychoRouter__AddressZero();
         }
-        PERMIT2 = IAllowanceTransfer(_permit2);
+        permit2 = IAllowanceTransfer(_permit2);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
@@ -175,7 +175,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
-            PERMIT2.permit(msg.sender, permitSingle, signature);
+            permit2.permit(msg.sender, permitSingle, signature);
         }
         _tstoreTransferFromInfo(tokenIn, amountIn, true, true);
 
@@ -264,7 +264,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
-            PERMIT2.permit(msg.sender, permitSingle, signature);
+            permit2.permit(msg.sender, permitSingle, signature);
         }
 
         _tstoreTransferFromInfo(tokenIn, amountIn, true, true);
@@ -352,7 +352,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
-            PERMIT2.permit(msg.sender, permitSingle, signature);
+            permit2.permit(msg.sender, permitSingle, signature);
         }
         _tstoreTransferFromInfo(tokenIn, amountIn, true, true);
 

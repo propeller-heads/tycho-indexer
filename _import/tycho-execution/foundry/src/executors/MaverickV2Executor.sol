@@ -19,13 +19,13 @@ error MaverickV2Executor__InvalidFactory();
 contract MaverickV2Executor is IExecutor {
     using SafeERC20 for IERC20;
 
-    address public immutable FACTORY;
+    address public immutable factory;
 
     constructor(address _factory) {
         if (_factory == address(0)) {
             revert MaverickV2Executor__InvalidFactory();
         }
-        FACTORY = _factory;
+        factory = _factory;
     }
 
     // slither-disable-next-line locked-ether
@@ -75,7 +75,7 @@ contract MaverickV2Executor is IExecutor {
     }
 
     function _verifyPairAddress(address target) internal view {
-        if (!IMaverickV2Factory(FACTORY).isFactoryPool(IMaverickV2Pool(target)))
+        if (!IMaverickV2Factory(factory).isFactoryPool(IMaverickV2Pool(target)))
         {
             revert MaverickV2Executor__InvalidTarget();
         }

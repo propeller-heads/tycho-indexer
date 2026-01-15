@@ -77,6 +77,7 @@ contract Dispatcher is RestrictTransferFrom {
             tstore(_CURRENTLY_SWAPPING_EXECUTOR_SLOT, executor)
         }
 
+        // slither-disable-next-line calls-loop
         (bool transferDataSuccess, bytes memory transferData) = executor.delegatecall(
             abi.encodeWithSelector(IExecutor.getTransferData.selector, data)
         );

@@ -30,7 +30,7 @@ error RestrictTransferFrom__UnknownTransferType();
 contract RestrictTransferFrom {
     using SafeERC20 for IERC20;
 
-    IAllowanceTransfer public immutable PERMIT2;
+    IAllowanceTransfer public immutable permit2;
     // keccak256("RestrictTransferFrom#TOKEN_IN_SLOT")
     uint256 private constant _TOKEN_IN_SLOT =
         0x25712b2458c26c244401cacab2c4d40a337e6c15af51d98c87ca8c05ed74935f;
@@ -48,7 +48,7 @@ contract RestrictTransferFrom {
         if (_permit2 == address(0)) {
             revert RestrictTransferFrom__AddressZero();
         }
-        PERMIT2 = IAllowanceTransfer(_permit2);
+        permit2 = IAllowanceTransfer(_permit2);
     }
 
     enum TransferType {
@@ -121,7 +121,8 @@ contract RestrictTransferFrom {
             }
             if (isPermit2) {
                 // Permit2.permit is already called from the TychoRouter
-                PERMIT2.transferFrom(sender, receiver, uint160(amount), tokenIn);
+                // slither-disable-next-line calls-loop
+                permit2.transferFrom(sender, receiver, uint160(amount), tokenIn);
             } else {
                 // slither-disable-next-line arbitrary-send-erc20
                 IERC20(tokenIn).safeTransferFrom(sender, receiver, amount);
