@@ -297,6 +297,33 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
         _mintWithoutEvent(user, id, amount);
     }
 
+    /**
+     * @dev Finalize all transient deltas to persistent storage
+     * @dev Verifies that only the input token has a negative delta and burns the vault balance
+     * @param user The user whose deltas should be finalized
+     * @param inputToken The expected input token
+     * @param inputAmount The expected input amount
+     */
+    function _finalizeBalances(
+        address user,
+        address inputToken,
+        uint256 inputAmount
+    ) internal {
+        uint256 negativeCount = _getNegativeDeltaCount();
+
+        // Check that there is only one negative delta: the input token
+        if (negativeCount > 1) {
+            revert Vault__UnexpectedNegativeDelta(negativeCount);
+        } else if (negativeCount == 1) {
+            int256 inputDelta = _getDelta(inputToken);
+            if (inputDelta != -int256(inputAmount)) {
+                revert Vault__UnexpectedInputDelta(inputDelta);
+            }
+            uint256 id = uint256(uint160(inputToken));
+            _burnWithoutEvent(user, id, inputAmount);
+        }
+    }
+
     // slither-disable-end dead-code
 
     // ============ Utils methods ============
