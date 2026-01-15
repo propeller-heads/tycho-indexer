@@ -272,17 +272,6 @@ contract UniswapV4Executor is IExecutor, ICallback {
     function verifyCallback(bytes calldata) public view poolManagerOnly {}
 
     /**
-     * @notice Handles the unlock callback from the pool manager. This is used for swaps against the executor directly (bypassing the router).
-     */
-    //    function unlockCallback(bytes calldata data)
-    //        external
-    //        poolManagerOnly
-    //        returns (bytes memory)
-    //    {
-    //        return _unlockCallback(data);
-    //    }
-
-    /**
      * @dev Internal function to handle the unlock callback.
      */
     function _unlockCallback(bytes calldata data)
