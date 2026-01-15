@@ -1,3 +1,10 @@
+## [0.6.0](https://github.com/propeller-heads/tycho-contracts/compare/0.5.0...0.6.0) (2026-01-15)
+
+
+### Features
+
+* Optimize UniswapV2 calldata encoding ([4d7c518](https://github.com/propeller-heads/tycho-contracts/commit/4d7c51869cc6b0b0e067face5ab3af8ee2aa6658))
+
 ## [0.5.0](https://github.com/propeller-heads/tycho-contracts/compare/0.4.0...0.5.0) (2026-01-15)
 
 
