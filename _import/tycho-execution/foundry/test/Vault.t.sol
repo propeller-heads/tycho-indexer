@@ -355,7 +355,7 @@ contract VaultTest is Constants, TestUtils {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                Vault__UnexpectedNegativeDelta.selector, negativeCount
+                Vault__UnexpectedNegativeCount.selector, negativeCount
             )
         );
 

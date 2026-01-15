@@ -15,7 +15,7 @@ error Vault__InsufficientBalance(
     address user, address token, uint256 requested, uint256 available
 );
 error Vault__AmountZero();
-error Vault__UnexpectedNegativeDelta(uint256 negativeCount);
+error Vault__UnexpectedNegativeCount(uint256 negativeCount);
 error Vault__InvalidInputDelta(address token, int256 expected, int256 actual);
 error Vault__UnexpectedInputDelta(int256 inputDelta);
 
@@ -313,7 +313,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
 
         // Check that there is only one negative delta: the input token
         if (negativeCount > 1) {
-            revert Vault__UnexpectedNegativeDelta(negativeCount);
+            revert Vault__UnexpectedNegativeCount(negativeCount);
         } else if (negativeCount == 1) {
             int256 inputDelta = _getDelta(inputToken);
             if (inputDelta != -int256(inputAmount)) {
