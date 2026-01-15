@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
+import {Vault} from "./Vault.sol";
 
 error FeeTaker__InvalidDataLength();
 error FeeTaker__FeeTooHigh();
@@ -14,7 +15,7 @@ error FeeTaker__FeeTooHigh();
  * @dev This contract is called via delegatecall from TychoRouter, giving it access
  *      to the router's storage
  */
-contract FeeTaker {
+contract FeeTaker is Vault {
     using SafeERC20 for IERC20;
     uint16 private constant MAX_FEE_BPS = 10000; // 100% max
 
@@ -59,9 +60,8 @@ contract FeeTaker {
         if (solverFeeBps > 0) {
             solverFee = (amountOut * solverFeeBps) / 10000;
             amountOut -= solverFee;
-            // TODO uncomment when implemented
-            //  _updateDeltaAccounting(token, -int256(solverFee));
-            //  _creditVault(solverFeeReceiver, token, solverFee);
+            _updateDeltaAccounting(token, -int256(solverFee));
+            _creditVault(solverFeeReceiver, token, solverFee);
         }
 
         uint256 totalRouterFeesTaken = 0;
@@ -82,9 +82,8 @@ contract FeeTaker {
         }
 
         if (totalRouterFeesTaken > 0) {
-            // TODO uncomment when implemented
-            //  _updateDeltaAccounting(token, -int256(totalRouterFeesTaken));
-            //  _creditVault(routerFeeReceiver, token, totalRouterFeesTaken);
+            _updateDeltaAccounting(token, -int256(totalRouterFeesTaken));
+            _creditVault(routerFeeReceiver, token, totalRouterFeesTaken);
         }
 
         return amountOut;

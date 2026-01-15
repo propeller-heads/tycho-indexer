@@ -19,6 +19,14 @@ contract FeeTakerExposed is FeeTaker {
     {
         return _decodeFeeData(data);
     }
+
+    function getDelta(address token) external view returns (int256 delta) {
+        delta = _getDelta(token);
+    }
+
+    function updateDeltaAccounting(address token, int256 change) external {
+        _updateDeltaAccounting(token, change);
+    }
 }
 
 contract FeeTakerTest is Constants {
@@ -78,6 +86,7 @@ contract FeeTakerTest is Constants {
         uint16 routerFeeOnSolverFeeBps = 0;
         address routerFeeReceiver = BOB;
         address token = WETH_ADDR;
+        uint256 tokenId = uint256(uint160(token));
 
         bytes memory data = abi.encodePacked(
             solverFeeBps,
@@ -88,17 +97,29 @@ contract FeeTakerTest is Constants {
             token
         );
 
+        // Check balances before takeFee - for reference
+        uint256 routerFeeReceiverBalanceBefore =
+            feeTakerExposed.balanceOf(routerFeeReceiver, tokenId);
+
+        // Simulate swap output being credited to delta
+        feeTakerExposed.updateDeltaAccounting(token, int256(amountIn));
+
         uint256 amountOut = feeTakerExposed.takeFee(amountIn, data);
 
         // routerFeeOnOutput = 1 ether * 100 / 10000 = 0.01 ether
         // amountOut = 1 ether - 0.01 ether = 0.99 ether
-        uint256 expectedAmountOut =
-            amountIn - (amountIn * routerFeeOnOutputBps / 10000);
-        assertEq(amountOut, expectedAmountOut);
         assertEq(amountOut, 0.99 ether);
 
-        // TODO: Check vault accounting when implemented
-        // - routerFeeReceiver should have 0.01 ether credited
+        // Check vault balance of the receiver - this should now include the fee
+        uint256 routerFeeReceiverBalanceAfter =
+            feeTakerExposed.balanceOf(routerFeeReceiver, tokenId);
+        assertEq(
+            routerFeeReceiverBalanceAfter,
+            routerFeeReceiverBalanceBefore + 0.01 ether
+        );
+
+        // Check delta accounting - should be amountOut remaining
+        assertEq(feeTakerExposed.getDelta(token), int256(0.99 ether));
     }
 
     function testTakeFeeOnlyRouterFeeOnSolverFee() public {
@@ -110,6 +131,7 @@ contract FeeTakerTest is Constants {
         uint16 routerFeeOnSolverFeeBps = 1000; // 10% of solver fee
         address routerFeeReceiver = BOB;
         address token = WETH_ADDR;
+        uint256 tokenId = uint256(uint160(token));
 
         bytes memory data = abi.encodePacked(
             solverFeeBps,
@@ -120,22 +142,40 @@ contract FeeTakerTest is Constants {
             token
         );
 
+        // Check balances before takeFee - for reference
+        uint256 solverFeeReceiverBalanceBefore =
+            feeTakerExposed.balanceOf(solverFeeReceiver, tokenId);
+        uint256 routerFeeReceiverBalanceBefore =
+            feeTakerExposed.balanceOf(routerFeeReceiver, tokenId);
+
+        // Simulate swap output being credited to delta
+        feeTakerExposed.updateDeltaAccounting(token, int256(amountIn));
+
         uint256 amountOut = feeTakerExposed.takeFee(amountIn, data);
 
         // solverFee = 1 ether * 200 / 10000 = 0.02 ether
         // amountAfterSolverFee = 1 ether - 0.02 ether = 0.98 ether
         // routerFeeOnSolverFee = 0.02 ether * 1000 / 10000 = 0.002 ether
         // amountOut = 0.98 ether - 0.002 ether = 0.978 ether
-        uint256 solverFee = amountIn * solverFeeBps / 10000;
-        uint256 routerFeeOnSolverFee =
-            solverFee * routerFeeOnSolverFeeBps / 10000;
-        uint256 expectedAmountOut = amountIn - solverFee - routerFeeOnSolverFee;
-        assertEq(amountOut, expectedAmountOut);
         assertEq(amountOut, 0.978 ether);
 
-        // TODO: Check vault accounting when implemented
-        // - solverFeeReceiver should have 0.02 ether credited
-        // - routerFeeReceiver should have 0.002 ether credited
+        // Check vault balance of the solver fee receiver - this should now include the solver fee
+        uint256 solverFeeReceiverBalanceAfter =
+            feeTakerExposed.balanceOf(solverFeeReceiver, tokenId);
+        assertEq(
+            solverFeeReceiverBalanceAfter,
+            solverFeeReceiverBalanceBefore + 0.02 ether
+        );
+        // Check vault balance of the router fee receiver - this should now include the router fee on solver fee
+        uint256 routerFeeReceiverBalanceAfter =
+            feeTakerExposed.balanceOf(routerFeeReceiver, tokenId);
+        assertEq(
+            routerFeeReceiverBalanceAfter,
+            routerFeeReceiverBalanceBefore + 0.002 ether
+        );
+
+        // Check delta accounting - should be amountOut remaining
+        assertEq(feeTakerExposed.getDelta(token), int256(0.978 ether));
     }
 
     function testTakeFeeOnlySolverFee() public {
@@ -147,6 +187,7 @@ contract FeeTakerTest is Constants {
         uint16 routerFeeOnSolverFeeBps = 0;
         address routerFeeReceiver = address(0);
         address token = WETH_ADDR;
+        uint256 tokenId = uint256(uint160(token));
 
         bytes memory data = abi.encodePacked(
             solverFeeBps,
@@ -157,20 +198,29 @@ contract FeeTakerTest is Constants {
             token
         );
 
+        // Check balances before takeFee - for reference
+        uint256 solverFeeReceiverBalanceBefore =
+            feeTakerExposed.balanceOf(solverFeeReceiver, tokenId);
+
+        // Simulate swap output being credited to delta
+        feeTakerExposed.updateDeltaAccounting(token, int256(amountIn));
+
         uint256 amountOut = feeTakerExposed.takeFee(amountIn, data);
 
         // solverFee = 1 ether * 150 / 10000 = 0.015 ether
         // amountOut = 1 ether - 0.015 ether = 0.985 ether
-        uint256 expectedAmountOut = amountIn - (amountIn * solverFeeBps / 10000);
-        assertEq(amountOut, expectedAmountOut);
         assertEq(amountOut, 0.985 ether);
 
-        // TODO: Check vault accounting when implemented
-        // - solverFeeReceiver should have 0.015 ether credited to vault
-        // TODO: Check delta accounting when implemented
-        // Debit 0.015 from the delta accounting (this means crediting the entire
-        // input amount to the delta accounting before running this test, and checking
-        // that the value after this test is the amountOut)
+        // Check vault balance of the solver fee receiver - this should now include the solver fee
+        uint256 solverFeeReceiverBalanceAfter =
+            feeTakerExposed.balanceOf(solverFeeReceiver, tokenId);
+        assertEq(
+            solverFeeReceiverBalanceAfter,
+            solverFeeReceiverBalanceBefore + 0.015 ether
+        );
+
+        // Check delta accounting - should be amountOut remaining
+        assertEq(feeTakerExposed.getDelta(token), int256(0.985 ether));
     }
 
     function testTakeFeeAllFeesSet() public {
@@ -181,6 +231,7 @@ contract FeeTakerTest is Constants {
         uint16 routerFeeOnSolverFeeBps = 500; // 5% of solver fee
         address routerFeeReceiver = BOB;
         address token = WETH_ADDR;
+        uint256 tokenId = uint256(uint160(token));
 
         bytes memory data = abi.encodePacked(
             solverFeeBps,
@@ -191,6 +242,15 @@ contract FeeTakerTest is Constants {
             token
         );
 
+        // Check balances before takeFee - for reference
+        uint256 solverFeeReceiverBalanceBefore =
+            feeTakerExposed.balanceOf(solverFeeReceiver, tokenId);
+        uint256 routerFeeReceiverBalanceBefore =
+            feeTakerExposed.balanceOf(routerFeeReceiver, tokenId);
+
+        // Simulate swap output being credited to delta
+        feeTakerExposed.updateDeltaAccounting(token, int256(amountIn));
+
         uint256 amountOut = feeTakerExposed.takeFee(amountIn, data);
 
         // 1. solverFee = 1 ether * 200 / 10000 = 0.02 ether
@@ -199,25 +259,25 @@ contract FeeTakerTest is Constants {
         //    amountAfterRouterFeeOnOutput = 0.98 ether - 0.0049 ether = 0.9751 ether
         // 3. routerFeeOnSolverFee = 0.02 ether * 500 / 10000 = 0.001 ether
         //    amountOut = 0.9751 ether - 0.001 ether = 0.9741 ether
-        uint256 solverFee = amountIn * solverFeeBps / 10000;
-        uint256 amountAfterSolverFee = amountIn - solverFee;
-        uint256 routerFeeOnOutput =
-            amountAfterSolverFee * routerFeeOnOutputBps / 10000;
-        uint256 routerFeeOnSolverFee =
-            solverFee * routerFeeOnSolverFeeBps / 10000;
-        uint256 expectedAmountOut =
-            amountAfterSolverFee - routerFeeOnOutput - routerFeeOnSolverFee;
-
-        assertEq(amountOut, expectedAmountOut);
         assertEq(amountOut, 0.9741 ether);
 
-        // TODO: Check vault accounting when implemented
-        // - solverFeeReceiver should have 0.02 ether credited
-        // - routerFeeReceiver should have 0.0059 ether (0.0049 + 0.001) credited
-        // TODO: Check delta accounting when implemented
-        // Debit 0.015 from the delta accounting (this means crediting the entire
-        // input amount to the delta accounting before running this test, and checking
-        // that the value after this test is the amountOut)
+        // Check vault balance of the solver fee receiver - this should now include the solver fee
+        uint256 solverFeeReceiverBalanceAfter =
+            feeTakerExposed.balanceOf(solverFeeReceiver, tokenId);
+        assertEq(
+            solverFeeReceiverBalanceAfter,
+            solverFeeReceiverBalanceBefore + 0.02 ether
+        );
+        // Check vault balance of the router fee receiver - this should now include both router fees
+        uint256 routerFeeReceiverBalanceAfter =
+            feeTakerExposed.balanceOf(routerFeeReceiver, tokenId);
+        assertEq(
+            routerFeeReceiverBalanceAfter,
+            routerFeeReceiverBalanceBefore + 0.0059 ether
+        );
+
+        // Check delta accounting - should be amountOut remaining
+        assertEq(feeTakerExposed.getDelta(token), int256(0.9741 ether));
     }
 
     function testTakeFeeSolverFeeTooHigh() public {

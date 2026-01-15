@@ -18,6 +18,7 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {
     IAllowanceTransfer
 } from "@permit2/src/interfaces/IAllowanceTransfer.sol";
+import {ERC6909} from "@openzeppelin/contracts/token/ERC6909/ERC6909.sol";
 import {Dispatcher} from "./Dispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
 import {RestrictTransferFrom} from "./RestrictTransferFrom.sol";
@@ -71,12 +72,7 @@ error TychoRouter__AmountOutNotFullyReceived(
 error TychoRouter__InvalidDataLength();
 error TychoRouter__UndefinedMinAmountOut();
 
-contract TychoRouter is
-    AccessControl,
-    Dispatcher,
-    Pausable,
-    ReentrancyGuard
-{
+contract TychoRouter is AccessControl, Dispatcher, Pausable {
     uint16 private _routerFeeOnOutputBps; // Router fee on output amount in basis points
     uint16 private _routerFeeOnSolverFeeBps; // Router fee on solver fee in basis points
     address private _feeTaker; // Address of the fee taker contract
@@ -129,6 +125,20 @@ contract TychoRouter is
         permit2 = IAllowanceTransfer(_permit2);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _routerFeeReceiver = msg.sender;
+    }
+
+    /**
+     * @notice Override supportsInterface to resolve conflict between AccessControl and ERC6909
+     */
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        virtual
+        override(AccessControl, ERC6909)
+        returns (bool)
+    {
+        return AccessControl.supportsInterface(interfaceId)
+            || ERC6909.supportsInterface(interfaceId);
     }
 
     /**
