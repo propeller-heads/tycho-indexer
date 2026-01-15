@@ -1,3 +1,10 @@
+## [0.8.0](https://github.com/propeller-heads/tycho-contracts/compare/0.7.0...0.8.0) (2026-01-15)
+
+
+### Features
+
+* TychoRouter fee setter methods ([418d8ac](https://github.com/propeller-heads/tycho-contracts/commit/418d8ac72e3ea15bdac0cf54def3f91c048a7997))
+
 ## [0.7.0](https://github.com/propeller-heads/tycho-contracts/compare/0.6.0...0.7.0) (2026-01-15)
 
 
