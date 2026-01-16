@@ -411,5 +411,6 @@ contract VaultTest is Constants, TestUtils {
         uint256 balanceEnd = vault.balanceOf(BOB, uint256(uint160(USDC_ADDR)));
 
         assertEq(balanceStart - balanceEnd, inputAmount);
+        assertEq(balanceEnd, 1_000_000);
     }
 }
