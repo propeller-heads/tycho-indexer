@@ -277,7 +277,7 @@ impl ProtocolSim for AerodromeSlipstreamsState {
                     pool = %self.id,
                     block_timestamp = self.block_timestamp,
                     %err,
-                    "Failed to calculate dynamic fee"
+                    "Error while calculating dynamic fee"
                 );
                 f64::MAX / 1_000_000.0
             }
