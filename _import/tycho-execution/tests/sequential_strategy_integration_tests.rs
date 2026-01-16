@@ -56,6 +56,7 @@ fn test_sequential_swap_strategy_encoder() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -117,6 +118,7 @@ fn test_sequential_swap_strategy_encoder_no_permit2_integration() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -230,9 +232,10 @@ fn test_sequential_strategy_cyclic_swap() {
         checked_token: usdc.clone(),
         checked_amount: BigUint::from_str("99389294").unwrap(), /* Expected output
                                                                  * from test */
-        swaps: vec![swap_usdc_weth, swap_weth_usdc],
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap_usdc_weth, swap_weth_usdc],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -260,7 +263,7 @@ fn test_sequential_strategy_cyclic_swap() {
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps = 0
         "0000000000000000000000000000000000000000000000000000000000000000", /* solverFeeReceiver
-                                                                             * = address(0) */
+                     * = address(0) */
     ]
     .join("");
 

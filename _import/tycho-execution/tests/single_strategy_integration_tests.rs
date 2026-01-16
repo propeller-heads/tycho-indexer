@@ -44,6 +44,7 @@ fn test_single_swap_strategy_encoder() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solutions = encoder
@@ -70,7 +71,7 @@ fn test_single_swap_strategy_encoder() {
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps = 0
         "0000000000000000000000000000000000000000000000000000000000000000", /* solverFeeReceiver
-                                                                             * = address(0) */
+                     * = address(0) */
     ]
     .join("");
 
@@ -126,6 +127,7 @@ fn test_single_swap_strategy_encoder_no_permit2() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solution = encoder

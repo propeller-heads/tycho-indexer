@@ -80,6 +80,7 @@ fn test_split_swap_strategy_encoder() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_dai, swap_weth_wbtc, swap_dai_usdc, swap_wbtc_usdc],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -188,6 +189,7 @@ fn test_split_input_cyclic_swap() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_usdc_weth_pool1, swap_usdc_weth_pool2, swap_weth_usdc_pool2],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -217,7 +219,7 @@ fn test_split_input_cyclic_swap() {
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps = 0
         "0000000000000000000000000000000000000000000000000000000000000000", /* solverFeeReceiver
-                                                                             * = address(0) */
+                     * = address(0) */
     ]
     .join("");
 
@@ -349,6 +351,7 @@ fn test_split_output_cyclic_swap() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_usdc_weth_v2, swap_weth_usdc_v3_pool1, swap_weth_usdc_v3_pool2],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -378,7 +381,7 @@ fn test_split_output_cyclic_swap() {
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps = 0
         "0000000000000000000000000000000000000000000000000000000000000000", /* solverFeeReceiver
-                                                                             * = address(0) */
+                     * = address(0) */
     ]
     .join("");
 

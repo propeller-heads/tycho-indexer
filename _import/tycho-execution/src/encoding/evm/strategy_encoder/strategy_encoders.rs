@@ -571,6 +571,7 @@ mod tests {
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap],
+                ..Default::default()
             };
 
             let encoded_solution = encoder
@@ -643,6 +644,7 @@ mod tests {
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
+                ..Default::default()
             };
 
             let encoded_solution = encoder
@@ -776,6 +778,7 @@ mod tests {
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_weth_pool1, swap_usdc_weth_pool2, swap_weth_usdc_pool2],
+                ..Default::default()
             };
 
             let encoded_solution = encoder
@@ -920,6 +923,7 @@ mod tests {
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_weth_v2, swap_weth_usdc_v3_pool1, swap_weth_usdc_v3_pool2],
+                ..Default::default()
             };
 
             let encoded_solution = encoder

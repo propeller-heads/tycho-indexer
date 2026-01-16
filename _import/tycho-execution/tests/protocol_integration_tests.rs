@@ -53,6 +53,7 @@ fn test_single_encoding_strategy_ekubo() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -212,6 +213,7 @@ fn test_single_encoding_strategy_maverick() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -271,6 +273,7 @@ fn test_single_encoding_strategy_usv4_eth_in() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_eth_pepe],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -335,6 +338,7 @@ fn test_single_encoding_strategy_usv4_eth_out() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_usdc_eth],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -416,6 +420,7 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_usdc_eth, swap_eth_pepe],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -443,7 +448,7 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps = 0
         "0000000000000000000000000000000000000000000000000000000000000000", /* solverFeeReceiver
-                                                                             * = address(0) */
+                     * = address(0) */
     ]
     .join("");
 
@@ -547,6 +552,7 @@ fn test_single_encoding_strategy_usv4_and_hooks_grouped_swap() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_usdc, swap_usdc_eth],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -631,6 +637,7 @@ fn test_single_encoding_strategy_ekubo_grouped_swap() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap1, swap2],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -691,6 +698,7 @@ fn test_single_encoding_strategy_curve() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -751,6 +759,7 @@ fn test_single_encoding_strategy_curve_st_eth() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -797,6 +806,7 @@ fn test_single_encoding_strategy_balancer_v3() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -869,6 +879,7 @@ fn test_single_encoding_strategy_bebop() {
         sender: user.clone(),
         receiver: user,
         swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -941,6 +952,7 @@ fn test_single_encoding_strategy_bebop_aggregate() {
         sender: user.clone(),
         receiver: user,
         swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -1043,6 +1055,7 @@ fn test_single_encoding_strategy_hashflow() {
         sender: alice_address(),
         receiver: alice_address(),
         swaps: vec![swap_usdc_wbtc],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -1089,6 +1102,7 @@ fn test_single_encoding_strategy_fluid() {
         sender: alice.clone(),
         receiver: alice,
         swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -1141,6 +1155,7 @@ fn test_sequential_encoding_strategy_fluid() {
         sender: alice.clone(),
         receiver: alice,
         swaps: vec![swap_1, swap_2],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -1188,6 +1203,7 @@ fn test_single_encoding_strategy_rocketpool_deposit() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -1240,6 +1256,7 @@ fn test_single_encoding_strategy_rocketpool_burn() {
         sender: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
         receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
         swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -1291,6 +1308,7 @@ fn test_single_encoding_strategy_slipstreams() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -1351,6 +1369,7 @@ fn test_sequential_encoding_strategy_slipstreams() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap1, swap2],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -1396,6 +1415,7 @@ fn test_single_encoding_strategy_erc4626() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -1448,6 +1468,7 @@ fn test_sequential_encoding_strategy_erc4626() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap1, swap2],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -1492,6 +1513,7 @@ fn test_single_encoding_strategy_steth_lido() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -1537,6 +1559,7 @@ fn test_single_encoding_strategy_wrap_wsteth_lido() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -1582,6 +1605,7 @@ fn test_single_encoding_strategy_unwrap_wsteth_lido() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -1655,6 +1679,7 @@ fn test_encoding_strategy_usv4_lido_sequential_swap() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_usdc_eth, swap_eth_steth],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -1729,6 +1754,7 @@ fn test_encoding_strategy_curve_lido_sequential_swap() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_eth_steth, swap_steth_wsteth],
+        ..Default::default()
     };
 
     let encoded_solution = encoder

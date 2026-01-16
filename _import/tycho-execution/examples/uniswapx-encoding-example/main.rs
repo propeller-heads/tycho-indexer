@@ -116,6 +116,7 @@ fn main() {
         sender: filler.clone(),
         receiver: filler.clone(),
         swaps: vec![swap_dai_usdc, swap_usdc_usdt],
+        ..Default::default()
     };
 
     // Encode the solution using appropriate safety checks
