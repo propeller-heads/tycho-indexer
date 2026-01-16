@@ -98,7 +98,7 @@ impl AerodromeSlipstreamsState {
         })
     }
 
-    fn get_fee(&self) -> u32 {
+    fn get_fee(&self) -> Result<u32, SimulationError> {
         get_dynamic_fee(
             &self.dfc,
             self.default_fee,
@@ -147,7 +147,7 @@ impl AerodromeSlipstreamsState {
         };
         let mut gas_used = U256::from(130_000);
 
-        let fee = self.get_fee();
+        let fee = self.get_fee()?;
         while state.amount_remaining != I256::from_raw(U256::from(0u64)) &&
             state.sqrt_price != price_limit
         {
@@ -266,7 +266,7 @@ impl AerodromeSlipstreamsState {
 
 impl ProtocolSim for AerodromeSlipstreamsState {
     fn fee(&self) -> f64 {
-        self.get_fee() as f64 / 1_000_000.0
+        self.get_fee().unwrap_or(u32::MAX) as f64 / 1_000_000.0
     }
 
     fn spot_price(&self, a: &Token, b: &Token) -> Result<f64, SimulationError> {
@@ -275,7 +275,7 @@ impl ProtocolSim for AerodromeSlipstreamsState {
         } else {
             1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, b.decimals, a.decimals)?
         };
-        Ok(add_fee_markup(price, self.fee()))
+        Ok(add_fee_markup(price, self.get_fee()? as f64 / 1_000_000.0))
     }
 
     fn get_amount_out(
@@ -570,9 +570,18 @@ impl ProtocolSim for AerodromeSlipstreamsState {
             .as_any()
             .downcast_ref::<AerodromeSlipstreamsState>()
         {
+            let self_fee = match self.get_fee() {
+                Ok(fee) => fee,
+                Err(_) => return false,
+            };
+            let other_fee = match other_state.get_fee() {
+                Ok(fee) => fee,
+                Err(_) => return false,
+            };
+
             self.liquidity == other_state.liquidity &&
                 self.sqrt_price == other_state.sqrt_price &&
-                self.get_fee() == other_state.get_fee() &&
+                self_fee == other_fee &&
                 self.tick == other_state.tick &&
                 self.ticks == other_state.ticks
         } else {
