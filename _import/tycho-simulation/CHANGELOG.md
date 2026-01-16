@@ -1,3 +1,10 @@
+## [0.228.2](https://github.com/propeller-heads/tycho-simulation/compare/0.228.1...0.228.2) (2026-01-16)
+
+
+### Bug Fixes
+
+* dummy commit ([a5f59c3](https://github.com/propeller-heads/tycho-simulation/commit/a5f59c37a5905c2e48e34c6aee4f828a3a44c2f7))
+
 ## [0.228.1](https://github.com/propeller-heads/tycho-simulation/compare/0.228.0...0.228.1) (2026-01-14)
 
 
