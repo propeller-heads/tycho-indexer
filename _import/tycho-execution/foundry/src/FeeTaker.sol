@@ -1,49 +1,51 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
-import {Vault} from "./Vault.sol";
-
 error FeeTaker__InvalidDataLength();
 error FeeTaker__FeeTooHigh();
 
 /**
  * @title FeeTaker
- * @notice Contract responsible for calculating and deducting fees from swap outputs
- * @dev This contract is called via delegatecall from TychoRouter, giving it access
- *      to the router's storage
+ * @notice Contract responsible for calculating fees on swap outputs
+ * @dev This contract is called via staticCall from TychoRouter.
+ *      It only calculates fees and returns the values - accounting is done by the caller.
  */
-contract FeeTaker is Vault {
-    using SafeERC20 for IERC20;
+contract FeeTaker {
     uint16 private constant MAX_FEE_BPS = 10000; // 100% max
 
     /**
-     * @notice Calculates and deducts fees from the swap output amount and updates
-     *         the vault balances of the fee receivers
-     * @dev Called via delegatecall from TychoRouter
+     * @notice Calculates fees from the swap output amount
+     * @dev Called via delegatecall from TychoRouter. Does not perform any accounting.
      * @param amountIn The amount before fee deduction
-     * @param data Encoded fee parameters:
+     * @param data Encoded fee parameters (46 bytes total):
      *        - solverFeeBps (uint16): Solver fee in basis points
      *        - solverFeeReceiver (address): Address to receive solver fee
      *        - routerFeeOnOutputBps (uint16): Router fee on output in basis points
      *        - routerFeeOnSolverFeeBps (uint16): Router fee on solver fee in basis points
      *        - routerFeeReceiver (address): Address to receive router fees
-     *        - token (address): The token address (address(0) for native ETH)
      * @return amountOut The amount remaining after all fee deductions
+     * @return routerFee Total router fee amount
+     * @return routerFeeReceiverAddr Address to receive router fees
+     * @return solverFee Solver fee amount (after router's cut)
+     * @return solverFeeReceiverAddr Address to receive solver fee
      */
     function takeFee(uint256 amountIn, bytes calldata data)
         external
-        returns (uint256 amountOut)
+        pure
+        returns (
+            uint256 amountOut,
+            uint256 routerFee,
+            address routerFeeReceiverAddr,
+            uint256 solverFee,
+            address solverFeeReceiverAddr
+        )
     {
         (
             uint16 solverFeeBps,
             address solverFeeReceiver,
             uint16 routerFeeOnOutputBps,
             uint16 routerFeeOnSolverFeeBps,
-            address routerFeeReceiver,
-            address token
+            address routerFeeReceiver
         ) = _decodeFeeData(data);
 
         if (
@@ -55,14 +57,15 @@ contract FeeTaker is Vault {
 
         amountOut = amountIn;
         uint256 routerFeeOnSolverFee = 0;
+        uint256 solverPortion = 0;
 
-        // Calculate and deduct solver fee if > 0
+        // Calculate solver fee if > 0
         if (solverFeeBps > 0) {
             // Save numerator for later routerFeeOnSolverFee calculation to avoid
             // divide-before-multiply precision loss and warning
             uint256 solverFeeNumerator = amountOut * solverFeeBps;
-            uint256 solverFee = solverFeeNumerator / 10_000;
-            amountOut -= solverFee;
+            uint256 totalSolverFee = solverFeeNumerator / 10_000;
+            amountOut -= totalSolverFee;
 
             // Calculate router's cut of the solver fee
             if (routerFeeOnSolverFeeBps > 0) {
@@ -70,30 +73,27 @@ contract FeeTaker is Vault {
                     (solverFeeNumerator * routerFeeOnSolverFeeBps) / 100_000_000;
             }
 
-            // Credit solver with their portion (after router's cut)
-            uint256 solverPortion = solverFee - routerFeeOnSolverFee;
-            if (solverPortion > 0) {
-                _updateDeltaAccounting(token, -int256(solverPortion));
-                _creditVault(solverFeeReceiver, token, solverPortion);
-            }
+            // Solver gets their portion (after router's cut)
+            solverPortion = totalSolverFee - routerFeeOnSolverFee;
         }
 
-        uint256 totalRouterFeesTaken = routerFeeOnSolverFee;
+        uint256 totalRouterFee = routerFeeOnSolverFee;
 
-        // Deduct router fee on output amount if > 0
+        // Calculate router fee on output amount if > 0
         if (routerFeeOnOutputBps > 0) {
             uint256 routerFeeOnOutput =
                 (amountOut * routerFeeOnOutputBps) / 10000;
             amountOut -= routerFeeOnOutput;
-            totalRouterFeesTaken += routerFeeOnOutput;
+            totalRouterFee += routerFeeOnOutput;
         }
 
-        if (totalRouterFeesTaken > 0) {
-            _updateDeltaAccounting(token, -int256(totalRouterFeesTaken));
-            _creditVault(routerFeeReceiver, token, totalRouterFeesTaken);
-        }
-
-        return amountOut;
+        return (
+            amountOut,
+            totalRouterFee,
+            routerFeeReceiver,
+            solverPortion,
+            solverFeeReceiver
+        );
     }
 
     /**
@@ -104,7 +104,6 @@ contract FeeTaker is Vault {
      * @return routerFeeOnOutputBps Router fee on output in basis points
      * @return routerFeeOnSolverFeeBps Router fee on solver fee in basis points
      * @return routerFeeReceiver Address to receive router fees
-     * @return token The token address
      */
     function _decodeFeeData(bytes calldata data)
         internal
@@ -114,11 +113,10 @@ contract FeeTaker is Vault {
             address solverFeeReceiver,
             uint16 routerFeeOnOutputBps,
             uint16 routerFeeOnSolverFeeBps,
-            address routerFeeReceiver,
-            address token
+            address routerFeeReceiver
         )
     {
-        if (data.length != 66) {
+        if (data.length != 46) {
             revert FeeTaker__InvalidDataLength();
         }
 
@@ -127,6 +125,5 @@ contract FeeTaker is Vault {
         routerFeeOnOutputBps = uint16(bytes2(data[22:24]));
         routerFeeOnSolverFeeBps = uint16(bytes2(data[24:26]));
         routerFeeReceiver = address(bytes20(data[26:46]));
-        token = address(bytes20(data[46:66]));
     }
 }
