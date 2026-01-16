@@ -302,7 +302,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
     }
 
     /**
-     * @dev Finalize all transient deltas to persistent storage
+     * @dev Finalizes the input transient delta to persistent storage
      * @dev Verifies that only the input token has a negative delta and burns the vault balance
      * @param user The user whose deltas should be finalized
      * @param inputToken The expected input token
