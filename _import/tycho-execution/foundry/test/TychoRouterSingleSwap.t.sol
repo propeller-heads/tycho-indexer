@@ -38,6 +38,8 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             DAI_ADDR,
             2008817438608734439722,
             ALICE,
+            0,
+            address(0),
             permitSingle,
             signature,
             swap
@@ -72,7 +74,15 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
 
         uint256 minAmountOut = 2000 * 1e18;
         uint256 amountOut = tychoRouter.singleSwap(
-            amountIn, WETH_ADDR, DAI_ADDR, minAmountOut, ALICE, true, swap
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            minAmountOut,
+            ALICE,
+            true,
+            0,
+            address(0),
+            swap
         );
 
         uint256 expectedAmount = 2018817438608734439722;
@@ -105,7 +115,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
 
         vm.expectRevert(TychoRouter__UndefinedMinAmountOut.selector);
         tychoRouter.singleSwap(
-            amountIn, WETH_ADDR, DAI_ADDR, 0, ALICE, true, swap
+            amountIn, WETH_ADDR, DAI_ADDR, 0, ALICE, true, 0, address(0), swap
         );
     }
 
@@ -131,7 +141,15 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         uint256 minAmountOut = 2600 * 1e18;
         vm.expectRevert();
         tychoRouter.singleSwap(
-            amountIn, WETH_ADDR, DAI_ADDR, minAmountOut, ALICE, true, swap
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            minAmountOut,
+            ALICE,
+            true,
+            0,
+            address(0),
+            swap
         );
     }
 
@@ -165,7 +183,15 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             )
         );
         tychoRouter.singleSwap(
-            amountIn, WETH_ADDR, DAI_ADDR, minAmountOut, ALICE, true, swap
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            minAmountOut,
+            ALICE,
+            true,
+            0,
+            address(0),
+            swap
         );
     }
 
@@ -197,7 +223,15 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             )
         );
         tychoRouter.singleSwap(
-            amountIn, WETH_ADDR, DAI_ADDR, 2000 * 1e18, ALICE, false, swap
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            2000 * 1e18,
+            ALICE,
+            false,
+            0,
+            address(0),
+            swap
         );
 
         vm.stopPrank();

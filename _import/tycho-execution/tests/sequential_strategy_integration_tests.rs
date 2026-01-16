@@ -138,16 +138,18 @@ fn test_sequential_swap_strategy_encoder_no_permit2_integration() {
     let hex_calldata = encode(&calldata);
 
     let expected = String::from(concat!(
-        "adccf472",                                                         // function selector
+        "7f3da92b", // function selector (sequentialSwap)
         "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount in
         "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
         "00000000000000000000000000000000000000000000000000000000018f61ec", // min amount out
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "0000000000000000000000000000000000000000000000000000000000000001", // transfer from needed
-        "00000000000000000000000000000000000000000000000000000000000000e0", // offset of swap bytes
+        "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps
+        "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeReceiver
+        "0000000000000000000000000000000000000000000000000000000000000120", // offset of swap bytes
         "0000000000000000000000000000000000000000000000000000000000000080", /* len swaps (128
-                                                                             * bytes) */
+                     * bytes) */
         // swap 1
         "003e",                                     // swap length (62 bytes)
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
@@ -250,14 +252,20 @@ fn test_sequential_strategy_cyclic_swap() {
     .data;
     let hex_calldata = alloy::hex::encode(&calldata);
     let expected_input = [
-        "c448f973",                                                         // selector
+        "788aa90c", // selector (sequentialSwapPermit2)
         "0000000000000000000000000000000000000000000000000000000005f5e100", // given amount
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // given token
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // checked token
         "0000000000000000000000000000000000000000000000000000000005ec8f6e", // min amount out
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
+        "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps = 0
+        "0000000000000000000000000000000000000000000000000000000000000000", /* solverFeeReceiver
+                                                                             * = address(0) */
     ]
     .join("");
+
+    // After this there is the permit and because of the deadlines (that depend on block
+    // time) it's hard to assert back
 
     let expected_swaps = [
         "00000000000000000000000000000000000000000000000000000000000000d6",  // length of ple encoded swaps without padding
@@ -283,7 +291,7 @@ fn test_sequential_strategy_cyclic_swap() {
     ]
         .join("");
 
-    assert_eq!(hex_calldata[..328], expected_input);
-    assert_eq!(hex_calldata[1096..], expected_swaps);
+    assert_eq!(hex_calldata[..456], expected_input);
+    assert_eq!(hex_calldata[1224..], expected_swaps);
     write_calldata_to_file("test_sequential_strategy_cyclic_swap", hex_calldata.as_str());
 }

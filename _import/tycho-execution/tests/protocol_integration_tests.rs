@@ -435,17 +435,20 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
     .data;
 
     let expected_input = [
-        "3bad854c", // Function selector (single swap)
+        "fd7f9dc9", // Function selector (singleSwapPermit2)
         "000000000000000000000000000000000000000000000000000000003b9aca00", // amount in
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
         "0000000000000000000000006982508145454ce325ddbe47a25d4ec3d2311933", // token out
         "0000000000000000000000000000000000000000005064ff624d54346285543f", // min amount out
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
+        "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps = 0
+        "0000000000000000000000000000000000000000000000000000000000000000", /* solverFeeReceiver
+                                                                             * = address(0) */
     ]
     .join("");
 
-    // after this there is the permit and because of the deadlines (that depend on block
-    // time) it's hard to assert
+    // After this there is the permit and because of the deadlines (that depend on block
+    // time) it's hard to assert back
 
     let expected_swaps = String::from(concat!(
         // length of ple encoded swaps without padding
@@ -477,8 +480,8 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
 
     let hex_calldata = encode(&calldata);
 
-    assert_eq!(hex_calldata[..328], expected_input);
-    assert_eq!(hex_calldata[1096..], expected_swaps);
+    assert_eq!(hex_calldata[..456], expected_input);
+    assert_eq!(hex_calldata[1224..], expected_swaps);
     write_calldata_to_file(
         "test_single_encoding_strategy_usv4_grouped_swap",
         hex_calldata.as_str(),

@@ -109,6 +109,8 @@ pub fn encode_tycho_router_call(
             checked_token,
             min_amount_out,
             receiver,
+            U256::from(0u64), // solverFeeBps
+            Address::ZERO,    // solverFeeReceiver
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
@@ -127,6 +129,8 @@ pub fn encode_tycho_router_call(
             min_amount_out,
             receiver,
             user_transfer_type == &UserTransferType::TransferFrom,
+            U256::from(0u64), // solverFeeBps
+            Address::ZERO,    // solverFeeReceiver
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -140,6 +144,8 @@ pub fn encode_tycho_router_call(
             checked_token,
             min_amount_out,
             receiver,
+            U256::from(0u64), // solverFeeBps
+            Address::ZERO,    // solverFeeReceiver
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
@@ -158,6 +164,8 @@ pub fn encode_tycho_router_call(
             min_amount_out,
             receiver,
             user_transfer_type == &UserTransferType::TransferFrom,
+            U256::from(0u64), // solverFeeBps
+            Address::ZERO,    // solverFeeReceiver
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -172,6 +180,8 @@ pub fn encode_tycho_router_call(
             min_amount_out,
             n_tokens,
             receiver,
+            U256::from(0u64), // solverFeeBps
+            Address::ZERO,    // solverFeeReceiver
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
@@ -191,6 +201,8 @@ pub fn encode_tycho_router_call(
             n_tokens,
             receiver,
             user_transfer_type == &UserTransferType::TransferFrom,
+            U256::from(0u64), // solverFeeBps
+            Address::ZERO,    // solverFeeReceiver
             encoded_solution.swaps,
         )
             .abi_encode()
