@@ -2,8 +2,8 @@ use std::{collections::VecDeque, num::NonZeroUsize};
 
 use lru::LruCache;
 use thiserror::Error;
-use tracing::error;
-use tycho_common::Bytes;
+use tracing::{debug, error};
+use tycho_common::{display::opt, Bytes};
 
 use crate::feed::BlockHeader;
 
@@ -29,13 +29,13 @@ pub struct BlockHistory {
 
 #[derive(Debug, PartialEq)]
 pub enum BlockPosition {
-    // The next expected block
+    /// The next expected block
     NextExpected,
-    // The latest processed block
+    /// The latest processed block
     Latest,
-    // A previously seen block
+    /// A previously seen block
     Delayed,
-    // An unknown block with a height above latest
+    /// A detached block with a height above NextExpected
     Advanced,
 }
 
@@ -79,7 +79,7 @@ impl BlockHistory {
         connected_chain.reverse();
 
         let cache_size = NonZeroUsize::new(size * 10).ok_or(BlockHistoryError::InvalidCacheSize)?;
-
+        debug!(tip = opt(&connected_chain.last()), "InitBlockHistory");
         Ok(Self {
             history: VecDeque::from(connected_chain),
             size,
@@ -127,6 +127,10 @@ impl BlockHistory {
                     return Err(BlockHistoryError::DetachedBlock);
                 }
                 // Push new block to history, marking it as latest.
+                debug!(
+                    tip = ?block.parent_hash,
+                    "BlockHistoryUpdate"
+                );
                 self.history.push_back(block);
                 if self.history.len() > self.size {
                     self.history.pop_front();

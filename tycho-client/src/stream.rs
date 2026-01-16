@@ -1,10 +1,10 @@
 use std::{
+    cmp::max,
     collections::{HashMap, HashSet},
     env,
     time::Duration,
 };
 
-use reqwest::Url;
 use thiserror::Error;
 use tokio::{sync::mpsc::Receiver, task::JoinHandle};
 use tracing::{info, warn};
@@ -13,10 +13,10 @@ use tycho_common::dto::{Chain, ExtractorIdentity, PaginationParams, ProtocolSyst
 use crate::{
     deltas::DeltasClient,
     feed::{
-        component_tracker::ComponentFilter, synchronizer::ProtocolStateSynchronizer,
-        BlockSynchronizer, FeedMessage,
+        component_tracker::ComponentFilter, synchronizer::ProtocolStateSynchronizer, BlockHeader,
+        BlockSynchronizer, BlockSynchronizerError, FeedMessage,
     },
-    rpc::RPCClient,
+    rpc::{HttpRPCClientOptions, RPCClient},
     HttpRPCClient, WsDeltasClient,
 };
 
@@ -32,17 +32,39 @@ pub enum StreamError {
     BlockSynchronizerError(String),
 }
 
+#[non_exhaustive]
+#[derive(Clone, Debug)]
+pub enum RetryConfiguration {
+    Constant(ConstantRetryConfiguration),
+}
+
+impl RetryConfiguration {
+    pub fn constant(max_attempts: u64, cooldown: Duration) -> Self {
+        RetryConfiguration::Constant(ConstantRetryConfiguration { max_attempts, cooldown })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ConstantRetryConfiguration {
+    max_attempts: u64,
+    cooldown: Duration,
+}
+
 pub struct TychoStreamBuilder {
     tycho_url: String,
     chain: Chain,
     exchanges: HashMap<String, ComponentFilter>,
     block_time: u64,
     timeout: u64,
+    startup_timeout: Duration,
     max_missed_blocks: u64,
+    state_sync_retry_config: RetryConfiguration,
+    websockets_retry_config: RetryConfiguration,
     no_state: bool,
     auth_key: Option<String>,
     no_tls: bool,
     include_tvl: bool,
+    compression: bool,
 }
 
 impl TychoStreamBuilder {
@@ -56,11 +78,21 @@ impl TychoStreamBuilder {
             exchanges: HashMap::new(),
             block_time,
             timeout,
+            startup_timeout: Duration::from_secs(block_time * max_missed_blocks),
             max_missed_blocks,
+            state_sync_retry_config: RetryConfiguration::constant(
+                32,
+                Duration::from_secs(max(block_time / 4, 2)),
+            ),
+            websockets_retry_config: RetryConfiguration::constant(
+                128,
+                Duration::from_secs(max(block_time / 6, 1)),
+            ),
             no_state: false,
             auth_key: None,
             no_tls: true,
             include_tvl: false,
+            compression: true,
         }
     }
 
@@ -68,11 +100,12 @@ impl TychoStreamBuilder {
     /// blockchain network.
     fn default_timing(chain: &Chain) -> (u64, u64, u64) {
         match chain {
-            Chain::Ethereum => (12, 36, 10),
+            Chain::Ethereum => (12, 36, 50),
             Chain::Starknet => (2, 8, 50),
             Chain::ZkSync => (3, 12, 50),
             Chain::Arbitrum => (1, 2, 100), // Typically closer to 0.25s
             Chain::Base => (2, 12, 50),
+            Chain::Bsc => (1, 12, 50),
             Chain::Unichain => (1, 10, 100),
         }
     }
@@ -96,9 +129,38 @@ impl TychoStreamBuilder {
         self
     }
 
+    pub fn startup_timeout(mut self, timeout: Duration) -> Self {
+        self.startup_timeout = timeout;
+        self
+    }
+
     pub fn max_missed_blocks(mut self, max_missed_blocks: u64) -> Self {
         self.max_missed_blocks = max_missed_blocks;
         self
+    }
+
+    pub fn websockets_retry_config(mut self, retry_config: &RetryConfiguration) -> Self {
+        self.websockets_retry_config = retry_config.clone();
+        self.warn_on_potential_timing_issues();
+        self
+    }
+
+    pub fn state_synchronizer_retry_config(mut self, retry_config: &RetryConfiguration) -> Self {
+        self.state_sync_retry_config = retry_config.clone();
+        self.warn_on_potential_timing_issues();
+        self
+    }
+
+    fn warn_on_potential_timing_issues(&self) {
+        let (RetryConfiguration::Constant(state_config), RetryConfiguration::Constant(ws_config)) =
+            (&self.state_sync_retry_config, &self.websockets_retry_config);
+
+        if ws_config.cooldown >= state_config.cooldown {
+            warn!(
+                "Websocket cooldown should be < than state syncronizer cooldown \
+                to avoid spending retries due to disconnected websocket."
+            )
+        }
     }
 
     /// Configures the client to exclude state updates from the stream.
@@ -131,9 +193,21 @@ impl TychoStreamBuilder {
         self
     }
 
+    /// Disables compression for RPC and WebSocket communication.
+    /// By default, messages are compressed using zstd.
+    pub fn disable_compression(mut self) -> Self {
+        self.compression = false;
+        self
+    }
+
     /// Builds and starts the Tycho client, connecting to the Tycho server and
     /// setting up the synchronization of exchange components.
-    pub async fn build(self) -> Result<(JoinHandle<()>, Receiver<FeedMessage>), StreamError> {
+    pub async fn build(
+        self,
+    ) -> Result<
+        (JoinHandle<()>, Receiver<Result<FeedMessage<BlockHeader>, BlockSynchronizerError>>),
+        StreamError,
+    > {
         if self.exchanges.is_empty() {
             return Err(StreamError::SetUpError(
                 "At least one exchange must be registered.".to_string(),
@@ -146,42 +220,38 @@ impl TychoStreamBuilder {
             .clone()
             .or_else(|| env::var("TYCHO_AUTH_TOKEN").ok());
 
-        // Parse the URL
-        let tycho_url = Url::parse(&self.tycho_url)
-            .map_err(|e| StreamError::SetUpError(format!("Invalid URL: {e}")))?;
+        info!("Running with version: {}", option_env!("CARGO_PKG_VERSION").unwrap_or("unknown"));
 
         // Determine the URLs based on the TLS setting
         let (tycho_ws_url, tycho_rpc_url) = if self.no_tls {
             info!("Using non-secure connection: ws:// and http://");
-            let mut tycho_ws_url = tycho_url.clone();
-            let mut tycho_rpc_url = tycho_url.clone();
-            tycho_ws_url
-                .set_scheme("ws")
-                .map_err(|_| StreamError::SetUpError("Failed to set scheme to ws".to_string()))?;
-            tycho_rpc_url
-                .set_scheme("http")
-                .map_err(|_| StreamError::SetUpError("Failed to set scheme to http".to_string()))?;
-            (tycho_ws_url.to_string(), tycho_rpc_url.to_string())
+            let tycho_ws_url = format!("ws://{}", self.tycho_url);
+            let tycho_rpc_url = format!("http://{}", self.tycho_url);
+            (tycho_ws_url, tycho_rpc_url)
         } else {
             info!("Using secure connection: wss:// and https://");
-            let mut tycho_ws_url = tycho_url.clone();
-            let mut tycho_rpc_url = tycho_url.clone();
-            tycho_ws_url
-                .set_scheme("wss")
-                .map_err(|_| StreamError::SetUpError("Failed to set scheme to wss".to_string()))?;
-            tycho_rpc_url
-                .set_scheme("https")
-                .map_err(|_| {
-                    StreamError::SetUpError("Failed to set scheme to https".to_string())
-                })?;
-            (tycho_ws_url.to_string(), tycho_rpc_url.to_string())
+            let tycho_ws_url = format!("wss://{}", self.tycho_url);
+            let tycho_rpc_url = format!("https://{}", self.tycho_url);
+            (tycho_ws_url, tycho_rpc_url)
         };
 
         // Initialize the WebSocket client
-        let ws_client = WsDeltasClient::new(&tycho_ws_url, auth_key.as_deref())
-            .map_err(|e| StreamError::SetUpError(e.to_string()))?;
-        let rpc_client = HttpRPCClient::new(&tycho_rpc_url, auth_key.as_deref())
-            .map_err(|e| StreamError::SetUpError(e.to_string()))?;
+        let ws_client = match &self.websockets_retry_config {
+            RetryConfiguration::Constant(config) => WsDeltasClient::new_with_reconnects(
+                &tycho_ws_url,
+                auth_key.as_deref(),
+                config.max_attempts,
+                config.cooldown,
+            ),
+        }
+        .map_err(|e| StreamError::SetUpError(e.to_string()))?;
+        let rpc_client = HttpRPCClient::new(
+            &tycho_rpc_url,
+            HttpRPCClientOptions::new()
+                .with_auth_key(auth_key)
+                .with_compression(self.compression),
+        )
+        .map_err(|e| StreamError::SetUpError(e.to_string()))?;
         let ws_jh = ws_client
             .connect()
             .await
@@ -201,17 +271,21 @@ impl TychoStreamBuilder {
         for (name, filter) in self.exchanges {
             info!("Registering exchange: {}", name);
             let id = ExtractorIdentity { chain: self.chain, name: name.clone() };
-            let sync = ProtocolStateSynchronizer::new(
-                id.clone(),
-                true,
-                filter,
-                3,
-                !self.no_state,
-                self.include_tvl,
-                rpc_client.clone(),
-                ws_client.clone(),
-                self.block_time + self.timeout,
-            );
+            let sync = match &self.state_sync_retry_config {
+                RetryConfiguration::Constant(retry_config) => ProtocolStateSynchronizer::new(
+                    id.clone(),
+                    true,
+                    filter,
+                    retry_config.max_attempts,
+                    retry_config.cooldown,
+                    !self.no_state,
+                    self.include_tvl,
+                    self.compression,
+                    rpc_client.clone(),
+                    ws_client.clone(),
+                    self.block_time + self.timeout,
+                ),
+            };
             block_sync = block_sync.register_synchronizer(id, sync);
         }
 
@@ -230,6 +304,9 @@ impl TychoStreamBuilder {
                 res = sync_jh => {
                     res.map_err(|e| StreamError::BlockSynchronizerError(e.to_string())).unwrap();
                 }
+            }
+            if let Err(e) = ws_client.close().await {
+                warn!(?e, "Failed to close WebSocket client");
             }
         });
 
@@ -282,6 +359,44 @@ impl TychoStreamBuilder {
 mod tests {
     use super::*;
 
+    #[test]
+    fn test_retry_configuration_constant() {
+        let config = RetryConfiguration::constant(5, Duration::from_secs(10));
+        match config {
+            RetryConfiguration::Constant(c) => {
+                assert_eq!(c.max_attempts, 5);
+                assert_eq!(c.cooldown, Duration::from_secs(10));
+            }
+        }
+    }
+
+    #[test]
+    fn test_stream_builder_retry_configs() {
+        let mut builder = TychoStreamBuilder::new("localhost:4242", Chain::Ethereum);
+        let ws_config = RetryConfiguration::constant(10, Duration::from_secs(2));
+        let state_config = RetryConfiguration::constant(20, Duration::from_secs(5));
+
+        builder = builder
+            .websockets_retry_config(&ws_config)
+            .state_synchronizer_retry_config(&state_config);
+
+        // Verify configs are stored correctly by checking they match expected values
+        match (&builder.websockets_retry_config, &builder.state_sync_retry_config) {
+            (RetryConfiguration::Constant(ws), RetryConfiguration::Constant(state)) => {
+                assert_eq!(ws.max_attempts, 10);
+                assert_eq!(ws.cooldown, Duration::from_secs(2));
+                assert_eq!(state.max_attempts, 20);
+                assert_eq!(state.cooldown, Duration::from_secs(5));
+            }
+        }
+    }
+
+    #[test]
+    fn test_default_compression() {
+        let builder = TychoStreamBuilder::new("localhost:4242", Chain::Ethereum);
+        assert!(builder.compression, "Compression should be enabled by default.");
+    }
+
     #[tokio::test]
     async fn test_no_exchanges() {
         let receiver = TychoStreamBuilder::new("localhost:4242", Chain::Ethereum)
@@ -293,7 +408,7 @@ mod tests {
 
     #[ignore = "require tycho gateway"]
     #[tokio::test]
-    async fn teat_simple_build() {
+    async fn test_simple_build() {
         let token = env::var("TYCHO_AUTH_TOKEN").unwrap();
         let receiver = TychoStreamBuilder::new("tycho-beta.propellerheads.xyz", Chain::Ethereum)
             .exchange("uniswap_v2", ComponentFilter::with_tvl_range(100.0, 100.0))

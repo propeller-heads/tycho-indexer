@@ -23,11 +23,27 @@ pub struct StorageSnapshotRequest {
     pub slots: Option<Vec<StoreKey>>,
 }
 
+impl std::fmt::Display for StorageSnapshotRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let address_str = self.address.to_string();
+        let truncated_address = if address_str.len() >= 10 {
+            format!("{}...{}", &address_str[0..8], &address_str[address_str.len() - 4..])
+        } else {
+            address_str
+        };
+
+        match &self.slots {
+            Some(slots) => write!(f, "{truncated_address}[{} slots]", slots.len()),
+            None => write!(f, "{truncated_address}[all slots]"),
+        }
+    }
+}
+
 /// Trait for getting multiple account states from chain data.
 #[cfg_attr(feature = "test-utils", mockall::automock(type Error = String;))]
 #[async_trait]
 pub trait AccountExtractor {
-    type Error: Debug;
+    type Error: Debug + Send + Sync;
 
     /// Get the account states at the end of the given block (after all transactions in the block
     /// have been applied).
@@ -144,5 +160,111 @@ pub trait EntryPointTracer: Sync {
         &self,
         block_hash: BlockHash,
         entry_points: Vec<EntryPointWithTracingParams>,
-    ) -> Result<Vec<TracedEntryPoint>, Self::Error>;
+    ) -> Vec<Result<TracedEntryPoint, Self::Error>>;
+}
+
+/// Trait for detecting storage slots that contain ERC20 token balances
+#[cfg_attr(feature = "test-utils", mockall::automock(type Error = String;))]
+#[async_trait]
+pub trait BalanceSlotDetector: Send + Sync {
+    type Error: Debug;
+
+    /// Detect balance storage slots for multiple tokens from a single holder.
+    /// Useful to allow overriding balances.
+    ///
+    /// # Arguments
+    /// * `tokens` - Slice of ERC20 token addresses.
+    /// * `holder` - Address that holds the tokens (e.g., pool manager)
+    /// * `block_hash` - Block at which to detect slots
+    ///
+    /// # Returns
+    /// HashMap mapping Token -> Result containing (contract_address -> storage_slot) or error.
+    /// The storage slot is the one that controls the token's holder balance.
+    async fn detect_balance_slots(
+        &self,
+        tokens: &[Address],
+        holder: Address,
+        block_hash: BlockHash,
+    ) -> HashMap<Address, Result<(Address, Bytes), Self::Error>>;
+}
+
+/// Trait for detecting storage slots that contain ERC20 token allowances
+#[cfg_attr(feature = "test-utils", mockall::automock(type Error = String;))]
+#[async_trait]
+pub trait AllowanceSlotDetector: Send + Sync {
+    type Error: Debug;
+
+    /// Detect allowance storage slots for multiple tokens for owner-spender pairs.
+    /// Useful to allow overriding allowances in simulations.
+    ///
+    /// # Arguments
+    /// * `tokens` - Slice of ERC20 token addresses.
+    /// * `owner` - Address that owns the tokens
+    /// * `spender` - Address that is allowed to spend the tokens
+    /// * `block_hash` - Block at which to detect slots
+    ///
+    /// # Returns
+    /// HashMap mapping Token -> Result containing (contract_address -> storage_slot) or error.
+    /// The storage slot is the one that controls the allowance from owner to spender.
+    async fn detect_allowance_slots(
+        &self,
+        tokens: &[Address],
+        owner: Address,
+        spender: Address,
+        block_hash: BlockHash,
+    ) -> HashMap<Address, Result<(Address, Bytes), Self::Error>>;
+}
+
+/// Trait for getting the gas price from the node.
+#[cfg_attr(feature = "test-utils", mockall::automock(type Error = String;))]
+#[async_trait]
+pub trait GasPriceGetter: Send + Sync {
+    type Error: Debug;
+
+    /// Get the latest gas price in the chain unit.
+    ///
+    /// # Returns
+    /// Gas price in the chain unit (usually wei) as u128
+    async fn get_latest_gas_price(&self) -> Result<u128, Self::Error>;
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn test_storage_snapshot_request_display() {
+        // Test with specific slots
+        let request_with_slots = StorageSnapshotRequest {
+            address: Address::from_str("0x1234567890123456789012345678901234567890").unwrap(),
+            slots: Some(vec![
+                StoreKey::from(vec![1, 2, 3, 4]),
+                StoreKey::from(vec![5, 6, 7, 8]),
+                StoreKey::from(vec![9, 10, 11, 12]),
+            ]),
+        };
+
+        let display_output = request_with_slots.to_string();
+        assert_eq!(display_output, "0x123456...7890[3 slots]");
+
+        // Test with all slots
+        let request_all_slots = StorageSnapshotRequest {
+            address: Address::from_str("0x9876543210987654321098765432109876543210").unwrap(),
+            slots: None,
+        };
+
+        let display_output = request_all_slots.to_string();
+        assert_eq!(display_output, "0x987654...3210[all slots]");
+
+        // Test with empty slots vector
+        let request_empty_slots = StorageSnapshotRequest {
+            address: Address::from_str("0xabcdefabcdefabcdefabcdefabcdefabcdefabcd").unwrap(),
+            slots: Some(vec![]),
+        };
+
+        let display_output = request_empty_slots.to_string();
+        assert_eq!(display_output, "0xabcdef...abcd[0 slots]");
+    }
 }

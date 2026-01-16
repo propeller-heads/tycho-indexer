@@ -68,7 +68,7 @@ mock! {
             &'life0 self,
             entry_points_params: &'life1 HashMap<
                 EntryPointId,
-                HashSet<(TracingParams, Option<ComponentId>)>,
+                HashSet<(TracingParams, ComponentId)>,
             >,
         ) -> ::core::pin::Pin<
             Box<
@@ -766,7 +766,9 @@ pub mod fixtures {
         if version == 0 {
             panic!("Block version 0 doesn't exist. It starts at 1");
         }
-        let base_ts = yesterday_midnight().timestamp() as u64;
+        let base_ts = yesterday_midnight()
+            .and_utc()
+            .timestamp() as u64;
 
         Block {
             number: version,
@@ -851,6 +853,7 @@ pub mod fixtures {
                                     value: Bytes::from(vec![0xd1, 0xd2, 0xd3, 0xd4])
                                         .lpad(32, 0)
                                         .to_vec(),
+                                    previous_value: Bytes::new().into(),
                                 },
                                 ContractSlot {
                                     slot: Bytes::from(vec![0xa1, 0xa2, 0xa3, 0xa4])
@@ -859,6 +862,7 @@ pub mod fixtures {
                                     value: Bytes::from(vec![0xb1, 0xb2, 0xb3, 0xb4])
                                         .lpad(32, 0)
                                         .to_vec(),
+                                    previous_value: Bytes::new().into(),
                                 },
                             ],
                             change: ChangeType::Update.into(),
@@ -936,6 +940,7 @@ pub mod fixtures {
                                     value: Bytes::from(vec![0xa1, 0xa2, 0xa3, 0xa4])
                                         .lpad(32, 0)
                                         .to_vec(),
+                                    previous_value: Bytes::new().into(),
                                 },
                                 ContractSlot {
                                     slot: Bytes::from(vec![0xa1, 0xa2, 0xa3, 0xa4])
@@ -944,6 +949,7 @@ pub mod fixtures {
                                     value: Bytes::from(vec![0xc1, 0xc2, 0xc3, 0xc4])
                                         .lpad(32, 0)
                                         .to_vec(),
+                                    previous_value: Bytes::new().into(),
                                 },
                             ],
                             change: ChangeType::Update.into(),
@@ -976,6 +982,7 @@ pub mod fixtures {
                         slots: vec![ContractSlot {
                             slot: Bytes::from("0x01").into(),
                             value: Bytes::from("0x01").into(),
+                            previous_value: Bytes::new().into(),
                         }],
                         change: ChangeType::Creation.into(),
                         token_balances: vec![
@@ -1031,6 +1038,7 @@ pub mod fixtures {
                             slots: vec![ContractSlot {
                                 slot: Bytes::from("0x01").into(),
                                 value: Bytes::from("0x02").into(),
+                                previous_value: Bytes::new().into(),
                             }],
                             change: ChangeType::Creation.into(),
                             token_balances: vec![],
@@ -1043,10 +1051,12 @@ pub mod fixtures {
                                 ContractSlot {
                                     slot: Bytes::from("0x01").into(),
                                     value: Bytes::from(10u8).lpad(32, 0).into(),
+                                    previous_value: Bytes::new().into(),
                                 },
                                 ContractSlot {
                                     slot: Bytes::from("0x02").into(),
                                     value: Bytes::from("0x0a").into(),
+                                    previous_value: Bytes::new().into(),
                                 },
                             ],
                             change: ChangeType::Update.into(),
@@ -1108,6 +1118,7 @@ pub mod fixtures {
                                 slots: vec![ContractSlot {
                                     slot: Bytes::from("0x01").into(),
                                     value: Bytes::from("0x01").into(),
+                                    previous_value: Bytes::new().into(),
                                 }],
                                 change: ChangeType::Update.into(),
                                 token_balances: vec![],
@@ -1121,6 +1132,7 @@ pub mod fixtures {
                                 slots: vec![ContractSlot {
                                     slot: Bytes::from("0x02").into(),
                                     value: Bytes::from(200u8).lpad(32, 0).into(),
+                                    previous_value: Bytes::new().into(),
                                 }],
                                 change: ChangeType::Update.into(),
                                 token_balances: vec![AccountBalanceChange {
@@ -1145,6 +1157,7 @@ pub mod fixtures {
                             slots: vec![ContractSlot {
                                 slot: Bytes::from("0x01").into(),
                                 value: Bytes::from("0x01").into(),
+                                previous_value: Bytes::new().into(),
                             }],
                             change: ChangeType::Update.into(),
                             token_balances: vec![AccountBalanceChange {
@@ -1179,6 +1192,7 @@ pub mod fixtures {
                         slots: vec![ContractSlot {
                             slot: Bytes::from(3u8).lpad(32, 0).into(),
                             value: Bytes::from(10u8).lpad(32, 0).into(),
+                            previous_value: Bytes::new().into(),
                         }],
                         change: ChangeType::Update.into(),
                         token_balances: vec![],
@@ -1213,6 +1227,7 @@ pub mod fixtures {
                             slots: vec![ContractSlot {
                                 slot: Bytes::from("0x01").into(),
                                 value: Bytes::from(10u8).lpad(32, 0).into(),
+                                previous_value: Bytes::new().into(),
                             }],
                             change: ChangeType::Update.into(),
                             token_balances: vec![AccountBalanceChange {
@@ -1227,6 +1242,7 @@ pub mod fixtures {
                             slots: vec![ContractSlot {
                                 slot: Bytes::from("0x01").into(),
                                 value: Bytes::from(10u8).lpad(32, 0).into(),
+                                previous_value: Bytes::new().into(),
                             }],
                             change: ChangeType::Update.into(),
                             token_balances: vec![AccountBalanceChange {
@@ -1268,7 +1284,9 @@ pub mod fixtures {
                         .lpad(32, 0)
                         .to_vec(),
                     number: 1,
-                    ts: yesterday_midnight().timestamp() as u64,
+                    ts: yesterday_midnight()
+                        .and_utc()
+                        .timestamp() as u64,
                 }),
                 changes: vec![
                     TransactionEntityChanges {
@@ -1704,10 +1722,12 @@ pub mod fixtures {
                                 ContractSlot {
                                     slot: vec![0xa1, 0xa2, 0xa3, 0xa4],
                                     value: vec![0xb1, 0xb2, 0xb3, 0xb4],
+                                    previous_value: Bytes::new().into(),
                                 },
                                 ContractSlot {
                                     slot: vec![0xc1, 0xc2, 0xc3, 0xc4],
                                     value: vec![0xd1, 0xd2, 0xd3, 0xd4],
+                                    previous_value: Bytes::new().into(),
                                 },
                             ],
                             change: ChangeType::Update.into(),
@@ -1776,10 +1796,12 @@ pub mod fixtures {
                                 ContractSlot {
                                     slot: vec![0x91, 0x92, 0x93, 0x94],
                                     value: vec![0xa1, 0xa2, 0xa3, 0xa4],
+                                    previous_value: Bytes::new().into(),
                                 },
                                 ContractSlot {
                                     slot: vec![0xa1, 0xa2, 0xa3, 0xa4],
                                     value: vec![0xc1, 0xc2, 0xc3, 0xc4],
+                                    previous_value: Bytes::new().into(),
                                 },
                             ],
                             change: ChangeType::Update.into(),
@@ -1813,6 +1835,7 @@ pub mod fixtures {
                         slots: vec![ContractSlot {
                             slot: Bytes::from("0x01").into(),
                             value: Bytes::from("0x01").into(),
+                            previous_value: Bytes::new().into(),
                         }],
                         change: ChangeType::Creation.into(),
                         token_balances: vec![
@@ -1870,6 +1893,7 @@ pub mod fixtures {
                             slots: vec![ContractSlot {
                                 slot: Bytes::from("0x01").into(),
                                 value: Bytes::from("0x02").into(),
+                                previous_value: Bytes::new().into(),
                             }],
                             change: ChangeType::Creation.into(),
                             token_balances: vec![
@@ -1891,10 +1915,12 @@ pub mod fixtures {
                                 ContractSlot {
                                     slot: Bytes::from("0x01").into(),
                                     value: Bytes::from("0x10").into(),
+                                    previous_value: Bytes::new().into(),
                                 },
                                 ContractSlot {
                                     slot: Bytes::from("0x02").into(),
                                     value: Bytes::from("0x0a").into(),
+                                    previous_value: Bytes::new().into(),
                                 },
                             ],
                             change: ChangeType::Update.into(),
@@ -1958,6 +1984,7 @@ pub mod fixtures {
                                 slots: vec![ContractSlot {
                                     slot: Bytes::from("0x01").into(),
                                     value: Bytes::from("0x01").into(),
+                                    previous_value: Bytes::new().into(),
                                 }],
                                 change: ChangeType::Update.into(),
                                 token_balances: vec![],
@@ -1971,6 +1998,7 @@ pub mod fixtures {
                                 slots: vec![ContractSlot {
                                     slot: Bytes::from("0x02").into(),
                                     value: Bytes::from("0xc8").into(),
+                                    previous_value: Bytes::new().into(),
                                 }],
                                 change: ChangeType::Update.into(),
                                 token_balances: vec![AccountBalanceChange {
@@ -1995,6 +2023,7 @@ pub mod fixtures {
                             slots: vec![ContractSlot {
                                 slot: Bytes::from("0x01").into(),
                                 value: Bytes::from("0x01").into(),
+                                previous_value: Bytes::new().into(),
                             }],
                             change: ChangeType::Update.into(),
                             token_balances: vec![AccountBalanceChange {
@@ -2030,6 +2059,7 @@ pub mod fixtures {
                         slots: vec![ContractSlot {
                             slot: Bytes::from("0x03").into(),
                             value: Bytes::from("0x10").into(),
+                            previous_value: Bytes::new().into(),
                         }],
                         change: ChangeType::Update.into(),
                         token_balances: vec![],
@@ -2065,6 +2095,7 @@ pub mod fixtures {
                             slots: vec![ContractSlot {
                                 slot: Bytes::from("0x01").into(),
                                 value: Bytes::from("0x10").into(),
+                                previous_value: Bytes::new().into(),
                             }],
                             change: ChangeType::Update.into(),
                             token_balances: vec![
@@ -2085,6 +2116,7 @@ pub mod fixtures {
                             slots: vec![ContractSlot {
                                 slot: Bytes::from("0x01").into(),
                                 value: Bytes::from("0x10").into(),
+                                previous_value: Bytes::new().into(),
                             }],
                             change: ChangeType::Update.into(),
                             token_balances: vec![AccountBalanceChange {
@@ -2125,7 +2157,9 @@ pub mod fixtures {
                     hash: vec![0x0, 0x0, 0x0, 0x0],
                     parent_hash: vec![0x21, 0x22, 0x23, 0x24],
                     number: 1,
-                    ts: yesterday_midnight().timestamp() as u64,
+                    ts: yesterday_midnight()
+                        .and_utc()
+                        .timestamp() as u64,
                 }),
                 changes: vec![
                     TransactionChanges {
@@ -2509,19 +2543,24 @@ pub mod fixtures {
                             ContractSlot {
                                 slot: Bytes::from("0x01").into(),
                                 value: Bytes::from("0x01").into(),
+                                previous_value: Bytes::new().into(),
                             },
                             ContractSlot {
                                 slot: Bytes::from("0x02").into(),
                                 value: Bytes::from("0x02").into(),
+                                previous_value: Bytes::new().into(),
                             },
                         ],
+                        native_balance: None,
                     },
                     StorageChanges {
                         address: address_from_str("0000000000000000000000000000000000000002"),
                         slots: vec![ContractSlot {
                             slot: Bytes::from("0x03").into(),
                             value: Bytes::from("0x03").into(),
+                            previous_value: Bytes::new().into(),
                         }],
+                        native_balance: Some(Bytes::from(1000u64).to_vec()),
                     },
                 ],
             },
@@ -2533,14 +2572,18 @@ pub mod fixtures {
                         slots: vec![ContractSlot {
                             slot: Bytes::from("0x01").into(),
                             value: Bytes::from("0x04").into(),
+                            previous_value: Bytes::new().into(),
                         }],
+                        native_balance: None,
                     },
                     StorageChanges {
                         address: address_from_str("0000000000000000000000000000000000000002"),
                         slots: vec![ContractSlot {
                             slot: Bytes::from("0x05").into(),
                             value: Bytes::from("0x05").into(),
+                            previous_value: Bytes::new().into(),
                         }],
+                        native_balance: None,
                     },
                 ],
             },

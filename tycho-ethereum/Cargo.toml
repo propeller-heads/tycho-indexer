@@ -12,38 +12,27 @@ categories.workspace = true
 readme = "README.md"
 
 [dependencies]
-anyhow.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true
 tracing.workspace = true
 tokio.workspace = true
 tycho-common.workspace = true
-serde.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
-reqwest.workspace = true
 unicode-segmentation.workspace = true
-url = "2"
+rand.workspace = true
 futures = "0.3"
+backoff = { version = "0.4.0", features = ["tokio"], default-features = false }
 
 # Required dependencies
-ethers = "^2.0.2"
-web3 = { version = "0.19", default-features = false }
-alloy = { version = "0.14", default-features = true }
-
-# Optional dependencies
-contracts = { git = "https://github.com/cowprotocol/services", rev = "f3678428991e055ceb517f184d1b37244f2d8f51", optional = true }
-ethrpc = { git = "https://github.com/cowprotocol/services", rev = "f3678428991e055ceb517f184d1b37244f2d8f51", optional = true }
-ethcontract = { version = "0.25.4", default-features = false, features = [
-    "aws-kms",
-], optional = true }
-clap = { version = "4", features = ["derive", "env"], optional = true }
-humantime = { version = "2.1.0", optional = true }
-tracing-test = "0.2.5"
+alloy = { workspace = true, default-features = false, features = ["reqwest-default-tls", "rpc-client", "json-rpc", "sol-types", "rpc-types-trace", "rpc-types-debug"] }
 
 [dev-dependencies]
 pretty_assertions.workspace = true
+mockito.workspace = true
+rstest.workspace = true
+tracing-test = "0.2.5"
 
-[features]
-default = []
-onchain_data = ["ethrpc", "ethcontract", "dep:contracts", "humantime", "clap"]
+[[example]]
+name = "run-analysis"

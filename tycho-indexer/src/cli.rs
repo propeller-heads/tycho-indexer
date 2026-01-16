@@ -1,5 +1,8 @@
 use clap::{Args, Parser, Subcommand};
 use tycho_common::{models::Chain, Bytes};
+use tycho_ethereum::rpc::{config::RPCRetryConfig, EthereumRpcClient};
+
+use crate::{extractor::ExtractionError, services::ServerRpcConfig};
 
 /// Tycho Indexer using Substreams
 ///
@@ -36,7 +39,7 @@ pub enum Command {
     Rpc,
 }
 
-#[derive(Parser, Debug, Clone, PartialEq, Eq)]
+#[derive(Parser, Debug, Clone, PartialEq)]
 #[command(version, about, long_about = None)]
 pub struct GlobalArgs {
     /// PostgresDB Connection Url
@@ -48,14 +51,14 @@ pub struct GlobalArgs {
     )]
     pub database_url: String,
 
+    /// Batch size for the database inserts
+    #[clap(long, default_value = "0")]
+    pub database_insert_batch_size: usize,
+
     /// Name of the s3 bucket used to retrieve spkgs
     #[clap(env = "TYCHO_S3_BUCKET", long, default_value = "repo.propellerheads-propellerheads")]
     //Default is for backward compatibility but needs to be removed later
     pub s3_bucket: Option<String>,
-
-    /// The RPC URL to connect to the Ethereum node
-    #[clap(env = "RPC_URL", long, hide_env_values = true)]
-    pub rpc_url: String,
 
     /// Substreams API endpoint
     #[clap(name = "endpoint", long, default_value = "https://mainnet.eth.streamingfast.io")]
@@ -72,6 +75,77 @@ pub struct GlobalArgs {
     /// The server version prefix
     #[clap(long, default_value = "v1")]
     pub server_version_prefix: String,
+
+    /// RPC configuration (URL and retry settings)
+    #[command(flatten)]
+    pub rpc: RPCArgs,
+
+    /// Tycho RPC server configuration (minimum filtering thresholds)
+    #[command(flatten)]
+    pub server: ServerArgs,
+}
+
+/// RPC configuration arguments (url, retry settings, and potentially others, such as batching)
+#[derive(Args, Debug, Clone, PartialEq)]
+pub struct RPCArgs {
+    /// The RPC URL to connect to the Blockchain node
+    #[clap(long = "rpc-url", env = "RPC_URL", hide_env_values = true)]
+    pub url: String,
+
+    /// Maximum number of RPC retry attempts for failed requests
+    #[clap(long = "rpc-max-retries", env = "RPC_MAX_RETRIES", default_value = "5")]
+    pub max_retries: usize,
+
+    /// Initial backoff delay in milliseconds before the first retry
+    #[clap(long = "rpc-initial-backoff-ms", env = "RPC_INITIAL_BACKOFF_MS", default_value = "150")]
+    pub initial_backoff_ms: u64,
+
+    /// Maximum backoff delay in milliseconds (backoff is capped at this value)
+    #[clap(long = "rpc-max-backoff-ms", env = "RPC_MAX_BACKOFF_MS", default_value = "5000")]
+    pub max_backoff_ms: u64,
+}
+
+/// Tycho RPC server configuration (minimum filtering thresholds)
+#[derive(Args, Debug, Clone, PartialEq)]
+pub struct ServerArgs {
+    /// Minimum TVL threshold for RPC responses (in chain's native token)
+    /// Components requests with TVL below this value or with no TVL will be rejected
+    #[clap(long = "rpc-min-tvl", env = "RPC_MIN_TVL")]
+    pub min_tvl: Option<f64>,
+
+    /// Minimum token quality threshold for RPC responses
+    /// Tokens requests with quality below this value will be rejected
+    #[clap(long = "rpc-min-token-quality", env = "RPC_MIN_TOKEN_QUALITY")]
+    pub min_token_quality: Option<i32>,
+
+    /// Maximum traded_n_days_ago threshold for RPC responses
+    /// Tokens requests with traded_n_days_ago above this value will be rejected
+    #[clap(
+        long = "rpc-max-traded-n-days-ago",
+        env = "RPC_MAX_TRADED_N_DAYS_AGO",
+        alias = "rpc-min-traded-n-days-ago" // to ensure backward compatibility, TODO: remove after next prod release
+    )]
+    pub max_traded_n_days_ago: Option<u64>,
+}
+
+impl From<ServerArgs> for ServerRpcConfig {
+    fn from(args: ServerArgs) -> Self {
+        Self::new()
+            .with_min_tvl(args.min_tvl)
+            .with_min_quality(args.min_token_quality)
+            .with_max_traded_n_days_ago(args.max_traded_n_days_ago)
+    }
+}
+
+impl RPCArgs {
+    pub fn build_client(&self) -> Result<EthereumRpcClient, ExtractionError> {
+        let retry_config =
+            RPCRetryConfig::new(self.max_retries, self.initial_backoff_ms, self.max_backoff_ms);
+
+        EthereumRpcClient::new(&self.url)
+            .map_err(|e| ExtractionError::Setup(format!("Failed to create RPC client: {e}")))
+            .map(|client| client.with_retry(retry_config))
+    }
 }
 
 #[derive(Args, Debug, Clone, PartialEq)]
@@ -122,6 +196,10 @@ pub struct RunSpkgArgs {
     #[clap(long, value_delimiter = ',')]
     pub protocol_type_names: Vec<String>,
 
+    // Protocol system to index
+    #[clap(long)]
+    pub protocol_system: String,
+
     /// Substreams start block
     #[clap(long)]
     pub start_block: i64,
@@ -140,7 +218,7 @@ pub struct RunSpkgArgs {
 
     /// Block number to initialize the accounts at
     #[clap(long, default_value = "0")]
-    pub initialization_block: i64,
+    pub initialization_block: u64,
 
     /// DCI plugin to use
     ///
@@ -171,9 +249,6 @@ impl RunSpkgArgs {
 
 #[derive(Args, Debug, Clone, PartialEq, Eq)]
 pub struct AnalyzeTokenArgs {
-    /// Ethereum node rpc url
-    #[clap(env, long)]
-    pub rpc_url: String,
     /// Blockchain to execute analysis for.
     #[clap(long)]
     pub chain: Chain,
@@ -201,6 +276,8 @@ mod cli_tests {
             "http://example.com",
             "--database-url",
             "my_db",
+            "--database-insert-batch-size",
+            "256",
             "--rpc-url",
             "http://example.com",
             "run",
@@ -214,6 +291,8 @@ mod cli_tests {
             "17361664",
             "--protocol-type-names",
             "pt1,pt2",
+            "--protocol-system",
+            "test_protocol",
         ])
         .expect("parse errored");
 
@@ -221,17 +300,29 @@ mod cli_tests {
             global_args: GlobalArgs {
                 endpoint_url: "http://example.com".to_string(),
                 database_url: "my_db".to_string(),
-                rpc_url: "http://example.com".to_string(),
+                database_insert_batch_size: 256,
                 s3_bucket: Some("repo.propellerheads-propellerheads".to_string()),
                 server_ip: "0.0.0.0".to_string(),
                 server_port: 4242,
                 server_version_prefix: "v1".to_string(),
+                rpc: RPCArgs {
+                    url: "http://example.com".to_string(),
+                    max_retries: 5,
+                    initial_backoff_ms: 150,
+                    max_backoff_ms: 5000,
+                },
+                server: ServerArgs {
+                    min_tvl: None,
+                    min_token_quality: None,
+                    max_traded_n_days_ago: None,
+                },
             },
             command: Command::Run(RunSpkgArgs {
                 chain: "ethereum".to_string(),
                 spkg: "package.spkg".to_string(),
                 module: "module_name".to_string(),
                 protocol_type_names: vec!["pt1".to_string(), "pt2".to_string()],
+                protocol_system: "test_protocol".to_string(),
                 start_block: 17361664,
                 stop_block: None,
                 substreams_args: SubstreamsArgs {
@@ -256,6 +347,12 @@ mod cli_tests {
             "my_db",
             "--rpc-url",
             "http://example.com",
+            "--rpc-max-retries",
+            "10",
+            "--rpc-initial-backoff-ms",
+            "200",
+            "--rpc-max-backoff-ms",
+            "10000",
             "index",
             "--extractors-config",
             "/opt/extractors.yaml",
@@ -268,11 +365,22 @@ mod cli_tests {
             global_args: GlobalArgs {
                 endpoint_url: "http://example.com".to_string(),
                 database_url: "my_db".to_string(),
-                rpc_url: "http://example.com".to_string(),
+                database_insert_batch_size: 0,
                 s3_bucket: Some("repo.propellerheads-propellerheads".to_string()),
                 server_ip: "0.0.0.0".to_string(),
                 server_port: 4242,
                 server_version_prefix: "v1".to_string(),
+                rpc: RPCArgs {
+                    url: "http://example.com".to_string(),
+                    max_retries: 10,
+                    initial_backoff_ms: 200,
+                    max_backoff_ms: 10000,
+                },
+                server: ServerArgs {
+                    min_tvl: None,
+                    min_token_quality: None,
+                    max_traded_n_days_ago: None,
+                },
             },
             command: Command::Index(IndexArgs {
                 substreams_args: SubstreamsArgs {
@@ -298,5 +406,24 @@ mod cli_tests {
         ]);
 
         assert!(args.is_err());
+    }
+
+    #[test]
+    fn test_rpc_args_conversion_to_rpc() {
+        // Test conversion from RPCArgs (CLI) to RPCConfig (domain)
+        let rpc_args = RPCArgs {
+            url: "https://eth.example.com".to_string(),
+            max_retries: 7,
+            initial_backoff_ms: 250,
+            max_backoff_ms: 8000,
+        };
+
+        let rpc_client = rpc_args.build_client().unwrap();
+
+        let rpc_config = rpc_client.get_retry_config();
+        assert_eq!(rpc_config.max_retries, 7);
+        assert_eq!(rpc_config.initial_backoff_ms, 250);
+        assert_eq!(rpc_config.max_backoff_ms, 8000);
+        assert_eq!(rpc_client.get_url(), "https://eth.example.com");
     }
 }

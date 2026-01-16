@@ -7,11 +7,12 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::{Duration, NaiveDateTime};
-use metrics::{counter, gauge};
+use deepsize::DeepSizeOf;
+use metrics::{counter, gauge, histogram};
 use mockall::automock;
 use prost::Message;
-use tokio::sync::Mutex;
-use tracing::{debug, error, info, instrument, trace, warn};
+use tokio::{sync::Mutex, task::JoinHandle};
+use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 use tycho_common::{
     models::{
         blockchain::{
@@ -58,8 +59,18 @@ pub struct Inner {
     first_message_processed: bool,
 }
 
+type BatchCommitHandle = tracing::instrument::Instrumented<JoinHandle<Result<(), ExtractionError>>>;
+
+#[derive(Default)]
+struct GatewayInner<G> {
+    inner: Arc<G>,
+    commit_handle: Mutex<Option<BatchCommitHandle>>,
+    committed_block_height: Arc<Mutex<Option<u64>>>,
+    commit_batch_size: usize,
+}
+
 pub struct ProtocolExtractor<G, T, E> {
-    gateway: G,
+    gateway: GatewayInner<G>,
     name: String,
     chain: Chain,
     chain_state: ChainState,
@@ -76,13 +87,14 @@ pub struct ProtocolExtractor<G, T, E> {
 
 impl<G, T, E> ProtocolExtractor<G, T, E>
 where
-    G: ExtractorGateway,
+    G: ExtractorGateway + 'static,
     T: TokenPreProcessor,
     E: ExtractorExtension,
 {
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
         gateway: G,
+        database_insert_batch_size: usize,
         name: &str,
         chain: Chain,
         chain_state: ChainState,
@@ -100,7 +112,12 @@ where
             Err(StorageError::NotFound(_, _)) => {
                 warn!(?name, ?chain, "No cursor found, starting from the beginning");
                 ProtocolExtractor {
-                    gateway,
+                    gateway: GatewayInner {
+                        inner: Arc::new(gateway),
+                        commit_handle: Default::default(),
+                        committed_block_height: Default::default(),
+                        commit_batch_size: database_insert_batch_size,
+                    },
                     name: name.to_string(),
                     chain,
                     chain_state,
@@ -133,10 +150,18 @@ where
                     ?name,
                     ?chain,
                     cursor = &cursor_hex,
+                    block_number = last_processed_block.number,
                     "Found existing cursor! Resuming extractor.."
                 );
                 ProtocolExtractor {
-                    gateway,
+                    gateway: GatewayInner {
+                        inner: Arc::new(gateway),
+                        commit_handle: Default::default(),
+                        committed_block_height: Arc::new(Mutex::new(Some(
+                            last_processed_block.number,
+                        ))),
+                        commit_batch_size: database_insert_batch_size,
+                    },
                     name: name.to_string(),
                     chain,
                     chain_state,
@@ -183,62 +208,109 @@ where
     }
 
     /// Reports sync progress if a minute has passed since the last report.
-    async fn maybe_report_progress(&self, block: &Block) {
+    async fn report_sync_progress(
+        &self,
+        block: &Block,
+        last_report_block_number: u64,
+        time_passed: i64,
+    ) {
+        let current_block = self.chain_state.current_block().await;
+        let distance_to_current = current_block - block.number;
+        let blocks_processed = block.number - last_report_block_number;
+        let blocks_per_minute = blocks_processed as f64 * 60.0 / time_passed as f64;
+
+        let extractor_id = self.get_id();
+        gauge!(
+            "extractor_sync_block_rate",
+            "chain" => extractor_id.chain.to_string(),
+            "extractor" => extractor_id.name.to_string(),
+        )
+        .set(blocks_per_minute);
+
+        if let Some(time_remaining) =
+            Duration::try_minutes((distance_to_current as f64 / blocks_per_minute) as i64)
+        {
+            let hours = time_remaining.num_hours();
+            let minutes = (time_remaining.num_minutes()) % 60;
+            info!(
+                extractor_id = self.name,
+                blocks_per_minute = format!("{blocks_per_minute:.2}"),
+                blocks_processed,
+                height = block.number,
+                estimated_current = current_block,
+                time_remaining = format!("{:02}h{:02}m", hours, minutes),
+                name = "SyncProgress"
+            );
+        } else {
+            warn!(
+                "Failed to convert {} to a duration",
+                (distance_to_current as f64 / blocks_per_minute) as i64,
+            );
+            info!(
+                extractor_id = self.name,
+                blocks_per_minute = format!("{blocks_per_minute:.2}"),
+                blocks_processed,
+                height = block.number,
+                estimated_current = current_block,
+                name = "SyncProgress"
+            );
+        }
+    }
+
+    #[instrument(skip_all, fields(chain = % self.chain, name = % self.name, block_number = % msg.block.number))]
+    async fn periodically_report_metrics(&self, msg: &mut BlockChanges, is_syncing: bool) {
         let mut state = self.inner.lock().await;
         let now = chrono::Local::now().naive_utc();
+
+        // On the first call, initialize the last report time and block number
         if state.last_report_block_number == 0 {
-            // On startup, initialize state and exit
             state.last_report_ts = now;
-            state.last_report_block_number = block.number;
+            state.last_report_block_number = msg.block.number;
             return;
         }
+
         let time_passed = now
             .signed_duration_since(state.last_report_ts)
             .num_seconds();
+
         if time_passed >= 60 {
-            let current_block = self.chain_state.current_block().await;
-            let distance_to_current = current_block - block.number;
-            let blocks_processed = block.number - state.last_report_block_number;
-            let blocks_per_minute = blocks_processed as f64 * 60.0 / time_passed as f64;
-
-            let extractor_id = self.get_id();
-            gauge!(
-                "extractor_sync_block_rate",
-                "chain" => extractor_id.chain.to_string(),
-                "extractor" => extractor_id.name.to_string(),
-            )
-            .set(blocks_per_minute);
-
-            if let Some(time_remaining) = chrono::Duration::try_minutes(
-                (distance_to_current as f64 / blocks_per_minute) as i64,
-            ) {
-                let hours = time_remaining.num_hours();
-                let minutes = (time_remaining.num_minutes()) % 60;
-                info!(
-                    extractor_id = self.name,
-                    blocks_per_minute = format!("{blocks_per_minute:.2}"),
-                    blocks_processed,
-                    height = block.number,
-                    estimated_current = current_block,
-                    time_remaining = format!("{:02}h{:02}m", hours, minutes),
-                    name = "SyncProgress"
-                );
-            } else {
-                warn!(
-                    "Failed to convert {} to a duration",
-                    (distance_to_current as f64 / blocks_per_minute) as i64,
-                );
-                info!(
-                    extractor_id = self.name,
-                    blocks_per_minute = format!("{blocks_per_minute:.2}"),
-                    blocks_processed,
-                    height = block.number,
-                    estimated_current = current_block,
-                    name = "SyncProgress"
-                );
+            if is_syncing {
+                self.report_sync_progress(&msg.block, state.last_report_block_number, time_passed)
+                    .await;
             }
+
             state.last_report_ts = now;
-            state.last_report_block_number = block.number;
+            state.last_report_block_number = msg.block.number;
+            drop(state); // Release the lock before doing potentially slow operations
+
+            // Report the memory usage for all buffers and caches
+            gauge!(
+                "extractor_reorg_buffer_size",
+                "chain" => self.chain.to_string(),
+                "extractor" => self.name.clone(),
+            )
+            .set(
+                self.reorg_buffer
+                    .lock()
+                    .await
+                    .deep_size_of() as f64,
+            );
+
+            // As the protocol cache is shared with other extractors, we only index it by chain
+            gauge!(
+                "protocol_cache_size",
+                "chain" => self.chain.to_string(),
+            )
+            .set(self.protocol_cache.size_of().await as f64);
+
+            if let Some(dci_plugin) = &self.dci_plugin {
+                gauge!(
+                    "dci_cache_size",
+                    "chain" => self.chain.to_string(),
+                    "extractor" => self.name.clone(),
+                )
+                .set(dci_plugin.lock().await.cache_size() as f64);
+            }
         }
     }
 
@@ -359,6 +431,7 @@ where
         // Then get the missing balances from db
         let missing_balances: HashMap<String, HashMap<Bytes, ComponentBalance>> = self
             .gateway
+            .inner
             .get_components_balances(
                 &missing_balances_map
                     .keys()
@@ -439,6 +512,7 @@ where
         // Then get the missing account balances from db
         let missing_balances = self
             .gateway
+            .inner
             .get_account_balances(
                 &missing_balances_map
                     .keys()
@@ -574,6 +648,11 @@ where
             .into_iter()
             .flatten()
             .map(|t| (t.address.clone(), t));
+
+        if !unknown_tokens.is_empty() {
+            debug!(?unknown_tokens, block_number = msg.block.number, "NewTokens");
+        }
+
         let new_tokens: HashMap<Address, Token> = self
             .token_pre_processor
             .get_tokens(unknown_tokens, Arc::new(tf), BlockTag::Number(msg.block.number))
@@ -589,7 +668,7 @@ where
 #[async_trait]
 impl<G, T, E> Extractor for ProtocolExtractor<G, T, E>
 where
-    G: ExtractorGateway,
+    G: ExtractorGateway + 'static,
     T: TokenPreProcessor,
     E: ExtractorExtension,
 {
@@ -605,6 +684,7 @@ where
             .cloned()
             .collect();
         self.gateway
+            .inner
             .ensure_protocol_types(&protocol_types)
             .await;
     }
@@ -622,7 +702,7 @@ where
     }
 
     #[allow(deprecated)]
-    #[instrument(skip_all, fields(block_number))]
+    #[instrument(skip_all, fields(block_number, final_block_height))]
     async fn handle_tick_scoped_data(
         &self,
         inp: BlockScopedData,
@@ -684,6 +764,7 @@ where
         let msg = match msg {
             Ok(changes) => {
                 tracing::Span::current().record("block_number", changes.block.number);
+                tracing::Span::current().record("final_block_height", inp.final_block_height);
                 changes
             }
             Err(ExtractionError::Empty) => {
@@ -697,7 +778,12 @@ where
             if let Some(post_process_f) = self.post_processor { post_process_f(msg) } else { msg };
 
         if let Some(last_processed_block) = self.get_last_processed_block().await {
-            if msg.block.ts.timestamp() == last_processed_block.ts.timestamp() {
+            if msg.block.ts.and_utc().timestamp() ==
+                last_processed_block
+                    .ts
+                    .and_utc()
+                    .timestamp()
+            {
                 debug!("Block with identical timestamp detected. Prev block ts: {:?} - New block ts: {:?}", last_processed_block.ts, msg.block.ts);
                 // Blockchains with fast block times (e.g., Arbitrum) may produce blocks with
                 // identical timestamps (measured in seconds). To ensure accurate ordering, we
@@ -733,45 +819,134 @@ where
 
         trace!(?msg, "Processing message");
 
-        // Depending on how Substreams handle them, this condition could be problematic for single
-        // block finality blockchains.
-        let is_syncing = inp.final_block_height >= msg.block.number;
-        {
-            // keep reorg buffer guard within a limited scope
+        // We work under the invariant that final_block_height is always <= block.number.
+        // They are equal only when we are syncing. Depending on how Substreams handle them, this
+        // invariant could be problematic for single block finality blockchains.
+        let is_syncing = inp.final_block_height == msg.block.number;
+        if inp.final_block_height > msg.block.number {
+            return Err(ExtractionError::ReorgBufferError(format!(
+                    "Final block height ({}) greater than block number ({}) are unsupported by the reorg buffer",
+                    inp.final_block_height, msg.block.number
+                )));
+        }
+
+        // Create a scope to lock the reorg buffer, insert the new block and possibly commit to the
+        // database if we have enough blocks in the buffer.
+        // Return the block height up to which we have committed to the database.
+        let blocks_to_commit = {
             let mut reorg_buffer = self.reorg_buffer.lock().await;
+
             reorg_buffer
                 .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
                 .map_err(ExtractionError::Storage)?;
 
-            let mut msgs = reorg_buffer
-                .drain_new_finalized_blocks(inp.final_block_height)
-                .map_err(ExtractionError::Storage)?
-                .into_iter()
-                .peekable();
-
-            while let Some(msg) = msgs.next() {
-                // Force a database commit if we're not syncing and this is the last block to be
-                // sent. Otherwise, wait to accumulate a full batch before
-                // committing.
-                let force_db_commit = if is_syncing { false } else { msgs.peek().is_none() };
-
-                self.gateway
-                    .advance(msg.block_update(), msg.cursor(), force_db_commit)
-                    .await?;
+            if reorg_buffer.count_blocks_before(inp.final_block_height) >=
+                self.gateway.commit_batch_size
+            {
+                reorg_buffer
+                    .drain_blocks_until(inp.final_block_height)
+                    .map_err(ExtractionError::Storage)?
+            } else {
+                Vec::new()
             }
-        }
+        };
+
+        // If we have blocks to commit, wait for the previous async commit task to finish and then
+        // spawn a new task that will commit the new blocks and update the committed block height.
+        if let Some(last_block) = blocks_to_commit.last() {
+            let mut commit_handle_guard = self.gateway.commit_handle.lock().await;
+            let gateway = self.gateway.inner.clone();
+            let committed_block_height = self
+                .gateway
+                .committed_block_height
+                .clone();
+            let last_block_height = last_block.block_update.block.number;
+            let batch_size = blocks_to_commit.len();
+            let (extractor_name, chain) = (self.name.clone(), self.chain);
+
+            // Consume the previous commit handle, leaving None in its place
+            if let Some(db_commit_handle_to_join) = commit_handle_guard.take() {
+                let awaited_commit = !db_commit_handle_to_join
+                    .inner()
+                    .is_finished();
+                let now = chrono::Utc::now().naive_utc();
+
+                match db_commit_handle_to_join.await {
+                    Ok(Ok(())) => {}
+                    Ok(Err(storage_err)) => {
+                        return Err(storage_err);
+                    }
+                    Err(join_err) => {
+                        return Err(ExtractionError::Storage(StorageError::Unexpected(format!(
+                            "Failed to join database commit task: {join_err}"
+                        ))));
+                    }
+                }
+
+                if awaited_commit {
+                    let wait_time = chrono::Utc::now()
+                        .naive_utc()
+                        .signed_duration_since(now);
+                    trace!(batch_size, block_height = last_block_height, extractor_id = self.name.clone(), chain = %self.chain, wait_time = %wait_time, "CommitTaskAwaited");
+                }
+            }
+
+            // Spawn a new task to commit the new blocks and update the committed block height
+            let new_handle = tokio::spawn(async move {
+                let now = std::time::Instant::now();
+
+                let mut it = blocks_to_commit.iter().peekable();
+                while let Some(block) = it.next() {
+                    // Force a database commit if we're not syncing and this is the last block
+                    // to be sent. Otherwise, wait to accumulate a full
+                    // batch before committing.
+                    let force_db_commit = if is_syncing { false } else { it.peek().is_none() };
+
+                    gateway
+                        .advance(block.block_update(), block.cursor(), force_db_commit)
+                        .await
+                        .map_err(ExtractionError::Storage)?;
+                }
+
+                let mut committed_hieght_guard = committed_block_height.lock().await;
+                *committed_hieght_guard = Some(last_block_height);
+
+                trace!(batch_size, block_height = last_block_height, extractor_id = extractor_name, chain = %chain, "CommitTaskCompleted");
+
+                histogram!(
+                    "database_commit_duration_ms", "chain" => chain.to_string(), "extractor" => extractor_name
+                )
+                .record(now.elapsed().as_millis() as f64);
+
+                Ok(())
+            }).instrument(info_span!(
+                parent: None,  // This task can outlive the current span, so we don't want to attach it to it
+                "commit_blocks_task",
+                batch_size,
+                block_height = last_block_height,
+                extractor_id = self.name.clone(),
+                chain = %chain,
+            ));
+
+            *commit_handle_guard = Some(new_handle);
+
+            trace!(batch_size, block_height = last_block_height, extractor_id = self.name.clone(), chain = %self.chain, "CommitTaskQueued");
+        };
 
         self.update_last_processed_block(msg.block.clone())
             .await;
 
-        if is_syncing {
-            self.maybe_report_progress(&msg.block)
-                .await;
-        }
+        self.periodically_report_metrics(&mut msg, is_syncing)
+            .await;
 
         self.update_cursor(inp.cursor).await;
 
-        let mut changes = msg.aggregate_updates()?;
+        let committed_block_height = *self
+            .gateway
+            .committed_block_height
+            .lock()
+            .await;
+        let mut changes = msg.into_aggregated(committed_block_height)?;
         self.handle_tvl_changes(&mut changes)
             .await?;
 
@@ -944,6 +1119,7 @@ where
 
         let missing_contracts = self
             .gateway
+            .inner
             .get_contracts(
                 &missing_map
                     .keys()
@@ -993,13 +1169,15 @@ where
                 .into_iter()
                 .fold(HashMap::new(), |mut acc, ((addr, key), value)| {
                     acc.entry(addr.clone())
-                        .or_insert_with(|| AccountDelta {
-                            address: addr,
-                            chain: self.chain,
-                            slots: HashMap::new(),
-                            balance: None, //TODO: handle balance changes
-                            code: None,    //TODO: handle code changes
-                            change: ChangeType::Update,
+                        .or_insert_with(|| {
+                            AccountDelta::new(
+                                self.chain,
+                                addr,
+                                HashMap::new(),
+                                None, //TODO: handle balance changes
+                                None, //TODO: handle code changes
+                                ChangeType::Update,
+                            )
                         })
                         .slots
                         .insert(key, Some(value));
@@ -1054,6 +1232,7 @@ where
 
         let missing_components_states = self
             .gateway
+            .inner
             .get_protocol_states(
                 &missing_map
                     .keys()
@@ -1182,15 +1361,22 @@ where
 
         let new_latest_block = reorg_buffer
             .get_most_recent_block()
-            .expect("Couldn't find most recent block in buffer during revert");
+            .ok_or(ExtractionError::ReorgBufferError("Reorg buffer is empty after purge".into()))?;
+
+        // The latest finalized block height is the one of the last block in the reverted_state
+        // (i.e. the most recent block that is reverted)
+        let finalized_block_height = reverted_state
+            .last()
+            .ok_or(ExtractionError::ReorgBufferError("Reorg buffer is empty after purge".into()))?
+            .block_update
+            .finalized_block_height;
 
         let revert_message = BlockAggregatedChanges {
             extractor: self.name.clone(),
             chain: self.chain,
             block: new_latest_block.clone(),
-            finalized_block_height: reverted_state[0]
-                .block_update
-                .finalized_block_height,
+            db_committed_block_height: None,
+            finalized_block_height,
             revert: true,
             state_deltas,
             account_deltas,
@@ -1336,7 +1522,10 @@ impl ExtractorGateway for ExtractorPgGateway {
                 .values()
                 .cloned()
                 .collect::<Vec<_>>();
-            debug!(new_tokens=?new_tokens.iter().map(|t| &t.address).collect::<Vec<_>>(), "NewTokens");
+
+            // Commented out to avoid spamming the logs. After https://github.com/propeller-heads/tycho-indexer/commit/94cd54a5a6de99336e467c3abe89b4bcdf5491b2 we are logging every token found in a block, not only new ones.
+            // debug!(new_tokens=?new_tokens.iter().map(|t| &t.address).collect::<Vec<_>>(),
+            // block_number=changes.block.number, "NewTokens");
             self.state_gateway
                 .add_tokens(&new_tokens)
                 .await?;
@@ -1357,7 +1546,7 @@ impl ExtractorGateway for ExtractorPgGateway {
         let mut new_entrypoints: HashMap<ComponentId, HashSet<EntryPoint>> = HashMap::new();
         let mut new_entrypoint_params: HashMap<
             EntryPointId,
-            HashSet<(TracingParams, Option<ComponentId>)>,
+            HashSet<(TracingParams, ComponentId)>,
         > = HashMap::new();
 
         for tx_update in changes.txs_with_update.iter() {
@@ -1397,9 +1586,10 @@ impl ExtractorGateway for ExtractorPgGateway {
                             .balance
                             .unwrap_or_default(),
                     );
-                    account_delta_creation.code = Some(
+                    account_delta_creation.set_code(
                         account_delta_creation
-                            .code
+                            .code()
+                            .clone()
                             .unwrap_or_default(),
                     );
                     account_changes.push((tx_update.tx.hash.clone(), account_delta_creation));
@@ -1469,6 +1659,7 @@ impl ExtractorGateway for ExtractorPgGateway {
                     .iter()
                     .map(|pc| &pc.id)
                     .collect::<Vec<_>>(),
+                block_number = changes.block.number,
                 "NewProtocolComponents"
             );
             self.state_gateway
@@ -1572,7 +1763,16 @@ impl ExtractorGateway for ExtractorPgGateway {
 
 #[cfg(test)]
 mod test {
+    use std::{
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
+        thread::sleep,
+    };
+
     use float_eq::assert_float_eq;
+    use futures03::FutureExt;
     use mockall::mock;
     use tycho_common::{models::blockchain::TxWithChanges, traits::TokenOwnerFinding};
 
@@ -1598,8 +1798,9 @@ mod test {
 
     const EXTRACTOR_NAME: &str = "TestExtractor";
     const TEST_PROTOCOL: &str = "TestProtocol";
-    async fn create_extractor(
+    async fn create_extractor_with_batch_size(
         gw: MockExtractorGateway,
+        batch_size: usize,
     ) -> ProtocolExtractor<MockExtractorGateway, MockTokenPreProcessor, MockExtractorExtension>
     {
         let protocol_types = HashMap::from([("pt_1".to_string(), ProtocolType::default())]);
@@ -1614,6 +1815,7 @@ mod test {
             .returning(|_, _, _| Vec::new());
         ProtocolExtractor::new(
             gw,
+            batch_size,
             EXTRACTOR_NAME,
             Chain::Ethereum,
             ChainState::default(),
@@ -1626,6 +1828,15 @@ mod test {
         )
         .await
         .expect("Failed to create extractor")
+    }
+
+    async fn create_extractor(
+        gw: MockExtractorGateway,
+    ) -> ProtocolExtractor<MockExtractorGateway, MockTokenPreProcessor, MockExtractorExtension>
+    {
+        // Default value that flushes the buffer once a single finalized block lands in the buffer.
+        // This behavior is consistent with flushing on every finalized block.
+        create_extractor_with_batch_size(gw, 1).await
     }
 
     #[tokio::test]
@@ -1697,17 +1908,165 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_handle_tick_scoped_data_old_native_msg() {
+    async fn test_handle_tick_scoped_respects_batch_async_commit() {
         let mut gw = MockExtractorGateway::new();
+
         gw.expect_ensure_protocol_types()
             .times(1)
             .returning(|_| ());
         gw.expect_get_cursor()
             .times(1)
             .returning(|| Ok(("cursor".into(), Bytes::default())));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
+
+        // Use blocking channels as mock does not support async
+        let (tx, rx) = std::sync::mpsc::channel::<bool>();
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let call_count_clone = call_count.clone();
+        gw.expect_advance()
+            .times(4)
+            .returning(move |_, _, _| {
+                rx.recv().unwrap();
+                call_count_clone.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            });
+
+        let commit_batch_size = 2;
+        let extractor = create_extractor_with_batch_size(gw, commit_batch_size).await;
+
+        let scoped = |n: u64, fin: u64| {
+            pb_fixtures::pb_block_scoped_data(
+                tycho_substreams::BlockChanges {
+                    block: Some(pb_fixtures::pb_blocks(n)),
+                    ..Default::default()
+                },
+                Some(&format!("cursor@{n}")),
+                Some(fin),
+            )
+        };
+        let commit_task_is_running = async |ex: &ProtocolExtractor<_, _, _>| -> bool {
+            let guard = ex.gateway.commit_handle.lock().await;
+            guard
+                .as_ref()
+                .is_some_and(|h| !h.inner().is_finished())
+        };
+        let commit_task_is_none = async |ex: &ProtocolExtractor<_, _, _>| -> bool {
+            ex.gateway
+                .commit_handle
+                .lock()
+                .await
+                .is_none()
+        };
+        let count_before = async |ex: &ProtocolExtractor<_, _, _>, n: u64| -> usize {
+            let g = ex.reorg_buffer.lock().await;
+            g.count_blocks_before(n)
+        };
+
+        // #1 — no database commit yet (counted 0 out of 2 needed to trigger commit)
+        extractor
+            .handle_tick_scoped_data(scoped(1, 1))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(call_count.load(Ordering::SeqCst), 0);
+        assert!(commit_task_is_none(&extractor).await);
+        assert_eq!(count_before(&extractor, 1).await, 0);
+
+        // #2 — no database commit yet (counted 1 out of 2 needed to trigger commit)
+        extractor
+            .handle_tick_scoped_data(scoped(2, 2))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(call_count.load(Ordering::SeqCst), 0);
+        assert!(commit_task_is_none(&extractor).await);
+        assert_eq!(count_before(&extractor, 2).await, 1);
+
+        // #3 — reaches batch size → kicks off first async commit task (which is blocked by channel)
+        extractor
+            .handle_tick_scoped_data(scoped(3, 3))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(call_count.load(Ordering::SeqCst), 0);
+        assert!(commit_task_is_running(&extractor).await);
+        assert_eq!(count_before(&extractor, 3).await, 0);
+
+        // #4 — no database commit yet (counted 1 out of 2)
+        // new tick processing should still succeed despite the commit task being blocked
+        extractor
+            .handle_tick_scoped_data(scoped(4, 4))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(call_count.load(Ordering::SeqCst), 0);
+        assert!(commit_task_is_running(&extractor).await);
+        assert_eq!(count_before(&extractor, 4).await, 1);
+
+        // #5 — should trigger second commit task, however as the first one is still blocked,
+        // this tick processing should also be blocked until the first commit task is done
+        let mut fifth_tick_future = extractor.handle_tick_scoped_data(scoped(5, 5));
+
+        // Sleep for a short while to ensure the fifth call processing is blocked
+        sleep(std::time::Duration::from_millis(100));
+
+        // Confirm the fifth call is *pending* (blocked on the first commit still running)
+        assert!(
+            fifth_tick_future
+                .as_mut()
+                .now_or_never()
+                .is_none(),
+            "should be pending"
+        );
+        assert_eq!(call_count.load(Ordering::SeqCst), 0);
+
+        // ---- Unblock first commit (allow it to finish) ----
+        tx.send(true).unwrap();
+        tx.send(true).unwrap();
+
+        // The fifth call (which also triggers a commit) can now complete
+        fifth_tick_future
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(call_count.load(Ordering::SeqCst), 2, "first commit should be counted");
+
+        // A second commit task should be running now async, still blocked
+        assert!(commit_task_is_running(&extractor).await);
+
+        // ---- Unblock second commit and wait for its task handle ----
+        tx.send(true).unwrap();
+        tx.send(true).unwrap();
+
+        // Await for the commit task to finish
+        let handle = {
+            let mut g = extractor
+                .gateway
+                .commit_handle
+                .lock()
+                .await;
+            g.take()
+        }
+        .expect("expected a running commit task");
+        handle.await.unwrap().unwrap();
+
+        assert_eq!(call_count.load(Ordering::SeqCst), 4, "second commit should be counted");
+    }
+
+    #[tokio::test]
+    async fn test_handle_tick_scoped_data_old_native_msg() {
+        let mut gw = MockExtractorGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
         gw.expect_advance()
             .times(1)
             .returning(|_, _, _| Ok(()));
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
         gw.expect_get_block()
             .times(1)
             .returning(|_| Ok(Block::default()));
@@ -1901,6 +2260,7 @@ mod test {
                 .await
                 .unwrap()
                 .ts
+                .and_utc()
                 .timestamp_subsec_micros(),
             1
         );
@@ -1923,6 +2283,7 @@ mod test {
                 .await
                 .unwrap()
                 .ts
+                .and_utc()
                 .timestamp_subsec_micros(),
             2
         );
@@ -2099,6 +2460,7 @@ mod test {
             MockExtractorExtension,
         >::new(
             extractor_gw,
+            1,
             EXTRACTOR_NAME,
             Chain::Ethereum,
             ChainState::default(),
@@ -2232,6 +2594,7 @@ mod test {
             MockExtractorExtension,
         >::new(
             extractor_gw,
+            1,
             "vm_name",
             Chain::Ethereum,
             ChainState::default(),
@@ -2324,6 +2687,8 @@ mod test_serial_db {
         0xaa, 0xaa, 0xaa, 0xaa, 0xa2, 0x4e, 0xee, 0xb8, 0xd5, 0x7d, 0x43, 0x12, 0x24, 0xf7, 0x38,
         0x32, 0xbc, 0x34, 0xf6, 0x88,
     ]; // 0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688
+
+    const DATABASE_INSERT_BATCH_SIZE: usize = 2;
 
     // SETUP
     fn get_mocked_token_pre_processor() -> MockTokenPreProcessor {
@@ -2842,6 +3207,7 @@ mod test_serial_db {
                 MockExtractorExtension,
             >::new(
                 gw,
+                DATABASE_INSERT_BATCH_SIZE,
                 "native_name",
                 Chain::Ethereum,
                 ChainState::default(),
@@ -2863,6 +3229,11 @@ mod test_serial_db {
                     .unwrap();
             }
 
+            // Wait for the extractor to finish processing
+            if let Some(handle) = extractor.gateway.commit_handle.lock().await.take() {
+                handle.await.unwrap().unwrap();
+            }
+
             let client_msg = extractor
                 .handle_revert(BlockUndoSignal {
                     last_valid_block: Some(BlockRef {
@@ -2876,11 +3247,7 @@ mod test_serial_db {
                 .unwrap();
 
 
-            let res = client_msg
-                .as_any()
-                .downcast_ref::<BlockAggregatedChanges>()
-                .expect("not good type");
-            let base_ts = db_fixtures::yesterday_midnight().timestamp();
+            let base_ts = db_fixtures::yesterday_midnight().and_utc().timestamp();
             let block_entity_changes_result = BlockAggregatedChanges {
                 extractor: "native_name".to_string(),
                 chain: Chain::Ethereum,
@@ -2889,9 +3256,10 @@ mod test_serial_db {
                     Chain::Ethereum,
                     Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000003").unwrap(),
                     Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
-                    NaiveDateTime::from_timestamp_opt(base_ts + 3000, 0).unwrap(),
+                    chrono::DateTime::from_timestamp(base_ts + 3000, 0).unwrap().naive_utc(),
                 ),
-                finalized_block_height: 1,
+                db_committed_block_height: None,
+                finalized_block_height: 3,
                 revert: true,
                 state_deltas: HashMap::from([
                     ("pc_1".to_string(), ProtocolComponentStateDelta {
@@ -2917,7 +3285,7 @@ mod test_serial_db {
                         static_attributes: HashMap::new(),
                         change: ChangeType::Creation,
                         creation_tx: Bytes::from_str("0x000000000000000000000000000000000000000000000000000000000000c351").unwrap(),
-                        created_at: NaiveDateTime::from_timestamp_opt(base_ts + 5000, 0).unwrap(),
+                        created_at: chrono::DateTime::from_timestamp(base_ts + 5000, 0).unwrap().naive_utc(),
                     }),
                 ]),
                 deleted_protocol_components: HashMap::from([
@@ -2934,7 +3302,7 @@ mod test_serial_db {
                         static_attributes: HashMap::new(),
                         change: ChangeType::Deletion,
                         creation_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000009c41").unwrap(),
-                        created_at: NaiveDateTime::from_timestamp_opt(base_ts + 4000, 0).unwrap(),
+                        created_at: chrono::DateTime::from_timestamp(base_ts + 4000, 0).unwrap().naive_utc(),
                     }),
                 ]),
                 component_balances: HashMap::from([
@@ -2959,8 +3327,8 @@ mod test_serial_db {
             };
 
             assert_eq!(
-                res,
-                &block_entity_changes_result
+                *client_msg,
+                block_entity_changes_result
             );
         })
             .await;
@@ -3024,6 +3392,7 @@ mod test_serial_db {
                 MockExtractorExtension,
             >::new(
                 gw,
+                DATABASE_INSERT_BATCH_SIZE,
                 "vm_name",
                 Chain::Ethereum,
                 ChainState::default(),
@@ -3045,6 +3414,11 @@ mod test_serial_db {
                     .unwrap();
             }
 
+            // Wait for the extractor to finish processing
+            if let Some(handle) = extractor.gateway.commit_handle.lock().await.take() {
+                handle.await.unwrap().unwrap();
+            }
+
             let client_msg = extractor
                 .handle_revert(BlockUndoSignal {
                     last_valid_block: Some(BlockRef {
@@ -3057,12 +3431,8 @@ mod test_serial_db {
                 .unwrap()
                 .unwrap();
 
-            let res = client_msg
-                .as_any()
-                .downcast_ref::<BlockAggregatedChanges>()
-                .expect("not good type");
 
-            let base_ts = db_fixtures::yesterday_midnight().timestamp();
+            let base_ts = db_fixtures::yesterday_midnight().and_utc().timestamp();
             let account1 = Bytes::from_str("0000000000000000000000000000000000000001").unwrap();
             let account2 = Bytes::from_str("0000000000000000000000000000000000000002").unwrap();
             let block_account_expected = BlockAggregatedChanges {
@@ -3073,32 +3443,33 @@ mod test_serial_db {
                     Chain::Ethereum,
                     Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000003").unwrap(),
                     Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
-                    NaiveDateTime::from_timestamp_opt(base_ts + 3000, 0).unwrap(),
+                    chrono::DateTime::from_timestamp(base_ts + 3000, 0).unwrap().naive_utc(),
                 ),
-                finalized_block_height: 1,
+                db_committed_block_height: None,
+                finalized_block_height: 3,
                 revert: true,
                 account_deltas: HashMap::from([
-                    (account1.clone(), AccountDelta {
-                        address: account1.clone(),
-                        chain: Chain::Ethereum,
-                        slots: HashMap::from([
+                    (account1.clone(), AccountDelta::new(
+                        Chain::Ethereum,
+                        account1.clone(),
+                        HashMap::from([
                             (Bytes::from("0x03"), Some(Bytes::new())),
                             (Bytes::from("0x01"), Some(Bytes::from("0x01"))),
                         ]),
-                        balance: None,
-                        code: None,
-                        change: ChangeType::Update,
-                    }),
-                    (account2.clone(), AccountDelta {
-                        address: account2.clone(),
-                        chain: Chain::Ethereum,
-                        slots: HashMap::from([
+                        None,
+                        None,
+                        ChangeType::Update,
+                    )),
+                    (account2.clone(), AccountDelta::new(
+                        Chain::Ethereum,
+                        account2.clone(),
+                        HashMap::from([
                             (Bytes::from("0x01"), Some(Bytes::from("0x02"))),
                         ]),
-                        balance: None,
-                        code: None,
-                        change: ChangeType::Update,
-                    }),
+                        None,
+                        None,
+                        ChangeType::Update,
+                    )),
                 ]),
                 deleted_protocol_components: HashMap::from([
                     ("pc_3".to_string(), ProtocolComponent {
@@ -3116,7 +3487,7 @@ mod test_serial_db {
                         static_attributes: HashMap::new(),
                         change: ChangeType::Deletion,
                         creation_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000009c41").unwrap(),
-                        created_at: NaiveDateTime::from_timestamp_opt(base_ts + 4000, 0).unwrap(),
+                        created_at: chrono::DateTime::from_timestamp(base_ts + 4000, 0).unwrap().naive_utc(),
                     }),
                 ]),
                 component_balances: HashMap::from([
@@ -3165,8 +3536,8 @@ mod test_serial_db {
             };
 
             assert_eq!(
-                res,
-                &block_account_expected
+                *client_msg,
+                block_account_expected
             );
         })
             .await;
@@ -3225,6 +3596,7 @@ mod test_serial_db {
                 MockExtractorExtension,
             >::new(
                 gw,
+                DATABASE_INSERT_BATCH_SIZE,
                 "vm_name",
                 Chain::Ethereum,
                 ChainState::default(),
@@ -3239,7 +3611,9 @@ mod test_serial_db {
             .expect("Failed to create extractor");
 
             // Send a sequence of block scoped data with the same timestamp.
-            let base_ts = db_fixtures::yesterday_midnight().timestamp() as u64;
+            let base_ts = db_fixtures::yesterday_midnight()
+                .and_utc()
+                .timestamp() as u64;
             let versions = [1, 2, 3, 4];
 
             let inp_sequence = versions
@@ -3266,7 +3640,7 @@ mod test_serial_db {
                             ..Default::default()
                         },
                         Some(format!("cursor@{version}").as_str()),
-                        Some(5), // Buffered
+                        Some(1), // Buffered
                     )
                 })
                 .collect::<Vec<_>>() // materialize into Vec
@@ -3277,6 +3651,17 @@ mod test_serial_db {
                     .handle_tick_scoped_data(inp)
                     .await
                     .unwrap();
+            }
+
+            // Wait for the extractor to finish processing
+            if let Some(handle) = extractor
+                .gateway
+                .commit_handle
+                .lock()
+                .await
+                .take()
+            {
+                handle.await.unwrap().unwrap();
             }
 
             // Revert block #4, which had a timestamp of 1 second after block #3.
@@ -3306,7 +3691,7 @@ mod test_serial_db {
                         ..Default::default()
                     },
                     Some(format!("cursor@{}", 4).as_str()),
-                    Some(5), // Buffered
+                    Some(1), // Buffered
                 ))
                 .await
                 .unwrap()
@@ -3320,6 +3705,7 @@ mod test_serial_db {
                     .await
                     .unwrap()
                     .ts
+                    .and_utc()
                     .timestamp_subsec_micros(),
                 3
             );

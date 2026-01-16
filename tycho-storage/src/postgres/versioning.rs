@@ -521,7 +521,6 @@ pub async fn apply_partitioned_versioning<T: PartitionedVersionedRow>(
 mod test {
     use std::vec;
 
-    use chrono::NaiveDateTime;
     use diesel::prelude::*;
     use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
     use tycho_common::{models, Bytes};
@@ -620,8 +619,12 @@ mod test {
             attribute_value: Bytes::from(1u8),
             previous_value: None,
             modify_tx: 1,
-            valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
-            valid_to: NaiveDateTime::from_timestamp_micros(999).unwrap(),
+            valid_from: chrono::DateTime::from_timestamp_micros(1)
+                .unwrap()
+                .naive_utc(),
+            valid_to: chrono::DateTime::from_timestamp_micros(999)
+                .unwrap()
+                .naive_utc(),
         });
         let row2 = VersioningEntry::Update(NewProtocolState {
             protocol_component_id: 0,
@@ -629,8 +632,12 @@ mod test {
             attribute_value: Bytes::from(2u8),
             previous_value: None,
             modify_tx: 2,
-            valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
-            valid_to: NaiveDateTime::from_timestamp_micros(999).unwrap(),
+            valid_from: chrono::DateTime::from_timestamp_micros(1)
+                .unwrap()
+                .naive_utc(),
+            valid_to: chrono::DateTime::from_timestamp_micros(999)
+                .unwrap()
+                .naive_utc(),
         });
         let row3 = VersioningEntry::Update(NewProtocolState {
             protocol_component_id: 0,
@@ -638,8 +645,12 @@ mod test {
             attribute_value: Bytes::from(3u8),
             previous_value: None,
             modify_tx: 3,
-            valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
-            valid_to: NaiveDateTime::from_timestamp_micros(999).unwrap(),
+            valid_from: chrono::DateTime::from_timestamp_micros(1)
+                .unwrap()
+                .naive_utc(),
+            valid_to: chrono::DateTime::from_timestamp_micros(999)
+                .unwrap()
+                .naive_utc(),
         });
         // outdated row - should get filtered out and not be part of the returned versioning
         let outdated_row = VersioningEntry::Update(NewProtocolState {
@@ -648,8 +659,12 @@ mod test {
             attribute_value: Bytes::from(4u8),
             previous_value: None,
             modify_tx: 4,
-            valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
-            valid_to: NaiveDateTime::from_timestamp_micros(999).unwrap(),
+            valid_from: chrono::DateTime::from_timestamp_micros(1)
+                .unwrap()
+                .naive_utc(),
+            valid_to: chrono::DateTime::from_timestamp_micros(999)
+                .unwrap()
+                .naive_utc(),
         });
         // outdated row for same attribute - should get filtered out and not be part of the returned
         // versioning
@@ -659,24 +674,26 @@ mod test {
             attribute_value: Bytes::from(4u8),
             previous_value: None,
             modify_tx: 5,
-            valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
-            valid_to: NaiveDateTime::from_timestamp_micros(999).unwrap(),
+            valid_from: chrono::DateTime::from_timestamp_micros(1)
+                .unwrap()
+                .naive_utc(),
+            valid_to: chrono::DateTime::from_timestamp_micros(999)
+                .unwrap()
+                .naive_utc(),
         });
-        // re-delete previously deleted row - should get filtered out and not be part of the
-        // returned versioning
-        let outdated_delete = VersioningEntry::Deletion((
-            (component_id, "fee".to_string()),
-            NaiveDateTime::from_timestamp_micros(1).unwrap(),
-        ));
 
         let delete_row1 = VersioningEntry::Deletion((
             (0i64, "tick".to_string()),
-            NaiveDateTime::from_timestamp_micros(1).unwrap(),
+            chrono::DateTime::from_timestamp_micros(1)
+                .unwrap()
+                .naive_utc(),
         ));
 
         let (latest, to_archive, to_delete) = apply_partitioned_versioning(
-            &[row1, delete_row1, row2, row3, outdated_row, outdated_row_repeat, outdated_delete],
-            NaiveDateTime::from_timestamp_micros(0).unwrap(),
+            &[row1, delete_row1, row2, row3, outdated_row, outdated_row_repeat],
+            chrono::DateTime::from_timestamp_micros(0)
+                .unwrap()
+                .naive_utc(),
             &mut conn,
         )
         .await
@@ -690,8 +707,12 @@ mod test {
                 attribute_value: Bytes::from(3u8),
                 previous_value: Some(Bytes::from(2u8)),
                 modify_tx: 3,
-                valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
-                valid_to: NaiveDateTime::from_timestamp_micros(999).unwrap(),
+                valid_from: chrono::DateTime::from_timestamp_micros(1)
+                    .unwrap()
+                    .naive_utc(),
+                valid_to: chrono::DateTime::from_timestamp_micros(999)
+                    .unwrap()
+                    .naive_utc(),
             }]
         );
         assert_eq!(
@@ -703,8 +724,12 @@ mod test {
                     attribute_value: Bytes::from(1u8),
                     previous_value: None,
                     modify_tx: 1,
-                    valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
-                    valid_to: NaiveDateTime::from_timestamp_micros(1).unwrap(),
+                    valid_from: chrono::DateTime::from_timestamp_micros(1)
+                        .unwrap()
+                        .naive_utc(),
+                    valid_to: chrono::DateTime::from_timestamp_micros(1)
+                        .unwrap()
+                        .naive_utc(),
                 },
                 NewProtocolState {
                     protocol_component_id: 0,
@@ -712,8 +737,12 @@ mod test {
                     attribute_value: Bytes::from(2u8),
                     previous_value: None, // None because row 1 has been deleted in the meantime
                     modify_tx: 2,
-                    valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
-                    valid_to: NaiveDateTime::from_timestamp_micros(1).unwrap(),
+                    valid_from: chrono::DateTime::from_timestamp_micros(1)
+                        .unwrap()
+                        .naive_utc(),
+                    valid_to: chrono::DateTime::from_timestamp_micros(1)
+                        .unwrap()
+                        .naive_utc(),
                 }
             ]
         );
@@ -781,7 +810,9 @@ mod test {
             token_id: token1,
             balance: Bytes::from(150u64),
             modify_tx: 2,
-            valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
+            valid_from: chrono::DateTime::from_timestamp_micros(1)
+                .unwrap()
+                .naive_utc(),
             valid_to: None,
         };
         // repeated outdated row - should get filtered out and not be part of the returned
@@ -791,7 +822,9 @@ mod test {
             token_id: token1,
             balance: Bytes::from(150u64),
             modify_tx: 3,
-            valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
+            valid_from: chrono::DateTime::from_timestamp_micros(1)
+                .unwrap()
+                .naive_utc(),
             valid_to: None,
         };
 

@@ -1,9 +1,12 @@
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, Mutex},
+    sync::{mpsc::SyncSender, Arc, Mutex},
+    time::Duration,
 };
 
+use deepsize::DeepSizeOf;
 use futures03::{stream, StreamExt};
+use metrics::gauge;
 use thiserror::Error;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, error, instrument, trace, Level};
@@ -12,14 +15,14 @@ use tycho_common::{
         blockchain::BlockAggregatedChanges,
         contract::Account,
         protocol::{ProtocolComponent, ProtocolComponentState},
-        MergeError, NormalisedMessage,
+        MergeError,
     },
     storage::StorageError,
     Bytes,
 };
 
 use crate::extractor::{
-    reorg_buffer::{BlockNumberOrTimestamp, FinalityStatus, ReorgBuffer},
+    reorg_buffer::{BlockNumberOrTimestamp, CommitStatus, ReorgBuffer},
     runner::MessageSender,
 };
 
@@ -29,9 +32,9 @@ use crate::extractor::{
 /// - Inserting new blocks and deltas into the correct `ReorgBuffer`.
 /// - Managing and applying deltas to state data, which includes merging buffered changes with data
 ///   fetched from the database.
-/// - Retrieving finality status for blocks, which is used to determine whether to fetch data from
-///   the database and/or from the buffer.
-#[derive(Default, Clone)]
+/// - Retrieving commit status for blocks, which is used to determine whether to fetch data from the
+///   database and/or from the buffer.
+#[derive(Default, Clone, DeepSizeOf)]
 pub struct PendingDeltas {
     // Map with the protocol system name as key and a `ReorgBuffer` as value.
     buffers: HashMap<String, Arc<Mutex<ReorgBuffer<BlockAggregatedChanges>>>>,
@@ -43,8 +46,6 @@ pub enum PendingDeltasError {
     LockError(String, String),
     #[error("ReorgBufferError: {0}")]
     ReorgBufferError(#[from] StorageError),
-    #[error("Downcast failed: Unknown message type")]
-    UnknownMessageType,
     #[error("Unknown extractor: {0}")]
     UnknownExtractor(String),
     #[error("Failed applying deltas: {0}")]
@@ -78,11 +79,11 @@ pub trait PendingDeltasBuffer {
         min_tvl: Option<f64>,
     ) -> Result<Vec<ProtocolComponent>>;
 
-    fn get_block_finality(
+    fn get_block_commit_status(
         &self,
         version: BlockNumberOrTimestamp,
         protocol_system: &str,
-    ) -> Result<Option<FinalityStatus>>;
+    ) -> Result<Option<CommitStatus>>;
 
     fn search_block(
         &self,
@@ -104,44 +105,37 @@ impl PendingDeltas {
         }
     }
 
-    fn insert(&self, message: Arc<dyn NormalisedMessage>) -> Result<()> {
-        let maybe_convert: Option<BlockAggregatedChanges> = message
-            .as_any()
-            .downcast_ref::<BlockAggregatedChanges>()
-            .cloned();
-        match maybe_convert {
-            Some(msg) => {
-                let maybe_buffer = self.buffers.get(&msg.extractor);
+    fn insert(&self, message: Arc<BlockAggregatedChanges>) -> Result<()> {
+        let maybe_buffer = self.buffers.get(&message.extractor);
 
-                match maybe_buffer {
-                    Some(buffer) => {
-                        let mut guard = buffer.lock().map_err(|e| {
-                            PendingDeltasError::LockError(msg.extractor.to_string(), e.to_string())
-                        })?;
-                        if msg.revert {
-                            trace!(
-                                block_number = msg.block.number,
-                                extractor = msg.extractor,
-                                "DeltaBufferPurge"
-                            );
-                            guard.purge(msg.block.hash.clone())?;
-                        } else {
-                            trace!(
-                                block_number = msg.block.number,
-                                finality = msg.finalized_block_height,
-                                extractor = msg.extractor,
-                                "DeltaBufferInsertion"
-                            );
-                            guard.insert_block(msg.clone())?;
-                            guard.drain_new_finalized_blocks(msg.finalized_block_height)?;
-                        }
+        match maybe_buffer {
+            Some(buffer) => {
+                let mut guard = buffer.lock().map_err(|e| {
+                    PendingDeltasError::LockError(message.extractor.to_string(), e.to_string())
+                })?;
+                if message.revert {
+                    trace!(
+                        block_number = message.block.number,
+                        extractor = message.extractor,
+                        "DeltaBufferPurge"
+                    );
+                    guard.purge(message.block.hash.clone())?;
+                } else {
+                    trace!(
+                        block_number = message.block.number,
+                        finality = message.finalized_block_height,
+                        db_commit_upto = message.db_committed_block_height,
+                        extractor = message.extractor,
+                        "DeltaBufferInsertion"
+                    );
+                    guard.insert_block((*message).clone())?;
+                    if let Some(height) = message.db_committed_block_height {
+                        guard.drain_blocks_until(height + 1)?;
                     }
-                    _ => return Err(PendingDeltasError::UnknownExtractor(msg.extractor.clone())),
                 }
             }
-            None => return Err(PendingDeltasError::UnknownMessageType),
+            _ => return Err(PendingDeltasError::UnknownExtractor(message.extractor.clone())),
         }
-
         Ok(())
     }
 
@@ -255,12 +249,28 @@ impl PendingDeltas {
     pub async fn run(
         self,
         extractors: impl IntoIterator<Item = Arc<dyn MessageSender + Send + Sync>>,
+        start_tx: SyncSender<()>,
     ) -> anyhow::Result<()> {
         let mut rxs = Vec::new();
         for extractor in extractors.into_iter() {
             let res = ReceiverStream::new(extractor.subscribe().await?);
             rxs.push(res);
         }
+
+        // Send the start signal to the startup task
+        start_tx
+            .send(())
+            .map_err(|_| anyhow::anyhow!("Failed to send PendingDeltas start signal"))?;
+
+        // Start a reporting task to log buffer sizes every 60 seconds
+        let self_clone = self.clone();
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(60));
+            loop {
+                tick.tick().await;
+                gauge!("pending_deltas_buffer_size").set(self_clone.deep_size_of() as f64);
+            }
+        });
 
         let all_messages = stream::select_all(rxs);
 
@@ -428,19 +438,17 @@ impl PendingDeltasBuffer for PendingDeltas {
         Ok(new_components)
     }
 
-    /// Returns finality for any extractor, can error if lock is poisened. Returns None if buffer is
-    /// empty.
+    /// Returns commit status for any extractor, can error if lock is poisened. Returns None
+    /// if buffer is empty.
     /// Returns an error if the provided protocol system isn't found in the buffer or the specified
     /// block version is unseen. If a timestamp version is provided, the latest block before that
     /// timestamp is used.
-    /// Note - if no protocol system is provided, we choose a random extractor to get the finality
-    /// status from. This is particularly risky when there is an extractor syncing.
     #[instrument(level = Level::TRACE, skip_all)]
-    fn get_block_finality(
+    fn get_block_commit_status(
         &self,
         version: BlockNumberOrTimestamp,
         protocol_system: &str,
-    ) -> Result<Option<FinalityStatus>> {
+    ) -> Result<Option<CommitStatus>> {
         let buffer = self
             .buffers
             .get(protocol_system)
@@ -452,7 +460,7 @@ impl PendingDeltasBuffer for PendingDeltas {
             PendingDeltasError::LockError(protocol_system.to_string(), e.to_string())
         })?;
 
-        Ok(guard.get_finality_status(version))
+        Ok(guard.get_commit_status(version))
     }
 
     fn search_block(
@@ -515,6 +523,7 @@ mod test {
         BlockAggregatedChanges {
             extractor: "vm:extractor".to_string(),
             block: block(1),
+            db_committed_block_height: None,
             finalized_block_height: 1,
             revert: false,
             account_deltas: HashMap::from([
@@ -645,6 +654,7 @@ mod test {
         BlockAggregatedChanges {
             extractor: "native:extractor".to_string(),
             block: block(1),
+            db_committed_block_height: None,
             finalized_block_height: 1,
             revert: false,
             state_deltas: HashMap::from([
@@ -737,6 +747,20 @@ mod test {
                     .collect(),
                 ),
             ]),
+            ..Default::default()
+        }
+    }
+
+    fn simple_block_changes(
+        block_number: u64,
+        db_committed_block_height: Option<u64>,
+    ) -> BlockAggregatedChanges {
+        BlockAggregatedChanges {
+            extractor: "vm:extractor".to_string(),
+            chain: Chain::Ethereum,
+            block: block(block_number),
+            finalized_block_height: block_number,
+            db_committed_block_height,
             ..Default::default()
         }
     }
@@ -857,7 +881,7 @@ mod test {
 
     #[test]
     fn test_get_new_components() {
-        let exp = vec![
+        let exp = [
             ProtocolComponent::new(
                 "component3",
                 "native_swap",
@@ -935,6 +959,59 @@ mod test {
         assert_eq!(new_components_tvl_filtered, vec![exp[1].clone()]);
     }
 
+    #[test]
+    fn test_insert_respects_db_committed_height() {
+        let buffer = PendingDeltas::new(["vm:extractor"]);
+
+        let exp1 = simple_block_changes(1, None);
+        let exp2 = simple_block_changes(2, None);
+        let exp3 = simple_block_changes(3, Some(2));
+
+        buffer
+            .insert(Arc::new(exp1.clone()))
+            .expect("first insert failed");
+        buffer
+            .insert(Arc::new(exp2.clone()))
+            .expect("second insert failed");
+
+        {
+            let reorg_buffer = buffer
+                .buffers
+                .get("vm:extractor")
+                .expect("extractor buffer missing");
+            let guard = reorg_buffer
+                .lock()
+                .expect("lock poisoned");
+            let block_numbers: Vec<&BlockAggregatedChanges> = guard
+                .get_block_range(None, None)
+                .expect("Failed to get block range")
+                .collect();
+            assert_eq!(
+                block_numbers,
+                vec![&exp1, &exp2],
+                "blocks should remain when commit height is None"
+            );
+        }
+
+        buffer
+            .insert(Arc::new(exp3.clone()))
+            .expect("third insert failed");
+
+        let reorg_buffer = buffer
+            .buffers
+            .get("vm:extractor")
+            .expect("extractor buffer missing");
+        let guard = reorg_buffer
+            .lock()
+            .expect("lock poisoned");
+        let block_numbers: Vec<&BlockAggregatedChanges> = guard
+            .get_block_range(None, None)
+            .expect("Failed to get block range")
+            .collect();
+
+        assert_eq!(block_numbers, vec![&exp3], "blocks <= commit height should be drained");
+    }
+
     use rstest::rstest;
 
     #[rstest]
@@ -944,7 +1021,7 @@ mod test {
     #[case("vm:extractor".to_string(), None)]
     // bad input
     #[case("unknown_system".to_string(), Some(PendingDeltasError::UnknownExtractor("unknown_system".to_string())))]
-    fn test_get_block_finality(
+    fn test_get_block_commit_status(
         #[case] protocol_system: String,
         #[case] expected_error: Option<PendingDeltasError>,
     ) {
@@ -958,15 +1035,15 @@ mod test {
 
         let version = BlockNumberOrTimestamp::Timestamp("2020-01-01T00:00:00".parse().unwrap());
 
-        let result = buffer.get_block_finality(version, &protocol_system);
+        let result = buffer.get_block_commit_status(version, &protocol_system);
 
         match expected_error {
             Some(expected_err) => {
                 assert!(matches!(result, Err(ref err) if err == &expected_err));
             }
             None => {
-                let finality_status = result.expect("Failed to get block finality");
-                assert!(finality_status.is_some());
+                let commit_status = result.expect("Failed to get block commit status");
+                assert!(commit_status.is_some());
             }
         }
     }

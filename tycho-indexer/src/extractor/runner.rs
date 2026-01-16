@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, path::Path, sync::Arc};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
 use anyhow::{format_err, Context, Result};
 use async_trait::async_trait;
@@ -16,26 +16,32 @@ use tokio::{
     task::JoinHandle,
 };
 use tokio_stream::StreamExt;
-use tracing::{debug, error, info, instrument, trace, warn, Instrument};
+use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 use tycho_common::{
-    models::{Chain, ExtractorIdentity, FinancialType, ImplementationType, ProtocolType},
+    models::{Address, Chain, ExtractorIdentity, FinancialType, ImplementationType, ProtocolType},
+    traits::AccountExtractor,
     Bytes,
 };
 use tycho_ethereum::{
-    account_extractor::contract::EVMBatchAccountExtractor,
-    entrypoint_tracer::tracer::EVMEntrypointService,
-    token_pre_processor::EthereumTokenPreProcessor,
+    rpc::EthereumRpcClient,
+    services::{
+        account_extractor::EVMAccountExtractor, entrypoint_tracer::tracer::EVMEntrypointService,
+        token_pre_processor::EthereumTokenPreProcessor,
+    },
 };
 use tycho_storage::postgres::cache::CachedGateway;
 
 use crate::{
     extractor::{
         chain_state::ChainState,
-        dynamic_contract_indexer::dci::DynamicContractIndexer,
+        dynamic_contract_indexer::{
+            dci::DynamicContractIndexer,
+            hooks::{hook_dci::UniswapV4HookDCI, hooks_dci_builder::UniswapV4HookDCIBuilder},
+        },
         post_processors::POST_PROCESSOR_REGISTRY,
         protocol_cache::ProtocolMemoryCache,
         protocol_extractor::{ExtractorPgGateway, ProtocolExtractor},
-        ExtractionError, Extractor, ExtractorMsg,
+        ExtractionError, Extractor, ExtractorExtension, ExtractorMsg,
     },
     pb::sf::substreams::v1::Package,
     substreams::{
@@ -43,6 +49,54 @@ use crate::{
         SubstreamsEndpoint,
     },
 };
+
+/// Enum to handle both standard DCI and UniswapV4 Hook DCI
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum DCIPlugin<AE: AccountExtractor + Send + Sync> {
+    Standard(DynamicContractIndexer<AE, EVMEntrypointService, CachedGateway>),
+    UniswapV4Hooks(Box<UniswapV4HookDCI<AE, EVMEntrypointService, CachedGateway>>),
+}
+
+#[async_trait]
+impl<AE: AccountExtractor + Send + Sync> ExtractorExtension for DCIPlugin<AE> {
+    async fn process_block_update(
+        &mut self,
+        block_changes: &mut crate::extractor::models::BlockChanges,
+    ) -> Result<(), ExtractionError> {
+        match self {
+            DCIPlugin::Standard(dci) => {
+                dci.process_block_update(block_changes)
+                    .await
+            }
+            DCIPlugin::UniswapV4Hooks(hooks_dci) => {
+                hooks_dci
+                    .process_block_update(block_changes)
+                    .await
+            }
+        }
+    }
+
+    async fn process_revert(
+        &mut self,
+        target_block: &tycho_common::models::BlockHash,
+    ) -> Result<(), ExtractionError> {
+        match self {
+            DCIPlugin::Standard(dci) => dci.process_revert(target_block).await,
+            DCIPlugin::UniswapV4Hooks(hooks_dci) => {
+                hooks_dci
+                    .process_revert(target_block)
+                    .await
+            }
+        }
+    }
+
+    fn cache_size(&self) -> usize {
+        match self {
+            DCIPlugin::Standard(dci) => dci.cache_size(),
+            DCIPlugin::UniswapV4Hooks(hooks_dci) => hooks_dci.cache_size(),
+        }
+    }
+}
 pub enum ControlMessage {
     Stop,
     Subscribe(Sender<ExtractorMsg>),
@@ -139,16 +193,18 @@ impl ExtractorRunner {
     }
 
     pub fn run(mut self) -> JoinHandle<Result<(), ExtractionError>> {
+        info!("Extractor {} started!", self.extractor.get_id());
+
         let runtime = self
             .runtime_handle
             .clone()
-            .unwrap_or_else(|| tokio::runtime::Handle::current());
+            .unwrap_or_else(|| Handle::current());
 
         runtime.spawn(async move {
             let id = self.extractor.get_id();
             loop {
                 // this is the main info span of an extractor
-                let loop_span = tracing::info_span!(
+                let loop_span = info_span!(
                     parent: None,  // don't attach this to the parent (builder) span to keep spans short
                     "extractor",
                     extractor_id = %id,
@@ -170,7 +226,7 @@ impl ExtractorRunner {
                                 },
                             }
                         }
-                        val = self.substreams.next() => {
+                        val = self.substreams.next().instrument(info_span!("substreams_waiting")) => {
                             match val {
                                 None => {
                                     error!("stream ended");
@@ -228,6 +284,10 @@ impl ExtractorRunner {
                                             return Err(err);
                                         }
                                     }
+                                }
+                                Some(Ok(BlockResponse::Ended)) => {
+                                    tracing::Span::current().record("otel.status_code", "ok");
+                                    return Ok(false);
                                 }
                                 Some(Err(err)) => {
                                     error!(error = %err, "Stream terminated with error.");
@@ -323,7 +383,7 @@ pub struct ExtractorConfig {
     #[serde(default)]
     pub initialized_accounts: Vec<Bytes>,
     #[serde(default)]
-    pub initialized_accounts_block: i64,
+    pub initialized_accounts_block: u64,
     #[serde(default)]
     pub post_processor: Option<String>,
     #[serde(default)]
@@ -343,7 +403,7 @@ impl ExtractorConfig {
         spkg: String,
         module_name: String,
         initialized_accounts: Vec<Bytes>,
-        initialized_accounts_block: i64,
+        initialized_accounts_block: u64,
         post_processor: Option<String>,
         dci_plugin: Option<DCIType>,
     ) -> Self {
@@ -366,9 +426,14 @@ impl ExtractorConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum DCIType {
     /// RPC DCI plugin - uses the RPC endpoint to fetch the account data
+    #[serde(rename = "rpc")]
     RPC,
+    /// UniswapV4Hooks DCI plugin - wrapper for the RPC DCI plugin that generates hook entrypoints
+    /// for tracing
+    UniswapV4Hooks { pool_manager_address: String },
 }
 
 pub struct ExtractorBuilder {
@@ -377,27 +442,29 @@ pub struct ExtractorBuilder {
     s3_bucket: Option<String>,
     token: String,
     extractor: Option<Arc<dyn Extractor>>,
+    database_insert_batch_size: Option<usize>,
     final_block_only: bool,
     /// Handle of the tokio runtime on which the extraction tasks will be run.
     /// If 'None' the default runtime will be used.
     runtime_handle: Option<Handle>,
-    /// Global RPC URL to use for DCI plugins
-    rpc_url: Option<String>,
 }
 
-pub type HandleResult = (JoinHandle<Result<(), ExtractionError>>, ExtractorHandle);
-
 impl ExtractorBuilder {
-    pub fn new(config: &ExtractorConfig, endpoint_url: &str, s3_bucket: Option<&str>) -> Self {
+    pub fn new(
+        config: &ExtractorConfig,
+        endpoint_url: &str,
+        s3_bucket: Option<&str>,
+        substreams_api_token: &str,
+    ) -> Self {
         Self {
             config: config.clone(),
             endpoint_url: endpoint_url.to_owned(),
             s3_bucket: s3_bucket.map(ToString::to_string),
-            token: env::var("SUBSTREAMS_API_TOKEN").unwrap_or("".to_string()),
+            token: substreams_api_token.to_string(),
             extractor: None,
+            database_insert_batch_size: None,
             final_block_only: false,
             runtime_handle: None,
-            rpc_url: None,
         }
     }
 
@@ -432,9 +499,9 @@ impl ExtractorBuilder {
         self
     }
 
-    /// Set the global RPC URL to use for DCI plugins
-    pub fn rpc_url(mut self, rpc_url: &str) -> Self {
-        self.rpc_url = Some(rpc_url.to_string());
+    /// Set the global database insert batch size
+    pub fn database_insert_batch_size(mut self, database_insert_batch_size: usize) -> Self {
+        self.database_insert_batch_size = Some(database_insert_batch_size);
         self
     }
 
@@ -468,12 +535,62 @@ impl ExtractorBuilder {
         Ok(())
     }
 
+    /// Creates a rpc DynamicContractIndexer with account extractor and tracer configured
+    async fn create_rpc_dci(
+        rpc_client: &EthereumRpcClient,
+        chain: Chain,
+        extractor_name: String,
+        cached_gw: &CachedGateway,
+    ) -> Result<
+        DynamicContractIndexer<EVMAccountExtractor, EVMEntrypointService, CachedGateway>,
+        ExtractionError,
+    > {
+        let account_extractor = EVMAccountExtractor::new(rpc_client, chain);
+
+        // Tracer uses dedicated TRACE_RPC_URL if available, and falls back to the main
+        // rpc client otherwise.
+        let tracer_rpc_client = if let Ok(tracer_rpc_url) = std::env::var("TRACE_RPC_URL") {
+            EthereumRpcClient::new(&tracer_rpc_url).map_err(|err| {
+                ExtractionError::Setup(format!(
+                    "Failed to create RPC client for {tracer_rpc_url}: {err}"
+                ))
+            })?
+        } else {
+            rpc_client.clone()
+        };
+
+        let max_retries = std::env::var("TRACE_MAX_RETRIES")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(3);
+
+        let retry_delay_ms = std::env::var("TRACE_RETRY_DELAY_MS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(200);
+
+        let tracer =
+            EVMEntrypointService::new_with_config(&tracer_rpc_client, max_retries, retry_delay_ms);
+
+        let mut rpc_dci = DynamicContractIndexer::new(
+            chain,
+            extractor_name,
+            cached_gw.clone(),
+            account_extractor,
+            tracer,
+        );
+        rpc_dci.initialize().await?;
+
+        Ok(rpc_dci)
+    }
+
     pub async fn build(
         mut self,
         chain_state: ChainState,
         cached_gw: &CachedGateway,
         token_pre_processor: &EthereumTokenPreProcessor,
         protocol_cache: &ProtocolMemoryCache,
+        rpc_client: &EthereumRpcClient,
     ) -> Result<Self, ExtractionError> {
         let protocol_types = self
             .config
@@ -518,51 +635,58 @@ impl ExtractorBuilder {
         let dci_plugin = if let Some(ref dci_type) = self.config.dci_plugin {
             Some(match dci_type {
                 DCIType::RPC => {
-                    let rpc_url = self.rpc_url.as_ref().ok_or_else(|| {
-                        ExtractionError::Setup(
-                            "RPC URL is required for RPC DCI plugin but not provided".to_string(),
-                        )
-                    })?;
-
-                    let account_extractor =
-                        EVMBatchAccountExtractor::new(rpc_url, self.config.chain)
-                            .await
-                            .map_err(|err| {
-                                ExtractionError::Setup(format!(
-                                    "Failed to create account extractor for {rpc_url}: {err}"
-                                ))
-                            })?;
-                    let tracer = EVMEntrypointService::try_from_url(rpc_url).map_err(|err| {
-                        ExtractionError::Setup(format!(
-                            "Failed to create entrypoint tracer for {rpc_url}: {err}"
-                        ))
-                    })?;
-                    let mut plugin = DynamicContractIndexer::new(
+                    let rpc_dci = Self::create_rpc_dci(
+                        rpc_client,
                         self.config.chain,
                         self.config.name.clone(),
+                        cached_gw,
+                    )
+                    .await?;
+
+                    DCIPlugin::Standard(rpc_dci)
+                }
+                DCIType::UniswapV4Hooks { pool_manager_address } => {
+                    // random address to deploy our mini router to
+                    let router_address =
+                        Address::from("0x2e234DAe75C793f67A35089C9d99245E1C58470b");
+                    let pool_manager = Address::from(pool_manager_address.as_str());
+
+                    let base_dci = Self::create_rpc_dci(
+                        rpc_client,
+                        self.config.chain,
+                        self.config.name.clone(),
+                        cached_gw,
+                    )
+                    .await?;
+
+                    let mut hooks_dci = UniswapV4HookDCIBuilder::new(
+                        base_dci,
+                        rpc_client,
+                        router_address,
+                        pool_manager,
                         cached_gw.clone(),
-                        account_extractor,
-                        tracer,
-                    );
-                    plugin.initialize().await?;
-                    plugin
+                        self.config.chain,
+                    )
+                    .pause_after_retries(3)
+                    .max_retries(5)
+                    .build()?;
+
+                    hooks_dci.initialize().await?;
+                    DCIPlugin::UniswapV4Hooks(Box::new(hooks_dci))
                 }
             })
         } else {
             None
         };
 
+        let database_insert_batch_size = self
+            .database_insert_batch_size
+            .unwrap_or_default();
+
         self.extractor = Some(Arc::new(
-            ProtocolExtractor::<
-                ExtractorPgGateway,
-                EthereumTokenPreProcessor,
-                DynamicContractIndexer<
-                    EVMBatchAccountExtractor,
-                    EVMEntrypointService,
-                    CachedGateway,
-                >,
-            >::new(
+            ProtocolExtractor::<ExtractorPgGateway, EthereumTokenPreProcessor, DCIPlugin<_>>::new(
                 gw,
+                database_insert_batch_size,
                 &self.config.name,
                 self.config.chain,
                 chain_state,
@@ -579,8 +703,31 @@ impl ExtractorBuilder {
         Ok(self)
     }
 
-    #[instrument(name = "extractor_start", skip(self), fields(id))]
-    pub async fn run(self) -> Result<HandleResult, ExtractionError> {
+    /// Converts this builder into a ready-to-run ExtractorRunner and its associated handle.
+    ///
+    /// This method completes the extractor setup process by:
+    /// - Ensuring the Substreams package (.spkg) file is available, downloading from S3 if
+    ///   necessary
+    /// - Creating a Substreams endpoint connection with authentication
+    /// - Setting up the data stream with the configured module, block range, and cursor
+    /// - Initializing control channels for managing the extractor lifecycle
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing:
+    /// - `ExtractorRunner`: The main component that processes blockchain data from the stream
+    /// - `ExtractorHandle`: A control interface for stopping the extractor and subscribing to its
+    ///   output
+    ///
+    /// # Errors
+    ///
+    /// Returns `ExtractionError` if:
+    /// - The extractor was not properly configured
+    /// - The Substreams package file cannot be accessed or downloaded
+    /// - The Substreams endpoint connection cannot be established
+    /// - Package decoding fails due to corrupted or invalid data
+    #[instrument(name = "extractor_runner_build", skip(self), fields(extractor_id))]
+    pub async fn into_runner(self) -> Result<(ExtractorRunner, ExtractorHandle), ExtractionError> {
         let extractor = self
             .extractor
             .clone()
@@ -624,8 +771,7 @@ impl ExtractorBuilder {
             self.runtime_handle,
         );
 
-        let handle = runner.run();
-        Ok((handle, ExtractorHandle::new(extractor_id, ctrl_tx)))
+        Ok((runner, ExtractorHandle::new(extractor_id, ctrl_tx)))
     }
 }
 
@@ -667,35 +813,108 @@ async fn download_file_from_s3(
 
 #[cfg(test)]
 mod test {
-    use serde::Serialize;
-    use tycho_common::models::NormalisedMessage;
-
     use super::*;
     use crate::extractor::MockExtractor;
 
-    #[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
-    struct DummyMessage {
-        extractor_id: ExtractorIdentity,
+    #[test]
+    fn test_extractor_config_without_dci_plugin() {
+        let yaml = r#"
+name: uniswap_v2
+chain: ethereum
+implementation_type: Custom
+sync_batch_size: 1000
+start_block: 10008300
+protocol_types:
+  - name: uniswap_v2_pool
+    financial_type: Swap
+spkg: substreams/ethereum-uniswap-v2/ethereum-uniswap-v2-v0.3.0.spkg
+module_name: map_pool_events
+"#;
+
+        let config: ExtractorConfig =
+            serde_yaml::from_str(yaml).expect("Failed to deserialize YAML");
+
+        // Verify basic fields
+        assert_eq!(config.name, "uniswap_v2");
+
+        // Verify DCI plugin is None (optional field)
+        assert!(config.dci_plugin.is_none());
     }
 
-    impl std::fmt::Display for DummyMessage {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{}", self.extractor_id)
-        }
+    #[test]
+    fn test_dci_extractor_config() {
+        let yaml = r#"
+name: uniswap_v3
+chain: ethereum
+implementation_type: Custom
+sync_batch_size: 1000
+start_block: 12369621
+protocol_types:
+  - name: uniswap_v3_pool
+    financial_type: Swap
+spkg: substreams/ethereum-uniswap-v3/ethereum-uniswap-v3-logs-only-0.1.1.spkg
+module_name: map_protocol_changes
+dci_plugin:
+  type: rpc
+"#;
+
+        let config: ExtractorConfig =
+            serde_yaml::from_str(yaml).expect("Failed to deserialize YAML");
+
+        // Verify basic fields
+        assert_eq!(config.name, "uniswap_v3");
+
+        // Verify DCI plugin is RPC
+        assert!(
+            matches!(config.dci_plugin, Some(DCIType::RPC)),
+            "Expected RPC DCI plugin but got {:?}",
+            config.dci_plugin
+        );
     }
 
-    #[typetag::serde]
-    impl NormalisedMessage for DummyMessage {
-        fn source(&self) -> ExtractorIdentity {
-            self.extractor_id.clone()
-        }
+    #[test]
+    fn test_uniswap_v4_hooks_dci_extractor_config() {
+        let yaml = r#"
+name: uniswap_v4
+chain: ethereum
+implementation_type: Custom
+sync_batch_size: 1000
+start_block: 21688329
+protocol_types:
+  - name: uniswap_v4_pool
+    financial_type: Swap
+spkg: substreams/ethereum-uniswap-v4/ethereum-uniswap-v4-v0.2.1.spkg
+module_name: map_protocol_changes
+dci_plugin:
+  type: uniswap_v4_hooks
+  router_address: "0x2e234DAe75C793f67A35089C9d99245E1C58470b"
+  pool_manager_address: "0x000000000004444c5dc75cB358380D2e3dE08A90"
+"#;
 
-        fn drop_state(&self) -> Arc<dyn NormalisedMessage> {
-            Arc::new(self.clone())
-        }
+        let config: ExtractorConfig =
+            serde_yaml::from_str(yaml).expect("Failed to deserialize YAML");
 
-        fn as_any(&self) -> &dyn std::any::Any {
-            self
+        // Verify basic fields
+        assert_eq!(config.name, "uniswap_v4");
+        assert_eq!(config.chain, Chain::Ethereum);
+        assert_eq!(config.sync_batch_size, 1000);
+        assert_eq!(config.start_block, 21688329);
+
+        // Verify protocol types
+        assert_eq!(config.protocol_types.len(), 1);
+        assert_eq!(config.protocol_types[0].name, "uniswap_v4_pool");
+
+        // Verify DCI plugin configuration
+        let dci_plugin = config
+            .dci_plugin
+            .expect("Expected dci_plugin to be set");
+        match dci_plugin {
+            DCIType::UniswapV4Hooks { pool_manager_address } => {
+                assert_eq!(pool_manager_address, "0x000000000004444c5dc75cB358380D2e3dE08A90");
+            }
+            _ => {
+                panic!("Expected UniswapV4Hooks DCI plugin but got RPC");
+            }
         }
     }
 
@@ -726,15 +945,16 @@ mod test {
             },
             "https://mainnet.eth.streamingfast.io",
             None,
+            "test_token",
         )
         .token("test_token")
         .set_extractor(extractor);
 
         // Run the builder
-        let (task, _handle) = builder.run().await.unwrap();
+        let (runner, _handle) = builder.into_runner().await.unwrap();
 
         // Wait for the handle to complete
-        match task.await {
+        match runner.run().await {
             Ok(_) => {
                 info!("ExtractorRunnerBuilder completed successfully");
             }

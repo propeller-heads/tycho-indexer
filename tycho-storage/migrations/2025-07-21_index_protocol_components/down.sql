@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS idx_protocol_system_id_external_id;
+DROP INDEX IF EXISTS idx_protocol_component_system_id;

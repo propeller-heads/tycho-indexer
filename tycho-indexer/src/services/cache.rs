@@ -1,27 +1,76 @@
-use std::{error::Error, fmt::Debug, hash::Hash, sync::Arc};
+use std::{
+    error::Error,
+    fmt::Debug,
+    hash::Hash,
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc,
+    },
+};
 
+use deepsize::DeepSizeOf;
 use futures03::Future;
-use metrics::counter;
+use metrics::{counter, gauge};
 use mini_moka::sync::Cache;
-use tracing::{instrument, trace, Level};
+use tokio::sync::MutexGuard;
+use tracing::{debug, instrument, trace, Level};
+
+/// A wrapper around the cached value that also tracks its size.
+/// The value is wrapped in a Mutex to allow for in-flight requests to be handled correctly.
+/// The size is stored in an AtomicU32 to allow for concurrent read/write access.
+struct ValueWithSize<V> {
+    value: tokio::sync::Mutex<Option<Arc<V>>>,
+    size: AtomicU32,
+}
+
+impl<V: DeepSizeOf + Send + Sync> ValueWithSize<V> {
+    /// Returns the previous snapshot size of the cached value.
+    /// Requires to be set manually when the value is updated such that the function is
+    /// non-blocking.
+    fn size(&self) -> u32 {
+        self.size.load(Ordering::Relaxed)
+    }
+
+    /// Creates a placeholder ValueWithSize with no value and size 0.
+    /// This is used to indicate that a request is in-flight.
+    async fn placeholder() -> ValueWithSize<V> {
+        Self { value: tokio::sync::Mutex::new(None), size: AtomicU32::new(0) }
+    }
+
+    /// Updates the cached value and its size.
+    /// This requires a lock on the value to ensure that no other thread is reading or writing
+    /// the value at the same time.
+    fn update(&self, new_value: Arc<V>, mut value_update_guard: MutexGuard<Option<Arc<V>>>) {
+        self.size
+            .store(new_value.deep_size_of() as u32, Ordering::Relaxed);
+        *value_update_guard = Some(new_value);
+    }
+}
 
 pub struct RpcCache<R, V> {
     name: String,
-    cache: Arc<Cache<R, Arc<tokio::sync::Mutex<Option<V>>>>>,
+    cache: Cache<R, Arc<ValueWithSize<V>>>,
 }
 
 impl<R, V> RpcCache<R, V>
 where
-    R: Clone + Hash + Eq + Send + Sync + Debug + 'static,
-    V: Clone + Send + Sync + 'static,
+    R: Clone + Hash + Eq + Send + Sync + Debug + DeepSizeOf + 'static,
+    V: Send + Sync + DeepSizeOf + 'static,
 {
     pub fn new(name: &str, capacity: u64, ttl: u64) -> Self {
-        let cache = Arc::new(
-            Cache::builder()
-                .max_capacity(capacity)
-                .time_to_live(std::time::Duration::from_secs(ttl))
-                .build(),
-        );
+        let weigher = Box::new(|key: &R, value_with_size: &Arc<ValueWithSize<V>>| {
+            let key_weight = key.deep_size_of() as u32;
+            value_with_size
+                .size()
+                .saturating_add(key_weight)
+        });
+
+        let cache = Cache::builder()
+            .max_capacity(capacity)
+            .time_to_live(std::time::Duration::from_secs(ttl))
+            .weigher(weigher)
+            .build();
+
         Self { name: name.to_string(), cache }
     }
 
@@ -40,14 +89,14 @@ where
         &'a self,
         request: R,
         fallback: F,
-    ) -> Result<V, E> {
+    ) -> Result<Arc<V>, E> {
         tracing::Span::current().record("size", self.cache.entry_count());
         // Check the cache for a cached response
         if let Some(inflight_val) = self.cache.get(&request) {
             // the value is present or is being written to
             // If the values is None, we likely hit a should_cache = false entry while in-flight,
             //  so we simply behave as if it was a cache miss.
-            if let Some(res) = inflight_val.lock().await.clone() {
+            if let Some(res) = inflight_val.value.lock().await.clone() {
                 tracing::Span::current().record("miss", false);
                 trace!("CacheHit");
                 counter!("rpc_cache_hits", "cache" => self.name.clone()).increment(1);
@@ -56,18 +105,29 @@ where
             }
         }
 
-        // the value has never been written
         tracing::Span::current().record("miss", true);
         trace!("CacheMiss");
         counter!("rpc_cache_misses", "cache" => self.name.clone()).increment(1);
 
-        let lock = Arc::new(tokio::sync::Mutex::new(None));
-        let mut guard = lock.lock().await;
+        // Log weighted size on cache miss
+        let cache_weighted_size = self.cache.weighted_size();
+        tracing::Span::current().record("weighted_size", cache_weighted_size);
+        debug!(cache_weighted_size, name = self.name, "CacheWeightedSize");
+        gauge!("rpc_cache_weighted_size", "cache" => self.name.clone())
+            .set(cache_weighted_size as f64);
+        gauge!("rpc_cache_entry_count", "cache" => self.name.clone())
+            .set(self.cache.entry_count() as f64);
+
+        let value = Arc::new(ValueWithSize::placeholder().await);
+        let value_update_guard = value.value.lock().await;
+
         // We insert a None value here to indicate that this request is in flight.
         //  In some cases this None value may leak to the reading part above, e.g.
         //  if the fallback failed or if the value is not safe to be cached.
         self.cache
-            .insert(request.clone(), lock.clone());
+            .insert(request.clone(), value.clone());
+        trace!("SavedPlaceholder");
+
         let (response, should_cache) = (fallback)(request.clone())
             .await
             .inspect_err(|_| {
@@ -75,17 +135,23 @@ where
                 self.cache.invalidate(&request);
                 trace!("FallbackFailure");
             })?;
+        let arc_response = Arc::new(response);
 
         // PERF: unnecessary lock if we don't cache the value, could be improved
         //  if `should_cache` value can be determined beforehand.
         if should_cache {
             tracing::Span::current().record("should_cache", true);
-            *guard = Some(response.clone());
-            trace!("EntrySaved")
+            // Update the placeholder placed in the cache with the actual value
+            value.update(arc_response.clone(), value_update_guard);
+            // Re-insert to update the weight in the cache
+            self.cache
+                .insert(request.clone(), value.clone());
+            trace!("UpdatedPlaceholder")
         } else {
+            drop(value_update_guard);
             self.cache.invalidate(&request);
         }
-        Ok(response)
+        Ok(arc_response)
     }
 }
 
@@ -93,7 +159,9 @@ where
 mod test {
     use std::sync::Arc;
 
+    use deepsize::DeepSizeOf;
     use futures03::future::try_join_all;
+    use mini_moka::sync::ConcurrentCacheExt;
     use tokio::sync::Mutex;
 
     use crate::services::{cache::RpcCache, rpc::RpcError};
@@ -169,5 +237,64 @@ mod test {
 
         let v = *access_counter.lock().await;
         assert_eq!(v, 10);
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_cache_evicts_when_over_capacity() {
+        const CAPACITY: u64 = 1000;
+        let cache = RpcCache::<u8, Vec<u8>>::new("eviction", CAPACITY, 3600);
+
+        let mut keys = Vec::new();
+        let mut total_expected_weight = 0usize;
+
+        for i in 0..5 {
+            let key = i;
+            let value = vec![i; 256];
+            total_expected_weight += key.deep_size_of() + value.deep_size_of();
+            let value_for_fallback = value.clone();
+            cache
+                .get(key, move |_| {
+                    let value_for_fallback = value_for_fallback.clone();
+                    async move {
+                        // simulate some latency in the fallback
+                        tokio::time::sleep(core::time::Duration::from_millis(10)).await;
+
+                        Ok::<(Vec<u8>, bool), RpcError>((value_for_fallback, true))
+                    }
+                })
+                .await
+                .unwrap();
+
+            keys.push(key);
+        }
+
+        cache.cache.sync();
+
+        assert!(
+            total_expected_weight as u64 > CAPACITY,
+            "test precondition failed: expected inserted weight {total_expected_weight} to exceed capacity {CAPACITY}"
+        );
+
+        assert_eq!(
+            cache.cache.entry_count(),
+            3,
+            "cache should evict entries once weight exceeds capacity"
+        );
+
+        let evicted_count = keys
+            .iter()
+            .filter(|k| cache.cache.get(*k).is_none())
+            .count();
+        assert_eq!(
+            evicted_count, 2,
+            "expected at least one key to be evicted after exceeding capacity"
+        );
+
+        assert!(
+            cache.cache.weighted_size() <= CAPACITY,
+            "cache weighted size {} should be <= capacity {} after eviction",
+            cache.cache.weighted_size(),
+            CAPACITY
+        );
     }
 }

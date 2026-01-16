@@ -1,10 +1,12 @@
 pub mod blockchain;
 pub mod contract;
+pub mod error;
 pub mod protocol;
 pub mod token;
 
-use std::{collections::HashMap, fmt::Display, str::FromStr, sync::Arc};
+use std::{collections::HashMap, fmt::Display, str::FromStr};
 
+use deepsize::DeepSizeOf;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use thiserror::Error;
@@ -45,9 +47,6 @@ pub type StoreVal = Bytes;
 /// A binary key-value store for an account.
 pub type ContractStore = HashMap<StoreKey, StoreVal>;
 pub type ContractStoreDeltas = HashMap<StoreKey, Option<StoreVal>>;
-
-/// Multiple binary key-value stores grouped by account address.
-pub type AccountToContractStore = HashMap<Address, ContractStore>;
 pub type AccountToContractStoreDeltas = HashMap<Address, ContractStoreDeltas>;
 
 /// Component id literal type to uniquely identify a component.
@@ -60,7 +59,18 @@ pub type ProtocolSystem = String;
 pub type EntryPointId = String;
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, EnumString, Display, Default,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    EnumString,
+    Display,
+    Default,
+    DeepSizeOf,
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
@@ -71,6 +81,7 @@ pub enum Chain {
     ZkSync,
     Arbitrum,
     Base,
+    Bsc,
     Unichain,
 }
 
@@ -82,6 +93,7 @@ impl From<dto::Chain> for Chain {
             dto::Chain::ZkSync => Chain::ZkSync,
             dto::Chain::Arbitrum => Chain::Arbitrum,
             dto::Chain::Base => Chain::Base,
+            dto::Chain::Bsc => Chain::Bsc,
             dto::Chain::Unichain => Chain::Unichain,
         }
     }
@@ -99,8 +111,24 @@ fn native_eth(chain: Chain) -> Token {
     )
 }
 
+fn native_bsc(chain: Chain) -> Token {
+    Token::new(
+        &Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
+        "BNB",
+        18,
+        0,
+        &[Some(2300)],
+        chain,
+        100,
+    )
+}
+
 fn wrapped_native_eth(chain: Chain, address: &str) -> Token {
     Token::new(&Bytes::from_str(address).unwrap(), "WETH", 18, 0, &[Some(2300)], chain, 100)
+}
+
+fn wrapped_native_bsc(chain: Chain, address: &str) -> Token {
+    Token::new(&Bytes::from_str(address).unwrap(), "WBNB", 18, 0, &[Some(2300)], chain, 100)
 }
 
 impl Chain {
@@ -111,6 +139,7 @@ impl Chain {
             Chain::Arbitrum => 42161,
             Chain::Starknet => 0,
             Chain::Base => 8453,
+            Chain::Bsc => 56,
             Chain::Unichain => 130,
         }
     }
@@ -125,6 +154,7 @@ impl Chain {
             Chain::ZkSync => native_eth(Chain::ZkSync),
             Chain::Arbitrum => native_eth(Chain::Arbitrum),
             Chain::Base => native_eth(Chain::Base),
+            Chain::Bsc => native_bsc(Chain::Bsc),
             Chain::Unichain => native_eth(Chain::Unichain),
         }
     }
@@ -148,6 +178,9 @@ impl Chain {
             Chain::Base => {
                 wrapped_native_eth(Chain::Base, "0x4200000000000000000000000000000000000006")
             }
+            Chain::Bsc => {
+                wrapped_native_bsc(Chain::Bsc, "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c")
+            }
             Chain::Unichain => {
                 wrapped_native_eth(Chain::Unichain, "0x4200000000000000000000000000000000000006")
             }
@@ -170,6 +203,18 @@ impl ExtractorIdentity {
 impl std::fmt::Display for ExtractorIdentity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}:{}", self.chain, self.name)
+    }
+}
+
+impl From<ExtractorIdentity> for dto::ExtractorIdentity {
+    fn from(value: ExtractorIdentity) -> Self {
+        dto::ExtractorIdentity { chain: value.chain.into(), name: value.name }
+    }
+}
+
+impl From<dto::ExtractorIdentity> for ExtractorIdentity {
+    fn from(value: dto::ExtractorIdentity) -> Self {
+        Self { chain: value.chain.into(), name: value.name }
     }
 }
 
@@ -198,18 +243,6 @@ impl ExtractionState {
             block_hash,
         }
     }
-}
-
-// TODO: replace with types from dto on extractor
-#[typetag::serde(tag = "type")]
-pub trait NormalisedMessage:
-    std::any::Any + std::fmt::Debug + std::fmt::Display + Send + Sync + 'static
-{
-    fn source(&self) -> ExtractorIdentity;
-
-    fn drop_state(&self) -> Arc<dyn NormalisedMessage>;
-
-    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 #[derive(PartialEq, Debug, Clone, Default, Deserialize, Serialize)]
@@ -247,7 +280,7 @@ impl ProtocolType {
     }
 }
 
-#[derive(Debug, PartialEq, Default, Copy, Clone, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Default, Copy, Clone, Deserialize, Serialize, DeepSizeOf)]
 pub enum ChangeType {
     #[default]
     Update,

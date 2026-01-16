@@ -2,7 +2,7 @@
 # This is required because we use some postgres extensions that aren't in the generic Postgres image such as pg_partman or pg_cron.
 
 # As an image with pg_partman already exist, we start from this one an add pg_cron and possibly other extensions on top of that.
-FROM ghcr.io/dbsystel/postgresql-partman:15-5
+FROM ghcr.io/dbsystel/postgresql-partman@sha256:ba56c1e48c2d92c8b58064c0d70d70808dd683ee40c0c2649c6ef0209d0c022e
 ARG PGCRON_VERSION="1.6.2"
 USER root
 RUN apt-get update && apt-get install -y wget build-essential

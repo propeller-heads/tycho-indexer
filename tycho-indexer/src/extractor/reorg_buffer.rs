@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use chrono::NaiveDateTime;
-use tracing::{debug, instrument, trace, warn, Level};
+use deepsize::DeepSizeOf;
+use tracing::{debug, error, instrument, trace, warn, Level};
 use tycho_common::{
     models::{
         blockchain::{Block, BlockScoped},
@@ -47,33 +48,36 @@ impl TryFrom<BlockOrTimestamp> for BlockNumberOrTimestamp {
     }
 }
 
-/// This buffer temporarily stores blockchain blocks that are not yet finalized. It allows for
-/// efficient handling of chain reorganisations (reorg) without requiring database rollbacks.
+/// Buffer that holds blocks awaiting persistence to the database so extractors can batch commits
+/// and efficiently handle chain reorganisations (reorg) without requiring database rollbacks.
 ///
-/// Every time a new block is received by an extractor, it's pushed here. The extractor should then
-/// check if the reorg buffer contains newly finalized blocks, and send them to the db if there are
-/// some.
+/// Each new block received by an extractor is pushed here. Once enough finalized blocks accumulate
+/// they are drained to the database.
 ///
-/// In case of a chain reorg, we can just purge this buffer.
-pub(crate) struct ReorgBuffer<B: BlockScoped> {
+/// In case of a chain reorg, we can just purge this buffer up to the common ancestor block.
+#[derive(DeepSizeOf)]
+pub(crate) struct ReorgBuffer<B>
+where
+    B: BlockScoped + DeepSizeOf,
+{
     block_messages: VecDeque<B>,
     strict: bool,
 }
 
-/// The finality status of a block or block-scoped data.
+/// The commitment status of a block or block-scoped data with the DB.
 #[derive(PartialEq, Clone, Debug, Copy)]
-pub enum FinalityStatus {
+pub enum CommitStatus {
     /// Versions at this status should have been committed to the db.
-    Finalized,
+    Committed,
     /// Versions with this status should be in the reorg buffer.
-    Unfinalized,
+    Uncommitted,
     /// We have not seen this version yet.
     Unseen,
 }
 
 impl<B> ReorgBuffer<B>
 where
-    B: BlockScoped + std::fmt::Debug,
+    B: BlockScoped + std::fmt::Debug + DeepSizeOf,
 {
     pub(crate) fn new() -> Self {
         Self { block_messages: VecDeque::new(), strict: false }
@@ -98,14 +102,14 @@ where
         Ok(())
     }
 
-    /// Drains blocks up to the specified finalized block height. The last finalized block is kept
-    /// in the buffer. Returns the drained blocks ordered by ascending number or an error if the
-    /// specified block is not found.
-    pub fn drain_new_finalized_blocks(
+    /// Drains blocks up to the specified block height (non-inclusive) from the buffer. Returns the
+    /// drained blocks ordered by ascending number or an error if the target height is not found
+    /// in the buffer and strict mode is enabled.
+    pub fn drain_blocks_until(
         &mut self,
-        final_block_height: u64,
+        drain_upto_block_height: u64,
     ) -> Result<Vec<B>, StorageError> {
-        let target_index = self.find_index(|b| b.block().number == final_block_height);
+        let target_index = self.find_index(|b| b.block().number == drain_upto_block_height);
         let first = self
             .get_block_range(None, None)?
             .next()
@@ -117,11 +121,21 @@ where
             std::mem::swap(&mut self.block_messages, &mut temp);
             trace!(?temp, "ReorgBuffer drained blocks");
             Ok(temp.into())
-        } else if !self.strict && first.unwrap_or(0) < final_block_height {
-            warn!(?first, ?final_block_height, "Finalized block not found in ReorgBuffer");
+        } else if !self.strict && first.unwrap_or(0) < drain_upto_block_height {
+            warn!(
+                ?first,
+                ?drain_upto_block_height,
+                "First uncommitted block not found in ReorgBuffer"
+            );
             Ok(Vec::new())
         } else {
-            Err(StorageError::NotFound("block".into(), final_block_height.to_string()))
+            error!(
+                ?first,
+                ?drain_upto_block_height,
+                "First uncommitted block not found in ReorgBuffer. Strict mode is {}",
+                self.strict
+            );
+            Err(StorageError::NotFound("block".into(), drain_upto_block_height.to_string()))
         }
     }
 
@@ -148,6 +162,7 @@ where
         {
             if block_message.block().hash == target_hash {
                 target_index = Some(self.block_messages.len() - index);
+                break;
             }
         }
 
@@ -170,6 +185,15 @@ where
             return Some(block_message.block());
         }
         None
+    }
+
+    /// Returns the number of blocks in the buffer with a block number less than the specified
+    /// target block number. Assumes blocks are stored in ascending order.
+    pub fn count_blocks_before(&self, target_block: u64) -> usize {
+        self.block_messages
+            .iter()
+            .take_while(|msg| msg.block().number < target_block)
+            .count()
     }
 
     /// Retrieves a range of blocks from the buffer.
@@ -236,8 +260,8 @@ where
             .range(start_index..end_index))
     }
 
-    // Retrieves FinalityStatus for a block, returns None if the buffer is empty.
-    pub fn get_finality_status(&self, version: BlockNumberOrTimestamp) -> Option<FinalityStatus> {
+    /// Retrieves [CommitStatus] for a block, returns None if the buffer is empty.
+    pub fn get_commit_status(&self, version: BlockNumberOrTimestamp) -> Option<CommitStatus> {
         let first_block = self.block_messages.front();
         let last_block = self.block_messages.back();
         match (first_block, last_block) {
@@ -246,13 +270,13 @@ where
                 let last_block = last.block();
 
                 if !version.greater_than(&first_block) {
-                    Some(FinalityStatus::Finalized)
+                    Some(CommitStatus::Committed)
                 } else if (version.greater_than(&first_block)) &
                     (!version.greater_than(&last_block))
                 {
-                    Some(FinalityStatus::Unfinalized)
+                    Some(CommitStatus::Uncommitted)
                 } else {
-                    Some(FinalityStatus::Unseen)
+                    Some(CommitStatus::Unseen)
                 }
             }
             _ => None,
@@ -297,7 +321,7 @@ pub(crate) trait StateUpdateBufferEntry: std::fmt::Debug {
 
 impl<B> ReorgBuffer<B>
 where
-    B: BlockScoped + StateUpdateBufferEntry,
+    B: BlockScoped + StateUpdateBufferEntry + DeepSizeOf,
 {
     /// Looks up buffered protocol state updates for the provided keys. Returns a map of updates and
     /// a list of keys for which updates were not found in the buffered blocks.
@@ -849,7 +873,26 @@ mod test {
     }
 
     #[test]
-    fn test_drain_finalized_blocks() {
+    fn test_count_blocks_before() {
+        let mut reorg_buffer = ReorgBuffer::new();
+        reorg_buffer
+            .insert_block(get_block_changes(1))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(2))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(3))
+            .unwrap();
+
+        assert_eq!(reorg_buffer.count_blocks_before(1), 0);
+        assert_eq!(reorg_buffer.count_blocks_before(2), 1);
+        assert_eq!(reorg_buffer.count_blocks_before(3), 2);
+        assert_eq!(reorg_buffer.count_blocks_before(4), 3);
+    }
+
+    #[test]
+    fn test_drain_committed_blocks() {
         let mut reorg_buffer = ReorgBuffer::new();
         reorg_buffer.strict = true;
         reorg_buffer
@@ -862,14 +905,14 @@ mod test {
             .insert_block(get_block_changes(3))
             .unwrap();
 
-        let finalized = reorg_buffer
-            .drain_new_finalized_blocks(3)
+        let committed = reorg_buffer
+            .drain_blocks_until(3)
             .unwrap();
 
         assert_eq!(reorg_buffer.block_messages.len(), 1);
-        assert_eq!(finalized, vec![get_block_changes(1), get_block_changes(2)]);
+        assert_eq!(committed, vec![get_block_changes(1), get_block_changes(2)]);
 
-        let unknown = reorg_buffer.drain_new_finalized_blocks(999);
+        let unknown = reorg_buffer.drain_blocks_until(999);
 
         assert!(unknown.is_err());
     }
@@ -993,25 +1036,22 @@ mod test {
     }
 
     #[rstest]
-    #[case::finalized_no(BlockNumberOrTimestamp::Number(0), FinalityStatus::Finalized)]
-    #[case::finalized_ts(
+    #[case::committed_no(BlockNumberOrTimestamp::Number(0), CommitStatus::Committed)]
+    #[case::committed_ts(
         BlockNumberOrTimestamp::Timestamp("2020-01-01T00:00:00".parse().unwrap()),
-        FinalityStatus::Finalized
+        CommitStatus::Committed
     )]
-    #[case::unfinalized_no(BlockNumberOrTimestamp::Number(2), FinalityStatus::Unfinalized)]
-    #[case::unfinalized_ts(
+    #[case::uncommitted_no(BlockNumberOrTimestamp::Number(2), CommitStatus::Uncommitted)]
+    #[case::uncommitted_ts(
         BlockNumberOrTimestamp::Timestamp("2020-01-01T00:00:15".parse().unwrap()), 
-        FinalityStatus::Unfinalized
+        CommitStatus::Uncommitted
     )]
-    #[case::unseen_no(BlockNumberOrTimestamp::Number(5), FinalityStatus::Unseen)]
+    #[case::unseen_no(BlockNumberOrTimestamp::Number(5), CommitStatus::Unseen)]
     #[case::unseen_ts(
         BlockNumberOrTimestamp::Timestamp("2020-01-01T01:00:00".parse().unwrap()),
-        FinalityStatus::Unseen
+        CommitStatus::Unseen
     )]
-    fn test_get_finality_status(
-        #[case] version: BlockNumberOrTimestamp,
-        #[case] exp: FinalityStatus,
-    ) {
+    fn test_get_commit_status(#[case] version: BlockNumberOrTimestamp, #[case] exp: CommitStatus) {
         let mut reorg_buffer = ReorgBuffer::new();
         reorg_buffer
             .insert_block(get_block_changes(1))
@@ -1023,16 +1063,16 @@ mod test {
             .insert_block(get_block_changes(3))
             .unwrap();
 
-        let res = reorg_buffer.get_finality_status(version);
+        let res = reorg_buffer.get_commit_status(version);
 
         assert_eq!(res, Some(exp));
     }
 
     #[test]
-    fn test_get_finality_status_empty() {
+    fn test_get_commit_status_empty() {
         let reorg_buffer = ReorgBuffer::<BlockChanges>::new();
 
-        let res = reorg_buffer.get_finality_status(BlockNumberOrTimestamp::Number(2));
+        let res = reorg_buffer.get_commit_status(BlockNumberOrTimestamp::Number(2));
 
         assert_eq!(res, None);
     }

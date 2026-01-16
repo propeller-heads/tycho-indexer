@@ -3,27 +3,64 @@ use std::{
     hash::Hash,
 };
 
+use deepsize::DeepSizeOf;
 use thiserror::Error;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 use tycho_common::models::{
     blockchain::{Block, EntryPoint, EntryPointWithTracingParams, TracingParams, TracingResult},
-    Address, BlockHash, EntryPointId, StoreKey,
+    protocol::ProtocolComponent,
+    Address, BlockHash, ComponentId, EntryPointId, StoreKey,
 };
+
+use super::hooks::hook_dci::ComponentProcessingState;
 
 /// A unique identifier for a storage location, consisting of an address and a storage key.
 type StorageLocation = (Address, StoreKey);
 
+/// A function used for merging values when the same key exists in multiple layers during finality
+/// handling.
+// Perf: all the merge functions are defined at compile time, so we can avoid the overhead of
+// dynamic dispatch.
+type MergeFunction<V> = Box<dyn Fn(&V, V) -> V>;
+
+/// Strategy for merging values when the same key exists in multiple layers during finality
+/// handling.
+pub(super) enum MergeStrategy<V> {
+    /// Replace existing values with new ones (default behavior).
+    Replace,
+    /// Use a custom function to merge values.
+    Custom(MergeFunction<V>),
+}
+
 /// Central data cache used by the Dynamic Contract Indexer (DCI).
+#[derive(Debug, DeepSizeOf)]
 pub(super) struct DCICache {
     /// Maps entry point IDs to entry point definitions.
     pub(super) ep_id_to_entrypoint: VersionedCache<EntryPointId, EntryPoint>,
     /// Stores tracing results for entry points paired with specific tracing parameters.
-    pub(super) entrypoint_results: VersionedCache<(EntryPointId, TracingParams), TracingResult>,
+    /// None indicates that the TracingParams exist but have no results (e.g., failed traces).
+    pub(super) entrypoint_results:
+        VersionedCache<(EntryPointId, TracingParams), Option<TracingResult>>,
     /// Maps a storage location to entry points that should be retriggered when that location
-    /// changes.
-    pub(super) retriggers: VersionedCache<StorageLocation, HashSet<EntryPointWithTracingParams>>,
+    /// changes and the address storage offset for packed slots.
+    pub(super) retriggers:
+        VersionedCache<StorageLocation, (HashSet<EntryPointWithTracingParams>, u8)>,
     /// Stores tracked contract addresses and their associated storage keys.
-    pub(super) tracked_contracts: VersionedCache<Address, Option<HashSet<StoreKey>>>,
+    pub(super) tracked_contracts: VersionedCache<Address, HashSet<StoreKey>>,
+    /// Stores addresses identified as ERC-20 tokens to skip full indexing.
+    /// perf: implement a versioned wrapper around HashSet, similar to VersionedCache for HashMap
+    pub(super) erc20_addresses: VersionedCache<Address, bool>,
+    /// Stores manually blacklisted addresses that should skip full indexing
+    /// but are not tokens (e.g., UniswapV4 pool manager).
+    pub(super) blacklisted_addresses: VersionedCache<Address, bool>,
+    /// Maps an entry point id to the component ids that use it.
+    pub(super) ep_id_to_component_id: VersionedCache<EntryPointId, HashSet<ComponentId>>,
+    /// Maps component IDs to their associated entrypoint params for retry logic.
+    pub(super) component_id_to_entrypoint_params:
+        VersionedCache<ComponentId, HashSet<EntryPointWithTracingParams>>,
+    /// Tracks the number of retry attempts for each failed tracing params.
+    /// Used to cap retries at a maximum number of attempts (e.g., 5).
+    pub(super) tracing_retry_counts: VersionedCache<(EntryPointId, TracingParams), u32>,
 }
 
 impl DCICache {
@@ -33,6 +70,11 @@ impl DCICache {
             entrypoint_results: VersionedCache::new(),
             retriggers: VersionedCache::new(),
             tracked_contracts: VersionedCache::new(),
+            erc20_addresses: VersionedCache::new(),
+            blacklisted_addresses: VersionedCache::new(),
+            ep_id_to_component_id: VersionedCache::new(),
+            component_id_to_entrypoint_params: VersionedCache::new(),
+            tracing_retry_counts: VersionedCache::new(),
         }
     }
 
@@ -56,6 +98,15 @@ impl DCICache {
         self.retriggers.revert_to(block)?;
         self.tracked_contracts
             .revert_to(block)?;
+        self.erc20_addresses.revert_to(block)?;
+        self.blacklisted_addresses
+            .revert_to(block)?;
+        self.ep_id_to_component_id
+            .revert_to(block)?;
+        self.component_id_to_entrypoint_params
+            .revert_to(block)?;
+        self.tracing_retry_counts
+            .revert_to(block)?;
 
         Ok(())
     }
@@ -69,13 +120,66 @@ impl DCICache {
         finalized_block_height: u64,
     ) -> Result<(), DCICacheError> {
         self.ep_id_to_entrypoint
-            .handle_finality(finalized_block_height)?;
+            .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
         self.entrypoint_results
-            .handle_finality(finalized_block_height)?;
-        self.retriggers
-            .handle_finality(finalized_block_height)?;
-        self.tracked_contracts
-            .handle_finality(finalized_block_height)?;
+            .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
+        // Use custom merge function for retriggers to union HashSets
+        self.retriggers.handle_finality(
+            finalized_block_height,
+            MergeStrategy::Custom(Box::new(
+                |existing: &(HashSet<EntryPointWithTracingParams>, u8),
+                 new: (HashSet<EntryPointWithTracingParams>, u8)| {
+                    let (mut merged, previous_offset) = existing.clone();
+                    merged.extend(new.0);
+                    if previous_offset != new.1 {
+                        warn!("Offset discrepancy detected: {previous_offset} != {}", new.1)
+                    }
+                    (merged, previous_offset)
+                },
+            )),
+        )?;
+
+        // Use custom merge function for tracked_contracts to merge HashSets
+        self.tracked_contracts.handle_finality(
+            finalized_block_height,
+            MergeStrategy::Custom(Box::new(
+                |existing: &HashSet<StoreKey>, new: HashSet<StoreKey>| {
+                    let mut merged = existing.clone();
+                    merged.extend(new);
+                    merged
+                },
+            )),
+        )?;
+
+        self.erc20_addresses
+            .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
+        self.blacklisted_addresses
+            .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
+        self.ep_id_to_component_id
+            .handle_finality(
+                finalized_block_height,
+                MergeStrategy::Custom(Box::new(
+                    |existing: &HashSet<ComponentId>, new: HashSet<ComponentId>| {
+                        let mut merged = existing.clone();
+                        merged.extend(new);
+                        merged
+                    },
+                )),
+            )?;
+        self.component_id_to_entrypoint_params
+            .handle_finality(
+                finalized_block_height,
+                MergeStrategy::Custom(Box::new(
+                    |existing: &HashSet<EntryPointWithTracingParams>,
+                     new: HashSet<EntryPointWithTracingParams>| {
+                        let mut merged = existing.clone();
+                        merged.extend(new);
+                        merged
+                    },
+                )),
+            )?;
+        self.tracing_retry_counts
+            .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
 
         Ok(())
     }
@@ -94,14 +198,93 @@ impl DCICache {
     ///   order
     pub(super) fn try_insert_block_layer(&mut self, block: &Block) -> Result<(), DCICacheError> {
         self.ep_id_to_entrypoint
-            .validate_and_ensure_block_layer(block)?;
+            .validate_and_ensure_block_layer_internal(block)?;
         self.entrypoint_results
-            .validate_and_ensure_block_layer(block)?;
+            .validate_and_ensure_block_layer_internal(block)?;
         self.retriggers
-            .validate_and_ensure_block_layer(block)?;
+            .validate_and_ensure_block_layer_internal(block)?;
         self.tracked_contracts
-            .validate_and_ensure_block_layer(block)?;
+            .validate_and_ensure_block_layer_internal(block)?;
+        self.ep_id_to_component_id
+            .validate_and_ensure_block_layer_internal(block)?;
+        self.erc20_addresses
+            .validate_and_ensure_block_layer_internal(block)?;
+        self.blacklisted_addresses
+            .validate_and_ensure_block_layer_internal(block)?;
+        self.component_id_to_entrypoint_params
+            .validate_and_ensure_block_layer_internal(block)?;
+        self.tracing_retry_counts
+            .validate_and_ensure_block_layer_internal(block)?;
 
+        Ok(())
+    }
+}
+
+/// Central data cache used by the Hooks Dynamic Contract Indexer (HooksDCI).
+#[derive(Debug, DeepSizeOf)]
+pub(super) struct HooksDCICache {
+    /// Maps component IDs to their processing state.
+    pub(super) component_states: VersionedCache<ComponentId, ComponentProcessingState>,
+    /// Stores ProtocolComponent data for both newly created and mutated components.
+    pub(super) protocol_components: VersionedCache<ComponentId, ProtocolComponent>,
+}
+
+impl HooksDCICache {
+    pub(super) fn new() -> Self {
+        Self { component_states: VersionedCache::new(), protocol_components: VersionedCache::new() }
+    }
+
+    /// Reverts the cache to the state at a specific block hash.
+    ///
+    /// This operation will discard all changes made in blocks after the specified block.
+    /// Errors if the block is not found and is not the parent of the latest pending block.
+    ///
+    /// # Arguments
+    /// * `block` - The block to revert to.
+    ///
+    /// # Returns
+    /// * `Ok(())` - On successful reversion
+    /// * `Err(DCICacheError::RevertToBlockNotFound)` - If the block is not found in one of the
+    ///   pending layers
+    pub(super) fn revert_to(&mut self, block: &BlockHash) -> Result<(), DCICacheError> {
+        self.component_states.revert_to(block)?;
+        self.protocol_components
+            .revert_to(block)?;
+        Ok(())
+    }
+
+    /// Move new finalized blocks state to the permanent layer.
+    ///
+    /// # Arguments
+    /// * `finalized_block_height` - The height of the finalized block.
+    pub(super) fn handle_finality(
+        &mut self,
+        finalized_block_height: u64,
+    ) -> Result<(), DCICacheError> {
+        self.component_states
+            .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
+        self.protocol_components
+            .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
+        Ok(())
+    }
+
+    /// Tries to insert a block layer for the given block.
+    /// If the block already exists, no-op.
+    /// If the block does not exist, we check if it's the next block in the chain. If it's not it
+    /// returns an error.
+    ///
+    /// # Arguments
+    /// * `block` - The block to validate and ensure the layer for.
+    ///
+    /// # Returns
+    /// * `Ok(())` - On successful layer creation
+    /// * `Err(DCICacheError::UnexpectedBlockOrder)` - If the inserted block is not the correct
+    ///   order
+    pub(super) fn try_insert_block_layer(&mut self, block: &Block) -> Result<(), DCICacheError> {
+        self.component_states
+            .validate_and_ensure_block_layer_internal(block)?;
+        self.protocol_components
+            .validate_and_ensure_block_layer_internal(block)?;
         Ok(())
     }
 }
@@ -117,8 +300,8 @@ pub enum DCICacheError {
 /// A versioned data container scoped to a specific block.
 ///
 /// Stores key-value pairs for a block, used in the pending portion of a cache.
-#[derive(Clone)]
-struct BlockScopedMap<K, V> {
+#[derive(Clone, Debug, DeepSizeOf)]
+struct BlockScopedMap<K: DeepSizeOf + Eq + Hash, V: DeepSizeOf> {
     /// Block metadata for this layer.
     block: Block,
     /// Key-value store scoped to the block.
@@ -130,7 +313,8 @@ struct BlockScopedMap<K, V> {
 /// It contains:
 /// - Permanent data that is not revertable.
 /// - Pending data organized in layers per block, supporting reverts.
-pub(super) struct VersionedCache<K, V> {
+#[derive(Debug, DeepSizeOf)]
+pub(super) struct VersionedCache<K: DeepSizeOf + Hash + Eq, V: DeepSizeOf> {
     /// Entries that are permanent and not affected by block reverts.
     permanent: HashMap<K, V>,
     /// Stack of pending block-scoped layers. These can be reverted.
@@ -138,10 +322,10 @@ pub(super) struct VersionedCache<K, V> {
 }
 impl<K, V> VersionedCache<K, V>
 where
-    K: Eq + Hash + Clone,
-    V: Clone,
+    K: Eq + Hash + Clone + std::fmt::Debug + DeepSizeOf,
+    V: Clone + std::fmt::Debug + DeepSizeOf,
 {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self { permanent: HashMap::new(), pending: VecDeque::new() }
     }
 
@@ -194,7 +378,7 @@ where
         Ok(layer.data.entry(k.clone()))
     }
 
-    /// Retrieves a value for a key, checking latest pending block first, then permanent.
+    /// Retrieves a single value for a key, checking latest pending block first, then permanent.
     pub(super) fn get(&self, k: &K) -> Option<&V> {
         for layer in self.pending.iter().rev() {
             if let Some(v) = layer.data.get(k) {
@@ -202,6 +386,43 @@ where
             }
         }
         self.permanent.get(k)
+    }
+
+    /// Retrieves all values for a key from all layers, starting from the latest pending layer.
+    ///
+    /// # Arguments
+    /// * `k` - The key to get the values for.
+    ///
+    /// # Returns
+    /// * `Some(Iterator<Item = &V>)` - An iterator of all values for the key, starting from the
+    ///   latest pending layer.
+    /// * `None` - If the key is not found in any layer.
+    pub(super) fn get_all<'a>(&'a self, k: K) -> Option<impl Iterator<Item = &'a V> + 'a> {
+        let key_for_pending = k.clone();
+        let key_for_permanent = k;
+
+        let pending_iter = self
+            .pending
+            .iter()
+            .rev()
+            .filter_map(move |layer| layer.data.get(&key_for_pending));
+
+        let permanent_iter = self
+            .permanent
+            .get(&key_for_permanent)
+            .into_iter();
+
+        let iter = pending_iter.chain(permanent_iter);
+
+        // Check if iterator would yield any items by peeking at the first element
+        // This avoids the redundant contains_key() check that iterates through all layers again
+        // while still returning None for empty iterators
+        let mut iter = iter.peekable();
+        if iter.peek().is_some() {
+            Some(iter)
+        } else {
+            None
+        }
     }
 
     /// Checks if the given key exists in either the pending or permanent layer.
@@ -214,10 +435,25 @@ where
         self.permanent.contains_key(key)
     }
 
+    /// Returns the count of all unique keys across permanent and pending layers.
+    pub(super) fn unique_key_count(&self) -> usize {
+        let mut unique_keys = HashSet::new();
+        // Collect keys from permanent layer
+        unique_keys.extend(self.permanent.keys());
+        // Collect keys from all pending layers
+        for layer in self.pending.iter() {
+            unique_keys.extend(layer.data.keys());
+        }
+        unique_keys.len()
+    }
+
     /// Process block finality by moving all finalized layers from pending to permanent storage.
     ///
     /// # Arguments
     /// * `finalized_block_height` - The block number of the finalized block
+    /// * `strategy` - Strategy for resolving conflicts when the same key exists in multiple layers.
+    ///   `Replace` will use later values to replace earlier ones. `Custom(fn)` will use the
+    ///   provided function to merge values.
     ///
     /// # Returns
     /// * `Ok(())` - On successful processing
@@ -232,6 +468,7 @@ where
     pub(super) fn handle_finality(
         &mut self,
         finalized_block_height: u64,
+        strategy: MergeStrategy<V>,
     ) -> Result<(), DCICacheError> {
         if self.pending.is_empty() {
             return Ok(());
@@ -264,7 +501,24 @@ where
             .collect();
 
         for layer in finalized_layers {
-            self.permanent.extend(layer.data);
+            match &strategy {
+                MergeStrategy::Replace => {
+                    self.permanent.extend(layer.data);
+                }
+                MergeStrategy::Custom(merge_func) => {
+                    for (key, value) in layer.data {
+                        match self.permanent.entry(key) {
+                            Entry::Occupied(mut entry) => {
+                                let merged_value = merge_func(entry.get(), value);
+                                entry.insert(merged_value);
+                            }
+                            Entry::Vacant(entry) => {
+                                entry.insert(value);
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -336,7 +590,10 @@ where
     /// # Returns
     /// * `Ok(())` - On successful validation and layer creation
     /// * `Err(DCICacheError::UnexpectedBlockOrder)` - On invalid chain progression
-    fn validate_and_ensure_block_layer(&mut self, block: &Block) -> Result<(), DCICacheError> {
+    fn validate_and_ensure_block_layer_internal(
+        &mut self,
+        block: &Block,
+    ) -> Result<(), DCICacheError> {
         match self.pending.back() {
             None => {
                 self.pending
@@ -379,8 +636,18 @@ where
 
     /// Returns full permanent state (only available in tests).
     #[cfg(test)]
-    pub fn get_full_permanent_state(&self) -> &HashMap<K, V> {
+    pub(super) fn get_full_permanent_state(&self) -> &HashMap<K, V> {
         &self.permanent
+    }
+
+    /// Validates block order and ensures the corresponding block layer exists (only available in
+    /// tests).
+    #[cfg(test)]
+    pub(super) fn validate_and_ensure_block_layer_test(
+        &mut self,
+        block: &Block,
+    ) -> Result<(), DCICacheError> {
+        self.validate_and_ensure_block_layer_internal(block)
     }
 }
 
@@ -388,12 +655,12 @@ where
 mod tests {
     use std::collections::HashSet;
 
-    use chrono::NaiveDateTime;
+    use chrono::DateTime;
     use tycho_common::{
         models::{
             blockchain::{
-                Block, EntryPoint, EntryPointWithTracingParams, RPCTracerParams, TracingParams,
-                TracingResult,
+                AddressStorageLocation, Block, EntryPoint, EntryPointWithTracingParams,
+                RPCTracerParams, TracingParams, TracingResult,
             },
             Address, BlockHash, Chain, StoreKey,
         },
@@ -407,7 +674,9 @@ mod tests {
             number,
             hash: BlockHash::from(hash),
             parent_hash: BlockHash::from(parent_hash),
-            ts: NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+            ts: DateTime::from_timestamp(0, 0)
+                .unwrap()
+                .naive_utc(),
             chain: Chain::Ethereum,
         }
     }
@@ -426,7 +695,10 @@ mod tests {
 
     fn get_tracing_result(version: u8) -> TracingResult {
         TracingResult::new(
-            HashSet::from([(Bytes::from(version), Bytes::from(version))]),
+            HashSet::from([(
+                Bytes::from(version),
+                AddressStorageLocation::new(Bytes::from(version), 12),
+            )]),
             HashMap::from([
                 (Bytes::from(version), HashSet::from([Bytes::from(version + version * 16)])),
                 (
@@ -468,10 +740,10 @@ mod tests {
         let block1 = create_test_block(1, "0x01", "0x00");
         let block2 = create_test_block(2, "0x02", "0x01");
         cache
-            .validate_and_ensure_block_layer(&block1)
+            .validate_and_ensure_block_layer_test(&block1)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block2)
+            .validate_and_ensure_block_layer_test(&block2)
             .unwrap();
 
         // Test pending insert
@@ -515,16 +787,16 @@ mod tests {
         let block3 = create_test_block(3, "0x03", "0x02");
         let block4 = create_test_block(4, "0x04", "0x03");
         cache
-            .validate_and_ensure_block_layer(&block1)
+            .validate_and_ensure_block_layer_test(&block1)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block2)
+            .validate_and_ensure_block_layer_test(&block2)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block3)
+            .validate_and_ensure_block_layer_test(&block3)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block4)
+            .validate_and_ensure_block_layer_test(&block4)
             .unwrap();
 
         // Insert data in both blocks
@@ -549,10 +821,10 @@ mod tests {
 
         // Make sure we can insert correct new layers after reverting
         cache
-            .validate_and_ensure_block_layer(&block2)
+            .validate_and_ensure_block_layer_test(&block2)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block3)
+            .validate_and_ensure_block_layer_test(&block3)
             .unwrap();
     }
 
@@ -588,7 +860,7 @@ mod tests {
             .insert_pending(
                 block1.clone(),
                 (entrypoint.external_id.clone(), tracing_params.clone()),
-                tracing_result.clone(),
+                Some(tracing_result.clone()),
             )
             .unwrap();
         cache
@@ -596,7 +868,7 @@ mod tests {
             .insert_pending(
                 block1.clone(),
                 (address.clone(), store_key.clone()),
-                retrigger_set.clone(),
+                (retrigger_set.clone(), 0),
             )
             .unwrap();
 
@@ -659,13 +931,13 @@ mod tests {
         let block2 = create_test_block(2, "0x02", "0x01");
         let block3 = create_test_block(3, "0x03", "0x02");
         cache
-            .validate_and_ensure_block_layer(&block1)
+            .validate_and_ensure_block_layer_test(&block1)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block2)
+            .validate_and_ensure_block_layer_test(&block2)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block3)
+            .validate_and_ensure_block_layer_test(&block3)
             .unwrap();
 
         // Insert data in block1
@@ -687,7 +959,7 @@ mod tests {
 
         // Handle finality of block2
         cache
-            .handle_finality(block2.number)
+            .handle_finality(block2.number, MergeStrategy::Replace)
             .unwrap();
 
         assert_eq!(cache.get_full_permanent_state(), &HashMap::from([("key1".to_string(), 1)]));
@@ -702,10 +974,10 @@ mod tests {
         let block1 = create_test_block(1, "0x01", "0x00");
         let block2 = create_test_block(2, "0x02", "0x01");
         cache
-            .validate_and_ensure_block_layer(&block1)
+            .validate_and_ensure_block_layer_test(&block1)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block2)
+            .validate_and_ensure_block_layer_test(&block2)
             .unwrap();
 
         // Insert same key with different values in different blocks
@@ -739,10 +1011,10 @@ mod tests {
         let block1 = create_test_block(1, "0x01", "0x00");
         let block2 = create_test_block(2, "0x02", "0x01");
         cache
-            .validate_and_ensure_block_layer(&block1)
+            .validate_and_ensure_block_layer_test(&block1)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block2)
+            .validate_and_ensure_block_layer_test(&block2)
             .unwrap();
 
         // Insert same key with different values in different blocks
@@ -774,10 +1046,10 @@ mod tests {
         let block1 = create_test_block(1, "0x01", "0x00");
         let block2 = create_test_block(2, "0x02", "0x01");
         cache
-            .validate_and_ensure_block_layer(&block1)
+            .validate_and_ensure_block_layer_test(&block1)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block2)
+            .validate_and_ensure_block_layer_test(&block2)
             .unwrap();
 
         // Insert initial values
@@ -806,5 +1078,186 @@ mod tests {
         assert_eq!(cache.get(&"key2".to_string()), Some(&21)); // block1
         assert_eq!(cache.get(&"key3".to_string()), Some(&3)); // block2
         assert_eq!(cache.get(&"key4".to_string()), Some(&40)); // block2
+    }
+
+    #[test]
+    fn test_versioned_cache_get_all() {
+        let mut cache: VersionedCache<String, u32> = VersionedCache::new();
+        let block1 = create_test_block(1, "0x01", "0x00");
+        let block2 = create_test_block(2, "0x02", "0x01");
+        let block3 = create_test_block(3, "0x03", "0x02");
+
+        cache
+            .validate_and_ensure_block_layer_internal(&block1)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer_internal(&block2)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer_internal(&block3)
+            .unwrap();
+
+        // Test 1: Key not found in any layer
+        assert!(cache
+            .get_all("nonexistent".to_string())
+            .is_none());
+
+        // Test 2: Key only in permanent layer
+        cache.insert_permanent("perm_only".to_string(), 100);
+        let result = cache
+            .get_all("perm_only".to_string())
+            .unwrap();
+        assert_eq!(result.collect::<Vec<_>>(), vec![&100]);
+
+        // Test 3: Key only in one pending layer
+        cache
+            .insert_pending(block2.clone(), "pending_only".to_string(), 200)
+            .unwrap();
+        let result = cache
+            .get_all("pending_only".to_string())
+            .unwrap();
+        assert_eq!(result.collect::<Vec<_>>(), vec![&200]);
+
+        // Test 4: Key in permanent and one pending layer
+        cache.insert_permanent("mixed".to_string(), 300);
+        cache
+            .insert_pending(block1.clone(), "mixed".to_string(), 301)
+            .unwrap();
+        let result = cache
+            .get_all("mixed".to_string())
+            .unwrap();
+        assert_eq!(result.collect::<Vec<_>>(), vec![&301, &300]); // Latest pending first, then permanent
+
+        // Test 5: Key in multiple pending layers and permanent
+        cache.insert_permanent("multi".to_string(), 400);
+        cache
+            .insert_pending(block1.clone(), "multi".to_string(), 401)
+            .unwrap();
+        cache
+            .insert_pending(block2.clone(), "multi".to_string(), 402)
+            .unwrap();
+        cache
+            .insert_pending(block3.clone(), "multi".to_string(), 403)
+            .unwrap();
+        let result = cache
+            .get_all("multi".to_string())
+            .unwrap();
+        assert_eq!(result.collect::<Vec<_>>(), vec![&403, &402, &401, &400]); // Latest to oldest
+
+        // Test 6: Key in some but not all pending layers
+        cache.insert_permanent("sparse".to_string(), 500);
+        cache
+            .insert_pending(block1.clone(), "sparse".to_string(), 501)
+            .unwrap();
+        cache
+            .insert_pending(block3.clone(), "sparse".to_string(), 503)
+            .unwrap();
+        let result = cache
+            .get_all("sparse".to_string())
+            .unwrap();
+        assert_eq!(result.collect::<Vec<_>>(), vec![&503, &501, &500]); // Skips block2, includes others
+
+        // Test 7: Key only in multiple pending layers (no permanent)
+        cache
+            .insert_pending(block1.clone(), "pending_multi".to_string(), 601)
+            .unwrap();
+        cache
+            .insert_pending(block3.clone(), "pending_multi".to_string(), 603)
+            .unwrap();
+        let result = cache
+            .get_all("pending_multi".to_string())
+            .unwrap();
+        assert_eq!(result.collect::<Vec<_>>(), vec![&603, &601]); // Latest to oldest pending only
+
+        // Test 8: After revert, get_all should reflect the new state
+        cache.revert_to(&block2.hash).unwrap();
+        let result = cache
+            .get_all("multi".to_string())
+            .unwrap();
+        assert_eq!(result.collect::<Vec<_>>(), vec![&402, &401, &400]); // Block3 data removed after revert
+
+        // Test 9: After finality, get_all should include finalized data in permanent
+        cache
+            .handle_finality(block2.number, MergeStrategy::Replace)
+            .unwrap();
+        let result = cache
+            .get_all("multi".to_string())
+            .unwrap();
+        assert_eq!(result.collect::<Vec<_>>(), vec![&402, &401]); // Block1 data moved to permanent,
+                                                                  // block2 stays
+                                                                  // pending
+    }
+
+    #[test]
+    fn test_versioned_cache_handle_finality_with_merge() {
+        let mut cache: VersionedCache<Address, Option<HashSet<StoreKey>>> = VersionedCache::new();
+        let block1 = create_test_block(1, "0x01", "0x00");
+        let block2 = create_test_block(2, "0x02", "0x01");
+        let block3 = create_test_block(3, "0x03", "0x02");
+
+        cache
+            .validate_and_ensure_block_layer_test(&block1)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer_test(&block2)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer_test(&block3)
+            .unwrap();
+
+        let address1 = Address::from("0x1111");
+        let address2 = Address::from("0x2222");
+        let key1 = StoreKey::from("0x01");
+        let key2 = StoreKey::from("0x02");
+        let key3 = StoreKey::from("0x03");
+
+        // Insert initial data in permanent storage
+        cache.insert_permanent(address1.clone(), Some(HashSet::from([key1.clone()])));
+
+        // Insert data in block1 - same address, different keys
+        cache
+            .insert_pending(block1.clone(), address1.clone(), Some(HashSet::from([key2.clone()])))
+            .unwrap();
+
+        // Insert data in block2 - same address, more keys
+        cache
+            .insert_pending(block2.clone(), address1.clone(), Some(HashSet::from([key3.clone()])))
+            .unwrap();
+
+        // Insert different address in block1
+        cache
+            .insert_pending(block1.clone(), address2.clone(), Some(HashSet::from([key1.clone()])))
+            .unwrap();
+
+        // Handle finality with merge function
+        cache
+            .handle_finality(
+                block2.number,
+                MergeStrategy::Custom(Box::new(
+                    |existing: &Option<HashSet<StoreKey>>, new: Option<HashSet<StoreKey>>| {
+                        match (existing, new) {
+                            (None, _) | (_, None) => None, /* If either is None (full tracking), */
+                            // result is None
+                            (Some(existing_set), Some(new_set)) => {
+                                let mut merged = existing_set.clone();
+                                merged.extend(new_set);
+                                Some(merged)
+                            }
+                        }
+                    },
+                )),
+            )
+            .unwrap();
+
+        // Verify merged results
+        let permanent_state = cache.get_full_permanent_state();
+
+        // address1 should have keys merged from permanent layer and block1 only
+        // (block2 remains in pending, so key3 is not included in permanent yet)
+        let expected_keys = HashSet::from([key1.clone(), key2.clone()]);
+        assert_eq!(permanent_state.get(&address1), Some(&Some(expected_keys)));
+
+        // address2 should have key1 from block1
+        assert_eq!(permanent_state.get(&address2), Some(&Some(HashSet::from([key1.clone()]))));
     }
 }

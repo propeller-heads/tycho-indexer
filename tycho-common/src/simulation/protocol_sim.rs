@@ -5,7 +5,10 @@ use num_bigint::BigUint;
 use crate::{
     dto::ProtocolStateDelta,
     models::token::Token,
-    simulation::errors::{SimulationError, TransitionError},
+    simulation::{
+        errors::{SimulationError, TransitionError},
+        indicatively_priced::IndicativelyPriced,
+    },
     Bytes,
 };
 
@@ -49,30 +52,208 @@ impl fmt::Display for GetAmountOutResult {
     }
 }
 
+/// Represents a price as a fraction in the token_in -> token_out direction with units
+/// `[token_out/token_in]`.
+///
+/// # Fields
+///
+/// * `numerator` - The amount of token_out (what you receive) in atomic units (wei)
+/// * `denominator` - The amount of token_in (what you pay) in atomic units (wei)
+///
+/// A fraction struct is used for price to have flexibility in precision independent of the
+/// decimal precisions of the numerator and denominator tokens. This allows for:
+/// - Exact price representation without floating-point errors
+/// - Handling tokens with different decimal places without loss of precision
+///
+/// # Example
+/// If we want to represent that token A is worth 2.5 units of token B:
+///
+/// ```
+/// use num_bigint::BigUint;
+/// use tycho_common::simulation::protocol_sim::Price;
+///
+/// let numerator = BigUint::from(25u32); // Represents 25 units of token B
+/// let denominator = BigUint::from(10u32); // Represents 10 units of token A
+/// let price = Price::new(numerator, denominator);
+/// ```
+///
+/// If you want to define a limit price for a trade, where you expect to get at least 120 T1 for
+/// 50 T2:
+/// ```
+/// use num_bigint::BigUint;
+/// use tycho_common::simulation::protocol_sim::Price;
+///
+/// let min_amount_out = BigUint::from(120u32); // The minimum amount of T1 you expect
+/// let amount_in = BigUint::from(50u32); // The amount of T2 you are selling
+/// let limit_price = Price::new(min_amount_out, amount_in);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Price {
+    pub numerator: BigUint,
+    pub denominator: BigUint,
+}
+
+impl Price {
+    pub fn new(numerator: BigUint, denominator: BigUint) -> Self {
+        if denominator == BigUint::ZERO {
+            // Division by zero is not possible
+            panic!("Price denominator cannot be zero");
+        } else if numerator == BigUint::ZERO {
+            // Zero pool price is not valid in our context
+            panic!("Price numerator cannot be zero");
+        }
+        Self { numerator, denominator }
+    }
+}
+
+/// Represents a pool swap between two tokens at a given price on a pool.
+#[derive(Debug, Clone)]
+pub struct PoolSwap {
+    /// The amount of token_in sold to the pool
+    amount_in: BigUint,
+    /// The amount of token_out bought from the pool
+    amount_out: BigUint,
+    /// The new state of the pool after the swap
+    new_state: Box<dyn ProtocolSim>,
+    /// Optional price points that the pool was transitioned through while computing this swap.
+    /// The values are tuples of (amount_in, amount_out, price). This is useful for repeated calls
+    /// by providing good bounds for the next call.
+    price_points: Option<Vec<(BigUint, BigUint, f64)>>,
+}
+
+impl PoolSwap {
+    pub fn new(
+        amount_in: BigUint,
+        amount_out: BigUint,
+        new_state: Box<dyn ProtocolSim>,
+        price_points: Option<Vec<(BigUint, BigUint, f64)>>,
+    ) -> Self {
+        Self { amount_in, amount_out, new_state, price_points }
+    }
+
+    pub fn amount_in(&self) -> &BigUint {
+        &self.amount_in
+    }
+
+    pub fn amount_out(&self) -> &BigUint {
+        &self.amount_out
+    }
+
+    pub fn new_state(&self) -> &dyn ProtocolSim {
+        self.new_state.as_ref()
+    }
+
+    pub fn price_points(&self) -> &Option<Vec<(BigUint, BigUint, f64)>> {
+        &self.price_points
+    }
+}
+
+/// Options on how to constrain the pool swap query.
+///
+/// All prices use units `[token_out/token_in]` with amounts in atomic units (wei). When selling
+/// token_in into a pool, prices decrease due to slippage.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SwapConstraint {
+    /// Calculates the maximum trade while respecting a minimum trade price.
+    TradeLimitPrice {
+        /// The minimum acceptable trade price. The resulting `amount_out / amount_in >= limit`.
+        limit: Price,
+        /// Fraction to raise the acceptance threshold above `limit`. Loosens the search criteria
+        /// but will never allow violating the trade limit price itself.
+        tolerance: f64,
+        /// The minimum amount of token_in that must be used for this trade.
+        min_amount_in: Option<BigUint>,
+        /// The maximum amount of token_in that can be used for this trade.
+        max_amount_in: Option<BigUint>,
+    },
+
+    /// Calculates the swap required to move the pool's marginal price down to a target.
+    ///
+    /// # Edge Cases and Limitations
+    ///
+    /// Computing the exact amount to move a pool's marginal price to a target has several
+    /// challenges:
+    /// - The definition of marginal price varies between protocols. It is usually not an attribute
+    ///   of the pool but a consequence of its liquidity distribution and current state.
+    /// - For protocols with concentrated liquidity, the marginal price is discrete, meaning we
+    ///   can't always find an exact trade amount to reach the target price.
+    /// - Not all protocols support analytical solutions for this problem, requiring numerical
+    ///   methods.
+    PoolTargetPrice {
+        /// The target marginal price for the pool after the trade. The pool's price decreases
+        /// toward this target as token_in is sold into it.
+        target: Price,
+        /// Fraction above `target` considered acceptable. After trading, the pool's marginal
+        /// price will be in `[target, target * (1 + tolerance)]`.
+        tolerance: f64,
+        /// The lower bound for searching algorithms.
+        min_amount_in: Option<BigUint>,
+        /// The upper bound for searching algorithms.
+        max_amount_in: Option<BigUint>,
+    },
+}
+
+/// Represents the parameters for [ProtocolSim::query_pool_swap].
+///
+/// # Fields
+///
+/// * `token_in` - The token being sold (swapped into the pool)
+/// * `token_out` - The token being bought (swapped out of the pool)
+/// * `swap_constraint` - Type of price constraint to be applied. See [SwapConstraint].
+#[derive(Debug, Clone, PartialEq)]
+pub struct QueryPoolSwapParams {
+    token_in: Token,
+    token_out: Token,
+    swap_constraint: SwapConstraint,
+}
+
+impl QueryPoolSwapParams {
+    pub fn new(token_in: Token, token_out: Token, swap_constraint: SwapConstraint) -> Self {
+        Self { token_in, token_out, swap_constraint }
+    }
+
+    /// Returns a reference to the input token (token being sold into the pool)
+    pub fn token_in(&self) -> &Token {
+        &self.token_in
+    }
+
+    /// Returns a reference to the output token (token being bought out of the pool)
+    pub fn token_out(&self) -> &Token {
+        &self.token_out
+    }
+
+    /// Returns a reference to the price constraint
+    pub fn swap_constraint(&self) -> &SwapConstraint {
+        &self.swap_constraint
+    }
+}
+
 /// ProtocolSim trait
 /// This trait defines the methods that a protocol state must implement in order to be used
 /// in the trade simulation.
-pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
+pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     /// Returns the fee of the protocol as ratio
     ///
     /// E.g. if the fee is 1%, the value returned would be 0.01.
+    ///
+    /// # Panics
+    ///
+    /// Currently panic for protocols with asymmetric fees (e.g. Rocketpool, Uniswap V4),
+    /// where a single fee value cannot represent the protocol's fee structure.
     fn fee(&self) -> f64;
 
-    /// Returns the protocol's current spot price of two tokens
+    /// Returns the protocol's current spot buy price for `base` in units of `quote`.
     ///
-    /// Currency pairs are meant to be compared against one another in
-    /// order to understand how much of the quote currency is required
-    /// to buy one unit of the base currency.
-    ///
-    /// E.g. if ETH/USD is trading at 1000, we need 1000 USD (quote)
-    /// to buy 1 ETH (base currency).
+    /// The returned price is the amount of `quote` required to buy exactly 1 unit of `base`,
+    /// accounting for the protocol fee (i.e. `price = pre_fee_price / (1.0 - fee)`)
+    /// and assuming zero slippage (i.e., a negligibly small trade size).
     ///
     /// # Arguments
+    /// * `base` - the token being priced (what you buy). For BTC/USDT, BTC is the base token.
+    /// * `quote` - the token used to price (pay) for `base`. For BTC/USDT, USDT is the quote token.
     ///
-    /// * `a` - Base Token: refers to the token that is the quantity of a pair. For the pair
-    ///   BTC/USDT, BTC would be the base asset.
-    /// * `b` - Quote Token: refers to the token that is the price of a pair. For the symbol
-    ///   BTC/USDT, USDT would be the quote asset.
+    /// # Examples
+    /// If the BTC/USDT is trading at 1000 with a 20% fee, this returns `1000 / (1.0 - 0.20) = 1250`
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError>;
 
     /// Returns the amount out given an amount in and input/output tokens.
@@ -112,13 +293,12 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
     /// * `buy_token` - The address of the token being bought
     ///
     /// # Returns
-    /// * `Ok((Option<BigUint>, Option<BigUint>))` - A tuple containing:
-    ///   - First element: The maximum input amount
-    ///   - Second element: The maximum output amount
+    /// * `Ok((BigUint, BigUint))` - A tuple containing:
+    ///   - First element: The maximum input amount (sell_token)
+    ///   - Second element: The maximum output amount (buy_token)
     ///
-    /// This means that for `let res = get_limits(...)` the amount input domain for `get_amount_out`
-    /// would be `[0, res.0]` and the amount input domain for `get_amount_in` would be `[0,
-    /// res.1]`
+    /// For `let res = get_limits(...)`, the valid input domain for `get_amount_out` is `[0,
+    /// res.0]`.
     ///
     /// * `Err(SimulationError)` - If any unexpected error occurs
     fn get_limits(
@@ -147,6 +327,33 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
         balances: &Balances,
     ) -> Result<(), TransitionError<String>>;
 
+    /// Calculates the swap volume required to achieve the provided goal when trading against this
+    /// pool.
+    ///
+    /// This method will branch towards different behaviors based on [SwapConstraint] enum. Please
+    /// refer to its documentation for further details on each behavior.
+    ///
+    /// In short, the current two options are:
+    /// - Maximize your trade while respecting a trade limit price:
+    ///   [SwapConstraint::TradeLimitPrice]
+    /// - Move the pool price to a target price: [SwapConstraint::PoolTargetPrice]
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - A [QueryPoolSwapParams] struct containing the inputs for this method.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(PoolSwap)` - A `PoolSwap` struct containing the amounts to be traded and the state of
+    ///   the pool after trading.
+    /// * `Err(SimulationError)` - If:
+    ///   - The calculation encounters numerical issues
+    ///   - The method is not implemented for this protocol
+    #[allow(unused)]
+    fn query_pool_swap(&self, params: &QueryPoolSwapParams) -> Result<PoolSwap, SimulationError> {
+        Err(SimulationError::FatalError("query_pool_swap not implemented".into()))
+    }
+
     /// Clones the protocol state as a trait object.
     /// This allows the state to be cloned when it is being used as a `Box<dyn ProtocolSim>`.
     fn clone_box(&self) -> Box<dyn ProtocolSim>;
@@ -161,6 +368,11 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
     /// This method must be implemented to define how two protocol states are considered equal
     /// (used for tests).
     fn eq(&self, other: &dyn ProtocolSim) -> bool;
+
+    /// Cast as IndicativelyPriced. This is necessary for RFQ protocols
+    fn as_indicatively_priced(&self) -> Result<&dyn IndicativelyPriced, SimulationError> {
+        Err(SimulationError::FatalError("Pool State does not implement IndicativelyPriced".into()))
+    }
 }
 
 impl Clone for Box<dyn ProtocolSim> {

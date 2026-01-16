@@ -6,19 +6,24 @@
 //! Structs in here implement utoipa traits so they can be used to derive an OpenAPI schema.
 #![allow(deprecated)]
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     fmt,
     hash::{Hash, Hasher},
 };
 
 use chrono::{NaiveDateTime, Utc};
+use deepsize::{Context, DeepSizeOf};
 use serde::{de, Deserialize, Deserializer, Serialize};
 use strum_macros::{Display, EnumString};
+use thiserror::Error;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::{
-    models::{self, Address, ComponentId, StoreKey, StoreVal},
+    models::{
+        self, blockchain::BlockAggregatedChanges, Address, Balance, Code, ComponentId, StoreKey,
+        StoreVal,
+    },
     serde_primitives::{
         hex_bytes, hex_bytes_option, hex_hashmap_key, hex_hashmap_key_value, hex_hashmap_value,
     },
@@ -39,6 +44,7 @@ use crate::{
     Display,
     Default,
     ToSchema,
+    DeepSizeOf,
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
@@ -49,6 +55,7 @@ pub enum Chain {
     ZkSync,
     Arbitrum,
     Base,
+    Bsc,
     Unichain,
 }
 
@@ -82,13 +89,24 @@ impl From<models::Chain> for Chain {
             models::Chain::ZkSync => Chain::ZkSync,
             models::Chain::Arbitrum => Chain::Arbitrum,
             models::Chain::Base => Chain::Base,
+            models::Chain::Bsc => Chain::Bsc,
             models::Chain::Unichain => Chain::Unichain,
         }
     }
 }
 
 #[derive(
-    Debug, PartialEq, Default, Copy, Clone, Deserialize, Serialize, ToSchema, EnumString, Display,
+    Debug,
+    PartialEq,
+    Default,
+    Copy,
+    Clone,
+    Deserialize,
+    Serialize,
+    ToSchema,
+    EnumString,
+    Display,
+    DeepSizeOf,
 )]
 pub enum ChangeType {
     #[default]
@@ -140,21 +158,78 @@ impl fmt::Display for ExtractorIdentity {
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
 #[serde(tag = "method", rename_all = "lowercase")]
 pub enum Command {
-    Subscribe { extractor_id: ExtractorIdentity, include_state: bool },
-    Unsubscribe { subscription_id: Uuid },
+    Subscribe {
+        extractor_id: ExtractorIdentity,
+        include_state: bool,
+        /// Enable zstd compression for messages in this subscription.
+        /// Defaults to false for backward compatibility.
+        #[serde(default)]
+        compression: bool,
+    },
+    Unsubscribe {
+        subscription_id: Uuid,
+    },
+}
+
+/// A easy serializable version of `models::error::WebsocketError`
+///
+/// This serves purely to transfer errors via websocket. It is meant to render
+/// similarly to the original struct but does not have server side debug information
+/// attached.
+///
+/// It should contain information needed to handle errors correctly on the client side.
+#[derive(Error, Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
+pub enum WebsocketError {
+    #[error("Extractor not found: {0}")]
+    ExtractorNotFound(ExtractorIdentity),
+
+    #[error("Subscription not found: {0}")]
+    SubscriptionNotFound(Uuid),
+
+    #[error("Failed to parse JSON: {1}, msg: {0}")]
+    ParseError(String, String),
+
+    #[error("Failed to subscribe to extractor: {0}")]
+    SubscribeError(ExtractorIdentity),
+
+    #[error("Failed to compress message for subscription: {0}, error: {1}")]
+    CompressionError(Uuid, String),
+}
+
+impl From<crate::models::error::WebsocketError> for WebsocketError {
+    fn from(value: crate::models::error::WebsocketError) -> Self {
+        match value {
+            crate::models::error::WebsocketError::ExtractorNotFound(eid) => {
+                Self::ExtractorNotFound(eid.into())
+            }
+            crate::models::error::WebsocketError::SubscriptionNotFound(sid) => {
+                Self::SubscriptionNotFound(sid)
+            }
+            crate::models::error::WebsocketError::ParseError(raw, error) => {
+                Self::ParseError(error.to_string(), raw)
+            }
+            crate::models::error::WebsocketError::SubscribeError(eid) => {
+                Self::SubscribeError(eid.into())
+            }
+            crate::models::error::WebsocketError::CompressionError(sid, error) => {
+                Self::CompressionError(sid, error.to_string())
+            }
+        }
+    }
 }
 
 /// A response sent from the server to the client
-#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone)]
 #[serde(tag = "method", rename_all = "lowercase")]
 pub enum Response {
     NewSubscription { extractor_id: ExtractorIdentity, subscription_id: Uuid },
     SubscriptionEnded { subscription_id: Uuid },
+    Error(WebsocketError),
 }
 
 /// A message sent from the server to the client
 #[allow(clippy::large_enum_variant)]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Display, Clone)]
 #[serde(untagged)]
 pub enum WebSocketMessage {
     BlockChanges { subscription_id: Uuid, deltas: BlockChanges },
@@ -172,7 +247,7 @@ pub struct Block {
     pub ts: NaiveDateTime,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash, DeepSizeOf)]
 #[serde(deny_unknown_fields)]
 pub struct BlockParam {
     #[schema(value_type=Option<String>)]
@@ -365,6 +440,122 @@ impl BlockChanges {
     pub fn n_changes(&self) -> usize {
         self.account_updates.len() + self.state_updates.len()
     }
+
+    pub fn drop_state(&self) -> Self {
+        Self {
+            extractor: self.extractor.clone(),
+            chain: self.chain,
+            block: self.block.clone(),
+            finalized_block_height: self.finalized_block_height,
+            revert: self.revert,
+            new_tokens: self.new_tokens.clone(),
+            account_updates: HashMap::new(),
+            state_updates: HashMap::new(),
+            new_protocol_components: self.new_protocol_components.clone(),
+            deleted_protocol_components: self.deleted_protocol_components.clone(),
+            component_balances: self.component_balances.clone(),
+            account_balances: self.account_balances.clone(),
+            component_tvl: self.component_tvl.clone(),
+            dci_update: self.dci_update.clone(),
+        }
+    }
+}
+
+impl From<models::blockchain::Block> for Block {
+    fn from(value: models::blockchain::Block) -> Self {
+        Self {
+            number: value.number,
+            hash: value.hash,
+            parent_hash: value.parent_hash,
+            chain: value.chain.into(),
+            ts: value.ts,
+        }
+    }
+}
+
+impl From<models::protocol::ComponentBalance> for ComponentBalance {
+    fn from(value: models::protocol::ComponentBalance) -> Self {
+        Self {
+            token: value.token,
+            balance: value.balance,
+            balance_float: value.balance_float,
+            modify_tx: value.modify_tx,
+            component_id: value.component_id,
+        }
+    }
+}
+
+impl From<models::contract::AccountBalance> for AccountBalance {
+    fn from(value: models::contract::AccountBalance) -> Self {
+        Self {
+            account: value.account,
+            token: value.token,
+            balance: value.balance,
+            modify_tx: value.modify_tx,
+        }
+    }
+}
+
+impl From<BlockAggregatedChanges> for BlockChanges {
+    fn from(value: BlockAggregatedChanges) -> Self {
+        Self {
+            extractor: value.extractor,
+            chain: value.chain.into(),
+            block: value.block.into(),
+            finalized_block_height: value.finalized_block_height,
+            revert: value.revert,
+            account_updates: value
+                .account_deltas
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+            state_updates: value
+                .state_deltas
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+            new_protocol_components: value
+                .new_protocol_components
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+            deleted_protocol_components: value
+                .deleted_protocol_components
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+            component_balances: value
+                .component_balances
+                .into_iter()
+                .map(|(component_id, v)| {
+                    let balances: HashMap<Bytes, ComponentBalance> = v
+                        .into_iter()
+                        .map(|(k, v)| (k, ComponentBalance::from(v)))
+                        .collect();
+                    (component_id, balances.into())
+                })
+                .collect(),
+            account_balances: value
+                .account_balances
+                .into_iter()
+                .map(|(k, v)| {
+                    (
+                        k,
+                        v.into_iter()
+                            .map(|(k, v)| (k, v.into()))
+                            .collect(),
+                    )
+                })
+                .collect(),
+            dci_update: value.dci_update.into(),
+            new_tokens: value
+                .new_tokens
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+            component_tvl: value.component_tvl,
+        }
+    }
 }
 
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug, ToSchema)]
@@ -412,6 +603,8 @@ impl AccountUpdate {
 
 impl From<models::contract::AccountDelta> for AccountUpdate {
     fn from(value: models::contract::AccountDelta) -> Self {
+        let code = value.code().clone();
+        let change_type = value.change_type().into();
         AccountUpdate::new(
             value.address,
             value.chain.into(),
@@ -421,8 +614,8 @@ impl From<models::contract::AccountDelta> for AccountUpdate {
                 .map(|(k, v)| (k, v.unwrap_or_default()))
                 .collect(),
             value.balance,
-            value.code,
-            value.change.into(),
+            code,
+            change_type,
         )
     }
 }
@@ -458,6 +651,26 @@ pub struct ProtocolComponent {
     pub creation_tx: Bytes,
     /// Date time of creation in UTC time
     pub created_at: NaiveDateTime,
+}
+
+// Manual impl as `NaiveDateTime` structure referenced in `created_at` does not implement DeepSizeOf
+impl DeepSizeOf for ProtocolComponent {
+    fn deep_size_of_children(&self, ctx: &mut Context) -> usize {
+        self.id.deep_size_of_children(ctx) +
+            self.protocol_system
+                .deep_size_of_children(ctx) +
+            self.protocol_type_name
+                .deep_size_of_children(ctx) +
+            self.chain.deep_size_of_children(ctx) +
+            self.tokens.deep_size_of_children(ctx) +
+            self.contract_ids
+                .deep_size_of_children(ctx) +
+            self.static_attributes
+                .deep_size_of_children(ctx) +
+            self.change.deep_size_of_children(ctx) +
+            self.creation_tx
+                .deep_size_of_children(ctx)
+    }
 }
 
 impl From<models::protocol::ProtocolComponent> for ProtocolComponent {
@@ -552,8 +765,98 @@ impl ProtocolStateDelta {
     }
 }
 
-/// Maximum page size for this endpoint is 100
-#[derive(Clone, Serialize, Debug, Default, Deserialize, PartialEq, ToSchema, Eq, Hash)]
+/// Pagination parameter
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash, DeepSizeOf)]
+#[serde(deny_unknown_fields)]
+pub struct PaginationParams {
+    /// What page to retrieve
+    #[serde(default)]
+    pub page: i64,
+    /// How many results to return per page
+    #[serde(default)]
+    #[schema(default = 100)]
+    pub page_size: i64,
+}
+
+impl PaginationParams {
+    pub fn new(page: i64, page_size: i64) -> Self {
+        Self { page, page_size }
+    }
+}
+
+impl Default for PaginationParams {
+    fn default() -> Self {
+        PaginationParams { page: 0, page_size: 100 }
+    }
+}
+
+/// Defines pagination size limits for request types.
+///
+/// Different limits apply based on whether compression is enabled,
+/// as compressed responses can safely transfer more data.
+pub trait PaginationLimits {
+    /// Maximum page size when compression is enabled (e.g., zstd)
+    const MAX_PAGE_SIZE_COMPRESSED: i64;
+
+    /// Maximum page size when compression is disabled
+    const MAX_PAGE_SIZE_UNCOMPRESSED: i64;
+
+    /// Returns the effective maximum page size based on compression setting
+    fn effective_max_page_size(compression: bool) -> i64 {
+        if compression {
+            Self::MAX_PAGE_SIZE_COMPRESSED
+        } else {
+            Self::MAX_PAGE_SIZE_UNCOMPRESSED
+        }
+    }
+
+    /// Returns a reference to the pagination parameters
+    fn pagination(&self) -> &PaginationParams;
+}
+
+/// Macro to implement PaginationLimits for request types
+///
+/// When INCREASING these limits, ensure to immediately redeploy the servers.
+///
+/// Why: pagination limits are shared. Clients use these constants to set their max page size.
+/// When clients upgrade before servers, they request more than old servers allow and get errors.
+macro_rules! impl_pagination_limits {
+    ($type:ty, compressed = $comp:expr, uncompressed = $uncomp:expr) => {
+        impl $crate::dto::PaginationLimits for $type {
+            const MAX_PAGE_SIZE_COMPRESSED: i64 = $comp;
+            const MAX_PAGE_SIZE_UNCOMPRESSED: i64 = $uncomp;
+
+            fn pagination(&self) -> &$crate::dto::PaginationParams {
+                &self.pagination
+            }
+        }
+    };
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash, DeepSizeOf)]
+#[serde(deny_unknown_fields)]
+pub struct PaginationResponse {
+    pub page: i64,
+    pub page_size: i64,
+    /// The total number of items available across all pages of results
+    pub total: i64,
+}
+
+/// Current pagination information
+impl PaginationResponse {
+    pub fn new(page: i64, page_size: i64, total: i64) -> Self {
+        Self { page, page_size, total }
+    }
+
+    pub fn total_pages(&self) -> i64 {
+        // ceil(total / page_size)
+        (self.total + self.page_size - 1) / self.page_size
+    }
+}
+
+#[derive(
+    Clone, Serialize, Debug, Default, Deserialize, PartialEq, ToSchema, Eq, Hash, DeepSizeOf,
+)]
 #[serde(deny_unknown_fields)]
 pub struct StateRequestBody {
     /// Filters response by contract addresses
@@ -571,6 +874,9 @@ pub struct StateRequestBody {
     #[serde(default)]
     pub pagination: PaginationParams,
 }
+
+// When INCREASING these limits, please read the warning in the macro definition.
+impl_pagination_limits!(StateRequestBody, compressed = 1200, uncompressed = 100);
 
 impl StateRequestBody {
     pub fn new(
@@ -605,7 +911,7 @@ impl StateRequestBody {
 }
 
 /// Response from Tycho server for a contract state request.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, DeepSizeOf)]
 pub struct StateRequestResponse {
     pub accounts: Vec<ResponseAccount>,
     pub pagination: PaginationResponse,
@@ -617,7 +923,7 @@ impl StateRequestResponse {
     }
 }
 
-#[derive(PartialEq, Clone, Serialize, Deserialize, Default, ToSchema)]
+#[derive(PartialEq, Clone, Serialize, Deserialize, Default, ToSchema, DeepSizeOf)]
 #[serde(rename = "Account")]
 /// Account struct for the response from Tycho server for a contract state request.
 ///
@@ -768,6 +1074,16 @@ pub struct VersionParam {
     pub block: Option<BlockParam>,
 }
 
+impl DeepSizeOf for VersionParam {
+    fn deep_size_of_children(&self, ctx: &mut Context) -> usize {
+        if let Some(block) = &self.block {
+            return block.deep_size_of_children(ctx);
+        }
+
+        0
+    }
+}
+
 impl VersionParam {
     pub fn new(timestamp: Option<NaiveDateTime>, block: Option<BlockParam>) -> Self {
         Self { timestamp, block }
@@ -825,7 +1141,9 @@ impl StateRequestParameters {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Hash, Clone)]
+#[derive(
+    Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Hash, Clone, DeepSizeOf,
+)]
 #[serde(deny_unknown_fields)]
 pub struct TokensRequestBody {
     /// Filters tokens by addresses
@@ -852,8 +1170,11 @@ pub struct TokensRequestBody {
     pub chain: Chain,
 }
 
+// When INCREASING these limits, please read the warning in the macro definition.
+impl_pagination_limits!(TokensRequestBody, compressed = 12900, uncompressed = 3000);
+
 /// Response from Tycho server for a tokens request.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash, DeepSizeOf)]
 pub struct TokensRequestResponse {
     pub tokens: Vec<ResponseToken>,
     pub pagination: PaginationResponse,
@@ -865,53 +1186,9 @@ impl TokensRequestResponse {
     }
 }
 
-/// Pagination parameter
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
-#[serde(deny_unknown_fields)]
-pub struct PaginationParams {
-    /// What page to retrieve
-    #[serde(default)]
-    pub page: i64,
-    /// How many results to return per page
-    #[serde(default)]
-    #[schema(default = 10)]
-    pub page_size: i64,
-}
-
-impl PaginationParams {
-    pub fn new(page: i64, page_size: i64) -> Self {
-        Self { page, page_size }
-    }
-}
-
-impl Default for PaginationParams {
-    fn default() -> Self {
-        PaginationParams { page: 0, page_size: 20 }
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
-#[serde(deny_unknown_fields)]
-pub struct PaginationResponse {
-    pub page: i64,
-    pub page_size: i64,
-    /// The total number of items available across all pages of results
-    pub total: i64,
-}
-
-/// Current pagination information
-impl PaginationResponse {
-    pub fn new(page: i64, page_size: i64, total: i64) -> Self {
-        Self { page, page_size, total }
-    }
-
-    pub fn total_pages(&self) -> i64 {
-        // ceil(total / page_size)
-        (self.total + self.page_size - 1) / self.page_size
-    }
-}
-
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Default, ToSchema, Eq, Hash)]
+#[derive(
+    PartialEq, Debug, Clone, Serialize, Deserialize, Default, ToSchema, Eq, Hash, DeepSizeOf,
+)]
 #[serde(rename = "Token")]
 /// Token struct for the response from Tycho server for a tokens request.
 pub struct ResponseToken {
@@ -953,13 +1230,14 @@ impl From<models::token::Token> for ResponseToken {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, ToSchema, Clone)]
+#[derive(Serialize, Deserialize, Debug, Default, ToSchema, Clone, DeepSizeOf)]
 #[serde(deny_unknown_fields)]
 pub struct ProtocolComponentsRequestBody {
     /// Filters by protocol, required to correctly apply unconfirmed state from
     /// ReorgBuffers
     pub protocol_system: String,
     /// Filter by component ids
+    #[schema(value_type=Option<Vec<String>>)]
     #[serde(alias = "componentAddresses")]
     pub component_ids: Option<Vec<ComponentId>>,
     /// The minimum TVL of the protocol components to return, denoted in the chain's
@@ -972,6 +1250,9 @@ pub struct ProtocolComponentsRequestBody {
     #[serde(default)]
     pub pagination: PaginationParams,
 }
+
+// When INCREASING these limits, please read the warning in the macro definition.
+impl_pagination_limits!(ProtocolComponentsRequestBody, compressed = 2550, uncompressed = 500);
 
 // Implement PartialEq where tvl is considered equal if the difference is less than 1e-6
 impl PartialEq for ProtocolComponentsRequestBody {
@@ -1070,7 +1351,7 @@ impl ProtocolComponentRequestParameters {
 }
 
 /// Response from Tycho server for a protocol components request.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, DeepSizeOf)]
 pub struct ProtocolComponentRequestResponse {
     pub protocol_components: Vec<ProtocolComponent>,
     pub pagination: PaginationResponse,
@@ -1106,7 +1387,7 @@ impl AsRef<str> for ProtocolId {
 }
 
 /// Protocol State struct for the response from Tycho server for a protocol state request.
-#[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize, ToSchema, DeepSizeOf)]
 pub struct ResponseProtocolState {
     /// Component id this state belongs to
     pub component_id: String,
@@ -1136,7 +1417,7 @@ fn default_include_balances_flag() -> bool {
 }
 
 /// Max page size supported is 100
-#[derive(Clone, Debug, Serialize, PartialEq, ToSchema, Default, Eq, Hash)]
+#[derive(Clone, Debug, Serialize, PartialEq, ToSchema, Default, Eq, Hash, DeepSizeOf)]
 #[serde(deny_unknown_fields)]
 pub struct ProtocolStateRequestBody {
     /// Filters response by protocol components ids
@@ -1156,6 +1437,9 @@ pub struct ProtocolStateRequestBody {
     #[serde(default)]
     pub pagination: PaginationParams,
 }
+
+// When INCREASING these limits, please read the warning in the macro definition.
+impl_pagination_limits!(ProtocolStateRequestBody, compressed = 360, uncompressed = 100);
 
 impl ProtocolStateRequestBody {
     pub fn id_filtered<I, T>(ids: I) -> Self
@@ -1277,7 +1561,7 @@ impl<'de> Deserialize<'de> for ProtocolStateRequestBody {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, DeepSizeOf)]
 pub struct ProtocolStateRequestResponse {
     pub states: Vec<ResponseProtocolState>,
     pub pagination: PaginationResponse,
@@ -1314,6 +1598,9 @@ pub struct ProtocolSystemsRequestBody {
     pub pagination: PaginationParams,
 }
 
+// When INCREASING these limits, please read the warning in the macro definition.
+impl_pagination_limits!(ProtocolSystemsRequestBody, compressed = 100, uncompressed = 100);
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
 pub struct ProtocolSystemsRequestResponse {
     /// List of currently supported protocol systems
@@ -1333,9 +1620,45 @@ pub struct DCIUpdate {
     pub new_entrypoints: HashMap<ComponentId, HashSet<EntryPoint>>,
     /// Map of entrypoint id to the new entrypoint params associtated with it (and optionally the
     /// component linked to those params)
-    pub new_entrypoint_params: HashMap<String, HashSet<(TracingParams, Option<String>)>>,
+    pub new_entrypoint_params: HashMap<String, HashSet<(TracingParams, String)>>,
     /// Map of entrypoint id to its trace result
     pub trace_results: HashMap<String, TracingResult>,
+}
+
+impl From<models::blockchain::DCIUpdate> for DCIUpdate {
+    fn from(value: models::blockchain::DCIUpdate) -> Self {
+        Self {
+            new_entrypoints: value
+                .new_entrypoints
+                .into_iter()
+                .map(|(k, v)| {
+                    (
+                        k,
+                        v.into_iter()
+                            .map(|v| v.into())
+                            .collect(),
+                    )
+                })
+                .collect(),
+            new_entrypoint_params: value
+                .new_entrypoint_params
+                .into_iter()
+                .map(|(k, v)| {
+                    (
+                        k,
+                        v.into_iter()
+                            .map(|(params, i)| (params.into(), i))
+                            .collect(),
+                    )
+                })
+                .collect(),
+            trace_results: value
+                .trace_results
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Hash, Clone)]
@@ -1352,6 +1675,9 @@ pub struct ComponentTvlRequestBody {
     #[serde(default)]
     pub pagination: PaginationParams,
 }
+
+// When INCREASING these limits, please read the warning in the macro definition.
+impl_pagination_limits!(ComponentTvlRequestBody, compressed = 100, uncompressed = 100);
 
 impl ComponentTvlRequestBody {
     pub fn system_filtered(system: &str, chain: Chain) -> Self {
@@ -1385,7 +1711,9 @@ impl ComponentTvlRequestResponse {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Hash, Clone)]
+#[derive(
+    Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Hash, Clone, DeepSizeOf,
+)]
 pub struct TracedEntryPointRequestBody {
     #[serde(default)]
     pub chain: Chain,
@@ -1393,13 +1721,17 @@ pub struct TracedEntryPointRequestBody {
     /// ReorgBuffers
     pub protocol_system: String,
     /// Filter by component ids
+    #[schema(value_type = Option<Vec<String>>)]
     pub component_ids: Option<Vec<ComponentId>>,
     /// Max page size supported is 100
     #[serde(default)]
     pub pagination: PaginationParams,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash)]
+// When INCREASING these limits, please read the warning in the macro definition.
+impl_pagination_limits!(TracedEntryPointRequestBody, compressed = 100, uncompressed = 100);
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash, DeepSizeOf)]
 pub struct EntryPoint {
     #[schema(example = "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()")]
     /// Entry point id.
@@ -1413,7 +1745,59 @@ pub struct EntryPoint {
     pub signature: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, Eq, Hash, DeepSizeOf)]
+pub enum StorageOverride {
+    /// Applies changes incrementally to the existing account storage.
+    /// Only modifies the specific storage slots provided in the map while
+    /// preserving all other storage slots.
+    #[schema(value_type=HashMap<String, String>)]
+    Diff(BTreeMap<StoreKey, StoreVal>),
+
+    /// Completely replaces the account's storage state.
+    /// Only the storage slots provided in the map will exist after the operation,
+    /// and any existing storage slots not included will be cleared/zeroed.
+    #[schema(value_type=HashMap<String, String>)]
+    Replace(BTreeMap<StoreKey, StoreVal>),
+}
+
+impl From<models::blockchain::StorageOverride> for StorageOverride {
+    fn from(value: models::blockchain::StorageOverride) -> Self {
+        match value {
+            models::blockchain::StorageOverride::Diff(diff) => StorageOverride::Diff(diff),
+            models::blockchain::StorageOverride::Replace(replace) => {
+                StorageOverride::Replace(replace)
+            }
+        }
+    }
+}
+
+/// State overrides for an account.
+///
+/// Used to modify account state. Commonly used for testing contract interactions with specific
+/// state conditions or simulating transactions with modified balances/code.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, Eq, Hash, DeepSizeOf)]
+pub struct AccountOverrides {
+    /// Storage slots to override
+    pub slots: Option<StorageOverride>,
+    #[schema(value_type=Option<String>)]
+    /// Native token balance override
+    pub native_balance: Option<Balance>,
+    #[schema(value_type=Option<String>)]
+    /// Contract code override
+    pub code: Option<Code>,
+}
+
+impl From<models::blockchain::AccountOverrides> for AccountOverrides {
+    fn from(value: models::blockchain::AccountOverrides) -> Self {
+        AccountOverrides {
+            slots: value.slots.map(|s| s.into()),
+            native_balance: value.native_balance,
+            code: value.code,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash, DeepSizeOf)]
 pub struct RPCTracerParams {
     /// The caller address of the transaction, if not provided tracing uses the default value
     /// for an address defined by the VM.
@@ -1424,15 +1808,32 @@ pub struct RPCTracerParams {
     #[schema(value_type=String, example="0x679aefce")]
     #[serde(with = "hex_bytes")]
     pub calldata: Bytes,
+    /// Optionally allow for state overrides so that the call works as expected
+    pub state_overrides: Option<BTreeMap<Address, AccountOverrides>>,
+    /// Addresses to prune from trace results. Useful for hooks that use mock
+    /// accounts/routers that shouldn't be tracked in the final DCI results.
+    #[schema(value_type=Option<Vec<String>>)]
+    #[serde(default)]
+    pub prune_addresses: Option<Vec<Address>>,
 }
 
 impl From<models::blockchain::RPCTracerParams> for RPCTracerParams {
     fn from(value: models::blockchain::RPCTracerParams) -> Self {
-        RPCTracerParams { caller: value.caller, calldata: value.calldata }
+        RPCTracerParams {
+            caller: value.caller,
+            calldata: value.calldata,
+            state_overrides: value.state_overrides.map(|overrides| {
+                overrides
+                    .into_iter()
+                    .map(|(address, account_overrides)| (address, account_overrides.into()))
+                    .collect()
+            }),
+            prune_addresses: value.prune_addresses,
+        }
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone, Hash, DeepSizeOf, ToSchema)]
 #[serde(tag = "method", rename_all = "lowercase")]
 pub enum TracingParams {
     /// Uses RPC calls to retrieve the called addresses and retriggers
@@ -1455,7 +1856,7 @@ impl From<models::blockchain::EntryPoint> for EntryPoint {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, ToSchema, Eq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, ToSchema, Eq, Clone, DeepSizeOf)]
 pub struct EntryPointWithTracingParams {
     /// The entry point object
     pub entry_point: EntryPoint,
@@ -1469,29 +1870,133 @@ impl From<models::blockchain::EntryPointWithTracingParams> for EntryPointWithTra
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Clone)]
+#[derive(
+    Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash, Serialize, Deserialize, DeepSizeOf,
+)]
+pub struct AddressStorageLocation {
+    pub key: StoreKey,
+    pub offset: u8,
+}
+
+impl AddressStorageLocation {
+    pub fn new(key: StoreKey, offset: u8) -> Self {
+        Self { key, offset }
+    }
+}
+
+impl From<models::blockchain::AddressStorageLocation> for AddressStorageLocation {
+    fn from(value: models::blockchain::AddressStorageLocation) -> Self {
+        Self { key: value.key, offset: value.offset }
+    }
+}
+
+fn deserialize_retriggers_from_value(
+    value: &serde_json::Value,
+) -> Result<HashSet<(StoreKey, AddressStorageLocation)>, String> {
+    use serde::Deserialize;
+    use serde_json::Value;
+
+    let mut result = HashSet::new();
+
+    if let Value::Array(items) = value {
+        for item in items {
+            if let Value::Array(pair) = item {
+                if pair.len() == 2 {
+                    let key = StoreKey::deserialize(&pair[0])
+                        .map_err(|e| format!("Failed to deserialize key: {}", e))?;
+
+                    // Handle both old format (string) and new format (AddressStorageLocation)
+                    let addr_storage = match &pair[1] {
+                        Value::String(_) => {
+                            // Old format: just a string key with offset defaulted to 0
+                            let storage_key = StoreKey::deserialize(&pair[1]).map_err(|e| {
+                                format!("Failed to deserialize old format storage key: {}", e)
+                            })?;
+                            AddressStorageLocation::new(storage_key, 12)
+                        }
+                        Value::Object(_) => {
+                            // New format: AddressStorageLocation struct
+                            AddressStorageLocation::deserialize(&pair[1]).map_err(|e| {
+                                format!("Failed to deserialize AddressStorageLocation: {}", e)
+                            })?
+                        }
+                        _ => return Err("Invalid retrigger format".to_string()),
+                    };
+
+                    result.insert((key, addr_storage));
+                }
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+#[derive(Serialize, Debug, Default, PartialEq, ToSchema, Eq, Clone, DeepSizeOf)]
 pub struct TracingResult {
     #[schema(value_type=HashSet<(String, String)>)]
-    pub retriggers: HashSet<(StoreKey, StoreVal)>,
+    pub retriggers: HashSet<(StoreKey, AddressStorageLocation)>,
     #[schema(value_type=HashMap<String,HashSet<String>>)]
     pub accessed_slots: HashMap<Address, HashSet<StoreKey>>,
 }
 
-impl From<models::blockchain::TracingResult> for TracingResult {
-    fn from(value: models::blockchain::TracingResult) -> Self {
-        TracingResult { retriggers: value.retriggers, accessed_slots: value.accessed_slots }
+/// Deserialize TracingResult with backward compatibility for retriggers
+/// TODO: remove this after offset detection is deployed in production
+impl<'de> Deserialize<'de> for TracingResult {
+    fn deserialize<D>(deserializer: D) -> Result<TracingResult, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::Error;
+        use serde_json::Value;
+
+        let value = Value::deserialize(deserializer)?;
+        let mut result = TracingResult::default();
+
+        if let Value::Object(map) = value {
+            // Deserialize retriggers using our custom deserializer
+            if let Some(retriggers_value) = map.get("retriggers") {
+                result.retriggers =
+                    deserialize_retriggers_from_value(retriggers_value).map_err(|e| {
+                        D::Error::custom(format!("Failed to deserialize retriggers: {}", e))
+                    })?;
+            }
+
+            // Deserialize accessed_slots normally
+            if let Some(accessed_slots_value) = map.get("accessed_slots") {
+                result.accessed_slots = serde_json::from_value(accessed_slots_value.clone())
+                    .map_err(|e| {
+                        D::Error::custom(format!("Failed to deserialize accessed_slots: {}", e))
+                    })?;
+            }
+        }
+
+        Ok(result)
     }
 }
 
-#[derive(Serialize, PartialEq, ToSchema, Eq, Clone, Debug, Deserialize)]
+impl From<models::blockchain::TracingResult> for TracingResult {
+    fn from(value: models::blockchain::TracingResult) -> Self {
+        TracingResult {
+            retriggers: value
+                .retriggers
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+            accessed_slots: value.accessed_slots,
+        }
+    }
+}
+
+#[derive(Serialize, PartialEq, ToSchema, Eq, Clone, Debug, Deserialize, DeepSizeOf)]
 pub struct TracedEntryPointRequestResponse {
     /// Map of protocol component id to a list of a tuple containing each entry point with its
     /// tracing parameters and its corresponding tracing results.
+    #[schema(value_type = HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>)]
     pub traced_entry_points:
         HashMap<ComponentId, Vec<(EntryPointWithTracingParams, TracingResult)>>,
     pub pagination: PaginationResponse,
 }
-
 impl From<TracedEntryPointRequestResponse> for DCIUpdate {
     fn from(response: TracedEntryPointRequestResponse) -> Self {
         let mut new_entrypoints = HashMap::new();
@@ -1514,7 +2019,7 @@ impl From<TracedEntryPointRequestResponse> for DCIUpdate {
                 new_entrypoint_params
                     .entry(entrypoint_id.clone())
                     .or_insert_with(HashSet::new)
-                    .insert((entrypoint.params, Some(component.clone())));
+                    .insert((entrypoint.params, component.clone()));
 
                 // Collect trace results
                 trace_results
@@ -1552,6 +2057,7 @@ pub struct AddEntryPointRequestBody {
     #[serde(default)]
     pub block_hash: Bytes,
     /// The map of component ids to their tracing params to insert
+    #[schema(value_type = Vec<(String, Vec<EntryPointWithTracingParams>)>)]
     pub entry_points_with_tracing_data: Vec<(ComponentId, Vec<EntryPointWithTracingParams>)>,
 }
 
@@ -1559,6 +2065,7 @@ pub struct AddEntryPointRequestBody {
 pub struct AddEntryPointRequestResponse {
     /// Map of protocol component id to a list of a tuple containing each entry point with its
     /// tracing parameters and its corresponding tracing results.
+    #[schema(value_type = HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>)]
     pub traced_entry_points:
         HashMap<ComponentId, Vec<(EntryPointWithTracingParams, TracingResult)>>,
 }
@@ -1571,6 +2078,102 @@ mod test {
     use rstest::rstest;
 
     use super::*;
+
+    #[test]
+    fn test_compression_backward_compatibility() {
+        // Test old format (without compression field) - should default to false
+        let json_without_compression = r#"{
+            "method": "subscribe",
+            "extractor_id": {
+                "chain": "ethereum",
+                "name": "test"
+            },
+            "include_state": true
+        }"#;
+
+        let command: Command = serde_json::from_str(json_without_compression)
+            .expect("Failed to deserialize Subscribe without compression field");
+
+        if let Command::Subscribe { compression, .. } = command {
+            assert_eq!(
+                compression, false,
+                "compression should default to false when not specified"
+            );
+        } else {
+            panic!("Expected Subscribe command");
+        }
+
+        // Test new format (with compression field)
+        let json_with_compression = r#"{
+            "method": "subscribe",
+            "extractor_id": {
+                "chain": "ethereum",
+                "name": "test"
+            },
+            "include_state": true,
+            "compression": true
+        }"#;
+
+        let command_with_compression: Command = serde_json::from_str(json_with_compression)
+            .expect("Failed to deserialize Subscribe with compression field");
+
+        if let Command::Subscribe { compression, .. } = command_with_compression {
+            assert_eq!(compression, true, "compression should be true as specified in the JSON");
+        } else {
+            panic!("Expected Subscribe command");
+        }
+    }
+
+    #[test]
+    fn test_tracing_result_backward_compatibility() {
+        use serde_json::json;
+
+        // Test old format (string storage locations)
+        let old_format_json = json!({
+            "retriggers": [
+                ["0x01", "0x02"],
+                ["0x03", "0x04"]
+            ],
+            "accessed_slots": {
+                "0x05": ["0x06", "0x07"]
+            }
+        });
+
+        let result: TracingResult = serde_json::from_value(old_format_json).unwrap();
+
+        // Check that retriggers were deserialized correctly with offset 0
+        assert_eq!(result.retriggers.len(), 2);
+        let retriggers_vec: Vec<_> = result.retriggers.iter().collect();
+        assert!(retriggers_vec.iter().any(|(k, v)| {
+            k == &Bytes::from("0x01") && v.key == Bytes::from("0x02") && v.offset == 12
+        }));
+        assert!(retriggers_vec.iter().any(|(k, v)| {
+            k == &Bytes::from("0x03") && v.key == Bytes::from("0x04") && v.offset == 12
+        }));
+
+        // Test new format (AddressStorageLocation objects)
+        let new_format_json = json!({
+            "retriggers": [
+                ["0x01", {"key": "0x02", "offset": 12}],
+                ["0x03", {"key": "0x04", "offset": 5}]
+            ],
+            "accessed_slots": {
+                "0x05": ["0x06", "0x07"]
+            }
+        });
+
+        let result2: TracingResult = serde_json::from_value(new_format_json).unwrap();
+
+        // Check that new format retriggers were deserialized correctly with proper offsets
+        assert_eq!(result2.retriggers.len(), 2);
+        let retriggers_vec2: Vec<_> = result2.retriggers.iter().collect();
+        assert!(retriggers_vec2.iter().any(|(k, v)| {
+            k == &Bytes::from("0x01") && v.key == Bytes::from("0x02") && v.offset == 12
+        }));
+        assert!(retriggers_vec2.iter().any(|(k, v)| {
+            k == &Bytes::from("0x03") && v.key == Bytes::from("0x04") && v.offset == 5
+        }));
+    }
 
     #[test]
     fn test_protocol_components_equality() {
@@ -1763,7 +2366,7 @@ mod test {
                 }),
             },
             chain: Chain::Ethereum,
-            pagination: PaginationParams { page: 0, page_size: 20 },
+            pagination: PaginationParams { page: 0, page_size: 100 },
         };
 
         assert_eq!(result, expected);
@@ -1863,8 +2466,9 @@ mod test {
                 models::Chain::Ethereum,
                 Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000003").unwrap(),
                 Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
-                NaiveDateTime::from_timestamp_opt(base_ts + 3000, 0).unwrap(),
+                chrono::DateTime::from_timestamp(base_ts + 3000, 0).unwrap().naive_utc(),
             ),
+            db_committed_block_height: Some(1),
             finalized_block_height: 1,
             revert: true,
             state_deltas: HashMap::from([
@@ -1891,7 +2495,7 @@ mod test {
                     static_attributes: HashMap::new(),
                     change: models::ChangeType::Creation,
                     creation_tx: Bytes::from_str("0x000000000000000000000000000000000000000000000000000000000000c351").unwrap(),
-                    created_at: NaiveDateTime::from_timestamp_opt(base_ts + 5000, 0).unwrap(),
+                    created_at: chrono::DateTime::from_timestamp(base_ts + 5000, 0).unwrap().naive_utc(),
                 }),
             ]),
             deleted_protocol_components: HashMap::from([
@@ -1908,7 +2512,7 @@ mod test {
                     static_attributes: HashMap::new(),
                     change: models::ChangeType::Deletion,
                     creation_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000009c41").unwrap(),
-                    created_at: NaiveDateTime::from_timestamp_opt(base_ts + 4000, 0).unwrap(),
+                    created_at: chrono::DateTime::from_timestamp(base_ts + 4000, 0).unwrap().naive_utc(),
                 }),
             ]),
             component_balances: HashMap::from([
@@ -2056,7 +2660,7 @@ mod test {
                 "trace_results": {
                     "0x01:sig()": {
                         "retriggers": [
-                            ["0x01", "0x02"]
+                            ["0x01", {"key": "0x02", "offset": 12}]
                         ],
                         "accessed_slots": {
                             "0x03": ["0x03", "0x04"]
@@ -2173,7 +2777,7 @@ mod test {
                     "trace_results": {
                         "0x01:sig()": {
                             "retriggers": [
-                                ["0x01", "0x02"]
+                                ["0x01", {"key": "0x02", "offset": 12}]
                             ],
                             "accessed_slots": {
                                 "0x03": ["0x03", "0x04"]
@@ -2452,5 +3056,206 @@ mod test {
         };
 
         assert_eq!(res, expected_block_entity_changes_result);
+    }
+
+    #[test]
+    fn test_websocket_error_serialization() {
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "test_extractor");
+        let subscription_id = Uuid::new_v4();
+
+        // Test ExtractorNotFound serialization
+        let error = WebsocketError::ExtractorNotFound(extractor_id.clone());
+        let json = serde_json::to_string(&error).unwrap();
+        let deserialized: WebsocketError = serde_json::from_str(&json).unwrap();
+        assert_eq!(error, deserialized);
+
+        // Test SubscriptionNotFound serialization
+        let error = WebsocketError::SubscriptionNotFound(subscription_id);
+        let json = serde_json::to_string(&error).unwrap();
+        let deserialized: WebsocketError = serde_json::from_str(&json).unwrap();
+        assert_eq!(error, deserialized);
+
+        // Test ParseError serialization
+        let error = WebsocketError::ParseError("{asd".to_string(), "invalid json".to_string());
+        let json = serde_json::to_string(&error).unwrap();
+        let deserialized: WebsocketError = serde_json::from_str(&json).unwrap();
+        assert_eq!(error, deserialized);
+
+        // Test SubscribeError serialization
+        let error = WebsocketError::SubscribeError(extractor_id.clone());
+        let json = serde_json::to_string(&error).unwrap();
+        let deserialized: WebsocketError = serde_json::from_str(&json).unwrap();
+        assert_eq!(error, deserialized);
+
+        // Test CompressionError serialization
+        let error =
+            WebsocketError::CompressionError(subscription_id, "Compression failed".to_string());
+        let json = serde_json::to_string(&error).unwrap();
+        let deserialized: WebsocketError = serde_json::from_str(&json).unwrap();
+        assert_eq!(error, deserialized);
+    }
+
+    #[test]
+    fn test_websocket_message_with_error_response() {
+        let error =
+            WebsocketError::ParseError("}asdfas".to_string(), "malformed request".to_string());
+        let response = Response::Error(error.clone());
+        let message = WebSocketMessage::Response(response);
+
+        let json = serde_json::to_string(&message).unwrap();
+        let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+
+        if let WebSocketMessage::Response(Response::Error(deserialized_error)) = deserialized {
+            assert_eq!(error, deserialized_error);
+        } else {
+            panic!("Expected WebSocketMessage::Response(Response::Error)");
+        }
+    }
+
+    #[test]
+    fn test_websocket_error_conversion_from_models() {
+        use crate::models::error::WebsocketError as ModelsError;
+
+        let extractor_id =
+            crate::models::ExtractorIdentity::new(crate::models::Chain::Ethereum, "test");
+        let subscription_id = Uuid::new_v4();
+
+        // Test ExtractorNotFound conversion
+        let models_error = ModelsError::ExtractorNotFound(extractor_id.clone());
+        let dto_error: WebsocketError = models_error.into();
+        assert_eq!(dto_error, WebsocketError::ExtractorNotFound(extractor_id.clone().into()));
+
+        // Test SubscriptionNotFound conversion
+        let models_error = ModelsError::SubscriptionNotFound(subscription_id);
+        let dto_error: WebsocketError = models_error.into();
+        assert_eq!(dto_error, WebsocketError::SubscriptionNotFound(subscription_id));
+
+        // Test ParseError conversion - create a real JSON parse error
+        let json_result: Result<serde_json::Value, _> = serde_json::from_str("{invalid json");
+        let json_error = json_result.unwrap_err();
+        let models_error = ModelsError::ParseError("{invalid json".to_string(), json_error);
+        let dto_error: WebsocketError = models_error.into();
+        if let WebsocketError::ParseError(msg, error) = dto_error {
+            // Just check that we have a non-empty error message
+            assert!(!error.is_empty(), "Error message should not be empty, got: '{}'", msg);
+        } else {
+            panic!("Expected ParseError variant");
+        }
+
+        // Test SubscribeError conversion
+        let models_error = ModelsError::SubscribeError(extractor_id.clone());
+        let dto_error: WebsocketError = models_error.into();
+        assert_eq!(dto_error, WebsocketError::SubscribeError(extractor_id.into()));
+
+        // Test CompressionError conversion
+        let io_error = std::io::Error::other("Compression failed");
+        let models_error = ModelsError::CompressionError(subscription_id, io_error);
+        let dto_error: WebsocketError = models_error.into();
+        if let WebsocketError::CompressionError(sub_id, msg) = &dto_error {
+            assert_eq!(*sub_id, subscription_id);
+            assert!(msg.contains("Compression failed"));
+        } else {
+            panic!("Expected CompressionError variant");
+        }
+    }
+}
+
+#[cfg(test)]
+mod memory_size_tests {
+    use std::collections::HashMap;
+
+    use super::*;
+
+    #[test]
+    fn test_state_request_response_memory_size_empty() {
+        let response = StateRequestResponse {
+            accounts: vec![],
+            pagination: PaginationResponse::new(1, 10, 0),
+        };
+
+        let size = response.deep_size_of();
+
+        // Should at least include base struct sizes
+        assert!(size >= 48, "Empty response should have minimum size of 48 bytes, got {}", size);
+        assert!(size < 200, "Empty response should not be too large, got {}", size);
+    }
+
+    #[test]
+    fn test_state_request_response_memory_size_scales_with_slots() {
+        let create_response_with_slots = |slot_count: usize| {
+            let mut slots = HashMap::new();
+            for i in 0..slot_count {
+                let key = vec![i as u8; 32]; // 32-byte key
+                let value = vec![(i + 100) as u8; 32]; // 32-byte value
+                slots.insert(key.into(), value.into());
+            }
+
+            let account = ResponseAccount::new(
+                Chain::Ethereum,
+                vec![1; 20].into(),
+                "Pool".to_string(),
+                slots,
+                vec![1; 32].into(),
+                HashMap::new(),
+                vec![].into(), // empty code
+                vec![1; 32].into(),
+                vec![1; 32].into(),
+                vec![1; 32].into(),
+                None,
+            );
+
+            StateRequestResponse {
+                accounts: vec![account],
+                pagination: PaginationResponse::new(1, 10, 1),
+            }
+        };
+
+        let small_response = create_response_with_slots(10);
+        let large_response = create_response_with_slots(100);
+
+        let small_size = small_response.deep_size_of();
+        let large_size = large_response.deep_size_of();
+
+        // Large response should be significantly bigger
+        assert!(
+            large_size > small_size * 5,
+            "Large response ({} bytes) should be much larger than small response ({} bytes)",
+            large_size,
+            small_size
+        );
+
+        // Each slot should contribute at least 64 bytes (32 + 32 + overhead)
+        let size_diff = large_size - small_size;
+        let expected_min_diff = 90 * 64; // 90 additional slots * 64 bytes each
+        assert!(
+            size_diff > expected_min_diff,
+            "Size difference ({} bytes) should reflect the additional slot data",
+            size_diff
+        );
+    }
+}
+
+#[cfg(test)]
+mod pagination_limits_tests {
+    use super::*;
+
+    // Test struct for pagination limits
+    #[derive(Clone, Debug)]
+    struct TestRequestBody {
+        pagination: PaginationParams,
+    }
+
+    // Implement pagination limits for test struct
+    impl_pagination_limits!(TestRequestBody, compressed = 500, uncompressed = 50);
+
+    #[test]
+    fn test_effective_max_page_size() {
+        // Test effective max with compression enabled
+        let max_size = TestRequestBody::effective_max_page_size(true);
+        assert_eq!(max_size, 500, "Should return compressed limit when compression is enabled");
+
+        // Test effective max with compression disabled
+        let max_size = TestRequestBody::effective_max_page_size(false);
+        assert_eq!(max_size, 50, "Should return uncompressed limit when compression is disabled");
     }
 }

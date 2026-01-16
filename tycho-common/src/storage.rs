@@ -510,6 +510,7 @@ pub trait ProtocolGateway {
 
 /// Filters for entry points queries in the database.
 // Shalow but can be used to add more filters without breaking backwards compatibility in the future
+#[derive(Debug, Clone)]
 pub struct EntryPointFilter {
     pub protocol_system: ProtocolSystem,
     pub component_ids: Option<Vec<ComponentId>>,
@@ -544,12 +545,12 @@ pub trait EntryPointGateway {
     ///
     /// # Arguments
     /// * `entry_points_params` - The map of entry points to their tracing params to insert and
-    ///   optionally a component id used for debugging only.
+    ///   component id for the component linked to the params.
     ///
     /// Note: This function ignores conflicts on inserts.
     async fn insert_entry_point_tracing_params(
         &self,
-        entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+        entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, ComponentId)>>,
     ) -> Result<(), StorageError>;
 
     /// Retrieves a map of component ids to a set of entry points from the database.

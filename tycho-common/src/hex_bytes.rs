@@ -6,6 +6,7 @@ use std::{
     str::FromStr,
 };
 
+use deepsize::{Context, DeepSizeOf};
 #[cfg(feature = "diesel")]
 use diesel::{
     deserialize::{self, FromSql, FromSqlRow},
@@ -25,6 +26,17 @@ use crate::serde_primitives::hex_bytes;
 #[cfg_attr(feature = "diesel", derive(AsExpression, FromSqlRow,))]
 #[cfg_attr(feature = "diesel", diesel(sql_type = Binary))]
 pub struct Bytes(#[serde(with = "hex_bytes")] pub bytes::Bytes);
+
+impl DeepSizeOf for Bytes {
+    fn deep_size_of_children(&self, _ctx: &mut Context) -> usize {
+        // Note: This may overcount memory if the underlying bytes are shared (e.g. via Arc).
+        // We cannot detect shared ownership here because Context’s internal tracking is private
+        // At the same time, this might also underreport memory if:
+        // - the bytes::Bytes are instantiated as Shared internally, which adds 24 bytes of overhead
+        // - the bytes::Bytes has capacity greater than its length, as we only count the length here
+        self.0.len()
+    }
+}
 
 fn bytes_to_hex(b: &Bytes) -> String {
     hex::encode(b.0.as_ref())

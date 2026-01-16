@@ -29,13 +29,12 @@ use tycho_common::{
 use super::{
     schema::{
         account, account_balance, block, chain, component_balance, component_balance_default,
-        component_tvl, contract_code, contract_storage, contract_storage_default,
-        debug_protocol_component_has_entry_point_tracing_params, entry_point,
+        component_tvl, contract_code, contract_storage, contract_storage_default, entry_point,
         entry_point_tracing_params, entry_point_tracing_params_calls_account,
         entry_point_tracing_result, extraction_state, protocol_component,
-        protocol_component_holds_contract, protocol_component_holds_token,
-        protocol_component_uses_entry_point, protocol_state, protocol_state_default,
-        protocol_system, protocol_type, token, transaction,
+        protocol_component_has_entry_point_tracing_params, protocol_component_holds_contract,
+        protocol_component_holds_token, protocol_component_uses_entry_point, protocol_state,
+        protocol_state_default, protocol_system, protocol_type, token, transaction,
     },
     versioning::{StoredVersionedRow, VersionedRow},
     PostgresError, MAX_TS, MAX_VERSION_TS,
@@ -223,6 +222,17 @@ pub struct NewBlock {
     pub ts: NaiveDateTime,
 }
 
+impl NewBlock {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 6;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
+}
+
 #[derive(Identifiable, Queryable, Associations, Selectable, Debug)]
 #[diesel(belongs_to(Block))]
 #[diesel(table_name = transaction)]
@@ -253,8 +263,13 @@ impl Transaction {
     ) -> Result<HashMap<TxHash, i64>, StorageError> {
         use super::schema::transaction::dsl::*;
 
+        let unique_hashes: HashSet<&TxHash> = hashes.iter().collect();
+        if unique_hashes.is_empty() {
+            return Ok(HashMap::new());
+        }
+
         transaction
-            .filter(hash.eq_any(hashes))
+            .filter(hash.eq_any(unique_hashes))
             .select((hash, id))
             .load::<(TxHash, i64)>(conn)
             .await
@@ -264,12 +279,16 @@ impl Transaction {
 
     // fetches the transaction id, hash, index and block timestamp for a given set of hashes
     pub async fn ids_and_ts_by_hash(
-        hashes: &[&TxHash],
+        hashes: impl Iterator<Item = &TxHash>,
         conn: &mut AsyncPgConnection,
     ) -> QueryResult<Vec<(i64, Bytes, i64, NaiveDateTime)>> {
+        let unique_hashes: HashSet<&TxHash> = hashes.collect();
+        if unique_hashes.is_empty() {
+            return Ok(vec![]);
+        }
         transaction::table
             .inner_join(block::table)
-            .filter(transaction::hash.eq_any(hashes))
+            .filter(transaction::hash.eq_any(unique_hashes))
             .select((transaction::id, transaction::hash, transaction::index, block::ts))
             .get_results::<(i64, Bytes, i64, NaiveDateTime)>(conn)
             .await
@@ -285,6 +304,17 @@ pub struct NewTransaction {
     pub from: Address,
     pub to: Address,
     pub index: i64,
+}
+
+impl NewTransaction {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 5;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
 }
 
 #[derive(Identifiable, Queryable, Selectable)]
@@ -353,7 +383,7 @@ pub struct ProtocolType {
     pub modified_ts: NaiveDateTime,
 }
 
-#[derive(Identifiable, Queryable, Selectable, Debug)]
+#[derive(Identifiable, Queryable, Selectable, Debug, QueryableByName)]
 #[diesel(table_name = component_balance)]
 #[diesel(belongs_to(ProtocolComponent))]
 #[diesel(primary_key(protocol_component_id, token_id, modify_tx))]
@@ -385,6 +415,15 @@ pub struct NewComponentBalance {
 }
 
 impl NewComponentBalance {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 8;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
+
     pub fn new(
         token_id: i64,
         new_balance: Balance,
@@ -453,66 +492,27 @@ impl PartitionedVersionedRow for NewComponentBalance {
     where
         Self: Sized,
     {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+
         let (component_ids, token_ids): (Vec<_>, Vec<_>) = ids.into_iter().unzip();
 
-        let tuple_ids = component_ids
-            .iter()
-            .zip(token_ids.iter())
-            .collect::<HashSet<_>>();
+        let results: Vec<ComponentBalance> = diesel::sql_query(
+            "SELECT cb.*
+             FROM component_balance_default cb
+             INNER JOIN unnest($1::bigint[], $2::bigint[]) AS pairs(comp_id, tok_id)
+               ON cb.protocol_component_id = pairs.comp_id
+               AND cb.token_id = pairs.tok_id",
+        )
+        .bind::<diesel::sql_types::Array<diesel::sql_types::BigInt>, _>(&component_ids)
+        .bind::<diesel::sql_types::Array<diesel::sql_types::BigInt>, _>(&token_ids)
+        .load(conn)
+        .await
+        .map_err(PostgresError::from)?;
 
-        let mut results: Vec<ComponentBalance> = component_balance::table
-            .select(ComponentBalance::as_select())
-            .into_boxed()
-            .filter(
-                component_balance::protocol_component_id
-                    .eq_any(&component_ids)
-                    .and(component_balance::token_id.eq_any(&token_ids))
-                    .and(component_balance::valid_to.eq(MAX_TS)),
-            )
-            .get_results(conn)
-            .await
-            .map_err(PostgresError::from)?;
-
-        let found_ids: HashSet<_> = results
-            .iter()
-            .map(|cb| (&cb.protocol_component_id, &cb.token_id))
-            .collect();
-
-        let missing_ids: Vec<_> = tuple_ids
-            .clone()
-            .into_iter()
-            .filter(|id| !found_ids.contains(id))
-            .collect();
-
-        // If we have missing ids, we need to query the archived tables as well. This is necessary
-        // when entries are deleted
-        if !missing_ids.is_empty() {
-            let (missing_component_ids, missing_token_ids): (Vec<&i64>, Vec<&i64>) =
-                missing_ids.into_iter().unzip();
-            let deleted_results = component_balance::table
-                .select(ComponentBalance::as_select())
-                .filter(
-                    component_balance::protocol_component_id
-                        .eq_any(&missing_component_ids)
-                        .and(component_balance::token_id.eq_any(&missing_token_ids)),
-                )
-                .distinct_on((
-                    component_balance::protocol_component_id,
-                    component_balance::token_id,
-                ))
-                .order_by((
-                    component_balance::protocol_component_id,
-                    component_balance::token_id,
-                    component_balance::valid_to.desc(),
-                ))
-                .get_results(conn)
-                .await
-                .map_err(PostgresError::from)?;
-            results.extend(deleted_results);
-        }
         Ok(results
             .into_iter()
-            .filter(|cb| tuple_ids.contains(&(&cb.protocol_component_id, &cb.token_id)))
             .map(NewComponentBalance::from)
             .collect())
     }
@@ -530,6 +530,17 @@ pub struct NewComponentBalanceLatest {
     pub protocol_component_id: i64,
     pub valid_from: NaiveDateTime,
     pub valid_to: NaiveDateTime,
+}
+
+impl NewComponentBalanceLatest {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 8;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
 }
 
 impl From<NewComponentBalance> for NewComponentBalanceLatest {
@@ -603,6 +614,15 @@ pub struct NewProtocolComponent {
 }
 
 impl NewProtocolComponent {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 7;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
+
     pub fn new(
         external_id: &str,
         chain_id: i64,
@@ -628,12 +648,16 @@ impl NewProtocolComponent {
 
 impl ProtocolComponent {
     pub async fn ids_by_external_ids(
-        external_ids: &[&str],
+        external_ids: impl Iterator<Item = &str>,
         chain_db_id: i64,
         conn: &mut AsyncPgConnection,
     ) -> QueryResult<Vec<(i64, String)>> {
+        let unique_ids: HashSet<&str> = external_ids.collect();
+        if unique_ids.is_empty() {
+            return Ok(vec![]);
+        }
         protocol_component::table
-            .filter(protocol_component::external_id.eq_any(external_ids))
+            .filter(protocol_component::external_id.eq_any(unique_ids))
             .filter(protocol_component::chain_id.eq(chain_db_id))
             .select((protocol_component::id, protocol_component::external_id))
             .get_results::<(i64, String)>(conn)
@@ -661,7 +685,7 @@ pub struct NewProtocolComponentHoldsContract {
     pub contract_code_id: i64,
 }
 
-#[derive(Identifiable, Queryable, Associations, Selectable, Clone, Debug)]
+#[derive(Identifiable, Queryable, Associations, Selectable, Clone, Debug, QueryableByName)]
 #[diesel(belongs_to(ProtocolComponent))]
 #[diesel(table_name = protocol_state)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -1094,6 +1118,17 @@ pub struct NewProtocolState {
     pub valid_to: NaiveDateTime,
 }
 
+impl NewProtocolState {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 7;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
+}
+
 impl From<ProtocolState> for NewProtocolState {
     fn from(value: ProtocolState) -> Self {
         Self {
@@ -1139,68 +1174,27 @@ impl PartitionedVersionedRow for NewProtocolState {
     where
         Self: Sized,
     {
-        let (pc_id, attr_name): (Vec<_>, Vec<_>) = ids.into_iter().unzip();
-        let tuple_ids = pc_id
-            .iter()
-            .zip(attr_name.iter())
-            .collect::<HashSet<_>>();
-
-        let mut results: Vec<ProtocolState> = protocol_state::table
-            .select(ProtocolState::as_select())
-            .into_boxed()
-            .filter(
-                protocol_state::protocol_component_id
-                    .eq_any(&pc_id)
-                    .and(protocol_state::attribute_name.eq_any(&attr_name))
-                    .and(protocol_state::valid_to.eq(MAX_TS)),
-            )
-            .get_results(conn)
-            .await
-            .map_err(PostgresError::from)?;
-
-        let found_ids: HashSet<_> = results
-            .iter()
-            .map(|ps| (&ps.protocol_component_id, &ps.attribute_name))
-            .collect();
-
-        let missing_ids: Vec<_> = tuple_ids
-            .clone()
-            .into_iter()
-            .filter(|id| !found_ids.contains(id))
-            .collect();
-
-        // If we have missing ids, we need to query the archived tables as well. This is necessary
-        // when entries are deleted
-        if !missing_ids.is_empty() {
-            let (missing_protocol_component_ids, missing_attribute_names): (
-                Vec<&i64>,
-                Vec<&String>,
-            ) = missing_ids.into_iter().unzip();
-            let deleted_results: Vec<ProtocolState> = protocol_state::table
-                .select(ProtocolState::as_select())
-                .filter(
-                    protocol_state::protocol_component_id
-                        .eq_any(&missing_protocol_component_ids)
-                        .and(protocol_state::attribute_name.eq_any(&missing_attribute_names)),
-                )
-                .distinct_on((
-                    protocol_state::protocol_component_id,
-                    protocol_state::attribute_name,
-                ))
-                .order_by((
-                    protocol_state::protocol_component_id,
-                    protocol_state::attribute_name,
-                    protocol_state::valid_to.desc(),
-                ))
-                .get_results(conn)
-                .await
-                .map_err(PostgresError::from)?;
-            results.extend(deleted_results);
+        if ids.is_empty() {
+            return Ok(vec![]);
         }
+
+        let (pc_ids, attr_names): (Vec<_>, Vec<_>) = ids.into_iter().unzip();
+
+        let results: Vec<ProtocolState> = diesel::sql_query(
+            "SELECT ps.* 
+             FROM protocol_state_default ps
+             INNER JOIN unnest($1::bigint[], $2::text[]) AS pairs(pc_id, attr_name)
+               ON ps.protocol_component_id = pairs.pc_id 
+               AND ps.attribute_name = pairs.attr_name",
+        )
+        .bind::<diesel::sql_types::Array<diesel::sql_types::BigInt>, _>(&pc_ids)
+        .bind::<diesel::sql_types::Array<diesel::sql_types::Text>, _>(&attr_names)
+        .load(conn)
+        .await
+        .map_err(PostgresError::from)?;
 
         Ok(results
             .into_iter()
-            .filter(|ps| tuple_ids.contains(&(&ps.protocol_component_id, &ps.attribute_name)))
             .map(NewProtocolState::from)
             .collect())
     }
@@ -1237,6 +1231,17 @@ pub struct NewProtocolStateLatest {
     pub modify_tx: i64,
     pub valid_from: NaiveDateTime,
     pub valid_to: NaiveDateTime,
+}
+
+impl NewProtocolStateLatest {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 7;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
 }
 
 impl From<NewProtocolState> for NewProtocolStateLatest {
@@ -1309,12 +1314,16 @@ impl Account {
 
     /// retrieves account ids by addresses
     pub async fn ids_by_addresses(
-        addresses: &[&Address],
+        addresses: impl Iterator<Item = &Address>,
         chain_db_id: i64,
         conn: &mut AsyncPgConnection,
     ) -> QueryResult<Vec<(i64, Address)>> {
+        let unique_addresses: HashSet<&Address> = addresses.collect();
+        if unique_addresses.is_empty() {
+            return Ok(vec![]);
+        }
         account::table
-            .filter(account::address.eq_any(addresses))
+            .filter(account::address.eq_any(unique_addresses))
             .filter(account::chain_id.eq(chain_db_id))
             .select((account::id, account::address))
             .get_results::<(i64, Address)>(conn)
@@ -1325,8 +1334,12 @@ impl Account {
         ids: impl Iterator<Item = &i64>,
         conn: &mut AsyncPgConnection,
     ) -> QueryResult<Vec<(i64, Address)>> {
+        let unique_ids: HashSet<&i64> = ids.collect();
+        if unique_ids.is_empty() {
+            return Ok(vec![]);
+        }
         account::table
-            .filter(account::id.eq_any(ids))
+            .filter(account::id.eq_any(unique_ids))
             .select((account::id, account::address))
             .get_results::<(i64, Address)>(conn)
             .await
@@ -1343,6 +1356,17 @@ pub struct NewAccount<'a> {
     pub creation_tx: Option<i64>,
     pub created_at: Option<NaiveDateTime>,
     pub deleted_at: Option<NaiveDateTime>,
+}
+
+impl<'a> NewAccount<'a> {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 6;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
 }
 
 #[derive(Identifiable, Queryable, Associations, Selectable, Debug, PartialEq)]
@@ -1374,6 +1398,15 @@ pub struct NewToken {
 }
 
 impl NewToken {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 6;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
+
     pub fn from_token(account_id: i64, token: &models::token::Token) -> Self {
         Self {
             account_id,
@@ -1390,7 +1423,7 @@ impl NewToken {
     }
 }
 
-#[derive(Identifiable, Queryable, Associations, Selectable, Debug)]
+#[derive(Identifiable, Queryable, Associations, Selectable, Debug, QueryableByName)]
 #[diesel(belongs_to(Account))]
 #[diesel(table_name = account_balance)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -1444,24 +1477,27 @@ impl StoredVersionedRow for AccountBalance {
         conn: &mut AsyncPgConnection,
     ) -> Result<Vec<Box<Self>>, StorageError> {
         let (accounts, tokens): (Vec<_>, Vec<_>) = ids.into_iter().unzip();
-        let tuple_ids = accounts
-            .iter()
-            .zip(tokens.iter())
-            .collect::<HashSet<_>>();
 
-        Ok(account_balance::table
-            .filter(
-                account_balance::account_id
-                    .eq_any(&accounts)
-                    .and(account_balance::token_id.eq_any(&tokens))
-                    .and(account_balance::valid_to.is_null()),
-            )
-            .select(Self::as_select())
-            .get_results::<Self>(conn)
-            .await
-            .map_err(PostgresError::from)?
+        if accounts.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let results: Vec<AccountBalance> = diesel::sql_query(
+            "SELECT ab.*
+             FROM account_balance ab
+             INNER JOIN unnest($1::bigint[], $2::bigint[]) AS pairs(acc_id, tok_id)
+               ON ab.account_id = pairs.acc_id
+               AND ab.token_id = pairs.tok_id
+             WHERE ab.valid_to IS NULL",
+        )
+        .bind::<diesel::sql_types::Array<diesel::sql_types::BigInt>, _>(&accounts)
+        .bind::<diesel::sql_types::Array<diesel::sql_types::BigInt>, _>(&tokens)
+        .load(conn)
+        .await
+        .map_err(PostgresError::from)?;
+
+        Ok(results
             .into_iter()
-            .filter(|tb| tuple_ids.contains(&(&tb.account_id, &tb.token_id)))
             .map(Box::new)
             .collect())
     }
@@ -1481,6 +1517,17 @@ pub struct NewAccountBalance {
     pub modify_tx: i64,
     pub valid_from: NaiveDateTime,
     pub valid_to: Option<NaiveDateTime>,
+}
+
+impl NewAccountBalance {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 6;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
 }
 
 impl VersionedRow for NewAccountBalance {
@@ -1632,7 +1679,7 @@ impl NewContract {
     }
 }
 
-#[derive(Identifiable, Queryable, Associations, Selectable, Debug)]
+#[derive(Identifiable, Queryable, Associations, Selectable, Debug, QueryableByName)]
 #[diesel(belongs_to(Account))]
 #[diesel(table_name = contract_storage)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -1697,68 +1744,27 @@ impl PartitionedVersionedRow for NewSlot {
     where
         Self: Sized,
     {
-        let (accounts, slots): (Vec<_>, Vec<_>) = ids.into_iter().unzip();
-        #[allow(clippy::mutable_key_type)]
-        let tuple_ids = accounts
-            .iter()
-            .zip(slots.iter())
-            .collect::<HashSet<_>>();
-
-        // PERF: The removal of the filter 'valid_to = MAX_TS' means we now search in archived
-        // tables as well. A possible optimisation would be to add the valid_to filter back
-        // and then use a second query for storage still missing that will access the
-        // archived tables. Therefore, performance is not impacted in the common case.
-        let mut results: Vec<ContractStorage> = contract_storage::table
-            .select(ContractStorage::as_select())
-            .into_boxed()
-            .filter(
-                contract_storage::account_id
-                    .eq_any(&accounts)
-                    .and(contract_storage::slot.eq_any(&slots))
-                    .and(contract_storage::valid_to.eq(MAX_TS)),
-            )
-            .get_results(conn)
-            .await
-            .map_err(PostgresError::from)?;
-
-        let found_ids: HashSet<_> = results
-            .iter()
-            .map(|cs| (&cs.account_id, &cs.slot))
-            .collect();
-
-        let missing_ids: Vec<_> = tuple_ids
-            .clone()
-            .into_iter()
-            .filter(|id| !found_ids.contains(id))
-            .collect();
-
-        // If we have missing ids, we need to query the archived tables as well. This is necessary
-        // when entries are deleted
-        if !missing_ids.is_empty() {
-            let (missing_accounts, missing_slots): (Vec<&i64>, Vec<&Bytes>) =
-                missing_ids.into_iter().unzip();
-            let deleted_results: Vec<ContractStorage> = contract_storage::table
-                .select(ContractStorage::as_select())
-                .filter(
-                    contract_storage::account_id
-                        .eq_any(&missing_accounts)
-                        .and(contract_storage::slot.eq_any(&missing_slots)),
-                )
-                .distinct_on((contract_storage::account_id, contract_storage::slot))
-                .order_by((
-                    contract_storage::account_id,
-                    contract_storage::slot,
-                    contract_storage::valid_to.desc(),
-                ))
-                .get_results(conn)
-                .await
-                .map_err(PostgresError::from)?;
-            results.extend(deleted_results);
+        if ids.is_empty() {
+            return Ok(vec![]);
         }
+
+        let (accounts, slots): (Vec<_>, Vec<_>) = ids.into_iter().unzip();
+
+        let results: Vec<ContractStorage> = diesel::sql_query(
+            "SELECT cs.*
+             FROM contract_storage_default cs
+             INNER JOIN unnest($1::bigint[], $2::bytea[]) AS pairs(acc_id, slot_val)
+               ON cs.account_id = pairs.acc_id
+               AND cs.slot = pairs.slot_val",
+        )
+        .bind::<diesel::sql_types::Array<diesel::sql_types::BigInt>, _>(&accounts)
+        .bind::<diesel::sql_types::Array<diesel::sql_types::Binary>, _>(&slots)
+        .load(conn)
+        .await
+        .map_err(PostgresError::from)?;
 
         Ok(results
             .into_iter()
-            .filter(|cs| tuple_ids.contains(&(&cs.account_id, &cs.slot)))
             .map(NewSlot::from)
             .collect())
     }
@@ -2130,8 +2136,19 @@ pub struct NewEntryPointTracingResult {
     pub detection_data: serde_json::Value,
 }
 
+impl NewEntryPointTracingResult {
+    /// Number of fields in this struct for database insertion.
+    /// IMPORTANT: Update this if you add/remove fields!
+    /// Used to calculate MAX_BATCH_SIZE to avoid exceeding PostgreSQL's i16 parameter limit
+    /// (32767).
+    pub const FIELD_COUNT: usize = 3;
+    /// Maximum number of rows that can be inserted in a single batch.
+    /// PostgreSQL wire protocol uses i16 for parameter count (max 32767).
+    pub const MAX_BATCH_SIZE: usize = 32767 / Self::FIELD_COUNT;
+}
+
 #[derive(Insertable)]
-#[diesel(table_name = debug_protocol_component_has_entry_point_tracing_params)]
+#[diesel(table_name = protocol_component_has_entry_point_tracing_params)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewProtocolComponentHasEntryPointTracingParams {
     pub protocol_component_id: i64,
@@ -2174,4 +2191,85 @@ pub struct EntryPointTracingParamsCallsAccount {
 pub struct NewEntryPointTracingParamsCallsAccount {
     pub entry_point_tracing_params_id: i64,
     pub account_id: i64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test that MAX_BATCH_SIZE is calculated correctly and doesn't exceed i16 limit
+    #[test]
+    fn test_max_batch_size_within_limits() {
+        // Verify that MAX_BATCH_SIZE * FIELD_COUNT doesn't exceed i16::MAX (32767)
+        const {
+            assert!(
+                NewComponentBalance::MAX_BATCH_SIZE * NewComponentBalance::FIELD_COUNT <= 32767,
+                "NewComponentBalance: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+        const {
+            assert!(
+                NewComponentBalanceLatest::MAX_BATCH_SIZE * NewComponentBalanceLatest::FIELD_COUNT <=
+                    32767,
+                "NewComponentBalanceLatest: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+        const {
+            assert!(
+                NewProtocolState::MAX_BATCH_SIZE * NewProtocolState::FIELD_COUNT <= 32767,
+                "NewProtocolState: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+        const {
+            assert!(
+                NewProtocolStateLatest::MAX_BATCH_SIZE * NewProtocolStateLatest::FIELD_COUNT <=
+                    32767,
+                "NewProtocolStateLatest: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+        const {
+            assert!(
+                NewAccountBalance::MAX_BATCH_SIZE * NewAccountBalance::FIELD_COUNT <= 32767,
+                "NewAccountBalance: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+        const {
+            assert!(
+                NewBlock::MAX_BATCH_SIZE * NewBlock::FIELD_COUNT <= 32767,
+                "NewBlock: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+        const {
+            assert!(
+                NewTransaction::MAX_BATCH_SIZE * NewTransaction::FIELD_COUNT <= 32767,
+                "NewTransaction: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+        const {
+            assert!(
+                NewAccount::MAX_BATCH_SIZE * NewAccount::FIELD_COUNT <= 32767,
+                "NewAccount: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+        const {
+            assert!(
+                NewToken::MAX_BATCH_SIZE * NewToken::FIELD_COUNT <= 32767,
+                "NewToken: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+        const {
+            assert!(
+                NewProtocolComponent::MAX_BATCH_SIZE * NewProtocolComponent::FIELD_COUNT <= 32767,
+                "NewProtocolComponent: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+        const {
+            assert!(
+                NewEntryPointTracingResult::MAX_BATCH_SIZE *
+                    NewEntryPointTracingResult::FIELD_COUNT <=
+                    32767,
+                "NewEntryPointTracingResult: MAX_BATCH_SIZE * FIELD_COUNT exceeds i16::MAX"
+            );
+        }
+    }
 }

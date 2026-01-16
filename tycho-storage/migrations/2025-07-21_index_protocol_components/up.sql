@@ -1,0 +1,2 @@
+CREATE INDEX IF NOT EXISTS idx_protocol_system_id_external_id ON protocol_component (protocol_system_id, external_id);
+CREATE INDEX IF NOT EXISTS idx_protocol_component_system_id ON protocol_component (protocol_system_id);

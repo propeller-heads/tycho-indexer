@@ -1,43 +1,39 @@
 //! This module contains Tycho web services implementation
 // TODO: remove once deprecated ProtocolId struct is removed
 #![allow(deprecated)]
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{mpsc, Arc},
+};
 
 use actix_cors::Cors;
-use actix_web::{dev::ServerHandle, http, web, App, HttpServer};
+use actix_web::{dev::ServerHandle, http, middleware as actix_middleware, web, App, HttpServer};
 use actix_web_opentelemetry::RequestTracing;
 use deltas_buffer::PendingDeltasBuffer;
 use futures03::future::try_join_all;
 use tokio::task::JoinHandle;
 use tracing::info;
-use tycho_common::{
-    dto::{
-        AccountUpdate, BlockParam, Chain, ChangeType, ComponentTvlRequestBody,
-        ComponentTvlRequestResponse, ContractId, Health, PaginationParams, PaginationResponse,
-        ProtocolComponent, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
-        ProtocolId, ProtocolStateDelta, ProtocolStateRequestBody, ProtocolStateRequestResponse,
-        ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse, ResponseAccount,
-        ResponseProtocolState, ResponseToken, StateRequestBody, StateRequestResponse,
-        TokensRequestBody, TokensRequestResponse, TracedEntryPointRequestBody,
-        TracedEntryPointRequestResponse, VersionParam,
-    },
-    storage::Gateway,
+use tycho_common::storage::Gateway;
+use tycho_ethereum::{
+    rpc::EthereumRpcClient, services::entrypoint_tracer::tracer::EVMEntrypointService,
 };
-use tycho_ethereum::entrypoint_tracer::tracer::EVMEntrypointService;
-use utoipa::{
-    openapi::security::{ApiKey, ApiKeyValue, SecurityScheme},
-    Modify, OpenApi,
-};
+use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     extractor::{runner::ExtractorHandle, ExtractionError},
-    services::deltas_buffer::PendingDeltas,
+    services::{
+        api_docs::ApiDoc,
+        deltas_buffer::PendingDeltas,
+        middleware::{compression_middleware, rpc_metrics_middleware},
+    },
 };
 
 mod access_control;
+mod api_docs;
 mod cache;
 mod deltas_buffer;
+mod middleware;
 mod rpc;
 mod ws;
 
@@ -46,25 +42,27 @@ pub struct ServicesBuilder<G> {
     prefix: String,
     port: u16,
     bind: String,
-    rpc_url: String,
+    rpc: EthereumRpcClient,
     api_key: String,
     extractor_handles: ws::MessageSenderMap,
     db_gateway: G,
+    rpc_config: ServerRpcConfig,
 }
 
 impl<G> ServicesBuilder<G>
 where
     G: Gateway + Send + Sync + 'static,
 {
-    pub fn new(db_gateway: G, rpc_url: String, api_key: String) -> Self {
+    pub fn new(db_gateway: G, rpc: EthereumRpcClient, api_key: String) -> Self {
         Self {
             prefix: "v1".to_owned(),
             port: 4242,
             bind: "0.0.0.0".to_owned(),
-            rpc_url,
+            rpc,
             api_key,
             extractor_handles: HashMap::new(),
             db_gateway,
+            rpc_config: ServerRpcConfig::new(),
         }
     }
 
@@ -96,75 +94,17 @@ where
         self
     }
 
+    pub fn server_rpc_config(mut self, v: ServerRpcConfig) -> Self {
+        self.rpc_config = v;
+        self
+    }
+
     /// Starts the Tycho server. Returns a tuple containing a handle for the server and a Tokio
     /// handle for the tasks. If no extractor tasks are registered, it starts the server without
     /// running the delta tasks.
     pub fn run(
         self,
     ) -> Result<(ServerHandle, JoinHandle<Result<(), ExtractionError>>), ExtractionError> {
-        #[derive(OpenApi)]
-        #[openapi(
-            info(title = "Tycho-Indexer RPC",),
-            paths(
-                rpc::health,
-                rpc::protocol_systems,
-                rpc::tokens,
-                rpc::protocol_components,
-                rpc::traced_entry_points,
-                rpc::protocol_state,
-                rpc::contract_state,
-                rpc::component_tvl,
-            ),
-            components(
-                schemas(VersionParam),
-                schemas(BlockParam),
-                schemas(ContractId),
-                schemas(StateRequestResponse),
-                schemas(StateRequestBody),
-                schemas(Chain),
-                schemas(ResponseAccount),
-                schemas(TokensRequestBody),
-                schemas(TokensRequestResponse),
-                schemas(PaginationParams),
-                schemas(PaginationResponse),
-                schemas(ResponseToken),
-                schemas(ProtocolComponentsRequestBody),
-                schemas(ProtocolComponentRequestResponse),
-                schemas(ProtocolComponent),
-                schemas(ProtocolStateRequestBody),
-                schemas(TracedEntryPointRequestBody),
-                schemas(TracedEntryPointRequestResponse),
-                schemas(ProtocolStateRequestResponse),
-                schemas(AccountUpdate),
-                schemas(ProtocolId),
-                schemas(ResponseProtocolState),
-                schemas(ChangeType),
-                schemas(ProtocolStateDelta),
-                schemas(Health),
-                schemas(ProtocolSystemsRequestBody),
-                schemas(ProtocolSystemsRequestResponse),
-                schemas(ComponentTvlRequestBody),
-                schemas(ComponentTvlRequestResponse),
-            ),
-            modifiers(&SecurityAddon),
-        )]
-        struct ApiDoc;
-
-        struct SecurityAddon;
-
-        impl Modify for SecurityAddon {
-            fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-                let components = openapi.components.as_mut().unwrap();
-                components.add_security_scheme(
-                    "apiKey",
-                    SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::with_description(
-                        "authorization",
-                        "Use 'sampletoken' as value for testing",
-                    ))),
-                );
-            }
-        }
-
         let open_api = ApiDoc::openapi();
 
         // If no extractors are registered, run the server without spawning extractor-related tasks.
@@ -193,12 +133,20 @@ where
             .clone()
             .into_values();
         let pending_deltas_clone = pending_deltas.clone();
+        let (start_tx, start_rx) = mpsc::sync_channel::<()>(1);
         let deltas_task = tokio::spawn(async move {
             pending_deltas_clone
-                .run(extractor_handles_clone)
+                .run(extractor_handles_clone, start_tx)
                 .await
                 .map_err(|err| ExtractionError::Unknown(err.to_string()))
         });
+
+        // Wait for the pending deltas task to start
+        start_rx.recv().map_err(|err| {
+            ExtractionError::ServiceError(format!(
+                "Failed to receive PendingDeltas start signal: {err}"
+            ))
+        })?;
         let ws_data = web::Data::new(ws::WsData::new(self.extractor_handles.clone()));
         let (server_handle, server_task) =
             self.start_server(Some(ws_data), openapi, Some(Arc::new(pending_deltas)))?;
@@ -220,11 +168,14 @@ where
         openapi: utoipa::openapi::OpenApi,
         pending_deltas: Option<Arc<dyn PendingDeltasBuffer + Send + Sync>>,
     ) -> Result<(ServerHandle, JoinHandle<Result<(), ExtractionError>>), ExtractionError> {
-        let tracer = EVMEntrypointService::try_from_url(&self.rpc_url)
-            .map_err(|err| ExtractionError::Setup(format!("Failed to create tracer: {err}")))?;
+        let tracer = EVMEntrypointService::new(&self.rpc);
 
-        let rpc_data =
-            web::Data::new(rpc::RpcHandler::new(self.db_gateway, pending_deltas, tracer));
+        let rpc_data = web::Data::new(rpc::RpcHandler::new(
+            self.db_gateway,
+            pending_deltas,
+            tracer,
+            self.rpc_config,
+        ));
 
         let server = HttpServer::new(move || {
             let cors = Cors::default()
@@ -245,6 +196,10 @@ where
 
             let mut app = App::new()
                 .wrap(cors)
+                .wrap(actix_middleware::from_fn(rpc_metrics_middleware))
+                // Enable zstd compression while being backwards compatible with clients that do not
+                .wrap(compression_middleware())
+                .wrap(RequestTracing::new())
                 .app_data(rpc_data.clone())
                 .service(
                     web::resource(format!("/{}/contract_state", self.prefix))
@@ -284,7 +239,6 @@ where
                     web::resource(format!("/{}/component_tvl", self.prefix))
                         .route(web::post().to(rpc::component_tvl::<G, EVMEntrypointService>)),
                 )
-                .wrap(RequestTracing::new())
                 .service(
                     SwaggerUi::new("/docs/{_:.*}").url("/api-docs/openapi.json", openapi.clone()),
                 );
@@ -312,5 +266,56 @@ where
                 .map_err(|err| ExtractionError::Unknown(err.to_string()))
         });
         Ok((handle, task))
+    }
+}
+
+/// Configuration for RPC filtering thresholds to prevent overly broad queries
+/// that could cause excessive database load.
+#[derive(Default, Debug, Clone)]
+pub struct ServerRpcConfig {
+    /// Minimum TVL threshold for filtering protocol components.
+    /// When set, clients must provide a `tvl_gt` parameter at least this high,
+    /// unless querying specific `component_ids`.
+    min_component_tvl: Option<f64>,
+    /// Minimum token quality threshold for filtering tokens.
+    /// When set, clients must provide a `min_quality` parameter at least this high,
+    /// unless querying specific `token_addresses`.
+    min_token_quality: Option<i32>,
+    /// Maximum traded_n_days_ago threshold for filtering tokens.
+    /// When set, clients must provide a `traded_n_days_ago` parameter at most this value,
+    /// unless querying specific `token_addresses`.
+    max_traded_n_days_ago: Option<u64>,
+}
+
+impl ServerRpcConfig {
+    pub fn new() -> Self {
+        Self { min_component_tvl: None, min_token_quality: None, max_traded_n_days_ago: None }
+    }
+
+    pub fn with_min_tvl(mut self, min_tvl: Option<f64>) -> Self {
+        self.min_component_tvl = min_tvl;
+        self
+    }
+
+    pub fn with_min_quality(mut self, min_quality: Option<i32>) -> Self {
+        self.min_token_quality = min_quality;
+        self
+    }
+
+    pub fn with_max_traded_n_days_ago(mut self, max_traded_n_days_ago: Option<u64>) -> Self {
+        self.max_traded_n_days_ago = max_traded_n_days_ago;
+        self
+    }
+
+    pub fn min_component_tvl(&self) -> Option<f64> {
+        self.min_component_tvl
+    }
+
+    pub fn min_token_quality(&self) -> Option<i32> {
+        self.min_token_quality
+    }
+
+    pub fn max_traded_n_days_ago(&self) -> Option<u64> {
+        self.max_traded_n_days_ago
     }
 }

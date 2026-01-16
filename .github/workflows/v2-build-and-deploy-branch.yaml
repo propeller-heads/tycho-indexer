@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       app_name:
-        description: Application name; If you choose tycho-indexer all application deploy to dev environment; If you choose specific app name you deploy only specific app
+        description: Application name; If you choose tycho-indexer, all indexers will be deployed to dev environment. If you choose a specific app name you will deploy only that app
         required: true
         default: tycho-indexer
         type: choice
@@ -12,7 +12,9 @@ on:
           - tycho-indexer
           - arbitrum-tycho-indexer
           - ethereum-tycho-indexer
+          - ethereum-tycho-indexer-new-protocol
           - base-tycho-indexer
+          - unichain-tycho-indexer
 
 permissions:
   id-token: write

@@ -1,10 +1,7 @@
-use std::{
-    any::Any,
-    collections::{hash_map::Entry, HashMap, HashSet},
-    sync::Arc,
-};
+use std::collections::{hash_map::Entry, BTreeMap, HashMap, HashSet};
 
 use chrono::NaiveDateTime;
+use deepsize::DeepSizeOf;
 use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 use tracing::warn;
 
@@ -16,8 +13,8 @@ use crate::{
             ComponentBalance, ProtocolChangesWithTx, ProtocolComponent, ProtocolComponentStateDelta,
         },
         token::Token,
-        Address, BlockHash, Chain, ComponentId, EntryPointId, ExtractorIdentity, MergeError,
-        NormalisedMessage, StoreKey,
+        Address, Balance, BlockHash, Chain, Code, ComponentId, EntryPointId, MergeError, StoreKey,
+        StoreVal,
     },
     Bytes,
 };
@@ -43,7 +40,18 @@ impl Block {
     }
 }
 
-#[derive(Clone, Default, PartialEq, Debug, Eq, Hash)]
+// Manual impl as `NaiveDateTime` structure referenced in `ts` does not implement DeepSizeOf
+impl DeepSizeOf for Block {
+    fn deep_size_of_children(&self, context: &mut deepsize::Context) -> usize {
+        self.chain
+            .deep_size_of_children(context) +
+            self.hash.deep_size_of_children(context) +
+            self.parent_hash
+                .deep_size_of_children(context)
+    }
+}
+
+#[derive(Clone, Default, PartialEq, Debug, Eq, Hash, DeepSizeOf)]
 pub struct Transaction {
     pub hash: Bytes,
     pub block_hash: Bytes,
@@ -75,12 +83,13 @@ pub struct TransactionDeltaGroup<T> {
     tx: Transaction,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, DeepSizeOf)]
 pub struct BlockAggregatedChanges {
     pub extractor: String,
     pub chain: Chain,
     pub block: Block,
     pub finalized_block_height: u64,
+    pub db_committed_block_height: Option<u64>,
     pub revert: bool,
     pub state_deltas: HashMap<String, ProtocolComponentStateDelta>,
     pub account_deltas: HashMap<Bytes, AccountDelta>,
@@ -99,6 +108,7 @@ impl BlockAggregatedChanges {
         extractor: &str,
         chain: Chain,
         block: Block,
+        db_committed_block_height: Option<u64>,
         finalized_block_height: u64,
         revert: bool,
         state_deltas: HashMap<String, ProtocolComponentStateDelta>,
@@ -115,6 +125,7 @@ impl BlockAggregatedChanges {
             extractor: extractor.to_string(),
             chain,
             block,
+            db_committed_block_height,
             finalized_block_height,
             revert,
             state_deltas,
@@ -136,17 +147,13 @@ impl std::fmt::Display for BlockAggregatedChanges {
     }
 }
 
-#[typetag::serde]
-impl NormalisedMessage for BlockAggregatedChanges {
-    fn source(&self) -> ExtractorIdentity {
-        ExtractorIdentity::new(self.chain, &self.extractor)
-    }
-
-    fn drop_state(&self) -> Arc<dyn NormalisedMessage> {
-        Arc::new(Self {
+impl BlockAggregatedChanges {
+    pub fn drop_state(&self) -> Self {
+        Self {
             extractor: self.extractor.clone(),
             chain: self.chain,
             block: self.block.clone(),
+            db_committed_block_height: self.db_committed_block_height,
             finalized_block_height: self.finalized_block_height,
             revert: self.revert,
             account_deltas: HashMap::new(),
@@ -158,11 +165,7 @@ impl NormalisedMessage for BlockAggregatedChanges {
             account_balances: self.account_balances.clone(),
             component_tvl: self.component_tvl.clone(),
             dci_update: self.dci_update.clone(),
-        })
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
+        }
     }
 }
 
@@ -176,15 +179,27 @@ impl BlockScoped for BlockAggregatedChanges {
     }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+impl From<dto::Block> for Block {
+    fn from(value: dto::Block) -> Self {
+        Self {
+            number: value.number,
+            chain: value.chain.into(),
+            hash: value.hash,
+            parent_hash: value.parent_hash,
+            ts: value.ts,
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, DeepSizeOf)]
 pub struct DCIUpdate {
     pub new_entrypoints: HashMap<ComponentId, HashSet<EntryPoint>>,
-    pub new_entrypoint_params: HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+    pub new_entrypoint_params: HashMap<EntryPointId, HashSet<(TracingParams, ComponentId)>>,
     pub trace_results: HashMap<EntryPointId, TracingResult>,
 }
 
 /// Changes grouped by their respective transaction.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, DeepSizeOf)]
 pub struct TxWithChanges {
     pub tx: Transaction,
     pub protocol_components: HashMap<ComponentId, ProtocolComponent>,
@@ -193,7 +208,7 @@ pub struct TxWithChanges {
     pub balance_changes: HashMap<ComponentId, HashMap<Address, ComponentBalance>>,
     pub account_balance_changes: HashMap<Address, HashMap<Address, AccountBalance>>,
     pub entrypoints: HashMap<ComponentId, HashSet<EntryPoint>>,
-    pub entrypoint_params: HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+    pub entrypoint_params: HashMap<EntryPointId, HashSet<(TracingParams, ComponentId)>>,
 }
 
 impl TxWithChanges {
@@ -206,7 +221,7 @@ impl TxWithChanges {
         balance_changes: HashMap<ComponentId, HashMap<Address, ComponentBalance>>,
         account_balance_changes: HashMap<Address, HashMap<Address, AccountBalance>>,
         entrypoints: HashMap<ComponentId, HashSet<EntryPoint>>,
-        entrypoint_params: HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+        entrypoint_params: HashMap<EntryPointId, HashSet<(TracingParams, ComponentId)>>,
     ) -> Self {
         Self {
             tx,
@@ -371,7 +386,7 @@ pub enum BlockTag {
     /// Block by number
     Number(u64),
 }
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, DeepSizeOf)]
 pub struct EntryPoint {
     /// Entry point id
     pub external_id: String,
@@ -394,7 +409,7 @@ impl From<dto::EntryPoint> for EntryPoint {
 }
 
 /// A struct that combines an entry point with its associated tracing params.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, DeepSizeOf)]
 pub struct EntryPointWithTracingParams {
     /// The entry point to trace, containing the target contract address and function signature
     pub entry_point: EntryPoint,
@@ -414,6 +429,15 @@ impl From<dto::EntryPointWithTracingParams> for EntryPointWithTracingParams {
                 params: TracingParams::RPCTracer(RPCTracerParams {
                     caller: tracer_params.caller.clone(),
                     calldata: tracer_params.calldata.clone(),
+                    state_overrides: tracer_params
+                        .state_overrides
+                        .clone()
+                        .map(|s| {
+                            s.into_iter()
+                                .map(|(k, v)| (k, v.into()))
+                                .collect()
+                        }),
+                    prune_addresses: tracer_params.prune_addresses.clone(),
                 }),
             },
         }
@@ -426,12 +450,29 @@ impl EntryPointWithTracingParams {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
+impl std::fmt::Display for EntryPointWithTracingParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let tracer_type = match &self.params {
+            TracingParams::RPCTracer(_) => "RPC",
+        };
+        write!(f, "{} [{}]", self.entry_point.external_id, tracer_type)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, DeepSizeOf)]
 /// An entry point to trace. Different types of entry points tracing will be supported in the
 /// future. Like RPC debug tracing, symbolic execution, etc.
 pub enum TracingParams {
     /// Uses RPC calls to retrieve the called addresses and retriggers
     RPCTracer(RPCTracerParams),
+}
+
+impl std::fmt::Display for TracingParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TracingParams::RPCTracer(params) => write!(f, "RPC: {params}"),
+        }
+    }
 }
 
 impl From<dto::TracingParams> for TracingParams {
@@ -444,24 +485,109 @@ impl From<dto::TracingParams> for TracingParams {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, DeepSizeOf)]
+pub enum StorageOverride {
+    Diff(BTreeMap<StoreKey, StoreVal>),
+    Replace(BTreeMap<StoreKey, StoreVal>),
+}
+
+impl From<dto::StorageOverride> for StorageOverride {
+    fn from(value: dto::StorageOverride) -> Self {
+        match value {
+            dto::StorageOverride::Diff(diff) => StorageOverride::Diff(diff),
+            dto::StorageOverride::Replace(replace) => StorageOverride::Replace(replace),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, DeepSizeOf)]
+pub struct AccountOverrides {
+    pub slots: Option<StorageOverride>,
+    pub native_balance: Option<Balance>,
+    pub code: Option<Code>,
+}
+
+impl From<dto::AccountOverrides> for AccountOverrides {
+    fn from(value: dto::AccountOverrides) -> Self {
+        Self {
+            slots: value.slots.map(|s| s.into()),
+            native_balance: value.native_balance,
+            code: value.code,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Eq, Hash, DeepSizeOf)]
 pub struct RPCTracerParams {
     /// The caller address of the transaction, if not provided tracing will use the default value
     /// for an address defined by the VM.
     pub caller: Option<Address>,
     /// The call data used for the tracing call, this needs to include the function selector
     pub calldata: Bytes,
+    /// Optionally allow for state overrides so that the call works as expected
+    pub state_overrides: Option<BTreeMap<Address, AccountOverrides>>,
+    /// Addresses to prune from trace results. Useful for hooks that use mock
+    /// accounts/routers that shouldn't be tracked in the final DCI results.
+    pub prune_addresses: Option<Vec<Address>>,
 }
 
 impl From<dto::RPCTracerParams> for RPCTracerParams {
     fn from(value: dto::RPCTracerParams) -> Self {
-        Self { caller: value.caller, calldata: value.calldata }
+        Self {
+            caller: value.caller,
+            calldata: value.calldata,
+            state_overrides: value.state_overrides.map(|overrides| {
+                overrides
+                    .into_iter()
+                    .map(|(address, account_overrides)| (address, account_overrides.into()))
+                    .collect()
+            }),
+            prune_addresses: value.prune_addresses,
+        }
     }
 }
 
 impl RPCTracerParams {
     pub fn new(caller: Option<Address>, calldata: Bytes) -> Self {
-        Self { caller, calldata }
+        Self { caller, calldata, state_overrides: None, prune_addresses: None }
+    }
+
+    pub fn with_state_overrides(mut self, state: BTreeMap<Address, AccountOverrides>) -> Self {
+        self.state_overrides = Some(state);
+        self
+    }
+
+    pub fn with_prune_addresses(mut self, addresses: Vec<Address>) -> Self {
+        self.prune_addresses = Some(addresses);
+        self
+    }
+}
+
+impl std::fmt::Display for RPCTracerParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let caller_str = match &self.caller {
+            Some(addr) => format!("caller={addr}"),
+            None => String::new(),
+        };
+
+        let calldata_str = if self.calldata.len() >= 8 {
+            format!(
+                "calldata=0x{}..({} bytes)",
+                hex::encode(&self.calldata[..8]),
+                self.calldata.len()
+            )
+        } else {
+            format!("calldata={}", self.calldata)
+        };
+
+        let overrides_str = match &self.state_overrides {
+            Some(overrides) if !overrides.is_empty() => {
+                format!(", {} state override(s)", overrides.len())
+            }
+            _ => String::new(),
+        };
+
+        write!(f, "{caller_str}, {calldata_str}{overrides_str}")
     }
 }
 
@@ -471,18 +597,50 @@ impl Serialize for RPCTracerParams {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("RPCTracerEntryPoint", 2)?;
+        // Count fields: always serialize caller and calldata, plus optional fields
+        let mut field_count = 2;
+        if self.state_overrides.is_some() {
+            field_count += 1;
+        }
+        if self.prune_addresses.is_some() {
+            field_count += 1;
+        }
+
+        let mut state = serializer.serialize_struct("RPCTracerEntryPoint", field_count)?;
         state.serialize_field("caller", &self.caller)?;
         state.serialize_field("calldata", &self.calldata)?;
+
+        // Only serialize optional fields if they are present
+        if let Some(ref overrides) = self.state_overrides {
+            state.serialize_field("state_overrides", overrides)?;
+        }
+        if let Some(ref prune_addrs) = self.prune_addresses {
+            state.serialize_field("prune_addresses", prune_addrs)?;
+        }
+
         state.end()
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, DeepSizeOf,
+)]
+pub struct AddressStorageLocation {
+    pub key: StoreKey,
+    pub offset: u8,
+}
+
+impl AddressStorageLocation {
+    pub fn new(key: StoreKey, offset: u8) -> Self {
+        Self { key, offset }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default, DeepSizeOf)]
 pub struct TracingResult {
     /// A set of (address, storage slot) pairs representing state that contain a called address.
     /// If any of these storage slots change, the execution path might change.
-    pub retriggers: HashSet<(Address, StoreKey)>,
+    pub retriggers: HashSet<(Address, AddressStorageLocation)>,
     /// A map of all addresses that were called during the trace with a list of storage slots that
     /// were accessed.
     pub accessed_slots: HashMap<Address, HashSet<StoreKey>>,
@@ -490,7 +648,7 @@ pub struct TracingResult {
 
 impl TracingResult {
     pub fn new(
-        retriggers: HashSet<(Address, StoreKey)>,
+        retriggers: HashSet<(Address, AddressStorageLocation)>,
         accessed_slots: HashMap<Address, HashSet<StoreKey>>,
     ) -> Self {
         Self { retriggers, accessed_slots }
@@ -510,7 +668,7 @@ impl TracingResult {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, DeepSizeOf)]
 /// Represents a traced entry point and the results of the tracing operation.
 pub struct TracedEntryPoint {
     /// The combined entry point and tracing params that was traced
@@ -535,6 +693,18 @@ impl TracedEntryPoint {
             .entry_point
             .external_id
             .clone()
+    }
+}
+
+impl std::fmt::Display for TracedEntryPoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "[{}: {} retriggers, {} accessed addresses]",
+            self.entry_point_id(),
+            self.tracing_result.retriggers.len(),
+            self.tracing_result.accessed_slots.len()
+        )
     }
 }
 
@@ -641,7 +811,7 @@ pub mod fixtures {
                         None,
                         Bytes::from_str("0x000001ef").unwrap(),
                     )),
-                    Some(component.id.clone()),
+                    component.id.clone(),
                 )]),
             )]),
         );
@@ -656,14 +826,14 @@ pub mod fixtures {
             )]),
             HashMap::from([(
                 contract_addr.clone(),
-                AccountDelta {
-                    slots: HashMap::from([(
-                        vec![0, 0, 0, 0].into(),
-                        Some(vec![0, 0, 0, 0].into()),
-                    )]),
-                    change: ChangeType::Update,
-                    ..account_delta
-                },
+                AccountDelta::new(
+                    Chain::Ethereum,
+                    contract_addr.clone(),
+                    HashMap::from([(vec![0, 0, 0, 0].into(), Some(vec![0, 0, 0, 0].into()))]),
+                    None,
+                    None,
+                    ChangeType::Update,
+                ),
             )]),
             HashMap::new(),
             HashMap::from([(
@@ -713,7 +883,7 @@ pub mod fixtures {
                         None,
                         Bytes::from_str("0x000001").unwrap(),
                     )),
-                    None,
+                    component.id.clone(),
                 )]),
             )]),
         );
@@ -810,7 +980,10 @@ pub mod fixtures {
         let store_key2 = StoreKey::from(vec![5, 6, 7, 8]);
 
         let mut result1 = TracingResult::new(
-            HashSet::from([(address1.clone(), store_key1.clone())]),
+            HashSet::from([(
+                address1.clone(),
+                AddressStorageLocation::new(store_key1.clone(), 12),
+            )]),
             HashMap::from([
                 (address2.clone(), HashSet::from([store_key1.clone()])),
                 (address3.clone(), HashSet::from([store_key2.clone()])),
@@ -818,7 +991,10 @@ pub mod fixtures {
         );
 
         let result2 = TracingResult::new(
-            HashSet::from([(address3.clone(), store_key2.clone())]),
+            HashSet::from([(
+                address3.clone(),
+                AddressStorageLocation::new(store_key2.clone(), 12),
+            )]),
             HashMap::from([
                 (address1.clone(), HashSet::from([store_key1.clone()])),
                 (address2.clone(), HashSet::from([store_key2.clone()])),
@@ -831,10 +1007,10 @@ pub mod fixtures {
         assert_eq!(result1.retriggers.len(), 2);
         assert!(result1
             .retriggers
-            .contains(&(address1.clone(), store_key1.clone())));
+            .contains(&(address1.clone(), AddressStorageLocation::new(store_key1.clone(), 12))));
         assert!(result1
             .retriggers
-            .contains(&(address3.clone(), store_key2.clone())));
+            .contains(&(address3.clone(), AddressStorageLocation::new(store_key2.clone(), 12))));
 
         // Verify accessed slots were merged
         assert_eq!(result1.accessed_slots.len(), 3);
@@ -855,5 +1031,73 @@ pub mod fixtures {
                 .unwrap(),
             &HashSet::from([store_key1.clone(), store_key2.clone()])
         );
+    }
+
+    #[test]
+    fn test_entry_point_with_tracing_params_display() {
+        use std::str::FromStr;
+
+        let entry_point = EntryPoint::new(
+            "uniswap_v3_pool_swap".to_string(),
+            Address::from_str("0x1234567890123456789012345678901234567890").unwrap(),
+            "swapExactETHForTokens(uint256,address[],address,uint256)".to_string(),
+        );
+
+        let tracing_params = TracingParams::RPCTracer(RPCTracerParams::new(
+            Some(Address::from_str("0x9876543210987654321098765432109876543210").unwrap()),
+            Bytes::from_str("0xabcdef").unwrap(),
+        ));
+
+        let entry_point_with_params = EntryPointWithTracingParams::new(entry_point, tracing_params);
+
+        let display_output = entry_point_with_params.to_string();
+        assert_eq!(display_output, "uniswap_v3_pool_swap [RPC]");
+    }
+
+    #[test]
+    fn test_traced_entry_point_display() {
+        use std::str::FromStr;
+
+        let entry_point = EntryPoint::new(
+            "uniswap_v3_pool_swap".to_string(),
+            Address::from_str("0x1234567890123456789012345678901234567890").unwrap(),
+            "swapExactETHForTokens(uint256,address[],address,uint256)".to_string(),
+        );
+
+        let tracing_params = TracingParams::RPCTracer(RPCTracerParams::new(
+            Some(Address::from_str("0x9876543210987654321098765432109876543210").unwrap()),
+            Bytes::from_str("0xabcdef").unwrap(),
+        ));
+
+        let entry_point_with_params = EntryPointWithTracingParams::new(entry_point, tracing_params);
+
+        // Create tracing result with 2 retriggers and 3 accessed addresses
+        let address1 = Address::from_str("0x1111111111111111111111111111111111111111").unwrap();
+        let address2 = Address::from_str("0x2222222222222222222222222222222222222222").unwrap();
+        let address3 = Address::from_str("0x3333333333333333333333333333333333333333").unwrap();
+
+        let store_key1 = StoreKey::from(vec![1, 2, 3, 4]);
+        let store_key2 = StoreKey::from(vec![5, 6, 7, 8]);
+
+        let tracing_result = TracingResult::new(
+            HashSet::from([
+                (address1.clone(), AddressStorageLocation::new(store_key1.clone(), 0)),
+                (address2.clone(), AddressStorageLocation::new(store_key2.clone(), 12)),
+            ]),
+            HashMap::from([
+                (address1.clone(), HashSet::from([store_key1.clone()])),
+                (address2.clone(), HashSet::from([store_key2.clone()])),
+                (address3.clone(), HashSet::from([store_key1.clone()])),
+            ]),
+        );
+
+        let traced_entry_point = TracedEntryPoint::new(
+            entry_point_with_params,
+            Bytes::from_str("0xabcdef1234567890").unwrap(),
+            tracing_result,
+        );
+
+        let display_output = traced_entry_point.to_string();
+        assert_eq!(display_output, "[uniswap_v3_pool_swap: 2 retriggers, 3 accessed addresses]");
     }
 }

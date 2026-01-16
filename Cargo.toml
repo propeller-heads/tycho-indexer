@@ -10,7 +10,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.77.0"
+version = "0.129.0"
 repository = "https://github.com/propeller-heads/tycho-indexer"
 homepage = "https://www.propellerheads.xyz/tycho"
 documentation = "https://docs.propellerheads.xyz/tycho"
@@ -37,7 +37,7 @@ serde_json = "1.0.120"
 serde = { version = "1.0.204", features = ["rc"] }
 strum = "0.25.0"
 strum_macros = "0.25.2"
-alloy-primitives = { version = "0.6.2", features = ["serde"] }
+alloy = { version = "1.0.41", default-features = false }
 uuid = { version = "1.4.1", features = [
     "serde",
     "v4",
@@ -45,13 +45,14 @@ uuid = { version = "1.4.1", features = [
     "macro-diagnostics",
 ] }
 hex = "0.4.3"
-tycho-common = { path = "./tycho-common", version = "0.77.0" }
-tycho-storage = { path = "./tycho-storage", version = "0.77.0" }
-tycho-ethereum = { path = "./tycho-ethereum", features = ["onchain_data"], version = "0.77.0" }
-tycho-client = { path = "./tycho-client", version = "0.77.0" }
+tycho-common = { path = "./tycho-common", version = "0.129.0" }
+tycho-storage = { path = "./tycho-storage", version = "0.129.0" }
+tycho-ethereum = { path = "./tycho-ethereum", version = "0.129.0" }
+tycho-client = { path = "./tycho-client", version = "0.129.0" }
 futures03 = { version = "0.3.1", package = "futures", features = ["compat"] }
 thiserror = "1"
 tracing = "0.1.37"
+deepsize = "0.2.0"
 async-trait = "0.1.73"
 tokio = { version = "1.27", features = [
     "time",
@@ -68,7 +69,7 @@ utoipa = { version = "4.2.0", features = ["chrono"] }
 diesel = { version = "2.1.0", features = ["postgres", "chrono", "serde_json"] }
 diesel-async = { version = "0.4.1", features = ["postgres", "deadpool"] }
 ethabi = "18.0.0"
-anyhow = "1.0.75"
+anyhow = "1.0.76"
 unicode-segmentation = "1.12.0"
 clap = "4.4.2"
 tracing-appender = "0.2"
@@ -80,3 +81,4 @@ rand = "0.8.5"
 pretty_assertions = "1.4.0"
 rstest = "0.18.2"
 mockall = "0.11.4"
+mockito = "1.1.1"

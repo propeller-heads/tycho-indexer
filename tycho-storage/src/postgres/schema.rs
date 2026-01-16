@@ -196,7 +196,7 @@ diesel::table! {
 }
 
 diesel::table! {
-    debug_protocol_component_has_entry_point_tracing_params (protocol_component_id, entry_point_tracing_params_id) {
+    protocol_component_has_entry_point_tracing_params (protocol_component_id, entry_point_tracing_params_id) {
         protocol_component_id -> Int8,
         entry_point_tracing_params_id -> Int8,
     }
@@ -377,8 +377,8 @@ diesel::joinable!(block -> chain (chain_id));
 diesel::joinable!(component_tvl -> protocol_component (protocol_component_id));
 diesel::joinable!(contract_code -> account (account_id));
 diesel::joinable!(contract_code -> transaction (modify_tx));
-diesel::joinable!(debug_protocol_component_has_entry_point_tracing_params -> entry_point_tracing_params (entry_point_tracing_params_id));
-diesel::joinable!(debug_protocol_component_has_entry_point_tracing_params -> protocol_component (protocol_component_id));
+diesel::joinable!(protocol_component_has_entry_point_tracing_params -> entry_point_tracing_params (entry_point_tracing_params_id));
+diesel::joinable!(protocol_component_has_entry_point_tracing_params -> protocol_component (protocol_component_id));
 diesel::joinable!(entry_point_tracing_params -> entry_point (entry_point_id));
 diesel::joinable!(entry_point_tracing_params_calls_account -> account (account_id));
 diesel::joinable!(entry_point_tracing_params_calls_account -> entry_point_tracing_params (entry_point_tracing_params_id));
@@ -414,8 +414,8 @@ diesel::allow_tables_to_appear_in_same_query!(
     chain,
     component_tvl,
     contract_code,
-    debug_protocol_component_has_entry_point_tracing_params,
     entry_point,
+    protocol_component_has_entry_point_tracing_params,
     entry_point_tracing_params,
     entry_point_tracing_params_calls_account,
     entry_point_tracing_result,

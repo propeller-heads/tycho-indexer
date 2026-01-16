@@ -5,12 +5,10 @@ use std::{
     sync::Arc,
 };
 
-use actix_web::{web, HttpResponse, ResponseError};
+use actix_web::{http::StatusCode, web, HttpResponse, ResponseError};
 use anyhow::Error;
 use chrono::{Duration, Utc};
 use diesel_async::pooled_connection::deadpool;
-use metrics::counter;
-use reqwest::StatusCode;
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
@@ -29,10 +27,12 @@ use tycho_common::{
 };
 
 use crate::{
-    extractor::reorg_buffer::{BlockNumberOrTimestamp, FinalityStatus},
+    extractor::reorg_buffer::{BlockNumberOrTimestamp, CommitStatus},
     services::{
         cache::RpcCache,
         deltas_buffer::{PendingDeltasBuffer, PendingDeltasError},
+        middleware::{RequestPaginationValidation, ValidateFilter},
+        ServerRpcConfig,
     },
 };
 
@@ -50,8 +50,14 @@ pub enum RpcError {
     #[error("Failed to apply pending deltas: {0}")]
     DeltasError(#[from] PendingDeltasError),
 
+    #[error("Page size must be less than or equal to {0}.")]
+    Pagination(usize),
+
     #[error("Unknown error: {0}")]
     Unknown(String),
+
+    #[error("Minimum filtering requirements for {0} not met: {1}")]
+    MinimumFilterNotMet(String, String),
 }
 
 impl From<anyhow::Error> for RpcError {
@@ -61,23 +67,28 @@ impl From<anyhow::Error> for RpcError {
 }
 
 impl ResponseError for RpcError {
-    fn error_response(&self) -> HttpResponse {
-        match self {
-            RpcError::Storage(e) => HttpResponse::NotFound().body(e.to_string()),
-            RpcError::Parse(e) => HttpResponse::BadRequest().body(e.to_string()),
-            RpcError::Connection(e) => HttpResponse::InternalServerError().body(e.to_string()),
-            RpcError::DeltasError(e) => HttpResponse::InternalServerError().body(e.to_string()),
-            RpcError::Unknown(e) => HttpResponse::InternalServerError().body(e.to_string()),
-        }
-    }
-
     fn status_code(&self) -> StatusCode {
         match self {
             RpcError::Storage(_) => StatusCode::NOT_FOUND,
             RpcError::Parse(_) => StatusCode::BAD_REQUEST,
             RpcError::Connection(_) => StatusCode::INTERNAL_SERVER_ERROR,
             RpcError::DeltasError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            RpcError::Pagination(_) => StatusCode::BAD_REQUEST,
             RpcError::Unknown(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            RpcError::MinimumFilterNotMet(_, _) => StatusCode::BAD_REQUEST,
+        }
+    }
+
+    fn error_response(&self) -> HttpResponse {
+        match self {
+            RpcError::Storage(e) => HttpResponse::NotFound().body(e.to_string()),
+            RpcError::Parse(e) => HttpResponse::BadRequest().body(e.to_string()),
+            RpcError::Connection(e) => HttpResponse::InternalServerError().body(e.to_string()),
+            RpcError::DeltasError(e) => HttpResponse::InternalServerError().body(e.to_string()),
+            RpcError::Pagination(e) => HttpResponse::BadRequest()
+                .body(format!("Page size must be less than or equal to {e}.")),
+            RpcError::Unknown(e) => HttpResponse::InternalServerError().body(e.to_string()),
+            RpcError::MinimumFilterNotMet(_, e) => HttpResponse::BadRequest().body(e.to_owned()),
         }
     }
 }
@@ -98,6 +109,7 @@ pub struct RpcHandler<G, T> {
         RpcCache<dto::TracedEntryPointRequestBody, dto::TracedEntryPointRequestResponse>,
     #[allow(dead_code)]
     tracer: T,
+    rpc_config: ServerRpcConfig,
 }
 
 impl<G, T> RpcHandler<G, T>
@@ -109,34 +121,40 @@ where
         db_gateway: G,
         pending_deltas: Option<Arc<dyn PendingDeltasBuffer + Send + Sync>>,
         tracer: T,
+        rpc_config: ServerRpcConfig,
     ) -> Self {
+        const ONE_MB: u64 = 1_024 * 1_024;
+        const HUNDRED_MB: u64 = ONE_MB * 100;
+        const ONE_GB: u64 = ONE_MB * 1_024;
+
         let token_cache = RpcCache::<dto::TokensRequestBody, dto::TokensRequestResponse>::new(
             "token",
-            50,
+            ONE_GB,
             7 * 60,
         );
 
+        // Create contract storage cache with a weigher to limit memory usage
         let contract_storage_cache =
             RpcCache::<dto::StateRequestBody, dto::StateRequestResponse>::new(
                 "contract_storage",
-                50,
+                ONE_GB,
                 7 * 60,
             );
 
         let protocol_state_cache = RpcCache::<
             dto::ProtocolStateRequestBody,
             dto::ProtocolStateRequestResponse,
-        >::new("protocol_state", 50, 7 * 60);
+        >::new("protocol_state", HUNDRED_MB, 7 * 60);
 
         let component_cache = RpcCache::<
             dto::ProtocolComponentsRequestBody,
             dto::ProtocolComponentRequestResponse,
-        >::new("protocol_components", 500, 7 * 60);
+        >::new("protocol_components", ONE_GB, 7 * 60);
 
         let traced_entry_point_cache = RpcCache::<
             dto::TracedEntryPointRequestBody,
             dto::TracedEntryPointRequestResponse,
-        >::new("traced_entry_points", 500, 7 * 60);
+        >::new("traced_entry_points", HUNDRED_MB, 7 * 60);
 
         Self {
             db_gateway,
@@ -147,6 +165,7 @@ where
             component_cache,
             traced_entry_point_cache,
             tracer,
+            rpc_config,
         }
     }
 
@@ -154,8 +173,17 @@ where
     async fn get_contract_state(
         &self,
         request: &dto::StateRequestBody,
-    ) -> Result<dto::StateRequestResponse, RpcError> {
-        info!(?request, "Getting contract state.");
+    ) -> Result<Arc<dto::StateRequestResponse>, RpcError> {
+        if let Some(ref contract_ids) = request.contract_ids {
+            info!(
+                n_contract_ids = contract_ids.len(),
+                first_contract_id = ?contract_ids.first(),
+                last_contract_id = ?contract_ids.last(),
+                "Getting contract state"
+            );
+        } else {
+            info!("Getting contract state (all contracts)");
+        }
         self.contract_storage_cache
             .get(request.clone(), |r| async {
                 self.get_contract_state_inner(r)
@@ -179,7 +207,7 @@ where
 
         // Get the contract IDs from the request
         let addresses = request.contract_ids.clone();
-        debug!(?addresses, "Getting contract states.");
+        trace!(?addresses, "Getting contract states.");
         let addresses = addresses.as_deref();
 
         // Apply pagination to the contract addresses. This is done so that we can determine which
@@ -245,12 +273,12 @@ where
     /// Calculates versions for state retrieval.
     ///
     /// This method will calculate:
-    /// - The finalized version to be retrieved from the database.
+    /// - The committed version to be retrieved from the database.
     /// - An "ordered" version to be retrieved from the pending deltas buffer.
     ///
     /// To calculate the finalized version, it queries the pending deltas buffer for the requested
-    /// version's finality. If the version is already finalized, it can be simply passed on to
-    /// the db, no deltas version is required. In case it is an unfinalized version, we downgrade
+    /// version's commit status. If the version is already committed, it can be simply passed on to
+    /// the db, no deltas version is required. In case it is an uncommitted version, we downgrade
     /// the db version to the latest available version and will later apply any pending
     /// changes from the buffer on top of the retrieved version. We also return a deltas
     /// version which must be either block number or timestamps based.
@@ -303,40 +331,40 @@ where
                     .number,
             ),
         };
-        let request_version_finality =
+        let request_version_commit_status =
             self.pending_deltas
                 .as_ref()
-                .map_or(FinalityStatus::Finalized, |pending| {
+                .map_or(CommitStatus::Committed, |pending| {
                     pending
-                        .get_block_finality(ordered_version, protocol_system)
+                        .get_block_commit_status(ordered_version, protocol_system)
                         .ok()
-                        .and_then(|finality| finality)
+                        .flatten()
                         .unwrap_or_else(|| {
                             warn!(
                                 ?ordered_version,
                                 ?protocol_system,
                                 "No finality found for version."
                             );
-                            FinalityStatus::Finalized
+                            CommitStatus::Committed
                         })
                 });
 
         debug!(
-            ?request_version_finality,
+            ?request_version_commit_status,
             ?request_version,
             ?ordered_version,
             "Version finality calculated!"
         );
 
-        match request_version_finality {
-            FinalityStatus::Finalized => {
+        match request_version_commit_status {
+            CommitStatus::Committed => {
                 Ok((Version(request_version.clone(), VersionKind::Last), None))
             }
-            FinalityStatus::Unfinalized => Ok((
+            CommitStatus::Uncommitted => Ok((
                 Version(BlockOrTimestamp::Block(BlockIdentifier::Latest(chain)), VersionKind::Last),
                 Some(ordered_version),
             )),
-            FinalityStatus::Unseen => {
+            CommitStatus::Unseen => {
                 match request_version {
                     BlockOrTimestamp::Timestamp(_) => {
                         // If the request is based on a timestamp, return the latest valid version
@@ -364,8 +392,17 @@ where
     async fn get_protocol_state(
         &self,
         request: &dto::ProtocolStateRequestBody,
-    ) -> Result<dto::ProtocolStateRequestResponse, RpcError> {
-        debug!(?request, "Getting protocol state.");
+    ) -> Result<Arc<dto::ProtocolStateRequestResponse>, RpcError> {
+        if let Some(ref component_ids) = request.protocol_ids {
+            info!(
+                n_component_ids = component_ids.len(),
+                first_component_id = ?component_ids.first(),
+                last_component_id = ?component_ids.last(),
+                "Getting protocol state"
+            );
+        } else {
+            info!("Getting protocol state (all protocols)");
+        }
         self.protocol_state_cache
             .get(request.clone(), |r| async {
                 self.get_protocol_state_inner(r)
@@ -389,7 +426,6 @@ where
 
         // Get the protocol IDs from the request
         let protocol_ids = request.protocol_ids.clone();
-        debug!(?protocol_ids, "Getting protocol states.");
         let ids = protocol_ids.as_deref();
 
         // Apply pagination to the protocol ids. This is done so that we can determine which ids
@@ -403,7 +439,6 @@ where
                 ids.iter()
                     .skip(pagination_params.offset() as usize)
                     .take(pagination_params.page_size as usize)
-                    .cloned()
                     .map(|s| s.to_string())
                     .collect(),
                 ids.len() as i64,
@@ -520,7 +555,16 @@ where
         &self,
         request: &dto::ComponentTvlRequestBody,
     ) -> Result<dto::ComponentTvlRequestResponse, RpcError> {
-        info!(?request, "Getting protocol component tvl.");
+        if let Some(ref component_ids) = request.component_ids {
+            info!(
+                n_component_ids = component_ids.len(),
+                first_component_id = ?component_ids.first(),
+                last_component_id = ?component_ids.last(),
+                "Getting protocol component tvl"
+            );
+        } else {
+            info!("Getting protocol component tvl (all components)");
+        }
         let chain = request.chain.into();
         let pagination_params: PaginationParams = (&request.pagination).into();
         let ids_strs: Option<Vec<&str>> = request
@@ -560,7 +604,7 @@ where
     async fn get_tokens(
         &self,
         request: &dto::TokensRequestBody,
-    ) -> Result<dto::TokensRequestResponse, RpcError> {
+    ) -> Result<Arc<dto::TokensRequestResponse>, RpcError> {
         let response = self
             .token_cache
             .get(request.clone(), |r: dto::TokensRequestBody| async {
@@ -640,8 +684,17 @@ where
     async fn get_protocol_components(
         &self,
         request: &dto::ProtocolComponentsRequestBody,
-    ) -> Result<dto::ProtocolComponentRequestResponse, RpcError> {
-        info!(?request, "Getting protocol components.");
+    ) -> Result<Arc<dto::ProtocolComponentRequestResponse>, RpcError> {
+        if let Some(ref component_ids) = request.component_ids {
+            info!(
+                n_component_ids = component_ids.len(),
+                first_component_id = ?component_ids.first(),
+                last_component_id = ?component_ids.last(),
+                "Getting protocol components"
+            );
+        } else {
+            info!("Getting protocol components (all components)");
+        }
         self.component_cache
             .get(request.clone(), |r| async {
                 self.get_protocol_components_inner(r)
@@ -790,8 +843,17 @@ where
     async fn get_traced_entry_points(
         &self,
         request: &dto::TracedEntryPointRequestBody,
-    ) -> Result<dto::TracedEntryPointRequestResponse, RpcError> {
-        info!(?request, "Getting traced entry points.");
+    ) -> Result<Arc<dto::TracedEntryPointRequestResponse>, RpcError> {
+        if let Some(ref component_ids) = request.component_ids {
+            info!(
+                n_component_ids = component_ids.len(),
+                first_component_id = ?component_ids.first(),
+                last_component_id = ?component_ids.last(),
+                "Getting traced entry points"
+            );
+        } else {
+            info!("Getting traced entry points (all components)");
+        }
 
         self.traced_entry_point_cache
             .get(request.clone(), |r| async {
@@ -895,8 +957,8 @@ where
                         ));
                     } else {
                         warn!(
-                            ?entry_point_id,
-                            ?tracing_param,
+                            %entry_point_id,
+                            %tracing_param,
                             "No tracing results found for entry point with params."
                         );
                     }
@@ -927,10 +989,8 @@ where
     ) -> Result<dto::AddEntryPointRequestResponse, RpcError> {
         let tracing_result = self.trace_entry_points(request).await?;
         let mut entry_points: HashMap<ComponentId, HashSet<EntryPoint>> = HashMap::new();
-        let mut entry_points_params: HashMap<
-            EntryPointId,
-            HashSet<(TracingParams, Option<ComponentId>)>,
-        > = HashMap::new();
+        let mut entry_points_params: HashMap<EntryPointId, HashSet<(TracingParams, ComponentId)>> =
+            HashMap::new();
         for (component_id, components_and_params) in &request.entry_points_with_tracing_data {
             for params in components_and_params {
                 entry_points
@@ -940,7 +1000,7 @@ where
                 entry_points_params
                     .entry(params.entry_point.external_id.clone())
                     .or_default()
-                    .insert((params.params.clone().into(), Some(component_id.into())));
+                    .insert((params.params.clone().into(), component_id.into()));
             }
         }
         self.db_gateway
@@ -1003,6 +1063,9 @@ where
             .tracer
             .trace(request.block_hash.clone(), entry_points_with_params)
             .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>() //TODO: Ideally we would want to return each error separately and not just a single
+            // error for the whole batch
             .map_err(|e| RpcError::Unknown(format!("Error while tracing entry points: {e:?}")))?;
         Ok(trace_results)
     }
@@ -1028,24 +1091,21 @@ where
          ("apiKey" = [])
     ),
 )]
+#[instrument(skip_all, fields(page, page_size, protocol_system))]
 pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
+    req: actix_web::HttpRequest,
     body: web::Json<dto::StateRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
-) -> HttpResponse {
+) -> Result<HttpResponse, RpcError> {
     // Note - filtering by protocol system is not supported on this endpoint. This is due to the
     // complexity of paginating this endpoint with the current design.
 
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
-    tracing::Span::current().record("page.size", body.pagination.page_size);
-    tracing::Span::current().record("protocol.system", &body.protocol_system);
-    counter!("rpc_requests", "endpoint" => "contract_state").increment(1);
+    tracing::Span::current().record("page_size", body.pagination.page_size);
+    tracing::Span::current().record("protocol_system", &body.protocol_system);
 
-    if body.pagination.page_size > 100 {
-        counter!("rpc_requests_failed", "endpoint" => "contract_state", "status" => "400")
-            .increment(1);
-        return HttpResponse::BadRequest().body("Page size must be less than or equal to 100.");
-    }
+    body.validate_pagination(&req)?;
 
     // Call the handler to get the state
     let response = handler
@@ -1054,13 +1114,10 @@ pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
         .await;
 
     match response {
-        Ok(state) => HttpResponse::Ok().json(state),
+        Ok(state) => Ok(HttpResponse::Ok().json(state)),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting contract state.");
-            let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "contract_state", "status" => status)
-                .increment(1);
-            HttpResponse::from_error(err)
+            Err(err)
         }
     }
 }
@@ -1080,19 +1137,18 @@ pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
          ("apiKey" = [])
     ),
 )]
+#[instrument(skip_all, fields(page, page_size))]
 pub async fn tokens<G: Gateway, T: EntryPointTracer>(
+    req: actix_web::HttpRequest,
     body: web::Json<dto::TokensRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
-) -> HttpResponse {
+) -> Result<HttpResponse, RpcError> {
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
-    tracing::Span::current().record("page.size", body.pagination.page_size);
-    counter!("rpc_requests", "endpoint" => "tokens").increment(1);
+    tracing::Span::current().record("page_size", body.pagination.page_size);
 
-    if body.pagination.page_size > 3000 {
-        counter!("rpc_requests_failed", "endpoint" => "tokens", "status" => "400").increment(1);
-        return HttpResponse::BadRequest().body("Page size must be less than or equal to 3000.");
-    }
+    body.validate_pagination(&req)?;
+    body.validate_filter(&handler.rpc_config)?;
 
     // Call the handler to get tokens
     let response = handler
@@ -1101,13 +1157,10 @@ pub async fn tokens<G: Gateway, T: EntryPointTracer>(
         .await;
 
     match response {
-        Ok(state) => HttpResponse::Ok().json(state),
+        Ok(state) => Ok(HttpResponse::Ok().json(state)),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting tokens.");
-            let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "tokens", "status" => status)
-                .increment(1);
-            HttpResponse::from_error(err)
+            Err(err)
         }
     }
 }
@@ -1127,35 +1180,31 @@ pub async fn tokens<G: Gateway, T: EntryPointTracer>(
          ("apiKey" = [])
     ),
 )]
+#[instrument(skip_all, fields(page, page_size, protocol_system))]
 pub async fn protocol_components<G: Gateway, T: EntryPointTracer>(
+    req: actix_web::HttpRequest,
     body: web::Json<dto::ProtocolComponentsRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
-) -> HttpResponse {
+) -> Result<HttpResponse, RpcError> {
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
-    tracing::Span::current().record("page.size", body.pagination.page_size);
-    tracing::Span::current().record("protocol.system", &body.protocol_system);
-    counter!("rpc_requests", "endpoint" => "protocol_components").increment(1);
+    tracing::Span::current().record("page_size", body.pagination.page_size);
+    tracing::Span::current().record("protocol_system", &body.protocol_system);
 
-    if body.pagination.page_size > 500 {
-        counter!("rpc_requests_failed", "endpoint" => "protocol_components", "status" => "400")
-            .increment(1);
-        return HttpResponse::BadRequest().body("Page size must be less than or equal to 500.");
-    }
+    body.validate_pagination(&req)?;
+    body.validate_filter(&handler.rpc_config)?;
 
-    // Call the handler to get tokens
+    // Call the handler to get protocol components
     let response = handler
         .into_inner()
         .get_protocol_components(&body)
         .await;
 
     match response {
-        Ok(state) => HttpResponse::Ok().json(state),
+        Ok(state) => Ok(HttpResponse::Ok().json(state)),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting tokens.");
-            let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "protocol_components", "status" => status).increment(1);
-            HttpResponse::from_error(err)
+            Err(err)
         }
     }
 }
@@ -1174,21 +1223,18 @@ pub async fn protocol_components<G: Gateway, T: EntryPointTracer>(
          ("apiKey" = [])
     ),
 )]
+#[instrument(skip_all, fields(page, page_size, protocol_system))]
 pub async fn protocol_state<G: Gateway, T: EntryPointTracer>(
+    req: actix_web::HttpRequest,
     body: web::Json<dto::ProtocolStateRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
-) -> HttpResponse {
+) -> Result<HttpResponse, RpcError> {
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
-    tracing::Span::current().record("page.size", body.pagination.page_size);
-    tracing::Span::current().record("protocol.system", &body.protocol_system);
-    counter!("rpc_requests", "endpoint" => "protocol_state").increment(1);
+    tracing::Span::current().record("page_size", body.pagination.page_size);
+    tracing::Span::current().record("protocol_system", &body.protocol_system);
 
-    if body.pagination.page_size > 100 {
-        counter!("rpc_requests_failed", "endpoint" => "protocol_state", "status" => "400")
-            .increment(1);
-        return HttpResponse::BadRequest().body("Page size must be less than or equal to 100.");
-    }
+    body.validate_pagination(&req)?;
 
     // Call the handler to get protocol states
     let response = handler
@@ -1197,13 +1243,10 @@ pub async fn protocol_state<G: Gateway, T: EntryPointTracer>(
         .await;
 
     match response {
-        Ok(state) => HttpResponse::Ok().json(state),
+        Ok(state) => Ok(HttpResponse::Ok().json(state)),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting protocol states.");
-            let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "protocol_state", "status" => status)
-                .increment(1);
-            HttpResponse::from_error(err)
+            Err(err)
         }
     }
 }
@@ -1222,20 +1265,17 @@ pub async fn protocol_state<G: Gateway, T: EntryPointTracer>(
         ("apiKey" = [])
     ),
 )]
+#[instrument(skip_all, fields(page, page_size))]
 pub async fn protocol_systems<G: Gateway, T: EntryPointTracer>(
+    req: actix_web::HttpRequest,
     body: web::Json<dto::ProtocolSystemsRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
-) -> HttpResponse {
+) -> Result<HttpResponse, RpcError> {
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
-    tracing::Span::current().record("page.size", body.pagination.page_size);
-    counter!("rpc_requests", "endpoint" => "protocol_systems").increment(1);
+    tracing::Span::current().record("page_size", body.pagination.page_size);
 
-    if body.pagination.page_size > 100 {
-        counter!("rpc_requests_failed", "endpoint" => "protocol_systems", "status" => "400")
-            .increment(1);
-        return HttpResponse::BadRequest().body("Page size must be less than or equal to 100.");
-    }
+    body.validate_pagination(&req)?;
 
     // Call the handler to get protocol systems
     let response = handler
@@ -1244,13 +1284,10 @@ pub async fn protocol_systems<G: Gateway, T: EntryPointTracer>(
         .await;
 
     match response {
-        Ok(systems) => HttpResponse::Ok().json(systems),
+        Ok(state) => Ok(HttpResponse::Ok().json(state)),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting protocol systems.");
-            let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "protocol_systems", "status" => status)
-                .increment(1);
-            HttpResponse::from_error(err)
+            Err(err)
         }
     }
 }
@@ -1262,21 +1299,24 @@ pub async fn protocol_systems<G: Gateway, T: EntryPointTracer>(
     post,
     path = "/v1/component_tvl",
     responses(
-        (status = 200, description = "OK", body = ProtocolComponentTvlRequestResponse),
+        (status = 200, description = "OK", body = ComponentTvlRequestResponse),
     ),
-    request_body = ProtocolComponentTvlRequestBody,
+    request_body = ComponentTvlRequestBody,
     security(
          ("apiKey" = [])
     ),
 )]
+#[instrument(skip_all, fields(page, page_size))]
 pub async fn component_tvl<G: Gateway, T: EntryPointTracer>(
+    req: actix_web::HttpRequest,
     body: web::Json<dto::ComponentTvlRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
-) -> HttpResponse {
+) -> Result<HttpResponse, RpcError> {
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
-    tracing::Span::current().record("page.size", body.pagination.page_size);
-    counter!("rpc_requests", "endpoint" => "component_tvl").increment(1);
+    tracing::Span::current().record("page_size", body.pagination.page_size);
+
+    body.validate_pagination(&req)?;
 
     // Call the handler to get component tvl
     let response = handler
@@ -1285,13 +1325,10 @@ pub async fn component_tvl<G: Gateway, T: EntryPointTracer>(
         .await;
 
     match response {
-        Ok(systems) => HttpResponse::Ok().json(systems),
+        Ok(state) => Ok(HttpResponse::Ok().json(state)),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting component tvl.");
-            let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "component_tvl", "status" => status)
-                .increment(1);
-            HttpResponse::from_error(err)
+            Err(err)
         }
     }
 }
@@ -1310,20 +1347,17 @@ pub async fn component_tvl<G: Gateway, T: EntryPointTracer>(
     ("apiKey" = [])
     ),
 )]
+#[instrument(skip_all, fields(page, page_size))]
 pub async fn traced_entry_points<G: Gateway, T: EntryPointTracer>(
+    req: actix_web::HttpRequest,
     body: web::Json<dto::TracedEntryPointRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
-) -> HttpResponse {
+) -> Result<HttpResponse, RpcError> {
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
-    tracing::Span::current().record("page.size", body.pagination.page_size);
-    counter!("rpc_requests", "endpoint" => "traced_entry_points").increment(1);
+    tracing::Span::current().record("page_size", body.pagination.page_size);
 
-    if body.pagination.page_size > 100 {
-        counter!("rpc_requests_failed", "endpoint" => "traced_entry_points", "status" => "400")
-            .increment(1);
-        return HttpResponse::BadRequest().body("Page size must be less than or equal to 100.");
-    }
+    body.validate_pagination(&req)?;
 
     // Call the handler to get traced entry points
     let response = handler
@@ -1332,13 +1366,10 @@ pub async fn traced_entry_points<G: Gateway, T: EntryPointTracer>(
         .await;
 
     match response {
-        Ok(entry_points) => HttpResponse::Ok().json(entry_points),
+        Ok(state) => Ok(HttpResponse::Ok().json(state)),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting traced entry points.");
-            let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "traced_entry_points", "status" => status)
-                .increment(1);
-            HttpResponse::from_error(err)
+            Err(err)
         }
     }
 }
@@ -1357,13 +1388,11 @@ pub async fn traced_entry_points<G: Gateway, T: EntryPointTracer>(
     ("apiKey" = [])
     ),
 )]
+#[instrument(skip_all)]
 pub async fn add_entry_points<G: Gateway, T: EntryPointTracer>(
     body: web::Json<dto::AddEntryPointRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
-) -> HttpResponse {
-    // Tracing and metrics
-    counter!("rpc_requests", "endpoint" => "add_entry_points").increment(1);
-
+) -> Result<HttpResponse, RpcError> {
     // Call the handler to add entry points
     let response = handler
         .into_inner()
@@ -1371,13 +1400,10 @@ pub async fn add_entry_points<G: Gateway, T: EntryPointTracer>(
         .await;
 
     match response {
-        Ok(add_entry_points_result) => HttpResponse::Ok().json(add_entry_points_result),
+        Ok(state) => Ok(HttpResponse::Ok().json(state)),
         Err(err) => {
             error!(error = %err, ?body, "Error while adding entry points.");
-            let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "add_entry_points", "status" => status)
-                .increment(1);
-            HttpResponse::from_error(err)
+            Err(err)
         }
     }
 }
@@ -1395,24 +1421,25 @@ pub async fn add_entry_points<G: Gateway, T: EntryPointTracer>(
          ("apiKey" = [])
     )
 )]
-pub async fn health() -> HttpResponse {
-    counter!("rpc_requests", "endpoint" => "health").increment(1);
-    HttpResponse::Ok().json(dto::Health::Ready)
+pub async fn health() -> Result<HttpResponse, RpcError> {
+    Ok(HttpResponse::Ok().json(dto::Health::Ready))
 }
 
 #[cfg(test)]
 mod tests {
     use std::{collections::HashMap, env, str::FromStr};
 
-    use actix_web::test;
+    use actix_web::{test, App};
     use chrono::NaiveDateTime;
     use mockall::{mock, predicate::eq};
+    use rstest::rstest;
     use tycho_common::{
-        keccak256,
+        dto, keccak256,
         models::{
+            blockchain,
             blockchain::{
-                EntryPoint, EntryPointWithTracingParams, RPCTracerParams, TracingParams,
-                TracingResult,
+                AddressStorageLocation, EntryPoint, EntryPointWithTracingParams, RPCTracerParams,
+                TracingParams, TracingResult,
             },
             contract::Account,
             protocol::{ProtocolComponent, ProtocolComponentState},
@@ -1422,7 +1449,9 @@ mod tests {
         storage::WithTotal,
         traits::MockEntryPointTracer,
     };
-    use tycho_ethereum::entrypoint_tracer::tracer::EVMEntrypointService;
+    use tycho_ethereum::{
+        rpc::EthereumRpcClient, services::entrypoint_tracer::tracer::EVMEntrypointService,
+    };
 
     use super::*;
     use crate::testing::{evm_contract_slots, MockGateway};
@@ -1457,11 +1486,11 @@ mod tests {
                 min_tvl: Option<f64>,
             ) -> Result<Vec<ProtocolComponent>, PendingDeltasError>;
 
-            fn get_block_finality<'a>(
+            fn get_block_commit_status<'a>(
                 &self,
                 version: BlockNumberOrTimestamp,
                 protocol_system: &'a str,
-            ) -> Result<Option<FinalityStatus>, PendingDeltasError>;
+            ) -> Result<Option<CommitStatus>, PendingDeltasError>;
 
             fn search_block<'a>(
                 &self,
@@ -1629,11 +1658,15 @@ mod tests {
                 }
             });
         mock_buffer
-            .expect_get_block_finality()
-            .return_once(|_, _| Ok(Some(FinalityStatus::Unfinalized)));
+            .expect_get_block_commit_status()
+            .return_once(|_, _| Ok(Some(CommitStatus::Uncommitted)));
 
-        let req_handler =
-            RpcHandler::new(gw, Some(Arc::new(mock_buffer)), MockEntryPointTracer::new());
+        let req_handler = RpcHandler::new(
+            gw,
+            Some(Arc::new(mock_buffer)),
+            MockEntryPointTracer::new(),
+            ServerRpcConfig::new(),
+        );
 
         let request = dto::StateRequestBody {
             contract_ids: Some(vec![
@@ -1660,7 +1693,7 @@ mod tests {
     #[allow(clippy::type_complexity)]
     fn normalize_tracing_result(
         result: &dto::TracingResult,
-    ) -> (Vec<(Bytes, Bytes)>, Vec<(Bytes, Vec<Bytes>)>) {
+    ) -> (Vec<(Bytes, dto::AddressStorageLocation)>, Vec<(Bytes, Vec<Bytes>)>) {
         let mut retriggers: Vec<_> = result
             .retriggers
             .iter()
@@ -1700,7 +1733,7 @@ mod tests {
         Vec<dto::EntryPointWithTracingParams>,
         Vec<TracedEntryPoint>,
         HashMap<ComponentId, HashSet<EntryPoint>>,
-        HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+        HashMap<EntryPointId, HashSet<(TracingParams, ComponentId)>>,
         Vec<(dto::EntryPointWithTracingParams, dto::TracingResult)>,
     ) {
         let entry_points = [
@@ -1719,10 +1752,14 @@ mod tests {
             dto::TracingParams::RPCTracer(dto::RPCTracerParams {
                 caller: None,
                 calldata: Bytes::from(&keccak256("getRate()").to_vec()[0..4]),
+                state_overrides: None,
+                prune_addresses: None,
             }),
             dto::TracingParams::RPCTracer(dto::RPCTracerParams {
                 caller: None,
                 calldata: Bytes::from(&keccak256("getRate()").to_vec()[0..4]),
+                state_overrides: None,
+                prune_addresses: None,
             }),
         ];
         let entry_points_with_tracing_params = vec![
@@ -1743,11 +1780,11 @@ mod tests {
                     HashSet::from([
                     (
                         Bytes::from_str("0x7bc3485026ac48b6cf9baf0a377477fff5703af8").unwrap(),
-                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                        AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                     ),
                     (
                         Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
-                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                        AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                     ),
                 ]),
                 HashMap::from([
@@ -1773,11 +1810,11 @@ mod tests {
                     HashSet::from([
                         (
                         Bytes::from_str("0xd4fa2d31b7968e448877f69a96de69f5de8cd23e").unwrap(),
-                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                        AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                     ),
                     (
                         Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
-                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                        AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                     ),
                     ]),
                     HashMap::from([
@@ -1805,15 +1842,15 @@ mod tests {
 
         let expected_inserted_tracing_params: HashMap<
             EntryPointId,
-            HashSet<(TracingParams, Option<ComponentId>)>,
+            HashSet<(TracingParams, ComponentId)>,
         > = HashMap::from([
             (
                 entry_point_ids[0].clone(),
-                HashSet::from([(tracing_params[0].clone().into(), Some(component_id.clone()))]),
+                HashSet::from([(tracing_params[0].clone().into(), component_id.clone())]),
             ),
             (
                 entry_point_ids[1].clone(),
-                HashSet::from([(tracing_params[1].clone().into(), Some(component_id.clone()))]),
+                HashSet::from([(tracing_params[1].clone().into(), component_id.clone())]),
             ),
         ]);
 
@@ -1846,7 +1883,7 @@ mod tests {
         expected_inserted_entry_points: HashMap<ComponentId, HashSet<EntryPoint>>,
         expected_inserted_tracing_params: HashMap<
             EntryPointId,
-            HashSet<(TracingParams, Option<ComponentId>)>,
+            HashSet<(TracingParams, ComponentId)>,
         >,
         expected_upserted_tracing_results: Vec<TracedEntryPoint>,
     ) -> MockGateway {
@@ -1918,7 +1955,13 @@ mod tests {
                     .map(EntryPointWithTracingParams::from)
                     .collect::<Vec<_>>()),
             )
-            .return_once(move |_, _| Ok(tracing_results.clone()));
+            .return_once(move |_, _| {
+                tracing_results
+                    .clone()
+                    .into_iter()
+                    .map(Ok)
+                    .collect()
+            });
 
         let gw = mock_gateway_add_entry_points(
             expected_inserted_entry_points,
@@ -1926,7 +1969,7 @@ mod tests {
             expected_upserted_tracing_results,
         );
 
-        let req_handler = RpcHandler::new(gw, None, mock_entrypoint_tracer);
+        let req_handler = RpcHandler::new(gw, None, mock_entrypoint_tracer, ServerRpcConfig::new());
         let response = req_handler
             .add_entry_points(&req_body)
             .await
@@ -1957,7 +2000,8 @@ mod tests {
     async fn test_add_entry_points_integration() {
         // Tests the RPC integration with the tracer. The DB writing is still mocked, however.
         let url = env::var("RPC_URL").expect("RPC_URL is not set");
-        let tracer = EVMEntrypointService::try_from_url(&url).unwrap();
+        let rpc = EthereumRpcClient::new(&url).expect("RPC client is not configured");
+        let tracer = EVMEntrypointService::new(&rpc);
 
         let block_hash =
             Bytes::from_str("0x354c90a0a98912aff15b044bdff6ce3d4ace63a6fc5ac006ce53c8737d425ab2")
@@ -1999,7 +2043,7 @@ mod tests {
             expected_upserted_tracing_results,
         );
 
-        let req_handler = RpcHandler::new(gw, None, tracer);
+        let req_handler = RpcHandler::new(gw, None, tracer, ServerRpcConfig::new());
         let response = req_handler
             .add_entry_points(&req_body)
             .await
@@ -2048,10 +2092,14 @@ mod tests {
         let tracing_params_a = TracingParams::RPCTracer(RPCTracerParams {
             caller: Some(Bytes::from("0x000000000000000000000000000000000000000a")),
             calldata: Bytes::from("0x000000000000000000000000000000000000000b"),
+            state_overrides: None,
+            prune_addresses: None,
         });
         let tracing_params_b = TracingParams::RPCTracer(RPCTracerParams {
             caller: Some(Bytes::from("0x000000000000000000000000000000000000000b")),
             calldata: Bytes::from("0x000000000000000000000000000000000000000c"),
+            state_overrides: None,
+            prune_addresses: None,
         });
         let entry_point_with_params_a = EntryPointWithTracingParams {
             entry_point: entry_point_a.clone(),
@@ -2064,7 +2112,10 @@ mod tests {
         let trace_result_a = TracingResult {
             retriggers: HashSet::from([(
                 Bytes::from("0x00000000000000000000000000000000000000aa"),
-                Bytes::from("0x0000000000000000000000000000000000000aaa"),
+                AddressStorageLocation::new(
+                    Bytes::from("0x0000000000000000000000000000000000000aaa"),
+                    12,
+                ),
             )]),
             accessed_slots: HashMap::from([(
                 Bytes::from("0x0000000000000000000000000000000000aaaa"),
@@ -2074,7 +2125,10 @@ mod tests {
         let trace_result_b = TracingResult {
             retriggers: HashSet::from([(
                 Bytes::from("0x00000000000000000000000000000000000000bb"),
-                Bytes::from("0x0000000000000000000000000000000000000bbb"),
+                AddressStorageLocation::new(
+                    Bytes::from("0x0000000000000000000000000000000000000bbb"),
+                    12,
+                ),
             )]),
             accessed_slots: HashMap::from([(
                 Bytes::from("0x0000000000000000000000000000000000bbbb"),
@@ -2108,7 +2162,8 @@ mod tests {
         gw.expect_get_traced_entry_points()
             .return_once(|_| Box::pin(async move { mock_traced_entry_points_response }));
 
-        let req_handler = RpcHandler::new(gw, None, MockEntryPointTracer::new());
+        let req_handler =
+            RpcHandler::new(gw, None, MockEntryPointTracer::new(), ServerRpcConfig::new());
 
         // Request for two protocol components
         let request = dto::TracedEntryPointRequestBody {
@@ -2122,7 +2177,9 @@ mod tests {
         let mut traced_entry_points = req_handler
             .get_traced_entry_points(&request)
             .await
-            .unwrap();
+            .unwrap()
+            .as_ref()
+            .clone();
 
         let expected_rpc_result = HashMap::from([(
             component_id_a.clone(),
@@ -2183,7 +2240,9 @@ mod tests {
         let mut traced_entry_points_second_request = req_handler
             .get_traced_entry_points(&request)
             .await
-            .unwrap();
+            .unwrap()
+            .as_ref()
+            .clone();
 
         // One protocol component returned
         assert_eq!(
@@ -2247,10 +2306,14 @@ mod tests {
         let tracing_params_a = TracingParams::RPCTracer(RPCTracerParams {
             caller: Some(Bytes::from("0x000000000000000000000000000000000000000a")),
             calldata: Bytes::from("0x000000000000000000000000000000000000000b"),
+            state_overrides: None,
+            prune_addresses: None,
         });
         let tracing_params_b = TracingParams::RPCTracer(RPCTracerParams {
             caller: Some(Bytes::from("0x000000000000000000000000000000000000000b")),
             calldata: Bytes::from("0x000000000000000000000000000000000000000c"),
+            state_overrides: None,
+            prune_addresses: None,
         });
         let entry_point_with_params_a = EntryPointWithTracingParams {
             entry_point: entry_point_a.clone(),
@@ -2263,7 +2326,10 @@ mod tests {
         let trace_result_a = TracingResult {
             retriggers: HashSet::from([(
                 Bytes::from("0x00000000000000000000000000000000000000aa"),
-                Bytes::from("0x0000000000000000000000000000000000000aaa"),
+                blockchain::AddressStorageLocation::new(
+                    Bytes::from("0x0000000000000000000000000000000000000aaa"),
+                    0,
+                ),
             )]),
             accessed_slots: HashMap::from([(
                 Bytes::from("0x0000000000000000000000000000000000aaaa"),
@@ -2295,7 +2361,8 @@ mod tests {
         gw.expect_get_traced_entry_points()
             .return_once(|_| Box::pin(async move { mock_traced_entry_points_response }));
 
-        let req_handler = RpcHandler::new(gw, None, MockEntryPointTracer::new());
+        let req_handler =
+            RpcHandler::new(gw, None, MockEntryPointTracer::new(), ServerRpcConfig::new());
 
         let request = dto::TracedEntryPointRequestBody {
             chain: dto::Chain::Ethereum,
@@ -2307,7 +2374,9 @@ mod tests {
         let mut traced_entry_points = req_handler
             .get_traced_entry_points(&request)
             .await
-            .unwrap();
+            .unwrap()
+            .as_ref()
+            .clone();
 
         let expected_rpc_result = HashMap::from([(
             component_id_a.clone(),
@@ -2362,7 +2431,8 @@ mod tests {
         // ensure the gateway is only accessed once - the second request should hit cache
         gw.expect_get_tokens()
             .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
-        let req_handler = RpcHandler::new(gw, None, MockEntryPointTracer::new());
+        let req_handler =
+            RpcHandler::new(gw, None, MockEntryPointTracer::new(), ServerRpcConfig::new());
 
         // request for 2 tokens that are in the DB (WETH and USDC)
         let request = dto::TokensRequestBody {
@@ -2429,11 +2499,15 @@ mod tests {
                 }
             });
         mock_buffer
-            .expect_get_block_finality()
-            .return_once(|_, _| Ok(Some(FinalityStatus::Unfinalized)));
+            .expect_get_block_commit_status()
+            .return_once(|_, _| Ok(Some(CommitStatus::Uncommitted)));
 
-        let req_handler =
-            RpcHandler::new(gw, Some(Arc::new(mock_buffer)), MockEntryPointTracer::new());
+        let req_handler = RpcHandler::new(
+            gw,
+            Some(Arc::new(mock_buffer)),
+            MockEntryPointTracer::new(),
+            ServerRpcConfig::new(),
+        );
 
         let request = dto::ProtocolStateRequestBody {
             protocol_ids: Some(vec!["state1".to_owned(), "state_buff".to_owned()]),
@@ -2514,8 +2588,12 @@ mod tests {
             .expect_get_new_components()
             .return_once(move |_, _, _| Ok(vec![mock_res]));
 
-        let req_handler =
-            RpcHandler::new(gw, Some(Arc::new(mock_buffer)), MockEntryPointTracer::new());
+        let req_handler = RpcHandler::new(
+            gw,
+            Some(Arc::new(mock_buffer)),
+            MockEntryPointTracer::new(),
+            ServerRpcConfig::new(),
+        );
 
         let request = dto::ProtocolComponentsRequestBody {
             protocol_system: "ambient".to_string(),
@@ -2608,8 +2686,12 @@ mod tests {
                 move |_, _, _| Ok(vec![buf_expected1_clone.clone(), buf_expected2_clone.clone()])
             });
 
-        let req_handler =
-            RpcHandler::new(gw, Some(Arc::new(mock_buffer)), MockEntryPointTracer::new());
+        let req_handler = RpcHandler::new(
+            gw,
+            Some(Arc::new(mock_buffer)),
+            MockEntryPointTracer::new(),
+            ServerRpcConfig::new(),
+        );
 
         let request = dto::ProtocolComponentsRequestBody {
             protocol_system: "ambient".to_string(),
@@ -2645,5 +2727,146 @@ mod tests {
         assert_eq!(response2.protocol_components.len(), 1);
         assert_eq!(response2.protocol_components[0], buf_expected2.into());
         assert_eq!(response2.pagination.total, 3);
+    }
+
+    #[rstest]
+    #[case::config_set_no_filter_rejects(Some(1000.0), None, false)]
+    #[case::config_set_below_threshold_rejects(Some(1000.0), Some(500.0), false)]
+    #[case::config_set_above_threshold_accepts(Some(1000.0), Some(1500.0), true)]
+    #[actix_web::test]
+    async fn test_protocol_components_endpoint_rejects_invalid_filters(
+        #[case] min_tvl: Option<f64>,
+        #[case] tvl_gt: Option<f64>,
+        #[case] should_pass: bool,
+    ) {
+        let mut gw = MockGateway::new();
+        if should_pass {
+            // Set up mock expectation for successful validation
+            let mock_response = Ok(WithTotal { entity: vec![], total: Some(0) });
+            gw.expect_get_protocol_components()
+                .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
+        }
+        let config = ServerRpcConfig::new().with_min_tvl(min_tvl);
+        let handler = RpcHandler::new(gw, None, MockEntryPointTracer::new(), config);
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(handler))
+                .route(
+                    "/v1/protocol_components",
+                    web::post().to(protocol_components::<MockGateway, MockEntryPointTracer>),
+                ),
+        )
+        .await;
+
+        let request_body = dto::ProtocolComponentsRequestBody {
+            protocol_system: "ambient".to_string(),
+            component_ids: None,
+            tvl_gt,
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::new(0, 10),
+        };
+
+        let req = test::TestRequest::post()
+            .uri("/v1/protocol_components")
+            .set_json(&request_body)
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+
+        if should_pass {
+            // Should succeed with 200 OK
+            assert_eq!(
+                resp.status(),
+                actix_web::http::StatusCode::OK,
+                "Expected validation to accept request"
+            );
+        } else {
+            // Should fail with 400 Bad Request due to filter validation
+            assert_eq!(
+                resp.status(),
+                actix_web::http::StatusCode::BAD_REQUEST,
+                "Expected validation to reject request"
+            );
+
+            let body = test::read_body(resp).await;
+            let body_str = std::str::from_utf8(&body).unwrap_or("");
+            assert!(
+                body_str.contains("tvl_gt parameter is required") ||
+                    body_str.contains("tvl_gt must be at least"),
+                "Should fail with filter validation error. Body: {}",
+                body_str
+            );
+        }
+    }
+
+    #[rstest]
+    #[case::config_set_no_filter_rejects(Some(50), None, None, false)]
+    #[case::config_set_below_threshold_rejects(Some(50), Some(30), None, false)]
+    #[case::config_set_token_addresses_accepts(Some(50), None, Some(vec![Bytes::from_str("0x01").unwrap()]), true)]
+    #[case::config_set_above_threshold_accepts(Some(50), Some(75), None, true)]
+    #[actix_web::test]
+    async fn test_tokens_endpoint_rejects_invalid_filters(
+        #[case] min_quality: Option<i32>,
+        #[case] request_quality: Option<i32>,
+        #[case] token_addresses: Option<Vec<tycho_common::Bytes>>,
+        #[case] should_pass: bool,
+    ) {
+        let mut gw = MockGateway::new();
+        if should_pass {
+            // Set up mock expectation for successful validation
+            let mock_response = Ok(WithTotal { entity: vec![], total: Some(0) });
+            gw.expect_get_tokens()
+                .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
+        }
+        let config = ServerRpcConfig::new().with_min_quality(min_quality);
+        let handler = RpcHandler::new(gw, None, MockEntryPointTracer::new(), config);
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(handler))
+                .route("/v1/tokens", web::post().to(tokens::<MockGateway, MockEntryPointTracer>)),
+        )
+        .await;
+
+        let request_body = dto::TokensRequestBody {
+            chain: dto::Chain::Ethereum,
+            token_addresses,
+            min_quality: request_quality,
+            traded_n_days_ago: None,
+            pagination: dto::PaginationParams::new(0, 10),
+        };
+
+        let req = test::TestRequest::post()
+            .uri("/v1/tokens")
+            .set_json(&request_body)
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+
+        if should_pass {
+            // Should succeed with 200 OK
+            assert_eq!(
+                resp.status(),
+                actix_web::http::StatusCode::OK,
+                "Expected validation to accept request"
+            );
+        } else {
+            // Should fail with 400 Bad Request due to filter validation
+            assert_eq!(
+                resp.status(),
+                actix_web::http::StatusCode::BAD_REQUEST,
+                "Expected validation to reject request"
+            );
+
+            let body = test::read_body(resp).await;
+            let body_str = std::str::from_utf8(&body).unwrap_or("");
+            assert!(
+                body_str.contains("min_quality parameter is required") ||
+                    body_str.contains("min_quality must be at least"),
+                "Should fail with filter validation error. Body: {}",
+                body_str
+            );
+        }
     }
 }

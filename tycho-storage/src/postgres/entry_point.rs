@@ -42,10 +42,7 @@ impl PostgresGateway {
         let chain_id = self.get_chain_id(chain)?;
 
         let pc_ids = orm::ProtocolComponent::ids_by_external_ids(
-            &new_data
-                .keys()
-                .map(AsRef::as_ref)
-                .collect::<Vec<_>>(),
+            new_data.keys().map(AsRef::as_ref),
             chain_id,
             conn,
         )
@@ -145,18 +142,18 @@ impl PostgresGateway {
     ///
     /// # Arguments
     ///
-    /// * `new_data` - A map of entry point ids to a list of tracing params and optional component
-    ///   id related to the tracing params.
+    /// * `new_data` - A map of entry point ids to a list of tracing params and component id related
+    ///   to the tracing params.
     /// * `conn` - The database connection to use.
     pub(crate) async fn insert_entry_point_tracing_params(
         &self,
-        new_data: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+        new_data: &HashMap<EntryPointId, HashSet<(TracingParams, ComponentId)>>,
         chain: &Chain,
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
         use schema::{
-            debug_protocol_component_has_entry_point_tracing_params::dsl::*,
             entry_point_tracing_params::dsl::*,
+            protocol_component_has_entry_point_tracing_params::dsl::*,
         };
 
         let input_external_ids: Vec<EntryPointId> = new_data.keys().cloned().collect();
@@ -196,53 +193,41 @@ impl PostgresGateway {
                 storage_error_from_diesel(e, "EntryPointTracingParams", "Batch upsert", None)
             })?;
 
-        let new_links: Vec<((&EntryPointId, &TracingParams), &String)> = new_data
-            .iter()
-            .flat_map(|(ep_id, ep)| {
-                ep.iter()
-                    .filter_map(move |(params, pc_ext_id)| {
-                        pc_ext_id
-                            .as_ref()
-                            .map(|pc_ext_id| ((ep_id, params), pc_ext_id))
-                    })
-            })
-            .collect();
-
         // Insert links between protocol components and tracing params
-        if !new_links.is_empty() {
-            let chain_id = self.get_chain_id(chain)?;
+        let chain_id = self.get_chain_id(chain)?;
 
-            // Fetch entry points tracing params, we can't use .returning() on the insert above
-            // because it doesn't return the ids on conflicts.
-            let params_ids = orm::EntryPointTracingParams::ids_by_entry_point_with_tracing_params(
-                &new_data
-                    .iter()
-                    .flat_map(|(ep_id, ep)| {
-                        ep.iter()
-                            .map(|params| (ep_id.clone(), params.0.clone()))
-                    })
-                    .collect::<Vec<_>>(),
-                conn,
-            )
-            .await?;
+        // Fetch entry points tracing params, we can't use .returning() on the insert above
+        // because it doesn't return the ids on conflicts.
+        let params_ids = orm::EntryPointTracingParams::ids_by_entry_point_with_tracing_params(
+            &new_data
+                .iter()
+                .flat_map(|(ep_id, ep)| {
+                    ep.iter()
+                        .map(|params| (ep_id.clone(), params.0.clone()))
+                })
+                .collect::<Vec<_>>(),
+            conn,
+        )
+        .await?;
 
-            let pc_ids = orm::ProtocolComponent::ids_by_external_ids(
-                &new_links
-                    .iter()
-                    .map(|(_, pc_ext_id)| pc_ext_id.as_str())
-                    .collect::<Vec<_>>(),
-                chain_id,
-                conn,
-            )
-            .await
-            .map_err(PostgresError::from)?
-            .into_iter()
-            .map(|(id_, ext_id)| (ext_id, id_))
-            .collect::<HashMap<_, _>>();
+        let pc_ids = orm::ProtocolComponent::ids_by_external_ids(
+            new_data
+                .values()
+                .flat_map(|set| set.iter())
+                .map(|(_, pc_ext_id)| pc_ext_id.as_str()),
+            chain_id,
+            conn,
+        )
+        .await
+        .map_err(PostgresError::from)?
+        .into_iter()
+        .map(|(id_, ext_id)| (ext_id, id_))
+        .collect::<HashMap<_, _>>();
 
-            let mut pc_tracing_params_links = Vec::new();
-            for ((ep_id, params), pc_ext_id) in new_links.into_iter() {
-                let pc_id = match pc_ids.get(pc_ext_id) {
+        let mut pc_tracing_params_links = Vec::new();
+        for (ep_id, set) in new_data.iter() {
+            for (params, pc_ext_id) in set.iter() {
+                let pc_id = match pc_ids.get(pc_ext_id.as_str()) {
                     Some(_id) => _id,
                     None => {
                         return Err(StorageError::NotFound(
@@ -267,21 +252,21 @@ impl PostgresGateway {
                     entry_point_tracing_params_id: *params_id,
                 });
             }
-
-            diesel::insert_into(debug_protocol_component_has_entry_point_tracing_params)
-                .values(&pc_tracing_params_links)
-                .on_conflict_do_nothing()
-                .execute(conn)
-                .await
-                .map_err(|e| {
-                    storage_error_from_diesel(
-                        e,
-                        "ProtocolComponentHasEntryPointTracingParams",
-                        "Batch upsert",
-                        None,
-                    )
-                })?;
         }
+
+        diesel::insert_into(protocol_component_has_entry_point_tracing_params)
+            .values(&pc_tracing_params_links)
+            .on_conflict_do_nothing()
+            .execute(conn)
+            .await
+            .map_err(|e| {
+                storage_error_from_diesel(
+                    e,
+                    "ProtocolComponentHasEntryPointTracingParams",
+                    "Batch upsert",
+                    None,
+                )
+            })?;
 
         Ok(())
     }
@@ -306,7 +291,7 @@ impl PostgresGateway {
     {
         use schema::{
             entry_point as ep, entry_point_tracing_params as eptp, protocol_component as pc,
-            protocol_component_uses_entry_point as pcuep,
+            protocol_component_has_entry_point_tracing_params as pcheptp,
         };
 
         let ps_id = self.get_protocol_system_id(&filter.protocol_system)?;
@@ -338,10 +323,19 @@ impl PostgresGateway {
             None
         };
 
+        // PERF: 4 inner joins is not very efficient.
+        // Note: it is important that we use the protocol_component_has_entry_point_tracing_params
+        // table to link components to the params they generate. The reasons are:
+        // - our retracing logic relies on knowing which component generated which params.
+        // - if we instead link components to entrypoints and fetch all the params for that entry
+        //   point, we run the risk of returning excessive amounts of duplicate params for every
+        //   component that uses it. This is especially evident for entry points that have
+        //   auto-generated params, such as the hooks dci. This has potential to exponentially
+        //   increase memory usage.
         let results = schema::entry_point::table
             .inner_join(eptp::table.on(ep::id.eq(eptp::entry_point_id)))
-            .inner_join(pcuep::table.on(ep::id.eq(pcuep::entry_point_id)))
-            .inner_join(pc::table.on(pcuep::protocol_component_id.eq(pc::id)))
+            .inner_join(pcheptp::table.on(eptp::id.eq(pcheptp::entry_point_tracing_params_id)))
+            .inner_join(pc::table.on(pcheptp::protocol_component_id.eq(pc::id)))
             .filter(pc::id.eq_any(component_query))
             .select((
                 pc::external_id,
@@ -452,23 +446,25 @@ impl PostgresGateway {
         Ok(WithTotal { entity: res, total: count })
     }
 
-    /// Upsert traced entry points into the database. Updates the result if it already exists for
-    /// the same entry point and tracing params.
+    /// Upsert traced entry points into the database. Merge the tracing results for the same entry
+    /// point and tracing params.
     ///
     /// # Arguments
     ///
     /// * `traced_entry_points` - The traced entry points to upsert.
     /// * `conn` - The database connection to use.
     ///
-    /// Note: Upserts are processed in the input order. If one entrypoint with params is upserted
-    /// twice, only the last entry will be used.
+    /// Note: If we merge with existing data, we keep the latest block id for the
+    /// `detection_block` field.
     pub(crate) async fn upsert_traced_entry_points(
         &self,
         traced_entry_points: &[TracedEntryPoint],
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
         use schema::{
-            entry_point_tracing_params_calls_account::dsl::*, entry_point_tracing_result::dsl::*,
+            entry_point as ep, entry_point_tracing_params as eptp,
+            entry_point_tracing_params_calls_account::dsl::*, entry_point_tracing_result as eptr,
+            entry_point_tracing_result::dsl::*,
         };
 
         let block_hashes: HashSet<_> = traced_entry_points
@@ -502,7 +498,8 @@ impl PostgresGateway {
         )
         .await?;
 
-        let mut values = HashMap::new();
+        // Group input traced entry points by params_id and merge their tracing results
+        let mut grouped_traced_points: HashMap<i64, (i64, TracingResult)> = HashMap::new();
         for tep in traced_entry_points {
             let params_id = params_ids
                 .get(&(
@@ -534,34 +531,79 @@ impl PostgresGateway {
                     )
                 })?;
 
-            let tracing_result = serde_json::to_value(&tep.tracing_result).map_err(|e| {
+            // Merge with existing entry for same params_id, if any
+            if let Some((b_id, existing_result)) = grouped_traced_points.get_mut(params_id) {
+                *b_id = block_id; // We keep the latest block id in the inserts.
+                existing_result.merge(tep.tracing_result.clone());
+            } else {
+                grouped_traced_points.insert(*params_id, (block_id, tep.tracing_result.clone()));
+            }
+        }
+
+        // Retrieve existing tracing results from database
+        let existing_results = schema::entry_point_tracing_result::table
+            .inner_join(eptp::table.on(eptr::entry_point_tracing_params_id.eq(eptp::id)))
+            .inner_join(ep::table.on(eptp::entry_point_id.eq(ep::id)))
+            .filter(
+                eptr::entry_point_tracing_params_id.eq_any(grouped_traced_points.keys().cloned()),
+            )
+            .select((eptr::entry_point_tracing_params_id, eptr::detection_data))
+            .load::<(i64, serde_json::Value)>(conn)
+            .await
+            .map_err(|e| storage_error_from_diesel(e, "TracingResult", "Query", None))?;
+
+        // Create a map of existing results by params_id
+        let existing_results_map: HashMap<i64, TracingResult> = existing_results
+            .into_iter()
+            .map(|(params_id, data)| {
+                let tracing_result: TracingResult = serde_json::from_value(data).map_err(|e| {
+                    StorageError::DecodeError(format!("Failed to deserialize TracingResult: {e}"))
+                })?;
+                Ok((params_id, tracing_result))
+            })
+            .collect::<Result<HashMap<_, _>, StorageError>>()?;
+
+        // Merge existing results with new grouped results
+        let mut final_values = Vec::new();
+        for (params_id, (block_id, mut new_result)) in grouped_traced_points {
+            // If there's an existing result, merge it with the new one
+            if let Some(existing_result) = existing_results_map.get(&params_id) {
+                new_result.merge(existing_result.clone());
+            }
+
+            let tracing_result = serde_json::to_value(&new_result).map_err(|e| {
                 StorageError::Unexpected(format!("Failed to serialize TracingResult: {e}"))
             })?;
 
-            values.insert(
-                params_id,
-                NewEntryPointTracingResult {
-                    entry_point_tracing_params_id: *params_id,
-                    detection_block: block_id,
-                    detection_data: tracing_result,
-                },
-            );
+            final_values.push(NewEntryPointTracingResult {
+                entry_point_tracing_params_id: params_id,
+                detection_block: block_id,
+                detection_data: tracing_result,
+            });
         }
 
-        diesel::insert_into(entry_point_tracing_result)
-            .values(&values.into_values().collect::<Vec<_>>())
-            .on_conflict(schema::entry_point_tracing_result::entry_point_tracing_params_id)
-            .do_update()
-            .set((
-                detection_block.eq(excluded(detection_block)),
-                detection_data.eq(excluded(detection_data)),
-                modified_ts.eq(excluded(modified_ts)),
-            ))
-            .execute(conn)
-            .await
-            .map_err(|err| {
-                storage_error_from_diesel(err, "NewEntryPointTracingResult", "Batch upsert", None)
-            })?;
+        // Insert protocol components in batches to avoid exceeding PostgreSQL parameter limit
+        for chunk in final_values.chunks(orm::NewEntryPointTracingResult::MAX_BATCH_SIZE) {
+            diesel::insert_into(entry_point_tracing_result)
+                .values(chunk)
+                .on_conflict(schema::entry_point_tracing_result::entry_point_tracing_params_id)
+                .do_update()
+                .set((
+                    detection_block.eq(excluded(detection_block)),
+                    detection_data.eq(excluded(detection_data)),
+                    modified_ts.eq(excluded(modified_ts)),
+                ))
+                .execute(conn)
+                .await
+                .map_err(|err| {
+                    storage_error_from_diesel(
+                        err,
+                        "NewEntryPointTracingResult",
+                        "Batch upsert",
+                        None,
+                    )
+                })?;
+        }
 
         let all_called_addresses: HashSet<_> = traced_entry_points
             .iter()
@@ -579,10 +621,26 @@ impl PostgresGateway {
         let account_id_map: HashMap<_, _> = accounts.into_iter().collect();
 
         let mut new_entry_point_calls_account = Vec::new();
-        for (tep, &params_id) in traced_entry_points
-            .iter()
-            .zip(params_ids.values())
-        {
+        for tep in traced_entry_points {
+            let params_id = params_ids
+                .get(&(
+                    tep.entry_point_with_params
+                        .entry_point
+                        .external_id
+                        .clone(),
+                    tep.entry_point_with_params
+                        .params
+                        .clone(),
+                ))
+                .ok_or_else(|| {
+                    StorageError::NotFound(
+                        "EntryPointTracingParams".to_string(),
+                        tep.entry_point_with_params
+                            .entry_point
+                            .external_id
+                            .clone(),
+                    )
+                })?;
             for address in tep.tracing_result.accessed_slots.keys() {
                 let acc_id = account_id_map
                     .get(address)
@@ -591,7 +649,7 @@ impl PostgresGateway {
                     })?;
 
                 new_entry_point_calls_account.push(NewEntryPointTracingParamsCallsAccount {
-                    entry_point_tracing_params_id: params_id,
+                    entry_point_tracing_params_id: *params_id,
                     account_id: *acc_id,
                 });
             }
@@ -670,7 +728,10 @@ mod test {
     use tycho_common::{
         keccak256,
         models::{
-            blockchain::{RPCTracerParams, TracedEntryPoint, TracingParams, TracingResult},
+            blockchain::{
+                AddressStorageLocation, RPCTracerParams, TracedEntryPoint, TracingParams,
+                TracingResult,
+            },
             FinancialType, ImplementationType, StoreKey,
         },
         Bytes,
@@ -690,7 +751,7 @@ mod test {
         conn
     }
 
-    async fn setup_data(conn: &mut AsyncPgConnection) {
+    async fn setup_data(conn: &mut AsyncPgConnection) -> i64 {
         let chain_id = db_fixtures::insert_chain(conn, "ethereum").await;
         db_fixtures::insert_token(
             conn,
@@ -776,6 +837,8 @@ mod test {
             None,
         )
         .await;
+
+        chain_id
     }
 
     fn rpc_tracer_entry_point(version: u8) -> EntryPoint {
@@ -818,10 +881,13 @@ mod test {
             TracingResult::new(
                 vec![(
                     Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
-                    StoreKey::from_str(
-                        "0x0000000000000000000000000000000000000000000000000000000000000001",
-                    )
-                    .unwrap(),
+                    AddressStorageLocation::new(
+                        StoreKey::from_str(
+                            "0x0000000000000000000000000000000000000000000000000000000000000001",
+                        )
+                        .unwrap(),
+                        12,
+                    ),
                 )]
                 .into_iter()
                 .collect(),
@@ -839,7 +905,7 @@ mod test {
     #[tokio::test]
     async fn test_entry_points_round_trip() {
         let mut conn = setup_db().await;
-        setup_data(&mut conn).await;
+        let _chain_id = setup_data(&mut conn).await;
         let gw = PostgresGateway::from_connection(&mut conn).await;
 
         gw.insert_entry_points(
@@ -895,57 +961,47 @@ mod test {
     #[tokio::test]
     async fn test_entry_points_with_data_round_trip() {
         let mut conn = setup_db().await;
-        setup_data(&mut conn).await;
+        let _chain_id = setup_data(&mut conn).await;
         let gw = PostgresGateway::from_connection(&mut conn).await;
 
-        gw.insert_entry_points(
-            &HashMap::from([
-                ("pc_0".to_string(), HashSet::from([rpc_tracer_entry_point(0)])),
-                (
-                    "pc_1".to_string(),
-                    HashSet::from([rpc_tracer_entry_point(0), rpc_tracer_entry_point(1)]),
-                ),
-                ("pc_2".to_string(), HashSet::from([rpc_tracer_entry_point(1)])),
-                ("unknown_pc".to_string(), HashSet::from([rpc_tracer_entry_point(0)])),
-            ]),
-            &Chain::Ethereum,
-            &mut conn,
-        )
-        .await
-        .unwrap();
+        let insert_ep_data = &HashMap::from([
+            ("pc_0".to_string(), HashSet::from([rpc_tracer_entry_point(0)])),
+            (
+                "pc_1".to_string(),
+                HashSet::from([rpc_tracer_entry_point(0), rpc_tracer_entry_point(1)]),
+            ),
+            ("pc_2".to_string(), HashSet::from([rpc_tracer_entry_point(1)])),
+            ("unknown_pc".to_string(), HashSet::from([rpc_tracer_entry_point(0)])),
+        ]);
+        gw.insert_entry_points(insert_ep_data, &Chain::Ethereum, &mut conn)
+            .await
+            .unwrap();
 
-        gw.insert_entry_point_tracing_params(
-            &HashMap::from([
-                (
-                    rpc_tracer_entry_point(0)
-                        .external_id
-                        .clone(),
-                    HashSet::from([(tracing_params(0), Some("pc_0".to_string()))]),
-                ),
-                (
-                    rpc_tracer_entry_point(1)
-                        .external_id
-                        .clone(),
-                    HashSet::from([(tracing_params(1), None), (tracing_params(0), None)]),
-                ),
-                (
-                    rpc_tracer_entry_point(1)
-                        .external_id
-                        .clone(),
-                    HashSet::from([(tracing_params(1), Some("pc_2".to_string()))]),
-                ),
-                (
-                    rpc_tracer_entry_point(0)
-                        .external_id
-                        .clone(),
-                    HashSet::from([(tracing_params(0), Some("unknown_pc".to_string()))]),
-                ),
-            ]),
-            &Chain::Ethereum,
-            &mut conn,
-        )
-        .await
-        .unwrap();
+        let insert_eptp_data = &HashMap::from([
+            (
+                rpc_tracer_entry_point(0)
+                    .external_id
+                    .clone(),
+                HashSet::from([
+                    (tracing_params(0), "pc_0".to_string()),
+                    (tracing_params(0), "unknown_pc".to_string()),
+                    (tracing_params(1), "pc_1".to_string()),
+                ]),
+            ),
+            (
+                rpc_tracer_entry_point(1)
+                    .external_id
+                    .clone(),
+                HashSet::from([
+                    (tracing_params(0), "pc_1".to_string()),
+                    (tracing_params(1), "pc_2".to_string()),
+                ]),
+            ),
+        ]);
+        dbg!(&insert_eptp_data);
+        gw.insert_entry_point_tracing_params(insert_eptp_data, &Chain::Ethereum, &mut conn)
+            .await
+            .unwrap();
 
         let filter = EntryPointFilter::new("test_protocol".to_string());
         let retrieved_entry_points = gw
@@ -961,11 +1017,11 @@ mod test {
                     HashSet::from([
                         EntryPointWithTracingParams::new(
                             rpc_tracer_entry_point(0),
-                            tracing_params(0)
+                            tracing_params(1)
                         ),
                         EntryPointWithTracingParams::new(
                             rpc_tracer_entry_point(1),
-                            tracing_params(1)
+                            tracing_params(0)
                         ),
                     ])
                 ),
@@ -998,8 +1054,8 @@ mod test {
             HashMap::from([(
                 "pc_1".to_string(),
                 HashSet::from([
-                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(1), tracing_params(1)),
-                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(0)),
+                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(1)),
+                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(1), tracing_params(0)),
                 ])
             ),])
         );
@@ -1016,8 +1072,8 @@ mod test {
             HashMap::from([(
                 "pc_1".to_string(),
                 HashSet::from([
-                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(1), tracing_params(1)),
-                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(0)),
+                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(1)),
+                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(1), tracing_params(0)),
                 ])
             ),])
         );
@@ -1026,7 +1082,7 @@ mod test {
     #[tokio::test]
     async fn test_traced_entry_points_round_trip() {
         let mut conn = setup_db().await;
-        setup_data(&mut conn).await;
+        let _chain_id = setup_data(&mut conn).await;
         let gw = PostgresGateway::from_connection(&mut conn).await;
 
         let entry_point = rpc_tracer_entry_point(0);
@@ -1043,7 +1099,7 @@ mod test {
         gw.insert_entry_point_tracing_params(
             &HashMap::from([(
                 entry_point.external_id.clone(),
-                HashSet::from([(tracing_params(0), Some("pc_0".to_string()))]),
+                HashSet::from([(tracing_params(0), "pc_0".to_string())]),
             )]),
             &Chain::Ethereum,
             &mut conn,
@@ -1067,5 +1123,303 @@ mod test {
                 HashMap::from([(tracing_params(0), traced_entry_point.tracing_result)])
             )])
         );
+    }
+
+    #[tokio::test]
+    async fn test_traced_entry_points_merging() {
+        let mut conn = setup_db().await;
+        let chain_id = setup_data(&mut conn).await;
+        let gw = PostgresGateway::from_connection(&mut conn).await;
+
+        let entry_point = rpc_tracer_entry_point(0);
+
+        gw.insert_entry_points(
+            &HashMap::from([("pc_0".to_string(), HashSet::from([entry_point.clone()]))]),
+            &Chain::Ethereum,
+            &mut conn,
+        )
+        .await
+        .unwrap();
+
+        gw.insert_entry_point_tracing_params(
+            &HashMap::from([(
+                entry_point.external_id.clone(),
+                HashSet::from([(tracing_params(0), "pc_0".to_string())]),
+            )]),
+            &Chain::Ethereum,
+            &mut conn,
+        )
+        .await
+        .unwrap();
+
+        // Need to insert additional accounts for different contracts
+        db_fixtures::insert_account(
+            &mut conn,
+            "a0b86a33e6e3a8f0c8a77c5b6a4c8d8e8f8a8b8c",
+            "contract_a",
+            chain_id,
+            None,
+        )
+        .await;
+
+        db_fixtures::insert_account(
+            &mut conn,
+            "b1c97b44f7f4b9f1d9b88d6c7b5d9e9f9b9c9d",
+            "contract_b",
+            chain_id,
+            None,
+        )
+        .await;
+
+        // Insert initial tracing result into database (with Contract A)
+        let contract_a_address =
+            Bytes::from_str("0xa0b86a33e6e3a8f0c8a77c5b6a4c8d8e8f8a8b8c").unwrap();
+        let initial_traced_entry_point =
+            TracedEntryPoint::new(
+                EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(0)),
+                Bytes::from_str("88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")
+                    .unwrap(),
+                TracingResult::new(
+                    vec![(
+                    contract_a_address.clone(),
+                    AddressStorageLocation::new(StoreKey::from_str(
+                        "0x0000000000000000000000000000000000000000000000000000000000000001",
+                    )
+                    .unwrap(),
+                                                0)
+                )]
+                    .into_iter()
+                    .collect(),
+                    HashMap::from([(
+                        contract_a_address.clone(),
+                        HashSet::from([Bytes::from_str(
+                            "0x0000000000000000000000000000000000000000000000000000000000000001",
+                        )
+                        .unwrap()]),
+                    )]),
+                ),
+            );
+
+        gw.upsert_traced_entry_points(slice::from_ref(&initial_traced_entry_point), &mut conn)
+            .await
+            .unwrap();
+
+        // Call upsert with multiple traced entry points - testing both:
+        // A) Merging within the same call (multiple TracedEntryPoint with same params)
+        // B) Merging with existing database data
+        let contract_b_address =
+            Bytes::from_str("0xb1c97b44f7f4b9f1d9b88d6c7b5d9e9f9b9c9d").unwrap();
+        let contract_c_address =
+            Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap();
+
+        let second_traced_entry_point =
+            TracedEntryPoint::new(
+                EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(0)),
+                Bytes::from_str("88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")
+                    .unwrap(),
+                TracingResult::new(
+                    vec![(
+                    contract_b_address.clone(),
+                    AddressStorageLocation::new(StoreKey::from_str(
+                        "0x0000000000000000000000000000000000000000000000000000000000000002",
+                    )
+                    .unwrap()
+                    ,0),
+                )]
+                    .into_iter()
+                    .collect(),
+                    HashMap::from([(
+                        contract_b_address.clone(),
+                        HashSet::from([Bytes::from_str(
+                            "0x0000000000000000000000000000000000000000000000000000000000000002",
+                        )
+                        .unwrap()]),
+                    )]),
+                ),
+            );
+
+        let third_traced_entry_point = TracedEntryPoint::new(
+            EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(0)),
+            Bytes::from_str("88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")
+                .unwrap(),
+            TracingResult::new(
+                vec![
+                    (
+                        contract_c_address.clone(),
+                        AddressStorageLocation::new(StoreKey::from_str(
+                            "0x0000000000000000000000000000000000000000000000000000000000000003",
+                        )
+                        .unwrap(), 0),
+                    ),
+                    (
+                        contract_a_address.clone(),
+                        AddressStorageLocation::new(StoreKey::from_str(
+                            "0x0000000000000000000000000000000000000000000000000000000000000003",
+                        )
+                        .unwrap(), 0),
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+                HashMap::from([
+                    (
+                        contract_c_address.clone(),
+                        HashSet::from([Bytes::from_str(
+                            "0x0000000000000000000000000000000000000000000000000000000000000003",
+                        )
+                        .unwrap()]),
+                    ),
+                    (
+                        contract_a_address.clone(),
+                        HashSet::from([Bytes::from_str(
+                            "0x0000000000000000000000000000000000000000000000000000000000000003",
+                        )
+                        .unwrap()]),
+                    ),
+                ]),
+            ),
+        );
+
+        let fourth_traced_entry_point =
+            TracedEntryPoint::new(
+                EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(0)),
+                Bytes::from_str("88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")
+                    .unwrap(),
+                TracingResult::new(
+                    vec![(
+                    contract_c_address.clone(),
+                    AddressStorageLocation::new(StoreKey::from_str(
+                        "0x0000000000000000000000000000000000000000000000000000000000000004",
+                    )
+                    .unwrap(), 0),
+                )]
+                    .into_iter()
+                    .collect(),
+                    HashMap::from([(
+                        contract_c_address.clone(),
+                        HashSet::from([Bytes::from_str(
+                            "0x0000000000000000000000000000000000000000000000000000000000000004",
+                        )
+                        .unwrap()]),
+                    )]),
+                ),
+            );
+
+        // This single call tests merging:
+        // 1. Merge third_traced_entry_point and fourth_traced_entry_point (same contract, same
+        //    call)
+        // 2. Merge second_traced_entry_point (different contract B, same call)
+        // 3. Merge all results with initial_traced_entry_point from database (Contract A, DB merge)
+        gw.upsert_traced_entry_points(
+            &[second_traced_entry_point, third_traced_entry_point, fourth_traced_entry_point],
+            &mut conn,
+        )
+        .await
+        .unwrap();
+
+        // SCENARIO 3: Verify comprehensive merging
+        let retrieved_traced_entry_points = gw
+            .get_tracing_results(&HashSet::from([entry_point.external_id.clone()]), &mut conn)
+            .await
+            .unwrap();
+
+        let merged_result = retrieved_traced_entry_points
+            .get(&entry_point.external_id)
+            .unwrap()
+            .get(&tracing_params(0))
+            .unwrap();
+
+        // Should contain retriggers from all four results:
+        // - One from initial DB entry (Contract A, slot 1)
+        // - One from second entry in the batch (Contract B, slot 2)
+        // - One from third entry in the batch (Contract C, slot 3)
+        // - One from third entry in the batch (Contract A, slot 3)
+        // - One from fourth entry in the batch (Contract C, slot 4)
+        assert_eq!(merged_result.retriggers.len(), 5);
+        assert!(merged_result.retriggers.contains(&(
+            contract_a_address.clone(),
+            AddressStorageLocation::new(
+                StoreKey::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000001"
+                )
+                .unwrap(),
+                0
+            ),
+        )));
+        assert!(merged_result.retriggers.contains(&(
+            contract_a_address.clone(),
+            AddressStorageLocation::new(
+                StoreKey::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000003"
+                )
+                .unwrap(),
+                0
+            ),
+        )));
+        assert!(merged_result.retriggers.contains(&(
+            contract_b_address.clone(),
+            AddressStorageLocation::new(
+                StoreKey::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000002"
+                )
+                .unwrap(),
+                0
+            ),
+        )));
+        assert!(merged_result.retriggers.contains(&(
+            contract_c_address.clone(),
+            AddressStorageLocation::new(
+                StoreKey::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000003"
+                )
+                .unwrap(),
+                0
+            ),
+        )));
+        assert!(merged_result.retriggers.contains(&(
+            contract_c_address.clone(),
+            AddressStorageLocation::new(
+                StoreKey::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000004"
+                )
+                .unwrap(),
+                0
+            ),
+        )));
+
+        // Should contain accessed_slots for all three different contracts
+        assert_eq!(merged_result.accessed_slots.len(), 3);
+
+        // Contract A should have its slot
+        let contract_a_slots = &merged_result.accessed_slots[&contract_a_address];
+        assert_eq!(contract_a_slots.len(), 2);
+        assert!(contract_a_slots.contains(
+            &Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000001")
+                .unwrap()
+        ));
+        assert!(contract_a_slots.contains(
+            &Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000003")
+                .unwrap()
+        ));
+
+        // Contract B should have its slot
+        let contract_b_slots = &merged_result.accessed_slots[&contract_b_address];
+        assert_eq!(contract_b_slots.len(), 1);
+        assert!(contract_b_slots.contains(
+            &Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000002")
+                .unwrap()
+        ));
+
+        // Original DAI contract should have both slots from third and fourth entries
+        let original_dai_slots = &merged_result.accessed_slots[&contract_c_address];
+        assert_eq!(original_dai_slots.len(), 2);
+        assert!(original_dai_slots.contains(
+            &Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000003")
+                .unwrap()
+        ));
+        assert!(original_dai_slots.contains(
+            &Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000004")
+                .unwrap()
+        ));
     }
 }

@@ -1175,7 +1175,7 @@ impl PostgresGateway {
                 balance_data.push(WithOrdinal::new(new, (account_id, ts, index)));
             }
 
-            if let Some(new_code) = delta.code.as_ref() {
+            if let Some(new_code) = delta.code() {
                 let hash = keccak256(new_code.clone());
                 let new = orm::NewContractCode {
                     code: new_code,
@@ -1429,30 +1429,24 @@ impl PostgresGateway {
             .iter()
             .map(|b| b.modify_tx.clone())
             .collect::<Vec<_>>();
-        let modify_txs_refs = modify_txs.iter().collect::<Vec<_>>();
-        let transaction_ids_and_ts =
-            orm::Transaction::ids_and_ts_by_hash(modify_txs_refs.as_ref(), conn)
-                .await
-                .map_err(PostgresError::from)?
-                .into_iter()
-                .map(|(db_id, hash, index, ts)| (hash, (db_id, index, ts)))
-                .collect::<HashMap<TxHash, (i64, i64, NaiveDateTime)>>();
+        let transaction_ids_and_ts = orm::Transaction::ids_and_ts_by_hash(modify_txs.iter(), conn)
+            .await
+            .map_err(PostgresError::from)?
+            .into_iter()
+            .map(|(db_id, hash, index, ts)| (hash, (db_id, index, ts)))
+            .collect::<HashMap<TxHash, (i64, i64, NaiveDateTime)>>();
 
         // fetch linked accounts
         let account_addresses = account_balances
             .iter()
             .map(|b| b.account.clone())
             .collect::<Vec<_>>();
-        let account_address_refs = account_addresses
-            .iter()
-            .collect::<Vec<_>>();
-        let account_ids =
-            orm::Account::ids_by_addresses(account_address_refs.as_ref(), chain_id, conn)
-                .await
-                .map_err(PostgresError::from)?
-                .into_iter()
-                .map(|(id, address)| (address, id))
-                .collect::<HashMap<Address, i64>>();
+        let account_ids = orm::Account::ids_by_addresses(account_addresses.iter(), chain_id, conn)
+            .await
+            .map_err(PostgresError::from)?
+            .into_iter()
+            .map(|(id, address)| (address, id))
+            .collect::<HashMap<Address, i64>>();
 
         // collect account balance updates
         let mut new_account_balances = Vec::new();
@@ -1497,11 +1491,17 @@ impl PostgresGateway {
                 .map(|b| b.entity)
                 .collect::<Vec<_>>();
             apply_versioning::<_, orm::AccountBalance>(&mut sorted, conn).await?;
-            diesel::insert_into(schema::account_balance::table)
-                .values(&sorted)
-                .execute(conn)
-                .await
-                .map_err(|err| storage_error_from_diesel(err, "AccountBalance", "batch", None))?;
+
+            // Insert in batches to avoid exceeding PostgreSQL parameter limit
+            for chunk in sorted.chunks(orm::NewAccountBalance::MAX_BATCH_SIZE) {
+                diesel::insert_into(schema::account_balance::table)
+                    .values(chunk)
+                    .execute(conn)
+                    .await
+                    .map_err(|err| {
+                        storage_error_from_diesel(err, "AccountBalance", "batch", None)
+                    })?;
+            }
         }
 
         Ok(())

@@ -6,7 +6,10 @@ use tycho_common::{
     models::{Address, ComponentId, ProtocolSystem},
 };
 
-use crate::{rpc::RPCClient, RPCError};
+use crate::{
+    rpc::{RPCClient, RPC_CLIENT_CONCURRENCY},
+    RPCError,
+};
 
 #[derive(Clone, Debug)]
 pub(crate) enum ComponentFilterVariant {
@@ -95,8 +98,8 @@ pub struct ComponentTracker<R: RPCClient> {
     chain: Chain,
     protocol_system: ProtocolSystem,
     filter: ComponentFilter,
-    // We will need to request a snapshot for components/contracts that we did not emit as
-    // snapshot for yet but are relevant now, e.g. because min tvl threshold exceeded.
+    /// We will need to request a snapshot for components/contracts that we did not emit as
+    /// snapshot for yet but are relevant now, e.g. because min tvl threshold exceeded.
     pub components: HashMap<ComponentId, ProtocolComponent>,
     /// Map of entrypoint id to its associated components and contracts
     entrypoints: HashMap<String, EntrypointRelations>,
@@ -142,7 +145,7 @@ where
         };
         self.components = self
             .rpc_client
-            .get_protocol_components_paginated(&body, 500, 4)
+            .get_protocol_components_paginated(&body, None, RPC_CLIENT_CONCURRENCY)
             .await?
             .protocol_components
             .into_iter()
@@ -182,21 +185,16 @@ where
 
     /// Update the tracked contracts list with contracts associated with the given components
     fn update_contracts(&mut self, components: Vec<ComponentId>) {
-        // Only process components that are actually being tracked. Convert to HashSet for
-        // efficient lookup.
-        let tracked_component_ids = components
-            .into_iter()
-            .filter(|id| self.components.contains_key(id))
-            .collect::<HashSet<_>>();
+        // Only process components that are actually being tracked.
+        let mut tracked_component_ids = HashSet::new();
 
         // Add contracts from the components
-        for comp in &tracked_component_ids {
-            let component = self
-                .components
-                .get(comp)
-                .expect("Component should exist as it was filtered above");
-            self.contracts
-                .extend(component.contract_ids.iter().cloned());
+        for comp in components {
+            if let Some(component) = self.components.get(&comp) {
+                self.contracts
+                    .extend(component.contract_ids.iter().cloned());
+                tracked_component_ids.insert(comp);
+            }
         }
 
         // Identify entrypoints linked to the given components
@@ -272,7 +270,7 @@ where
     }
 
     /// Updates the tracked entrypoints and contracts based on the given DCI data.
-    pub fn process_entrypoints(&mut self, dci_update: &DCIUpdate) -> Result<(), RPCError> {
+    pub fn process_entrypoints(&mut self, dci_update: &DCIUpdate) {
         // Update detected contracts for entrypoints
         for (entrypoint, traces) in &dci_update.trace_results {
             self.entrypoints
@@ -303,8 +301,6 @@ where
                 }
             }
         }
-
-        Ok(())
     }
 
     /// Get related contracts for the given component ids. Assumes that the components are already

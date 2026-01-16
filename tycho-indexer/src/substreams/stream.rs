@@ -27,6 +27,7 @@ use crate::{
 pub enum BlockResponse {
     New(BlockScopedData),
     Undo(BlockUndoSignal),
+    Ended,
 }
 
 pub struct SubstreamsStream {
@@ -180,6 +181,7 @@ fn stream_blocks(
                     }
 
                     info!("Stream completed, reached end block");
+                    yield BlockResponse::Ended;
                     return;
                 },
                 Err(e) => {

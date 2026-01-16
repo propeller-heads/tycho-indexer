@@ -3,6 +3,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
+use deepsize::DeepSizeOf;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 
@@ -15,7 +16,7 @@ pub type TransferCost = u64;
 /// Tax related to a token transfer. Should be given in Basis Points (1/100th of a percent)
 pub type TransferTax = u64;
 
-#[derive(Debug, Clone, Deserialize, Serialize, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, Eq, DeepSizeOf)]
 pub struct Token {
     pub address: Bytes,
     pub symbol: String,
@@ -61,6 +62,20 @@ impl Token {
     /// Returns one token as BigUint
     pub fn one(&self) -> BigUint {
         BigUint::from((1.0 * 10f64.powi(self.decimals as i32)) as u128)
+    }
+
+    pub fn gas_usage(&self) -> BigUint {
+        BigUint::from(
+            self.gas
+                .clone()
+                .into_iter()
+                .flatten()
+                .collect::<Vec<u64>>()
+                .iter()
+                .min()
+                .copied()
+                .unwrap_or(0u64),
+        )
     }
 }
 
