@@ -290,7 +290,7 @@ impl ProtocolSim for AerodromeSlipstreamsState {
         } else {
             1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, b.decimals, a.decimals)?
         };
-        Ok(add_fee_markup(price, self.get_fee() as f64 / 1_000_000.0))
+        Ok(add_fee_markup(price, self.fee()))
     }
 
     fn get_amount_out(
@@ -585,12 +585,9 @@ impl ProtocolSim for AerodromeSlipstreamsState {
             .as_any()
             .downcast_ref::<AerodromeSlipstreamsState>()
         {
-            let self_fee = self.get_fee();
-            let other_fee = other_state.get_fee();
-
             self.liquidity == other_state.liquidity &&
                 self.sqrt_price == other_state.sqrt_price &&
-                self_fee == other_fee &&
+                self.get_fee() == other_state.get_fee() &&
                 self.tick == other_state.tick &&
                 self.ticks == other_state.ticks
         } else {
