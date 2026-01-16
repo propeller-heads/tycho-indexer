@@ -3,7 +3,7 @@ use std::{any::Any, collections::HashMap};
 use alloy::primitives::{Sign, I256, U256};
 use num_bigint::{BigInt, BigUint};
 use num_traits::{ToPrimitive, Zero};
-use tracing::trace;
+use tracing::{error, trace};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -39,6 +39,7 @@ use crate::evm::protocol::{
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AerodromeSlipstreamsState {
+    id: String,
     block_timestamp: u64,
     liquidity: u128,
     sqrt_price: U256,
@@ -56,6 +57,7 @@ impl AerodromeSlipstreamsState {
     /// Creates a new instance of `AerodromeSlipstreamsState`.
     ///
     /// # Arguments
+    /// - `id`: The id of the protocol component.
     /// - `block_timestamp`: The timestamp of the block.
     /// - `liquidity`: The initial liquidity of the pool.
     /// - `sqrt_price`: The square root of the current price.
@@ -70,6 +72,7 @@ impl AerodromeSlipstreamsState {
     /// - `dfc`: The dynamic fee configuration for the pool.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
+        id: String,
         block_timestamp: u64,
         liquidity: u128,
         sqrt_price: U256,
@@ -84,6 +87,7 @@ impl AerodromeSlipstreamsState {
     ) -> Result<Self, SimulationError> {
         let tick_list = TickList::from(tick_spacing as u16, ticks)?;
         Ok(AerodromeSlipstreamsState {
+            id,
             block_timestamp,
             liquidity,
             sqrt_price,
@@ -98,8 +102,8 @@ impl AerodromeSlipstreamsState {
         })
     }
 
-    fn get_fee(&self) -> Result<u32, SimulationError> {
-        get_dynamic_fee(
+    fn get_fee(&self) -> u32 {
+        match get_dynamic_fee(
             &self.dfc,
             self.default_fee,
             self.tick,
@@ -108,7 +112,18 @@ impl AerodromeSlipstreamsState {
             self.observation_cardinality,
             &self.observations,
             self.block_timestamp as u32,
-        )
+        ) {
+            Ok(fee) => fee,
+            Err(err) => {
+                error!(
+                    pool = %self.id,
+                    block_timestamp = self.block_timestamp,
+                    %err,
+                    "Failed to calculate dynamic fee"
+                );
+                u32::MAX
+            }
+        }
     }
 
     fn swap(
@@ -147,7 +162,7 @@ impl AerodromeSlipstreamsState {
         };
         let mut gas_used = U256::from(130_000);
 
-        let fee = self.get_fee()?;
+        let fee = self.get_fee();
         while state.amount_remaining != I256::from_raw(U256::from(0u64)) &&
             state.sqrt_price != price_limit
         {
@@ -266,7 +281,7 @@ impl AerodromeSlipstreamsState {
 
 impl ProtocolSim for AerodromeSlipstreamsState {
     fn fee(&self) -> f64 {
-        self.get_fee().unwrap_or(u32::MAX) as f64 / 1_000_000.0
+        self.get_fee() as f64 / 1_000_000.0
     }
 
     fn spot_price(&self, a: &Token, b: &Token) -> Result<f64, SimulationError> {
@@ -275,7 +290,7 @@ impl ProtocolSim for AerodromeSlipstreamsState {
         } else {
             1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, b.decimals, a.decimals)?
         };
-        Ok(add_fee_markup(price, self.get_fee()? as f64 / 1_000_000.0))
+        Ok(add_fee_markup(price, self.get_fee() as f64 / 1_000_000.0))
     }
 
     fn get_amount_out(
@@ -570,14 +585,8 @@ impl ProtocolSim for AerodromeSlipstreamsState {
             .as_any()
             .downcast_ref::<AerodromeSlipstreamsState>()
         {
-            let self_fee = match self.get_fee() {
-                Ok(fee) => fee,
-                Err(_) => return false,
-            };
-            let other_fee = match other_state.get_fee() {
-                Ok(fee) => fee,
-                Err(_) => return false,
-            };
+            let self_fee = self.get_fee();
+            let other_fee = other_state.get_fee();
 
             self.liquidity == other_state.liquidity &&
                 self.sqrt_price == other_state.sqrt_price &&
