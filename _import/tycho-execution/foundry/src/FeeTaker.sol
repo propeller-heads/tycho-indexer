@@ -3,7 +3,6 @@ pragma solidity ^0.8.26;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
-error FeeTaker__InvalidDataLength();
 error FeeTaker__FeeTooHigh();
 error FeeTaker__AddressZero();
 
@@ -56,38 +55,29 @@ contract FeeTaker is AccessControl {
 
     /**
      * @notice Calculates fees from the swap output amount
-     * @dev Called via delegatecall from TychoRouter. Does not perform any accounting.
+     * @dev Called via staticcall from TychoRouter. Does not perform any accounting.
+     *      Router fee parameters are retrieved from contract storage based on the user address.
+     *      Solver fee parameters are passed as function arguments.
      * @param amountIn The amount before fee deduction
-     * @param data Encoded fee parameters (46 bytes total):
-     *        - solverFeeBps (uint16): Solver fee in basis points
-     *        - solverFeeReceiver (address): Address to receive solver fee
-     *        - routerFeeOnOutputBps (uint16): Router fee on output in basis points
-     *        - routerFeeOnSolverFeeBps (uint16): Router fee on solver fee in basis points
-     *        - routerFeeReceiver (address): Address to receive router fees
+     * @param user The user address to look up custom router fees for
+     * @param solverFeeBps Solver fee in basis points
      * @return amountOut The amount remaining after all fee deductions
      * @return routerFee Total router fee amount
      * @return routerFeeReceiverAddr Address to receive router fees
      * @return solverFee Solver fee amount (after router's cut)
-     * @return solverFeeReceiverAddr Address to receive solver fee
      */
-    function takeFee(uint256 amountIn, bytes calldata data)
+    function calculateFee(uint256 amountIn, address user, uint16 solverFeeBps)
         external
-        pure
+        view
         returns (
             uint256 amountOut,
             uint256 routerFee,
             address routerFeeReceiverAddr,
-            uint256 solverFee,
-            address solverFeeReceiverAddr
+            uint256 solverFee
         )
     {
-        (
-            uint16 solverFeeBps,
-            address solverFeeReceiver,
-            uint16 routerFeeOnOutputBps,
-            uint16 routerFeeOnSolverFeeBps,
-            address routerFeeReceiver
-        ) = _decodeFeeData(data);
+        (uint16 routerFeeOnOutputBps, uint16 routerFeeOnSolverFeeBps) =
+            _getFeeInfo(user);
 
         if (
             (solverFeeBps + routerFeeOnOutputBps > MAX_FEE_BPS)
@@ -128,44 +118,28 @@ contract FeeTaker is AccessControl {
             totalRouterFee += routerFeeOnOutput;
         }
 
-        return (
-            amountOut,
-            totalRouterFee,
-            routerFeeReceiver,
-            solverPortion,
-            solverFeeReceiver
-        );
+        return (amountOut, totalRouterFee, _routerFeeReceiver, solverPortion);
     }
 
     /**
-     * @notice Decodes the fee data parameters
-     * @param data Encoded fee parameters
-     * @return solverFeeBps Solver fee in basis points
-     * @return solverFeeReceiver Address to receive solver fee
+     * @notice Gets fee information for a specific user
+     * @dev Returns custom fees if set for the user, otherwise returns default fees
+     * @param user The user address to check
      * @return routerFeeOnOutputBps Router fee on output in basis points
      * @return routerFeeOnSolverFeeBps Router fee on solver fee in basis points
-     * @return routerFeeReceiver Address to receive router fees
      */
-    function _decodeFeeData(bytes calldata data)
+    function _getFeeInfo(address user)
         internal
-        pure
-        returns (
-            uint16 solverFeeBps,
-            address solverFeeReceiver,
-            uint16 routerFeeOnOutputBps,
-            uint16 routerFeeOnSolverFeeBps,
-            address routerFeeReceiver
-        )
+        view
+        returns (uint16 routerFeeOnOutputBps, uint16 routerFeeOnSolverFeeBps)
     {
-        if (data.length != 46) {
-            revert FeeTaker__InvalidDataLength();
-        }
+        routerFeeOnOutputBps = _hasCustomRouterFeeOnOutput[user]
+            ? _customRouterFeeOnOutput[user]
+            : _routerFeeOnOutputBps;
 
-        solverFeeBps = uint16(bytes2(data[0:2]));
-        solverFeeReceiver = address(bytes20(data[2:22]));
-        routerFeeOnOutputBps = uint16(bytes2(data[22:24]));
-        routerFeeOnSolverFeeBps = uint16(bytes2(data[24:26]));
-        routerFeeReceiver = address(bytes20(data[26:46]));
+        routerFeeOnSolverFeeBps = _hasCustomRouterFeeOnSolverFee[user]
+            ? _customRouterFeeOnSolverFee[user]
+            : _routerFeeOnSolverFeeBps;
     }
 
     /**
