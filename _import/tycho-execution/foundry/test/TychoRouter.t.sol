@@ -88,4 +88,40 @@ contract TychoRouterTest is TychoRouterTestSetup {
         vm.expectRevert(TychoRouter__EmptySwaps.selector);
         tychoRouter.exposedSplitSwap(amountIn, 2, swaps);
     }
+
+    // FEE CALCULATOR TESTS
+    function testSetFeeCalculator() public {
+        vm.prank(FEE_SETTER);
+        tychoRouter.setFeeCalculator(FEE_CALCULATOR);
+        assertEq(tychoRouter.getFeeCalculator(), FEE_CALCULATOR);
+    }
+
+    function testSetFeeCalculatorZeroAddress() public {
+        vm.prank(FEE_SETTER);
+        vm.expectRevert(TychoRouter__AddressZero.selector);
+        tychoRouter.setFeeCalculator(address(0));
+    }
+
+    function testSetFeeCalculatorUnauthorized() public {
+        vm.prank(ALICE);
+        vm.expectRevert();
+        tychoRouter.setFeeCalculator(FEE_CALCULATOR);
+    }
+
+    function testSetFeeCalculatorUpdatesCorrectly() public {
+        address newFeeCalculator = address(0x999);
+        vm.startPrank(FEE_SETTER);
+        tychoRouter.setFeeCalculator(FEE_CALCULATOR);
+        assertEq(tychoRouter.getFeeCalculator(), FEE_CALCULATOR);
+
+        tychoRouter.setFeeCalculator(newFeeCalculator);
+        vm.stopPrank();
+
+        assertEq(tychoRouter.getFeeCalculator(), newFeeCalculator);
+    }
+
+    function testDefaultFeeCalculator() public view {
+        // Calculator should be zero if not explicitly set
+        assertEq(tychoRouter.getFeeCalculator(), address(0));
+    }
 }

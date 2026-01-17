@@ -3,17 +3,17 @@ pragma solidity ^0.8.26;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
-error FeeTaker__FeeTooHigh();
-error FeeTaker__AddressZero();
+error FeeCalculator__FeeTooHigh();
+error FeeCalculator__AddressZero();
 
 /**
- * @title FeeTaker
+ * @title FeeCalculator
  * @notice Contract responsible for calculating fees on swap outputs and managing fee configuration
  * @dev This contract is called via staticCall from TychoRouter.
  *      It calculates fees and returns the values - accounting is done by the caller.
  *      It also stores all fee-related configuration.
  */
-contract FeeTaker is AccessControl {
+contract FeeCalculator is AccessControl {
     uint16 private constant MAX_FEE_BPS = 10000; // 100% max
 
     uint16 private _routerFeeOnOutputBps; // Router fee on output amount in basis points
@@ -83,7 +83,7 @@ contract FeeTaker is AccessControl {
             (solverFeeBps + routerFeeOnOutputBps > MAX_FEE_BPS)
                 || routerFeeOnSolverFeeBps > MAX_FEE_BPS
         ) {
-            revert FeeTaker__FeeTooHigh();
+            revert FeeCalculator__FeeTooHigh();
         }
 
         amountOut = amountIn;
@@ -283,7 +283,7 @@ contract FeeTaker is AccessControl {
         onlyRole(ROUTER_FEE_SETTER_ROLE)
     {
         if (routerFeeReceiver == address(0)) {
-            revert FeeTaker__AddressZero();
+            revert FeeCalculator__AddressZero();
         }
         address oldReceiver = _routerFeeReceiver;
         _routerFeeReceiver = routerFeeReceiver;

@@ -73,7 +73,7 @@ error TychoRouter__InvalidDataLength();
 error TychoRouter__UndefinedMinAmountOut();
 
 contract TychoRouter is AccessControl, Dispatcher, Pausable {
-    address private _feeTaker; // Address of the fee taker contract
+    address private _feeCalculator; // Address of the fee calculator contract
 
     using SafeERC20 for IERC20;
     using LibPrefixLengthEncodedByteArray for bytes;
@@ -92,8 +92,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     event Withdrawal(
         address indexed token, uint256 amount, address indexed receiver
     );
-    event FeeTakerUpdated(
-        address indexed oldTaker, address indexed newExecutor
+    event FeeCalculatorUpdated(
+        address indexed oldCalculator, address indexed newCalculator
     );
 
     constructor(address _permit2) Dispatcher(_permit2) {
@@ -667,26 +667,26 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     }
 
     /**
-     * @notice Sets the fee taker contract address
-     * @param feeTaker The address of the fee taker contract
+     * @notice Sets the fee calculator contract address
+     * @param feeCalculator The address of the fee calculator contract
      */
-    function setFeeTaker(address feeTaker)
+    function setFeeCalculator(address feeCalculator)
         external
         onlyRole(ROUTER_FEE_SETTER_ROLE)
     {
-        if (feeTaker == address(0)) {
+        if (feeCalculator == address(0)) {
             revert TychoRouter__AddressZero();
         }
-        address oldTaker = _feeTaker;
-        _feeTaker = feeTaker;
-        emit FeeTakerUpdated(oldTaker, feeTaker);
+        address oldCalculator = _feeCalculator;
+        _feeCalculator = feeCalculator;
+        emit FeeCalculatorUpdated(oldCalculator, feeCalculator);
     }
 
     /**
-     * @dev Returns the current fee taker address
+     * @dev Returns the current fee calculator address
      */
-    function getFeeTaker() external view returns (address) {
-        return _feeTaker;
+    function getFeeCalculator() external view returns (address) {
+        return _feeCalculator;
     }
 
     /**

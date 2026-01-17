@@ -36,7 +36,7 @@ contract Constants is Test, BaseConstants {
     // Changed this since someone deployed a drainer contract to makeAddr("bob")
     address BOB = makeAddr("bob*"); //bob=someone!=us
     address EXECUTOR_SETTER = makeAddr("executorSetter");
-    address FEE_TAKER = makeAddr("feeTaker");
+    address FEE_CALCULATOR = makeAddr("feeCalculator");
     address FEE_SETTER = makeAddr("feeSetter");
     address ALICE = 0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2;
     uint256 ALICE_PK =
