@@ -1,13 +1,37 @@
 substreams_yaml_path: ./substreams.yaml
 protocol_system: "ekubo_v3"
-skip_balance_check: true # Fails because the pool id is not the owner of the tokens. Needs to be address in the testing framework.
+skip_balance_check: true # Fails because the pool id is not the owner of the tokens. Needs to be addressed in the testing framework.
 protocol_type_names:
   - "ekubo_v3_pool"
 tests:
   - name: test_pool_creation
-    start_block: 24169200
-    stop_block: 24169200
+    start_block: 24134506
+    stop_block: 24250907
     expected_components:
+      - id: "0x4a619b24ff31bbeae86503d0321898c9cb3f07bc32097749ee0622d5e9b78d6f"
+        tokens:
+          - "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+          - "0xdac17f958d2ee523a2206206994597c13d831ec7"
+        static_attributes:
+          token0: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+          token1: "0xdac17f958d2ee523a2206206994597c13d831ec7"
+          extension: "0x0000000000000000000000000000000000000000"
+          fee: "0x0000a7c5ac471b48"
+          pool_type_config: "0x80000032"
+          extension_id: "0x00000001"
+        creation_tx: "0xfdc4c3c3ad5b613469effa7c2ab9796d6b76f5fb25258f648ff211687697aee7"
+      - id: "0x40f28acb8adc041aa51c8db8f21a9ccac0ee359075b01e1b432c238bb4e6c7eb"
+        tokens:
+          - "0x0000000000000000000000000000000000000000"
+          - "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        static_attributes:
+          token0: "0x0000000000000000000000000000000000000000"
+          token1: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+          extension: "0x517e506700271aea091b02f42756f5e174af5230"
+          fee: "0x0000000000000000"
+          pool_type_config: "0x00000000"
+          extension_id: "0x00000002"
+        creation_tx: "0x8b60940efaf9fa8580a7b20b05682b5530634451becb465091c77093eb8a75e3"
       - id: "0x8d04fa3b0df99076064daf0511006a8a06b0f988922db81c1e596ddfd1f3da12"
         tokens:
           - "0x0000000000000000000000000000000000000000"
@@ -20,4 +44,15 @@ tests:
           pool_type_config: "0x00000000"
           extension_id: "0x00000003"
         creation_tx: "0xa0460837160c3e74c14a56fe8af78ea81458c11f44bf23b317123e6629f9c529"
-        skip_simulation: true # Not integrated into tycho-simulation yet
+      - id: "0x49f4744cd4e8d49b180c7db20522e9053a030cd02f94a276403b2e361eed683f"
+        tokens:
+          - "0x0000000000000000000000000000000000000000"
+          - "0xdac17f958d2ee523a2206206994597c13d831ec7"
+        static_attributes:
+          token0: "0x0000000000000000000000000000000000000000"
+          token1: "0xdac17f958d2ee523a2206206994597c13d831ec7"
+          extension: "0x5555ff9ff2757500bf4ee020dcfd0210cffa41be"
+          fee: "0x00068db8bac710cb"
+          pool_type_config: "0x80000064"
+          extension_id: "0x00000004"
+        creation_tx: "0x672de3c0f48ee967812cc85310581fbc22e3b1d54e0ba33f9fc549eb09a56c2e"
