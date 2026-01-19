@@ -1,3 +1,18 @@
+## [0.9.0](https://github.com/propeller-heads/tycho-contracts/compare/0.8.0...0.9.0) (2026-01-19)
+
+
+### Features
+
+* add assertion for final balance in testFinalizeBalances ([2d833fc](https://github.com/propeller-heads/tycho-contracts/commit/2d833fc32e9e7cb72921a85fed5888d4806bcc27))
+* add tests for finalizeBalances method ([c9c4112](https://github.com/propeller-heads/tycho-contracts/commit/c9c4112ce6c48b34e359fdd0578bbf0c427439a7))
+* implement finalizeBalances method ([d68829f](https://github.com/propeller-heads/tycho-contracts/commit/d68829f8487e33b90c4c6727172d00c424cde505))
+
+
+### Bug Fixes
+
+* rename error for negative count ([197dc78](https://github.com/propeller-heads/tycho-contracts/commit/197dc784939d03faa55c95d5001f9e3db86f401b))
+* update slither args and event parameters to be indexed according to the ERC20 spec ([73ec132](https://github.com/propeller-heads/tycho-contracts/commit/73ec1321396c5cb752708ad4c949315211ad7cb1))
+
 ## [0.8.0](https://github.com/propeller-heads/tycho-contracts/compare/0.7.0...0.8.0) (2026-01-15)
 
 
