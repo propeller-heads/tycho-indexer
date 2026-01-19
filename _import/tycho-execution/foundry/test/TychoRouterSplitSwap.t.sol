@@ -105,9 +105,11 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             amountIn,
             WETH_ADDR,
             USDC_ADDR,
-            1, // min amount
+            1, // min amount,
             4,
             ALICE,
+            0,
+            address(0),
             permitSingle,
             signature,
             pleEncode(swaps)
@@ -136,6 +138,8 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             4,
             ALICE,
             true,
+            0,
+            address(0),
             pleEncode(swaps)
         );
 
@@ -163,6 +167,8 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             4,
             ALICE,
             true,
+            0,
+            address(0),
             pleEncode(swaps)
         );
         vm.stopPrank();
@@ -187,6 +193,8 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             2,
             ALICE,
             true,
+            0,
+            address(0),
             pleEncode(swaps)
         );
 
@@ -222,6 +230,8 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             minAmountOut,
             4,
             ALICE,
+            0,
+            address(0),
             permitSingle,
             signature,
             pleEncode(swaps)
@@ -359,7 +369,16 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         );
         vm.expectRevert();
         tychoRouter.splitSwap(
-            amountIn, USDC_ADDR, WETH_ADDR, 1, 2, ALICE, true, pleEncode(swaps)
+            amountIn,
+            USDC_ADDR,
+            WETH_ADDR,
+            1,
+            2,
+            ALICE,
+            true,
+            0,
+            address(0),
+            pleEncode(swaps)
         );
         vm.stopPrank();
     }

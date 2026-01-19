@@ -492,7 +492,7 @@ mod tests {
                 Bytes::from_str("0x3ede3eca2a72b3aecc820e955b36f38437d01395").unwrap()
             );
             // single swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "51cebf92");
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "c3333f19");
         }
 
         #[test]
@@ -508,6 +508,7 @@ mod tests {
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_eth_univ4(), swap_eth_pepe_univ4()],
+                ..Default::default()
             };
 
             let transactions = encoder.encode_full_calldata(vec![solution]);
@@ -515,7 +516,7 @@ mod tests {
             let transactions = transactions.unwrap();
             assert_eq!(transactions.len(), 1);
             // single swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "51cebf92");
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "c3333f19");
         }
 
         #[test]
@@ -560,7 +561,7 @@ mod tests {
             assert_eq!(transactions.len(), 1);
             assert_eq!(transactions[0].value, BigUint::ZERO);
             // sequential swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "adccf472");
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "7f3da92b");
         }
 
         #[test]
@@ -577,6 +578,7 @@ mod tests {
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_eth, swap_usdc_eth_univ4()],
+                ..Default::default()
             };
 
             let encoded_solution_res = encoder.encode_solution(&solution);
@@ -830,6 +832,7 @@ mod tests {
                 // The receiver was generated with `makeAddr("bob") using forge`
                 receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
                 swaps: vec![swap],
+                ..Default::default()
             };
 
             let encoded_solutions = encoder
@@ -885,6 +888,7 @@ mod tests {
                 sender: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
                 receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
                 swaps: vec![swap.clone(), swap],
+                ..Default::default()
             };
 
             let result = encoder.encode_solutions(vec![solution]);
@@ -908,6 +912,7 @@ mod tests {
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_eth_univ4(), swap_eth_pepe_univ4()],
+                ..Default::default()
             };
 
             let encoded_solutions = encoder

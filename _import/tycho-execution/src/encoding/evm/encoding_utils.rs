@@ -86,6 +86,12 @@ pub fn encode_tycho_router_call(
     let checked_token = bytes_to_address(&solution.checked_token)?;
     let receiver = bytes_to_address(&solution.receiver)?;
     let n_tokens = U256::from(encoded_solution.n_tokens);
+    let solver_fee_bps = U256::from(solution.solver_fee_bps);
+    let solver_fee_receiver = if solution.solver_fee_receiver.is_empty() {
+        Address::ZERO
+    } else {
+        bytes_to_address(&solution.solver_fee_receiver)?
+    };
     let (permit, signature) = if let Some(p) = encoded_solution.permit {
         let permit = Some(
             PermitSingle::try_from(&p)
@@ -109,6 +115,8 @@ pub fn encode_tycho_router_call(
             checked_token,
             min_amount_out,
             receiver,
+            solver_fee_bps,
+            solver_fee_receiver,
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
@@ -127,6 +135,8 @@ pub fn encode_tycho_router_call(
             min_amount_out,
             receiver,
             user_transfer_type == &UserTransferType::TransferFrom,
+            solver_fee_bps,
+            solver_fee_receiver,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -140,6 +150,8 @@ pub fn encode_tycho_router_call(
             checked_token,
             min_amount_out,
             receiver,
+            solver_fee_bps,
+            solver_fee_receiver,
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
@@ -158,6 +170,8 @@ pub fn encode_tycho_router_call(
             min_amount_out,
             receiver,
             user_transfer_type == &UserTransferType::TransferFrom,
+            solver_fee_bps,
+            solver_fee_receiver,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -172,6 +186,8 @@ pub fn encode_tycho_router_call(
             min_amount_out,
             n_tokens,
             receiver,
+            solver_fee_bps,
+            solver_fee_receiver,
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
@@ -191,6 +207,8 @@ pub fn encode_tycho_router_call(
             n_tokens,
             receiver,
             user_transfer_type == &UserTransferType::TransferFrom,
+            solver_fee_bps,
+            solver_fee_receiver,
             encoded_solution.swaps,
         )
             .abi_encode()

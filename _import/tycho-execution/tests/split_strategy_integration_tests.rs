@@ -80,6 +80,7 @@ fn test_split_swap_strategy_encoder() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_dai, swap_weth_wbtc, swap_dai_usdc, swap_wbtc_usdc],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -188,6 +189,7 @@ fn test_split_input_cyclic_swap() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_usdc_weth_pool1, swap_usdc_weth_pool2, swap_weth_usdc_pool2],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -208,15 +210,22 @@ fn test_split_input_cyclic_swap() {
 
     let hex_calldata = alloy::hex::encode(&calldata);
     let expected_input = [
-        "7fa02a7d",                                                         // selector
+        "29e42b85", // selector (splitSwapPermit2)
         "0000000000000000000000000000000000000000000000000000000005f5e100", // given amount
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // given token
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // checked token
         "0000000000000000000000000000000000000000000000000000000005ef619b", // min amount out
         "0000000000000000000000000000000000000000000000000000000000000002", // tokens length
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
+        "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps = 0
+        "0000000000000000000000000000000000000000000000000000000000000000", /* solverFeeReceiver
+                     * = address(0) */
     ]
     .join("");
+
+    // After this there is the permit and because of the deadlines (that depend on block
+    // time) it's hard to assert back
+
     let expected_swaps = [
         "0000000000000000000000000000000000000000000000000000000000000125", /* length of ple
                                                                              * encoded swaps
@@ -258,8 +267,8 @@ fn test_split_input_cyclic_swap() {
         "000000000000000000000000000000000000000000000000000000", // padding
     ]
     .join("");
-    assert_eq!(hex_calldata[..392], expected_input);
-    assert_eq!(hex_calldata[1160..], expected_swaps);
+    assert_eq!(hex_calldata[..520], expected_input);
+    assert_eq!(hex_calldata[1288..], expected_swaps);
     write_calldata_to_file("test_split_input_cyclic_swap", hex_calldata.as_str());
 }
 
@@ -342,6 +351,7 @@ fn test_split_output_cyclic_swap() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_usdc_weth_v2, swap_weth_usdc_v3_pool1, swap_weth_usdc_v3_pool2],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -362,15 +372,21 @@ fn test_split_output_cyclic_swap() {
 
     let hex_calldata = alloy::hex::encode(&calldata);
     let expected_input = [
-        "7fa02a7d",                                                         // selector
+        "29e42b85", // selector (splitSwapPermit2)
         "0000000000000000000000000000000000000000000000000000000005f5e100", // given amount
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // given token
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // checked token
         "0000000000000000000000000000000000000000000000000000000005e703f4", // min amount out
         "0000000000000000000000000000000000000000000000000000000000000002", // tokens length
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
+        "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps = 0
+        "0000000000000000000000000000000000000000000000000000000000000000", /* solverFeeReceiver
+                     * = address(0) */
     ]
     .join("");
+
+    // After this there is the permit and because of the deadlines (that depend on block
+    // time) it's hard to assert back
 
     let expected_swaps = [
         "0000000000000000000000000000000000000000000000000000000000000125", /* length of ple
@@ -414,7 +430,7 @@ fn test_split_output_cyclic_swap() {
     ]
     .join("");
 
-    assert_eq!(hex_calldata[..392], expected_input);
-    assert_eq!(hex_calldata[1160..], expected_swaps);
+    assert_eq!(hex_calldata[..520], expected_input);
+    assert_eq!(hex_calldata[1288..], expected_swaps);
     write_calldata_to_file("test_split_output_cyclic_swap", hex_calldata.as_str());
 }

@@ -58,6 +58,12 @@ pub struct Solution {
     pub checked_amount: BigUint,
     /// List of swaps to fulfill the solution.
     pub swaps: Vec<Swap>,
+    /// Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%).
+    #[serde(default)]
+    pub solver_fee_bps: u16,
+    /// Address to receive the solver fee.
+    #[serde(default)]
+    pub solver_fee_receiver: Bytes,
 }
 
 /// Represents a swap operation to be performed on a pool.
