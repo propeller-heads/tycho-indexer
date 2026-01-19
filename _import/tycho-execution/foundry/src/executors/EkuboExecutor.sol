@@ -120,6 +120,8 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         returns (uint128 swappedAmount, address tokenOut, address receiver)
     {
         // Prepend selector of lock() to calldata
+        // We must use assembly here since the Ekubo Core's lock method expects the raw
+        // bytes directly and not ABI-encoded bytes
         bytes memory callData = bytes.concat(bytes4(0xf83d08ba), data);
 
         // slither-disable-next-line low-level-calls
@@ -223,11 +225,13 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         returns (bytes memory result)
     {
         // Prepend forward(address) selector to the data
+        // We must use assembly here since the Ekubo Core's lock method expects the raw
+        // bytes directly and not ABI-encoded bytes
         bytes memory callData = bytes.concat(
             bytes4(0x101e8952), bytes32(uint256(uint160(to))), data
         );
 
-        // slither-disable-next-line low-level-calls
+        // slither-disable-next-line low-level-calls,calls-loop
         (bool success, bytes memory returnData) = address(core).call(callData);
 
         // Assembly is necessary to be able to revert with arbitrary bytes memory
