@@ -24,7 +24,7 @@ error Vault__UnexpectedInputDelta(int256 inputDelta);
  * @dev Implements ERC6909 for managing user token balances within the router.
  * Users can deposit tokens, use them for swaps, and withdraw them.
  */
-abstract contract Vault is ERC6909, ReentrancyGuard {
+abstract contract Vault is ERC6909 {
     using SafeERC20 for IERC20;
 
     // Vault balances - using our own mapping to avoid expensive Transfer events from ERC6909
@@ -128,11 +128,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      * @param token The token address to deposit (use address(0) for native ETH)
      * @param amount The amount to deposit
      */
-    function deposit(address token, uint256 amount)
-        external
-        payable
-        nonReentrant
-    {
+    function deposit(address token, uint256 amount) external payable {
         if (amount == 0) {
             revert Vault__AmountZero();
         }
@@ -155,7 +151,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      * @param token The token to withdraw
      * @param amount The amount to withdraw
      */
-    function withdraw(address token, uint256 amount) external nonReentrant {
+    function withdraw(address token, uint256 amount) external {
         if (amount == 0) {
             revert Vault__AmountZero();
         }

@@ -107,8 +107,8 @@ mod tests {
                 "c71ea051a5f82c67adcf634c36ffe6334793d24c",
                 // pool id
                 "85b2b559bc2d21104c4defdd6efca8a20343361d",
-                // transfer type None
-                "01",
+                // transfer type Transfer
+                "02",
                 // receiver
                 "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))

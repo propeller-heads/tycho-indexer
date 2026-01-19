@@ -96,9 +96,6 @@ contract LidoExecutor is IExecutor {
         ) {
             tokenOut = wstEth;
             // WST_ETH wrapping: ST_ETH -> WST_ETH
-            if (approvalNeeded) {
-                stEth.forceApprove(wstEth, type(uint256).max - 1);
-            }
             amountOut = LidoWrappedPool(wstEth).wrap(amountIn);
 
             if (receiver != address(this)) {
@@ -158,8 +155,6 @@ contract LidoExecutor is IExecutor {
             revert LidoExecutor__InvalidDataLength();
         }
 
-        // TODO: hardcode the transferType in ENG-4881
-        transferType = RestrictTransferFrom.TransferType(uint8(data[20]));
         LidoPoolType pool = LidoPoolType(uint8(data[21]));
         LidoPoolDirection direction = LidoPoolDirection(uint8(data[22]));
 
@@ -167,22 +162,29 @@ contract LidoExecutor is IExecutor {
         {
             // ST_ETH staking: ETH -> ST_ETH
             tokenIn = address(0);
+            transferType =
+            RestrictTransferFrom.TransferType.TransferNativeInMsgValue;
         } else if (
             pool == LidoPoolType.wstETH && direction == LidoPoolDirection.Wrap
         ) {
             // WST_ETH wrapping: ST_ETH -> WST_ETH
-            tokenIn = address(stEth);
+            tokenIn = stEthAddress;
+            transferType = RestrictTransferFrom.TransferType(uint8(data[20]));
+            // The receiver of the funds will be the wstEth contract.
+            // This protocol will only ever have the following transferTypes:
+            // - TransferFromAndProtocolWillDebit: the funds should be transferred to the TychoRouter and the wstEth contract needs to be approved
+            // - ProtocolWillDebit: wstEth needs to be approved
+            receiver = wstEth;
         } else if (
             pool == LidoPoolType.wstETH && direction == LidoPoolDirection.Unwrap
         ) {
             // WST_ETH unwrapping: WST_ETH -> ST_ETH
-            tokenIn = address(wstEth);
+            tokenIn = wstEth;
+            transferType = RestrictTransferFrom.TransferType(uint8(data[20]));
+            // The receiver needs to be TychoRouter because the wstETH contract will burn it from the msg.sender
+            receiver = address(this);
         } else {
             revert LidoExecutor__InvalidSwapDirection();
         }
-
-        // Since the wstEth contract withdraws the funds from the msg.sender, the user's funds need to sent to the
-        // TychoRouter initially (address(this))
-        receiver = address(this);
     }
 }

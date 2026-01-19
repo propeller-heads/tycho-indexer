@@ -379,7 +379,7 @@ mod tests {
                 // approval needed
                 "01",
                 // transfer type None
-                "02",
+                "05",
                 // receiver,
                 "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))
@@ -446,7 +446,7 @@ mod tests {
                 // approval needed
                 "01",
                 // transfer type None
-                "02",
+                "05",
                 // receiver
                 "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))
@@ -523,7 +523,7 @@ mod tests {
                 // approval needed
                 "01",
                 // transfer type None
-                "02",
+                "05",
                 // receiver
                 "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))

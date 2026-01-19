@@ -29,10 +29,6 @@ contract ERC4626Executor is IExecutor {
         bool approvalNeeded;
 
         (tokenIn, target, receiver, approvalNeeded) = _decodeData(data);
-        if (approvalNeeded) {
-            // slither-disable-next-line unused-return
-            tokenIn.forceApprove(target, type(uint256).max);
-        }
 
         if (address(tokenIn) == target) {
             // shares --> asset
@@ -80,9 +76,11 @@ contract ERC4626Executor is IExecutor {
             revert ERC4626Executor__InvalidDataLength();
         }
         tokenIn = address(bytes20(data[0:20]));
-        // Since the ERC4626 vault withdraws the funds from the msg.sender, the user's funds need to sent to the
-        // TychoRouter initially (address(this))
-        receiver = address(this);
+        // The receiver of the funds will be the ERC4626 vault.
+        // This protocol will only ever have the following transferTypes:
+        // - TransferFromAndProtocolWillDebit: the funds should be transferred to the TychoRouter and the ERC4626 vault needs to be approved
+        // - ProtocolWillDebit: ERC4626 vault needs to be approved
+        receiver = address(bytes20(data[20:40]));
         transferType = RestrictTransferFrom.TransferType(uint8(data[60]));
     }
 }

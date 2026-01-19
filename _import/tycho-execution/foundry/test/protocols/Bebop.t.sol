@@ -124,7 +124,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             "transferType mismatch"
         );
         assertEq(tokenIn, USDC_ADDR, "tokenIn mismatch");
-        assertEq(decodedReceiver, address(bebopExecutor), "receiver mismatch");
+        assertEq(decodedReceiver, BEBOP_SETTLEMENT, "receiver mismatch");
     }
 
     // Single Order Tests
@@ -161,7 +161,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         uint256 initialTokenOutBalance =
             IERC20(tokenOut).balanceOf(address(bebopExecutor));
-
+        vm.prank(address(bebopExecutor));
+        IERC20(tokenIn).approve(BEBOP_SETTLEMENT, amountIn);
         (uint256 amountOut, address tokenOutReturned, address receiver) =
             bebopExecutor.swap(amountIn, params);
 
@@ -264,7 +265,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         uint256 initialTokenOutBalance =
             IERC20(tokenOut).balanceOf(address(bebopExecutor));
-
+        vm.prank(address(bebopExecutor));
+        IERC20(tokenIn).approve(BEBOP_SETTLEMENT, amountIn);
         (uint256 amountOut, address tokenOutReturned, address receiver) =
             bebopExecutor.swap(amountIn, params);
 
@@ -321,6 +323,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 initialTokenOutBalance =
             IERC20(tokenOut).balanceOf(address(bebopExecutor));
 
+        vm.prank(address(bebopExecutor));
+        IERC20(tokenIn).approve(BEBOP_SETTLEMENT, amountIn);
         (uint256 amountOut, address tokenOutReturned, address receiver) =
             bebopExecutor.swap(amountIn, params);
 
@@ -376,7 +380,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         uint256 initialTokenOutBalance =
             IERC20(tokenOut).balanceOf(address(bebopExecutor));
-
+        vm.prank(address(bebopExecutor));
+        IERC20(tokenIn).approve(BEBOP_SETTLEMENT, amountIn);
         (uint256 amountOut, address tokenOutReturned, address receiver) =
             bebopExecutor.swap(amountIn, params);
 

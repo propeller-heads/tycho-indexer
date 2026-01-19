@@ -149,7 +149,7 @@ mod tests {
                 // approval needed
                 "01",
                 // transfer type None
-                "02"
+                "05"
             ))
         );
         write_calldata_to_file("test_encode_balancer_v2", hex_swap.as_str());

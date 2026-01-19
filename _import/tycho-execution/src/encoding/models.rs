@@ -271,15 +271,21 @@ pub struct EncodingContext {
 ///
 /// # Fields
 ///
-/// * `TransferFrom`: Transfer the token from the sender to the protocol/router.
-/// * `Transfer`: Transfer the token from the router into the protocol.
-/// * `None`: No transfer is needed. Tokens are already in the pool.
+/// * - TransferFrom: Transfer from user wallet to protocol
+/// * - TransferFromAndProtocolWillDebit: Transfer from user wallet to router, protocol takes it
+/// * - Transfer: Transfer from router balance to protocol (could be from vault or previous swap)
+/// * - TransferNativeInMsgValue: Native ETH sent via msg.value (hardcoded in executor for security)
+/// * - ProtocolWillDebit: Protocol takes from router/vault
+/// * - None: Funds already transferred from previous pool
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum TransferType {
     TransferFrom = 0,
-    Transfer = 1,
-    None = 2,
+    TransferFromAndProtocolWillDebit = 1,
+    Transfer = 2,
+    TransferNativeInMsgValue = 3,
+    ProtocolWillDebit = 4,
+    None = 5,
 }
 
 mod tests {

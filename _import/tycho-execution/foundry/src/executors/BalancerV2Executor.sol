@@ -34,11 +34,6 @@ contract BalancerV2Executor is IExecutor {
         (tokenIn, tokenOut, poolId, receiver, approvalNeeded) =
             _decodeData(data);
 
-        if (approvalNeeded) {
-            // slither-disable-next-line unused-return
-            IERC20(tokenIn).forceApprove(VAULT, type(uint256).max);
-        }
-
         IVault.SingleSwap memory singleSwap = IVault.SingleSwap({
             poolId: poolId,
             kind: IVault.SwapKind.GIVEN_IN,
@@ -97,9 +92,11 @@ contract BalancerV2Executor is IExecutor {
         }
 
         tokenIn = address(bytes20(data[0:20]));
-        // Since the Balancer Vault withdraws the funds from the msg.sender, the user's funds need to sent to the
-        // TychoRouter initially (address(this))
-        receiver = address(this);
+        // The receiver of the funds will be the Balancer Vault.
+        // This protocol will only ever have the following transferTypes:
+        // - TransferFromAndProtocolWillDebit: the funds should be transferred to the TychoRouter and the Balancer Vault needs to be approved
+        // - ProtocolWillDebit: Balancer Vault needs to be approved
+        receiver = VAULT;
         transferType = RestrictTransferFrom.TransferType(uint8(data[93]));
     }
 }

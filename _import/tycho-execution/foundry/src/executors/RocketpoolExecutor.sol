@@ -85,12 +85,13 @@ contract RocketpoolExecutor is IExecutor {
         }
 
         bool isDeposit = uint8(data[0]) == 1;
-        // TODO: hardcode the transferType in ENG-4881
-        transferType = RestrictTransferFrom.TransferType(uint8(data[1]));
         if (isDeposit) {
             tokenIn = address(0);
+            transferType =
+            RestrictTransferFrom.TransferType.TransferNativeInMsgValue;
         } else {
             tokenIn = address(RETH);
+            transferType = RestrictTransferFrom.TransferType(uint8(data[1]));
         }
         // Since burning withdraws the funds from the msg.sender, the user's funds need to sent to the
         // TychoRouter initially (address(this))

@@ -124,7 +124,7 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
         ) = executor.getTransferData(encodedQuote);
 
         assertEq(tokenIn, expected_quote.baseToken, "baseToken mismatch");
-        assertEq(receiver, address(executor));
+        assertEq(receiver, HASHFLOW_ROUTER);
         assertEq(
             uint8(transferType),
             uint8(RestrictTransferFrom.TransferType.None),
@@ -140,6 +140,10 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
 
         deal(WETH_ADDR, address(executor), amountIn);
         uint256 balanceBefore = USDC.balanceOf(trader);
+
+        vm.prank(address(executor));
+        IERC20(quote.baseToken).approve(HASHFLOW_ROUTER, amountIn);
+        vm.stopPrank();
 
         vm.prank(trader);
         (uint256 amountOut, address tokenOut, address receiver) =
@@ -162,6 +166,10 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
         deal(WETH_ADDR, address(executor), amountIn);
         uint256 balanceBefore = USDC.balanceOf(trader);
 
+        vm.prank(address(executor));
+        IERC20(quote.baseToken).approve(HASHFLOW_ROUTER, amountIn);
+        vm.stopPrank();
+
         vm.prank(trader);
         (uint256 amountOut, address tokenOut, address receiver) =
             executor.swap(amountIn, encodedQuote);
@@ -182,6 +190,10 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
 
         deal(WETH_ADDR, address(executor), amountIn);
         uint256 balanceBefore = USDC.balanceOf(trader);
+
+        vm.prank(address(executor));
+        IERC20(quote.baseToken).approve(HASHFLOW_ROUTER, amountIn);
+        vm.stopPrank();
 
         vm.prank(trader);
         (uint256 amountOut, address tokenOut, address receiver) =

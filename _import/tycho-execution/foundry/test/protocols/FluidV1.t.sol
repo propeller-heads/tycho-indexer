@@ -146,6 +146,31 @@ contract FluidV1ExecutorTest is Test, Constants {
         assertEq(amount, amountOwed);
     }
 
+    function testGetCallbackTransferDataETH() public {
+        uint256 amountOwed = 1000000000000000000;
+        bytes memory data =
+            abi.encodeWithSelector(hex"12345678", address(0), amountOwed);
+        address dexAddress = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
+        executor.setSwapParams(
+            IFluidV1Dex(dexAddress), RestrictTransferFrom.TransferType.Transfer
+        );
+
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            uint256 amount
+        ) = executor.getCallbackTransferData(data);
+
+        assertEq(
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.TransferNativeInMsgValue)
+        );
+        assertEq(receiver, FLUIDV1_LIQUIDITY);
+        assertEq(tokenIn, address(0));
+        assertEq(amount, amountOwed);
+    }
+
     function testSwapParamsRoundtrip() public {
         address dexAddress = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
         IFluidV1Dex dex = IFluidV1Dex(dexAddress);

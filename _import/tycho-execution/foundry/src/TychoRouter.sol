@@ -7,6 +7,7 @@ import {
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ERC6909} from "@openzeppelin/contracts/token/ERC6909/ERC6909.sol";
 import {
     SafeERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -102,6 +103,20 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         }
         permit2 = IAllowanceTransfer(_permit2);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    }
+
+    /**
+     * @notice Override supportsInterface to resolve conflict between AccessControl and ERC6909
+     */
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        virtual
+        override(AccessControl, ERC6909)
+        returns (bool)
+    {
+        return AccessControl.supportsInterface(interfaceId)
+            || ERC6909.supportsInterface(interfaceId);
     }
 
     /**

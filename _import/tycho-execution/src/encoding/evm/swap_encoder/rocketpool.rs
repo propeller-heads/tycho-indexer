@@ -110,8 +110,8 @@ mod tests {
             String::from(concat!(
                 // is deposit
                 "01",
-                // transfer type
-                "01",
+                // transfer type Transfer
+                "02",
                 // receiver
                 "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))
@@ -159,8 +159,8 @@ mod tests {
             String::from(concat!(
                 // is deposit
                 "00",
-                // transfer type
-                "01",
+                // transfer type Transfer
+                "02",
                 // receiver
                 "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))

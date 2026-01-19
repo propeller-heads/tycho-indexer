@@ -82,7 +82,7 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
         ) = ERC4626Exposed.getTransferData(params);
 
         assertEq(tokenIn, WETH_ADDR);
-        assertEq(receiver, address(ERC4626Exposed));
+        assertEq(receiver, address(spETH));
         assertEq(
             uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
         );
@@ -102,6 +102,8 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
 
         uint256 balanceBefore = spETH.balanceOf(BOB);
 
+        vm.prank(address(ERC4626Exposed));
+        IERC20(WETH_ADDR).approve(address(spETH), amountIn);
         (uint256 amountOut, address tokenOut, address receiver) =
             ERC4626Exposed.swap(amountIn, protocolData);
 

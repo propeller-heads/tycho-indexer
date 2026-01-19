@@ -177,8 +177,12 @@ contract FluidV1Executor is IExecutor, ICallback {
         )
     {
         (tokenIn, amount) = abi.decode(data[4:68], (address, uint256));
-        // TODO: hardcode the transferType in ENG-4881
-        transferType = _getTransferType();
+        if (tokenIn == address(0)) {
+            transferType =
+            RestrictTransferFrom.TransferType.TransferNativeInMsgValue;
+        } else {
+            transferType = _getTransferType();
+        }
         receiver = liquidity;
     }
 }

@@ -54,7 +54,10 @@ contract RestrictTransferFrom is Vault {
 
     enum TransferType {
         TransferFrom,
+        TransferFromAndProtocolWillDebit,
         Transfer,
+        TransferNativeInMsgValue,
+        ProtocolWillDebit,
         None
     }
 
@@ -83,10 +86,14 @@ contract RestrictTransferFrom is Vault {
 
     /**
      * @dev This function is used to transfer the tokens from the sender to the receiver.
-     * This function is called within the Executor contracts.
-     * If the TransferType is TransferFrom, it will check if the amount is within the allowed amount and transfer those funds from the user.
-     * If the TransferType is Transfer, it will transfer the funds from the TychoRouter to the receiver.
-     * If the TransferType is None, it will do nothing.
+     * This function is called within the Dispatcher before calling executors.
+     * Handles 6 transfer scenarios:
+     * - TransferFrom: Transfer from user wallet to protocol
+     * - TransferFromAndProtocolWillDebit: Transfer from user wallet to router, protocol takes it
+     * - Transfer: Transfer from router balance to protocol (could be from vault or previous swap)
+     * - TransferNativeInMsgValue: Native ETH sent via msg.value (hardcoded in executor for security)
+     * - ProtocolWillDebit: Protocol takes from router/vault
+     * - None: Funds already transferred from previous pool
      */
     // slither-disable-next-line assembly
     function _transfer(
@@ -95,30 +102,15 @@ contract RestrictTransferFrom is Vault {
         address tokenIn,
         uint256 amount
     ) internal {
+        address sender;
+        assembly {
+            sender := tload(_SENDER_SLOT)
+        }
         if (transferType == TransferType.TransferFrom) {
-            address tokenInStorage;
+            _restrictTransferFrom(sender, amount, tokenIn);
             bool isPermit2;
-            address sender;
-            uint256 amountAllowed;
             assembly {
-                tokenInStorage := tload(_TOKEN_IN_SLOT)
-                amountAllowed := tload(_AMOUNT_ALLOWED_SLOT)
                 isPermit2 := tload(_IS_PERMIT2_SLOT)
-                sender := tload(_SENDER_SLOT)
-            }
-            if (amount > amountAllowed) {
-                revert RestrictTransferFrom__ExceededTransferFromAllowance(
-                    amountAllowed, amount
-                );
-            }
-            if (tokenIn != tokenInStorage) {
-                revert RestrictTransferFrom__DifferentTokenIn(
-                    tokenIn, tokenInStorage
-                );
-            }
-            amountAllowed -= amount;
-            assembly {
-                tstore(_AMOUNT_ALLOWED_SLOT, amountAllowed)
             }
             if (isPermit2) {
                 // Permit2.permit is already called from the TychoRouter
@@ -128,16 +120,86 @@ contract RestrictTransferFrom is Vault {
                 // slither-disable-next-line arbitrary-send-erc20
                 IERC20(tokenIn).safeTransferFrom(sender, receiver, amount);
             }
+        } else if (
+            transferType == TransferType.TransferFromAndProtocolWillDebit
+        ) {
+            _restrictTransferFrom(sender, amount, tokenIn);
+            bool isPermit2;
+            assembly {
+                isPermit2 := tload(_IS_PERMIT2_SLOT)
+            }
+            if (isPermit2) {
+                // Permit2.permit is already called from the TychoRouter
+                // slither-disable-next-line calls-loop
+                permit2.transferFrom(
+                    sender, address(this), uint160(amount), tokenIn
+                );
+            } else {
+                // slither-disable-next-line arbitrary-send-erc20
+                IERC20(tokenIn).safeTransferFrom(sender, address(this), amount);
+            }
+            if (tokenIn != address(0)) {
+                // Approve receiver (usually a pool/vault/router) to use the TychoRouter's funds
+                IERC20(tokenIn).forceApprove(receiver, amount);
+            }
         } else if (transferType == TransferType.Transfer) {
+            // Transfer using the user's router balance.
+            // This could mean the funds come from the user's vault (first swap)
+            // or funds are in the router from the previous swap.
+            _updateDeltaAccounting(tokenIn, -int256(amount));
             if (tokenIn == address(0)) {
                 Address.sendValue(payable(receiver), amount);
             } else {
                 IERC20(tokenIn).safeTransfer(receiver, amount);
             }
+        } else if (transferType == TransferType.TransferNativeInMsgValue) {
+            // Protocols like Fluid or Lido require us to send the ETH as
+            // msg.value when calling the swap function from inside the executor.
+            // This transfer type must be encoded from the executor for security purposes
+            _updateDeltaAccounting(tokenIn, -int256(amount));
+        } else if (transferType == TransferType.ProtocolWillDebit) {
+            // Funds are either in the router from the previous swap, or will
+            // be taken from our vault (in the case of the first swap).
+            _updateDeltaAccounting(tokenIn, -int256(amount));
+            if (tokenIn != address(0)) {
+                IERC20(tokenIn).forceApprove(receiver, amount);
+            }
         } else if (transferType == TransferType.None) {
             return;
         } else {
             revert RestrictTransferFrom__UnknownTransferType();
+        }
+    }
+
+    // Assembly required for transient storage operations (tload/tstore)
+    // slither-disable-next-line assembly
+    function _restrictTransferFrom(
+        address sender,
+        uint256 amount,
+        address tokenIn
+    ) internal {
+        //  This is important to prevent badly encoded split swaps from taking
+        //  more than the input amount out of the user's wallet or vault balance.
+        address tokenInStorage;
+        uint256 amountAllowed;
+
+        assembly {
+            tokenInStorage := tload(_TOKEN_IN_SLOT)
+            amountAllowed := tload(_AMOUNT_ALLOWED_SLOT)
+        }
+        if (amount > amountAllowed) {
+            revert RestrictTransferFrom__ExceededTransferFromAllowance(
+                amountAllowed, amount
+            );
+        }
+        if (tokenIn != tokenInStorage) {
+            revert RestrictTransferFrom__DifferentTokenIn(
+                tokenIn, tokenInStorage
+            );
+        }
+        amountAllowed -= amount;
+        assembly {
+            tstore(_AMOUNT_ALLOWED_SLOT, amountAllowed)
         }
     }
 }

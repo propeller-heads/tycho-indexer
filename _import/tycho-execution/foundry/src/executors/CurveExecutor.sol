@@ -65,11 +65,6 @@ contract CurveExecutor is IExecutor {
         (tokenIn, tokenOut, pool, poolType, i, j, approvalNeeded, receiver) =
             _decodeData(data);
 
-        if (approvalNeeded && tokenIn != nativeToken) {
-            // slither-disable-next-line unused-return
-            IERC20(tokenIn).forceApprove(address(pool), type(uint256).max);
-        }
-
         /// Inspired by Curve's router contract: https://github.com/curvefi/curve-router-ng/blob/9ab006ca848fc7f1995b6fbbecfecc1e0eb29e2a/contracts/Router.vy#L44
         uint256 balanceBefore = _balanceOf(tokenOut);
 
@@ -166,8 +161,10 @@ contract CurveExecutor is IExecutor {
     {
         tokenIn = address(bytes20(data[0:20]));
         transferType = RestrictTransferFrom.TransferType(uint8(data[64]));
-        // Since the curve pool withdraws the funds from the msg.sender, the user's funds need to sent to the
-        // TychoRouter initially (address(this))
-        receiver = address(this);
+        // The receiver of the funds will be the pool contract.
+        // This protocol will only ever have the following transferTypes:
+        // - TransferFromAndProtocolWillDebit: the funds should be transferred to the TychoRouter and the pool contract needs to be approved
+        // - ProtocolWillDebit: pool contract needs to be approved
+        receiver = address(bytes20(data[40:60]));
     }
 }

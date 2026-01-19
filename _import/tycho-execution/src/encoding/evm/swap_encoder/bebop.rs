@@ -292,7 +292,7 @@ mod tests {
             // token out
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
             // transfer type
-            "01",
+            "02",
             // partiall filled offset
             "0c",
             //  original taker amount

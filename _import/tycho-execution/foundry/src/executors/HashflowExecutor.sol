@@ -62,12 +62,6 @@ contract HashflowExecutor is IExecutor {
         }
         quote.effectiveBaseTokenAmount = amountIn;
 
-        if (approvalNeeded && quote.baseToken != NATIVE_TOKEN) {
-            // slither-disable-next-line unused-return
-            IERC20(quote.baseToken)
-                .forceApprove(hashflowRouter, type(uint256).max);
-        }
-
         uint256 ethValue = 0;
         if (quote.baseToken == NATIVE_TOKEN) {
             ethValue = quote.effectiveBaseTokenAmount;
@@ -134,8 +128,12 @@ contract HashflowExecutor is IExecutor {
 
         transferType = RestrictTransferFrom.TransferType(uint8(data[0]));
         tokenIn = address(bytes20(data[62:82]));
-        // Since the Hashflow Router withdraws the funds from the msg.sender, the user's funds need to sent to the
-        // TychoRouter initially (address(this))
-        receiver = address(this);
+        // The receiver of the funds will be the Hashflow Router.
+        // This protocol will only ever have the following transferTypes:
+        // - TransferFromAndProtocolWillDebit: the funds should be transferred to the TychoRouter and the Hashflow Router needs to be approved
+        // - ProtocolWillDebit: Hashflow Router needs to be approved
+        receiver = hashflowRouter;
     }
 }
+
+//adccf4720000000000000000000000000000000000000000000000000de0b6b3a7640000000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20000000000000000000000002260fac5e5542a773aa44fbcfedf7c193bc2c599000000000000000000000000000000000000000000000000000000000038aebf000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000e000000000000000000000000000000000000000000000000000000000000001c800692e234dae75c793f67a35089c9d99245e1c58470bc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480001f43ede3eca2a72b3aecc820e955b36f38437d0139588e6a0c2ddd26feeb64f039a2c41296fcb3f56400000015b15cf58144ef33af1e14b5208015d11f9143e27b904here01478eca1b93865dca0b9f325935eb123c8a4af011bee3211ab312a8d065c4fef0247448e17a8da000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2a0b86991c6218b36c1d19d4a2e9eb0ce3606eb482260fac5e5542a773aa44fbcfedf7c193bc2c5990000000000000000000000000000000000000000000000000000000100c84f11000000000000000000000000000000000000000000000000000000000038aebf0000000000000000000000000000000000000000000000000000000068a47cd800000000000000000000000000000000000000000000000000000198c286fecb125000064000640000001747eb8c38ffffffffffffff0029642016edb36d00006ddb3b21fe8509e274ddf46c55209cdbf30360944abbca6569ed6b26740d052f419964dcb5a3bdb98b4ed1fb3642a2760b8312118599a962251f7a8f73fe4fbe1c000000000000000000000000000000000000000000000000

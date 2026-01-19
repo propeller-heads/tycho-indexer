@@ -68,12 +68,6 @@ contract BebopExecutor is IExecutor {
             partialFillOffset
         );
 
-        // Approve Bebop settlement to spend tokens if needed
-        if (approvalNeeded) {
-            // slither-disable-next-line unused-return
-            IERC20(tokenIn).forceApprove(bebopSettlement, type(uint256).max);
-        }
-
         uint256 balanceBefore = _balanceOf(tokenOut, receiver);
         uint256 ethValue = tokenIn == address(0) ? amountIn : 0;
 
@@ -192,8 +186,10 @@ contract BebopExecutor is IExecutor {
 
         tokenIn = address(bytes20(data[0:20]));
         transferType = RestrictTransferFrom.TransferType(uint8(data[40]));
-        // Since the Bebop Settlement withdraws the funds from the msg.sender, the user's funds need to sent to the
-        // TychoRouter initially (address(this))
-        receiver = address(this);
+        // The receiver of the funds will be the Bebop Settlement contract.
+        // This protocol will only ever have the following transferTypes:
+        // - TransferFromAndProtocolWillDebit: the funds should be transferred to the TychoRouter and the Bebop Settlement contract needs to be approved
+        // - ProtocolWillDebit: Bebop Settlement contract needs to be approved
+        receiver = bebopSettlement;
     }
 }

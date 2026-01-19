@@ -165,7 +165,7 @@ fn test_sequential_swap_strategy_encoder_no_permit2_integration() {
         "004375dff511095cc5a197a54140a24efef3a416", // component id (pool address)
         "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver (final user)
         "01",                                       // zero to one
-        "02",                                       // transfer type None
+        "05",                                       // transfer type None
     ));
 
     assert_eq!(hex_calldata, expected);
@@ -289,7 +289,7 @@ fn test_sequential_strategy_cyclic_swap() {
         "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
         "00",                                       // zero2one
-        "01",                                       // transfer type Transfer
+        "02",                                       // transfer type Transfer
         "00000000000000000000",                     // padding
     ]
         .join("");

@@ -85,9 +85,10 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
         ) = LidoExposed.getTransferData(params);
 
         assertEq(
-            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.TransferNativeInMsgValue)
         );
-        assertEq(receiver, address(LidoExposed));
+        assertEq(receiver, address(0));
         assertEq(tokenIn, address(0));
     }
 
@@ -109,7 +110,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
         assertEq(
             uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
         );
-        assertEq(receiver, address(LidoExposed));
+        assertEq(receiver, WSTETH_ADDR);
         assertEq(tokenIn, STETH_ADDR);
     }
 
@@ -177,6 +178,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
             LidoPoolDirection.Wrap,
             true
         );
+        IERC20(STETH_ADDR).approve(WSTETH_ADDR, amountIn);
 
         (uint256 amountOut, address tokenOut, address receiver) =
             LidoExposed.swap(stETHAmount, protocolData);

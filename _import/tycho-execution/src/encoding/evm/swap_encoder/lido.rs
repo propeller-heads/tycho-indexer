@@ -181,8 +181,8 @@ mod tests {
             String::from(concat!(
                 // receiver
                 "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
-                // transfer type Transfer
-                "02",
+                // transfer type None
+                "05",
                 // pool
                 "00",
                 // direction
@@ -227,8 +227,8 @@ mod tests {
             String::from(concat!(
                 // receiver
                 "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
-                // transfer type Transfer
-                "02",
+                // transfer type None
+                "05",
                 // pool
                 "01",
                 // direction
@@ -273,8 +273,8 @@ mod tests {
             String::from(concat!(
                 // receiver
                 "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
-                // transfer type Transfer
-                "02",
+                // transfer type None
+                "05",
                 // pool
                 "01",
                 // direction

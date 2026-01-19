@@ -113,7 +113,7 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         assertEq(
             uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
         );
-        assertEq(receiver, address(curveExecutorExposed));
+        assertEq(receiver, TRICRYPTO_POOL);
     }
 
     function testTriPool() public {
@@ -130,6 +130,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
+        vm.prank(address(curveExecutorExposed));
+        IERC20(DAI_ADDR).approve(TRIPOOL, amountIn);
         (uint256 amountOut, address tokenOut, address receiver) =
             curveExecutorExposed.swap(amountIn, data);
 
@@ -179,6 +181,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
+        vm.prank(address(curveExecutorExposed));
+        IERC20(WETH_ADDR).approve(TRICRYPTO2_POOL, amountIn);
         (uint256 amountOut, address tokenOut, address receiver) =
             curveExecutorExposed.swap(amountIn, data);
 
@@ -202,6 +206,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
+        vm.prank(address(curveExecutorExposed));
+        IERC20(USDC_ADDR).approve(SUSD_POOL, amountIn);
         (uint256 amountOut, address tokenOut, address receiver) =
             curveExecutorExposed.swap(amountIn, data);
 
@@ -225,6 +231,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
+        vm.prank(address(curveExecutorExposed));
+        IERC20(FRAX_ADDR).approve(FRAX_USDC_POOL, amountIn);
         (uint256 amountOut, address tokenOut, address receiver) =
             curveExecutorExposed.swap(amountIn, data);
 
@@ -248,6 +256,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
+        vm.prank(address(curveExecutorExposed));
+        IERC20(USDC_ADDR).approve(USDE_USDC_POOL, amountIn);
         (uint256 amountOut, address tokenOut, address receiver) =
             curveExecutorExposed.swap(amountIn, data);
 
@@ -271,6 +281,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
+        vm.prank(address(curveExecutorExposed));
+        IERC20(DOLA_ADDR).approve(DOLA_FRAXPYUSD_POOL, amountIn);
         (uint256 amountOut, address tokenOut, address receiver) =
             curveExecutorExposed.swap(amountIn, data);
 
@@ -295,6 +307,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
+        vm.prank(address(curveExecutorExposed));
+        IERC20(XYO_ADDR).approve(ETH_XYO_POOL, amountIn);
         (uint256 amountOut, address tokenOut, address receiver) =
             curveExecutorExposed.swap(amountIn, data);
 
@@ -318,6 +332,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
+        vm.prank(address(curveExecutorExposed));
+        IERC20(BSGG_ADDR).approve(BSGG_USDT_POOL, amountIn);
         (uint256 amountOut, address tokenOut, address receiver) =
             curveExecutorExposed.swap(amountIn, data);
 
@@ -341,6 +357,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
+        vm.prank(address(curveExecutorExposed));
+        IERC20(WETH_ADDR).approve(TRICRYPTO_POOL, amountIn);
         (uint256 amountOut, address tokenOut, address receiver) =
             curveExecutorExposed.swap(amountIn, data);
 
@@ -364,6 +382,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
+        vm.prank(address(curveExecutorExposed));
+        IERC20(UWU_ADDR).approve(UWU_WETH_POOL, amountIn);
         (uint256 amountOut, address tokenOut, address receiver) =
             curveExecutorExposed.swap(amountIn, data);
 
@@ -387,6 +407,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
+        vm.prank(address(curveExecutorExposed));
+        IERC20(USDT_ADDR).forceApprove(CRVUSD_USDT_POOL, amountIn);
         (uint256 amountOut, address tokenOut, address receiver) =
             curveExecutorExposed.swap(amountIn, data);
 
@@ -410,6 +432,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             RestrictTransferFrom.TransferType.None
         );
 
+        vm.prank(address(curveExecutorExposed));
+        IERC20(WTAO_ADDR).approve(WSTTAO_WTAO_POOL, amountIn);
         (uint256 amountOut, address tokenOut, address receiver) =
             curveExecutorExposed.swap(amountIn, data);
 
@@ -452,7 +476,7 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
     }
 }
 
-contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
+contract TychoRouterForCurveTest is TychoRouterTestSetup {
     function testSingleCurveIntegration() public {
         deal(UWU_ADDR, ALICE, 1 ether);
 
