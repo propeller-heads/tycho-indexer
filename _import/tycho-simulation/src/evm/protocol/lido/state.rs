@@ -2,6 +2,7 @@ use std::{any::Any, collections::HashMap};
 
 use num_bigint::BigUint;
 use num_traits::Zero;
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -17,13 +18,13 @@ use crate::evm::protocol::{
     u256_num::{biguint_to_u256, u256_to_biguint, u256_to_f64},
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LidoPoolType {
     StEth,
     WStEth,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StakingStatus {
     Limited = 0,
     Paused = 1,
@@ -41,7 +42,7 @@ impl StakingStatus {
 }
 
 // see here https://github.com/lidofinance/core/blob/cca04b42123735714d8c60a73c2f7af949e989db/contracts/0.4.24/lib/StakeLimitUtils.sol#L38
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StakeLimitState {
     pub staking_status: StakingStatus,
     pub staking_limit: BigUint,
@@ -60,7 +61,7 @@ impl StakeLimitState {
 
 pub const DEFAULT_GAS: u64 = 60000;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LidoState {
     pub pool_type: LidoPoolType,
     pub total_shares: BigUint,
@@ -125,7 +126,7 @@ impl LidoState {
 
     fn wrap_steth(&self, amount_in: BigUint) -> Result<GetAmountOutResult, SimulationError> {
         if amount_in.is_zero() {
-            return Err(SimulationError::InvalidInput("Cannot wrap 0 stETH ".to_string(), None))
+            return Err(SimulationError::InvalidInput("Cannot wrap 0 stETH ".to_string(), None));
         }
 
         let amount_out = u256_to_biguint(safe_div_u256(
@@ -136,8 +137,8 @@ impl LidoState {
         let new_total_wrapped_st_eth = self
             .total_wrapped_st_eth
             .as_ref()
-            .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool") +
-            &amount_out;
+            .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool")
+            + &amount_out;
 
         Ok(GetAmountOutResult {
             amount: amount_out.clone(),
@@ -160,7 +161,7 @@ impl LidoState {
 
     fn unwrap_steth(&self, amount_in: BigUint) -> Result<GetAmountOutResult, SimulationError> {
         if amount_in.is_zero() {
-            return Err(SimulationError::InvalidInput("Cannot unwrap 0 wstETH ".to_string(), None))
+            return Err(SimulationError::InvalidInput("Cannot unwrap 0 wstETH ".to_string(), None));
         }
 
         let amount_out = u256_to_biguint(safe_div_u256(
@@ -181,8 +182,8 @@ impl LidoState {
         let new_total_wrapped_st_eth = self
             .total_wrapped_st_eth
             .as_ref()
-            .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool") -
-            &amount_in;
+            .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool")
+            - &amount_in;
 
         Ok(GetAmountOutResult {
             amount: amount_transferred.clone(),
@@ -278,8 +279,9 @@ impl LidoState {
         } else {
             // total_shares - wstETH, stETH -> wstETH
 
-            let limit_for_wrapping = &self.total_shares -
-                self.total_wrapped_st_eth
+            let limit_for_wrapping = &self.total_shares
+                - self
+                    .total_wrapped_st_eth
                     .as_ref()
                     .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool");
 
@@ -327,7 +329,7 @@ impl LidoState {
                 }
             }
         } else {
-            return Err(TransitionError::DecodeError("status_as_str cannot be parsed".to_owned()))
+            return Err(TransitionError::DecodeError("status_as_str cannot be parsed".to_owned()));
         };
 
         let staking_limit = delta
@@ -385,6 +387,7 @@ impl LidoState {
     }
 }
 
+#[typetag::serde]
 impl ProtocolSim for LidoState {
     fn fee(&self) -> f64 {
         // there is no fee when swapping
@@ -399,8 +402,8 @@ impl ProtocolSim for LidoState {
                     let total_pooled_eth_f64 =
                         u256_to_f64(biguint_to_u256(&self.total_pooled_eth))?;
 
-                    Ok(total_pooled_eth_f64 / total_shares_f64 * total_shares_f64 /
-                        total_pooled_eth_f64)
+                    Ok(total_pooled_eth_f64 / total_shares_f64 * total_shares_f64
+                        / total_pooled_eth_f64)
                 } else {
                     Err(SimulationError::InvalidInput(
                         format!(
@@ -493,7 +496,7 @@ impl ProtocolSim for LidoState {
                 return Err(TransitionError::DecodeError(format!(
                     "Invalid component id in balances: {:?}",
                     component_id,
-                )))
+                )));
             }
         }
 
@@ -839,8 +842,8 @@ mod tests {
         let res = wst_state
             .get_limits(token_st_eth.clone(), token_wst_eth.clone())
             .unwrap();
-        let allowed_to_wrap = wst_state.total_shares.clone() -
-            wst_state
+        let allowed_to_wrap = wst_state.total_shares.clone()
+            - wst_state
                 .total_wrapped_st_eth
                 .clone()
                 .unwrap();

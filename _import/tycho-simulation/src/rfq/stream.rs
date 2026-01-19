@@ -112,6 +112,7 @@ mod tests {
     use async_trait::async_trait;
     use futures::stream::BoxStream;
     use num_bigint::BigUint;
+    use serde::{Deserialize, Serialize};
     use tokio::sync::mpsc;
     use tokio_stream::wrappers::IntervalStream;
     use tycho_client::feed::synchronizer::{Snapshot, StateSyncMessage};
@@ -129,9 +130,10 @@ mod tests {
     use super::*;
     use crate::{protocol::models::DecoderContext, rfq::errors::RFQError};
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, Serialize, Deserialize)]
     pub struct DummyProtocol;
 
+    #[typetag::serde]
     impl ProtocolSim for DummyProtocol {
         fn fee(&self) -> f64 {
             unimplemented!("Not needed for this test")
@@ -224,7 +226,7 @@ mod tests {
                         if error_at_time == current_time {
                             return Err(RFQError::FatalError(format!(
                                 "{name} stream is dying and can't go on"
-                            )))
+                            )));
                         };
                     };
                     let protocol_component =

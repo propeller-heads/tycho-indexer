@@ -651,8 +651,8 @@ fn select_components_to_process(
                     .update
                     .states
                     .keys()
-                    .contains(component_id) &&
-                    current_state
+                    .contains(component_id)
+                    && current_state
                         .components
                         .contains_key(component_id)
                 {
@@ -945,14 +945,14 @@ fn process_execution_result(
                 let diff = amount_out - &execution_info.expected_amount_out;
                 ((diff.clone() * BigUint::from(10000u32)) / &execution_info.expected_amount_out)
                     .to_f64()
-                    .unwrap_or(0.0) /
-                    100.0
+                    .unwrap_or(0.0)
+                    / 100.0
             } else {
                 let diff = &execution_info.expected_amount_out - amount_out;
                 -((diff.clone() * BigUint::from(10000u32)) / &execution_info.expected_amount_out)
                     .to_f64()
-                    .unwrap_or(0.0) /
-                    100.0
+                    .unwrap_or(0.0)
+                    / 100.0
             };
 
             if !(-0.2..=0.2).contains(&slippage) {

@@ -97,7 +97,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoState {
                 } else {
                     return Err(InvalidSnapshotError::ValueError(
                         "status_as_str cannot be parsed".to_owned(),
-                    ))
+                    ));
                 };
 
             let staking_limit = snapshot

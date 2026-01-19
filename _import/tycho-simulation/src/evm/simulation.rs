@@ -603,9 +603,9 @@ mod tests {
             let mut data = selector_bytes.to_vec();
             let mut encoded_args = args.abi_encode();
             // Remove extra prefix if present (32 bytes for dynamic data)
-            if encoded_args.len() > 32 &&
-                encoded_args[..32] ==
-                    [0u8; 31]
+            if encoded_args.len() > 32
+                && encoded_args[..32]
+                    == [0u8; 31]
                         .into_iter()
                         .chain([32].to_vec())
                         .collect::<Vec<u8>>()

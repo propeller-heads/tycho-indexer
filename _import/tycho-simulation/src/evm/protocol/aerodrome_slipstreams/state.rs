@@ -3,6 +3,7 @@ use std::{any::Any, collections::HashMap};
 use alloy::primitives::{Sign, I256, U256};
 use num_bigint::{BigInt, BigUint};
 use num_traits::{ToPrimitive, Zero};
+use serde::{Deserialize, Serialize};
 use tracing::trace;
 use tycho_common::{
     dto::ProtocolStateDelta,
@@ -37,7 +38,7 @@ use crate::evm::protocol::{
     },
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AerodromeSlipstreamsState {
     block_timestamp: u64,
     liquidity: u128,
@@ -148,8 +149,8 @@ impl AerodromeSlipstreamsState {
         let mut gas_used = U256::from(130_000);
 
         let fee = self.get_fee();
-        while state.amount_remaining != I256::from_raw(U256::from(0u64)) &&
-            state.sqrt_price != price_limit
+        while state.amount_remaining != I256::from_raw(U256::from(0u64))
+            && state.sqrt_price != price_limit
         {
             let (mut next_tick, initialized) = match self
                 .ticks
@@ -264,6 +265,7 @@ impl AerodromeSlipstreamsState {
     }
 }
 
+#[typetag::serde]
 impl ProtocolSim for AerodromeSlipstreamsState {
     fn fee(&self) -> f64 {
         self.get_fee() as f64 / 1_000_000.0
@@ -570,11 +572,11 @@ impl ProtocolSim for AerodromeSlipstreamsState {
             .as_any()
             .downcast_ref::<AerodromeSlipstreamsState>()
         {
-            self.liquidity == other_state.liquidity &&
-                self.sqrt_price == other_state.sqrt_price &&
-                self.get_fee() == other_state.get_fee() &&
-                self.tick == other_state.tick &&
-                self.ticks == other_state.ticks
+            self.liquidity == other_state.liquidity
+                && self.sqrt_price == other_state.sqrt_price
+                && self.get_fee() == other_state.get_fee()
+                && self.tick == other_state.tick
+                && self.ticks == other_state.ticks
         } else {
             false
         }

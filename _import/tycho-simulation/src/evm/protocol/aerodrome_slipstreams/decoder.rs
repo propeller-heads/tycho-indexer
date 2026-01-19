@@ -196,7 +196,9 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for AerodromeSlipstreamsS
                 .into_iter()
                 .filter(|t| t.net_liquidity != 0)
                 .collect::<Vec<_>>(),
-            _ => return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string())),
+            _ => {
+                return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string()))
+            }
         };
 
         ticks.sort_by_key(|tick| tick.index);

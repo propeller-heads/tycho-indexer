@@ -3,6 +3,7 @@ use std::{any::Any, collections::HashMap, fmt};
 use async_trait::async_trait;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Pow, ToPrimitive};
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::{protocol::GetAmountOutParams, token::Token},
@@ -19,7 +20,7 @@ use crate::rfq::{
     protocols::hashflow::{client::HashflowClient, models::HashflowMarketMakerLevels},
 };
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct HashflowState {
     pub base_token: Token,
     pub quote_token: Token,
@@ -55,8 +56,8 @@ impl HashflowState {
         token_address_out: &Bytes,
     ) -> Result<(), SimulationError> {
         // The current levels are only valid for the base/quote pair.
-        if !(token_address_in == &self.base_token.address &&
-            token_address_out == &self.quote_token.address)
+        if !(token_address_in == &self.base_token.address
+            && token_address_out == &self.quote_token.address)
         {
             Err(SimulationError::InvalidInput(
                 format!("Invalid token addresses. Got in={token_address_in}, out={token_address_out}, expected in={}, out={}", self.base_token.address, self.quote_token.address),
@@ -75,6 +76,7 @@ impl HashflowState {
     }
 }
 
+#[typetag::serde]
 impl ProtocolSim for HashflowState {
     fn fee(&self) -> f64 {
         todo!()
@@ -190,9 +192,9 @@ impl ProtocolSim for HashflowState {
             .as_any()
             .downcast_ref::<HashflowState>()
         {
-            self.base_token == other_state.base_token &&
-                self.quote_token == other_state.quote_token &&
-                self.levels == other_state.levels
+            self.base_token == other_state.base_token
+                && self.quote_token == other_state.quote_token
+                && self.levels == other_state.levels
         } else {
             false
         }

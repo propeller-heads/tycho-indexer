@@ -201,8 +201,8 @@ fn is_legitimate_signature(signature: &str) -> bool {
     // Reject signatures that look like random hex or encoded data
     if signature
         .matches(char::is_numeric)
-        .count() >
-        signature.len() / 2
+        .count()
+        > signature.len() / 2
     {
         return false;
     }

@@ -256,8 +256,8 @@ pub fn cpmm_swap_to_price(
     // Calculate new reserve_in: x' = sqrt(k * price_num * FEE_NUMERATOR / (price_den *
     // FEE_PRECISION))
     let k = U512::from(reserve_in) * U512::from(reserve_out);
-    let k_times_price = k * U512::from(swap_price_num) * U512::from(fee.numerator) /
-        (U512::from(swap_price_den) * U512::from(fee.precision));
+    let k_times_price = k * U512::from(swap_price_num) * U512::from(fee.numerator)
+        / (U512::from(swap_price_den) * U512::from(fee.precision));
     let x_prime_u512 = sqrt_u512(k_times_price);
 
     // Convert back to U256 and calculate amount_in

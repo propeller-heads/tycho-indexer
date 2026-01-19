@@ -10,6 +10,7 @@ use alloy::primitives::{Address, U256};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use revm::DatabaseRef;
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -233,8 +234,8 @@ where
                         })?;
                         let sell_token_decimals = self.get_decimals(tokens, &sell_token_address)?;
                         let buy_token_decimals = self.get_decimals(tokens, &buy_token_address)?;
-                        *unscaled_price * 10f64.powi(sell_token_decimals as i32) /
-                            10f64.powi(buy_token_decimals as i32)
+                        *unscaled_price * 10f64.powi(sell_token_decimals as i32)
+                            / 10f64.powi(buy_token_decimals as i32)
                     };
 
                     self.spot_prices
@@ -255,8 +256,8 @@ where
                     // Calculate the first sell amount (x1) as 1% of the maximum limit.
                     let x1 = self
                         .get_amount_limits(vec![t0, t1], overwrites.clone())?
-                        .0 /
-                        U256::from(100);
+                        .0
+                        / U256::from(100);
 
                     // Calculate the second sell amount (x2) as x1 + 1% of x1. 1.01% of the max
                     // limit
@@ -555,6 +556,35 @@ where
     }
 }
 
+impl<D> Serialize for EVMPoolState<D>
+where
+    D: EngineDatabaseInterface + Clone + Debug,
+    <D as DatabaseRef>::Error: Debug,
+    <D as EngineDatabaseInterface>::Error: Debug,
+{
+    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        Err(serde::ser::Error::custom("not supported due vm state deps"))
+    }
+}
+
+impl<'de, D> Deserialize<'de> for EVMPoolState<D>
+where
+    D: EngineDatabaseInterface + Clone + Debug,
+    <D as DatabaseRef>::Error: Debug,
+    <D as EngineDatabaseInterface>::Error: Debug,
+{
+    fn deserialize<De>(_deserializer: De) -> Result<Self, De::Error>
+    where
+        De: serde::Deserializer<'de>,
+    {
+        Err(serde::de::Error::custom("not supported due vm state deps"))
+    }
+}
+
+#[typetag::serialize]
 impl<D> ProtocolSim for EVMPoolState<D>
 where
     D: EngineDatabaseInterface + Clone + Debug + 'static,
@@ -595,8 +625,8 @@ where
         )?;
         let (sell_amount_respecting_limit, sell_amount_exceeds_limit) = if self
             .capabilities
-            .contains(&Capability::HardLimits) &&
-            sell_amount_limit < sell_amount
+            .contains(&Capability::HardLimits)
+            && sell_amount_limit < sell_amount
         {
             (sell_amount_limit, true)
         } else {
@@ -721,6 +751,12 @@ where
         } else {
             false
         }
+    }
+
+    /// Implemented manually because `typetag` macro not supports generics
+    fn typetag_deserialize(&self) {
+        // https://github.com/dtolnay/typetag/blob/21ae0d40c9f73443a20204ab4a134441355b52f7/impl/src/tagged_trait.rs#L140
+        unreachable!("Only to catch missing typetag attribute on impl blocks. Not called.")
     }
 }
 

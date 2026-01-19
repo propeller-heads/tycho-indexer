@@ -85,8 +85,8 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
             .attributes
             .get("hook_identifier")
             .and_then(|bytes| String::from_utf8(bytes.0.to_vec()).ok())
-            .unwrap_or_default() ==
-            "euler_v1";
+            .unwrap_or_default()
+            == "euler_v1";
 
         let mut trace = false;
         if let Some(vm_traces) = params.vm_traces {

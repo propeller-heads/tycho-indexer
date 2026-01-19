@@ -13,6 +13,7 @@ use evm_ekubo_sdk::{
     },
 };
 use num_traits::Zero;
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     simulation::errors::{SimulationError, TransitionError},
     Bytes,
@@ -23,7 +24,7 @@ use crate::{
     evm::protocol::ekubo::attributes::ticks_from_attributes, protocol::errors::InvalidSnapshotError,
 };
 
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone, Eq, Serialize, Deserialize)]
 pub struct BasePool {
     imp: quoting::base_pool::BasePool,
     state: BasePoolState,
@@ -33,9 +34,9 @@ pub struct BasePool {
 
 impl PartialEq for BasePool {
     fn eq(&self, other: &Self) -> bool {
-        self.key() == other.key() &&
-            self.imp.get_sorted_ticks() == other.imp.get_sorted_ticks() &&
-            self.state == other.state
+        self.key() == other.key()
+            && self.imp.get_sorted_ticks() == other.imp.get_sorted_ticks()
+            && self.state == other.state
     }
 }
 
@@ -75,9 +76,9 @@ impl BasePool {
     }
 
     pub(super) fn gas_costs(resources: BasePoolResources) -> u64 {
-        u64::from(resources.tick_spacings_crossed) * Self::GAS_COST_OF_ONE_TICK_SPACING_CROSSED +
-            u64::from(resources.initialized_ticks_crossed) *
-                Self::GAS_COST_OF_ONE_INITIALIZED_TICK_CROSSED
+        u64::from(resources.tick_spacings_crossed) * Self::GAS_COST_OF_ONE_TICK_SPACING_CROSSED
+            + u64::from(resources.initialized_ticks_crossed)
+                * Self::GAS_COST_OF_ONE_INITIALIZED_TICK_CROSSED
     }
 }
 
@@ -251,9 +252,9 @@ where
     let resources = resources_fn(quote.execution_resources);
 
     Ok(quote.consumed_amount.saturating_sub(
-        WEI_UNDERESTIMATION_FACTOR *
-            (i128::from(resources.initialized_ticks_crossed) +
-                i128::from(resources.tick_spacings_crossed) / 256 +
-                1),
+        WEI_UNDERESTIMATION_FACTOR
+            * (i128::from(resources.initialized_ticks_crossed)
+                + i128::from(resources.tick_spacings_crossed) / 256
+                + 1),
     ))
 }

@@ -163,9 +163,9 @@ fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
     // Remove extra prefix if present (32 bytes for dynamic data)
     // Alloy encoding is including a prefix for dynamic data indicating the offset or length
     // but at this point we don't want that
-    if encoded_args.len() > 32 &&
-        encoded_args[..32] ==
-            [0u8; 31]
+    if encoded_args.len() > 32
+        && encoded_args[..32]
+            == [0u8; 31]
                 .into_iter()
                 .chain([32].to_vec())
                 .collect::<Vec<u8>>()
@@ -264,8 +264,8 @@ pub(crate) fn setup_user_overwrites(
 
     // ETH
     if token_address == &Bytes::zero(20) {
-        let eth_balance = biguint_to_u256(amount) +
-            U256::from_str("100000000000000000000").expect("Couldn't convert eth amount to U256"); // given_amount + 10 ETH for gas
+        let eth_balance = biguint_to_u256(amount)
+            + U256::from_str("100000000000000000000").expect("Couldn't convert eth amount to U256"); // given_amount + 10 ETH for gas
         overwrites.insert(user_address, AccountOverride::default().with_balance(eth_balance));
     } else {
         let token_balance = biguint_to_u256(amount);

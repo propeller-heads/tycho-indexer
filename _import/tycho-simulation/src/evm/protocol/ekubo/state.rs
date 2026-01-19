@@ -9,6 +9,7 @@ use evm_ekubo_sdk::{
     quoting::types::{NodeKey, TokenAmount},
 };
 use num_bigint::BigUint;
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -22,12 +23,13 @@ use tycho_common::{
 use super::pool::{
     base::BasePool, full_range::FullRangePool, oracle::OraclePool, twamm::TwammPool, EkuboPool,
 };
+
 use crate::evm::protocol::{
     ekubo::pool::mev_resist::MevResistPool, u256_num::u256_to_f64, utils::add_fee_markup,
 };
 
 #[enum_delegate::implement(EkuboPool)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EkuboState {
     Base(BasePool),
     FullRange(FullRangePool),
@@ -46,6 +48,7 @@ fn sqrt_price_q128_to_f64(
     Ok(price.powi(2) * token_correction)
 }
 
+#[typetag::serde]
 impl ProtocolSim for EkuboState {
     fn fee(&self) -> f64 {
         self.key().config.fee as f64 / (2f64.powi(64))

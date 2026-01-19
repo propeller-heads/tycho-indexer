@@ -3,6 +3,7 @@ use std::{any::Any, collections::HashMap};
 use alloy::primitives::{Sign, I256, U256};
 use num_bigint::BigUint;
 use num_traits::Zero;
+use serde::{Deserialize, Serialize};
 use tracing::trace;
 use tycho_common::{
     dto::ProtocolStateDelta,
@@ -47,7 +48,7 @@ const GAS_PER_TICK: u64 = 2_500;
 const MAX_SWAP_GAS: u64 = 16_700_000;
 const MAX_TICKS_CROSSED: u64 = (MAX_SWAP_GAS - SWAP_BASE_GAS) / GAS_PER_TICK;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UniswapV3State {
     liquidity: u128,
     sqrt_price: U256,
@@ -127,8 +128,8 @@ impl UniswapV3State {
         };
         let mut gas_used = U256::from(130_000);
 
-        while state.amount_remaining != I256::from_raw(U256::from(0u64)) &&
-            state.sqrt_price != price_limit
+        while state.amount_remaining != I256::from_raw(U256::from(0u64))
+            && state.sqrt_price != price_limit
         {
             let (mut next_tick, initialized) = match self
                 .ticks
@@ -239,6 +240,7 @@ impl UniswapV3State {
     }
 }
 
+#[typetag::serde]
 impl ProtocolSim for UniswapV3State {
     fn fee(&self) -> f64 {
         (self.fee as u32) as f64 / 1_000_000.0
@@ -541,11 +543,11 @@ impl ProtocolSim for UniswapV3State {
             .as_any()
             .downcast_ref::<UniswapV3State>()
         {
-            self.liquidity == other_state.liquidity &&
-                self.sqrt_price == other_state.sqrt_price &&
-                self.fee == other_state.fee &&
-                self.tick == other_state.tick &&
-                self.ticks == other_state.ticks
+            self.liquidity == other_state.liquidity
+                && self.sqrt_price == other_state.sqrt_price
+                && self.fee == other_state.fee
+                && self.tick == other_state.tick
+                && self.ticks == other_state.ticks
         } else {
             false
         }

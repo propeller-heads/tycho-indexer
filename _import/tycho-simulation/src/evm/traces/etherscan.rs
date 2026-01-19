@@ -80,8 +80,8 @@ impl EtherscanIdentifier {
     pub async fn identify_addresses(&mut self, addresses: &[Address]) -> Vec<EtherscanAddress> {
         if self
             .invalid_api_key
-            .load(Ordering::Relaxed) ||
-            addresses.is_empty()
+            .load(Ordering::Relaxed)
+            || addresses.is_empty()
         {
             return Vec::new();
         }

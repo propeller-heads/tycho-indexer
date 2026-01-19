@@ -247,8 +247,8 @@ where
                     .new_tokens
                     .iter()
                     .filter(|(addr, t)| {
-                        t.quality >= self.min_token_quality &&
-                            !state_guard.tokens.contains_key(*addr)
+                        t.quality >= self.min_token_quality
+                            && !state_guard.tokens.contains_key(*addr)
                     })
                     .filter_map(|(addr, t)| {
                         t.clone()
@@ -1016,6 +1016,9 @@ mock! {
 }
 
 #[cfg(test)]
+crate::impl_non_serializable_protocol!(MockProtocolSim, "test protocol");
+
+#[cfg(test)]
 impl ProtocolSim for MockProtocolSim {
     fn fee(&self) -> f64 {
         self.fee()
@@ -1065,6 +1068,14 @@ impl ProtocolSim for MockProtocolSim {
 
     fn eq(&self, other: &dyn ProtocolSim) -> bool {
         self.eq(other)
+    }
+
+    fn typetag_name(&self) -> &'static str {
+        unreachable!()
+    }
+
+    fn typetag_deserialize(&self) {
+        unreachable!()
     }
 }
 

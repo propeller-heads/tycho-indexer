@@ -61,9 +61,9 @@ where
     <D as EngineDatabaseInterface>::Error: Debug,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.address == other.address &&
-            self.pool_manager == other.pool_manager &&
-            self.limits_entrypoint == other.limits_entrypoint
+        self.address == other.address
+            && self.pool_manager == other.pool_manager
+            && self.limits_entrypoint == other.limits_entrypoint
     }
 }
 

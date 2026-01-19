@@ -3,6 +3,7 @@ use std::{any::Any, collections::HashMap, fmt};
 use async_trait::async_trait;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Pow, ToPrimitive};
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::{protocol::GetAmountOutParams, token::Token},
@@ -19,7 +20,7 @@ use crate::rfq::{
     protocols::bebop::{client::BebopClient, models::BebopPriceData},
 };
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct BebopState {
     pub base_token: Token,
     pub quote_token: Token,
@@ -47,6 +48,7 @@ impl BebopState {
     }
 }
 
+#[typetag::serde]
 impl ProtocolSim for BebopState {
     fn fee(&self) -> f64 {
         0.0
@@ -80,8 +82,8 @@ impl ProtocolSim for BebopState {
         // the price
         if base.address == self.quote_token.address && quote.address == self.base_token.address {
             Ok(1.0 / average_price)
-        } else if quote.address == self.quote_token.address &&
-            base.address == self.base_token.address
+        } else if quote.address == self.quote_token.address
+            && base.address == self.base_token.address
         {
             Ok(average_price)
         } else {
@@ -156,8 +158,8 @@ impl ProtocolSim for BebopState {
     ) -> Result<(BigUint, BigUint), SimulationError> {
         // If selling BASE for QUOTE, we need to look at [BASE/QUOTE].bids
         // If buying BASE with QUOTE, we need to look at [BASE/QUOTE].asks
-        let (sell_decimals, buy_decimals, price_levels) = if sell_token == self.base_token.address &&
-            buy_token == self.quote_token.address
+        let (sell_decimals, buy_decimals, price_levels) = if sell_token == self.base_token.address
+            && buy_token == self.quote_token.address
         {
             (self.base_token.decimals, self.quote_token.decimals, self.price_data.get_bids())
         } else if buy_token == self.base_token.address && sell_token == self.quote_token.address {
@@ -222,9 +224,9 @@ impl ProtocolSim for BebopState {
             .as_any()
             .downcast_ref::<BebopState>()
         {
-            self.base_token == other_state.base_token &&
-                self.quote_token == other_state.quote_token &&
-                self.price_data == other_state.price_data
+            self.base_token == other_state.base_token
+                && self.quote_token == other_state.quote_token
+                && self.price_data == other_state.price_data
         } else {
             false
         }

@@ -69,7 +69,7 @@ impl HookHandler for AngstromHookHandler {
             return Err(SimulationError::FatalError(format!(
                 "angstrom pool {} has been removed",
                 self.address
-            )))
+            )));
         }
         // Base gas for the hook call
         let mut gas_estimate = 400;

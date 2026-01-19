@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use futures::stream::BoxStream;
 use num_bigint::BigUint;
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use tokio::time::{interval, timeout, Duration};
 use tracing::{error, info, warn};
 use tycho_common::{
@@ -32,7 +33,7 @@ use crate::{
     tycho_common::dto::{ProtocolComponent, ResponseProtocolState},
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HashflowClient {
     chain: Chain,
     price_levels_endpoint: String,
@@ -42,7 +43,9 @@ pub struct HashflowClient {
     tokens: HashSet<Bytes>,
     // Min tvl value in the quote token.
     tvl: f64,
+    #[serde(skip_serializing, default)]
     auth_key: String,
+    #[serde(skip_serializing, default)]
     auth_user: String,
     // Quote tokens to normalize to for TVL purposes. Should have the same prices.
     quote_tokens: HashSet<Bytes>,
@@ -98,8 +101,8 @@ impl HashflowClient {
             for (_mm, mm_levels_inner) in levels_by_mm.iter() {
                 for quote_mm_level in mm_levels_inner {
                     // Check for direct pair: quote_token/approved_quote_token
-                    if quote_mm_level.pair.base_token == quote_token &&
-                        quote_mm_level.pair.quote_token == *approved_quote_token
+                    if quote_mm_level.pair.base_token == quote_token
+                        && quote_mm_level.pair.quote_token == *approved_quote_token
                     {
                         if let Some(price) = quote_mm_level.get_price(1.0) {
                             return Ok(raw_tvl * price);
@@ -504,7 +507,7 @@ impl RFQClient for HashflowClient {
                             return Err(RFQError::QuoteNotFound(format!(
                                 "Hashflow quote not found for {} {} ->{}",
                                 params.amount_in, params.token_in, params.token_out,
-                            )))
+                            )));
                         }
                         // We assume there will be only one quote request at a time
                         let quote = quotes[0].clone();
@@ -760,7 +763,7 @@ mod tests {
                         let snapshot = &msg.snapshots;
                         total_components_received += snapshot.states.len();
 
-                        println!("Received {} components in this message (Total so far: {})", 
+                        println!("Received {} components in this message (Total so far: {})",
                                 snapshot.states.len(), total_components_received);
 
                         for (id, component_with_state) in &snapshot.states {
@@ -1075,5 +1078,71 @@ mod tests {
         // Verify exactly 3 requests were made (2 failures + 1 success)
         let final_count = *request_count.lock().unwrap();
         assert_eq!(final_count, 3, "Expected 3 requests, got {}", final_count);
+    }
+
+    #[test]
+    fn test_hashflow_client_serialize_deserialize_roundtrip() {
+        let token_in = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
+        let token_out = Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap();
+        let quote_token = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+
+        let original = HashflowClient {
+            chain: Chain::Ethereum,
+            price_levels_endpoint: "https://api.hashflow.com/price_levels".to_string(),
+            market_makers_endpoint: "https://api.hashflow.com/market_makers".to_string(),
+            quote_endpoint: "https://api.hashflow.com/quote".to_string(),
+            tokens: HashSet::from([token_in.clone(), token_out.clone()]),
+            tvl: 50.5,
+            auth_key: "secret_key".to_string(),
+            auth_user: "secret_user".to_string(),
+            quote_tokens: HashSet::from([quote_token.clone()]),
+            poll_time: Duration::from_secs(10),
+            quote_timeout: Duration::from_millis(5500),
+        };
+
+        let serialized = serde_json::to_string(&original).unwrap();
+        let deserialized: HashflowClient = serde_json::from_str(&serialized).unwrap();
+
+        // Fields that should round-trip correctly
+        assert_eq!(deserialized.chain, original.chain);
+        assert_eq!(deserialized.price_levels_endpoint, original.price_levels_endpoint);
+        assert_eq!(deserialized.market_makers_endpoint, original.market_makers_endpoint);
+        assert_eq!(deserialized.quote_endpoint, original.quote_endpoint);
+        assert_eq!(deserialized.tokens, original.tokens);
+        assert_eq!(deserialized.tvl, original.tvl);
+        assert_eq!(deserialized.quote_tokens, original.quote_tokens);
+        assert_eq!(deserialized.poll_time, original.poll_time);
+        assert_eq!(deserialized.quote_timeout, original.quote_timeout);
+
+        // auth_key and auth_user should NOT round-trip (skip_serializing + default)
+        assert_eq!(deserialized.auth_key, "");
+        assert_eq!(deserialized.auth_user, "");
+        assert_ne!(deserialized.auth_key, original.auth_key);
+        assert_ne!(deserialized.auth_user, original.auth_user);
+    }
+
+    #[test]
+    fn test_hashflow_client_deserialize_with_credentials() {
+        // When auth_key and auth_user are provided in JSON, they should be deserialized
+        // (skip_serializing only affects serialization, not deserialization)
+        let json = r#"{
+            "chain": "ethereum",
+            "price_levels_endpoint": "https://api.hashflow.com/price_levels",
+            "market_makers_endpoint": "https://api.hashflow.com/market_makers",
+            "quote_endpoint": "https://api.hashflow.com/quote",
+            "tokens": [],
+            "tvl": 10.0,
+            "auth_key": "provided_key",
+            "auth_user": "provided_user",
+            "quote_tokens": [],
+            "poll_time": {"secs": 10, "nanos": 0},
+            "quote_timeout": {"secs": 30, "nanos": 0}
+        }"#;
+
+        let client: HashflowClient = serde_json::from_str(json).unwrap();
+
+        // Credentials should be deserialized from JSON
+        assert_eq!(client.auth_key, "provided_key");
+        assert_eq!(client.auth_user, "provided_user");
     }
 }

@@ -17,6 +17,7 @@ use std::{
 use alloy::primitives::U256;
 use num_bigint::{BigUint, ToBigUint};
 use num_traits::Euclid;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::trace;
 use tycho_common::{
@@ -54,7 +55,7 @@ mod constant {
     pub const RESERVES_RESOLVER: &[u8] = &hex!("0xc93876c0eed99645dd53937b25433e311881a27c");
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FluidV1 {
     pool_address: Bytes,
     token0: Token,
@@ -69,7 +70,7 @@ pub struct FluidV1 {
     pool_reserve1: U256,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(super) struct CollateralReserves {
     pub(super) token0_real_reserves: U256,
     pub(super) token1_real_reserves: U256,
@@ -77,7 +78,7 @@ pub(super) struct CollateralReserves {
     pub(super) token1_imaginary_reserves: U256,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(super) struct DebtReserves {
     pub(super) token0_real_reserves: U256,
     pub(super) token1_real_reserves: U256,
@@ -85,7 +86,7 @@ pub(super) struct DebtReserves {
     pub(super) token1_imaginary_reserves: U256,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(super) struct DexLimits {
     pub(super) borrowable_token0: TokenLimit,
     pub(super) borrowable_token1: TokenLimit,
@@ -93,7 +94,7 @@ pub(super) struct DexLimits {
     pub(super) withdrawable_token1: TokenLimit,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(super) struct TokenLimit {
     pub(super) available: U256,
     pub(super) expands_to: U256,
@@ -154,8 +155,8 @@ impl FluidV1 {
         // potentially flip token0 and token1 since ETH address is different from our eth marker
         // address
         let (token0_normalized, token1_normalized) =
-            if FluidV1::normalize_native_address(&token0.address) <
-                FluidV1::normalize_native_address(&token1.address)
+            if FluidV1::normalize_native_address(&token0.address)
+                < FluidV1::normalize_native_address(&token1.address)
             {
                 (token0.clone(), token1.clone())
             } else {
@@ -185,6 +186,7 @@ impl FluidV1 {
     }
 }
 
+#[typetag::serde]
 impl ProtocolSim for FluidV1 {
     fn fee(&self) -> f64 {
         let fee = u256_to_f64(self.fee).expect("Fluid fee values are safe to convert");
@@ -246,10 +248,10 @@ impl ProtocolSim for FluidV1 {
         let amount_in_after_fee = amount_in - fee;
         let amount_in_adjusted = to_adjusted_amount(amount_in_after_fee, token_in_decimals as i64);
 
-        if amount_in_adjusted < constant::SIX_DECIMALS ||
-            amount_in_after_fee < constant::TWO_DECIMALS
+        if amount_in_adjusted < constant::SIX_DECIMALS
+            || amount_in_after_fee < constant::TWO_DECIMALS
         {
-            return Err(SwapError::InvalidAmountIn.into())
+            return Err(SwapError::InvalidAmountIn.into());
         }
         let mut new_col_reserves = self.collateral_reserves.clone();
         let mut new_debt_reserves = self.debt_reserves.clone();
@@ -268,7 +270,7 @@ impl ProtocolSim for FluidV1 {
 
         let reserve = if zero2one { self.pool_reserve1 } else { self.pool_reserve0 };
         if amount_out > reserve {
-            return Err(SwapError::InsufficientReserve.into())
+            return Err(SwapError::InsufficientReserve.into());
         }
 
         let result = GetAmountOutResult::new(
@@ -303,8 +305,9 @@ impl ProtocolSim for FluidV1 {
                 to_adjusted_amount(
                     self.dex_limits
                         .withdrawable_token0
-                        .available +
-                        self.dex_limits
+                        .available
+                        + self
+                            .dex_limits
                             .borrowable_token0
                             .available,
                     self.token0.decimals as i64,
@@ -317,8 +320,9 @@ impl ProtocolSim for FluidV1 {
                 to_adjusted_amount(
                     self.dex_limits
                         .withdrawable_token1
-                        .available +
-                        self.dex_limits
+                        .available
+                        + self
+                            .dex_limits
                             .borrowable_token1
                             .available,
                     self.token1.decimals as i64,
@@ -519,15 +523,15 @@ fn swap_in_adjusted(
     let withdrawable = to_adjusted_amount(withdrawable, out_decimals);
 
     // Check if all reserves are greater than 0
-    let col_pool_enabled = col_reserves.token0_real_reserves > U256::ZERO &&
-        col_reserves.token1_real_reserves > U256::ZERO &&
-        col_reserves.token0_imaginary_reserves > U256::ZERO &&
-        col_reserves.token1_imaginary_reserves > U256::ZERO;
+    let col_pool_enabled = col_reserves.token0_real_reserves > U256::ZERO
+        && col_reserves.token1_real_reserves > U256::ZERO
+        && col_reserves.token0_imaginary_reserves > U256::ZERO
+        && col_reserves.token1_imaginary_reserves > U256::ZERO;
 
-    let debt_pool_enabled = debt_reserves.token0_real_reserves > U256::ZERO &&
-        debt_reserves.token1_real_reserves > U256::ZERO &&
-        debt_reserves.token0_imaginary_reserves > U256::ZERO &&
-        debt_reserves.token1_imaginary_reserves > U256::ZERO;
+    let debt_pool_enabled = debt_reserves.token0_real_reserves > U256::ZERO
+        && debt_reserves.token1_real_reserves > U256::ZERO
+        && debt_reserves.token0_imaginary_reserves > U256::ZERO
+        && debt_reserves.token1_imaginary_reserves > U256::ZERO;
 
     if !col_pool_enabled && !debt_pool_enabled {
         return Err(SwapError::NoPoolsEnabled);
@@ -549,9 +553,9 @@ fn swap_in_adjusted(
         return Err(SwapError::NoPoolsEnabled);
     };
 
-    let (amount_in_collateral, amount_out_collateral, amount_in_debt, amount_out_debt) = if a ==
-        U256::ZERO ||
-        a == U256::MAX
+    let (amount_in_collateral, amount_out_collateral, amount_in_debt, amount_out_debt) = if a
+        == U256::ZERO
+        || a == U256::MAX
     {
         // Entire trade routes through debt pool
         let amount_out_debt = get_amount_out(amount_to_swap, debt_i_reserve_in, debt_i_reserve_out);
@@ -627,27 +631,27 @@ fn swap_in_adjusted(
         if swap0_to_1 {
             (
                 col_i_reserve_out * constant::B_I1E27 / col_i_reserve_in,
-                (col_i_reserve_out - amount_out_collateral) * constant::B_I1E27 /
-                    (col_i_reserve_in + amount_in_collateral),
+                (col_i_reserve_out - amount_out_collateral) * constant::B_I1E27
+                    / (col_i_reserve_in + amount_in_collateral),
             )
         } else {
             (
                 col_i_reserve_in * constant::B_I1E27 / col_i_reserve_out,
-                (col_i_reserve_in + amount_in_collateral) * constant::B_I1E27 /
-                    (col_i_reserve_out - amount_out_collateral),
+                (col_i_reserve_in + amount_in_collateral) * constant::B_I1E27
+                    / (col_i_reserve_out - amount_out_collateral),
             )
         }
     } else if swap0_to_1 {
         (
             debt_i_reserve_out * constant::B_I1E27 / debt_i_reserve_in,
-            (debt_i_reserve_out - amount_out_debt) * constant::B_I1E27 /
-                (debt_i_reserve_in + amount_in_debt),
+            (debt_i_reserve_out - amount_out_debt) * constant::B_I1E27
+                / (debt_i_reserve_in + amount_in_debt),
         )
     } else {
         (
             debt_i_reserve_in * constant::B_I1E27 / debt_i_reserve_out,
-            (debt_i_reserve_in + amount_in_debt) * constant::B_I1E27 /
-                (debt_i_reserve_out - amount_out_debt),
+            (debt_i_reserve_in + amount_in_debt) * constant::B_I1E27
+                / (debt_i_reserve_out - amount_out_debt),
         )
     };
 
@@ -737,15 +741,15 @@ fn swap_out_adjusted(
     let borrowable = to_adjusted_amount(borrowable, out_decimals);
     let withdrawable = to_adjusted_amount(withdrawable, out_decimals);
 
-    let col_pool_enabled = col_reserves.token0_real_reserves > U256::ZERO &&
-        col_reserves.token1_real_reserves > U256::ZERO &&
-        col_reserves.token0_imaginary_reserves > U256::ZERO &&
-        col_reserves.token1_imaginary_reserves > U256::ZERO;
+    let col_pool_enabled = col_reserves.token0_real_reserves > U256::ZERO
+        && col_reserves.token1_real_reserves > U256::ZERO
+        && col_reserves.token0_imaginary_reserves > U256::ZERO
+        && col_reserves.token1_imaginary_reserves > U256::ZERO;
 
-    let debt_pool_enabled = debt_reserves.token0_real_reserves > U256::ZERO &&
-        debt_reserves.token1_real_reserves > U256::ZERO &&
-        debt_reserves.token0_imaginary_reserves > U256::ZERO &&
-        debt_reserves.token1_imaginary_reserves > U256::ZERO;
+    let debt_pool_enabled = debt_reserves.token0_real_reserves > U256::ZERO
+        && debt_reserves.token1_real_reserves > U256::ZERO
+        && debt_reserves.token0_imaginary_reserves > U256::ZERO
+        && debt_reserves.token1_imaginary_reserves > U256::ZERO;
 
     if !col_pool_enabled && !debt_pool_enabled {
         return Err(SwapError::NoPoolsEnabled);
@@ -855,27 +859,27 @@ fn swap_out_adjusted(
         if swap0_to_1 {
             (
                 col_i_reserve_out * constant::B_I1E27 / col_i_reserve_in,
-                (col_i_reserve_out - amount_out_collateral) * constant::B_I1E27 /
-                    (col_i_reserve_in + amount_in_collateral),
+                (col_i_reserve_out - amount_out_collateral) * constant::B_I1E27
+                    / (col_i_reserve_in + amount_in_collateral),
             )
         } else {
             (
                 col_i_reserve_in * constant::B_I1E27 / col_i_reserve_out,
-                (col_i_reserve_in + amount_in_collateral) * constant::B_I1E27 /
-                    (col_i_reserve_out - amount_out_collateral),
+                (col_i_reserve_in + amount_in_collateral) * constant::B_I1E27
+                    / (col_i_reserve_out - amount_out_collateral),
             )
         }
     } else if swap0_to_1 {
         (
             debt_i_reserve_out * constant::B_I1E27 / debt_i_reserve_in,
-            (debt_i_reserve_out - amount_out_debt) * constant::B_I1E27 /
-                (debt_i_reserve_in + amount_in_debt),
+            (debt_i_reserve_out - amount_out_debt) * constant::B_I1E27
+                / (debt_i_reserve_in + amount_in_debt),
         )
     } else {
         (
             debt_i_reserve_in * constant::B_I1E27 / debt_i_reserve_out,
-            (debt_i_reserve_in + amount_in_debt) * constant::B_I1E27 /
-                (debt_i_reserve_out - amount_out_debt),
+            (debt_i_reserve_in + amount_in_debt) * constant::B_I1E27
+                / (debt_i_reserve_out - amount_out_debt),
         )
     };
 
@@ -1027,8 +1031,8 @@ fn ten_pow(v: i64) -> U256 {
 fn verify_token0_reserves(token0_reserves: U256, token1_reserves: U256, price: U256) -> bool {
     let numerator = token1_reserves.saturating_mul(constant::B_I1E27);
     let denominator = price.saturating_mul(constant::MIN_SWAP_LIQUIDITY);
-    token0_reserves >=
-        numerator
+    token0_reserves
+        >= numerator
             .checked_div(denominator)
             .unwrap_or(U256::ZERO)
 }
@@ -1281,8 +1285,8 @@ mod test {
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_secs() -
-                10,
+                .as_secs()
+                - 10,
         );
         (wsteth, eth, pool)
     }
@@ -1383,27 +1387,27 @@ mod test {
     ) -> Result<U256, anyhow::Error> {
         let col_pool_enabled = !col_reserves
             .token0_real_reserves
-            .is_zero() &&
-            !col_reserves
+            .is_zero()
+            && !col_reserves
                 .token1_real_reserves
-                .is_zero() &&
-            !col_reserves
+                .is_zero()
+            && !col_reserves
                 .token0_imaginary_reserves
-                .is_zero() &&
-            !col_reserves
+                .is_zero()
+            && !col_reserves
                 .token1_imaginary_reserves
                 .is_zero();
 
         let debt_pool_enabled = !debt_reserves
             .token0_real_reserves
-            .is_zero() &&
-            !debt_reserves
+            .is_zero()
+            && !debt_reserves
                 .token1_real_reserves
-                .is_zero() &&
-            !debt_reserves
+                .is_zero()
+            && !debt_reserves
                 .token0_imaginary_reserves
-                .is_zero() &&
-            !debt_reserves
+                .is_zero()
+            && !debt_reserves
                 .token1_imaginary_reserves
                 .is_zero();
 
@@ -1454,24 +1458,24 @@ mod test {
             if swap0_to_1 {
                 col_i_reserve_out
                     .checked_mul(constant::B_I1E27)
-                    .unwrap() /
-                    col_i_reserve_in
+                    .unwrap()
+                    / col_i_reserve_in
             } else {
                 col_i_reserve_in
                     .checked_mul(constant::B_I1E27)
-                    .unwrap() /
-                    col_i_reserve_out
+                    .unwrap()
+                    / col_i_reserve_out
             }
         } else if swap0_to_1 {
             debt_i_reserve_out
                 .checked_mul(constant::B_I1E27)
-                .unwrap() /
-                debt_i_reserve_in
+                .unwrap()
+                / debt_i_reserve_in
         } else {
             debt_i_reserve_in
                 .checked_mul(constant::B_I1E27)
-                .unwrap() /
-                debt_i_reserve_out
+                .unwrap()
+                / debt_i_reserve_out
         };
 
         Ok(price)
@@ -1483,15 +1487,15 @@ mod test {
         col_reserves: &CollateralReserves,
         debt_reserves: &DebtReserves,
     ) -> Result<U256, SwapError> {
-        let col_pool_enabled = col_reserves.token0_real_reserves > U256::ZERO &&
-            col_reserves.token1_real_reserves > U256::ZERO &&
-            col_reserves.token0_imaginary_reserves > U256::ZERO &&
-            col_reserves.token1_imaginary_reserves > U256::ZERO;
+        let col_pool_enabled = col_reserves.token0_real_reserves > U256::ZERO
+            && col_reserves.token1_real_reserves > U256::ZERO
+            && col_reserves.token0_imaginary_reserves > U256::ZERO
+            && col_reserves.token1_imaginary_reserves > U256::ZERO;
 
-        let debt_pool_enabled = debt_reserves.token0_real_reserves > U256::ZERO &&
-            debt_reserves.token1_real_reserves > U256::ZERO &&
-            debt_reserves.token0_imaginary_reserves > U256::ZERO &&
-            debt_reserves.token1_imaginary_reserves > U256::ZERO;
+        let debt_pool_enabled = debt_reserves.token0_real_reserves > U256::ZERO
+            && debt_reserves.token1_real_reserves > U256::ZERO
+            && debt_reserves.token0_imaginary_reserves > U256::ZERO
+            && debt_reserves.token1_imaginary_reserves > U256::ZERO;
 
         let (col_i_reserve_in, col_i_reserve_out, debt_i_reserve_in, debt_i_reserve_out) =
             if swap0_to_1 {
@@ -1961,8 +1965,8 @@ mod test {
         let sync_time = (SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_secs() as i64) -
-            10;
+            .as_secs() as i64)
+            - 10;
 
         assert_swap_out_result(
             true,
@@ -2042,8 +2046,8 @@ mod test {
         let sync_time_recent = (SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_secs()) -
-            10;
+            .as_secs())
+            - 10;
 
         let sync_time_expanded = sync_time_recent - 5990; // ~6000 seconds earlier
 
@@ -2146,8 +2150,8 @@ mod test {
         let sync_time = (SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_secs() as i64) -
-            10;
+            .as_secs() as i64)
+            - 10;
 
         // swap0To1 = true
         assert_swap_out_result(
@@ -2181,8 +2185,8 @@ mod test {
         let sync_time = (SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_secs() as i64) -
-            10;
+            .as_secs() as i64)
+            - 10;
 
         // swap0To1 = true
         assert_swap_out_result(
@@ -2344,8 +2348,8 @@ mod test {
         let sync_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_secs() -
-            10;
+            .as_secs()
+            - 10;
 
         // --- Case: Swap amount triggers revert (14_905)
         let swap_amount = U256::from(14_905) * U256::from(10).pow(U256::from(12)); // decimals factor
@@ -2498,8 +2502,8 @@ mod test {
         let sync_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_secs() -
-            10;
+            .as_secs()
+            - 10;
 
         let mut col_reserves = new_verify_ratio_col_reserves_swap_out();
         let mut debt_reserves = new_verify_ratio_debt_reserves_swap_out();

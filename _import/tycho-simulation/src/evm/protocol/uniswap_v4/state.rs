@@ -68,6 +68,24 @@ pub struct UniswapV4State {
     pub hook: Option<Box<dyn HookHandler>>,
 }
 
+impl serde::Serialize for UniswapV4State {
+    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        Err(serde::ser::Error::custom("not supported due vm state deps"))
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for UniswapV4State {
+    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Err(serde::de::Error::custom("not supported due vm state deps"))
+    }
+}
+
 impl fmt::Debug for UniswapV4State {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("UniswapV4State")
@@ -407,6 +425,7 @@ impl UniswapV4State {
     }
 }
 
+#[typetag::serde]
 impl ProtocolSim for UniswapV4State {
     // Not possible to implement correctly with the current interface because we need to know the
     // swap direction.
@@ -946,11 +965,11 @@ impl ProtocolSim for UniswapV4State {
             .as_any()
             .downcast_ref::<UniswapV4State>()
         {
-            self.liquidity == other_state.liquidity &&
-                self.sqrt_price == other_state.sqrt_price &&
-                self.fees == other_state.fees &&
-                self.tick == other_state.tick &&
-                self.ticks == other_state.ticks
+            self.liquidity == other_state.liquidity
+                && self.sqrt_price == other_state.sqrt_price
+                && self.fees == other_state.fees
+                && self.tick == other_state.tick
+                && self.ticks == other_state.ticks
         } else {
             false
         }

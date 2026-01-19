@@ -1,11 +1,12 @@
 use std::cmp;
 
 use alloy::primitives::U256;
+use serde::{Deserialize, Serialize};
 use tycho_common::simulation::errors::SimulationError;
 
 use super::tick_math::{get_sqrt_ratio_at_tick, MAX_TICK, MIN_TICK};
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TickInfo {
     pub(crate) index: i32,
     pub(crate) net_liquidity: i128,
@@ -40,7 +41,7 @@ pub(crate) enum TickListErrorKind {
     TicksExeeded,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct TickList {
     tick_spacing: u16,
     ticks: Vec<TickInfo>,
