@@ -7232,6 +7232,7 @@ dependencies = [
  "chrono",
  "futures 0.3.31",
  "mockito",
+ "num-bigint",
  "pretty_assertions",
  "rand 0.8.5",
  "rstest",

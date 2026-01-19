@@ -215,17 +215,20 @@ pub trait AllowanceSlotDetector: Send + Sync {
     ) -> HashMap<Address, Result<(Address, Bytes), Self::Error>>;
 }
 
-/// Trait for getting the gas price from the node.
-#[cfg_attr(feature = "test-utils", mockall::automock(type Error = String;))]
+/// Trait for getting the transaction fee price from the node.
+/// The fee price is the dynamic part of the fee, which usually varies based on the network
+/// congestion. For example, on Ethereum, the fee price is the gas price (base fee + priority fee).
+#[cfg_attr(feature = "test-utils", mockall::automock(type Error = String; type FeePrice = u128;))]
 #[async_trait]
-pub trait GasPriceGetter: Send + Sync {
+pub trait FeePriceGetter: Send + Sync {
     type Error: Debug;
+    type FeePrice;
 
-    /// Get the latest gas price in the chain unit.
+    /// Get the latest fee price information from the chain.
     ///
     /// # Returns
-    /// Gas price in the chain unit (usually wei) as u128
-    async fn get_latest_gas_price(&self) -> Result<u128, Self::Error>;
+    /// A chain-specific fee price type that can provide an effective fee price.
+    async fn get_latest_fee_price(&self) -> Result<Self::FeePrice, Self::Error>;
 }
 
 #[cfg(test)]
