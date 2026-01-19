@@ -113,8 +113,12 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     );
     event CustomRouterFeeOnOutputRemoved(address indexed user);
     event CustomRouterFeeOnSolverFeeRemoved(address indexed user);
-    event FeeTakerUpdated(address oldTaker, address newExecutor);
-    event RouterFeeReceiverUpdated(address oldReceiver, address newReceiver);
+    event FeeTakerUpdated(
+        address indexed oldTaker, address indexed newExecutor
+    );
+    event RouterFeeReceiverUpdated(
+        address indexed oldReceiver, address indexed newReceiver
+    );
 
     constructor(address _permit2) Dispatcher(_permit2) {
         if (_permit2 == address(0)) {

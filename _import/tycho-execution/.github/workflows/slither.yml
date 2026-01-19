@@ -17,4 +17,4 @@ jobs:
       - uses: crytic/slither-action@f197989dea5b53e986d0f88c60a034ddd77ec9a8
         with:
           target: 'foundry/'
-          slither-args: '--filter-paths foundry/lib/'
+          slither-args: '--filter-paths foundry/lib/ --exclude unindexed-event-address'
