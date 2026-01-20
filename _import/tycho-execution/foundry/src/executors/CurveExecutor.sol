@@ -39,12 +39,21 @@ contract CurveExecutor is IExecutor {
     using SafeERC20 for IERC20;
 
     address public immutable nativeToken;
+    address public immutable stEthAddress;
+    bool public immutable hasStETH;
 
-    constructor(address _nativeToken) {
+    constructor(address _nativeToken, address _stEthAddress) {
         if (_nativeToken == address(0)) {
             revert CurveExecutor__AddressZero();
         }
         nativeToken = _nativeToken;
+
+        if (_stEthAddress != address(0)) {
+            hasStETH = true;
+        } else {
+            hasStETH = false;
+        }
+        stEthAddress = _stEthAddress;
     }
 
     // slither-disable-next-line locked-ether
@@ -93,12 +102,21 @@ contract CurveExecutor is IExecutor {
         uint256 balanceAfter = _balanceOf(tokenOut);
         amountOut = balanceAfter - balanceBefore;
 
+        uint256 castRemainderWei = 0;
+
         if (receiver != address(this)) {
             if (tokenOut == nativeToken) {
                 Address.sendValue(payable(receiver), amountOut);
             } else {
+                // Due to rounding errors, 1 wei might get lost
                 IERC20(tokenOut).safeTransfer(receiver, amountOut);
             }
+        }
+
+        if (hasStETH && tokenOut == stEthAddress) {
+            castRemainderWei =
+                IERC20(stEthAddress).balanceOf(address(this)) - balanceBefore;
+            amountOut -= castRemainderWei;
         }
 
         // This is necessary because Curve's native token is 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE and TychoRouter
