@@ -1,3 +1,10 @@
+## [0.229.1](https://github.com/propeller-heads/tycho-simulation/compare/0.229.0...0.229.1) (2026-01-20)
+
+
+### Bug Fixes
+
+* record block count instead of block number ([3a0c281](https://github.com/propeller-heads/tycho-simulation/commit/3a0c281ffa735237be80d77c73f87e7f8d388c17))
+
 ## [0.229.0](https://github.com/propeller-heads/tycho-simulation/compare/0.228.2...0.229.0) (2026-01-20)
 
 
