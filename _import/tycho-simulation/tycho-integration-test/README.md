@@ -44,6 +44,7 @@ This test runs continuously in the cluster but it can also be run locally for de
 | `--skip-messages-duration`   | `600`      | RFQ stream skip duration (seconds) after processing a message        |
 | `--block-wait-time`          | `12`       | Time to wait (seconds) for block N+1 before executing debug_traceCall |
 | `--always-test-components`   | -          | Comma-separated list of component IDs to test every block            |
+| `--max-blocks`               | `0`        | Maximum number of blocks to process before exiting (0 = run indefinitely). When set, prints a summary at the end |
 
 ## Running Locally
 
@@ -66,4 +67,10 @@ cargo run --package tycho-integration-test -- \
 # Run with specific components to always test
 cargo run --package tycho-integration-test -- \
   --always-test-components component_id_1,component_id_2,component_id_3
+
+# Run for a specific number of blocks and get a summary
+cargo run --package tycho-integration-test -- \
+  --chain ethereum \
+  --max-blocks 10 \
+  --protocols uniswap_v2,uniswap_v3
 ```
