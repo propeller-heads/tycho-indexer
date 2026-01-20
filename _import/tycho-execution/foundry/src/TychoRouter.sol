@@ -424,6 +424,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * splitSwap() and splitSwapPermit2() functions.
      *
      */
+    // State writes in _takeFees after external calls are safe because all public entry points use nonReentrant modifier
+    // slither-disable-next-line reentrancy-benign
     function _splitSwapChecked(
         uint256 amountIn,
         address tokenIn,
@@ -444,7 +446,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         }
 
         uint256 amountOutBeforeFees = _splitSwap(amountIn, nTokens, swaps);
-        amountOut = takeFees(
+        amountOut = _takeFees(
             tokenOut,
             amountOutBeforeFees,
             msg.sender,
@@ -483,6 +485,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * singleSwap() and singleSwapPermit2() functions.
      *
      */
+    // State writes in _takeFees after external calls are safe because all public entry points use nonReentrant modifier
+    // slither-disable-next-line reentrancy-benign
     function _singleSwap(
         uint256 amountIn,
         address tokenIn,
@@ -506,7 +510,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
 
         uint256 amountOutBeforeFees =
             _callSwapOnExecutor(executor, amountIn, protocolData);
-        amountOut = takeFees(
+        amountOut = _takeFees(
             tokenOut,
             amountOutBeforeFees,
             msg.sender,
@@ -545,6 +549,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * sequentialSwap() and sequentialSwapPermit2() functions.
      *
      */
+    // State writes in _takeFees after external calls are safe because all public entry points use nonReentrant modifier
+    // slither-disable-next-line reentrancy-benign
     function _sequentialSwapChecked(
         uint256 amountIn,
         address tokenIn,
@@ -564,7 +570,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         }
 
         uint256 amountOutBeforeFees = _sequentialSwap(amountIn, swaps);
-        amountOut = takeFees(
+        amountOut = _takeFees(
             tokenOut,
             amountOutBeforeFees,
             msg.sender,
@@ -780,7 +786,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @param solverFeeReceiver Address to receive solver fees
      * @return amountOut The amount remaining after all fee deductions
      */
-    function takeFees(
+    function _takeFees(
         address token,
         uint256 amountIn,
         address user,

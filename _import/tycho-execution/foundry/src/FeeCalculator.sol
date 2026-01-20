@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {FeeRecipient} from "../lib/FeeStructs.sol";
+import {IFeeCalculator} from "@interfaces/IFeeCalculator.sol";
 
 error FeeCalculator__FeeTooHigh();
 error FeeCalculator__AddressZero();
@@ -14,7 +15,7 @@ error FeeCalculator__AddressZero();
  *      It calculates fees and returns the values - accounting is done by the caller.
  *      It also stores all fee-related configuration.
  */
-contract FeeCalculator is AccessControl {
+contract FeeCalculator is AccessControl, IFeeCalculator {
     uint16 private constant MAX_FEE_BPS = 10000; // 100% max
 
     uint16 private _routerFeeOnOutputBps; // Router fee on output amount in basis points
