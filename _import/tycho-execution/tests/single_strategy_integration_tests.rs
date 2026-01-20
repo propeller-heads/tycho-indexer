@@ -44,6 +44,7 @@ fn test_single_swap_strategy_encoder() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solutions = encoder
@@ -62,17 +63,20 @@ fn test_single_swap_strategy_encoder() {
     .data;
     let expected_min_amount_encoded = encode(U256::abi_encode(&biguint_to_u256(&checked_amount)));
     let expected_input = [
-        "3bad854c",                                                         // Function selector
+        "fd7f9dc9", // Function selector (singleSwapPermit2)
         "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount in
         "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f", // token out
-        &expected_min_amount_encoded,                                       // min amount out
+        &expected_min_amount_encoded, // min amount out
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
+        "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps = 0
+        "0000000000000000000000000000000000000000000000000000000000000000", /* solverFeeReceiver
+                     * = address(0) */
     ]
     .join("");
 
-    // after this there is the permit and because of the deadlines (that depend on block
-    // time) it's hard to assert
+    // After this there is the permit and because of the deadlines (that depend on block
+    // time) it's hard to assert back
 
     let expected_swap = String::from(concat!(
         // length of encoded swap (62 bytes)
@@ -87,8 +91,8 @@ fn test_single_swap_strategy_encoder() {
     ));
     let hex_calldata = encode(&calldata);
 
-    assert_eq!(hex_calldata[..328], expected_input);
-    assert_eq!(hex_calldata[1096..], expected_swap);
+    assert_eq!(hex_calldata[..456], expected_input);
+    assert_eq!(hex_calldata[1224..], expected_swap);
     write_calldata_to_file("test_single_swap_strategy_encoder", &hex_calldata.to_string());
 }
 
@@ -123,6 +127,7 @@ fn test_single_swap_strategy_encoder_no_permit2() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -141,14 +146,16 @@ fn test_single_swap_strategy_encoder_no_permit2() {
     .data;
     let expected_min_amount_encoded = encode(U256::abi_encode(&expected_min_amount));
     let expected_input = [
-        "51cebf92",                                                         // Function selector
+        "c3333f19", // Function selector (singleSwap)
         "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount in
         "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f", // token out
-        &expected_min_amount_encoded,                                       // min amount out
+        &expected_min_amount_encoded, // min amount out
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "0000000000000000000000000000000000000000000000000000000000000001", // transfer from needed
-        "00000000000000000000000000000000000000000000000000000000000000e0", // offset of swap bytes
+        "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps
+        "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeReceiver
+        "0000000000000000000000000000000000000000000000000000000000000120", // offset of swap bytes
         "000000000000000000000000000000000000000000000000000000000000003e", // len swap (62 bytes)
         // Swap data
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address

@@ -61,6 +61,7 @@ fn main() {
         exact_out: false, // it's an exact in solution
         checked_amount: BigUint::from(1u64),
         swaps: vec![simple_swap],
+        ..Default::default()
     };
 
     // Encode the solution

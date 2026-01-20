@@ -1,3 +1,16 @@
+## [0.10.0](https://github.com/propeller-heads/tycho-contracts/compare/0.9.0...0.10.0) (2026-01-20)
+
+
+### Features
+
+* (encoding) Add solver fee params to Solution object ([d4b7514](https://github.com/propeller-heads/tycho-contracts/commit/d4b75140762fd471a3c2aa0895777815a570c6ab))
+* pass solver fee params in main swap interfaces: ([7cffc62](https://github.com/propeller-heads/tycho-contracts/commit/7cffc6259091c43c3d2431f446b07deafad51aa1))
+
+
+### Bug Fixes
+
+* update slither args and event parameters to be indexed according to the ERC20 spec ([0d1d8fa](https://github.com/propeller-heads/tycho-contracts/commit/0d1d8fa7d4bae09e917ccacf558c8b2c220fc5b2))
+
 ## [0.9.0](https://github.com/propeller-heads/tycho-contracts/compare/0.8.0...0.9.0) (2026-01-19)
 
 

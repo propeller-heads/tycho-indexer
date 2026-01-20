@@ -71,6 +71,7 @@ fn test_uniswap_v3_uniswap_v2() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -153,6 +154,7 @@ fn test_uniswap_v3_uniswap_v3() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -244,6 +246,7 @@ fn test_uniswap_v3_curve() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_wbtc, swap_wbtc_usdt],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -310,6 +313,7 @@ fn test_balancer_v2_uniswap_v2() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -451,6 +455,7 @@ fn test_multi_protocol() {
             ekubo_swap_usdt_usdc,
             usv4_swap_usdc_eth,
         ],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -521,6 +526,7 @@ fn test_uniswap_v3_balancer_v3() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_wbtc, swap_wbtc_qnt],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -618,6 +624,7 @@ fn test_uniswap_v3_bebop() {
         sender: Bytes::from_str("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e").unwrap(),
         receiver: Bytes::from_str("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e").unwrap(),
         swaps: vec![swap_weth_usdc, swap_usdc_wbtc],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -741,6 +748,7 @@ fn test_uniswap_v3_hashflow() {
         sender: alice_address(),
         receiver: alice_address(),
         swaps: vec![swap_weth_usdc, swap_usdc_wbtc],
+        ..Default::default()
     };
 
     let encoded_solution = encoder

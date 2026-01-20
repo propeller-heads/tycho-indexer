@@ -52,8 +52,10 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             amountIn,
             WETH_ADDR,
             USDC_ADDR,
-            1000_000000, // min amount
+            1000_000000, // min amount,
             ALICE,
+            0,
+            address(0),
             permitSingle,
             signature,
             pleEncode(swaps)
@@ -80,6 +82,8 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             1000_000000, // min amount
             ALICE,
             true,
+            0,
+            address(0),
             pleEncode(swaps)
         );
 
@@ -105,6 +109,8 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             0, // min amount
             ALICE,
             true,
+            0,
+            address(0),
             pleEncode(swaps)
         );
     }
@@ -126,6 +132,8 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             0, // min amount
             ALICE,
             true,
+            0,
+            address(0),
             pleEncode(swaps)
         );
     }
@@ -158,6 +166,8 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
+            0,
+            address(0),
             permitSingle,
             signature,
             pleEncode(swaps)

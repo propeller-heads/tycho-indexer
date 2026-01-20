@@ -145,6 +145,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 nTokens,
         address receiver,
         bool isTransferFromAllowed,
+        uint16 solverFeeBps,
+        address solverFeeReceiver,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
@@ -190,6 +192,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 minAmountOut,
         uint256 nTokens,
         address receiver,
+        uint16 solverFeeBps,
+        address solverFeeReceiver,
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
         bytes calldata swaps
@@ -238,6 +242,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 minAmountOut,
         address receiver,
         bool isTransferFromAllowed,
+        uint16 solverFeeBps,
+        address solverFeeReceiver,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
@@ -279,6 +285,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address tokenOut,
         uint256 minAmountOut,
         address receiver,
+        uint16 solverFeeBps,
+        address solverFeeReceiver,
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
         bytes calldata swaps
@@ -326,6 +334,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 minAmountOut,
         address receiver,
         bool isTransferFromAllowed,
+        uint16 solverFeeBps,
+        address solverFeeReceiver,
         bytes calldata swapData
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
@@ -367,6 +377,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address tokenOut,
         uint256 minAmountOut,
         address receiver,
+        uint16 solverFeeBps,
+        address solverFeeReceiver,
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
         bytes calldata swapData
