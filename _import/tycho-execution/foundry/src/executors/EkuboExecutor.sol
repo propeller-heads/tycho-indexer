@@ -60,7 +60,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
 
         // amountIn must be at most type(int128).MAX
         (amountOut, tokenOut, receiver) =
-            _lock(bytes.concat(bytes16(uint128(amountIn)), data));
+            _lock(abi.encodePacked(bytes16(uint128(amountIn)), data));
     }
 
     function handleCallback(bytes calldata raw)
@@ -94,13 +94,14 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         // Without selector and locker id
         (int128 amountOut, address tokenOut, address receiver) =
             _locked(msg.data[36:]);
+
+        // Pack: 16 bytes int128 + 20 bytes address + 20 bytes address = 56 bytes total
+        bytes memory result = abi.encodePacked(amountOut, tokenOut, receiver);
+
         // slither-disable-next-line assembly
         assembly ("memory-safe") {
-            // Pack: 16 bytes int128 + 20 bytes address + 20 bytes address = 56 bytes total
-            mstore(0, shl(128, amountOut)) // Store int128 in upper 16 bytes
-            mstore(16, shl(96, tokenOut)) // Store address in upper 20 bytes (of next word)
-            mstore(36, shl(96, receiver)) // Store address in upper 20 bytes (of next word)
-            return(0, 56)
+            // Return raw bytes without ABI encoding
+            return(add(result, 32), mload(result))
         }
     }
 
@@ -118,31 +119,32 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         internal
         returns (uint128 swappedAmount, address tokenOut, address receiver)
     {
-        address target = address(core);
+        // Prepend selector of lock() to calldata
+        // We must use assembly here since the Ekubo Core's lock method expects the raw
+        // bytes directly and not ABI-encoded bytes
+        bytes memory callData = abi.encodePacked(bytes4(0xf83d08ba), data);
 
+        // slither-disable-next-line low-level-calls
+        (bool success, bytes memory result) = address(core).call(callData);
+
+        if (!success) {
+            // slither-disable-next-line assembly
+            assembly ("memory-safe") {
+                revert(add(result, 32), mload(result))
+            }
+        }
+
+        // Decode 56 bytes: 16 bytes for int128 + 20 bytes for address + 20 bytes for address
+        // Data is packed with values left-shifted in each position
+        // Assembly is necessary since the input is bytes memory and not bytes calldata
+        int128 amountOut;
         // slither-disable-next-line assembly
         assembly ("memory-safe") {
-            let args := mload(0x40)
-
-            // Selector of lock()
-            mstore(args, shl(224, 0xf83d08ba))
-
-            // We only copy the data, not the length, because the length is read from the calldata size
-            let len := mload(data)
-            mcopy(add(args, 4), add(data, 32), len)
-
-            // If the call failed, pass through the revert
-            if iszero(call(gas(), target, 0, args, add(len, 36), 0, 0)) {
-                returndatacopy(0, 0, returndatasize())
-                revert(0, returndatasize())
-            }
-
-            // Copy 56 bytes: 16 bytes for amount + 20 bytes for address (tokenOut) + 20 bytes for address (receiver)
-            returndatacopy(0, 0, 56)
-            swappedAmount := shr(128, mload(0))
-            tokenOut := shr(96, mload(16))
-            receiver := shr(96, mload(36))
+            amountOut := shr(128, mload(add(result, 32)))
+            tokenOut := shr(96, mload(add(result, 48)))
+            receiver := shr(96, mload(add(result, 68)))
         }
+        swappedAmount = uint128(amountOut);
     }
 
     function _locked(bytes calldata swapData)
@@ -222,39 +224,25 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         internal
         returns (bytes memory result)
     {
-        address target = address(core);
+        // Prepend forward(address) selector to the data
+        // We must use assembly here since the Ekubo Core's lock method expects the raw
+        // bytes directly and not ABI-encoded bytes
+        bytes memory callData = abi.encodePacked(
+            bytes4(0x101e8952), bytes32(uint256(uint160(to))), data
+        );
 
-        // slither-disable-next-line assembly
-        assembly ("memory-safe") {
-            // We will store result where the free memory pointer is now, ...
-            result := mload(0x40)
+        // slither-disable-next-line low-level-calls,calls-loop
+        (bool success, bytes memory returnData) = address(core).call(callData);
 
-            // But first use it to store the calldata
-
-            // Selector of forward(address)
-            mstore(result, shl(224, 0x101e8952))
-            mstore(add(result, 4), to)
-
-            // We only copy the data, not the length, because the length is read from the calldata size
-            let len := mload(data)
-            mcopy(add(result, 36), add(data, 32), len)
-
-            // If the call failed, pass through the revert
-            if iszero(call(gas(), target, 0, result, add(36, len), 0, 0)) {
-                returndatacopy(result, 0, returndatasize())
-                revert(result, returndatasize())
+        // Assembly is necessary to be able to revert with arbitrary bytes memory
+        if (!success) {
+            // slither-disable-next-line assembly
+            assembly ("memory-safe") {
+                revert(add(returnData, 32), mload(returnData))
             }
-
-            // Copy the entire return data into the space where the result is pointing
-            mstore(result, returndatasize())
-            returndatacopy(add(result, 32), 0, returndatasize())
-
-            // Update the free memory pointer to be after the end of the data, aligned to the next 32 byte word
-            mstore(
-                0x40,
-                and(add(add(result, add(32, returndatasize())), 31), not(31))
-            )
         }
+
+        return returnData;
     }
 
     function _pay(
@@ -262,24 +250,23 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         uint128 amount,
         RestrictTransferFrom.TransferType transferType
     ) internal {
-        address target = address(core);
-
         if (token == NATIVE_TOKEN_ADDRESS) {
-            SafeTransferLib.safeTransferETH(target, amount);
+            SafeTransferLib.safeTransferETH(address(core), amount);
         } else {
-            // slither-disable-next-line assembly
-            assembly ("memory-safe") {
-                let free := mload(0x40)
-                // selector of pay(address)
-                mstore(free, shl(224, 0x0c11dedd))
-                mstore(add(free, 4), token)
-                mstore(add(free, 36), shl(128, amount))
-                mstore(add(free, 52), shl(248, transferType))
+            bytes memory callData = abi.encodePacked(
+                bytes4(0x0c11dedd), // pay(address) selector
+                bytes32(uint256(uint160(token))),
+                bytes16(amount),
+                bytes1(uint8(transferType))
+            );
 
-                // 4 (selector) + 32 (token) + 16 (amount) + 1 (transferType) = 53
-                if iszero(call(gas(), target, 0, free, 53, 0, 0)) {
-                    returndatacopy(0, 0, returndatasize())
-                    revert(0, returndatasize())
+            // slither-disable-next-line low-level-calls
+            (bool success, bytes memory result) = address(core).call(callData);
+
+            if (!success) {
+                // slither-disable-next-line assembly
+                assembly ("memory-safe") {
+                    revert(add(result, 32), mload(result))
                 }
             }
         }
