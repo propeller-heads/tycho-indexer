@@ -52,8 +52,7 @@ contract HashflowExecutor is IExecutor {
         payable
         returns (uint256 amountOut, address tokenOut, address receiver)
     {
-        (IHashflowRouter.RFQTQuote memory quote, bool approvalNeeded) =
-            _decodeData(data);
+        (IHashflowRouter.RFQTQuote memory quote) = _decodeData(data);
 
         // Slippage checks
         if (amountIn > quote.baseTokenAmount) {
@@ -78,29 +77,27 @@ contract HashflowExecutor is IExecutor {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (IHashflowRouter.RFQTQuote memory quote, bool approvalNeeded)
+        returns (IHashflowRouter.RFQTQuote memory quote)
     {
-        if (data.length != 327) {
+        if (data.length != 326) {
             revert HashflowExecutor__InvalidDataLength();
         }
 
-        approvalNeeded = data[1] != 0;
-
-        quote.pool = address(bytes20(data[2:22]));
-        quote.externalAccount = address(bytes20(data[22:42]));
-        quote.trader = address(bytes20(data[42:62]));
+        quote.pool = address(bytes20(data[1:21]));
+        quote.externalAccount = address(bytes20(data[21:41]));
+        quote.trader = address(bytes20(data[41:61]));
         // Assumes we never set the effectiveTrader when requesting a quote.
         quote.effectiveTrader = quote.trader;
-        quote.baseToken = address(bytes20(data[62:82]));
-        quote.quoteToken = address(bytes20(data[82:102]));
+        quote.baseToken = address(bytes20(data[61:81]));
+        quote.quoteToken = address(bytes20(data[81:101]));
         // Not included in the calldata. Will be set in the swap function.
         quote.effectiveBaseTokenAmount = 0;
-        quote.baseTokenAmount = uint256(bytes32(data[102:134]));
-        quote.quoteTokenAmount = uint256(bytes32(data[134:166]));
-        quote.quoteExpiry = uint256(bytes32(data[166:198]));
-        quote.nonce = uint256(bytes32(data[198:230]));
-        quote.txid = bytes32(data[230:262]);
-        quote.signature = data[262:327];
+        quote.baseTokenAmount = uint256(bytes32(data[101:133]));
+        quote.quoteTokenAmount = uint256(bytes32(data[133:165]));
+        quote.quoteExpiry = uint256(bytes32(data[165:197]));
+        quote.nonce = uint256(bytes32(data[197:229]));
+        quote.txid = bytes32(data[229:261]);
+        quote.signature = data[261:326];
     }
 
     function _balanceOf(address trader, address token)
@@ -122,12 +119,12 @@ contract HashflowExecutor is IExecutor {
             address tokenIn
         )
     {
-        if (data.length != 327) {
+        if (data.length != 326) {
             revert HashflowExecutor__InvalidDataLength();
         }
 
         transferType = RestrictTransferFrom.TransferType(uint8(data[0]));
-        tokenIn = address(bytes20(data[62:82]));
+        tokenIn = address(bytes20(data[61:81]));
         // The receiver of the funds will be the Hashflow Router.
         // This protocol will only ever have the following transferTypes:
         // - TransferFromAndProtocolWillDebit: the funds should be transferred to the TychoRouter and the Hashflow Router needs to be approved
@@ -135,5 +132,3 @@ contract HashflowExecutor is IExecutor {
         receiver = hashflowRouter;
     }
 }
-
-//adccf4720000000000000000000000000000000000000000000000000de0b6b3a7640000000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20000000000000000000000002260fac5e5542a773aa44fbcfedf7c193bc2c599000000000000000000000000000000000000000000000000000000000038aebf000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000e000000000000000000000000000000000000000000000000000000000000001c800692e234dae75c793f67a35089c9d99245e1c58470bc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480001f43ede3eca2a72b3aecc820e955b36f38437d0139588e6a0c2ddd26feeb64f039a2c41296fcb3f56400000015b15cf58144ef33af1e14b5208015d11f9143e27b904here01478eca1b93865dca0b9f325935eb123c8a4af011bee3211ab312a8d065c4fef0247448e17a8da000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2a0b86991c6218b36c1d19d4a2e9eb0ce3606eb482260fac5e5542a773aa44fbcfedf7c193bc2c5990000000000000000000000000000000000000000000000000000000100c84f11000000000000000000000000000000000000000000000000000000000038aebf0000000000000000000000000000000000000000000000000000000068a47cd800000000000000000000000000000000000000000000000000000198c286fecb125000064000640000001747eb8c38ffffffffffffff0029642016edb36d00006ddb3b21fe8509e274ddf46c55209cdbf30360944abbca6569ed6b26740d052f419964dcb5a3bdb98b4ed1fb3642a2760b8312118599a962251f7a8f73fe4fbe1c000000000000000000000000000000000000000000000000

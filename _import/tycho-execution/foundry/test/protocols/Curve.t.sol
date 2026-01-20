@@ -35,7 +35,6 @@ contract CurveExecutorExposed is CurveExecutor {
             uint8 poolType,
             int128 i,
             int128 j,
-            bool tokenApprovalNeeded,
             address receiver
         )
     {
@@ -64,7 +63,6 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             uint8(3),
             uint8(2),
             uint8(0),
-            true,
             RestrictTransferFrom.TransferType.None,
             ALICE
         );
@@ -76,7 +74,6 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             uint8 poolType,
             int128 i,
             int128 j,
-            bool tokenApprovalNeeded,
             address receiver
         ) = curveExecutorExposed.decodeData(data);
 
@@ -86,7 +83,6 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         assertEq(poolType, 3);
         assertEq(i, 2);
         assertEq(j, 0);
-        assertEq(tokenApprovalNeeded, true);
         assertEq(receiver, ALICE);
     }
 
@@ -98,7 +94,6 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             uint8(3),
             uint8(2),
             uint8(0),
-            true,
             RestrictTransferFrom.TransferType.None,
             ALICE
         );
@@ -459,7 +454,6 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             poolType,
             uint8(uint256(uint128(i))),
             uint8(uint256(uint128(j))),
-            true,
             transferType,
             receiver
         );

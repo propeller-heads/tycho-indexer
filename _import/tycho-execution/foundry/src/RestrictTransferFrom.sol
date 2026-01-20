@@ -107,7 +107,7 @@ contract RestrictTransferFrom is Vault {
             sender := tload(_SENDER_SLOT)
         }
         if (transferType == TransferType.TransferFrom) {
-            _restrictTransferFrom(sender, amount, tokenIn);
+            _restrictTransferFrom(amount, tokenIn);
             bool isPermit2;
             assembly {
                 isPermit2 := tload(_IS_PERMIT2_SLOT)
@@ -123,7 +123,7 @@ contract RestrictTransferFrom is Vault {
         } else if (
             transferType == TransferType.TransferFromAndProtocolWillDebit
         ) {
-            _restrictTransferFrom(sender, amount, tokenIn);
+            _restrictTransferFrom(amount, tokenIn);
             bool isPermit2;
             assembly {
                 isPermit2 := tload(_IS_PERMIT2_SLOT)
@@ -173,11 +173,7 @@ contract RestrictTransferFrom is Vault {
 
     // Assembly required for transient storage operations (tload/tstore)
     // slither-disable-next-line assembly
-    function _restrictTransferFrom(
-        address sender,
-        uint256 amount,
-        address tokenIn
-    ) internal {
+    function _restrictTransferFrom(uint256 amount, address tokenIn) internal {
         //  This is important to prevent badly encoded split swaps from taking
         //  more than the input amount out of the user's wallet or vault balance.
         address tokenInStorage;

@@ -15,8 +15,7 @@ contract BalancerV2ExecutorExposed is BalancerV2Executor {
             address tokenIn,
             address tokenOut,
             bytes32 poolId,
-            address receiver,
-            bool needsApproval
+            address receiver
         )
     {
         return _decodeData(data);
@@ -45,23 +44,16 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
             BAL_ADDR,
             WETH_BAL_POOL_ID,
             address(2),
-            true,
             RestrictTransferFrom.TransferType.None
         );
 
-        (
-            address tokenIn,
-            address tokenOut,
-            bytes32 poolId,
-            address receiver,
-            bool needsApproval
-        ) = balancerV2Exposed.decodeParams(params);
+        (address tokenIn, address tokenOut, bytes32 poolId, address receiver) =
+            balancerV2Exposed.decodeParams(params);
 
         assertEq(tokenIn, WETH_ADDR);
         assertEq(tokenOut, BAL_ADDR);
         assertEq(poolId, WETH_BAL_POOL_ID);
         assertEq(receiver, address(2));
-        assertEq(needsApproval, true);
     }
 
     function testGetTransferData() public {
@@ -70,7 +62,6 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
             BAL_ADDR,
             WETH_BAL_POOL_ID,
             address(2),
-            true,
             RestrictTransferFrom.TransferType.None
         );
 
@@ -102,7 +93,6 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
             BAL_ADDR,
             WETH_BAL_POOL_ID,
             BOB,
-            true,
             RestrictTransferFrom.TransferType.None
         );
 
@@ -124,19 +114,13 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
     function testDecodeIntegration() public view {
         bytes memory protocolData =
             loadCallDataFromFile("test_encode_balancer_v2");
-        (
-            address tokenIn,
-            address tokenOut,
-            bytes32 poolId,
-            address receiver,
-            bool needsApproval
-        ) = balancerV2Exposed.decodeParams(protocolData);
+        (address tokenIn, address tokenOut, bytes32 poolId, address receiver) =
+            balancerV2Exposed.decodeParams(protocolData);
 
         assertEq(tokenIn, WETH_ADDR);
         assertEq(tokenOut, BAL_ADDR);
         assertEq(poolId, WETH_BAL_POOL_ID);
         assertEq(receiver, BOB);
-        assertEq(needsApproval, true);
     }
 
     function testSwapIntegration() public {

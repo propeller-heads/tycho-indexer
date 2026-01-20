@@ -1,5 +1,5 @@
 mod common;
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{collections::HashMap, default::Default, str::FromStr, sync::Arc};
 
 use alloy::{hex, hex::encode};
 use num_bigint::{BigInt, BigUint};
@@ -109,7 +109,8 @@ fn test_single_encoding_strategy_ekubo_erc20() {
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        swaps: vec![swap]
+        swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solution = encoder
@@ -165,7 +166,8 @@ fn test_single_encoding_strategy_ekubo_mev_resist() {
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        swaps: vec![swap]
+        swaps: vec![swap],
+        ..Default::default()
     };
 
     let encoded_solution = encoder

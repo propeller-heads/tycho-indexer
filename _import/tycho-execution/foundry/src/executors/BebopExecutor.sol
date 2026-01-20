@@ -47,14 +47,12 @@ contract BebopExecutor is IExecutor {
         address tokenIn;
         uint8 partialFillOffset;
         uint256 originalFilledTakerAmount;
-        bool approvalNeeded;
         bytes memory bebopCalldata;
         (
             tokenIn,
             tokenOut,
             partialFillOffset,
             originalFilledTakerAmount,
-            approvalNeeded,
             receiver,
             bebopCalldata
         ) = _decodeData(data);
@@ -89,22 +87,20 @@ contract BebopExecutor is IExecutor {
             address tokenOut,
             uint8 partialFillOffset,
             uint256 originalFilledTakerAmount,
-            bool approvalNeeded,
             address receiver,
             bytes memory bebopCalldata
         )
     {
         // Need at least 95 bytes for the minimum fixed fields
-        // 20 + 20 + 1 + 1 (offset) + 32 (original amount) + 1 (approval) + 20 (receiver) = 95
-        if (data.length < 95) revert BebopExecutor__InvalidDataLength();
+        // 20 + 20 + 1 + 1 (offset) + 32 (original amount) + 20 (receiver) = 95
+        if (data.length < 94) revert BebopExecutor__InvalidDataLength();
 
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
         partialFillOffset = uint8(data[41]);
         originalFilledTakerAmount = uint256(bytes32(data[42:74]));
-        approvalNeeded = data[74] != 0;
-        receiver = address(bytes20(data[75:95]));
-        bebopCalldata = data[95:];
+        receiver = address(bytes20(data[74:94]));
+        bebopCalldata = data[94:];
     }
 
     /// @dev Modifies the filledTakerAmount in the bebop calldata to handle slippage
@@ -180,7 +176,7 @@ contract BebopExecutor is IExecutor {
             address tokenIn
         )
     {
-        if (data.length < 95) {
+        if (data.length < 94) {
             revert BebopExecutor__InvalidDataLength();
         }
 

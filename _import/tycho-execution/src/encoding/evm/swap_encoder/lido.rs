@@ -5,9 +5,7 @@ use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::{
-        approvals::protocol_approvals_manager::ProtocolApprovalsManager, utils::bytes_to_address,
-    },
+    evm::utils::bytes_to_address,
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
 };
@@ -73,32 +71,17 @@ impl SwapEncoder for LidoSwapEncoder {
         swap: &Swap,
         encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
-        let (pool, direction, approval_needed) =
+        let (pool, direction) =
             if *swap.token_in() == self.eth_address && *swap.token_out() == self.st_eth_address {
-                (LidoPool::StETH, LidoPoolDirection::Stake, false)
+                (LidoPool::StETH, LidoPoolDirection::Stake)
             } else if *swap.token_in() == self.st_eth_address &&
                 *swap.token_out() == self.wst_eth_address
             {
-                let token_approvals_manager = ProtocolApprovalsManager::new()?;
-                let token = bytes_to_address(&self.st_eth_address)?;
-                let mut approval_needed: bool = true;
-
-                if let Some(router_address) = &encoding_context.router_address {
-                    if !encoding_context.historical_trade {
-                        let tycho_router_address = bytes_to_address(router_address)?;
-                        approval_needed = token_approvals_manager.approval_needed(
-                            token,
-                            tycho_router_address,
-                            bytes_to_address(&self.wst_eth_address)?,
-                        )?;
-                    }
-                }
-
-                (LidoPool::WStETH, LidoPoolDirection::Wrap, approval_needed)
+                (LidoPool::WStETH, LidoPoolDirection::Wrap)
             } else if *swap.token_in() == self.wst_eth_address &&
                 *swap.token_out() == self.st_eth_address
             {
-                (LidoPool::WStETH, LidoPoolDirection::Unwrap, false)
+                (LidoPool::WStETH, LidoPoolDirection::Unwrap)
             } else {
                 return Err(EncodingError::InvalidInput("Combination not allowed".to_owned()))
             };
@@ -108,7 +91,6 @@ impl SwapEncoder for LidoSwapEncoder {
             (encoding_context.transfer_type as u8).to_be_bytes(),
             (pool as u8).to_be_bytes(),
             (direction as u8).to_be_bytes(),
-            approval_needed,
         );
 
         Ok(args.abi_encode_packed())
@@ -187,8 +169,6 @@ mod tests {
                 "00",
                 // direction
                 "00",
-                // approval_needed
-                "00",
             ))
         );
     }
@@ -232,8 +212,6 @@ mod tests {
                 // pool
                 "01",
                 // direction
-                "01",
-                // approval_needed
                 "01",
             ))
         );
@@ -279,8 +257,6 @@ mod tests {
                 "01",
                 // direction
                 "02",
-                // approval_needed
-                "00",
             ))
         );
     }

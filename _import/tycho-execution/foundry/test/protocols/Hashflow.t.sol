@@ -11,12 +11,10 @@ contract HashflowUtils is Test {
 
     function encodeRfqtQuote(
         IHashflowRouter.RFQTQuote memory quote,
-        bool approvalNeeded,
         RestrictTransferFrom.TransferType transferType
     ) internal pure returns (bytes memory) {
         return abi.encodePacked(
             uint8(transferType), // transferType (1 byte)
-            approvalNeeded, // needsApproval (1 byte)
             quote.pool, // pool (20 bytes)
             quote.externalAccount, // externalAccount (20 bytes)
             quote.trader, // trader (20 bytes)
@@ -36,8 +34,7 @@ contract HashflowUtils is Test {
         pure
         returns (bytes memory)
     {
-        return
-            encodeRfqtQuote(quote, true, RestrictTransferFrom.TransferType.None);
+        return encodeRfqtQuote(quote, RestrictTransferFrom.TransferType.None);
     }
 }
 
@@ -59,7 +56,7 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
     function testDecodeParams() public view {
         IHashflowRouter.RFQTQuote memory expected_quote = rfqtQuote();
         bytes memory encodedQuote = encodeRfqtQuoteWithDefaults(expected_quote);
-        (IHashflowRouter.RFQTQuote memory quote, bool approvalNeeded) =
+        (IHashflowRouter.RFQTQuote memory quote) =
             executor.decodeData(encodedQuote);
 
         assertEq(quote.pool, expected_quote.pool, "pool mismatch");
@@ -105,7 +102,6 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
         assertEq(
             quote.signature, expected_quote.signature, "signature mismatch"
         );
-        assertEq(approvalNeeded, true, "Approval flag mismatch");
     }
 
     function testDecodeParamsInvalidDataLength() public {
@@ -307,7 +303,7 @@ contract HashflowExecutorExposed is HashflowExecutor {
     function decodeData(bytes calldata data)
         external
         pure
-        returns (IHashflowRouter.RFQTQuote memory quote, bool approvalNeeded)
+        returns (IHashflowRouter.RFQTQuote memory quote)
     {
         return _decodeData(data);
     }

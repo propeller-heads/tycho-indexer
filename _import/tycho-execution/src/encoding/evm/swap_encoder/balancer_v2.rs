@@ -1,16 +1,11 @@
 use std::{collections::HashMap, str::FromStr};
 
-use alloy::{
-    primitives::{Address, Bytes as AlloyBytes},
-    sol_types::SolValue,
-};
+use alloy::{primitives::Bytes as AlloyBytes, sol_types::SolValue};
 use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::{
-        approvals::protocol_approvals_manager::ProtocolApprovalsManager, utils::bytes_to_address,
-    },
+    evm::utils::bytes_to_address,
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
 };
@@ -19,34 +14,18 @@ use crate::encoding::{
 ///
 /// # Fields
 /// * `executor_address` - The address of the executor contract that will perform the swap.
-/// * `vault_address` - The address of the vault contract that will perform the swap.
 #[derive(Clone)]
 pub struct BalancerV2SwapEncoder {
     executor_address: Bytes,
-    vault_address: Bytes,
 }
 
 impl SwapEncoder for BalancerV2SwapEncoder {
     fn new(
         executor_address: Bytes,
         _chain: Chain,
-        config: Option<HashMap<String, String>>,
+        _config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
-        let config = config.ok_or(EncodingError::FatalError(
-            "Missing balancer v2 specific addresses in config".to_string(),
-        ))?;
-        let vault_address = config
-            .get("vault_address")
-            .map(|s| {
-                Bytes::from_str(s).map_err(|_| {
-                    EncodingError::FatalError("Invalid balancer v2 vault address".to_string())
-                })
-            })
-            .ok_or(EncodingError::FatalError(
-                "Missing balancer v2 vault address in config".to_string(),
-            ))
-            .flatten()?;
-        Ok(Self { executor_address, vault_address })
+        Ok(Self { executor_address })
     }
 
     fn encode_swap(
@@ -54,21 +33,6 @@ impl SwapEncoder for BalancerV2SwapEncoder {
         swap: &Swap,
         encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
-        let token_approvals_manager = ProtocolApprovalsManager::new()?;
-        let token = bytes_to_address(swap.token_in())?;
-        let mut approval_needed: bool = true;
-
-        if let Some(router_address) = &encoding_context.router_address {
-            if !encoding_context.historical_trade {
-                let tycho_router_address = bytes_to_address(router_address)?;
-                approval_needed = token_approvals_manager.approval_needed(
-                    token,
-                    tycho_router_address,
-                    Address::from_slice(&self.vault_address),
-                )?;
-            }
-        };
-
         let component_id = AlloyBytes::from_str(&swap.component().id)
             .map_err(|_| EncodingError::FatalError("Invalid component ID".to_string()))?;
 
@@ -77,7 +41,6 @@ impl SwapEncoder for BalancerV2SwapEncoder {
             bytes_to_address(swap.token_out())?,
             component_id,
             bytes_to_address(&encoding_context.receiver)?,
-            approval_needed,
             (encoding_context.transfer_type as u8).to_be_bytes(),
         );
         Ok(args.abi_encode_packed())
@@ -146,8 +109,6 @@ mod tests {
                 "5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014",
                 // receiver
                 "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
-                // approval needed
-                "01",
                 // transfer type None
                 "05"
             ))

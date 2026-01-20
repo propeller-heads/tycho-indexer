@@ -9,10 +9,7 @@ use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::{
-        approvals::protocol_approvals_manager::ProtocolApprovalsManager,
-        utils::{bytes_to_address, get_static_attribute},
-    },
+    evm::utils::{bytes_to_address, get_static_attribute},
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
 };
@@ -147,7 +144,6 @@ impl SwapEncoder for CurveSwapEncoder {
         swap: &Swap,
         encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
-        let token_approvals_manager = ProtocolApprovalsManager::new()?;
         let native_token_curve_address = Address::from_slice(&self.native_token_curve_address);
         let token_in = if *swap.token_in() == self.native_token_address {
             native_token_curve_address
@@ -159,24 +155,9 @@ impl SwapEncoder for CurveSwapEncoder {
         } else {
             bytes_to_address(swap.token_out())?
         };
-        let approval_needed: bool;
 
         let component_address = Address::from_str(&swap.component().id)
             .map_err(|_| EncodingError::FatalError("Invalid curve pool address".to_string()))?;
-        if let Some(router_address) = &encoding_context.router_address {
-            if token_in != native_token_curve_address {
-                let tycho_router_address = bytes_to_address(router_address)?;
-                approval_needed = token_approvals_manager.approval_needed(
-                    token_in,
-                    tycho_router_address,
-                    component_address,
-                )?;
-            } else {
-                approval_needed = false;
-            }
-        } else {
-            approval_needed = true;
-        }
 
         let factory_bytes = get_static_attribute(swap, "factory")?.to_vec();
         // the conversion to Address is necessary to checksum the address
@@ -202,7 +183,6 @@ impl SwapEncoder for CurveSwapEncoder {
             pool_type.to_be_bytes::<1>(),
             i.to_be_bytes::<1>(),
             j.to_be_bytes::<1>(),
-            approval_needed,
             (encoding_context.transfer_type as u8).to_be_bytes(),
             bytes_to_address(&encoding_context.receiver)?,
         );
@@ -376,8 +356,6 @@ mod tests {
                 "00",
                 // j index
                 "01",
-                // approval needed
-                "01",
                 // transfer type None
                 "05",
                 // receiver,
@@ -443,8 +421,6 @@ mod tests {
                 "01",
                 // j index
                 "00",
-                // approval needed
-                "01",
                 // transfer type None
                 "05",
                 // receiver
@@ -519,8 +495,6 @@ mod tests {
                 // i index
                 "00",
                 // j index
-                "01",
-                // approval needed
                 "01",
                 // transfer type None
                 "05",

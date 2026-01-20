@@ -61,9 +61,8 @@ contract LidoExecutor is IExecutor {
     {
         LidoPoolType pool;
         LidoPoolDirection direction;
-        bool approvalNeeded;
 
-        (receiver, pool, direction, approvalNeeded) = _decodeData(data);
+        (receiver, pool, direction) = _decodeData(data);
 
         if (pool == LidoPoolType.stETH && direction == LidoPoolDirection.Stake)
         {
@@ -128,18 +127,16 @@ contract LidoExecutor is IExecutor {
         returns (
             address receiver,
             LidoPoolType pool,
-            LidoPoolDirection direction,
-            bool approvalNeeded
+            LidoPoolDirection direction
         )
     {
-        if (data.length != 24) {
+        if (data.length != 23) {
             revert LidoExecutor__InvalidDataLength();
         }
 
         receiver = address(bytes20(data[0:20]));
         pool = LidoPoolType(uint8(data[21]));
         direction = LidoPoolDirection(uint8(data[22]));
-        approvalNeeded = data[23] != 0;
     }
 
     function getTransferData(bytes calldata data)
@@ -151,7 +148,7 @@ contract LidoExecutor is IExecutor {
             address tokenIn
         )
     {
-        if (data.length != 24) {
+        if (data.length != 23) {
             revert LidoExecutor__InvalidDataLength();
         }
 

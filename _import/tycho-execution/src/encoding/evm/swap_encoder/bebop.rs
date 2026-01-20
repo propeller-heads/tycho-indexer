@@ -1,6 +1,6 @@
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
-use alloy::{primitives::Address, sol_types::SolValue};
+use alloy::sol_types::SolValue;
 use tokio::{
     runtime::{Handle, Runtime},
     task::block_in_place,
@@ -12,10 +12,7 @@ use tycho_common::{
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::{
-        approvals::protocol_approvals_manager::ProtocolApprovalsManager,
-        utils::{biguint_to_u256, bytes_to_address, get_runtime},
-    },
+    evm::utils::{biguint_to_u256, bytes_to_address, get_runtime},
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
 };
@@ -27,11 +24,9 @@ use crate::encoding::{
 ///
 /// # Fields
 /// * `executor_address` - The address of the executor contract that will perform the swap.
-/// * `settlement_address` - The address of the Bebop settlement contract.
 #[derive(Clone)]
 pub struct BebopSwapEncoder {
     executor_address: Bytes,
-    settlement_address: Bytes,
     native_token_bebop_address: Bytes,
     native_token_address: Bytes,
     runtime_handle: Handle,
@@ -48,17 +43,6 @@ impl SwapEncoder for BebopSwapEncoder {
         let config = config.ok_or(EncodingError::FatalError(
             "Missing bebop specific addresses in config".to_string(),
         ))?;
-        let settlement_address = config
-            .get("bebop_settlement_address")
-            .map(|s| {
-                Bytes::from_str(s).map_err(|_| {
-                    EncodingError::FatalError("Invalid bebop settlement address".to_string())
-                })
-            })
-            .ok_or(EncodingError::FatalError(
-                "Missing bebop settlement address in config".to_string(),
-            ))
-            .flatten()?;
         let native_token_bebop_address = config
             .get("native_token_address")
             .map(|s| {
@@ -73,7 +57,6 @@ impl SwapEncoder for BebopSwapEncoder {
         let (runtime_handle, runtime) = get_runtime()?;
         Ok(Self {
             executor_address,
-            settlement_address,
             runtime_handle,
             runtime,
             native_token_bebop_address,
@@ -88,26 +71,6 @@ impl SwapEncoder for BebopSwapEncoder {
     ) -> Result<Vec<u8>, EncodingError> {
         let token_in = bytes_to_address(swap.token_in())?;
         let token_out = bytes_to_address(swap.token_out())?;
-        let sender = encoding_context
-            .router_address
-            .clone()
-            .ok_or(EncodingError::FatalError(
-                "The router address is needed to perform a Hashflow swap".to_string(),
-            ))?;
-        let approval_needed = if *swap.token_in() == self.native_token_address {
-            false
-        } else {
-            let tycho_router_address = bytes_to_address(&sender)?;
-            let settlement_address = Address::from_str(&self.settlement_address.to_string())
-                .map_err(|_| {
-                    EncodingError::FatalError("Invalid bebop settlement address".to_string())
-                })?;
-            ProtocolApprovalsManager::new()?.approval_needed(
-                token_in,
-                tycho_router_address,
-                settlement_address,
-            )?
-        };
 
         let protocol_state = swap
             .get_protocol_state()
@@ -188,7 +151,6 @@ impl SwapEncoder for BebopSwapEncoder {
             (encoding_context.transfer_type as u8).to_be_bytes(),
             partial_fill_offset.to_be_bytes(),
             original_filled_taker_amount.to_be_bytes::<32>(),
-            (approval_needed as u8).to_be_bytes(),
             receiver,
             &bebop_calldata[..],
         );
@@ -297,8 +259,6 @@ mod tests {
             "0c",
             //  original taker amount
             "0000000000000000000000000000000000000000000000000de0b6b3a7640000",
-            // approval needed
-            "01",
             //receiver,
             "c5564c13a157e6240659fb81882a28091add8670",
         ));

@@ -26,9 +26,8 @@ contract ERC4626Executor is IExecutor {
     {
         address target;
         IERC20 tokenIn;
-        bool approvalNeeded;
 
-        (tokenIn, target, receiver, approvalNeeded) = _decodeData(data);
+        (tokenIn, target, receiver) = _decodeData(data);
 
         if (address(tokenIn) == target) {
             // shares --> asset
@@ -47,20 +46,14 @@ contract ERC4626Executor is IExecutor {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (
-            IERC20 tokenIn,
-            address target,
-            address receiver,
-            bool approvalNeeded
-        )
+        returns (IERC20 tokenIn, address target, address receiver)
     {
-        if (data.length != 62) {
+        if (data.length != 61) {
             revert ERC4626Executor__InvalidDataLength();
         }
         tokenIn = IERC20(address(bytes20(data[0:20])));
         target = address(bytes20(data[20:40]));
         receiver = address(bytes20(data[40:60]));
-        approvalNeeded = data[61] != 0;
     }
 
     function getTransferData(bytes calldata data)
@@ -72,7 +65,7 @@ contract ERC4626Executor is IExecutor {
             address tokenIn
         )
     {
-        if (data.length != 62) {
+        if (data.length != 61) {
             revert ERC4626Executor__InvalidDataLength();
         }
         tokenIn = address(bytes20(data[0:20]));

@@ -19,8 +19,7 @@ contract LidoExecutorExposed is LidoExecutor {
         returns (
             address receiver,
             LidoPoolType pool,
-            LidoPoolDirection direction,
-            bool approvalNeeded
+            LidoPoolDirection direction
         )
     {
         return _decodeData(data);
@@ -43,21 +42,15 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
             BOB,
             RestrictTransferFrom.TransferType.None,
             LidoPoolType.stETH,
-            LidoPoolDirection.Stake,
-            false
+            LidoPoolDirection.Stake
         );
 
-        (
-            address receiver,
-            LidoPoolType pool,
-            LidoPoolDirection direction,
-            bool approvalNeeded
-        ) = LidoExposed.decodeParams(params);
+        (address receiver, LidoPoolType pool, LidoPoolDirection direction) =
+            LidoExposed.decodeParams(params);
 
         assertEq(receiver, BOB);
         assertEq(uint8(pool), uint8(LidoPoolType.stETH));
         assertEq(uint8(direction), uint8(LidoPoolDirection.Stake));
-        assertEq(approvalNeeded, false);
     }
 
     function testDecodeParamsInvalidDataLength() public {
@@ -74,8 +67,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
             BOB,
             RestrictTransferFrom.TransferType.None,
             LidoPoolType.stETH,
-            LidoPoolDirection.Stake,
-            false
+            LidoPoolDirection.Stake
         );
 
         (
@@ -97,8 +89,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
             BOB,
             RestrictTransferFrom.TransferType.None,
             LidoPoolType.wstETH,
-            LidoPoolDirection.Wrap,
-            false
+            LidoPoolDirection.Wrap
         );
 
         (
@@ -119,8 +110,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
             BOB,
             RestrictTransferFrom.TransferType.None,
             LidoPoolType.wstETH,
-            LidoPoolDirection.Unwrap,
-            false
+            LidoPoolDirection.Unwrap
         );
 
         (
@@ -144,8 +134,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
             BOB,
             RestrictTransferFrom.TransferType.None,
             LidoPoolType.stETH,
-            LidoPoolDirection.Stake,
-            false
+            LidoPoolDirection.Stake
         );
 
         deal(address(LidoExposed), amountIn);
@@ -175,8 +164,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
             BOB,
             RestrictTransferFrom.TransferType.None,
             LidoPoolType.wstETH,
-            LidoPoolDirection.Wrap,
-            true
+            LidoPoolDirection.Wrap
         );
         IERC20(STETH_ADDR).approve(WSTETH_ADDR, amountIn);
 
@@ -202,8 +190,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
             BOB,
             RestrictTransferFrom.TransferType.None,
             LidoPoolType.wstETH,
-            LidoPoolDirection.Unwrap,
-            false
+            LidoPoolDirection.Unwrap
         );
         vm.startPrank(address(LidoExposed));
         (uint256 amountOut, address tokenOut, address receiver) =

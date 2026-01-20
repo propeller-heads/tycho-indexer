@@ -1,6 +1,6 @@
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
-use alloy::{primitives::Address, sol_types::SolValue};
+use alloy::sol_types::SolValue;
 use tokio::{
     runtime::{Handle, Runtime},
     task::block_in_place,
@@ -12,10 +12,7 @@ use tycho_common::{
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::{
-        approvals::protocol_approvals_manager::ProtocolApprovalsManager,
-        utils::{bytes_to_address, get_runtime},
-    },
+    evm::utils::get_runtime,
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
 };
@@ -23,8 +20,6 @@ use crate::encoding::{
 #[derive(Clone)]
 pub struct HashflowSwapEncoder {
     executor_address: Bytes,
-    hashflow_router_address: Bytes,
-    native_token_address: Bytes,
     runtime_handle: Handle,
     #[allow(dead_code)]
     runtime: Option<Arc<Runtime>>,
@@ -33,32 +28,11 @@ pub struct HashflowSwapEncoder {
 impl SwapEncoder for HashflowSwapEncoder {
     fn new(
         executor_address: Bytes,
-        chain: Chain,
-        config: Option<HashMap<String, String>>,
+        _chain: Chain,
+        _config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
-        let config = config.ok_or(EncodingError::FatalError(
-            "Missing hashflow specific addresses in config".to_string(),
-        ))?;
-        let hashflow_router_address = config
-            .get("hashflow_router_address")
-            .map(|s| {
-                Bytes::from_str(s).map_err(|_| {
-                    EncodingError::FatalError("Invalid hashflow router address".to_string())
-                })
-            })
-            .ok_or(EncodingError::FatalError(
-                "Missing hashflow router address in config".to_string(),
-            ))
-            .flatten()?;
-        let native_token_address = chain.native_token().address;
         let (runtime_handle, runtime) = get_runtime()?;
-        Ok(Self {
-            executor_address,
-            hashflow_router_address,
-            native_token_address,
-            runtime_handle,
-            runtime,
-        })
+        Ok(Self { executor_address, runtime_handle, runtime })
     }
 
     fn encode_swap(
@@ -66,27 +40,6 @@ impl SwapEncoder for HashflowSwapEncoder {
         swap: &Swap,
         encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
-        // Native tokens doesn't need approval, only ERC20 tokens do
-        let sender = encoding_context
-            .router_address
-            .clone()
-            .ok_or(EncodingError::FatalError(
-                "The router address is needed to perform a Hashflow swap".to_string(),
-            ))?;
-
-        // Native ETH doesn't need approval, only ERC20 tokens do
-        let approval_needed = if *swap.token_in() == self.native_token_address {
-            false
-        } else {
-            let tycho_router_address = bytes_to_address(&sender)?;
-            let hashflow_router_address = Address::from_slice(&self.hashflow_router_address);
-            ProtocolApprovalsManager::new()?.approval_needed(
-                bytes_to_address(swap.token_in())?,
-                tycho_router_address,
-                hashflow_router_address,
-            )?
-        };
-
         // Get quote
         let protocol_state = swap
             .get_protocol_state()
@@ -147,11 +100,7 @@ impl SwapEncoder for HashflowSwapEncoder {
                 )))?;
             hashflow_calldata.extend_from_slice(value);
         }
-        let args = (
-            (encoding_context.transfer_type as u8).to_be_bytes(),
-            (approval_needed as u8).to_be_bytes(),
-            &hashflow_calldata[..],
-        );
+        let args = ((encoding_context.transfer_type as u8).to_be_bytes(), &hashflow_calldata[..]);
         Ok(args.abi_encode_packed())
     }
 
@@ -166,6 +115,8 @@ impl SwapEncoder for HashflowSwapEncoder {
 
 #[cfg(test)]
 mod test {
+    use std::str::FromStr;
+
     use alloy::hex::encode;
     use num_bigint::BigUint;
     use tycho_common::models::protocol::ProtocolComponent;
@@ -316,10 +267,9 @@ mod test {
             .unwrap();
         let hex_swap = encode(&encoded_swap);
 
-        let expected_swap = String::from(concat!(
+        let expected_swap = String::from(
             "02", // transfer type
-            "01", // approval needed
-        ));
+        );
         assert_eq!(hex_swap, expected_swap + &hashflow_calldata.to_string()[2..]);
     }
 }
