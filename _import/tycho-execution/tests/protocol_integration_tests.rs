@@ -1525,7 +1525,7 @@ fn test_single_encoding_strategy_steth_lido() {
         eth_chain().id(),
         encoded_solution,
         &solution,
-        &UserTransferType::None,
+        &UserTransferType::TransferFrom,
         &eth(),
         None,
     )

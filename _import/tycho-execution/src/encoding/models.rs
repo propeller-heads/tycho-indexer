@@ -21,17 +21,14 @@ use crate::encoding::serde_primitives::biguint_string;
 ///     - You must approve the Tycho Router contract to spend your tokens via standard `approve()`
 ///       calls.
 ///
-/// - `None`: No transfer will be performed.
+/// - `UseVaultsFunds`: No transfer will be performed and the Vault's funds will be used
 ///     - Assumes the tokens are already present in the Tycho Router.
-///     - **Warning**: This is an advanced mode. Ensure your logic guarantees that the tokens are
-///       already in the router at the time of execution.
-///     - The Tycho router is **not** designed to safely hold tokens. If tokens are not transferred
-///       and used in the **same transaction**, they will be permanently lost.
+///     - The tokens must be deposited into the TychoRouter before performing the swap
 #[derive(Clone, Debug, PartialEq, ValueEnum)]
 pub enum UserTransferType {
     TransferFromPermit2,
     TransferFrom,
-    None,
+    UseVaultsFunds,
 }
 
 /// Represents a solution containing details describing an order, and  instructions for filling
