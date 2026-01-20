@@ -153,14 +153,14 @@ impl CowAMMState {
         pool_amount_out: U256,
         max_amounts_in: &[U256],
     ) -> Result<(), CowAMMError> {
-        let pool_total = self.lp_token_supply;
+        let pool_total = new_state.lp_token_supply;
         let ratio = bdiv(pool_amount_out, pool_total)?;
 
         if ratio.is_zero() {
             return Err(CowAMMError::InvalidPoolRatio);
         }
 
-        let balances = vec![self.liquidity_a(), self.liquidity_b()];
+        let balances = vec![new_state.liquidity_a(), new_state.liquidity_b()];
 
         for (i, bal) in balances.into_iter().enumerate() {
             let token_amount_in = bmul(ratio, bal)?;
@@ -173,14 +173,14 @@ impl CowAMMState {
 
             // equivalent to _pullUnderlying
             if i == 0 {
-                new_state.token_a.1 = badd(self.token_a.1, token_amount_in)?;
+                new_state.token_a.1 = badd(new_state.token_a.1, token_amount_in)?;
             } else {
-                new_state.token_b.1 = badd(self.token_b.1, token_amount_in)?;
+                new_state.token_b.1 = badd(new_state.token_b.1, token_amount_in)?;
             }
         }
 
         // mint LP shares
-        new_state.lp_token_supply = badd(self.lp_token_supply, pool_amount_out)?;
+        new_state.lp_token_supply = badd(new_state.lp_token_supply, pool_amount_out)?;
         Ok(())
     }
 
@@ -488,58 +488,92 @@ impl ProtocolSim for CowAMMState {
         // JOIN POOL (TOKEN → LP)
         // ============================
         if is_lp_out && !is_lp_in {
-            let (proportional_token_amount_a, proportional_token_amount_b) = self
-                .calc_tokens_out_given_exact_lp_token_in(amount_in)
-                .map_err(|e| {
-                    SimulationError::FatalError(format!(
-                        "failed to calculate token proportions out error: {e:?}"
-                    ))
-                })?;
+            let fee = U256::from(self.fee);
+            let (bal_in, weight_in, bal_out, weight_out, is_token_a_in) =
+                if token_in.address == *new_state.token_a_addr() {
+                    (
+                        new_state.liquidity_a(),
+                        new_state.weight_a(),
+                        new_state.liquidity_b(),
+                        new_state.weight_b(),
+                        true,
+                    )
+                } else {
+                    (
+                        new_state.liquidity_b(),
+                        new_state.weight_b(),
+                        new_state.liquidity_a(),
+                        new_state.weight_a(),
+                        false,
+                    )
+                };
 
-            let (amount_to_swap, is_token_a_swap) = if token_in.address == *new_state.token_a_addr()
-            {
-                (proportional_token_amount_b, false)
-            } else {
-                (proportional_token_amount_a, true)
-            };
+            // Find swap amount that matches the post-swap pool ratio to join with no dust.
+            let mut lo = U256::ZERO;
+            let mut hi = amount_in;
+            let mut best_x = U256::ZERO;
+            for _ in 0..128 {
+                let x = safe_div_u256(safe_add_u256(lo, hi)?, U256::from(2u8))?;
+                let out = calculate_out_given_in(bal_in, weight_in, bal_out, weight_out, x, fee)
+                    .map_err(|e| SimulationError::FatalError(format!("amount_out error: {e:?}")))?;
 
-            let amt_in = if is_token_a_swap {
-                calculate_in_given_out(
-                    new_state.liquidity_b(),
-                    new_state.weight_b(),
-                    new_state.liquidity_a(),
-                    new_state.weight_a(),
-                    amount_to_swap,
-                    U256::from(self.fee),
-                )
-            } else {
-                calculate_in_given_out(
-                    new_state.liquidity_a(),
-                    new_state.weight_a(),
-                    new_state.liquidity_b(),
-                    new_state.weight_b(),
-                    amount_to_swap,
-                    U256::from(self.fee),
-                )
+                let in_remaining = safe_sub_u256(amount_in, x)?;
+                let bal_in_after = safe_add_u256(bal_in, x)?;
+                let bal_out_after = safe_sub_u256(bal_out, out)?;
+
+                let left = safe_mul_u256(in_remaining, bal_out_after)?;
+                let right = safe_mul_u256(out, bal_in_after)?;
+
+                if left > right {
+                    lo = safe_add_u256(x, U256::from(1u8))?;
+                } else {
+                    best_x = x;
+                    if x.is_zero() {
+                        break;
+                    }
+                    hi = safe_sub_u256(x, U256::from(1u8))?;
+                }
             }
-            .map_err(|e| SimulationError::FatalError(format!("amt_in error: {e:?}")))?;
 
-            if is_token_a_swap {
-                new_state.token_a.1 = safe_sub_u256(new_state.liquidity_a(), amount_to_swap)?;
-                new_state.token_b.1 = safe_add_u256(new_state.liquidity_b(), amt_in)?;
-            } else {
-                new_state.token_b.1 = safe_sub_u256(new_state.liquidity_b(), amount_to_swap)?;
-                new_state.token_a.1 = safe_add_u256(new_state.liquidity_a(), amt_in)?;
+            let x = best_x;
+            let out = calculate_out_given_in(bal_in, weight_in, bal_out, weight_out, x, fee)
+                .map_err(|e| SimulationError::FatalError(format!("amount_out error: {e:?}")))?;
+
+            let in_remaining = safe_sub_u256(amount_in, x)?;
+            let bal_in_after = safe_add_u256(bal_in, x)?;
+            let bal_out_after = safe_sub_u256(bal_out, out)?;
+
+            if bal_in_after.is_zero() || bal_out_after.is_zero() {
+                return Err(SimulationError::FatalError(
+                    "join_pool balance is zero after swap".to_string(),
+                ));
             }
 
-            let _ = self.join_pool(
-                &mut new_state,
-                amount_in,
-                &[proportional_token_amount_a, proportional_token_amount_b],
-            );
+            let pool_total = new_state.lp_token_supply;
+            let lp_from_in = safe_div_u256(safe_mul_u256(in_remaining, pool_total)?, bal_in_after)?;
+            let lp_from_out = safe_div_u256(safe_mul_u256(out, pool_total)?, bal_out_after)?;
+            let lp_out = if lp_from_in < lp_from_out { lp_from_in } else { lp_from_out };
+
+            if lp_out.is_zero() {
+                return Err(SimulationError::FatalError(
+                    "join_pool produces zero lp_out".to_string(),
+                ));
+            }
+
+            if is_token_a_in {
+                new_state.token_a.1 = bal_in_after;
+                new_state.token_b.1 = bal_out_after;
+            } else {
+                new_state.token_b.1 = bal_in_after;
+                new_state.token_a.1 = bal_out_after;
+            }
+
+            let (max_a, max_b) =
+                if is_token_a_in { (in_remaining, out) } else { (out, in_remaining) };
+            let _ = self.join_pool(&mut new_state, lp_out, &[max_a, max_b]);
 
             return Ok(GetAmountOutResult {
-                amount: u256_to_biguint(amt_in),
+                amount: u256_to_biguint(lp_out),
                 gas: 120_000u64.to_biguint().unwrap(),
                 new_state: Box::new(new_state),
             });
@@ -749,7 +783,7 @@ mod tests {
         U256::from_str("170286779513658066185").unwrap(), //WETH balance
         U256::from_str("413545982676").unwrap(), //USDC balance
         3, 4, // token indices: t3 -> t4
-        BigUint::from_str("217679081735374278").unwrap(), //WETH in 
+        BigUint::from_str("217679081735374278").unwrap(), //WETH in
         BigUint::from_str("527964550").unwrap(), // USDC out (≈ 0.2177 WETH) for 527964550 USDC (≈ 527.96 USDC)
     )]
     fn test_get_amount_out(
@@ -818,7 +852,7 @@ mod tests {
         U256::from_str("1547000000000000000000").unwrap(),
         U256::from_str("100000000000000000").unwrap(),
         2, 0, // token indices: t2 -> t0
-        BigUint::from_str("1000000000000000000").unwrap(), //Amount of lp_token being sold (redeeemd) 
+        BigUint::from_str("1000000000000000000").unwrap(), //Amount of lp_token being sold (redeeemd)
         BigUint::from_str("15431325000000000000").unwrap(), //COW as output, verify that we sent this amount to the pool in total
     )]
     fn test_get_amount_out_lp_token(

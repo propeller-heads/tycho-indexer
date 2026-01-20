@@ -26,6 +26,7 @@ use tycho_simulation::{
             uniswap_v4::state::UniswapV4State,
             velodrome_slipstreams::state::VelodromeSlipstreamsState,
             vm::state::EVMPoolState,
+            cowamm::state::CowAMMState,
         },
         stream::ProtocolStreamBuilder,
     },
@@ -268,6 +269,13 @@ impl ProtocolStreamProcessor {
             "velodrome_slipstreams" => {
                 stream = stream.exchange::<VelodromeSlipstreamsState>(
                     "velodrome_slipstreams",
+                    tvl_filter.clone(),
+                    None,
+                );
+            }
+            "cowamm" => {
+                stream = stream.exchange::<CowAMMState>(
+                    "cowamm",
                     tvl_filter.clone(),
                     None,
                 );

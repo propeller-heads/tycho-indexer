@@ -25,6 +25,7 @@ use tycho_common::simulation::protocol_sim::ProtocolSim;
 use tycho_simulation::{
     protocol::models::ProtocolComponent,
     rfq::protocols::hashflow::{client::HashflowClient, state::HashflowState},
+    evm::protocol::cowamm::constants::PROTOCOL_SYSTEM,
     tycho_common::models::Chain,
     utils::load_all_tokens,
 };
@@ -997,6 +998,12 @@ async fn process_state(
         if expected_amount_out == BigUint::ZERO {
             continue;
         }
+
+        if component.protocol_system == PROTOCOL_SYSTEM {
+            debug!("CowAMM protocol system is not supported for execution");
+            continue;
+        }
+
         // Simulate execution amount out against the RPC
         let (solution, transaction) = match encode_swap(
             &component,

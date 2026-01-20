@@ -10,3 +10,4 @@ pub const U256_1: U256 = U256::from_limbs([1, 0, 0, 0]);
 pub const BONE: U256 = U256::from_limbs([0xDE0B6B3A7640000, 0, 0, 0]);
 
 pub const DECIMAL_RADIX: i32 = 10;
+pub const PROTOCOL_SYSTEM: &str = "cowamm";
