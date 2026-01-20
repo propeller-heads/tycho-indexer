@@ -161,6 +161,8 @@ contract LidoExecutor is IExecutor {
             tokenIn = address(0);
             transferType =
             RestrictTransferFrom.TransferType.TransferNativeInMsgValue;
+            // The token in is ETH in this case so we don't really need a receiver
+            // (the funds are passed in the msg.value)
         } else if (
             pool == LidoPoolType.wstETH && direction == LidoPoolDirection.Wrap
         ) {
