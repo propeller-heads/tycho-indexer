@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import "@src/Dispatcher.sol";
 import "./TychoRouterTestSetup.sol";
 
-contract DispatcherExposed is Dispatcher {
+abstract contract DispatcherExposed is Dispatcher {
     constructor(address _permit2) Dispatcher(_permit2) {}
 
     function exposedCallExecutor(
