@@ -3,6 +3,7 @@
 extern crate pretty_assertions;
 
 pub mod erc20;
+pub mod gas;
 pub mod rpc;
 pub mod services;
 
