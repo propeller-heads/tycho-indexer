@@ -311,7 +311,7 @@ mod tests {
                 // zero for one
                 "01",
                 // transfer type Transfer
-                "01",
+                "02",
                 // receiver
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
                 // pool params:
@@ -480,7 +480,7 @@ mod tests {
                 // zero for one
                 "01",
                 // transfer type Transfer
-                "01",
+                "02",
                 // receiver
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
                 // pool params:

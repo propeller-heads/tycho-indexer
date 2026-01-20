@@ -12,12 +12,7 @@ contract ERC4626ExecutorExposed is ERC4626Executor {
     function decodeParams(bytes calldata data)
         external
         pure
-        returns (
-            IERC20 inToken,
-            address target,
-            address receiver,
-            bool approvalNeeded
-        )
+        returns (IERC20 inToken, address target, address receiver)
     {
         return _decodeData(data);
     }
@@ -41,21 +36,15 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
             WETH_ADDR,
             address(spETH),
             address(2),
-            RestrictTransferFrom.TransferType.None,
-            false
+            RestrictTransferFrom.TransferType.None
         );
 
-        (
-            IERC20 inToken,
-            address target,
-            address receiver,
-            bool approvalNeeded
-        ) = ERC4626Exposed.decodeParams(params);
+        (IERC20 inToken, address target, address receiver) =
+            ERC4626Exposed.decodeParams(params);
 
         assertEq(address(inToken), WETH_ADDR);
         assertEq(address(target), address(spETH));
         assertEq(receiver, address(2));
-        assertEq(approvalNeeded, false);
     }
 
     function testDecodeParamsInvalidDataLength() public {
@@ -71,8 +60,7 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
             WETH_ADDR,
             address(spETH),
             address(2),
-            RestrictTransferFrom.TransferType.None,
-            false
+            RestrictTransferFrom.TransferType.None
         );
 
         (
@@ -82,7 +70,7 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
         ) = ERC4626Exposed.getTransferData(params);
 
         assertEq(tokenIn, WETH_ADDR);
-        assertEq(receiver, address(ERC4626Exposed));
+        assertEq(receiver, address(spETH));
         assertEq(
             uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
         );
@@ -94,14 +82,15 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
             WETH_ADDR,
             address(spETH),
             BOB,
-            RestrictTransferFrom.TransferType.None,
-            true
+            RestrictTransferFrom.TransferType.None
         );
 
         deal(WETH_ADDR, address(ERC4626Exposed), amountIn);
 
         uint256 balanceBefore = spETH.balanceOf(BOB);
 
+        vm.prank(address(ERC4626Exposed));
+        IERC20(WETH_ADDR).approve(address(spETH), amountIn);
         (uint256 amountOut, address tokenOut, address receiver) =
             ERC4626Exposed.swap(amountIn, protocolData);
 
@@ -118,8 +107,7 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
             address(spETH),
             address(spETH),
             BOB,
-            RestrictTransferFrom.TransferType.None,
-            false
+            RestrictTransferFrom.TransferType.None
         );
 
         deal(address(spETH), address(ERC4626Exposed), amountIn);

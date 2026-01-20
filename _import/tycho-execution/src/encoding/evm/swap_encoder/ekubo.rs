@@ -130,7 +130,7 @@ mod tests {
             hex_swap,
             concat!(
                 // transfer type Transfer
-                "01",
+                "02",
                 // receiver
                 "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6",
                 // group token in
@@ -206,7 +206,7 @@ mod tests {
             // transfer type
             concat!(
                 // transfer type Transfer
-                "01",
+                "02",
                 // receiver
                 "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6",
                 // group token in

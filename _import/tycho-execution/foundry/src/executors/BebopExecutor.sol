@@ -47,14 +47,12 @@ contract BebopExecutor is IExecutor {
         address tokenIn;
         uint8 partialFillOffset;
         uint256 originalFilledTakerAmount;
-        bool approvalNeeded;
         bytes memory bebopCalldata;
         (
             tokenIn,
             tokenOut,
             partialFillOffset,
             originalFilledTakerAmount,
-            approvalNeeded,
             receiver,
             bebopCalldata
         ) = _decodeData(data);
@@ -67,12 +65,6 @@ contract BebopExecutor is IExecutor {
             originalFilledTakerAmount,
             partialFillOffset
         );
-
-        // Approve Bebop settlement to spend tokens if needed
-        if (approvalNeeded) {
-            // slither-disable-next-line unused-return
-            IERC20(tokenIn).forceApprove(bebopSettlement, type(uint256).max);
-        }
 
         uint256 balanceBefore = _balanceOf(tokenOut, receiver);
         uint256 ethValue = tokenIn == address(0) ? amountIn : 0;
@@ -95,22 +87,20 @@ contract BebopExecutor is IExecutor {
             address tokenOut,
             uint8 partialFillOffset,
             uint256 originalFilledTakerAmount,
-            bool approvalNeeded,
             address receiver,
             bytes memory bebopCalldata
         )
     {
         // Need at least 95 bytes for the minimum fixed fields
-        // 20 + 20 + 1 + 1 (offset) + 32 (original amount) + 1 (approval) + 20 (receiver) = 95
-        if (data.length < 95) revert BebopExecutor__InvalidDataLength();
+        // 20 + 20 + 1 + 1 (offset) + 32 (original amount) + 20 (receiver) = 95
+        if (data.length < 94) revert BebopExecutor__InvalidDataLength();
 
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
         partialFillOffset = uint8(data[41]);
         originalFilledTakerAmount = uint256(bytes32(data[42:74]));
-        approvalNeeded = data[74] != 0;
-        receiver = address(bytes20(data[75:95]));
-        bebopCalldata = data[95:];
+        receiver = address(bytes20(data[74:94]));
+        bebopCalldata = data[94:];
     }
 
     /// @dev Modifies the filledTakerAmount in the bebop calldata to handle slippage
@@ -186,14 +176,16 @@ contract BebopExecutor is IExecutor {
             address tokenIn
         )
     {
-        if (data.length < 95) {
+        if (data.length < 94) {
             revert BebopExecutor__InvalidDataLength();
         }
 
         tokenIn = address(bytes20(data[0:20]));
         transferType = RestrictTransferFrom.TransferType(uint8(data[40]));
-        // Since the Bebop Settlement withdraws the funds from the msg.sender, the user's funds need to sent to the
-        // TychoRouter initially (address(this))
-        receiver = address(this);
+        // The receiver of the funds will be the Bebop Settlement contract.
+        // This protocol will only ever have the following transferTypes:
+        // - TransferFromAndProtocolWillDebit: the funds should be transferred to the TychoRouter and the Bebop Settlement contract needs to be approved
+        // - ProtocolWillDebit: Bebop Settlement contract needs to be approved
+        receiver = bebopSettlement;
     }
 }

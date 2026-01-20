@@ -855,8 +855,8 @@ mod tests {
                     "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                     // zero for one
                     "00",
-                    // transfer true
-                    "01",
+                    // transfer type Transfer
+                    "02",
                 ))
             );
         }
@@ -936,7 +936,7 @@ mod tests {
                     // zero for one
                     "00",
                     // transfer type Transfer
-                    "01",
+                    "02",
                     // receiver
                     "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
                     // first pool intermediary token (ETH)

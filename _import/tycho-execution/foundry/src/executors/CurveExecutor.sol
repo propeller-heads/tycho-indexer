@@ -53,7 +53,7 @@ contract CurveExecutor is IExecutor {
         payable
         returns (uint256 amountOut, address tokenOut, address receiver)
     {
-        if (data.length != 85) {
+        if (data.length != 84) {
             revert CurveExecutor__InvalidDataLength();
         }
         address tokenIn;
@@ -61,14 +61,7 @@ contract CurveExecutor is IExecutor {
         uint8 poolType;
         int128 i;
         int128 j;
-        bool approvalNeeded;
-        (tokenIn, tokenOut, pool, poolType, i, j, approvalNeeded, receiver) =
-            _decodeData(data);
-
-        if (approvalNeeded && tokenIn != nativeToken) {
-            // slither-disable-next-line unused-return
-            IERC20(tokenIn).forceApprove(address(pool), type(uint256).max);
-        }
+        (tokenIn, tokenOut, pool, poolType, i, j, receiver) = _decodeData(data);
 
         /// Inspired by Curve's router contract: https://github.com/curvefi/curve-router-ng/blob/9ab006ca848fc7f1995b6fbbecfecc1e0eb29e2a/contracts/Router.vy#L44
         uint256 balanceBefore = _balanceOf(tokenOut);
@@ -126,7 +119,6 @@ contract CurveExecutor is IExecutor {
             uint8 poolType,
             int128 i,
             int128 j,
-            bool approvalNeeded,
             address receiver
         )
     {
@@ -136,8 +128,7 @@ contract CurveExecutor is IExecutor {
         poolType = uint8(data[60]);
         i = int128(uint128(uint8(data[61])));
         j = int128(uint128(uint8(data[62])));
-        approvalNeeded = data[63] != 0;
-        receiver = address(bytes20(data[65:85]));
+        receiver = address(bytes20(data[64:84]));
     }
 
     /**
@@ -165,9 +156,11 @@ contract CurveExecutor is IExecutor {
         )
     {
         tokenIn = address(bytes20(data[0:20]));
-        transferType = RestrictTransferFrom.TransferType(uint8(data[64]));
-        // Since the curve pool withdraws the funds from the msg.sender, the user's funds need to sent to the
-        // TychoRouter initially (address(this))
-        receiver = address(this);
+        transferType = RestrictTransferFrom.TransferType(uint8(data[63]));
+        // The receiver of the funds will be the pool contract.
+        // This protocol will only ever have the following transferTypes:
+        // - TransferFromAndProtocolWillDebit: the funds should be transferred to the TychoRouter and the pool contract needs to be approved
+        // - ProtocolWillDebit: pool contract needs to be approved
+        receiver = address(bytes20(data[40:60]));
     }
 }

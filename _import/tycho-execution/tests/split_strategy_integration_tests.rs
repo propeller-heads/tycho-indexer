@@ -263,7 +263,7 @@ fn test_split_input_cyclic_swap() {
         "b4e16d0168e52d35cacd2c6185b44281ec28c9dc",               // component id,
         "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",               // receiver
         "00",                                                     // zero2one
-        "01",                                                     // transfer type Transfer
+        "02",                                                     // transfer type Transfer
         "000000000000000000000000000000000000000000000000000000", // padding
     ]
     .join("");
@@ -413,7 +413,7 @@ fn test_split_output_cyclic_swap() {
         "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
         "00",                                       // zero2one
-        "01",                                       // transfer type Transfer
+        "02",                                       // transfer type Transfer
         "006e",                                     // ple encoded swaps
         "01",                                       // token in index
         "00",                                       // token out index
@@ -425,7 +425,7 @@ fn test_split_output_cyclic_swap() {
         "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
         "00",                                       // zero2one
-        "01",                                       // transfer type Transfer
+        "02",                                       // transfer type Transfer
         "000000000000000000000000000000000000000000000000000000", // padding
     ]
     .join("");

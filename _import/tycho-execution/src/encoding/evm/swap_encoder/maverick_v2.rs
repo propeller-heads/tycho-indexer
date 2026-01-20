@@ -108,8 +108,8 @@ mod tests {
                 "A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
                 // receiver
                 "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
-                // transfer type
-                "01",
+                // transfer type Transfer
+                "02",
             ))
             .to_lowercase()
         );

@@ -22,7 +22,6 @@ contract BebopExecutorExposed is BebopExecutor {
             address tokenOut,
             uint8 partialFillOffset,
             uint256 originalFilledTakerAmount,
-            bool approvalNeeded,
             address receiver,
             bytes memory bebopCalldata
         )
@@ -59,7 +58,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint8(RestrictTransferFrom.TransferType.Transfer),
             uint8(2),
             originalAmountIn,
-            true,
             address(123),
             bebopCalldata
         );
@@ -69,7 +67,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             address tokenOut,
             uint8 decodedPartialFillOffset,
             uint256 decodedOriginalAmountIn,
-            bool decodedApprovalNeeded,
             address decodedReceiver,
             bytes memory decodedBebopCalldata
         ) = bebopExecutor.decodeData(params);
@@ -87,7 +84,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             originalAmountIn,
             "originalAmountIn mismatch"
         );
-        assertTrue(decodedApprovalNeeded, "approvalNeeded should be true");
         assertEq(decodedReceiver, address(123), "receiver mismatch");
     }
 
@@ -107,7 +103,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint8(RestrictTransferFrom.TransferType.Transfer),
             uint8(2),
             originalAmountIn,
-            true,
             address(123),
             bebopCalldata
         );
@@ -124,7 +119,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             "transferType mismatch"
         );
         assertEq(tokenIn, USDC_ADDR, "tokenIn mismatch");
-        assertEq(decodedReceiver, address(bebopExecutor), "receiver mismatch");
+        assertEq(decodedReceiver, BEBOP_SETTLEMENT, "receiver mismatch");
     }
 
     // Single Order Tests
@@ -143,7 +138,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         RestrictTransferFrom.TransferType.None;
         uint8 partialFillOffset = 12;
         uint256 amountIn = 1000000000000000000;
-        bool approvalNeeded = true;
         uint256 expectedAmountOut = 3617660;
 
         deal(tokenIn, address(bebopExecutor), amountIn);
@@ -154,14 +148,14 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             transferType,
             partialFillOffset,
             amountIn,
-            approvalNeeded,
             address(bebopExecutor),
             bebopCalldata
         );
 
         uint256 initialTokenOutBalance =
             IERC20(tokenOut).balanceOf(address(bebopExecutor));
-
+        vm.prank(address(bebopExecutor));
+        IERC20(tokenIn).approve(BEBOP_SETTLEMENT, amountIn);
         (uint256 amountOut, address tokenOutReturned, address receiver) =
             bebopExecutor.swap(amountIn, params);
 
@@ -196,7 +190,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         RestrictTransferFrom.TransferType.None;
         uint8 partialFillOffset = 12;
         uint256 amountIn = 1000000000000000000;
-        bool approvalNeeded = false;
         uint256 expectedAmountOut = 3839649;
 
         vm.deal(address(bebopExecutor), amountIn);
@@ -207,7 +200,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             transferType,
             partialFillOffset,
             amountIn,
-            approvalNeeded,
             address(bebopExecutor),
             bebopCalldata
         );
@@ -246,7 +238,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint8 partialFillOffset = 12;
         // filling only half of the quote
         uint256 amountIn = 1000000000000000000 / 2;
-        bool approvalNeeded = true;
         uint256 expectedAmountOut = 3617660 / 2;
 
         deal(tokenIn, address(bebopExecutor), amountIn);
@@ -257,14 +248,14 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             transferType,
             partialFillOffset,
             amountIn * 2, // this is the original amount in
-            approvalNeeded,
             address(bebopExecutor),
             bebopCalldata
         );
 
         uint256 initialTokenOutBalance =
             IERC20(tokenOut).balanceOf(address(bebopExecutor));
-
+        vm.prank(address(bebopExecutor));
+        IERC20(tokenIn).approve(BEBOP_SETTLEMENT, amountIn);
         (uint256 amountOut, address tokenOutReturned, address receiver) =
             bebopExecutor.swap(amountIn, params);
 
@@ -300,7 +291,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint8 partialFillOffset = 2;
         // filling only half of the quote
         uint256 amountIn = 20000000000;
-        bool approvalNeeded = true;
         // maker amounts from quote
         uint256 expectedAmountOut =
             (8999445165322964385268 + 9912843438638420000000);
@@ -313,7 +303,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             transferType,
             partialFillOffset,
             amountIn,
-            approvalNeeded,
             address(bebopExecutor),
             bebopCalldata
         );
@@ -321,6 +310,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 initialTokenOutBalance =
             IERC20(tokenOut).balanceOf(address(bebopExecutor));
 
+        vm.prank(address(bebopExecutor));
+        IERC20(tokenIn).approve(BEBOP_SETTLEMENT, amountIn);
         (uint256 amountOut, address tokenOutReturned, address receiver) =
             bebopExecutor.swap(amountIn, params);
 
@@ -356,7 +347,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint8 partialFillOffset = 2;
         // filling only half of the quote
         uint256 amountIn = 20000000000 / 2;
-        bool approvalNeeded = true;
         // maker amounts from quote
         uint256 expectedAmountOut =
             (8999445165322964385268 + 9912843438638420000000) / 2;
@@ -369,14 +359,14 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             transferType,
             partialFillOffset,
             amountIn * 2, // this is the original amount from the quote
-            approvalNeeded,
             address(bebopExecutor),
             bebopCalldata
         );
 
         uint256 initialTokenOutBalance =
             IERC20(tokenOut).balanceOf(address(bebopExecutor));
-
+        vm.prank(address(bebopExecutor));
+        IERC20(tokenIn).approve(BEBOP_SETTLEMENT, amountIn);
         (uint256 amountOut, address tokenOutReturned, address receiver) =
             bebopExecutor.swap(amountIn, params);
 
@@ -413,7 +403,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint8(RestrictTransferFrom.TransferType.Transfer),
             uint8(2),
             originalAmountIn,
-            true,
             address(bebopExecutor),
             bebopCalldata
         );

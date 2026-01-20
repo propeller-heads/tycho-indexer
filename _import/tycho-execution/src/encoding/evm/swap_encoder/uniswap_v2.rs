@@ -114,7 +114,7 @@ mod tests {
                 // zero for one
                 "00",
                 // transfer type Transfer
-                "01",
+                "02",
             ))
         );
         write_calldata_to_file("test_encode_uniswap_v2", hex_swap.as_str());

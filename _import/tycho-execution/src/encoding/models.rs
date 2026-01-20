@@ -21,17 +21,14 @@ use crate::encoding::serde_primitives::biguint_string;
 ///     - You must approve the Tycho Router contract to spend your tokens via standard `approve()`
 ///       calls.
 ///
-/// - `None`: No transfer will be performed.
+/// - `UseVaultsFunds`: No transfer will be performed and the Vault's funds will be used
 ///     - Assumes the tokens are already present in the Tycho Router.
-///     - **Warning**: This is an advanced mode. Ensure your logic guarantees that the tokens are
-///       already in the router at the time of execution.
-///     - The Tycho router is **not** designed to safely hold tokens. If tokens are not transferred
-///       and used in the **same transaction**, they will be permanently lost.
+///     - The tokens must be deposited into the TychoRouter before performing the swap
 #[derive(Clone, Debug, PartialEq, ValueEnum)]
 pub enum UserTransferType {
     TransferFromPermit2,
     TransferFrom,
-    None,
+    UseVaultsFunds,
 }
 
 /// Represents a solution containing details describing an order, and  instructions for filling
@@ -271,15 +268,21 @@ pub struct EncodingContext {
 ///
 /// # Fields
 ///
-/// * `TransferFrom`: Transfer the token from the sender to the protocol/router.
-/// * `Transfer`: Transfer the token from the router into the protocol.
-/// * `None`: No transfer is needed. Tokens are already in the pool.
+/// * - TransferFrom: Transfer from user wallet to protocol
+/// * - TransferFromAndProtocolWillDebit: Transfer from user wallet to router, protocol takes it
+/// * - Transfer: Transfer from router balance to protocol (could be from vault or previous swap)
+/// * - TransferNativeInMsgValue: Native ETH sent via msg.value (hardcoded in executor for security)
+/// * - ProtocolWillDebit: Protocol takes from router/vault
+/// * - None: Funds already transferred from previous pool
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum TransferType {
     TransferFrom = 0,
-    Transfer = 1,
-    None = 2,
+    TransferFromAndProtocolWillDebit = 1,
+    Transfer = 2,
+    TransferNativeInMsgValue = 3,
+    ProtocolWillDebit = 4,
+    None = 5,
 }
 
 mod tests {

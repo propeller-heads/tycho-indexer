@@ -90,7 +90,7 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
         assertEq(receiver, address(rocketpoolExecutor));
         assertEq(
             uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.Transfer)
+            uint8(RestrictTransferFrom.TransferType.TransferNativeInMsgValue)
         );
         assertEq(tokenIn, address(0));
     }

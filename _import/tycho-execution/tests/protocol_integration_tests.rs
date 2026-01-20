@@ -1,5 +1,5 @@
 mod common;
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{collections::HashMap, default::Default, str::FromStr, sync::Arc};
 
 use alloy::{hex, hex::encode};
 use num_bigint::{BigInt, BigUint};
@@ -1525,7 +1525,7 @@ fn test_single_encoding_strategy_steth_lido() {
         eth_chain().id(),
         encoded_solution,
         &solution,
-        &UserTransferType::None,
+        &UserTransferType::TransferFrom,
         &eth(),
         None,
     )

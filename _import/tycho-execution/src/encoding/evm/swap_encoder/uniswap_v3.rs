@@ -131,7 +131,7 @@ mod tests {
                 // zero for one
                 "00",
                 // transfer type Transfer
-                "01",
+                "02",
             ))
         );
     }

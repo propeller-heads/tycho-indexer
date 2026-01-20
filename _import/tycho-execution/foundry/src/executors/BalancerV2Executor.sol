@@ -29,15 +29,8 @@ contract BalancerV2Executor is IExecutor {
     {
         address tokenIn;
         bytes32 poolId;
-        bool approvalNeeded;
 
-        (tokenIn, tokenOut, poolId, receiver, approvalNeeded) =
-            _decodeData(data);
-
-        if (approvalNeeded) {
-            // slither-disable-next-line unused-return
-            IERC20(tokenIn).forceApprove(VAULT, type(uint256).max);
-        }
+        (tokenIn, tokenOut, poolId, receiver) = _decodeData(data);
 
         IVault.SingleSwap memory singleSwap = IVault.SingleSwap({
             poolId: poolId,
@@ -68,11 +61,10 @@ contract BalancerV2Executor is IExecutor {
             address tokenIn,
             address tokenOut,
             bytes32 poolId,
-            address receiver,
-            bool approvalNeeded
+            address receiver
         )
     {
-        if (data.length != 94) {
+        if (data.length != 93) {
             revert BalancerV2Executor__InvalidDataLength();
         }
 
@@ -80,7 +72,6 @@ contract BalancerV2Executor is IExecutor {
         tokenOut = address(bytes20(data[20:40]));
         poolId = bytes32(data[40:72]);
         receiver = address(bytes20(data[72:92]));
-        approvalNeeded = data[92] != 0;
     }
 
     function getTransferData(bytes calldata data)
@@ -92,14 +83,16 @@ contract BalancerV2Executor is IExecutor {
             address tokenIn
         )
     {
-        if (data.length != 94) {
+        if (data.length != 93) {
             revert BalancerV2Executor__InvalidDataLength();
         }
 
         tokenIn = address(bytes20(data[0:20]));
-        // Since the Balancer Vault withdraws the funds from the msg.sender, the user's funds need to sent to the
-        // TychoRouter initially (address(this))
-        receiver = address(this);
-        transferType = RestrictTransferFrom.TransferType(uint8(data[93]));
+        // The receiver of the funds will be the Balancer Vault.
+        // This protocol will only ever have the following transferTypes:
+        // - TransferFromAndProtocolWillDebit: the funds should be transferred to the TychoRouter and the Balancer Vault needs to be approved
+        // - ProtocolWillDebit: Balancer Vault needs to be approved
+        receiver = VAULT;
+        transferType = RestrictTransferFrom.TransferType(uint8(data[92]));
     }
 }
