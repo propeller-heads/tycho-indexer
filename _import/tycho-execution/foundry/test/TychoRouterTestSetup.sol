@@ -52,6 +52,10 @@ contract TychoRouterExposed is TychoRouter {
         return _splitSwap(amountIn, nTokens, swaps);
     }
 
+    function exposedGetDelta(address token) external returns (int256 delta) {
+        return _getDelta(token);
+    }
+
     function exposedSequentialSwap(uint256 amountIn, bytes calldata swaps)
         external
         returns (uint256)
