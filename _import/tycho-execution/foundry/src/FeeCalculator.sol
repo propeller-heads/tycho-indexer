@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {FeeRecipient} from "../lib/FeeStructs.sol";
 
 error FeeCalculator__FeeTooHigh();
 error FeeCalculator__AddressZero();
@@ -61,20 +62,19 @@ contract FeeCalculator is AccessControl {
      * @param amountIn The amount before fee deduction
      * @param user The user address to look up custom router fees for
      * @param solverFeeBps Solver fee in basis points
+     * @param solverFeeReceiver Address to receive solver fees
      * @return amountOut The amount remaining after all fee deductions
-     * @return routerFee Total router fee amount
-     * @return routerFeeReceiverAddr Address to receive router fees
-     * @return solverFee Solver fee amount (after router's cut)
+     * @return feeRecipients Array of (address, feeAmount) tuples for fee distribution
      */
-    function calculateFee(uint256 amountIn, address user, uint16 solverFeeBps)
+    function calculateFee(
+        uint256 amountIn,
+        address user,
+        uint16 solverFeeBps,
+        address solverFeeReceiver
+    )
         external
         view
-        returns (
-            uint256 amountOut,
-            uint256 routerFee,
-            address routerFeeReceiverAddr,
-            uint256 solverFee
-        )
+        returns (uint256 amountOut, FeeRecipient[] memory feeRecipients)
     {
         (uint16 routerFeeOnOutputBps, uint16 routerFeeOnSolverFeeBps) =
             _getFeeInfo(user);
@@ -118,7 +118,16 @@ contract FeeCalculator is AccessControl {
             totalRouterFee += routerFeeOnOutput;
         }
 
-        return (amountOut, totalRouterFee, _routerFeeReceiver, solverPortion);
+        // Build fee recipients array
+        feeRecipients = new FeeRecipient[](2);
+        feeRecipients[0] = FeeRecipient({
+            recipient: _routerFeeReceiver, feeAmount: totalRouterFee
+        });
+        feeRecipients[1] = FeeRecipient({
+            recipient: solverFeeReceiver, feeAmount: solverPortion
+        });
+
+        return (amountOut, feeRecipients);
     }
 
     /**

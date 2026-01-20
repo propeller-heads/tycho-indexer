@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import "@src/FeeCalculator.sol";
+import {FeeRecipient} from "../lib/FeeStructs.sol";
 import "./Constants.sol";
 
 contract FeeCalculatorTest is Constants {
@@ -25,19 +26,18 @@ contract FeeCalculatorTest is Constants {
         uint256 amountIn = 1 ether;
 
         // The user is BOB - he doesn't get any router fee discounts.
-        (
-            uint256 amountOut,
-            uint256 routerFee,
-            address returnedRouterFeeReceiver,
-            uint256 solverFee
-        ) = feeCalculator.calculateFee(amountIn, BOB, 0);
+        (uint256 amountOut, FeeRecipient[] memory feeRecipients) =
+            feeCalculator.calculateFee(amountIn, BOB, 0, DUMMY);
 
         // routerFeeOnOutput = 1 ether * 100 / 10000 = 0.01 ether
         // amountOut = 1 ether - 0.01 ether = 0.99 ether
         assertEq(amountOut, 0.99 ether);
-        assertEq(routerFee, 0.01 ether);
-        assertEq(returnedRouterFeeReceiver, ALICE);
-        assertEq(solverFee, 0);
+        // Router fee
+        assertEq(feeRecipients[0].recipient, ALICE);
+        assertEq(feeRecipients[0].feeAmount, 0.01 ether);
+        // Solver fee
+        assertEq(feeRecipients[1].recipient, DUMMY);
+        assertEq(feeRecipients[1].feeAmount, 0);
     }
 
     function testCalculateOnlyRouterFeeOnSolverFee() public {
@@ -48,21 +48,20 @@ contract FeeCalculatorTest is Constants {
         uint256 amountIn = 1 ether;
         uint16 solverFeeBps = 200; // 2%
 
-        (
-            uint256 amountOut,
-            uint256 routerFee,
-            address returnedRouterFeeReceiver,
-            uint256 solverFee
-        ) = feeCalculator.calculateFee(amountIn, BOB, solverFeeBps);
+        (uint256 amountOut, FeeRecipient[] memory feeRecipients) =
+            feeCalculator.calculateFee(amountIn, BOB, solverFeeBps, DUMMY);
 
         // solverFee = 1 ether * 200 / 10000 = 0.02 ether
         // routerFeeOnSolverFee = 0.02 ether * 1000 / 10000 = 0.002 ether
         // solverPortion = 0.02 - 0.002 = 0.018 ether
         // amountOut = 1 ether - 0.02 ether = 0.98 ether
         assertEq(amountOut, 0.98 ether);
-        assertEq(routerFee, 0.002 ether);
-        assertEq(returnedRouterFeeReceiver, address(this));
-        assertEq(solverFee, 0.018 ether);
+        // Router fee
+        assertEq(feeRecipients[0].recipient, address(this));
+        assertEq(feeRecipients[0].feeAmount, 0.002 ether);
+        // Solver fee
+        assertEq(feeRecipients[1].recipient, DUMMY);
+        assertEq(feeRecipients[1].feeAmount, 0.018 ether);
     }
 
     function testCalculateWithCustomUserFee() public {
@@ -77,33 +76,34 @@ contract FeeCalculatorTest is Constants {
         uint256 amountIn = 1 ether;
 
         // ALICE should get default fee
-        (uint256 amountOutAlice, uint256 routerFeeAlice,,) =
-            feeCalculator.calculateFee(amountIn, ALICE, 0);
+        (uint256 amountOutAlice, FeeRecipient[] memory feeRecipientsAlice) =
+            feeCalculator.calculateFee(amountIn, ALICE, 0, DUMMY);
         assertEq(amountOutAlice, 0.99 ether);
-        assertEq(routerFeeAlice, 0.01 ether);
+        // Router fee
+        assertEq(feeRecipientsAlice[0].feeAmount, 0.01 ether);
 
         // BOB should get custom fee
-        (uint256 amountOutBob, uint256 routerFeeBob,,) =
-            feeCalculator.calculateFee(amountIn, BOB, 0);
+        (uint256 amountOutBob, FeeRecipient[] memory feeRecipientsBob) =
+            feeCalculator.calculateFee(amountIn, BOB, 0, DUMMY);
         assertEq(amountOutBob, 0.995 ether); // 0.5% fee
-        assertEq(routerFeeBob, 0.005 ether);
+        // Router fee
+        assertEq(feeRecipientsBob[0].feeAmount, 0.005 ether);
     }
 
     function testCalculateNoFeesSet() public view {
         // No fees set, should return full amount
         uint256 amountIn = 1 ether;
 
-        (
-            uint256 amountOut,
-            uint256 routerFee,
-            address returnedRouterFeeReceiver,
-            uint256 solverFee
-        ) = feeCalculator.calculateFee(amountIn, ALICE, 0);
+        (uint256 amountOut, FeeRecipient[] memory feeRecipients) =
+            feeCalculator.calculateFee(amountIn, ALICE, 0, DUMMY);
 
         assertEq(amountOut, 1 ether);
-        assertEq(routerFee, 0);
-        assertEq(returnedRouterFeeReceiver, address(this));
-        assertEq(solverFee, 0);
+        // Router fee
+        assertEq(feeRecipients[0].recipient, address(this));
+        assertEq(feeRecipients[0].feeAmount, 0);
+        // Solver fee
+        assertEq(feeRecipients[1].recipient, DUMMY);
+        assertEq(feeRecipients[1].feeAmount, 0);
     }
 
     function testCalculateOnlySolverFee() public view {
@@ -113,19 +113,18 @@ contract FeeCalculatorTest is Constants {
 
         // BOB is the user - but this is irrelevant since
         // there are no router fees to overwrite with custom user fees
-        (
-            uint256 amountOut,
-            uint256 routerFee,
-            address returnedRouterFeeReceiver,
-            uint256 solverFee
-        ) = feeCalculator.calculateFee(amountIn, BOB, solverFeeBps);
+        (uint256 amountOut, FeeRecipient[] memory feeRecipients) =
+            feeCalculator.calculateFee(amountIn, BOB, solverFeeBps, DUMMY);
 
         // solverFee = 1 ether * 150 / 10000 = 0.015 ether
         // amountOut = 1 ether - 0.015 ether = 0.985 ether
         assertEq(amountOut, 0.985 ether);
-        assertEq(routerFee, 0);
-        assertEq(returnedRouterFeeReceiver, address(this));
-        assertEq(solverFee, 0.015 ether);
+        // Router fee
+        assertEq(feeRecipients[0].recipient, address(this));
+        assertEq(feeRecipients[0].feeAmount, 0);
+        // Solver fee
+        assertEq(feeRecipients[1].recipient, DUMMY);
+        assertEq(feeRecipients[1].feeAmount, 0.015 ether);
     }
 
     function testCalculateAllFeesSet() public {
@@ -137,12 +136,8 @@ contract FeeCalculatorTest is Constants {
         uint256 amountIn = 1 ether;
         uint16 solverFeeBps = 200; // 2%
 
-        (
-            uint256 amountOut,
-            uint256 routerFee,
-            address returnedRouterFeeReceiver,
-            uint256 solverFee
-        ) = feeCalculator.calculateFee(amountIn, BOB, solverFeeBps);
+        (uint256 amountOut, FeeRecipient[] memory feeRecipients) =
+            feeCalculator.calculateFee(amountIn, BOB, solverFeeBps, DUMMY);
 
         // 1. solverFee = 1 ether * 200 / 10000 = 0.02 ether
         //    routerFeeOnSolverFee = 0.02 ether * 500 / 10000 = 0.001 ether
@@ -152,9 +147,12 @@ contract FeeCalculatorTest is Constants {
         //    amountOut = 0.98 ether - 0.0049 ether = 0.9751 ether
         //    totalRouterFee = 0.001 + 0.0049 = 0.0059 ether
         assertEq(amountOut, 0.9751 ether);
-        assertEq(routerFee, 0.0059 ether);
-        assertEq(returnedRouterFeeReceiver, address(this));
-        assertEq(solverFee, 0.019 ether);
+        // Router fee
+        assertEq(feeRecipients[0].recipient, address(this));
+        assertEq(feeRecipients[0].feeAmount, 0.0059 ether);
+        // Solver fee
+        assertEq(feeRecipients[1].recipient, DUMMY);
+        assertEq(feeRecipients[1].feeAmount, 0.019 ether);
     }
 
     function testCalculateCombinedFeeTooHigh() public {
@@ -168,7 +166,7 @@ contract FeeCalculatorTest is Constants {
         vm.expectRevert(
             abi.encodeWithSelector(FeeCalculator__FeeTooHigh.selector)
         );
-        feeCalculator.calculateFee(amountIn, BOB, solverFeeBps);
+        feeCalculator.calculateFee(amountIn, BOB, solverFeeBps, DUMMY);
     }
 
     function testCalculateRouterFeeOnSolverFeeTooHigh() public {
@@ -181,7 +179,7 @@ contract FeeCalculatorTest is Constants {
         vm.expectRevert(
             abi.encodeWithSelector(FeeCalculator__FeeTooHigh.selector)
         );
-        feeCalculator.calculateFee(amountIn, ALICE, 100);
+        feeCalculator.calculateFee(amountIn, ALICE, 100, DUMMY);
     }
 
     function testCalculateWithCustomRouterFeeReceiver() public {
@@ -193,15 +191,17 @@ contract FeeCalculatorTest is Constants {
 
         uint256 amountIn = 1 ether;
 
-        (,, address returnedRouterFeeReceiver,) =
-            feeCalculator.calculateFee(amountIn, ALICE, 0);
+        (, FeeRecipient[] memory feeRecipients) =
+            feeCalculator.calculateFee(amountIn, ALICE, 0, DUMMY);
 
-        assertEq(returnedRouterFeeReceiver, BOB);
+        // Router fee
+        assertEq(feeRecipients[0].recipient, BOB);
     }
 
     function testCalculateCustomRouterFeeOnSolverFee() public {
         // Test that custom router fee on solver fee overrides default
         vm.startPrank(FEE_SETTER);
+        feeCalculator.setRouterFeeReceiver(ALICE);
         feeCalculator.setRouterFeeOnSolverFee(1000); // 10% default
         feeCalculator.setCustomRouterFeeOnSolverFee(ALICE, 500); // 5% custom for ALICE
         vm.stopPrank();
@@ -210,32 +210,30 @@ contract FeeCalculatorTest is Constants {
         uint16 solverFeeBps = 200; // 2%
 
         // ALICE should get custom router fee on solver fee (5%)
-        (
-            uint256 amountOutAlice,
-            uint256 routerFeeAlice,
-            address routerFeeReceiverAlice,
-            uint256 solverFeeAlice
-        ) = feeCalculator.calculateFee(amountIn, ALICE, solverFeeBps);
+        (uint256 amountOutAlice, FeeRecipient[] memory feeRecipientsAlice) =
+            feeCalculator.calculateFee(amountIn, ALICE, solverFeeBps, DUMMY);
 
         // routerFeeOnSolverFee = 0.02 * 500 / 10000 = 0.001 ether
         assertEq(amountOutAlice, 0.98 ether); // 1 - 0.02 solver fee
-        assertEq(routerFeeAlice, 0.001 ether);
-        assertEq(routerFeeReceiverAlice, address(this));
-        assertEq(solverFeeAlice, 0.019 ether); // 0.02 - 0.001 router cut
+        // Router fee
+        assertEq(feeRecipientsAlice[0].recipient, ALICE);
+        assertEq(feeRecipientsAlice[0].feeAmount, 0.001 ether);
+        // Solver fee
+        assertEq(feeRecipientsAlice[1].recipient, DUMMY);
+        assertEq(feeRecipientsAlice[1].feeAmount, 0.019 ether); // 0.02 - 0.001 router cut
 
         // BOB should get default router fee on solver fee (10%)
-        (
-            uint256 amountOutBob,
-            uint256 routerFeeBob,
-            address routerFeeReceiverBob,
-            uint256 solverFeeBob
-        ) = feeCalculator.calculateFee(amountIn, BOB, solverFeeBps);
+        (uint256 amountOutBob, FeeRecipient[] memory feeRecipientsBob) =
+            feeCalculator.calculateFee(amountIn, BOB, solverFeeBps, DUMMY);
 
         // routerFeeOnSolverFee = 0.02 * 1000 / 10000 = 0.002 ether
         assertEq(amountOutBob, 0.98 ether); // 1 - 0.02 solver fee
-        assertEq(routerFeeBob, 0.002 ether);
-        assertEq(routerFeeReceiverBob, address(this));
-        assertEq(solverFeeBob, 0.018 ether); // 0.02 - 0.002 router cut
+        // Router fee
+        assertEq(feeRecipientsBob[0].recipient, ALICE);
+        assertEq(feeRecipientsBob[0].feeAmount, 0.002 ether);
+        // Solver fee
+        assertEq(feeRecipientsBob[1].recipient, DUMMY);
+        assertEq(feeRecipientsBob[1].feeAmount, 0.018 ether); // 0.02 - 0.002 router cut
     }
 
     function testCalculateBothCustomFeesSet() public {
@@ -250,12 +248,8 @@ contract FeeCalculatorTest is Constants {
         uint256 amountIn = 1 ether;
         uint16 solverFeeBps = 200; // 2%
 
-        (
-            uint256 amountOut,
-            uint256 routerFee,
-            address routerFeeReceiver,
-            uint256 solverFee
-        ) = feeCalculator.calculateFee(amountIn, ALICE, solverFeeBps);
+        (uint256 amountOut, FeeRecipient[] memory feeRecipients) =
+            feeCalculator.calculateFee(amountIn, ALICE, solverFeeBps, DUMMY);
 
         // 1. solverFee = 1 ether * 200 / 10000 = 0.02 ether
         //    routerFeeOnSolverFee = 0.02 * 500 / 10000 = 0.001 ether (custom 5%)
@@ -264,9 +258,12 @@ contract FeeCalculatorTest is Constants {
         //    amountOut = 0.98 - 0.0049 = 0.9751 ether
         //    totalRouterFee = 0.001 + 0.0049 = 0.0059 ether
         assertEq(amountOut, 0.9751 ether);
-        assertEq(routerFee, 0.0059 ether);
-        assertEq(routerFeeReceiver, address(this));
-        assertEq(solverFee, 0.019 ether); // 0.02 - 0.001 router cut
+        // Router fee
+        assertEq(feeRecipients[0].recipient, address(this));
+        assertEq(feeRecipients[0].feeAmount, 0.0059 ether);
+        // Solver fee
+        assertEq(feeRecipients[1].recipient, DUMMY);
+        assertEq(feeRecipients[1].feeAmount, 0.019 ether); // 0.02 - 0.001 router cut
     }
 }
 
