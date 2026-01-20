@@ -6,6 +6,11 @@ import {
 } from "../lib/bytes/LibPrefixLengthEncodedByteArray.sol";
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {
+    IAccessControl
+} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {ERC6909} from "@openzeppelin/contracts/token/ERC6909/ERC6909.sol";
+import {IERC6909} from "@openzeppelin/contracts/interfaces/IERC6909.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC6909} from "@openzeppelin/contracts/token/ERC6909/ERC6909.sol";
 import {
@@ -800,5 +805,17 @@ contract TychoRouter is
         int256 deltaChange
     ) internal override(Dispatcher, Vault) {
         Vault._updateDeltaAccounting(token, deltaChange);
+    }
+
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        virtual
+        override(AccessControl, ERC6909)
+        returns (bool)
+    {
+        return interfaceId == type(IERC6909).interfaceId
+            || interfaceId == type(IAccessControl).interfaceId
+            || super.supportsInterface(interfaceId);
     }
 }
