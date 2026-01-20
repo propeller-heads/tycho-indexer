@@ -56,7 +56,7 @@ contract FeeCalculator is AccessControl {
 
     /**
      * @notice Calculates fees from the swap output amount
-     * @dev Called via staticcall from TychoRouter. Does not perform any accounting.
+     * @dev Called from TychoRouter. Does not perform any accounting.
      *      Router fee parameters are retrieved from contract storage based on the user address.
      *      Solver fee parameters are passed as function arguments.
      * @param amountIn The amount before fee deduction
