@@ -60,7 +60,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
 
         // amountIn must be at most type(int128).MAX
         (amountOut, tokenOut, receiver) =
-            _lock(bytes.concat(bytes16(uint128(amountIn)), data));
+            _lock(abi.encodePacked(bytes16(uint128(amountIn)), data));
     }
 
     function handleCallback(bytes calldata raw)
@@ -122,7 +122,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         // Prepend selector of lock() to calldata
         // We must use assembly here since the Ekubo Core's lock method expects the raw
         // bytes directly and not ABI-encoded bytes
-        bytes memory callData = bytes.concat(bytes4(0xf83d08ba), data);
+        bytes memory callData = abi.encodePacked(bytes4(0xf83d08ba), data);
 
         // slither-disable-next-line low-level-calls
         (bool success, bytes memory result) = address(core).call(callData);
@@ -227,7 +227,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         // Prepend forward(address) selector to the data
         // We must use assembly here since the Ekubo Core's lock method expects the raw
         // bytes directly and not ABI-encoded bytes
-        bytes memory callData = bytes.concat(
+        bytes memory callData = abi.encodePacked(
             bytes4(0x101e8952), bytes32(uint256(uint160(to))), data
         );
 
@@ -253,7 +253,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         if (token == NATIVE_TOKEN_ADDRESS) {
             SafeTransferLib.safeTransferETH(address(core), amount);
         } else {
-            bytes memory callData = bytes.concat(
+            bytes memory callData = abi.encodePacked(
                 bytes4(0x0c11dedd), // pay(address) selector
                 bytes32(uint256(uint160(token))),
                 bytes16(amount),
