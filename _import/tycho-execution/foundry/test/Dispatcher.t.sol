@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import "@src/Dispatcher.sol";
 import "./TychoRouterTestSetup.sol";
 
-abstract contract DispatcherExposed is Dispatcher {
+contract DispatcherExposed is Dispatcher {
     constructor(address _permit2) Dispatcher(_permit2) {}
 
     function exposedCallExecutor(
@@ -22,6 +22,11 @@ abstract contract DispatcherExposed is Dispatcher {
     function exposedRemoveExecutor(address target) external {
         _removeExecutor(target);
     }
+
+    function _updateDeltaAccounting(address token, int256 deltaChange)
+        internal
+        override
+    {}
 }
 
 contract DispatcherTest is Constants {
