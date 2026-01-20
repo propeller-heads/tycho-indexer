@@ -1,3 +1,25 @@
+## [0.11.0](https://github.com/propeller-heads/tycho-contracts/compare/0.10.0...0.11.0) (2026-01-20)
+
+
+### Features
+
+* [temp fix] add slither filter ([f79a11f](https://github.com/propeller-heads/tycho-contracts/commit/f79a11f66da605d5b3264afeda5450a12091a3fa))
+* Do Vault accounting in FeeTaker.sol ([4b149c0](https://github.com/propeller-heads/tycho-contracts/commit/4b149c05e253c961c403d068af1173e4e69000b2))
+* Implement FeeTaker ([b293bda](https://github.com/propeller-heads/tycho-contracts/commit/b293bdad65879ecec3add621c959b8c58d9e264d))
+* Move fee setting methods into FeeTaker.sol ([0bb992a](https://github.com/propeller-heads/tycho-contracts/commit/0bb992a4fc6d3c03713221b53260d0211bfc69e3))
+* No accounting in FeeTaker ([498fa32](https://github.com/propeller-heads/tycho-contracts/commit/498fa32430fdebff66fe04b31065804b2754fb5e))
+* replace _decodeFeeData with _getFeeInfo ([41b8891](https://github.com/propeller-heads/tycho-contracts/commit/41b88911bbb5339c170d6fb6d809b2f55df1548b))
+* Return array of FeeRecipient from FeeCalculator ([d5fb36d](https://github.com/propeller-heads/tycho-contracts/commit/d5fb36d0683c17af3c1e1ffb859e58833379ea66))
+* TychoRouter fee setter methods ([1d2fbf8](https://github.com/propeller-heads/tycho-contracts/commit/1d2fbf8e6067410ad153813e6560a279c8a047ee))
+
+
+### Bug Fixes
+
+* Max fee check ([2c1e986](https://github.com/propeller-heads/tycho-contracts/commit/2c1e986f411e41dc653c989303023b140788226a))
+* Router fee portion should be deducted from solver fee ([ff9599d](https://github.com/propeller-heads/tycho-contracts/commit/ff9599d5bb9ae79a2ccf4b77b29213cf240a57f8))
+* Slither divide-before-multiply ([cd42cc5](https://github.com/propeller-heads/tycho-contracts/commit/cd42cc5572a64fe0565b89e8193b6ab625d5a462))
+* slither indexed address params in events ([3c19da0](https://github.com/propeller-heads/tycho-contracts/commit/3c19da0dfdf4d0d38cb9341d8a9c0f56e1ae1f2b))
+
 ## [0.10.0](https://github.com/propeller-heads/tycho-contracts/compare/0.9.0...0.10.0) (2026-01-20)
 
 
