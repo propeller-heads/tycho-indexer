@@ -1,3 +1,18 @@
+## [0.12.0](https://github.com/propeller-heads/tycho-contracts/compare/0.11.1...0.12.0) (2026-01-20)
+
+
+### Features
+
+* Remove approval_needed from encoding and executors ([12ce178](https://github.com/propeller-heads/tycho-contracts/commit/12ce17872362d819176d0cdf57450aaf799559a5))
+* Rename UserTransferType::None -> UserTransferType::UseVaultsFunds ([9126678](https://github.com/propeller-heads/tycho-contracts/commit/91266782f8a20b6ebf386922e93c4bb38057c5a6))
+* Use new TransferTypes for router v3 ([e1d3edb](https://github.com/propeller-heads/tycho-contracts/commit/e1d3edb8db23daabbb72fa7f1c97604739aba4a6))
+
+
+### Bug Fixes
+
+* Fixes after rebase with main ([c9c446e](https://github.com/propeller-heads/tycho-contracts/commit/c9c446edc0a67edf26d28f07b5eba738b15c96e3))
+* Simplify Bebop encoding (unsupported ETH swaps) ([d57a383](https://github.com/propeller-heads/tycho-contracts/commit/d57a383e2f894441a45369e4db45ee7d570f47a3))
+
 ## [0.11.1](https://github.com/propeller-heads/tycho-contracts/compare/0.11.0...0.11.1) (2026-01-20)
 
 ## [0.11.0](https://github.com/propeller-heads/tycho-contracts/compare/0.10.0...0.11.0) (2026-01-20)
