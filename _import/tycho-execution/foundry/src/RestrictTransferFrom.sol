@@ -9,6 +9,7 @@ import {
     IAllowanceTransfer
 } from "@permit2/src/interfaces/IAllowanceTransfer.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {Vault} from "./Vault.sol";
 
 error RestrictTransferFrom__AddressZero();
 error RestrictTransferFrom__ExceededTransferFromAllowance(
@@ -27,7 +28,7 @@ error RestrictTransferFrom__UnknownTransferType();
  * that calls the main swap method. Reverts if `transferFrom`s are attempted above
  * this allowed amount.
  */
-contract RestrictTransferFrom {
+contract RestrictTransferFrom is Vault {
     using SafeERC20 for IERC20;
 
     IAllowanceTransfer public immutable permit2;
