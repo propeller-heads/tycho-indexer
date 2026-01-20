@@ -1,3 +1,10 @@
+## [0.229.0](https://github.com/propeller-heads/tycho-simulation/compare/0.228.2...0.229.0) (2026-01-20)
+
+
+### Features
+
+* update tycho-client, tycho-common, and tycho-ethereum to version 0.129.1 ([b4d92b8](https://github.com/propeller-heads/tycho-simulation/commit/b4d92b8c011f00dd99c49999acc80119bf479de5))
+
 ## [0.228.2](https://github.com/propeller-heads/tycho-simulation/compare/0.228.1...0.228.2) (2026-01-16)
 
 
