@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use alloy::sol_types::SolValue;
 use tokio::{
@@ -27,8 +27,6 @@ use crate::encoding::{
 #[derive(Clone)]
 pub struct BebopSwapEncoder {
     executor_address: Bytes,
-    native_token_bebop_address: Bytes,
-    native_token_address: Bytes,
     runtime_handle: Handle,
     #[allow(dead_code)]
     runtime: Option<Arc<Runtime>>,
@@ -37,31 +35,11 @@ pub struct BebopSwapEncoder {
 impl SwapEncoder for BebopSwapEncoder {
     fn new(
         executor_address: Bytes,
-        chain: Chain,
-        config: Option<HashMap<String, String>>,
+        _chain: Chain,
+        _config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
-        let config = config.ok_or(EncodingError::FatalError(
-            "Missing bebop specific addresses in config".to_string(),
-        ))?;
-        let native_token_bebop_address = config
-            .get("native_token_address")
-            .map(|s| {
-                Bytes::from_str(s).map_err(|_| {
-                    EncodingError::FatalError("Invalid native token bebop address".to_string())
-                })
-            })
-            .ok_or(EncodingError::FatalError(
-                "Missing native token bebop address in config".to_string(),
-            ))
-            .flatten()?;
         let (runtime_handle, runtime) = get_runtime()?;
-        Ok(Self {
-            executor_address,
-            runtime_handle,
-            runtime,
-            native_token_bebop_address,
-            native_token_address: chain.native_token().address,
-        })
+        Ok(Self { executor_address, runtime_handle, runtime })
     }
 
     fn encode_swap(
@@ -90,15 +68,8 @@ impl SwapEncoder for BebopSwapEncoder {
                 .ok_or(EncodingError::FatalError(
                     "Estimated amount in is mandatory for a Bebop swap".to_string(),
                 ))?;
-            // Bebop uses another address for the native token than the zero address
-            let mut token_in = swap.token_in().clone();
-            if *swap.token_in() == self.native_token_address {
-                token_in = self.native_token_bebop_address.clone()
-            }
-            let mut token_out = swap.token_out().clone();
-            if *swap.token_out() == self.native_token_address {
-                token_out = self.native_token_bebop_address.clone()
-            }
+            let token_in = swap.token_in().clone();
+            let token_out = swap.token_out().clone();
 
             let params = GetAmountOutParams {
                 amount_in: estimated_amount_in,
@@ -169,6 +140,8 @@ impl SwapEncoder for BebopSwapEncoder {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use alloy::hex::encode;
     use num_bigint::BigUint;
     use tycho_common::models::protocol::ProtocolComponent;
@@ -178,19 +151,6 @@ mod tests {
         evm::{swap_encoder::bebop::BebopSwapEncoder, testing_utils::MockRFQState},
         models::TransferType,
     };
-
-    fn bebop_config() -> HashMap<String, String> {
-        HashMap::from([
-            (
-                "bebop_settlement_address".to_string(),
-                "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F".to_string(),
-            ),
-            (
-                "native_token_address".to_string(),
-                "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE".to_string(),
-            ),
-        ])
-    }
 
     #[test]
     fn test_encode_bebop_single_with_protocol_state() {
@@ -239,7 +199,7 @@ mod tests {
         let encoder = BebopSwapEncoder::new(
             Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
             Chain::Ethereum,
-            Some(bebop_config()),
+            None,
         )
         .unwrap();
 

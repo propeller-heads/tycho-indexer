@@ -6,20 +6,12 @@
     "uniswap_v4_hooks": {
       "angstrom_hook_address": "0x0000000aa232009084Bd71A5797d089AA4Edfad4"
     },
-    "rfq:bebop": {
-      "native_token_address": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
-    },
     "lido": {
       "st_eth_address": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
       "wst_eth_address": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"
     }
   },
-  "base": {
-    "rfq:bebop": {
-      "bebop_settlement_address": "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F",
-      "native_token_address": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
-    }
-  },
+  "base": {},
   "unichain": {
     "vm:curve": {
       "native_token_address": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
