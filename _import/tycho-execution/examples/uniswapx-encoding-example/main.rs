@@ -109,10 +109,10 @@ fn main() {
     // Then we create a solution object with the previous swap
     let solution = Solution {
         exact_out: false,
-        given_token: dai.clone(),
-        given_amount: BigUint::from_str("2_000_000000000000000000").unwrap(),
-        checked_token: usdt.clone(),
-        checked_amount: BigUint::from_str("1_990_000000").unwrap(),
+        token_in: dai.clone(),
+        amount_in: BigUint::from_str("2_000_000000000000000000").unwrap(),
+        token_out: usdt.clone(),
+        min_amount_out: BigUint::from_str("1_990_000000").unwrap(),
         sender: filler.clone(),
         receiver: filler.clone(),
         swaps: vec![swap_dai_usdc, swap_usdc_usdt],
@@ -125,10 +125,10 @@ fn main() {
         .unwrap()[0]
         .clone();
 
-    let given_amount = biguint_to_u256(&solution.given_amount);
-    let min_amount_out = biguint_to_u256(&solution.checked_amount);
-    let given_token = bytes_to_address(&solution.given_token).unwrap();
-    let checked_token = bytes_to_address(&solution.checked_token).unwrap();
+    let given_amount = biguint_to_u256(&solution.amount_in);
+    let min_amount_out = biguint_to_u256(&solution.min_amount_out);
+    let given_token = bytes_to_address(&solution.token_in).unwrap();
+    let checked_token = bytes_to_address(&solution.token_out).unwrap();
     let receiver = bytes_to_address(&solution.receiver).unwrap();
 
     let method_calldata = (

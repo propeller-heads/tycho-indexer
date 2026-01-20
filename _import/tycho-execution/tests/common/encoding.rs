@@ -78,10 +78,10 @@ pub fn encode_tycho_router_call(
     native_address: &Bytes,
     signer: Option<PrivateKeySigner>,
 ) -> Result<Transaction, EncodingError> {
-    let given_amount = biguint_to_u256(&solution.given_amount);
-    let min_amount_out = biguint_to_u256(&solution.checked_amount);
-    let given_token = bytes_to_address(&solution.given_token)?;
-    let checked_token = bytes_to_address(&solution.checked_token)?;
+    let given_amount = biguint_to_u256(&solution.amount_in);
+    let min_amount_out = biguint_to_u256(&solution.min_amount_out);
+    let given_token = bytes_to_address(&solution.token_in)?;
+    let checked_token = bytes_to_address(&solution.token_out)?;
     let receiver = bytes_to_address(&solution.receiver)?;
     let n_tokens = U256::from(encoded_solution.n_tokens);
     let solver_fee_bps = U256::from(solution.solver_fee_bps);
@@ -215,8 +215,8 @@ pub fn encode_tycho_router_call(
     };
 
     let contract_interaction = encode_input(&encoded_solution.function_signature, method_calldata);
-    let value = if solution.given_token == *native_address {
-        solution.given_amount.clone()
+    let value = if solution.token_in == *native_address {
+        solution.amount_in.clone()
     } else {
         BigUint::ZERO
     };

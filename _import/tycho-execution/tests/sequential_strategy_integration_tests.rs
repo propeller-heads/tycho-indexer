@@ -49,10 +49,10 @@ fn test_sequential_swap_strategy_encoder() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: weth,
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: usdc,
-        checked_amount: BigUint::from_str("26173932").unwrap(),
+        token_in: weth,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out: usdc,
+        min_amount_out: BigUint::from_str("26173932").unwrap(),
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
@@ -111,10 +111,10 @@ fn test_sequential_swap_strategy_encoder_no_permit2_integration() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: weth,
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: usdc,
-        checked_amount: BigUint::from_str("26173932").unwrap(),
+        token_in: weth,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out: usdc,
+        min_amount_out: BigUint::from_str("26173932").unwrap(),
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
@@ -227,10 +227,10 @@ fn test_sequential_strategy_cyclic_swap() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: usdc.clone(),
-        given_amount: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
-        checked_token: usdc.clone(),
-        checked_amount: BigUint::from_str("99389294").unwrap(), /* Expected output
+        token_in: usdc.clone(),
+        amount_in: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
+        token_out: usdc.clone(),
+        min_amount_out: BigUint::from_str("99389294").unwrap(), /* Expected output
                                                                  * from test */
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),

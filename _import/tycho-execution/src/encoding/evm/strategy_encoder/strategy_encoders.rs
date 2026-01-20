@@ -108,7 +108,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
 
         let transfer = self
             .transfer_optimization
-            .get_transfers(grouped_swap, &solution.given_token, false);
+            .get_transfers(grouped_swap, &solution.token_in, false);
         let encoding_context = EncodingContext {
             receiver: swap_receiver,
             exact_out: solution.exact_out,
@@ -386,11 +386,11 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         self.split_swap_validator
             .validate_split_percentages(&solution.swaps)?;
         self.split_swap_validator
-            .validate_swap_path(&solution.swaps, &solution.given_token, &solution.checked_token)?;
+            .validate_swap_path(&solution.swaps, &solution.token_in, &solution.token_out)?;
 
         // The tokens array is composed of the given token, the checked token and all the
         // intermediary tokens in between. The contract expects the tokens to be in this order.
-        let solution_tokens: HashSet<&Bytes> = vec![&solution.given_token, &solution.checked_token]
+        let solution_tokens: HashSet<&Bytes> = vec![&solution.token_in, &solution.token_out]
             .into_iter()
             .collect();
 
@@ -409,9 +409,9 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         intermediary_tokens.sort();
 
         let mut tokens = Vec::with_capacity(2 + intermediary_tokens.len());
-        tokens.push(&solution.given_token);
+        tokens.push(&solution.token_in);
         tokens.extend(intermediary_tokens);
-        tokens.push(&solution.checked_token);
+        tokens.push(&solution.token_out);
 
         let mut swaps = vec![];
         for grouped_swap in grouped_swaps.iter() {
@@ -424,14 +424,14 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                     ))
                 })?;
 
-            let swap_receiver = if grouped_swap.token_out == solution.checked_token {
+            let swap_receiver = if grouped_swap.token_out == solution.token_out {
                 solution.receiver.clone()
             } else {
                 self.router_address.clone()
             };
             let transfer = self
                 .transfer_optimization
-                .get_transfers(grouped_swap, &solution.given_token, false);
+                .get_transfers(grouped_swap, &solution.token_in, false);
             let encoding_context = EncodingContext {
                 receiver: swap_receiver,
                 exact_out: solution.exact_out,
@@ -474,11 +474,8 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         }
 
         let encoded_swaps = ple_encode(swaps);
-        let tokens_len = if solution.given_token == solution.checked_token {
-            tokens.len() - 1
-        } else {
-            tokens.len()
-        };
+        let tokens_len =
+            if solution.token_in == solution.token_out { tokens.len() - 1 } else { tokens.len() };
         Ok(EncodedSolution {
             interacting_with: self.router_address.clone(),
             function_signature: self.function_signature.clone(),
@@ -564,10 +561,10 @@ mod tests {
             .unwrap();
             let solution = Solution {
                 exact_out: false,
-                given_token: weth,
-                given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-                checked_token: dai,
-                checked_amount: checked_amount.clone(),
+                token_in: weth,
+                amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+                token_out: dai,
+                min_amount_out: checked_amount.clone(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap],
@@ -637,10 +634,10 @@ mod tests {
             .unwrap();
             let solution = Solution {
                 exact_out: false,
-                given_token: weth,
-                given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-                checked_token: usdc,
-                checked_amount: BigUint::from_str("26173932").unwrap(),
+                token_in: weth,
+                amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+                token_out: usdc,
+                min_amount_out: BigUint::from_str("26173932").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
@@ -769,10 +766,10 @@ mod tests {
 
             let solution = Solution {
                 exact_out: false,
-                given_token: usdc.clone(),
-                given_amount: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
-                checked_token: usdc.clone(),
-                checked_amount: BigUint::from_str("99574171").unwrap(), /* Expected output
+                token_in: usdc.clone(),
+                amount_in: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
+                token_out: usdc.clone(),
+                min_amount_out: BigUint::from_str("99574171").unwrap(), /* Expected output
                                                                          * from
                                                                          * test */
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -914,10 +911,10 @@ mod tests {
 
             let solution = Solution {
                 exact_out: false,
-                given_token: usdc.clone(),
-                given_amount: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
-                checked_token: usdc.clone(),
-                checked_amount: BigUint::from_str("99025908").unwrap(), /* Expected output
+                token_in: usdc.clone(),
+                amount_in: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
+                token_out: usdc.clone(),
+                min_amount_out: BigUint::from_str("99025908").unwrap(), /* Expected output
                                                                          * from
                                                                          * test */
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),

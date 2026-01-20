@@ -39,20 +39,20 @@ pub struct Solution {
     pub sender: Bytes,
     /// Address of the receiver.
     pub receiver: Bytes,
-    /// The token being sold (exact in) or bought (exact out).
-    pub given_token: Bytes,
-    /// Amount of the given token.
+    /// The token being sold
+    pub token_in: Bytes,
+    /// Amount of the token in.
     #[serde(with = "biguint_string")]
-    pub given_amount: BigUint,
-    /// The token being bought (exact in) or sold (exact out).
-    pub checked_token: Bytes,
+    pub amount_in: BigUint,
+    /// The token being bought
+    pub token_out: Bytes,
     /// False if the solution is an exact input solution. Currently only exact input solutions are
     /// supported.
     #[serde(default)]
     pub exact_out: bool,
-    /// Minimum amount to be checked for the solution to be valid.
+    /// Minimum amount that the receiver must receive at the end of the transaction.
     #[serde(with = "biguint_string")]
-    pub checked_amount: BigUint,
+    pub min_amount_out: BigUint,
     /// List of swaps to fulfill the solution.
     pub swaps: Vec<Swap>,
     /// Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%).

@@ -37,10 +37,10 @@ fn test_single_swap_strategy_encoder() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: weth,
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: dai,
-        checked_amount: checked_amount.clone(),
+        token_in: weth,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out: dai,
+        min_amount_out: checked_amount.clone(),
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
@@ -120,10 +120,10 @@ fn test_single_swap_strategy_encoder_no_permit2() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: weth,
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: dai,
-        checked_amount,
+        token_in: weth,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out: dai,
+        min_amount_out: checked_amount,
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],

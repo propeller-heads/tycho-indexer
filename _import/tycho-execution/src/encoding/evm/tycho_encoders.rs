@@ -126,8 +126,8 @@ impl TychoRouterEncoder {
             let permit = permit2.get_permit(
                 &self.router_address,
                 &solution.sender,
-                &solution.given_token,
-                &solution.given_amount,
+                &solution.token_in,
+                &solution.amount_in,
             )?;
             encoded_solution.permit = Some(permit);
         }
@@ -474,9 +474,9 @@ mod tests {
 
             let solution = Solution {
                 exact_out: false,
-                given_amount: weth_amount_in.clone(),
-                given_token: weth(),
-                checked_token: dai(),
+                amount_in: weth_amount_in.clone(),
+                token_in: weth(),
+                token_out: dai(),
                 swaps: vec![swap],
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 ..Default::default()
@@ -501,10 +501,10 @@ mod tests {
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
             let solution = Solution {
                 exact_out: false,
-                given_token: usdc(),
-                given_amount: BigUint::from_str("1000_000000").unwrap(),
-                checked_token: pepe(),
-                checked_amount: BigUint::from_str("105_152_000000000000000000").unwrap(),
+                token_in: usdc(),
+                amount_in: BigUint::from_str("1000_000000").unwrap(),
+                token_out: pepe(),
+                min_amount_out: BigUint::from_str("105_152_000000000000000000").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_eth_univ4(), swap_eth_pepe_univ4()],
@@ -546,12 +546,12 @@ mod tests {
 
             let solution = Solution {
                 exact_out: false,
-                given_amount: weth_amount_in.clone(),
-                given_token: weth(),
-                checked_token: usdc(),
+                amount_in: weth_amount_in.clone(),
+                token_in: weth(),
+                token_out: usdc(),
                 swaps: vec![swap_weth_dai, swap_dai_usdc],
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                checked_amount: BigUint::from(1000u32),
+                min_amount_out: BigUint::from(1000u32),
                 ..Default::default()
             };
 
@@ -571,10 +571,10 @@ mod tests {
             swap_usdc_eth = swap_usdc_eth.split(0.5); // Set split to 50%
             let solution = Solution {
                 exact_out: false,
-                given_token: usdc(),
-                given_amount: BigUint::from_str("1000_000000").unwrap(),
-                checked_token: eth(),
-                checked_amount: BigUint::from_str("105_152_000000000000000000").unwrap(),
+                token_in: usdc(),
+                amount_in: BigUint::from_str("1000_000000").unwrap(),
+                token_out: eth(),
+                min_amount_out: BigUint::from_str("105_152_000000000000000000").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_eth, swap_usdc_eth_univ4()],
@@ -611,12 +611,8 @@ mod tests {
         #[test]
         fn test_validate_fails_no_swaps() {
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let solution = Solution {
-                exact_out: false,
-                given_token: eth(),
-                swaps: vec![],
-                ..Default::default()
-            };
+            let solution =
+                Solution { exact_out: false, token_in: eth(), swaps: vec![], ..Default::default() };
 
             let result = encoder.validate_solution(&solution);
 
@@ -667,8 +663,8 @@ mod tests {
 
             let solution = Solution {
                 exact_out: false,
-                given_token: dai(),
-                checked_token: dai(),
+                token_in: dai(),
+                token_out: dai(),
                 swaps,
                 ..Default::default()
             };
@@ -725,8 +721,8 @@ mod tests {
 
             let solution = Solution {
                 exact_out: false,
-                given_token: dai(),
-                checked_token: wbtc(),
+                token_in: dai(),
+                token_out: wbtc(),
                 swaps,
                 ..Default::default()
             };
@@ -782,8 +778,8 @@ mod tests {
 
             let solution = Solution {
                 exact_out: false,
-                given_token: weth(),
-                checked_token: weth(),
+                token_in: weth(),
+                token_out: weth(),
                 swaps,
                 ..Default::default()
             };
@@ -824,10 +820,10 @@ mod tests {
 
             let solution = Solution {
                 exact_out: false,
-                given_token: token_in,
-                given_amount: BigUint::from(1000000000000000000u64),
-                checked_token: token_out,
-                checked_amount: BigUint::from(1000000000000000000u64),
+                token_in,
+                amount_in: BigUint::from(1000000000000000000u64),
+                token_out,
+                min_amount_out: BigUint::from(1000000000000000000u64),
                 sender: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
                 // The receiver was generated with `makeAddr("bob") using forge`
                 receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
@@ -881,10 +877,10 @@ mod tests {
 
             let solution = Solution {
                 exact_out: false,
-                given_token: token_in,
-                given_amount: BigUint::from(1000000000000000000u64),
-                checked_token: token_out,
-                checked_amount: BigUint::from(1000000000000000000u64),
+                token_in,
+                amount_in: BigUint::from(1000000000000000000u64),
+                token_out,
+                min_amount_out: BigUint::from(1000000000000000000u64),
                 sender: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
                 receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
                 swaps: vec![swap.clone(), swap],
@@ -905,10 +901,10 @@ mod tests {
 
             let solution = Solution {
                 exact_out: false,
-                given_token: usdc,
-                given_amount: BigUint::from_str("1000_000000").unwrap(),
-                checked_token: pepe,
-                checked_amount: BigUint::from(1000000000000000000u64),
+                token_in: usdc,
+                amount_in: BigUint::from_str("1000_000000").unwrap(),
+                token_out: pepe,
+                min_amount_out: BigUint::from(1000000000000000000u64),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_eth_univ4(), swap_eth_pepe_univ4()],
