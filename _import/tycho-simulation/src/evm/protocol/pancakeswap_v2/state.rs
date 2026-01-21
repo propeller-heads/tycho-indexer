@@ -160,9 +160,9 @@ impl ProtocolSim for PancakeswapV2State {
         if let Some(other_state) = other.as_any().downcast_ref::<Self>() {
             let (self_reserve0, self_reserve1) = (self.reserve0, self.reserve1);
             let (other_reserve0, other_reserve1) = (other_state.reserve0, other_state.reserve1);
-            self_reserve0 == other_reserve0
-                && self_reserve1 == other_reserve1
-                && self.fee() == other_state.fee()
+            self_reserve0 == other_reserve0 &&
+                self_reserve1 == other_reserve1 &&
+                self.fee() == other_state.fee()
         } else {
             false
         }

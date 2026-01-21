@@ -101,8 +101,8 @@ impl HashflowClient {
             for (_mm, mm_levels_inner) in levels_by_mm.iter() {
                 for quote_mm_level in mm_levels_inner {
                     // Check for direct pair: quote_token/approved_quote_token
-                    if quote_mm_level.pair.base_token == quote_token
-                        && quote_mm_level.pair.quote_token == *approved_quote_token
+                    if quote_mm_level.pair.base_token == quote_token &&
+                        quote_mm_level.pair.quote_token == *approved_quote_token
                     {
                         if let Some(price) = quote_mm_level.get_price(1.0) {
                             return Ok(raw_tvl * price);

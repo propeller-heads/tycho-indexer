@@ -965,11 +965,11 @@ impl ProtocolSim for UniswapV4State {
             .as_any()
             .downcast_ref::<UniswapV4State>()
         {
-            self.liquidity == other_state.liquidity
-                && self.sqrt_price == other_state.sqrt_price
-                && self.fees == other_state.fees
-                && self.tick == other_state.tick
-                && self.ticks == other_state.ticks
+            self.liquidity == other_state.liquidity &&
+                self.sqrt_price == other_state.sqrt_price &&
+                self.fees == other_state.fees &&
+                self.tick == other_state.tick &&
+                self.ticks == other_state.ticks
         } else {
             false
         }

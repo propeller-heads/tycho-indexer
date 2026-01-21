@@ -86,28 +86,28 @@ impl ProtocolSim for ERC4626State {
         token_out: &Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
         let amount_in = biguint_to_u256(&amount_in);
-        if token_in.address == self.asset_token.address
-            && token_out.address == self.share_token.address
+        if token_in.address == self.asset_token.address &&
+            token_out.address == self.share_token.address
         {
             // asset → share: this corresponds to an ERC4626.deposit operation.
             // The user deposits underlying assets and receives vault shares.
             Ok(GetAmountOutResult {
                 amount: u256_to_biguint(
-                    amount_in * self.asset_price
-                        / U256::from(10).pow(U256::from(self.asset_token.decimals)),
+                    amount_in * self.asset_price /
+                        U256::from(10).pow(U256::from(self.asset_token.decimals)),
                 ),
                 gas: 86107.to_biguint().expect("infallible"),
                 new_state: self.clone_box(),
             })
-        } else if token_in.address == self.share_token.address
-            && token_out.address == self.asset_token.address
+        } else if token_in.address == self.share_token.address &&
+            token_out.address == self.asset_token.address
         {
             // share → asset: this corresponds to an ERC4626.redeem operation.
             // The user burns vault shares and receives underlying assets.
             Ok(GetAmountOutResult {
                 amount: u256_to_biguint(
-                    amount_in * self.share_price
-                        / U256::from(10).pow(U256::from(self.share_token.decimals)),
+                    amount_in * self.share_price /
+                        U256::from(10).pow(U256::from(self.share_token.decimals)),
                 ),
                 gas: 74977.to_biguint().expect("infallible"),
                 new_state: self.clone_box(),
@@ -130,15 +130,15 @@ impl ProtocolSim for ERC4626State {
 
         if sell_token == self.share_token.address && buy_token == self.asset_token.address {
             // asset_out_raw = shares_raw * share_price_raw / 10^share_decimals
-            let buy_raw = (&u256_to_biguint(self.max_redeem) * &u256_to_biguint(self.share_price))
-                / &share_scale;
+            let buy_raw = (&u256_to_biguint(self.max_redeem) * &u256_to_biguint(self.share_price)) /
+                &share_scale;
             return Ok((u256_to_biguint(self.max_redeem), buy_raw));
         }
 
         if sell_token == self.asset_token.address && buy_token == self.share_token.address {
             // share_out_raw = asset_raw * asset_price_raw / 10^asset_decimals
-            let buy_raw = (&u256_to_biguint(self.max_deposit) * &u256_to_biguint(self.asset_price))
-                / &asset_scale;
+            let buy_raw = (&u256_to_biguint(self.max_deposit) * &u256_to_biguint(self.asset_price)) /
+                &asset_scale;
 
             return Ok((u256_to_biguint(self.max_deposit), buy_raw));
         }
@@ -186,13 +186,13 @@ impl ProtocolSim for ERC4626State {
             .as_any()
             .downcast_ref::<ERC4626State>()
         {
-            self.pool_address == other_state.pool_address
-                && self.asset_token == other_state.asset_token
-                && self.share_token == other_state.share_token
-                && self.asset_price == other_state.asset_price
-                && self.share_price == other_state.share_price
-                && self.max_deposit == other_state.max_deposit
-                && self.max_redeem == other_state.max_redeem
+            self.pool_address == other_state.pool_address &&
+                self.asset_token == other_state.asset_token &&
+                self.share_token == other_state.share_token &&
+                self.asset_price == other_state.asset_price &&
+                self.share_price == other_state.share_price &&
+                self.max_deposit == other_state.max_deposit &&
+                self.max_redeem == other_state.max_redeem
         } else {
             false
         }

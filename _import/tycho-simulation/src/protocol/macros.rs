@@ -4,7 +4,6 @@
 /// # Examples
 /// ```ignore
 /// impl_non_serializable_protocol!(MyProtocolState, "error message");
-///
 /// ```
 #[macro_export]
 macro_rules! impl_non_serializable_protocol {

@@ -330,9 +330,9 @@ fn iqi(p: &[PricePoint], target_price: f64) -> Option<f64> {
     let d2 = (pr1 - pr0) * (pr1 - pr2);
     let d3 = (pr2 - pr0) * (pr2 - pr1);
 
-    let result = a0 * (target_price - pr1) * (target_price - pr2) / d1
-        + a1 * (target_price - pr0) * (target_price - pr2) / d2
-        + a2 * (target_price - pr0) * (target_price - pr1) / d3;
+    let result = a0 * (target_price - pr1) * (target_price - pr2) / d1 +
+        a1 * (target_price - pr0) * (target_price - pr2) / d2 +
+        a2 * (target_price - pr0) * (target_price - pr1) / d3;
 
     (result.is_finite() && result > 0.0).then_some(result)
 }
@@ -1046,8 +1046,8 @@ mod tests {
         assert!(result.is_ok());
         let pool_swap = result.unwrap();
         assert!(
-            pool_swap.amount_in() <= &BigUint::from(1u32)
-                || pool_swap.amount_in() == &BigUint::zero()
+            pool_swap.amount_in() <= &BigUint::from(1u32) ||
+                pool_swap.amount_in() == &BigUint::zero()
         );
     }
 

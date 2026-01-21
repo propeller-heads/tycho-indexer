@@ -138,9 +138,10 @@ pub(crate) fn get_sqrt_ratio_at_tick(tick: i32) -> Result<U256, SimulationError>
         )?) >> 128
     }
     if abs_tick.bit(19) {
-        ratio =
-            (safe_mul_u256(ratio, U256::from_limbs([10518117631919034274u64, 76158723u64, 0, 0]))?)
-                >> 128
+        ratio = (safe_mul_u256(
+            ratio,
+            U256::from_limbs([10518117631919034274u64, 76158723u64, 0, 0]),
+        )?) >> 128
     }
 
     if tick > 0 {
@@ -197,8 +198,8 @@ pub(crate) fn get_tick_at_sqrt_ratio(sqrt_price: U256) -> Result<i32, Simulation
         I256::from_raw(U256::from_limbs([6552757943157144234u64, 184476617836266586u64, 0, 0]));
 
     let tick_low: I256 = (log_sqrt10001 - tmp1).asr(128);
-    let tick_high: I256 = (log_sqrt10001
-        + I256::from_raw(U256::from_limbs([
+    let tick_high: I256 = (log_sqrt10001 +
+        I256::from_raw(U256::from_limbs([
             4998474450511881007u64,
             15793544031827761793u64,
             0,

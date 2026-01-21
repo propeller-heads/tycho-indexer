@@ -23,7 +23,6 @@ use tycho_common::{
 use super::pool::{
     base::BasePool, full_range::FullRangePool, oracle::OraclePool, twamm::TwammPool, EkuboPool,
 };
-
 use crate::evm::protocol::{
     ekubo::pool::mev_resist::MevResistPool, u256_num::u256_to_f64, utils::add_fee_markup,
 };

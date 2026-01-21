@@ -271,9 +271,9 @@ impl Observations {
                 as i64;
             let target_delta = target.wrapping_sub(before_or_at.block_timestamp) as i64;
 
-            let tick_cumulative = before_or_at.tick_cumulative
-                + ((at_or_after.tick_cumulative - before_or_at.tick_cumulative) * target_delta
-                    / observation_time_delta);
+            let tick_cumulative = before_or_at.tick_cumulative +
+                ((at_or_after.tick_cumulative - before_or_at.tick_cumulative) * target_delta /
+                    observation_time_delta);
 
             let seconds_per_liquidity_cumulative_x128 = {
                 let delta = safe_sub_u256(
@@ -378,8 +378,8 @@ mod tests {
         assert_eq!(result.index, before.index);
 
         assert!(
-            result.seconds_per_liquidity_cumulative_x128
-                > before.seconds_per_liquidity_cumulative_x128
+            result.seconds_per_liquidity_cumulative_x128 >
+                before.seconds_per_liquidity_cumulative_x128
         );
     }
 
@@ -431,8 +431,8 @@ mod tests {
         };
         value |= tick_encoded << 32u32;
 
-        value |= (seconds_per_liquidity_cumulative_x128 & ((U256::from(1) << 160) - U256::from(1)))
-            << 88u32;
+        value |= (seconds_per_liquidity_cumulative_x128 & ((U256::from(1) << 160) - U256::from(1))) <<
+            88u32;
 
         if initialized {
             value |= U256::from(1) << 248u32;

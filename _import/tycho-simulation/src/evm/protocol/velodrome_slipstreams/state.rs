@@ -120,8 +120,8 @@ impl VelodromeSlipstreamsState {
         let mut gas_used = U256::from(130_000);
 
         let fee = self.get_fee();
-        while state.amount_remaining != I256::from_raw(U256::from(0u64))
-            && state.sqrt_price != price_limit
+        while state.amount_remaining != I256::from_raw(U256::from(0u64)) &&
+            state.sqrt_price != price_limit
         {
             let (mut next_tick, initialized) = match self
                 .ticks
@@ -459,11 +459,11 @@ impl ProtocolSim for VelodromeSlipstreamsState {
             .as_any()
             .downcast_ref::<VelodromeSlipstreamsState>()
         {
-            self.liquidity == other_state.liquidity
-                && self.sqrt_price == other_state.sqrt_price
-                && self.get_fee() == other_state.get_fee()
-                && self.tick == other_state.tick
-                && self.ticks == other_state.ticks
+            self.liquidity == other_state.liquidity &&
+                self.sqrt_price == other_state.sqrt_price &&
+                self.get_fee() == other_state.get_fee() &&
+                self.tick == other_state.tick &&
+                self.ticks == other_state.ticks
         } else {
             false
         }

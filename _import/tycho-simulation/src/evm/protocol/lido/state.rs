@@ -137,8 +137,8 @@ impl LidoState {
         let new_total_wrapped_st_eth = self
             .total_wrapped_st_eth
             .as_ref()
-            .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool")
-            + &amount_out;
+            .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool") +
+            &amount_out;
 
         Ok(GetAmountOutResult {
             amount: amount_out.clone(),
@@ -182,8 +182,8 @@ impl LidoState {
         let new_total_wrapped_st_eth = self
             .total_wrapped_st_eth
             .as_ref()
-            .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool")
-            - &amount_in;
+            .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool") -
+            &amount_in;
 
         Ok(GetAmountOutResult {
             amount: amount_transferred.clone(),
@@ -279,9 +279,8 @@ impl LidoState {
         } else {
             // total_shares - wstETH, stETH -> wstETH
 
-            let limit_for_wrapping = &self.total_shares
-                - self
-                    .total_wrapped_st_eth
+            let limit_for_wrapping = &self.total_shares -
+                self.total_wrapped_st_eth
                     .as_ref()
                     .expect("total_wrapped_st_eth must be present for wrapped staked ETH pool");
 
@@ -402,8 +401,8 @@ impl ProtocolSim for LidoState {
                     let total_pooled_eth_f64 =
                         u256_to_f64(biguint_to_u256(&self.total_pooled_eth))?;
 
-                    Ok(total_pooled_eth_f64 / total_shares_f64 * total_shares_f64
-                        / total_pooled_eth_f64)
+                    Ok(total_pooled_eth_f64 / total_shares_f64 * total_shares_f64 /
+                        total_pooled_eth_f64)
                 } else {
                     Err(SimulationError::InvalidInput(
                         format!(
@@ -849,8 +848,8 @@ mod tests {
         let res = wst_state
             .get_limits(token_st_eth.clone(), token_wst_eth.clone())
             .unwrap();
-        let allowed_to_wrap = wst_state.total_shares.clone()
-            - wst_state
+        let allowed_to_wrap = wst_state.total_shares.clone() -
+            wst_state
                 .total_wrapped_st_eth
                 .clone()
                 .unwrap();

@@ -53,8 +53,8 @@ pub(crate) fn get_dynamic_fee(
     } else {
         (DEFAULT_SCALING_FACTOR, DEFAULT_FEE_CAP)
     };
-    let total_fee = base_fee
-        + calculate_dynamic_fee(
+    let total_fee = base_fee +
+        calculate_dynamic_fee(
             current_tick,
             liquidity,
             observation_index,

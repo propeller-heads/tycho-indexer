@@ -128,8 +128,8 @@ impl UniswapV3State {
         };
         let mut gas_used = U256::from(130_000);
 
-        while state.amount_remaining != I256::from_raw(U256::from(0u64))
-            && state.sqrt_price != price_limit
+        while state.amount_remaining != I256::from_raw(U256::from(0u64)) &&
+            state.sqrt_price != price_limit
         {
             let (mut next_tick, initialized) = match self
                 .ticks
@@ -543,11 +543,11 @@ impl ProtocolSim for UniswapV3State {
             .as_any()
             .downcast_ref::<UniswapV3State>()
         {
-            self.liquidity == other_state.liquidity
-                && self.sqrt_price == other_state.sqrt_price
-                && self.fee == other_state.fee
-                && self.tick == other_state.tick
-                && self.ticks == other_state.ticks
+            self.liquidity == other_state.liquidity &&
+                self.sqrt_price == other_state.sqrt_price &&
+                self.fee == other_state.fee &&
+                self.tick == other_state.tick &&
+                self.ticks == other_state.ticks
         } else {
             false
         }
