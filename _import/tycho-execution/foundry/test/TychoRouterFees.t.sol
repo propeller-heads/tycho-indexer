@@ -55,11 +55,6 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             RestrictTransferFrom.TransferType.TransferFrom
         );
 
-        // TODO remove when vault crediting PR is merged. This is to simulate
-        // the delta accounting being credited after the final swap (which will only
-        // be done if the final swap receiver is rightfully set to be the TychoRouter)
-        tychoRouter.exposedDeltaAccounting(DAI_ADDR, 2018817438608734439722);
-
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);
 
@@ -152,15 +147,14 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         // 1. Swap sends tokens to ALICE (not router)
         // 2. takeFees calculates fees (amountOut < amountOutBeforeFees)
         // 3. Router checks if it received the full amount
-        // 4. Router didn't receive the tokens → reverts with Vault__UnexpectedNegativeCount(2)
+        // 4. Router didn't receive the tokens → reverts with
+        //    Vault__UnexpectedInputDelta(0). This happens because the
+        //    _finalizeBalances method sees a negative Delta, and expects this to be the
+        //    input delta. Since it's not the input delta (we didn't withdraw vault
+        //    balances on input), and no other negative deltas are allowed, this
+        //    reverts.
         vm.expectRevert(
-            abi.encodeWithSelector(
-                // TODO when the crediting PR is merged, uncomment the _finalizeBalances
-                // calls and change this selector to Vault__UnexpectedNegativeCount(2)
-                TychoRouter__AmountOutNotFullyReceived.selector,
-                4017446702831381535047, // TODO remove this
-                1998629264222647095325 // TODO remove this
-            )
+            abi.encodeWithSelector(Vault__UnexpectedInputDelta.selector, 0)
         );
         tychoRouter.singleSwap(
             amountIn,

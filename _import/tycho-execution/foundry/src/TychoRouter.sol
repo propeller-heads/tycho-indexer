@@ -151,6 +151,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address solverFeeReceiver,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+        _updateNativeDeltaAccounting();
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         _tstoreTransferFromInfo(tokenIn, amountIn, false, isTransferFromAllowed);
 
@@ -202,6 +203,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         bytes calldata signature,
         bytes calldata swaps
     ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+        _updateNativeDeltaAccounting();
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
@@ -252,6 +254,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address solverFeeReceiver,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+        _updateNativeDeltaAccounting();
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         _tstoreTransferFromInfo(tokenIn, amountIn, false, isTransferFromAllowed);
 
@@ -299,6 +302,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         bytes calldata signature,
         bytes calldata swaps
     ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+        _updateNativeDeltaAccounting();
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
@@ -348,6 +352,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address solverFeeReceiver,
         bytes calldata swapData
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+        _updateNativeDeltaAccounting();
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         _tstoreTransferFromInfo(tokenIn, amountIn, false, isTransferFromAllowed);
 
@@ -395,6 +400,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         bytes calldata signature,
         bytes calldata swapData
     ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+        _updateNativeDeltaAccounting();
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
@@ -454,8 +460,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         );
 
         // Finalize all transient deltas to persistent storage
-        // TODO uncomment after crediting PR is merged
-        // _finalizeBalances(msg.sender, tokenIn, amountIn);
+        _finalizeBalances(msg.sender, tokenIn, amountIn);
 
         if (amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
@@ -522,8 +527,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         );
 
         // Finalize all transient deltas to persistent storage
-        // TODO uncomment after crediting PR is merged
-        // _finalizeBalances(msg.sender, tokenIn, amountIn);
+        _finalizeBalances(msg.sender, tokenIn, amountIn);
 
         if (amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
@@ -586,8 +590,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         );
 
         // Finalize all transient deltas to persistent storage
-        // TODO uncomment after crediting PR is merged
-        // _finalizeBalances(msg.sender, tokenIn, amountIn);
+        _finalizeBalances(msg.sender, tokenIn, amountIn);
 
         if (amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
@@ -832,6 +835,16 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      */
     receive() external payable {
         require(msg.sender.code.length != 0);
+    }
+
+    /**
+     * @dev Updates delta accounting for native ETH received via msg.value
+     * @notice This should be called at each entry point to credit the delta when ETH is sent
+     */
+    function _updateNativeDeltaAccounting() internal {
+        if (msg.value > 0) {
+            _updateDeltaAccounting(address(0), int256(msg.value));
+        }
     }
 
     /**
