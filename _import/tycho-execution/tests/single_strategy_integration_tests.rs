@@ -63,7 +63,7 @@ fn test_single_swap_strategy_encoder() {
     .data;
     let expected_min_amount_encoded = encode(U256::abi_encode(&biguint_to_u256(&checked_amount)));
     let expected_input = [
-        "fd7f9dc9", // Function selector (singleSwapPermit2)
+        "b322d802", // Function selector (singleSwapPermit2)
         "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount in
         "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f", // token out
@@ -72,6 +72,7 @@ fn test_single_swap_strategy_encoder() {
         "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps = 0
         "0000000000000000000000000000000000000000000000000000000000000000", /* solverFeeReceiver
                      * = address(0) */
+        "0000000000000000000000000000000000000000000000000000000000000000", // solverMaxContribution
     ]
     .join("");
 
@@ -91,8 +92,8 @@ fn test_single_swap_strategy_encoder() {
     ));
     let hex_calldata = encode(&calldata);
 
-    assert_eq!(hex_calldata[..456], expected_input);
-    assert_eq!(hex_calldata[1224..], expected_swap);
+    assert_eq!(hex_calldata[..520], expected_input);
+    assert_eq!(hex_calldata[1288..], expected_swap);
     write_calldata_to_file("test_single_swap_strategy_encoder", &hex_calldata.to_string());
 }
 
@@ -146,7 +147,7 @@ fn test_single_swap_strategy_encoder_no_permit2() {
     .data;
     let expected_min_amount_encoded = encode(U256::abi_encode(&expected_min_amount));
     let expected_input = [
-        "c3333f19", // Function selector (singleSwap)
+        "3cbe9156", // Function selector (singleSwap)
         "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount in
         "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f", // token out
@@ -155,7 +156,8 @@ fn test_single_swap_strategy_encoder_no_permit2() {
         "0000000000000000000000000000000000000000000000000000000000000001", // transfer from needed
         "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps
         "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeReceiver
-        "0000000000000000000000000000000000000000000000000000000000000120", // offset of swap bytes
+        "0000000000000000000000000000000000000000000000000000000000000000", // solverMaxContribution
+        "0000000000000000000000000000000000000000000000000000000000000140", // offset of swap bytes
         "000000000000000000000000000000000000000000000000000000000000003e", // len swap (62 bytes)
         // Swap data
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address

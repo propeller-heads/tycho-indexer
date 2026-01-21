@@ -61,6 +61,11 @@ pub struct Solution {
     /// Address to receive the solver fee.
     #[serde(default)]
     pub solver_fee_receiver: Bytes,
+    /// Maximum amount the solver is willing to pay out of pocket to subsidize this trade.
+    /// This represents the maximum slippage the solver will cover.
+    /// If (min_amount_out - actual_swap_output) > max_solver_contribution, the tx reverts.
+    #[serde(with = "biguint_string")]
+    pub max_solver_contribution: BigUint,
 }
 
 /// Represents a swap operation to be performed on a pool.

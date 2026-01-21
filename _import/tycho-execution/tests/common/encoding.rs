@@ -90,6 +90,7 @@ pub fn encode_tycho_router_call(
     } else {
         bytes_to_address(&solution.solver_fee_receiver)?
     };
+    let max_solver_contribution = biguint_to_u256(&solution.max_solver_contribution);
     let (permit, signature) = if let Some(p) = encoded_solution.permit {
         let permit = Some(
             PermitSingle::try_from(&p)
@@ -115,6 +116,7 @@ pub fn encode_tycho_router_call(
             receiver,
             solver_fee_bps,
             solver_fee_receiver,
+            max_solver_contribution,
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
@@ -135,6 +137,7 @@ pub fn encode_tycho_router_call(
             *user_transfer_type == UserTransferType::TransferFrom,
             solver_fee_bps,
             solver_fee_receiver,
+            max_solver_contribution,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -150,6 +153,7 @@ pub fn encode_tycho_router_call(
             receiver,
             solver_fee_bps,
             solver_fee_receiver,
+            max_solver_contribution,
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
@@ -170,6 +174,7 @@ pub fn encode_tycho_router_call(
             *user_transfer_type == UserTransferType::TransferFrom,
             solver_fee_bps,
             solver_fee_receiver,
+            max_solver_contribution,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -186,6 +191,7 @@ pub fn encode_tycho_router_call(
             receiver,
             solver_fee_bps,
             solver_fee_receiver,
+            max_solver_contribution,
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
@@ -207,6 +213,7 @@ pub fn encode_tycho_router_call(
             *user_transfer_type == UserTransferType::TransferFrom,
             solver_fee_bps,
             solver_fee_receiver,
+            max_solver_contribution,
             encoded_solution.swaps,
         )
             .abi_encode()
