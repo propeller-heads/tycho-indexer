@@ -13,14 +13,16 @@ use tycho_common::{
 };
 
 use crate::evm::protocol::{
-    cowamm::{bmath::*, constants::BONE, error::CowAMMError},
+    cowamm::{
+        bmath::*,
+        constants::{BONE, MAX_IN_RATIO},
+        error::CowAMMError,
+    },
     safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
     u256_num::{biguint_to_u256, u256_to_biguint, u256_to_f64},
 };
 
 const COWAMM_FEE: f64 = 0.0; // 0% fee
-const MAX_IN_FACTOR: u64 = 50;
-const MAX_OUT_FACTOR: u64 = 33;
 
 // Token 3 tuple: (address, liquidity, weight)
 type TokenInfo = (Bytes, U256, U256);
@@ -255,104 +257,129 @@ impl CowAMMState {
         sell_token: Bytes,
         buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
-        // For LP token swaps, we need to ensure the intermediate swap doesn't exceed limits
+        // LP swaps are modeled as: swap part of the input to the other leg, then join/exit.
+        // Limits cap the intermediate swap via MAX_IN_RATIO; dust is allowed.
         if is_lp_buy {
-            // Buying LP tokens (joining pool)
-            // Example: ARB → LP means we swap some ARB→WETH, then join with ARB+WETH
-
+            // Buy LP: swap part of the sell token into the other leg, then join.
             let is_token_a_in = sell_token == *self.token_a_addr();
 
-            let (input_liquidity, needed_liquidity) = if is_token_a_in {
-                // Selling token_a, will need to swap some to token_b
-                (self.liquidity_b(), self.liquidity_a())
+            let (bal_in, weight_in, bal_out, weight_out) = if is_token_a_in {
+                (self.liquidity_a(), self.weight_a(), self.liquidity_b(), self.weight_b())
             } else {
-                // Selling token_b, will need to swap some to token_a
-                (self.liquidity_a(), self.liquidity_b())
+                (self.liquidity_b(), self.weight_b(), self.liquidity_a(), self.weight_a())
             };
 
-            // The intermediate swap's OUTPUT constraint:
-            // We can receive at most 33% of the NEEDED token's liquidity
-            let max_intermediate_swap_out = safe_div_u256(
-                safe_mul_u256(needed_liquidity, U256::from(MAX_OUT_FACTOR))?,
-                U256::from(100),
-            )?;
+            // Cap total input by MAX_IN_RATIO of the input token balance.
+            let max_token_in = bmul(bal_in, MAX_IN_RATIO)
+                .map_err(|err| SimulationError::FatalError(format!("max_in error: {err:?}")))?;
 
-            // The LP tokens we can mint are limited by how much we can swap
-            // Work backwards to find max LP we can mint:
-            // proportional_needed = (LP_out / LP_supply) × needed_liquidity
-            // We need: proportional_needed ≤ max_intermediate_swap_out
-            // Therefore: LP_out ≤ (max_intermediate_swap_out × LP_supply) / needed_liquidity
-
-            if needed_liquidity.is_zero() {
+            if max_token_in.is_zero() || bal_in.is_zero() || bal_out.is_zero() {
                 return Ok((BigUint::ZERO, BigUint::ZERO));
             }
 
-            let max_lp_out = safe_div_u256(
-                safe_mul_u256(max_intermediate_swap_out, self.lp_token_supply)?,
-                needed_liquidity,
-            )?;
+            // Find a split (x to swap, max_token_in - x to keep) that matches pool proportions.
+            let mut lo = U256::ZERO;
+            let mut hi = max_token_in;
+            let mut best_x = U256::ZERO;
+            for _ in 0..128 {
+                let x = safe_div_u256(safe_add_u256(lo, hi)?, U256::from(2u8))?;
+                let out = calculate_out_given_in(
+                    bal_in,
+                    weight_in,
+                    bal_out,
+                    weight_out,
+                    x,
+                    U256::from(self.fee),
+                )
+                .map_err(|e| SimulationError::FatalError(format!("amount_out error: {e:?}")))?;
 
-            // Max input is standard 50% of the token being sold
-            let max_token_in = safe_div_u256(
-                safe_mul_u256(input_liquidity, U256::from(MAX_IN_FACTOR))?,
-                U256::from(100),
-            )?;
+                let in_remaining = safe_sub_u256(max_token_in, x)?;
+                let bal_in_after = safe_add_u256(bal_in, x)?;
+                let bal_out_after = safe_sub_u256(bal_out, out)?;
+
+                // Target: in_remaining / bal_in_after == out / bal_out_after
+                let left = safe_mul_u256(in_remaining, bal_out_after)?;
+                let right = safe_mul_u256(out, bal_in_after)?;
+
+                if left > right {
+                    lo = safe_add_u256(x, U256::from(1u8))?;
+                } else {
+                    best_x = x;
+                    if x.is_zero() {
+                        break;
+                    }
+                    hi = safe_sub_u256(x, U256::from(1u8))?;
+                }
+            }
+
+            let x = best_x;
+            let out = calculate_out_given_in(
+                bal_in,
+                weight_in,
+                bal_out,
+                weight_out,
+                x,
+                U256::from(self.fee),
+            )
+            .map_err(|e| SimulationError::FatalError(format!("amount_out error: {e:?}")))?;
+
+            let in_remaining = safe_sub_u256(max_token_in, x)?;
+            let bal_in_after = safe_add_u256(bal_in, x)?;
+            let bal_out_after = safe_sub_u256(bal_out, out)?;
+
+            // LP minting is limited by the smaller proportional contribution.
+            let pool_total = self.lp_token_supply;
+            let lp_from_in = safe_div_u256(safe_mul_u256(in_remaining, pool_total)?, bal_in_after)?;
+            let lp_from_out = safe_div_u256(safe_mul_u256(out, pool_total)?, bal_out_after)?;
+            let max_lp_out = if lp_from_in < lp_from_out { lp_from_in } else { lp_from_out };
 
             Ok((u256_to_biguint(max_token_in), u256_to_biguint(max_lp_out)))
         } else {
-            // Selling LP tokens (exiting pool)
-            // Example: LP → ARB means we exit the pool to receive ARB + WETH,
-            // then swap the WETH portion into ARB
+            // Sell LP: exit to both tokens, then swap the unwanted leg into the desired token.
             let is_token_a_out = buy_token == *self.token_a_addr();
 
-            let (unwanted_liquidity, wanted_liquidity) = if is_token_a_out {
-                // Want token_a, will swap token_b → token_a
-                // token_b is the swap input (must be ≤ 50% of token_a liquidity)
-                (self.liquidity_b(), self.liquidity_a())
-            } else {
-                // Want token_b, will swap token_a → token_b
-                // token_a is the swap input (must be ≤ 50% of token_b liquidity)
-                (self.liquidity_a(), self.liquidity_b())
-            };
-
-            // The intermediate swap has TWO constraints:
-            // 1. INPUT: Can swap at most 50% of WANTED token's liquidity
-            // 2. OUTPUT: Can receive at most 33% of WANTED token's liquidity
-
-            // Constraint 1: Max input to intermediate swap
-            // We can swap at most 50% of the UNWANTED token's liquidity/balance of the pool
-            // Maximum amount we can swap in the intermediate step
-
-            let max_intermediate_swap_in = safe_div_u256(
-                safe_mul_u256(unwanted_liquidity, U256::from(MAX_IN_FACTOR))?,
-                U256::from(100),
-            )?;
-
-            // Work backwards to find max LP:
-            // proportional_unwanted = (LP_in / LP_supply) × unwanted_liquidity
-            // We need: proportional_unwanted ≤ max_intermediate_swap_in
-            // Therefore: LP_in ≤ (max_intermediate_swap_in × LP_supply) / unwanted_liquidity
+            let (unwanted_liquidity, unwanted_weight, wanted_liquidity, wanted_weight) =
+                if is_token_a_out {
+                    // Want token_a; swap token_b into token_a after exit.
+                    (self.liquidity_b(), self.weight_b(), self.liquidity_a(), self.weight_a())
+                } else {
+                    // Want token_b; swap token_a into token_b after exit.
+                    (self.liquidity_a(), self.weight_a(), self.liquidity_b(), self.weight_b())
+                };
 
             if unwanted_liquidity.is_zero() {
                 return Ok((BigUint::ZERO, BigUint::ZERO));
             }
 
-            // max_lp_in = (max_intermediate_swap_in * lp_token_supply) / target_liquidity
-            let max_lp_in = safe_div_u256(
-                safe_mul_u256(max_intermediate_swap_in, self.lp_token_supply)?,
+            // Cap the exit ratio so the unwanted leg can be fully swapped under MAX_IN_RATIO.
+            let max_intermediate_swap_in = bmul(unwanted_liquidity, MAX_IN_RATIO)
+                .map_err(|err| SimulationError::FatalError(format!("max_in error: {err:?}")))?;
+
+            let ratio = bdiv(max_intermediate_swap_in, unwanted_liquidity)
+                .map_err(|err| SimulationError::FatalError(format!("ratio error: {err:?}")))?;
+
+            // LP in upper bound implied by the ratio cap.
+            let max_lp_in = bmul(self.lp_token_supply, ratio)
+                .map_err(|err| SimulationError::FatalError(format!("max_lp_in error: {err:?}")))?;
+
+            // Wanted token from the exit leg at the capped ratio.
+            let exit_wanted = bmul(wanted_liquidity, ratio).map_err(|err| {
+                SimulationError::FatalError(format!("exit_wanted error: {err:?}"))
+            })?;
+
+            // Wanted token from swapping the unwanted leg at MAX_IN_RATIO.
+            let swap_out = calculate_out_given_in(
                 unwanted_liquidity,
-            )?;
+                unwanted_weight,
+                wanted_liquidity,
+                wanted_weight,
+                max_intermediate_swap_in,
+                U256::from(self.fee),
+            )
+            .map_err(|err| SimulationError::FatalError(format!("amount_out error: {err:?}")))?;
 
-            // Constraint 2: MAX_OUT_FACTOR
-            // "user can only swap out less than 33.33% of current balance of tokenOut"
-            // We can receive at most 33% of WANTED (OUTPUT) token's liquidity
-            let max_intermediate_swap_out = safe_div_u256(
-                safe_mul_u256(wanted_liquidity, U256::from(MAX_OUT_FACTOR))?,
-                U256::from(100),
-            )?;
-
-            // The max_token_out represents total wanted token user can receive
-            let max_token_out = max_intermediate_swap_out;
+            // Total upper bound: wanted from exit + wanted from swap.
+            let max_token_out = safe_add_u256(exit_wanted, swap_out)?;
 
             Ok((u256_to_biguint(max_lp_in), u256_to_biguint(max_token_out)))
         }
@@ -440,13 +467,14 @@ impl ProtocolSim for CowAMMState {
                 U256::from(self.fee),
             );
 
-            let (amount_to_swap, is_token_a_swap) = if token_out.address == *self.token_a_addr() {
+            let (amount_to_swap, is_token_a_swap_in) = if token_out.address == *self.token_a_addr()
+            {
                 (proportional_token_amount_b, false)
             } else {
                 (proportional_token_amount_a, true)
             };
 
-            let amount_out = if is_token_a_swap {
+            let amount_out = if is_token_a_swap_in {
                 calculate_out_given_in(
                     new_state.liquidity_a(),
                     new_state.weight_a(),
@@ -467,15 +495,19 @@ impl ProtocolSim for CowAMMState {
             }
             .map_err(|e| SimulationError::FatalError(format!("amount_out error: {e:?}")))?;
 
-            if is_token_a_swap {
-                new_state.token_b.1 = safe_sub_u256(new_state.liquidity_b(), amount_out)?;
-                new_state.token_a.1 = safe_add_u256(new_state.liquidity_a(), amount_to_swap)?;
+            if is_token_a_swap_in {
+                new_state.token_a.1 = safe_sub_u256(new_state.liquidity_a(), amount_to_swap)?;
+                new_state.token_b.1 = safe_add_u256(new_state.liquidity_b(), amount_out)?;
             } else {
-                new_state.token_a.1 = safe_sub_u256(new_state.liquidity_a(), amount_out)?;
-                new_state.token_b.1 = safe_add_u256(new_state.liquidity_b(), amount_to_swap)?;
+                new_state.token_b.1 = safe_sub_u256(new_state.liquidity_b(), amount_to_swap)?;
+                new_state.token_a.1 = safe_add_u256(new_state.liquidity_a(), amount_out)?;
             }
 
-            let total_trade_amount = safe_add_u256(amount_out, proportional_token_amount_a)?;
+            let total_trade_amount = if is_token_a_swap_in {
+                safe_add_u256(amount_out, proportional_token_amount_b)?
+            } else {
+                safe_add_u256(amount_out, proportional_token_amount_a)?
+            };
 
             return Ok(GetAmountOutResult {
                 amount: u256_to_biguint(total_trade_amount),
@@ -582,18 +614,30 @@ impl ProtocolSim for CowAMMState {
         // ============================
         // NORMAL SWAP
         // ============================
+        let is_token_a_in = token_in.address == *self.token_a_addr();
+        let (bal_in, weight_in, bal_out, weight_out) = if is_token_a_in {
+            (self.liquidity_a(), self.weight_a(), self.liquidity_b(), self.weight_b())
+        } else {
+            (self.liquidity_b(), self.weight_b(), self.liquidity_a(), self.weight_a())
+        };
+
         let amount_out = calculate_out_given_in(
-            self.liquidity_a(),
-            self.weight_a(),
-            self.liquidity_b(),
-            self.weight_b(),
+            bal_in,
+            weight_in,
+            bal_out,
+            weight_out,
             amount_in,
             U256::from(self.fee),
         )
         .map_err(|e| SimulationError::FatalError(format!("amount_out error: {e:?}")))?;
 
-        new_state.token_a.1 = safe_sub_u256(new_state.liquidity_a(), amount_in)?;
-        new_state.token_b.1 = safe_add_u256(new_state.liquidity_b(), amount_out)?;
+        if is_token_a_in {
+            new_state.token_a.1 = safe_sub_u256(new_state.liquidity_a(), amount_in)?;
+            new_state.token_b.1 = safe_add_u256(new_state.liquidity_b(), amount_out)?;
+        } else {
+            new_state.token_b.1 = safe_sub_u256(new_state.liquidity_b(), amount_in)?;
+            new_state.token_a.1 = safe_add_u256(new_state.liquidity_a(), amount_out)?;
+        }
 
         Ok(GetAmountOutResult {
             amount: u256_to_biguint(amount_out),
@@ -620,17 +664,39 @@ impl ProtocolSim for CowAMMState {
             return self.get_lp_swap_limits(is_lp_buy, sell_token, buy_token);
         }
 
-        let max_in = safe_div_u256(
-            safe_mul_u256(self.liquidity_a(), U256::from(MAX_IN_FACTOR))?,
-            U256::from(100),
-        )?;
+        if sell_token == *self.token_a_addr() {
+            // Sell token A for token B
+            let max_in = bmul(self.liquidity_a(), MAX_IN_RATIO)
+                .map_err(|err| SimulationError::FatalError(format!("max_in error: {err:?}")))?;
 
-        let max_out = safe_div_u256(
-            safe_mul_u256(self.liquidity_b(), U256::from(MAX_OUT_FACTOR))?,
-            U256::from(100),
-        )?;
+            let max_out = calculate_out_given_in(
+                self.liquidity_a(),
+                self.weight_a(),
+                self.liquidity_b(),
+                self.weight_b(),
+                max_in,
+                U256::from(self.fee),
+            )
+            .map_err(|err| SimulationError::FatalError(format!("max_out error: {err:?}")))?;
 
-        Ok((u256_to_biguint(max_in), u256_to_biguint(max_out)))
+            Ok((u256_to_biguint(max_in), u256_to_biguint(max_out)))
+        } else {
+            // Sell token B for token A
+            let max_in = bmul(self.liquidity_b(), MAX_IN_RATIO)
+                .map_err(|err| SimulationError::FatalError(format!("max_in error: {err:?}")))?;
+
+            let max_out = calculate_out_given_in(
+                self.liquidity_b(),
+                self.weight_b(),
+                self.liquidity_a(),
+                self.weight_a(),
+                max_in,
+                U256::from(self.fee),
+            )
+            .map_err(|err| SimulationError::FatalError(format!("max_out error: {err:?}")))?;
+
+            Ok((u256_to_biguint(max_in), u256_to_biguint(max_out)))
+        }
     }
 
     fn delta_transition(
