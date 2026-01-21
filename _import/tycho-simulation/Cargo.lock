@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "_tycho_simulation_py"
-version = "0.230.0"
+version = "0.231.0"
 dependencies = [
  "alloy",
  "num-bigint",
@@ -3758,7 +3758,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4b0f83760fb341a774ed326568e19f5a863af4a952def8c39f9ab92fd95b88e5"
 dependencies = [
  "equivalent",
- "hashbrown 0.16.0",
+ "hashbrown 0.15.5",
  "serde",
  "serde_core",
 ]
@@ -6290,9 +6290,9 @@ dependencies = [
 
 [[package]]
 name = "serde_with"
-version = "3.15.0"
+version = "3.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6093cd8c01b25262b84927e0f7151692158fab02d961e04c979d3903eba7ecc5"
+checksum = "4fa237f2807440d238e0364a218270b98f767a00d3dada77b1c53ae88940e2e7"
 dependencies = [
  "base64",
  "chrono",
@@ -6309,9 +6309,9 @@ dependencies = [
 
 [[package]]
 name = "serde_with_macros"
-version = "3.15.0"
+version = "3.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7e6c180db0816026a61afa1cff5344fb7ebded7e4d3062772179f2501481c27"
+checksum = "52a8e3ca0ca629121f70ab50f95249e5a6f925cc0f6ffe8256c45b728875706c"
 dependencies = [
  "darling 0.21.3",
  "proc-macro2",
@@ -7309,6 +7309,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_json",
+ "serde_with",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
@@ -7341,7 +7342,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-integration-test"
-version = "0.230.0"
+version = "0.231.0"
 dependencies = [
  "actix-web",
  "alloy",
@@ -7370,7 +7371,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.230.0"
+version = "0.231.0"
 dependencies = [
  "alloy",
  "alloy-chains",
@@ -7428,7 +7429,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-test"
-version = "0.230.0"
+version = "0.231.0"
 dependencies = [
  "alloy",
  "alloy-chains",
