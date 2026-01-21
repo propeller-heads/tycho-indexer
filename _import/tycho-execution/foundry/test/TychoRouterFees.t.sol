@@ -7,6 +7,7 @@ import {
     Vault__UnexpectedNegativeCount,
     Vault__UnexpectedInputDelta
 } from "@src/Vault.sol";
+import {TychoRouter__AmountOutNotFullyReceived} from "@src/TychoRouter.sol";
 
 contract TychoRouterFeesTest is TychoRouterTestSetup {
     FeeCalculator feeCalculator;
@@ -125,6 +126,12 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         uint256 amountIn = 1 ether;
 
         deal(WETH_ADDR, ALICE, amountIn);
+
+        // Give router some DAI balance to simulate the router already holding tokens
+        // The transfer shouldn't fail with insufficient balance (we would like it
+        // to fail in _finalizeBalances instead)
+        deal(DAI_ADDR, address(tychoRouter), 3000 * 1e18);
+
         vm.startPrank(ALICE);
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
 
@@ -144,9 +151,17 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         // Execute swap - this should fail because:
         // 1. Swap sends tokens to ALICE (not router)
         // 2. takeFees calculates fees (amountOut < amountOutBeforeFees)
-        // 3. Router tries to transfer amountOut to ALICE
-        // 4. Router doesn't have the tokens → reverts with insufficient balance
-        vm.expectRevert();
+        // 3. Router checks if it received the full amount
+        // 4. Router didn't receive the tokens → reverts with Vault__UnexpectedNegativeCount(2)
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                // TODO when the crediting PR is merged, uncomment the _finalizeBalances
+                // calls and change this selector to Vault__UnexpectedNegativeCount(2)
+                TychoRouter__AmountOutNotFullyReceived.selector,
+                4017446702831381535047, // TODO remove this
+                1998629264222647095325 // TODO remove this
+            )
+        );
         tychoRouter.singleSwap(
             amountIn,
             WETH_ADDR,

@@ -454,6 +454,10 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             solverFeeReceiver
         );
 
+        // Finalize all transient deltas to persistent storage
+        // TODO uncomment after crediting PR is merged
+        // _finalizeBalances(msg.sender, tokenIn, amountIn);
+
         if (amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
         }
@@ -518,6 +522,10 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             solverFeeReceiver
         );
 
+        // Finalize all transient deltas to persistent storage
+        // TODO uncomment after crediting PR is merged
+        // _finalizeBalances(msg.sender, tokenIn, amountIn);
+
         if (amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
         }
@@ -577,6 +585,10 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             solverFeeBps,
             solverFeeReceiver
         );
+
+        // Finalize all transient deltas to persistent storage
+        // TODO uncomment after crediting PR is merged
+        // _finalizeBalances(msg.sender, tokenIn, amountIn);
 
         if (amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
