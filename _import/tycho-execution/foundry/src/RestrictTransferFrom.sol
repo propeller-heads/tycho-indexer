@@ -175,7 +175,7 @@ contract RestrictTransferFrom is Vault {
     // slither-disable-next-line assembly
     function _restrictTransferFrom(uint256 amount, address tokenIn) internal {
         //  This is important to prevent badly encoded split swaps from taking
-        //  more than the input amount out of the user's wallet or vault balance.
+        //  more than the input amount out of the user's wallet.
         address tokenInStorage;
         uint256 amountAllowed;
 
