@@ -1,3 +1,11 @@
+## [0.130.0](https://github.com/propeller-heads/tycho-indexer/compare/0.129.1...0.130.0) (2026-01-21)
+
+
+### Features
+
+* add PartialEq and Serde to tycho-ethereum GasPrice. ([e66af2d](https://github.com/propeller-heads/tycho-indexer/commit/e66af2dfdc30e4ef82283e77137b7119f4897529))
+* add PartialEq and Serde to tycho-ethereum GasPrice. ([#828](https://github.com/propeller-heads/tycho-indexer/issues/828)) ([2f2a78d](https://github.com/propeller-heads/tycho-indexer/commit/2f2a78d8512861cb4c09f97965263c4a48844363))
+
 ## [0.129.1](https://github.com/propeller-heads/tycho-indexer/compare/0.129.0...0.129.1) (2026-01-20)
 
 ## [0.129.0](https://github.com/propeller-heads/tycho-indexer/compare/0.128.0...0.129.0) (2026-01-13)
