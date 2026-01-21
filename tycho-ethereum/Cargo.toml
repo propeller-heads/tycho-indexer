@@ -24,10 +24,18 @@ unicode-segmentation.workspace = true
 rand.workspace = true
 futures = "0.3"
 backoff = { version = "0.4.0", features = ["tokio"], default-features = false }
-num-bigint = "0.4"
+num-bigint = { version = "0.4", features = ["serde"] }
+serde_with = "3.16.1"
 
 # Required dependencies
-alloy = { workspace = true, default-features = false, features = ["reqwest-default-tls", "rpc-client", "json-rpc", "sol-types", "rpc-types-trace", "rpc-types-debug"] }
+alloy = { workspace = true, default-features = false, features = [
+    "reqwest-default-tls",
+    "rpc-client",
+    "json-rpc",
+    "sol-types",
+    "rpc-types-trace",
+    "rpc-types-debug",
+] }
 
 [dev-dependencies]
 pretty_assertions.workspace = true
