@@ -1,3 +1,51 @@
+## [0.230.0](https://github.com/propeller-heads/tycho-simulation/compare/0.229.1...0.230.0) (2026-01-21)
+
+
+### Features
+
+* Bump tycho-execution ([9698dbe](https://github.com/propeller-heads/tycho-simulation/commit/9698dbe2abe56d75e2d7ee5c4013717824a4c0f2))
+
+## [0.229.1](https://github.com/propeller-heads/tycho-simulation/compare/0.229.0...0.229.1) (2026-01-20)
+
+
+### Bug Fixes
+
+* record block count instead of block number ([3a0c281](https://github.com/propeller-heads/tycho-simulation/commit/3a0c281ffa735237be80d77c73f87e7f8d388c17))
+
+## [0.229.0](https://github.com/propeller-heads/tycho-simulation/compare/0.228.2...0.229.0) (2026-01-20)
+
+
+### Features
+
+* update tycho-client, tycho-common, and tycho-ethereum to version 0.129.1 ([b4d92b8](https://github.com/propeller-heads/tycho-simulation/commit/b4d92b8c011f00dd99c49999acc80119bf479de5))
+
+## [0.228.2](https://github.com/propeller-heads/tycho-simulation/compare/0.228.1...0.228.2) (2026-01-16)
+
+
+### Bug Fixes
+
+* dummy commit ([a5f59c3](https://github.com/propeller-heads/tycho-simulation/commit/a5f59c37a5905c2e48e34c6aee4f828a3a44c2f7))
+
+## [0.228.1](https://github.com/propeller-heads/tycho-simulation/compare/0.228.0...0.228.1) (2026-01-14)
+
+
+### Bug Fixes
+
+* use correct "ticks/" prefix when handling deleted tick attributes ([287f3e1](https://github.com/propeller-heads/tycho-simulation/commit/287f3e19478fa60563a213739c1c7d37188f7b13))
+
+## [0.228.0](https://github.com/propeller-heads/tycho-simulation/compare/0.227.0...0.228.0) (2026-01-12)
+
+
+### Features
+
+* Add the default implementation for multiple protocols ([91c47d0](https://github.com/propeller-heads/tycho-simulation/commit/91c47d0bd25a0e1b54336bb07c0ac87f011cf9c0))
+* Implement query_pool_swap ([81045e5](https://github.com/propeller-heads/tycho-simulation/commit/81045e5d2fd425dcc903f4507fb2a0eae1afe4b7))
+
+
+### Bug Fixes
+
+* Address PR review issues ([c6b6ff4](https://github.com/propeller-heads/tycho-simulation/commit/c6b6ff4e5e8235a931478f07201830202aca2adf))
+
 ## [0.227.0](https://github.com/propeller-heads/tycho-simulation/compare/0.226.1...0.227.0) (2026-01-09)
 
 

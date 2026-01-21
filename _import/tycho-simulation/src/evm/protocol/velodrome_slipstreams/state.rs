@@ -411,7 +411,7 @@ impl ProtocolSim for VelodromeSlipstreamsState {
 
         // apply tick & observations changes
         for (key, value) in delta.updated_attributes.iter() {
-            // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
+            // tick liquidity keys are in the format "ticks/{tick_index}/net_liquidity"
             if key.starts_with("ticks/") {
                 let parts: Vec<&str> = key.split('/').collect();
                 self.ticks
@@ -426,8 +426,8 @@ impl ProtocolSim for VelodromeSlipstreamsState {
         }
         // delete ticks - ignores deletes for attributes other than tick liquidity
         for key in delta.deleted_attributes.iter() {
-            // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
-            if key.starts_with("tick/") {
+            // tick liquidity keys are in the format "ticks/{tick_index}/net_liquidity"
+            if key.starts_with("ticks/") {
                 let parts: Vec<&str> = key.split('/').collect();
                 self.ticks
                     .set_tick_liquidity(

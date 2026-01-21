@@ -15,7 +15,7 @@ use tycho_common::{
     models::token::Token,
     simulation::{
         errors::{SimulationError, TransitionError},
-        protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
+        protocol_sim::{Balances, GetAmountOutResult, PoolSwap, ProtocolSim, QueryPoolSwapParams},
     },
     Bytes,
 };
@@ -161,6 +161,10 @@ impl ProtocolSim for EkuboState {
             })?,
             BigUint::ZERO,
         ))
+    }
+
+    fn query_pool_swap(&self, params: &QueryPoolSwapParams) -> Result<PoolSwap, SimulationError> {
+        crate::evm::query_pool_swap::query_pool_swap(self, params)
     }
 }
 

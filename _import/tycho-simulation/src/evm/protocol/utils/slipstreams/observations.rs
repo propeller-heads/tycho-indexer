@@ -69,6 +69,16 @@ impl Observations {
         Self { observations }
     }
 
+    fn observation_index_err(&self, idx: usize, index: u16, cardinality: u16) -> SimulationError {
+        SimulationError::FatalError(format!(
+            "Observation index {} out of bounds (len={}), index={} cardinality={}",
+            idx,
+            self.observations.len(),
+            index,
+            cardinality
+        ))
+    }
+
     pub fn upsert_observation(&mut self, index: i32, bytes: &[u8]) -> Result<(), SimulationError> {
         let idx = index as usize;
         if bytes.is_empty() {
@@ -135,19 +145,30 @@ impl Observations {
         index: u16,
         cardinality: u16,
     ) -> Result<(Observation, Observation), SimulationError> {
+        if self.observations.is_empty() {
+            return Err(SimulationError::FatalError("No observations available".to_string()));
+        }
         let mut l = (index as usize + 1) % cardinality as usize;
         let mut r = l + cardinality as usize - 1;
 
         loop {
             let i = (l + r) / 2;
-            let before_or_at = self.observations[i % cardinality as usize];
+            let before_idx = i % cardinality as usize;
+            if before_idx >= self.observations.len() {
+                return Err(self.observation_index_err(before_idx, index, cardinality));
+            }
+            let before_or_at = self.observations[before_idx];
 
             if !before_or_at.initialized {
                 l = i + 1;
                 continue;
             }
 
-            let at_or_after = self.observations[(i + 1) % cardinality as usize];
+            let after_idx = (i + 1) % cardinality as usize;
+            if after_idx >= self.observations.len() {
+                return Err(self.observation_index_err(after_idx, index, cardinality));
+            }
+            let at_or_after = self.observations[after_idx];
             let target_at_or_after = lte(time, before_or_at.block_timestamp, target);
             if target_at_or_after && lte(time, target, at_or_after.block_timestamp) {
                 return Ok((before_or_at, at_or_after));
@@ -177,7 +198,11 @@ impl Observations {
         liquidity: u128,
         cardinality: u16,
     ) -> Result<(Observation, Observation), SimulationError> {
-        let mut before_or_at = self.observations[index as usize];
+        let idx = index as usize;
+        if idx >= self.observations.len() {
+            return Err(self.observation_index_err(idx, index, cardinality));
+        }
+        let mut before_or_at = self.observations[idx];
 
         if lte(time, before_or_at.block_timestamp, target) {
             if before_or_at.block_timestamp == target {
@@ -186,8 +211,15 @@ impl Observations {
             return Ok((before_or_at, transform(&before_or_at, target, tick, liquidity)?));
         }
 
-        before_or_at = self.observations[(index as usize + 1) % cardinality as usize];
+        let next_idx = (index as usize + 1) % cardinality as usize;
+        if next_idx >= self.observations.len() {
+            return Err(self.observation_index_err(next_idx, index, cardinality));
+        }
+        before_or_at = self.observations[next_idx];
         if !before_or_at.initialized {
+            if self.observations.is_empty() {
+                return Err(SimulationError::FatalError("No observations available".to_string()));
+            }
             before_or_at = self.observations[0];
         }
 
@@ -210,7 +242,11 @@ impl Observations {
         cardinality: u16,
     ) -> Result<(i64, U256), SimulationError> {
         if seconds_ago == 0 {
-            let mut last = self.observations[index as usize];
+            let idx = index as usize;
+            if idx >= self.observations.len() {
+                return Err(self.observation_index_err(idx, index, cardinality));
+            }
+            let mut last = self.observations[idx];
             if last.block_timestamp != time {
                 last = transform(&last, time, tick, liquidity)?;
             }

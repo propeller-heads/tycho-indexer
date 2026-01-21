@@ -4,7 +4,7 @@ use alloy::primitives::{Sign, I256, U256};
 use num_bigint::{BigInt, BigUint};
 use num_traits::{ToPrimitive, Zero};
 use serde::{Deserialize, Serialize};
-use tracing::trace;
+use tracing::{error, trace};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -40,6 +40,7 @@ use crate::evm::protocol::{
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AerodromeSlipstreamsState {
+    id: String,
     block_timestamp: u64,
     liquidity: u128,
     sqrt_price: U256,
@@ -57,6 +58,7 @@ impl AerodromeSlipstreamsState {
     /// Creates a new instance of `AerodromeSlipstreamsState`.
     ///
     /// # Arguments
+    /// - `id`: The id of the protocol component.
     /// - `block_timestamp`: The timestamp of the block.
     /// - `liquidity`: The initial liquidity of the pool.
     /// - `sqrt_price`: The square root of the current price.
@@ -71,6 +73,7 @@ impl AerodromeSlipstreamsState {
     /// - `dfc`: The dynamic fee configuration for the pool.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
+        id: String,
         block_timestamp: u64,
         liquidity: u128,
         sqrt_price: U256,
@@ -85,6 +88,7 @@ impl AerodromeSlipstreamsState {
     ) -> Result<Self, SimulationError> {
         let tick_list = TickList::from(tick_spacing as u16, ticks)?;
         Ok(AerodromeSlipstreamsState {
+            id,
             block_timestamp,
             liquidity,
             sqrt_price,
@@ -99,7 +103,7 @@ impl AerodromeSlipstreamsState {
         })
     }
 
-    fn get_fee(&self) -> u32 {
+    fn get_fee(&self) -> Result<u32, SimulationError> {
         get_dynamic_fee(
             &self.dfc,
             self.default_fee,
@@ -148,7 +152,7 @@ impl AerodromeSlipstreamsState {
         };
         let mut gas_used = U256::from(130_000);
 
-        let fee = self.get_fee();
+        let fee = self.get_fee()?;
         while state.amount_remaining != I256::from_raw(U256::from(0u64))
             && state.sqrt_price != price_limit
         {
@@ -268,7 +272,18 @@ impl AerodromeSlipstreamsState {
 #[typetag::serde]
 impl ProtocolSim for AerodromeSlipstreamsState {
     fn fee(&self) -> f64 {
-        self.get_fee() as f64 / 1_000_000.0
+        match self.get_fee() {
+            Ok(fee) => fee as f64 / 1_000_000.0,
+            Err(err) => {
+                error!(
+                    pool = %self.id,
+                    block_timestamp = self.block_timestamp,
+                    %err,
+                    "Error while calculating dynamic fee"
+                );
+                f64::MAX / 1_000_000.0
+            }
+        }
     }
 
     fn spot_price(&self, a: &Token, b: &Token) -> Result<f64, SimulationError> {
@@ -277,7 +292,7 @@ impl ProtocolSim for AerodromeSlipstreamsState {
         } else {
             1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, b.decimals, a.decimals)?
         };
-        Ok(add_fee_markup(price, self.fee()))
+        Ok(add_fee_markup(price, self.get_fee()? as f64 / 1_000_000.0))
     }
 
     fn get_amount_out(
@@ -506,7 +521,7 @@ impl ProtocolSim for AerodromeSlipstreamsState {
 
         // apply tick & observations changes
         for (key, value) in delta.updated_attributes.iter() {
-            // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
+            // tick liquidity keys are in the format "ticks/{tick_index}/net_liquidity"
             if key.starts_with("ticks/") {
                 let parts: Vec<&str> = key.split('/').collect();
                 self.ticks
@@ -530,8 +545,8 @@ impl ProtocolSim for AerodromeSlipstreamsState {
         }
         // delete ticks - ignores deletes for attributes other than tick liquidity
         for key in delta.deleted_attributes.iter() {
-            // tick liquidity keys are in the format "tick/{tick_index}/net_liquidity"
-            if key.starts_with("tick/") {
+            // tick liquidity keys are in the format "ticks/{tick_index}/net_liquidity"
+            if key.starts_with("ticks/") {
                 let parts: Vec<&str> = key.split('/').collect();
                 self.ticks
                     .set_tick_liquidity(
@@ -572,13 +587,29 @@ impl ProtocolSim for AerodromeSlipstreamsState {
             .as_any()
             .downcast_ref::<AerodromeSlipstreamsState>()
         {
+            let self_fee = match self.get_fee() {
+                Ok(fee) => fee,
+                Err(_) => return false,
+            };
+            let other_fee = match other_state.get_fee() {
+                Ok(fee) => fee,
+                Err(_) => return false,
+            };
+
             self.liquidity == other_state.liquidity
                 && self.sqrt_price == other_state.sqrt_price
-                && self.get_fee() == other_state.get_fee()
+                && self_fee == other_fee
                 && self.tick == other_state.tick
                 && self.ticks == other_state.ticks
         } else {
             false
         }
+    }
+
+    fn query_pool_swap(
+        &self,
+        params: &tycho_common::simulation::protocol_sim::QueryPoolSwapParams,
+    ) -> Result<tycho_common::simulation::protocol_sim::PoolSwap, SimulationError> {
+        crate::evm::query_pool_swap::query_pool_swap(self, params)
     }
 }

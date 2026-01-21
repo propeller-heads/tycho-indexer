@@ -227,6 +227,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for AerodromeSlipstreamsS
         observations.sort_by_key(|observation| observation.index);
 
         AerodromeSlipstreamsState::new(
+            snapshot.component.id.clone(),
             block.timestamp,
             liquidity,
             sqrt_price,
