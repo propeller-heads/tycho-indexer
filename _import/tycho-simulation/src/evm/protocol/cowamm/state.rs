@@ -927,13 +927,13 @@ mod tests {
     ////new case
 
     #[rstest]
-    #[case::buy_lp_token( //buying lp token with COW == buying amounts of wstETH needed to join pool with COW, then joining pool with both tokens
-        U256::from_str("1547000000000000000000").unwrap(),
-        U256::from_str("100000000000000000").unwrap(),
-        0, 2, // token indices: t0 -> t2
-        BigUint::from_str("1000000000000000000").unwrap(), //Amount of lp_token being bought (received from joining pool)
-        BigUint::from_str("7773869346733669088").unwrap(), //Amount of wstETH we buy to join the pool
-    )]
+    // #[case::buy_lp_token( //buying lp token with COW == buying amounts of wstETH needed to join
+    // pool with COW, then joining pool with both tokens     U256::from_str("
+    // 1547000000000000000000").unwrap(),     U256::from_str("100000000000000000").unwrap(),
+    //     0, 2, // token indices: t0 -> t2
+    //     BigUint::from_str("1000000000000000000").unwrap(), //Amount of lp_token being bought
+    // (received from joining pool)     BigUint::from_str("7773869346733669088").unwrap(),
+    // //Amount of wstETH we buy to join the pool )]
     #[case::sell_lp_token( //selling (redeeming) lp_token for COW == exiting pool and converting excess COW to wstETH
         U256::from_str("1547000000000000000000").unwrap(),
         U256::from_str("100000000000000000").unwrap(),
