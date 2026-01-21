@@ -15,6 +15,7 @@ use tycho_simulation::{
         engine_db::tycho_db::PreCachedDB,
         protocol::{
             aerodrome_slipstreams::state::AerodromeSlipstreamsState,
+            cowamm::state::CowAMMState,
             ekubo::state::EkuboState,
             erc4626::state::ERC4626State,
             filters::{balancer_v2_pool_filter, erc4626_filter, fluid_v1_paused_pools_filter},
@@ -26,7 +27,6 @@ use tycho_simulation::{
             uniswap_v4::state::UniswapV4State,
             velodrome_slipstreams::state::VelodromeSlipstreamsState,
             vm::state::EVMPoolState,
-            cowamm::state::CowAMMState,
         },
         stream::ProtocolStreamBuilder,
     },
@@ -274,11 +274,7 @@ impl ProtocolStreamProcessor {
                 );
             }
             "cowamm" => {
-                stream = stream.exchange::<CowAMMState>(
-                    "cowamm",
-                    tvl_filter.clone(),
-                    None,
-                );
+                stream = stream.exchange::<CowAMMState>("cowamm", tvl_filter.clone(), None);
             }
             _ => {
                 return Err(miette::miette!("Unknown protocol: {}", protocol));

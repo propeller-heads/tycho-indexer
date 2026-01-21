@@ -23,9 +23,9 @@ use tracing::{debug, error, info, warn};
 use tracing_subscriber::EnvFilter;
 use tycho_common::simulation::protocol_sim::ProtocolSim;
 use tycho_simulation::{
+    evm::protocol::cowamm::constants::PROTOCOL_SYSTEM,
     protocol::models::ProtocolComponent,
     rfq::protocols::hashflow::{client::HashflowClient, state::HashflowState},
-    evm::protocol::cowamm::constants::PROTOCOL_SYSTEM,
     tycho_common::models::Chain,
     utils::load_all_tokens,
 };
