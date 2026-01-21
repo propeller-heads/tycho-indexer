@@ -58,6 +58,10 @@ contract TychoRouterExposed is TychoRouter {
     {
         return _sequentialSwap(amountIn, swaps);
     }
+
+    function exposedDeltaAccounting(address token, uint256 amount) external {
+        _updateDeltaAccounting(token, int256(amount));
+    }
 }
 
 contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {

@@ -142,14 +142,13 @@ contract FeeCalculatorTest is Constants {
         // 1. solverFee = 1 ether * 200 / 10000 = 0.02 ether
         //    routerFeeOnSolverFee = 0.02 ether * 500 / 10000 = 0.001 ether
         //    solverPortion = 0.02 - 0.001 = 0.019 ether
-        //    amountAfterSolverFee = 1 ether - 0.02 ether = 0.98 ether
-        // 2. routerFeeOnOutput = 0.98 ether * 50 / 10000 = 0.0049 ether
-        //    amountOut = 0.98 ether - 0.0049 ether = 0.9751 ether
-        //    totalRouterFee = 0.001 + 0.0049 = 0.0059 ether
-        assertEq(amountOut, 0.9751 ether);
+        // 2. routerFeeOnOutput = 1 ether * 50 / 10000 = 0.005 ether (calculated on original amount)
+        //    totalRouterFee = 0.001 + 0.005 = 0.006 ether
+        //    amountOut = 1 ether - 0.019 ether - 0.006 ether = 0.975 ether
+        assertEq(amountOut, 0.975 ether);
         // Router fee
         assertEq(feeRecipients[0].recipient, address(this));
-        assertEq(feeRecipients[0].feeAmount, 0.0059 ether);
+        assertEq(feeRecipients[0].feeAmount, 0.006 ether);
         // Solver fee
         assertEq(feeRecipients[1].recipient, DUMMY);
         assertEq(feeRecipients[1].feeAmount, 0.019 ether);
@@ -253,14 +252,14 @@ contract FeeCalculatorTest is Constants {
 
         // 1. solverFee = 1 ether * 200 / 10000 = 0.02 ether
         //    routerFeeOnSolverFee = 0.02 * 500 / 10000 = 0.001 ether (custom 5%)
-        //    amountAfterSolverFee = 1 ether - 0.02 = 0.98 ether
-        // 2. routerFeeOnOutput = 0.98 * 50 / 10000 = 0.0049 ether (custom 0.5%)
-        //    amountOut = 0.98 - 0.0049 = 0.9751 ether
-        //    totalRouterFee = 0.001 + 0.0049 = 0.0059 ether
-        assertEq(amountOut, 0.9751 ether);
+        //    solverPortion = 0.02 - 0.001 = 0.019 ether
+        // 2. routerFeeOnOutput = 1 * 50 / 10000 = 0.005 ether (custom 0.5%, calculated on original amount)
+        //    totalRouterFee = 0.001 + 0.005 = 0.006 ether
+        //    amountOut = 1 - 0.019 - 0.006 = 0.975 ether
+        assertEq(amountOut, 0.975 ether);
         // Router fee
         assertEq(feeRecipients[0].recipient, address(this));
-        assertEq(feeRecipients[0].feeAmount, 0.0059 ether);
+        assertEq(feeRecipients[0].feeAmount, 0.006 ether);
         // Solver fee
         assertEq(feeRecipients[1].recipient, DUMMY);
         assertEq(feeRecipients[1].feeAmount, 0.019 ether); // 0.02 - 0.001 router cut

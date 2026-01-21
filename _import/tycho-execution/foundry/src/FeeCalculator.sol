@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {FeeRecipient} from "../lib/FeeStructs.sol";
+import {IFeeCalculator} from "@interfaces/IFeeCalculator.sol";
 
 error FeeCalculator__FeeTooHigh();
 error FeeCalculator__AddressZero();
@@ -14,7 +15,7 @@ error FeeCalculator__AddressZero();
  *      It calculates fees and returns the values - accounting is done by the caller.
  *      It also stores all fee-related configuration.
  */
-contract FeeCalculator is AccessControl {
+contract FeeCalculator is AccessControl, IFeeCalculator {
     uint16 private constant MAX_FEE_BPS = 10000; // 100% max
 
     uint16 private _routerFeeOnOutputBps; // Router fee on output amount in basis points
@@ -56,7 +57,7 @@ contract FeeCalculator is AccessControl {
 
     /**
      * @notice Calculates fees from the swap output amount
-     * @dev Called via staticcall from TychoRouter. Does not perform any accounting.
+     * @dev Called from TychoRouter. Does not perform any accounting.
      *      Router fee parameters are retrieved from contract storage based on the user address.
      *      Solver fee parameters are passed as function arguments.
      * @param amountIn The amount before fee deduction
@@ -96,7 +97,6 @@ contract FeeCalculator is AccessControl {
             // divide-before-multiply precision loss and warning
             uint256 solverFeeNumerator = amountOut * solverFeeBps;
             uint256 totalSolverFee = solverFeeNumerator / 10_000;
-            amountOut -= totalSolverFee;
 
             // Calculate router's cut of the solver fee
             if (routerFeeOnSolverFeeBps > 0) {
@@ -114,9 +114,11 @@ contract FeeCalculator is AccessControl {
         if (routerFeeOnOutputBps > 0) {
             uint256 routerFeeOnOutput =
                 (amountOut * routerFeeOnOutputBps) / 10000;
-            amountOut -= routerFeeOnOutput;
             totalRouterFee += routerFeeOnOutput;
         }
+
+        // Update amountOut considering both fees
+        amountOut -= (solverPortion + totalRouterFee);
 
         // Build fee recipients array
         feeRecipients = new FeeRecipient[](2);

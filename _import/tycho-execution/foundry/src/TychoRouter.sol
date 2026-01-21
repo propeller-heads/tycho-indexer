@@ -22,6 +22,8 @@ import {ERC6909} from "@openzeppelin/contracts/token/ERC6909/ERC6909.sol";
 import {Dispatcher} from "./Dispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
 import {RestrictTransferFrom} from "./RestrictTransferFrom.sol";
+import {IFeeCalculator} from "@interfaces/IFeeCalculator.sol";
+import {FeeRecipient} from "../lib/FeeStructs.sol";
 
 //                                         ✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷
 //                                   ✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷
@@ -73,7 +75,7 @@ error TychoRouter__InvalidDataLength();
 error TychoRouter__UndefinedMinAmountOut();
 
 contract TychoRouter is AccessControl, Dispatcher, Pausable {
-    address private _feeCalculator; // Address of the fee calculator contract
+    IFeeCalculator private _feeCalculator; // Fee calculator contract
 
     using SafeERC20 for IERC20;
     using LibPrefixLengthEncodedByteArray for bytes;
@@ -149,6 +151,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address solverFeeReceiver,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+        _updateNativeDeltaAccounting();
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         _tstoreTransferFromInfo(tokenIn, amountIn, false, isTransferFromAllowed);
 
@@ -160,6 +163,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             initialBalanceTokenOut,
             nTokens,
             receiver,
+            solverFeeBps,
+            solverFeeReceiver,
             swaps
         );
     }
@@ -198,6 +203,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         bytes calldata signature,
         bytes calldata swaps
     ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+        _updateNativeDeltaAccounting();
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
@@ -213,6 +219,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             initialBalanceTokenOut,
             nTokens,
             receiver,
+            solverFeeBps,
+            solverFeeReceiver,
             swaps
         );
     }
@@ -246,6 +254,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address solverFeeReceiver,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+        _updateNativeDeltaAccounting();
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         _tstoreTransferFromInfo(tokenIn, amountIn, false, isTransferFromAllowed);
 
@@ -256,6 +265,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             minAmountOut,
             initialBalanceTokenOut,
             receiver,
+            solverFeeBps,
+            solverFeeReceiver,
             swaps
         );
     }
@@ -291,6 +302,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         bytes calldata signature,
         bytes calldata swaps
     ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+        _updateNativeDeltaAccounting();
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
@@ -306,6 +318,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             minAmountOut,
             initialBalanceTokenOut,
             receiver,
+            solverFeeBps,
+            solverFeeReceiver,
             swaps
         );
     }
@@ -338,6 +352,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address solverFeeReceiver,
         bytes calldata swapData
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+        _updateNativeDeltaAccounting();
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         _tstoreTransferFromInfo(tokenIn, amountIn, false, isTransferFromAllowed);
 
@@ -348,6 +363,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             minAmountOut,
             initialBalanceTokenOut,
             receiver,
+            solverFeeBps,
+            solverFeeReceiver,
             swapData
         );
     }
@@ -383,6 +400,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         bytes calldata signature,
         bytes calldata swapData
     ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+        _updateNativeDeltaAccounting();
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
@@ -397,6 +415,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             minAmountOut,
             initialBalanceTokenOut,
             receiver,
+            solverFeeBps,
+            solverFeeReceiver,
             swapData
         );
     }
@@ -409,6 +429,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * splitSwap() and splitSwapPermit2() functions.
      *
      */
+    // State writes in _takeFees after external calls are safe because all public entry points use nonReentrant modifier
+    // slither-disable-next-line reentrancy-benign
     function _splitSwapChecked(
         uint256 amountIn,
         address tokenIn,
@@ -417,6 +439,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 initialBalanceTokenOut,
         uint256 nTokens,
         address receiver,
+        uint16 solverFeeBps,
+        address solverFeeReceiver,
         bytes calldata swaps
     ) internal returns (uint256 amountOut) {
         if (receiver == address(0)) {
@@ -426,10 +450,29 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             revert TychoRouter__UndefinedMinAmountOut();
         }
 
-        amountOut = _splitSwap(amountIn, nTokens, swaps);
+        uint256 amountOutBeforeFees = _splitSwap(amountIn, nTokens, swaps);
+        amountOut = _takeFees(
+            tokenOut,
+            amountOutBeforeFees,
+            msg.sender,
+            solverFeeBps,
+            solverFeeReceiver
+        );
+
+        // Finalize all transient deltas to persistent storage
+        _finalizeBalances(msg.sender, tokenIn, amountIn);
 
         if (amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
+        }
+
+        // If fees were taken, transfer the amount after fees to the receiver
+        if (amountOut < amountOutBeforeFees) {
+            if (tokenOut == address(0)) {
+                Address.sendValue(payable(receiver), amountOut);
+            } else {
+                IERC20(tokenOut).safeTransfer(receiver, amountOut);
+            }
         }
 
         _verifyAmountOutWasReceived(
@@ -450,6 +493,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * singleSwap() and singleSwapPermit2() functions.
      *
      */
+    // State writes in _takeFees after external calls are safe because all public entry points use nonReentrant modifier
+    // slither-disable-next-line reentrancy-benign
     function _singleSwap(
         uint256 amountIn,
         address tokenIn,
@@ -457,6 +502,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 minAmountOut,
         uint256 initialBalanceTokenOut,
         address receiver,
+        uint16 solverFeeBps,
+        address solverFeeReceiver,
         bytes calldata swap_
     ) internal returns (uint256 amountOut) {
         if (receiver == address(0)) {
@@ -469,10 +516,30 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         (address executor, bytes calldata protocolData) =
             swap_.decodeSingleSwap();
 
-        amountOut = _callSwapOnExecutor(executor, amountIn, protocolData);
+        uint256 amountOutBeforeFees =
+            _callSwapOnExecutor(executor, amountIn, protocolData);
+        amountOut = _takeFees(
+            tokenOut,
+            amountOutBeforeFees,
+            msg.sender,
+            solverFeeBps,
+            solverFeeReceiver
+        );
+
+        // Finalize all transient deltas to persistent storage
+        _finalizeBalances(msg.sender, tokenIn, amountIn);
 
         if (amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
+        }
+
+        // If fees were taken, transfer the amount after fees to the receiver
+        if (amountOut < amountOutBeforeFees) {
+            if (tokenOut == address(0)) {
+                Address.sendValue(payable(receiver), amountOut);
+            } else {
+                IERC20(tokenOut).safeTransfer(receiver, amountOut);
+            }
         }
 
         _verifyAmountOutWasReceived(
@@ -493,6 +560,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * sequentialSwap() and sequentialSwapPermit2() functions.
      *
      */
+    // State writes in _takeFees after external calls are safe because all public entry points use nonReentrant modifier
+    // slither-disable-next-line reentrancy-benign
     function _sequentialSwapChecked(
         uint256 amountIn,
         address tokenIn,
@@ -500,6 +569,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 minAmountOut,
         uint256 initialBalanceTokenOut,
         address receiver,
+        uint16 solverFeeBps,
+        address solverFeeReceiver,
         bytes calldata swaps
     ) internal returns (uint256 amountOut) {
         if (receiver == address(0)) {
@@ -509,10 +580,29 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             revert TychoRouter__UndefinedMinAmountOut();
         }
 
-        amountOut = _sequentialSwap(amountIn, swaps);
+        uint256 amountOutBeforeFees = _sequentialSwap(amountIn, swaps);
+        amountOut = _takeFees(
+            tokenOut,
+            amountOutBeforeFees,
+            msg.sender,
+            solverFeeBps,
+            solverFeeReceiver
+        );
+
+        // Finalize all transient deltas to persistent storage
+        _finalizeBalances(msg.sender, tokenIn, amountIn);
 
         if (amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
+        }
+
+        // If fees were taken, transfer the amount after fees to the receiver
+        if (amountOut < amountOutBeforeFees) {
+            if (tokenOut == address(0)) {
+                Address.sendValue(payable(receiver), amountOut);
+            } else {
+                IERC20(tokenOut).safeTransfer(receiver, amountOut);
+            }
         }
 
         _verifyAmountOutWasReceived(
@@ -689,8 +779,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         if (feeCalculator == address(0)) {
             revert TychoRouter__AddressZero();
         }
-        address oldCalculator = _feeCalculator;
-        _feeCalculator = feeCalculator;
+        address oldCalculator = address(_feeCalculator);
+        _feeCalculator = IFeeCalculator(feeCalculator);
         emit FeeCalculatorUpdated(oldCalculator, feeCalculator);
     }
 
@@ -698,7 +788,46 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @dev Returns the current fee calculator address
      */
     function getFeeCalculator() external view returns (address) {
-        return _feeCalculator;
+        return address(_feeCalculator);
+    }
+
+    /**
+     * @notice Calculates and takes fees using the FeeCalculator contract
+     * @param token The token address for which fees are being taken
+     * @param amountIn The amount before fee deduction
+     * @param user The user address to look up custom router fees for
+     * @param solverFeeBps Solver fee in basis points
+     * @param solverFeeReceiver Address to receive solver fees
+     * @return amountOut The amount remaining after all fee deductions
+     */
+    function _takeFees(
+        address token,
+        uint256 amountIn,
+        address user,
+        uint16 solverFeeBps,
+        address solverFeeReceiver
+    ) internal returns (uint256 amountOut) {
+        // If no fee calculator is set, return the full amount without taking fees
+        if (address(_feeCalculator) == address(0)) {
+            return amountIn;
+        }
+
+        FeeRecipient[] memory fees;
+        (amountOut, fees) = _feeCalculator.calculateFee(
+            amountIn, user, solverFeeBps, solverFeeReceiver
+        );
+
+        for (uint256 i = 0; i < fees.length; i++) {
+            if (fees[i].feeAmount > 0) {
+                // We still need to update the delta accounting to ensure the funds are
+                // in the router after the final swap and have not bypassed the router
+                // due to incorrect or malicious encoding. Updating the delta
+                // accounting without funds will result in an additional negative
+                // delta, and cause the _finalizeBalances method to revert.
+                _updateDeltaAccounting(token, -int256(fees[i].feeAmount));
+                _creditVault(fees[i].recipient, token, fees[i].feeAmount);
+            }
+        }
     }
 
     /**
@@ -706,6 +835,16 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      */
     receive() external payable {
         require(msg.sender.code.length != 0);
+    }
+
+    /**
+     * @dev Updates delta accounting for native ETH received via msg.value
+     * @notice This should be called at each entry point to credit the delta when ETH is sent
+     */
+    function _updateNativeDeltaAccounting() internal {
+        if (msg.value > 0) {
+            _updateDeltaAccounting(address(0), int256(msg.value));
+        }
     }
 
     /**
