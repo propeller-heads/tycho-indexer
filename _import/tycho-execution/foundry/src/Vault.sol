@@ -328,8 +328,6 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
         }
     }
 
-    // slither-disable-end dead-code
-
     // ============ Utils methods ============
 
     /**

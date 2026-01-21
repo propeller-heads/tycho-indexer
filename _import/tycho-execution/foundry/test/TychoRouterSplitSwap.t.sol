@@ -91,9 +91,11 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         // Trade 1 WETH for USDC through DAI and WBTC - see _getSplitSwaps for more info
 
         uint256 amountIn = 1 ether;
-        deal(WETH_ADDR, ALICE, amountIn);
+        uint256 existingVaultBalance = 1.5 ether;
+        deal(WETH_ADDR, ALICE, amountIn + existingVaultBalance);
 
         vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, existingVaultBalance);
         (
             IAllowanceTransfer.PermitSingle memory permitSingle,
             bytes memory signature
@@ -101,6 +103,8 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
 
         bytes[] memory swaps = _getSplitSwaps(true);
 
+        // Alice has an existing Vault balance which should not be used.
+        tychoRouter.deposit(WETH_ADDR, existingVaultBalance);
         tychoRouter.splitSwapPermit2(
             amountIn,
             WETH_ADDR,
@@ -118,19 +122,31 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
 
         uint256 usdcBalance = IERC20(USDC_ADDR).balanceOf(ALICE);
         assertEq(usdcBalance, 1989737355);
-        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
+        assertEq(
+            IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), existingVaultBalance
+        );
+        assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), 0);
+        // Check that ALICE's Vault balance was not affected.
+        assertEq(
+            tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR))),
+            existingVaultBalance
+        );
     }
 
     function testSplitSwapNoPermit2() public {
         // Trade 1 WETH for USDC through DAI and WBTC - see _getSplitSwaps for more info
         uint256 amountIn = 1 ether;
-        deal(WETH_ADDR, ALICE, amountIn);
+        uint256 existingVaultBalance = 1.5 ether;
+        deal(WETH_ADDR, ALICE, amountIn + existingVaultBalance);
 
         vm.startPrank(ALICE);
-        IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
+        IERC20(WETH_ADDR)
+            .approve(tychoRouterAddr, amountIn + existingVaultBalance);
 
         bytes[] memory swaps = _getSplitSwaps(true);
 
+        // Alice has an existing Vault balance which should not be used.
+        tychoRouter.deposit(WETH_ADDR, existingVaultBalance);
         tychoRouter.splitSwap(
             amountIn,
             WETH_ADDR,
@@ -147,7 +163,15 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
 
         uint256 usdcBalance = IERC20(USDC_ADDR).balanceOf(ALICE);
         assertEq(usdcBalance, 1989737355);
+        assertEq(
+            IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), existingVaultBalance
+        );
         assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), 0);
+        // Check that ALICE's Vault balance was not affected.
+        assertEq(
+            tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR))),
+            existingVaultBalance
+        );
     }
 
     function testSplitSwapUndefinedMinAmount() public {
