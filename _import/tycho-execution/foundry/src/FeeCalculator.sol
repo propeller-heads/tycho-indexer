@@ -97,7 +97,6 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
             // divide-before-multiply precision loss and warning
             uint256 solverFeeNumerator = amountOut * solverFeeBps;
             uint256 totalSolverFee = solverFeeNumerator / 10_000;
-            amountOut -= totalSolverFee;
 
             // Calculate router's cut of the solver fee
             if (routerFeeOnSolverFeeBps > 0) {
@@ -115,9 +114,11 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
         if (routerFeeOnOutputBps > 0) {
             uint256 routerFeeOnOutput =
                 (amountOut * routerFeeOnOutputBps) / 10000;
-            amountOut -= routerFeeOnOutput;
             totalRouterFee += routerFeeOnOutput;
         }
+
+        // Update amountOut considering both fees
+        amountOut -= (solverPortion + totalRouterFee);
 
         // Build fee recipients array
         feeRecipients = new FeeRecipient[](2);

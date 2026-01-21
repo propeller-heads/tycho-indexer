@@ -81,20 +81,19 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         // 1. Swap sends full output to router (2018817438608734439722 DAI)
         // 2. takeFees deducts fees and credits fee recipients' vaults
         // 3. Router transfers amountOut (after fees) to ALICE's address
-        // 4. ALICE receives 1958656678938194153419 DAI in her address
+        // 4. ALICE receives 1958252915450472406531 DAI in her address
         // 5. Fee recipients have fees in their vaults
 
         // Expected fees with all three fee types:
         // 1. solverFee = 2018817438608734439722 * 200 / 10000 = 40376348772174688794
         //    routerFeeOnSolverFee = 40376348772174688794 * 1000 / 10000 = 4037634877217468879
         //    solverPortion = 40376348772174688794 - 4037634877217468879 = 36338713894957219915
-        //    amountAfterSolverFee = 2018817438608734439722 - 40376348772174688794 = 1978441089836559750928
-        // 2. routerFeeOnOutput = 1978441089836559750928 * 100 / 10000 = 19784410898365597509
-        //    amountOut = 1978441089836559750928 - 19784410898365597509 = 1958656678938194153419
-        //    totalRouterFee = 4037634877217468879 + 19784410898365597509 = 23822045775583066388
-        uint256 expectedRouterFee = 23822045775583066388;
+        // 2. routerFeeOnOutput = 2018817438608734439722 * 100 / 10000 = 20188174386087344397 (calculated on original amount)
+        //    totalRouterFee = 4037634877217468879 + 20188174386087344397 = 24225809263304813276
+        // 3. amountOut = 2018817438608734439722 - 36338713894957219915 - 24225809263304813276 = 1958252915450472406531
+        uint256 expectedRouterFee = 24225809263304813276;
         uint256 expectedSolverFee = 36338713894957219915;
-        uint256 expectedAmountOut = 1958656678938194153419;
+        uint256 expectedAmountOut = 1958252915450472406531;
 
         assertEq(swapOutput, expectedAmountOut);
 
