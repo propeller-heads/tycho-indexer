@@ -1,3 +1,16 @@
+## [0.13.0](https://github.com/propeller-heads/tycho-contracts/compare/0.12.0...0.13.0) (2026-01-21)
+
+
+### Features
+
+* add test for balance when router is the receiver ([741e194](https://github.com/propeller-heads/tycho-contracts/commit/741e19449ed3e4af734a62c5d85b5e40101a3c91))
+* credit vault after each swap if tokens stay in router ([fe11d83](https://github.com/propeller-heads/tycho-contracts/commit/fe11d839e127c95bc248738becf57f937e0e2f91))
+
+
+### Bug Fixes
+
+* override supportsInterface for AccessControl and ERC6909 ([454f6e6](https://github.com/propeller-heads/tycho-contracts/commit/454f6e679684152160d1fceca8e4dc77353e4a2a))
+
 ## [0.12.0](https://github.com/propeller-heads/tycho-contracts/compare/0.11.1...0.12.0) (2026-01-20)
 
 
