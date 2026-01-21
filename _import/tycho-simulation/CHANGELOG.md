@@ -1,3 +1,10 @@
+## [0.231.0](https://github.com/propeller-heads/tycho-simulation/compare/0.230.0...0.231.0) (2026-01-21)
+
+
+### Features
+
+* update tycho dependencies to 0.130.0 ([c8a201b](https://github.com/propeller-heads/tycho-simulation/commit/c8a201b8d949a52be347bcd9207e277c7ee1f7f6))
+
 ## [0.230.0](https://github.com/propeller-heads/tycho-simulation/compare/0.229.1...0.230.0) (2026-01-21)
 
 
