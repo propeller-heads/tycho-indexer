@@ -807,6 +807,9 @@ contract TychoRouter is
         Vault._updateDeltaAccounting(token, deltaChange);
     }
 
+    /**
+     * @dev Returns true if this contract implements the interface defined by `interfaceId`.
+     */
     function supportsInterface(bytes4 interfaceId)
         public
         view
