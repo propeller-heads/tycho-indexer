@@ -125,6 +125,12 @@ contract Dispatcher is RestrictTransferFrom {
         address receiver;
         (calculatedAmount, tokenOut, receiver) =
             abi.decode(result, (uint256, address, address));
+
+        // Update delta accounting (transient storage) if tokens stayed in router
+        if (receiver == address(this)) {
+            // slither-disable-next-line calls-loop
+            _updateDeltaAccounting(tokenOut, int256(calculatedAmount));
+        }
     }
 
     // slither-disable-next-line assembly

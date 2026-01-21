@@ -180,8 +180,6 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
 
     // ============ Tracking deltas methods ============
 
-    // TODO: remove dead-code once used
-    // slither-disable-start dead-code
     /**
      * @dev Internal helper to get transient storage slot for a token delta
      * @notice Only needs token since transient storage is scoped to current transaction's sender
@@ -267,6 +265,8 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
 
     // ============ Vault accounting ============
 
+    // TODO: remove dead-code once used
+    // slither-disable-start dead-code
     /**
      * @dev Internal helper to debit user's actual vault balance (persistent storage)
      * @notice This debits the persistent vault balance, not the transient delta
