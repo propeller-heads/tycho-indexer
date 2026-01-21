@@ -1,3 +1,17 @@
+## [0.14.0](https://github.com/propeller-heads/tycho-contracts/compare/0.13.0...0.14.0) (2026-01-21)
+
+
+### Features
+
+* call _finalizeBalances, check for native ETH in msg.value ([ac41956](https://github.com/propeller-heads/tycho-contracts/commit/ac4195650642563cb51ba628005ee985eb621a7b))
+* Take fees in TychoRouter ([c31c9a8](https://github.com/propeller-heads/tycho-contracts/commit/c31c9a8e1fd29788b15324c794f5dba40bdf30ff))
+
+
+### Bug Fixes
+
+* fee subtraction in calculator ([a0cb3f0](https://github.com/propeller-heads/tycho-contracts/commit/a0cb3f0391714e9a55cad975e05a9d7e9378535b))
+* silence slither warnings with comment ([cd7082c](https://github.com/propeller-heads/tycho-contracts/commit/cd7082c32580a53dcb6ba8095844f7a8562e201a))
+
 ## [0.13.0](https://github.com/propeller-heads/tycho-contracts/compare/0.12.0...0.13.0) (2026-01-21)
 
 
