@@ -72,8 +72,9 @@ error TychoRouter__AmountOutNotFullyReceived(
 error TychoRouter__InvalidDataLength();
 error TychoRouter__UndefinedMinAmountOut();
 
-contract TychoRouter is Pausable, AccessControl, Dispatcher {
+contract TychoRouter is AccessControl, Dispatcher, Pausable {
     address private _feeCalculator; // Address of the fee calculator contract
+
     using SafeERC20 for IERC20;
     using LibPrefixLengthEncodedByteArray for bytes;
     using LibSwap for bytes;
