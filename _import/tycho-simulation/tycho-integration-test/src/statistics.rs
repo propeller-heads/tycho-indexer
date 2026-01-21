@@ -126,10 +126,10 @@ impl TestStatistics {
                 println!("    Simulations: {}", stats.execution_simulations);
 
                 // Operation statistics
-                let total_ops = stats.get_limits_success +
-                    stats.get_limits_failure +
-                    stats.get_amount_out_success +
-                    stats.get_amount_out_failure;
+                let total_ops = stats.get_limits_success
+                    + stats.get_limits_failure
+                    + stats.get_amount_out_success
+                    + stats.get_amount_out_failure;
                 if total_ops > 0 {
                     println!("    Operations:");
                     println!(
@@ -147,15 +147,15 @@ impl TestStatistics {
                     println!(
                         "      Success: {} ({:.1}%)",
                         stats.execution_successes,
-                        (stats.execution_successes as f64 / stats.execution_simulations as f64) *
-                            100.0
+                        (stats.execution_successes as f64 / stats.execution_simulations as f64)
+                            * 100.0
                     );
                     println!(
                         "      Failed: {} ({:.1}%)",
                         stats.execution_reverts + stats.execution_setup_failures,
-                        ((stats.execution_reverts + stats.execution_setup_failures) as f64 /
-                            stats.execution_simulations as f64) *
-                            100.0
+                        ((stats.execution_reverts + stats.execution_setup_failures) as f64
+                            / stats.execution_simulations as f64)
+                            * 100.0
                     );
                     println!("        - Reverted: {}", stats.execution_reverts);
                     println!("        - Setup Failures: {}", stats.execution_setup_failures);
