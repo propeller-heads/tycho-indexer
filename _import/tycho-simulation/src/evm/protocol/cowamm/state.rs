@@ -401,13 +401,33 @@ impl ProtocolSim for CowAMMState {
     /// // sF = swapFee
     /// // *************************************************************************************
     /// *********/
-    fn spot_price(&self, _base: &Token, _quote: &Token) -> Result<f64, SimulationError> {
-        let numer = bdiv(self.liquidity_a(), self.weight_a()).map_err(|err| {
+    fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
+        let (bal_in, weight_in) = if base.address == *self.token_a_addr() {
+            (self.liquidity_a(), self.weight_a())
+        } else if base.address == self.token_b.0 {
+            (self.liquidity_b(), self.weight_b())
+        } else {
+            return Err(SimulationError::FatalError(
+                "spot_price base token not in pool".to_string(),
+            ));
+        };
+
+        let (bal_out, weight_out) = if quote.address == *self.token_a_addr() {
+            (self.liquidity_a(), self.weight_a())
+        } else if quote.address == self.token_b.0 {
+            (self.liquidity_b(), self.weight_b())
+        } else {
+            return Err(SimulationError::FatalError(
+                "spot_price quote token not in pool".to_string(),
+            ));
+        };
+
+        let numer = bdiv(bal_in, weight_in).map_err(|err| {
             SimulationError::FatalError(format!(
                 "Error in numerator bdiv(balance_base / weight_base): {err:?}"
             ))
         })?;
-        let denom = bdiv(self.liquidity_b(), self.weight_b()).map_err(|err| {
+        let denom = bdiv(bal_out, weight_out).map_err(|err| {
             SimulationError::FatalError(format!(
                 "Error in denominator bdiv(balance_quote / weight_quote): {err:?}"
             ))
