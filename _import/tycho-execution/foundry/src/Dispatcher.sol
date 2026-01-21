@@ -21,7 +21,7 @@ error Dispatcher__AddressZero();
  *  Note: Executor contracts need to implement the IExecutor interface unless
  *  an alternate selector is specified.
  */
-abstract contract Dispatcher is RestrictTransferFrom {
+contract Dispatcher is RestrictTransferFrom {
     mapping(address => bool) public executors;
 
     // keccak256("Dispatcher#CURRENTLY_SWAPPING_EXECUTOR_SLOT")
@@ -58,10 +58,6 @@ abstract contract Dispatcher is RestrictTransferFrom {
         delete executors[target];
         emit ExecutorRemoved(target);
     }
-
-    function _updateDeltaAccounting(address token, int256 deltaChange)
-        internal
-        virtual;
 
     /**
      * @dev Calls an executor, assumes swap.protocolData contains

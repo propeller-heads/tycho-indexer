@@ -22,11 +22,6 @@ contract DispatcherExposed is Dispatcher {
     function exposedRemoveExecutor(address target) external {
         _removeExecutor(target);
     }
-
-    function _updateDeltaAccounting(address token, int256 deltaChange)
-        internal
-        override
-    {}
 }
 
 contract DispatcherTest is Constants {

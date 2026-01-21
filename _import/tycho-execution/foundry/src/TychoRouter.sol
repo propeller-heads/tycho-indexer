@@ -6,13 +6,7 @@ import {
 } from "../lib/bytes/LibPrefixLengthEncodedByteArray.sol";
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-import {
-    IAccessControl
-} from "@openzeppelin/contracts/access/IAccessControl.sol";
-import {ERC6909} from "@openzeppelin/contracts/token/ERC6909/ERC6909.sol";
-import {IERC6909} from "@openzeppelin/contracts/interfaces/IERC6909.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {ERC6909} from "@openzeppelin/contracts/token/ERC6909/ERC6909.sol";
 import {
     SafeERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -26,7 +20,6 @@ import {
 } from "@permit2/src/interfaces/IAllowanceTransfer.sol";
 import {ERC6909} from "@openzeppelin/contracts/token/ERC6909/ERC6909.sol";
 import {Dispatcher} from "./Dispatcher.sol";
-import {Vault} from "./Vault.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
 import {RestrictTransferFrom} from "./RestrictTransferFrom.sol";
 
@@ -74,30 +67,13 @@ error TychoRouter__AddressZero();
 error TychoRouter__EmptySwaps();
 error TychoRouter__NegativeSlippage(uint256 amount, uint256 minAmount);
 error TychoRouter__AmountOutNotFullyReceived(
-    uint256 amountIn,
-    uint256 amountConsumed
+    uint256 amountIn, uint256 amountConsumed
 );
 error TychoRouter__InvalidDataLength();
 error TychoRouter__UndefinedMinAmountOut();
 
-contract TychoRouter is
-    AccessControl,
-    Dispatcher,
-    Pausable,
-    ReentrancyGuard,
-    Vault
-{
+contract TychoRouter is Pausable, AccessControl, Dispatcher {
     address private _feeCalculator; // Address of the fee calculator contract
-
-    // Per-user custom router fees on output amount
-    // If set, this will override the default router fee on output for the user
-    mapping(address => bool) private _hasCustomRouterFeeOnOutput;
-    mapping(address => uint16) private _customRouterFeeOnOutput;
-
-    // Per-user custom router fees on solver fee
-    // If set, this will override the default router fee on the solver fee for the user
-    mapping(address => bool) private _hasCustomRouterFeeOnSolverFee;
-    mapping(address => uint16) private _customRouterFeeOnSolverFee;
     using SafeERC20 for IERC20;
     using LibPrefixLengthEncodedByteArray for bytes;
     using LibSwap for bytes;
@@ -113,13 +89,10 @@ contract TychoRouter is
         0x9939157be7760e9462f1d5a0dcad88b616ddc64138e317108b40b1cf55601348;
 
     event Withdrawal(
-        address indexed token,
-        uint256 amount,
-        address indexed receiver
+        address indexed token, uint256 amount, address indexed receiver
     );
     event FeeCalculatorUpdated(
-        address indexed oldCalculator,
-        address indexed newCalculator
+        address indexed oldCalculator, address indexed newCalculator
     );
 
     constructor(address _permit2) Dispatcher(_permit2) {
@@ -133,12 +106,15 @@ contract TychoRouter is
     /**
      * @notice Override supportsInterface to resolve conflict between AccessControl and ERC6909
      */
-    function supportsInterface(
-        bytes4 interfaceId
-    ) public view virtual override(AccessControl, ERC6909) returns (bool) {
-        return
-            AccessControl.supportsInterface(interfaceId) ||
-            ERC6909.supportsInterface(interfaceId);
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        virtual
+        override(AccessControl, ERC6909)
+        returns (bool)
+    {
+        return AccessControl.supportsInterface(interfaceId)
+            || ERC6909.supportsInterface(interfaceId);
     }
 
     /**
@@ -173,24 +149,18 @@ contract TychoRouter is
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        _tstoreTransferFromInfo(
-            tokenIn,
-            amountIn,
-            false,
-            isTransferFromAllowed
-        );
+        _tstoreTransferFromInfo(tokenIn, amountIn, false, isTransferFromAllowed);
 
-        return
-            _splitSwapChecked(
-                amountIn,
-                tokenIn,
-                tokenOut,
-                minAmountOut,
-                initialBalanceTokenOut,
-                nTokens,
-                receiver,
-                swaps
-            );
+        return _splitSwapChecked(
+            amountIn,
+            tokenIn,
+            tokenOut,
+            minAmountOut,
+            initialBalanceTokenOut,
+            nTokens,
+            receiver,
+            swaps
+        );
     }
 
     /**
@@ -234,17 +204,16 @@ contract TychoRouter is
         }
         _tstoreTransferFromInfo(tokenIn, amountIn, true, true);
 
-        return
-            _splitSwapChecked(
-                amountIn,
-                tokenIn,
-                tokenOut,
-                minAmountOut,
-                initialBalanceTokenOut,
-                nTokens,
-                receiver,
-                swaps
-            );
+        return _splitSwapChecked(
+            amountIn,
+            tokenIn,
+            tokenOut,
+            minAmountOut,
+            initialBalanceTokenOut,
+            nTokens,
+            receiver,
+            swaps
+        );
     }
 
     /**
@@ -277,23 +246,17 @@ contract TychoRouter is
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        _tstoreTransferFromInfo(
-            tokenIn,
-            amountIn,
-            false,
-            isTransferFromAllowed
-        );
+        _tstoreTransferFromInfo(tokenIn, amountIn, false, isTransferFromAllowed);
 
-        return
-            _sequentialSwapChecked(
-                amountIn,
-                tokenIn,
-                tokenOut,
-                minAmountOut,
-                initialBalanceTokenOut,
-                receiver,
-                swaps
-            );
+        return _sequentialSwapChecked(
+            amountIn,
+            tokenIn,
+            tokenOut,
+            minAmountOut,
+            initialBalanceTokenOut,
+            receiver,
+            swaps
+        );
     }
 
     /**
@@ -335,16 +298,15 @@ contract TychoRouter is
 
         _tstoreTransferFromInfo(tokenIn, amountIn, true, true);
 
-        return
-            _sequentialSwapChecked(
-                amountIn,
-                tokenIn,
-                tokenOut,
-                minAmountOut,
-                initialBalanceTokenOut,
-                receiver,
-                swaps
-            );
+        return _sequentialSwapChecked(
+            amountIn,
+            tokenIn,
+            tokenOut,
+            minAmountOut,
+            initialBalanceTokenOut,
+            receiver,
+            swaps
+        );
     }
 
     /**
@@ -376,23 +338,17 @@ contract TychoRouter is
         bytes calldata swapData
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        _tstoreTransferFromInfo(
-            tokenIn,
-            amountIn,
-            false,
-            isTransferFromAllowed
-        );
+        _tstoreTransferFromInfo(tokenIn, amountIn, false, isTransferFromAllowed);
 
-        return
-            _singleSwap(
-                amountIn,
-                tokenIn,
-                tokenOut,
-                minAmountOut,
-                initialBalanceTokenOut,
-                receiver,
-                swapData
-            );
+        return _singleSwap(
+            amountIn,
+            tokenIn,
+            tokenOut,
+            minAmountOut,
+            initialBalanceTokenOut,
+            receiver,
+            swapData
+        );
     }
 
     /**
@@ -433,16 +389,15 @@ contract TychoRouter is
         }
         _tstoreTransferFromInfo(tokenIn, amountIn, true, true);
 
-        return
-            _singleSwap(
-                amountIn,
-                tokenIn,
-                tokenOut,
-                minAmountOut,
-                initialBalanceTokenOut,
-                receiver,
-                swapData
-            );
+        return _singleSwap(
+            amountIn,
+            tokenIn,
+            tokenOut,
+            minAmountOut,
+            initialBalanceTokenOut,
+            receiver,
+            swapData
+        );
     }
 
     /**
@@ -510,8 +465,8 @@ contract TychoRouter is
             revert TychoRouter__UndefinedMinAmountOut();
         }
 
-        (address executor, bytes calldata protocolData) = swap_
-            .decodeSingleSwap();
+        (address executor, bytes calldata protocolData) =
+            swap_.decodeSingleSwap();
 
         amountOut = _callSwapOnExecutor(executor, amountIn, protocolData);
 
@@ -619,23 +574,15 @@ contract TychoRouter is
         while (swaps_.length > 0) {
             (swapData, swaps_) = swaps_.next();
 
-            (
-                tokenInIndex,
-                tokenOutIndex,
-                split,
-                executor,
-                protocolData
-            ) = swapData.decodeSplitSwap();
+            (tokenInIndex, tokenOutIndex, split, executor, protocolData) =
+                swapData.decodeSplitSwap();
 
             currentAmountIn = split > 0
                 ? (amounts[tokenInIndex] * split) / 0xffffff
                 : remainingAmounts[tokenInIndex];
 
-            currentAmountOut = _callSwapOnExecutor(
-                executor,
-                currentAmountIn,
-                protocolData
-            );
+            currentAmountOut =
+                _callSwapOnExecutor(executor, currentAmountIn, protocolData);
             // Checks if the output token is the same as the input token
             if (tokenOutIndex == 0) {
                 cyclicSwapAmountOut += currentAmountOut;
@@ -645,8 +592,7 @@ contract TychoRouter is
             remainingAmounts[tokenOutIndex] += currentAmountOut;
             remainingAmounts[tokenInIndex] -= currentAmountIn;
         }
-        return
-            tokenOutIndex == 0 ? cyclicSwapAmountOut : amounts[tokenOutIndex];
+        return tokenOutIndex == 0 ? cyclicSwapAmountOut : amounts[tokenOutIndex];
     }
 
     /**
@@ -657,23 +603,20 @@ contract TychoRouter is
      *
      * @return calculatedAmount The total amount of the buy token obtained after all swaps have been executed.
      */
-    function _sequentialSwap(
-        uint256 amountIn,
-        bytes calldata swaps_
-    ) internal returns (uint256 calculatedAmount) {
+    function _sequentialSwap(uint256 amountIn, bytes calldata swaps_)
+        internal
+        returns (uint256 calculatedAmount)
+    {
         bytes calldata swap;
         calculatedAmount = amountIn;
         while (swaps_.length > 0) {
             (swap, swaps_) = swaps_.next();
 
-            (address executor, bytes calldata protocolData) = swap
-                .decodeSingleSwap();
+            (address executor, bytes calldata protocolData) =
+                swap.decodeSingleSwap();
 
-            calculatedAmount = _callSwapOnExecutor(
-                executor,
-                calculatedAmount,
-                protocolData
-            );
+            calculatedAmount =
+                _callSwapOnExecutor(executor, calculatedAmount, protocolData);
         }
     }
 
@@ -701,10 +644,10 @@ contract TychoRouter is
     /**
      * @dev Allows granting roles to multiple accounts in a single call.
      */
-    function batchGrantRole(
-        bytes32 role,
-        address[] memory accounts
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function batchGrantRole(bytes32 role, address[] memory accounts)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         for (uint256 i = 0; i < accounts.length; i++) {
             _grantRole(role, accounts[i]);
         }
@@ -714,9 +657,10 @@ contract TychoRouter is
      * @dev Entrypoint to add or replace an approved executor contract address
      * @param targets address of the executor contract
      */
-    function setExecutors(
-        address[] memory targets
-    ) external onlyRole(EXECUTOR_SETTER_ROLE) {
+    function setExecutors(address[] memory targets)
+        external
+        onlyRole(EXECUTOR_SETTER_ROLE)
+    {
         for (uint256 i = 0; i < targets.length; i++) {
             _setExecutor(targets[i]);
         }
@@ -726,9 +670,10 @@ contract TychoRouter is
      * @dev Entrypoint to remove an approved executor contract address
      * @param target address of the executor contract
      */
-    function removeExecutor(
-        address target
-    ) external onlyRole(EXECUTOR_SETTER_ROLE) {
+    function removeExecutor(address target)
+        external
+        onlyRole(EXECUTOR_SETTER_ROLE)
+    {
         _removeExecutor(target);
     }
 
@@ -736,9 +681,10 @@ contract TychoRouter is
      * @notice Sets the fee calculator contract address
      * @param feeCalculator The address of the fee calculator contract
      */
-    function setFeeCalculator(
-        address feeCalculator
-    ) external onlyRole(ROUTER_FEE_SETTER_ROLE) {
+    function setFeeCalculator(address feeCalculator)
+        external
+        onlyRole(ROUTER_FEE_SETTER_ROLE)
+    {
         if (feeCalculator == address(0)) {
             revert TychoRouter__AddressZero();
         }
@@ -764,14 +710,14 @@ contract TychoRouter is
     /**
      * @dev Gets balance of a token for a given address. Supports both native ETH and ERC20 tokens.
      */
-    function _balanceOf(
-        address token,
-        address owner
-    ) internal view returns (uint256) {
-        return
-            token == address(0)
-                ? owner.balance
-                : IERC20(token).balanceOf(owner);
+    function _balanceOf(address token, address owner)
+        internal
+        view
+        returns (uint256)
+    {
+        return token == address(0)
+            ? owner.balance
+            : IERC20(token).balanceOf(owner);
     }
 
     /**
@@ -793,32 +739,7 @@ contract TychoRouter is
         }
         uint256 userAmount = currentBalanceTokenOut - initialBalanceTokenOut;
         if (userAmount != amountOut) {
-            revert TychoRouter__AmountOutNotFullyReceived(
-                userAmount,
-                amountOut
-            );
+            revert TychoRouter__AmountOutNotFullyReceived(userAmount, amountOut);
         }
-    }
-
-    function _updateDeltaAccounting(
-        address token,
-        int256 deltaChange
-    ) internal override(Dispatcher, Vault) {
-        Vault._updateDeltaAccounting(token, deltaChange);
-    }
-
-    /**
-     * @dev Returns true if this contract implements the interface defined by `interfaceId`.
-     */
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        virtual
-        override(AccessControl, ERC6909)
-        returns (bool)
-    {
-        return interfaceId == type(IERC6909).interfaceId
-            || interfaceId == type(IAccessControl).interfaceId
-            || super.supportsInterface(interfaceId);
     }
 }

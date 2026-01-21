@@ -48,51 +48,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         uint256 daiBalance = IERC20(DAI_ADDR).balanceOf(ALICE);
         assertEq(daiBalance, 2018817438608734439722);
         assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), 0);
-        assertEq(tychoRouter.exposedGetDelta(DAI_ADDR), 0);
-        vm.stopPrank();
-    }
 
-    function testSingleSwapPermit2RouterIsReceiver() public {
-        // Trade 1 WETH for DAI with 1 swap on Uniswap V2 using Permit2
-        // Router is the receiver
-        // 1 WETH   ->   DAI
-        //       (USV2)
-        vm.startPrank(ALICE);
-
-        uint256 amountIn = 1 ether;
-        deal(WETH_ADDR, ALICE, amountIn);
-        (
-            IAllowanceTransfer.PermitSingle memory permitSingle,
-            bytes memory signature
-        ) = handlePermit2Approval(WETH_ADDR, tychoRouterAddr, amountIn);
-
-        bytes memory protocolData = encodeUniswapV2Swap(
-            DAI_WETH_UNIV2_POOL,
-            tychoRouterAddr,
-            false,
-            RestrictTransferFrom.TransferType.TransferFrom
-        );
-
-        bytes memory swap =
-            encodeSingleSwap(address(usv2Executor), protocolData);
-
-        tychoRouter.singleSwapPermit2(
-            amountIn,
-            WETH_ADDR,
-            DAI_ADDR,
-            2008817438608734439722,
-            tychoRouterAddr,
-            0,
-            address(0),
-            permitSingle,
-            signature,
-            swap
-        );
-
-        assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), 0);
-        uint256 daiBalance = IERC20(DAI_ADDR).balanceOf(ALICE);
-        assertEq(daiBalance, 0);
-        assertEq(tychoRouter.exposedGetDelta(DAI_ADDR), 2018817438608734439722);
         vm.stopPrank();
     }
 
