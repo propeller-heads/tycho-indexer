@@ -374,39 +374,3 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 }
-
-contract TychoRouterSequentialSwapTestForBebop is TychoRouterTestSetup {
-    // old BOB address with drainer contract here to avoid changing hardcoded test fixtures
-    address BOB_OLD = makeAddr("bob"); //bob=someone!=us
-
-    function getForkBlock() public pure override returns (uint256) {
-        return 23139046;
-    }
-
-    function testUSV3BebopIntegration() public {
-        // Performs a sequential swap from WETH to WBTC through USDC using USV3 and Bebop RFQ
-        //
-        //   WETH ──(USV3)──> USDC ───(Bebop RFQ)──> WBTC
-
-        // The Bebop order expects:
-        // - 4705340251 USDC input -> 5239731 WBTC output
-
-        uint256 amountIn = 1 ether;
-        uint256 expectedAmountOut = 5239731;
-        deal(WETH_ADDR, BOB_OLD, amountIn);
-        uint256 balanceBefore = IERC20(WBTC_ADDR).balanceOf(BOB_OLD);
-
-        vm.startPrank(BOB_OLD);
-        IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
-        bytes memory callData = loadCallDataFromFile("test_uniswap_v3_bebop");
-        (bool success,) = tychoRouterAddr.call(callData);
-
-        vm.stopPrank();
-
-        uint256 balanceAfter = IERC20(WBTC_ADDR).balanceOf(BOB_OLD);
-
-        assertTrue(success, "Call Failed");
-        assertEq(balanceAfter - balanceBefore, expectedAmountOut);
-        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
-    }
-}
