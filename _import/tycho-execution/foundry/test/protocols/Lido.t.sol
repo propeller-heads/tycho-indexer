@@ -322,8 +322,7 @@ contract LidoExecutorV3Test is Constants, Permit2TestHelper, TestUtils {
             BOB,
             RestrictTransferFrom.TransferType.None,
             LidoPoolType.stETH,
-            LidoPoolDirection.Stake,
-            false
+            LidoPoolDirection.Stake
         );
 
         deal(address(LidoExposed), amountIn);
@@ -353,9 +352,9 @@ contract LidoExecutorV3Test is Constants, Permit2TestHelper, TestUtils {
             BOB,
             RestrictTransferFrom.TransferType.None,
             LidoPoolType.wstETH,
-            LidoPoolDirection.Wrap,
-            true
+            LidoPoolDirection.Wrap
         );
+        IERC20(STETH_ADDR).approve(WSTETH_ADDR, amountIn);
 
         (uint256 amountOut, address tokenOut, address receiver) =
             LidoExposed.swap(stETHAmount, protocolData);
@@ -379,8 +378,7 @@ contract LidoExecutorV3Test is Constants, Permit2TestHelper, TestUtils {
             BOB,
             RestrictTransferFrom.TransferType.None,
             LidoPoolType.wstETH,
-            LidoPoolDirection.Unwrap,
-            false
+            LidoPoolDirection.Unwrap
         );
         vm.startPrank(address(LidoExposed));
         (uint256 amountOut, address tokenOut, address receiver) =
