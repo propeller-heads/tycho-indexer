@@ -23,7 +23,9 @@ interface MetaRegistry {
 }
 
 contract CurveExecutorExposed is CurveExecutor {
-    constructor(address _nativeToken) CurveExecutor(_nativeToken) {}
+    constructor(address _nativeToken, address _stEthAddress)
+        CurveExecutor(_nativeToken, _stEthAddress)
+    {}
 
     function decodeData(bytes calldata data)
         external
@@ -51,7 +53,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
     function setUp() public {
         uint256 forkBlock = 22031795;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        curveExecutorExposed = new CurveExecutorExposed(ETH_ADDR_FOR_CURVE);
+        curveExecutorExposed =
+            new CurveExecutorExposed(ETH_ADDR_FOR_CURVE, STETH_ADDR);
         metaRegistry = MetaRegistry(CURVE_META_REGISTRY);
     }
 
@@ -153,13 +156,52 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         (uint256 amountOut, address tokenOut, address receiver) =
             curveExecutorExposed.swap(amountIn, data);
 
-        assertEq(amountOut, 1001072414418410897);
-        assertEq(
-            IERC20(STETH_ADDR).balanceOf(ALICE),
-            amountOut - 1 // there is something weird in this pool, but won't investigate for now because we don't currently support it in the simulation
-        );
+        assertEq(amountOut, 1001072414418410896);
+        assertEq(IERC20(STETH_ADDR).balanceOf(ALICE), amountOut);
         assertEq(tokenOut, STETH_ADDR);
         assertEq(receiver, ALICE);
+    }
+
+    // This test verifies that amountOut for stETH is calculated correctly by
+    // accounting for an existing stETH balance in the executor prior to the swap
+    function testStEthPoolWithInitialstETH() public {
+        // Swapping ETH -> stETH on StEthPool 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022 twice
+        uint256 amountIn = 2 ether;
+        deal(address(curveExecutorExposed), amountIn);
+
+        uint256 amountInForTest = 1 ether;
+
+        bytes memory data1 = _getData(
+            ETH_ADDR_FOR_CURVE,
+            STETH_ADDR,
+            STETH_POOL,
+            1,
+            ALICE,
+            RestrictTransferFrom.TransferType.None
+        );
+
+        (uint256 amountOut1, address tokenOut1, address receiver1) =
+            curveExecutorExposed.swap(amountInForTest, data1);
+
+        bytes memory data2 = _getData(
+            ETH_ADDR_FOR_CURVE,
+            STETH_ADDR,
+            STETH_POOL,
+            1,
+            ALICE,
+            RestrictTransferFrom.TransferType.None
+        );
+
+        (uint256 amountOut2, address tokenOut2, address receiver2) =
+            curveExecutorExposed.swap(amountInForTest, data2);
+
+        assertEq(amountOut1, 1001072414418410896);
+        assertEq(amountOut2, 1001072213238226892);
+        assertEq(IERC20(STETH_ADDR).balanceOf(ALICE), amountOut1 + amountOut2);
+        assertEq(tokenOut1, STETH_ADDR);
+        assertEq(tokenOut2, STETH_ADDR);
+        assertEq(receiver1, ALICE);
+        assertEq(receiver2, ALICE);
     }
 
     function testTricrypto2Pool() public {

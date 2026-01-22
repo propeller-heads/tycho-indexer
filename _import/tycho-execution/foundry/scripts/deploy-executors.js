@@ -66,11 +66,12 @@ const executors_to_deploy = {
                 "0x000000000022D473030F116dDEE9F6B43aC78BA3"
             ]
         },
-        // Args: ETH address in curve pools, Permit2
+        // Args: ETH address in curve pools, Permit2, stETH address
         {
             exchange: "CurveExecutor", args: [
                 "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+                "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+                "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"
             ]
         },
         // Args: factory, permit2
@@ -194,11 +195,12 @@ const executors_to_deploy = {
                 "0x000000000022D473030F116dDEE9F6B43aC78BA3"
             ]
         },
-        // Args: ETH address in curve pools, Permit2
+        // Args: ETH address in curve pools, Permit2, stETH address
         {
             exchange: "CurveExecutor", args: [
                 "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+                "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+                "0x0000000000000000000000000000000000000000" // No stETH on unichain
             ]
         },
         // Aerodrome Slipstreams - Args: Old Factory, New Factory, Permit2
