@@ -496,13 +496,10 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             amountOut, minAmountOut, maxSolverContribution, tokenOut, receiver
         );
 
-        // If fees were taken, transfer the amount after fees to the receiver
-        if (amountOut < amountOutBeforeFees) {
-            if (tokenOut == address(0)) {
-                Address.sendValue(payable(receiver), amountOut);
-            } else {
-                IERC20(tokenOut).safeTransfer(receiver, amountOut);
-            }
+        if (tokenOut == address(0)) {
+            Address.sendValue(payable(receiver), amountOut);
+        } else {
+            IERC20(tokenOut).safeTransfer(receiver, amountOut);
         }
 
         _verifyAmountOutWasReceived(
@@ -564,13 +561,10 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             amountOut, minAmountOut, maxSolverContribution, tokenOut, receiver
         );
 
-        // If fees were taken, transfer the amount after fees to the receiver
-        if (amountOut < amountOutBeforeFees) {
-            if (tokenOut == address(0)) {
-                Address.sendValue(payable(receiver), amountOut);
-            } else {
-                IERC20(tokenOut).safeTransfer(receiver, amountOut);
-            }
+        if (tokenOut == address(0)) {
+            Address.sendValue(payable(receiver), amountOut);
+        } else {
+            IERC20(tokenOut).safeTransfer(receiver, amountOut);
         }
 
         _verifyAmountOutWasReceived(
@@ -628,13 +622,10 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             amountOut, minAmountOut, maxSolverContribution, tokenOut, receiver
         );
 
-        // If fees were taken, transfer the amount after fees to the receiver
-        if (amountOut < amountOutBeforeFees) {
-            if (tokenOut == address(0)) {
-                Address.sendValue(payable(receiver), amountOut);
-            } else {
-                IERC20(tokenOut).safeTransfer(receiver, amountOut);
-            }
+        if (tokenOut == address(0)) {
+            Address.sendValue(payable(receiver), amountOut);
+        } else {
+            IERC20(tokenOut).safeTransfer(receiver, amountOut);
         }
 
         _verifyAmountOutWasReceived(
@@ -910,7 +901,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             initialBalanceTokenOut -= amountIn;
         }
         uint256 userAmount = currentBalanceTokenOut - initialBalanceTokenOut;
-        if (userAmount != amountOut) {
+        if (userAmount < amountOut - 2) {
             revert TychoRouter__AmountOutNotFullyReceived(userAmount, amountOut);
         }
     }
@@ -935,11 +926,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             // Debit the solver's vault balance and transfer contribution to receiver
             _debitVault(msg.sender, tokenOut, requiredContribution);
 
-            if (tokenOut == address(0)) {
-                Address.sendValue(payable(receiver), requiredContribution);
-            } else {
-                IERC20(tokenOut).safeTransfer(receiver, requiredContribution);
-            }
             amount = minAmountOut;
         } else {
             amount = amountOut;

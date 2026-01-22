@@ -85,7 +85,7 @@ fn test_single_swap_strategy_encoder() {
         // Swap data
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
         "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id (pool address)
-        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
+        "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
         "00",                                       // zero2one
         "00",                                       // transfer type TransferFrom
         "0000",                                     // padding to 32-byte boundary
@@ -162,7 +162,7 @@ fn test_single_swap_strategy_encoder_no_permit2() {
         // Swap data
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
         "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id (pool address)
-        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
+        "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
         "00",                                       // zero2one
         "00",                                       // transfer type TransferFrom
         "0000",                                     // padding to 32-byte boundary

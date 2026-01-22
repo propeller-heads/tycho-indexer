@@ -514,7 +514,7 @@ contract TychoRouterForUniswapV4Test is TychoRouterTestSetup {
             USDT_ADDR,
             true,
             RestrictTransferFrom.TransferType.TransferFrom,
-            ALICE,
+            address(tychoRouter),
             pools
         );
 
@@ -567,7 +567,7 @@ contract TychoRouterForUniswapV4Test is TychoRouterTestSetup {
             WBTC_ADDR,
             true,
             RestrictTransferFrom.TransferType.TransferFrom,
-            ALICE,
+            address(tychoRouter),
             pools
         );
 

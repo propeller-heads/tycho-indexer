@@ -316,7 +316,7 @@ contract TychoRouterForUniswapV3Test is TychoRouterTestSetup {
         bytes memory protocolData = encodeUniswapV3Swap(
             WETH_ADDR,
             DAI_ADDR,
-            ALICE,
+            address(tychoRouter),
             DAI_WETH_USV3,
             zeroForOne,
             RestrictTransferFrom.TransferType.TransferFrom

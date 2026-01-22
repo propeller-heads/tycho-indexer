@@ -77,7 +77,7 @@ impl TransferOptimization {
     // is necessary for the next swap transfer type decision).
     pub fn get_receiver(
         &self,
-        solution_receiver: &Bytes,
+        _solution_receiver: &Bytes,
         next_swap: Option<&SwapGroup>,
     ) -> Result<(Bytes, bool), EncodingError> {
         if let Some(next) = next_swap {
@@ -101,7 +101,7 @@ impl TransferOptimization {
             }
         } else {
             // last swap - there is no next swap
-            Ok((solution_receiver.clone(), false))
+            Ok((self.router_address.clone(), false))
         }
     }
 }
@@ -195,8 +195,8 @@ mod tests {
     }
 
     #[rstest]
-    // there is no next swap -> receiver is the solution receiver
-    #[case(None, receiver(), false)]
+    // there is no next swap -> receiver is the router
+    #[case(None, router_address(), false)]
     // protocol of next swap supports transfer in optimization
     #[case(Some("uniswap_v2"), component_id(), true)]
     // protocol of next swap supports transfer in optimization but is callback constrained
