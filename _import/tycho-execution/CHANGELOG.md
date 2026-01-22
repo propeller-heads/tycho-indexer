@@ -1,3 +1,11 @@
+## [0.16.0](https://github.com/propeller-heads/tycho-contracts/compare/0.15.0...0.16.0) (2026-01-22)
+
+
+### Features
+
+* Introduce max solver contribution ([cd60de5](https://github.com/propeller-heads/tycho-contracts/commit/cd60de55b6690c913f78f03eb653d198095f3ef2))
+* Rename given_token/amount -> token/amount_in and checked_amount -> min_amount_out ([14853af](https://github.com/propeller-heads/tycho-contracts/commit/14853afeafc544ddfcc02a67ad3f2f82bc84d93a))
+
 ## [0.15.0](https://github.com/propeller-heads/tycho-contracts/compare/0.14.0...0.15.0) (2026-01-22)
 
 
