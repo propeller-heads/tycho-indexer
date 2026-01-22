@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "_tycho_simulation_py"
-version = "0.231.0"
+version = "0.232.0"
 dependencies = [
  "alloy",
  "num-bigint",
@@ -3758,7 +3758,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4b0f83760fb341a774ed326568e19f5a863af4a952def8c39f9ab92fd95b88e5"
 dependencies = [
  "equivalent",
- "hashbrown 0.15.5",
+ "hashbrown 0.16.0",
  "serde",
  "serde_core",
 ]
@@ -7341,7 +7341,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-integration-test"
-version = "0.231.0"
+version = "0.232.0"
 dependencies = [
  "actix-web",
  "alloy",
@@ -7370,7 +7370,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.231.0"
+version = "0.232.0"
 dependencies = [
  "alloy",
  "alloy-chains",
@@ -7428,7 +7428,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-test"
-version = "0.231.0"
+version = "0.232.0"
 dependencies = [
  "alloy",
  "alloy-chains",

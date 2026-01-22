@@ -461,6 +461,8 @@ where
                                 let token_address = match bytes_to_address(&token.address) {
                                     Ok(addr) => addr,
                                     Err(_) => {
+                                        count_token_skips += 1;
+                                        msg_failed_components.insert(id.clone());
                                         warn!(
                                             "Token address could not be decoded {}, ignoring pool {:x?}",
                                             token.address, id
@@ -487,6 +489,7 @@ where
                             }
                             None => {
                                 count_token_skips += 1;
+                                msg_failed_components.insert(id.clone());
                                 debug!("Token not found {}, ignoring pool {:x?}", token, id);
                                 continue 'snapshot_loop;
                             }

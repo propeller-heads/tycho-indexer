@@ -1,3 +1,17 @@
+## [0.232.0](https://github.com/propeller-heads/tycho-simulation/compare/0.231.1...0.232.0) (2026-01-22)
+
+
+### Features
+
+* update tycho dependencies ([67aba74](https://github.com/propeller-heads/tycho-simulation/commit/67aba74b4dbd04ced58fd396ed73cc68c5539378))
+
+## [0.231.1](https://github.com/propeller-heads/tycho-simulation/compare/0.231.0...0.231.1) (2026-01-22)
+
+
+### Bug Fixes
+
+* skip decoding updates for components with missing tokens ([7b9bf3c](https://github.com/propeller-heads/tycho-simulation/commit/7b9bf3cd3bd099434d9713ab0d521143879aa30d))
+
 ## [0.231.0](https://github.com/propeller-heads/tycho-simulation/compare/0.230.0...0.231.0) (2026-01-21)
 
 
