@@ -80,10 +80,10 @@ pub fn encode_tycho_router_call(
     native_address: &Bytes,
     signer: Option<PrivateKeySigner>,
 ) -> Result<Transaction, EncodingError> {
-    let given_amount = biguint_to_u256(&solution.given_amount);
-    let min_amount_out = biguint_to_u256(&solution.checked_amount);
-    let given_token = bytes_to_address(&solution.given_token)?;
-    let checked_token = bytes_to_address(&solution.checked_token)?;
+    let amount_in = biguint_to_u256(&solution.amount_in);
+    let min_amount_out = biguint_to_u256(&solution.min_amount_out);
+    let token_in = bytes_to_address(&solution.token_in)?;
+    let token_out = bytes_to_address(&solution.token_out)?;
     let receiver = bytes_to_address(&solution.receiver)?;
     let n_tokens = U256::from(encoded_solution.n_tokens);
     let solver_fee_bps = U256::from(solution.solver_fee_bps);
@@ -92,6 +92,7 @@ pub fn encode_tycho_router_call(
     } else {
         bytes_to_address(&solution.solver_fee_receiver)?
     };
+    let max_solver_contribution = biguint_to_u256(&solution.max_solver_contribution);
     let (permit, signature) = if let Some(p) = encoded_solution.permit {
         let permit = Some(
             PermitSingle::try_from(&p)
@@ -110,13 +111,14 @@ pub fn encode_tycho_router_call(
         .contains("singleSwapPermit2")
     {
         (
-            given_amount,
-            given_token,
-            checked_token,
+            amount_in,
+            token_in,
+            token_out,
             min_amount_out,
             receiver,
             solver_fee_bps,
             solver_fee_receiver,
+            max_solver_contribution,
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
@@ -129,14 +131,15 @@ pub fn encode_tycho_router_call(
         .contains("singleSwap")
     {
         (
-            given_amount,
-            given_token,
-            checked_token,
+            amount_in,
+            token_in,
+            token_out,
             min_amount_out,
             receiver,
             user_transfer_type == &UserTransferType::TransferFrom,
             solver_fee_bps,
             solver_fee_receiver,
+            max_solver_contribution,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -145,13 +148,14 @@ pub fn encode_tycho_router_call(
         .contains("sequentialSwapPermit2")
     {
         (
-            given_amount,
-            given_token,
-            checked_token,
+            amount_in,
+            token_in,
+            token_out,
             min_amount_out,
             receiver,
             solver_fee_bps,
             solver_fee_receiver,
+            max_solver_contribution,
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
@@ -164,14 +168,15 @@ pub fn encode_tycho_router_call(
         .contains("sequentialSwap")
     {
         (
-            given_amount,
-            given_token,
-            checked_token,
+            amount_in,
+            token_in,
+            token_out,
             min_amount_out,
             receiver,
             user_transfer_type == &UserTransferType::TransferFrom,
             solver_fee_bps,
             solver_fee_receiver,
+            max_solver_contribution,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -180,14 +185,15 @@ pub fn encode_tycho_router_call(
         .contains("splitSwapPermit2")
     {
         (
-            given_amount,
-            given_token,
-            checked_token,
+            amount_in,
+            token_in,
+            token_out,
             min_amount_out,
             n_tokens,
             receiver,
             solver_fee_bps,
             solver_fee_receiver,
+            max_solver_contribution,
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
@@ -200,15 +206,16 @@ pub fn encode_tycho_router_call(
         .contains("splitSwap")
     {
         (
-            given_amount,
-            given_token,
-            checked_token,
+            amount_in,
+            token_in,
+            token_out,
             min_amount_out,
             n_tokens,
             receiver,
             user_transfer_type == &UserTransferType::TransferFrom,
             solver_fee_bps,
             solver_fee_receiver,
+            max_solver_contribution,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -217,8 +224,8 @@ pub fn encode_tycho_router_call(
     };
 
     let contract_interaction = encode_input(&encoded_solution.function_signature, method_calldata);
-    let value = if solution.given_token == *native_address {
-        solution.given_amount.clone()
+    let value = if solution.token_in == *native_address {
+        solution.amount_in.clone()
     } else {
         BigUint::ZERO
     };

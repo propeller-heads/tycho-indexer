@@ -64,10 +64,10 @@ fn test_uniswap_v3_uniswap_v2() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: weth,
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: usdc,
-        checked_amount: BigUint::from_str("26173932").unwrap(),
+        token_in: weth,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out: usdc,
+        min_amount_out: BigUint::from_str("26173932").unwrap(),
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
@@ -147,10 +147,10 @@ fn test_uniswap_v3_uniswap_v3() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: weth,
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: usdc,
-        checked_amount: BigUint::from_str("26173932").unwrap(),
+        token_in: weth,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out: usdc,
+        min_amount_out: BigUint::from_str("26173932").unwrap(),
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
@@ -239,10 +239,10 @@ fn test_uniswap_v3_curve() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: weth,
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: usdt,
-        checked_amount: BigUint::from_str("26173932").unwrap(),
+        token_in: weth,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out: usdt,
+        min_amount_out: BigUint::from_str("26173932").unwrap(),
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_wbtc, swap_wbtc_usdt],
@@ -306,10 +306,10 @@ fn test_balancer_v2_uniswap_v2() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: weth,
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: usdc,
-        checked_amount: BigUint::from_str("26173932").unwrap(),
+        token_in: weth,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out: usdc,
+        min_amount_out: BigUint::from_str("26173932").unwrap(),
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
@@ -442,10 +442,10 @@ fn test_multi_protocol() {
     // Put all components together
     let solution = Solution {
         exact_out: false,
-        given_token: dai,
-        given_amount: BigUint::from_str("1500_000000000000000000").unwrap(),
-        checked_token: eth.clone(),
-        checked_amount: BigUint::from_str("732214216964381330").unwrap(),
+        token_in: dai,
+        amount_in: BigUint::from_str("1500_000000000000000000").unwrap(),
+        token_out: eth.clone(),
+        min_amount_out: BigUint::from_str("732214216964381330").unwrap(),
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![
@@ -519,10 +519,10 @@ fn test_uniswap_v3_balancer_v3() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: weth,
-        given_amount: BigUint::from_str("1_0000000000000000").unwrap(),
-        checked_token: qnt,
-        checked_amount: BigUint::from_str("26173932").unwrap(),
+        token_in: weth,
+        amount_in: BigUint::from_str("1_0000000000000000").unwrap(),
+        token_out: qnt,
+        min_amount_out: BigUint::from_str("26173932").unwrap(),
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_wbtc, swap_wbtc_qnt],
@@ -615,10 +615,10 @@ fn test_uniswap_v3_bebop() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: weth,
-        given_amount: BigUint::from_str("1000000000000000000").unwrap(), // 0.099 WETH
-        checked_token: wbtc,
-        checked_amount: BigUint::from_str("1672307").unwrap(),
+        token_in: weth,
+        amount_in: BigUint::from_str("1000000000000000000").unwrap(), // 0.099 WETH
+        token_out: wbtc,
+        min_amount_out: BigUint::from_str("1672307").unwrap(),
         // Has a drainer deployed to this address (BOB_OLD).
         // Only used because of the hardcoded calldata in this test.
         sender: Bytes::from_str("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e").unwrap(),
@@ -741,10 +741,10 @@ fn test_uniswap_v3_hashflow() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: weth,
-        given_amount: BigUint::from_str("1000000000000000000").unwrap(),
-        checked_token: wbtc,
-        checked_amount: BigUint::from_str("3714751").unwrap(),
+        token_in: weth,
+        amount_in: BigUint::from_str("1000000000000000000").unwrap(),
+        token_out: wbtc,
+        min_amount_out: BigUint::from_str("3714751").unwrap(),
         sender: alice_address(),
         receiver: alice_address(),
         swaps: vec![swap_weth_usdc, swap_usdc_wbtc],

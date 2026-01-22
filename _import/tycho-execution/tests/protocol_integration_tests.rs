@@ -45,10 +45,10 @@ fn test_single_encoding_strategy_ekubo() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: token_in,
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: token_out,
-        checked_amount: BigUint::from_str("1000").unwrap(),
+        token_in,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out,
+        min_amount_out: BigUint::from_str("1000").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -102,10 +102,10 @@ fn test_single_encoding_strategy_ekubo_erc20() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: token_in,
-        given_amount: BigUint::from_str("1_000_000_000").unwrap(),
-        checked_token: token_out,
-        checked_amount: BigUint::from_str("1000").unwrap(),
+        token_in,
+        amount_in: BigUint::from_str("1_000_000_000").unwrap(),
+        token_out,
+        min_amount_out: BigUint::from_str("1000").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -159,10 +159,10 @@ fn test_single_encoding_strategy_ekubo_mev_resist() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: token_in,
-        given_amount: BigUint::from_str("1_000_000_000").unwrap(),
-        checked_token: token_out,
-        checked_amount: BigUint::from_str("1000").unwrap(),
+        token_in,
+        amount_in: BigUint::from_str("1_000_000_000").unwrap(),
+        token_out,
+        min_amount_out: BigUint::from_str("1000").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -205,10 +205,10 @@ fn test_single_encoding_strategy_maverick() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: token_in,
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: token_out,
-        checked_amount: BigUint::from_str("1000").unwrap(),
+        token_in,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out,
+        min_amount_out: BigUint::from_str("1000").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -266,10 +266,10 @@ fn test_single_encoding_strategy_usv4_eth_in() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: eth.clone(),
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: pepe,
-        checked_amount: BigUint::from_str("152373460199848577067005852").unwrap(),
+        token_in: eth.clone(),
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out: pepe,
+        min_amount_out: BigUint::from_str("152373460199848577067005852").unwrap(),
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_eth_pepe],
@@ -331,10 +331,10 @@ fn test_single_encoding_strategy_usv4_eth_out() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: usdc,
-        given_amount: BigUint::from_str("3000_000000").unwrap(),
-        checked_token: eth.clone(),
-        checked_amount: BigUint::from_str("1117254495486192350").unwrap(),
+        token_in: usdc,
+        amount_in: BigUint::from_str("3000_000000").unwrap(),
+        token_out: eth.clone(),
+        min_amount_out: BigUint::from_str("1117254495486192350").unwrap(),
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_usdc_eth],
@@ -413,10 +413,10 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: usdc,
-        given_amount: BigUint::from_str("1000_000000").unwrap(),
-        checked_token: pepe,
-        checked_amount: BigUint::from_str("97191013220606467325121599").unwrap(),
+        token_in: usdc,
+        amount_in: BigUint::from_str("1000_000000").unwrap(),
+        token_out: pepe,
+        min_amount_out: BigUint::from_str("97191013220606467325121599").unwrap(),
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_usdc_eth, swap_eth_pepe],
@@ -440,7 +440,7 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
     .data;
 
     let expected_input = [
-        "fd7f9dc9", // Function selector (singleSwapPermit2)
+        "b322d802", // Function selector (singleSwapPermit2)
         "000000000000000000000000000000000000000000000000000000003b9aca00", // amount in
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
         "0000000000000000000000006982508145454ce325ddbe47a25d4ec3d2311933", // token out
@@ -449,6 +449,8 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
         "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps = 0
         "0000000000000000000000000000000000000000000000000000000000000000", /* solverFeeReceiver
                      * = address(0) */
+        "0000000000000000000000000000000000000000000000000000000000000000", /* max solver
+                                                                             * contribution */
     ]
     .join("");
 
@@ -485,8 +487,8 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
 
     let hex_calldata = encode(&calldata);
 
-    assert_eq!(hex_calldata[..456], expected_input);
-    assert_eq!(hex_calldata[1224..], expected_swaps);
+    assert_eq!(hex_calldata[..520], expected_input);
+    assert_eq!(hex_calldata[1288..], expected_swaps);
     write_calldata_to_file(
         "test_single_encoding_strategy_usv4_grouped_swap",
         hex_calldata.as_str(),
@@ -545,10 +547,10 @@ fn test_single_encoding_strategy_usv4_and_hooks_grouped_swap() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: weth,
-        given_amount: BigUint::from_str("1000000000000000000").unwrap(), // 1 WETH
-        checked_token: eth.clone(),
-        checked_amount: BigUint::from_str("900000000000000000").unwrap(), // 0.9 ETH
+        token_in: weth,
+        amount_in: BigUint::from_str("1000000000000000000").unwrap(), // 1 WETH
+        token_out: eth.clone(),
+        min_amount_out: BigUint::from_str("900000000000000000").unwrap(), // 0.9 ETH
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_usdc, swap_usdc_eth],
@@ -630,10 +632,10 @@ fn test_single_encoding_strategy_ekubo_grouped_swap() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: usde,
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: usdt,
-        checked_amount: BigUint::from_str("1000").unwrap(),
+        token_in: usde,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out: usdt,
+        min_amount_out: BigUint::from_str("1000").unwrap(),
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap1, swap2],
@@ -690,10 +692,10 @@ fn test_single_encoding_strategy_curve() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: token_in,
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: token_out,
-        checked_amount: BigUint::from_str("1").unwrap(),
+        token_in,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out,
+        min_amount_out: BigUint::from_str("1").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -751,10 +753,10 @@ fn test_single_encoding_strategy_curve_st_eth() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: token_in,
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: token_out,
-        checked_amount: BigUint::from_str("1").unwrap(),
+        token_in,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out,
+        min_amount_out: BigUint::from_str("1").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -798,10 +800,10 @@ fn test_single_encoding_strategy_balancer_v3() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: token_in,
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: token_out,
-        checked_amount: BigUint::from_str("1000").unwrap(),
+        token_in,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out,
+        min_amount_out: BigUint::from_str("1000").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -872,10 +874,10 @@ fn test_single_encoding_strategy_bebop() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: token_in,
-        given_amount: amount_in,
-        checked_token: token_out,
-        checked_amount: amount_out, // Expected output amount
+        token_in,
+        amount_in,
+        token_out,
+        min_amount_out: amount_out, // Expected output amount
         sender: user.clone(),
         receiver: user,
         swaps: vec![swap],
@@ -945,10 +947,10 @@ fn test_single_encoding_strategy_bebop_aggregate() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: token_in.clone(),
-        given_amount: amount_in,
-        checked_token: token_out,
-        checked_amount: amount_out,
+        token_in,
+        amount_in,
+        token_out,
+        min_amount_out: amount_out,
         sender: user.clone(),
         receiver: user,
         swaps: vec![swap],
@@ -1048,10 +1050,10 @@ fn test_single_encoding_strategy_hashflow() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: usdc,
-        given_amount: BigUint::from_str("4308094737").unwrap(),
-        checked_token: wbtc,
-        checked_amount: BigUint::from_str("3714751").unwrap(),
+        token_in: usdc,
+        amount_in: BigUint::from_str("4308094737").unwrap(),
+        token_out: wbtc,
+        min_amount_out: BigUint::from_str("3714751").unwrap(),
         sender: alice_address(),
         receiver: alice_address(),
         swaps: vec![swap_usdc_wbtc],
@@ -1094,10 +1096,10 @@ fn test_single_encoding_strategy_fluid() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: token_in,
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: token_out,
-        checked_amount: BigUint::from_str("1000").unwrap(),
+        token_in,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out,
+        min_amount_out: BigUint::from_str("1000").unwrap(),
         // Alice
         sender: alice.clone(),
         receiver: alice,
@@ -1147,10 +1149,10 @@ fn test_sequential_encoding_strategy_fluid() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: token_in,
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: token_out,
-        checked_amount: BigUint::from_str("1000").unwrap(),
+        token_in,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out,
+        min_amount_out: BigUint::from_str("1000").unwrap(),
         // Alice
         sender: alice.clone(),
         receiver: alice,
@@ -1195,10 +1197,10 @@ fn test_single_encoding_strategy_rocketpool_deposit() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: token_in,
-        given_amount: BigUint::from(4_500_000_000_000_000_000_u128),
-        checked_token: token_out,
-        checked_amount: BigUint::from(3_905_847_020_555_141_679_u128),
+        token_in,
+        amount_in: BigUint::from(4_500_000_000_000_000_000_u128),
+        token_out,
+        min_amount_out: BigUint::from(3_905_847_020_555_141_679_u128),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -1248,10 +1250,10 @@ fn test_single_encoding_strategy_rocketpool_burn() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: token_in,
-        given_amount: BigUint::from(1_000_000_000_000_000_000u128), // 1 rETH
-        checked_token: token_out,
-        checked_amount: BigUint::from(1_151_971_256_664_605_227u128), // 1.151971256664605227 ETH
+        token_in,
+        amount_in: BigUint::from(1_000_000_000_000_000_000u128), // 1 rETH
+        token_out,
+        min_amount_out: BigUint::from(1_151_971_256_664_605_227u128), // 1.151971256664605227 ETH
         // Bob*
         sender: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
         receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
@@ -1300,10 +1302,10 @@ fn test_single_encoding_strategy_slipstreams() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: token_in,
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: token_out,
-        checked_amount: BigUint::from_str("1000").unwrap(),
+        token_in,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out,
+        min_amount_out: BigUint::from_str("1000").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -1361,10 +1363,10 @@ fn test_sequential_encoding_strategy_slipstreams() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: weth.clone(),
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: btc.clone(),
-        checked_amount: BigUint::from_str("1000").unwrap(),
+        token_in: weth.clone(),
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out: btc.clone(),
+        min_amount_out: BigUint::from_str("1000").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -1407,10 +1409,10 @@ fn test_single_encoding_strategy_erc4626() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: token_in,
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: token_out,
-        checked_amount: BigUint::from_str("1000").unwrap(),
+        token_in,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out,
+        min_amount_out: BigUint::from_str("1000").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -1460,10 +1462,10 @@ fn test_sequential_encoding_strategy_erc4626() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: sp_usdc.clone(),
-        given_amount: BigUint::from_str("100_000_000").unwrap(),
-        checked_token: susdc.clone(),
-        checked_amount: BigUint::from_str("90_000000000000000000").unwrap(),
+        token_in: sp_usdc.clone(),
+        amount_in: BigUint::from_str("100_000_000").unwrap(),
+        token_out: susdc.clone(),
+        min_amount_out: BigUint::from_str("90_000000000000000000").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -1505,10 +1507,10 @@ fn test_single_encoding_strategy_steth_lido() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: token_in,
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: token_out,
-        checked_amount: BigUint::from_str("999999999999999997").unwrap(),
+        token_in,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out,
+        min_amount_out: BigUint::from_str("999999999999999997").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -1551,10 +1553,10 @@ fn test_single_encoding_strategy_wrap_wsteth_lido() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: token_in,
-        given_amount: BigUint::from_str("1000000000000000000").unwrap(),
-        checked_token: token_out,
-        checked_amount: BigUint::from_str("835259856480552328").unwrap(),
+        token_in,
+        amount_in: BigUint::from_str("1000000000000000000").unwrap(),
+        token_out,
+        min_amount_out: BigUint::from_str("835259856480552328").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -1597,10 +1599,10 @@ fn test_single_encoding_strategy_unwrap_wsteth_lido() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: token_in,
-        given_amount: BigUint::from_str("1000000000000000000").unwrap(),
-        checked_token: token_out,
-        checked_amount: BigUint::from_str("1197232205332596846").unwrap(),
+        token_in,
+        amount_in: BigUint::from_str("1000000000000000000").unwrap(),
+        token_out,
+        min_amount_out: BigUint::from_str("1197232205332596846").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -1671,10 +1673,10 @@ fn test_encoding_strategy_usv4_lido_sequential_swap() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: usdc,
-        given_amount: BigUint::from_str("1000_000000").unwrap(),
-        checked_token: st_eth,
-        checked_amount: BigUint::from_str("492041525283271396").unwrap(),
+        token_in: usdc,
+        amount_in: BigUint::from_str("1000_000000").unwrap(),
+        token_out: st_eth,
+        min_amount_out: BigUint::from_str("492041525283271396").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -1746,10 +1748,10 @@ fn test_encoding_strategy_curve_lido_sequential_swap() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: eth.clone(),
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: wst_eth,
-        checked_amount: BigUint::from_str("835224812176401374").unwrap(),
+        token_in: eth.clone(),
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out: wst_eth,
+        min_amount_out: BigUint::from_str("835224812176401374").unwrap(),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),

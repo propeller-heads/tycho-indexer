@@ -55,11 +55,11 @@ fn main() {
     let solution = Solution {
         sender: user_address.clone(),
         receiver: user_address.clone(),
-        given_token: weth.clone(),
-        given_amount: BigUint::from_str("1_000000000000000000").expect("Failed to create amount"),
-        checked_token: usdc.clone(),
+        token_in: weth.clone(),
+        amount_in: BigUint::from_str("1_000000000000000000").expect("Failed to create amount"),
+        token_out: usdc.clone(),
         exact_out: false, // it's an exact in solution
-        checked_amount: BigUint::from(1u64),
+        min_amount_out: BigUint::from(1u64),
         swaps: vec![simple_swap],
         ..Default::default()
     };

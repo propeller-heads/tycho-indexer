@@ -69,6 +69,7 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             true,
             200, // 2% solverFeeBps
             solverFeeReceiver,
+            0,
             swap
         );
         vm.stopPrank();
@@ -165,6 +166,7 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             true,
             0, // solverFeeBps
             address(0), // solverFeeReceiver
+            0,
             swap
         );
         vm.stopPrank();
