@@ -24,7 +24,7 @@ use crate::{
 ///
 /// Every values of a `ProtocolComponent` must be static, they can't ever be changed after creation.
 /// The dynamic values associated to a component must be given using `ProtocolComponentState`.
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProtocolComponent<Token: Into<Address> + Clone = Address> {
     pub id: ComponentId,
     pub protocol_system: String,
