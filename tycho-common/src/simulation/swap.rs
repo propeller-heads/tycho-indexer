@@ -1,5 +1,6 @@
 use std::{collections::HashMap, fmt, fmt::Debug, sync::Arc};
 
+use itertools::Itertools;
 use num_bigint::BigUint;
 
 use crate::{
@@ -405,6 +406,7 @@ impl Default for Transition {
 pub enum SwapConstraint {
     /// This mode will calculate the maximum trade that this pool can execute while respecting a
     /// trade limit price.
+    #[non_exhaustive]
     TradeLimitPrice {
         /// The minimum acceptable price for the resulting trade, as a [Price] struct. The
         /// resulting amount_out / amount_in must be >= trade_limit_price
@@ -433,6 +435,7 @@ pub enum SwapConstraint {
     ///   can't always find an exact trade amount to reach the target price.
     /// - Not all protocols support analytical solutions for this problem, requiring numerical
     ///   methods.
+    #[non_exhaustive]
     PoolTargetPrice {
         /// The marginal price we want the pool to be after the trade, as a [Price] struct. The
         /// pool's price will move down to this level as token_in is sold into it
@@ -531,7 +534,7 @@ params_with_context! {
 /// prices instead of given amount values.
 pub struct QuerySwapParams<'a> {
     token_in: &'a TokenAddress,
-    token_out: &'a Token,
+    token_out: &'a TokenAddress,
     swap_constraint: SwapConstraint,
 }
 }
@@ -545,10 +548,22 @@ impl<'a> QuerySwapParams<'a> {
     /// * `swap_constraint` - The constraint to apply to the swap calculation
     pub fn new(
         token_in: &'a TokenAddress,
-        token_out: &'a Token,
+        token_out: &'a TokenAddress,
         swap_constraint: SwapConstraint,
     ) -> Self {
         Self { context: Context::default(), token_in, token_out, swap_constraint }
+    }
+
+    pub fn token_in(&self) -> &'a TokenAddress {
+        self.token_in
+    }
+
+    pub fn token_out(&self) -> &'a TokenAddress {
+        self.token_out
+    }
+
+    pub fn swap_constraint(&self) -> &SwapConstraint {
+        &self.swap_constraint
     }
 }
 
@@ -676,7 +691,15 @@ pub trait SwapQuoter: fmt::Debug + Send + Sync + 'static {
     /// This method is primarily intended for routing, discovery, and validation logic,
     /// allowing callers to determine whether a quote request is meaningful before invoking
     /// [`quote`].
-    fn quotable_pairs(&self) -> Vec<(TokenAddress, TokenAddress)>;
+    fn quotable_pairs(&self) -> Vec<(TokenAddress, TokenAddress)> {
+        let component = self.component();
+        component
+            .tokens
+            .iter()
+            .permutations(2)
+            .map(|t| (t[0].address.clone(), t[1].address.clone()))
+            .collect()
+    }
 
     /// Computes the protocol fee applicable to a prospective swap described by `params`.
     ///
