@@ -29,7 +29,7 @@ use serde_json::{json, Value};
 use tracing::{debug, info, instrument, trace, Span};
 use tycho_common::{traits::FeePriceGetter, Bytes};
 
-use crate::{gas::GasPrice, RPCError, RequestError};
+use crate::{gas::BlockGasPrice, RPCError, RequestError};
 
 pub mod config;
 pub mod errors;
@@ -128,14 +128,18 @@ impl EthereumRpcClient {
     /// Gets the gas price from the node.
     ///
     /// Assumes EIP-1559 support first (most modern chains), falling back to legacy if needed.
-    /// Returns the gas price in wei as a u128.
+    /// Returns the gas price with block context information.
     #[instrument(level = "debug", skip(self))]
-    pub async fn get_gas_price(&self) -> Result<GasPrice, RPCError> {
+    pub async fn get_gas_price(&self) -> Result<BlockGasPrice, RPCError> {
         // Assume EIP-1559 first (most modern chains)
         // Get the latest block to check for base fee
         let block = self
             .eth_get_block_by_number(BlockId::Number(BlockNumberOrTag::Latest))
             .await?;
+
+        let block_number = block.header.number;
+        let block_hash = block.header.hash;
+        let block_timestamp = block.header.timestamp;
 
         if let Some(base_fee) = block.header.base_fee_per_gas {
             // EIP-1559 chain - get priority fee
@@ -144,11 +148,16 @@ impl EthereumRpcClient {
                 .await
             {
                 Ok(priority_fee) => {
-                    return Ok(GasPrice::Eip1559 {
-                        base_fee_per_gas: BigUint::from(base_fee),
-                        max_priority_fee_per_gas: BigUint::from_bytes_be(
-                            &priority_fee.to_be_bytes::<32>(),
-                        ),
+                    return Ok(BlockGasPrice {
+                        block_number,
+                        block_hash,
+                        block_timestamp,
+                        pricing: crate::gas::GasPrice::Eip1559 {
+                            base_fee_per_gas: BigUint::from(base_fee),
+                            max_priority_fee_per_gas: BigUint::from_bytes_be(
+                                &priority_fee.to_be_bytes::<32>(),
+                            ),
+                        },
                     });
                 }
                 Err(e) => {
@@ -169,7 +178,14 @@ impl EthereumRpcClient {
             .await
             .map_err(|e| RPCError::from_alloy("Failed to get gas price", e))?;
 
-        Ok(GasPrice::Legacy { gas_price: BigUint::from_bytes_be(&gas_price.to_be_bytes::<32>()) })
+        Ok(BlockGasPrice {
+            block_number,
+            block_hash,
+            block_timestamp,
+            pricing: crate::gas::GasPrice::Legacy {
+                gas_price: BigUint::from_bytes_be(&gas_price.to_be_bytes::<32>()),
+            },
+        })
     }
 
     /// Gets the max priority fee per gas using eth_maxPriorityFeePerGas RPC method.
@@ -955,7 +971,7 @@ impl EthereumRpcClient {
 #[async_trait]
 impl FeePriceGetter for EthereumRpcClient {
     type Error = RPCError;
-    type FeePrice = GasPrice;
+    type FeePrice = BlockGasPrice;
 
     async fn get_latest_fee_price(&self) -> Result<Self::FeePrice, Self::Error> {
         self.get_gas_price().await
@@ -1876,8 +1892,13 @@ mod tests {
             .expect("Failed to get gas price");
 
         // Should return Legacy variant for chains without EIP-1559
-        assert!(matches!(gas_price, GasPrice::Legacy { .. }), "Should return Legacy gas price");
+        assert!(
+            matches!(gas_price.pricing, crate::gas::GasPrice::Legacy { .. }),
+            "Should return Legacy gas price"
+        );
         assert_eq!(gas_price.effective_gas_price(), num_bigint::BigUint::from(0x1234u128));
+        assert_eq!(gas_price.block_number, 1);
+        assert_eq!(gas_price.block_timestamp, 0);
 
         block_mock.assert();
         gas_price_mock.assert();
@@ -1920,12 +1941,17 @@ mod tests {
             .expect("Failed to get gas price");
 
         // Should return EIP-1559 variant for chains with baseFeePerGas
-        assert!(matches!(gas_price, GasPrice::Eip1559 { .. }), "Should return EIP-1559 gas price");
+        assert!(
+            matches!(gas_price.pricing, crate::gas::GasPrice::Eip1559 { .. }),
+            "Should return EIP-1559 gas price"
+        );
 
         // Effective gas price should be base_fee + priority_fee
         // 1 gwei + 0.1 gwei = 1.1 gwei = 1,100,000,000 wei
         let expected = num_bigint::BigUint::from(1_100_000_000u128);
         assert_eq!(gas_price.effective_gas_price(), expected);
+        assert_eq!(gas_price.block_number, 1);
+        assert_eq!(gas_price.block_timestamp, 0);
 
         block_mock.assert();
         priority_fee_mock.assert();
@@ -1952,10 +1978,14 @@ mod tests {
             "Gas price from trait should be positive"
         );
 
+        // Verify block info is populated
+        assert!(gas_price.block_number > 0, "Block number should be positive");
+        assert!(gas_price.block_timestamp > 0, "Block timestamp should be positive");
+
         // Log the gas price type for debugging
-        if matches!(gas_price, GasPrice::Eip1559 { .. }) {
+        if matches!(gas_price.pricing, crate::gas::GasPrice::Eip1559 { .. }) {
             println!("Detected EIP-1559 chain");
-        } else if matches!(gas_price, GasPrice::Legacy { .. }) {
+        } else if matches!(gas_price.pricing, crate::gas::GasPrice::Legacy { .. }) {
             println!("Detected legacy chain");
         }
 
