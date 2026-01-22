@@ -294,3 +294,102 @@ contract TychoRouterForLidoTest is TychoRouterTestSetup {
         assertEq(ALICE.balance, 0);
     }
 }
+
+/**
+ *
+ *
+ * These tests demonstrate that the rounding issue causing 1–2 wei discrepancies
+ * in stETH transfers exists in LidoV3, as it did previously in LidoV2.
+ *
+ * Only tests relevant to this issue are included.
+ */
+contract LidoExecutorV3Test is Constants, Permit2TestHelper, TestUtils {
+    using SafeERC20 for IERC20;
+
+    LidoExecutorExposed LidoExposed;
+
+    function setUp() public {
+        uint256 forkBlock = 24238735;
+        vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
+        LidoExposed = new LidoExecutorExposed(STETH_ADDR, WSTETH_ADDR);
+    }
+
+    function testStaking() public {
+        uint256 amountIn = 1 ether;
+        uint256 expectedAmountOut = 999999999999999998;
+
+        bytes memory protocolData = abi.encodePacked(
+            BOB,
+            RestrictTransferFrom.TransferType.None,
+            LidoPoolType.stETH,
+            LidoPoolDirection.Stake
+        );
+
+        deal(address(LidoExposed), amountIn);
+        (uint256 amountOut, address tokenOut, address receiver) =
+            LidoExposed.swap{value: amountIn}(amountIn, protocolData);
+
+        uint256 finalBalance = IERC20(STETH_ADDR).balanceOf(BOB);
+        assertEq(amountOut, finalBalance);
+        assertEq(finalBalance, expectedAmountOut);
+        assertEq(BOB.balance, 0);
+        assertEq(tokenOut, STETH_ADDR);
+        assertEq(receiver, BOB);
+    }
+
+    function testWrapping() public {
+        uint256 amountIn = 1 ether;
+        uint256 expectedAmountOut = 816702140251455050;
+
+        // Need to mint STETH before, just dealing won't work because stETH does some internal accounting
+        deal(address(LidoExposed), amountIn);
+        vm.startPrank(address(LidoExposed));
+        // slither-disable-next-line arbitrary-send-eth
+        LidoPool(STETH_ADDR).submit{value: amountIn}(address(this));
+        uint256 stETHAmount = IERC20(STETH_ADDR).balanceOf(address(LidoExposed));
+
+        bytes memory protocolData = abi.encodePacked(
+            BOB,
+            RestrictTransferFrom.TransferType.None,
+            LidoPoolType.wstETH,
+            LidoPoolDirection.Wrap
+        );
+        IERC20(STETH_ADDR).approve(WSTETH_ADDR, amountIn);
+
+        (uint256 amountOut, address tokenOut, address receiver) =
+            LidoExposed.swap(stETHAmount, protocolData);
+
+        uint256 finalBalance = IERC20(WSTETH_ADDR).balanceOf(BOB);
+        assertEq(amountOut, expectedAmountOut);
+        assertEq(finalBalance, expectedAmountOut);
+        // there is 1 wei left in the contract
+        assertEq(IERC20(STETH_ADDR).balanceOf(address(LidoExposed)), 1);
+        assertEq(tokenOut, WSTETH_ADDR);
+        assertEq(receiver, BOB);
+        vm.stopPrank();
+    }
+
+    function testUnwrapping() public {
+        uint256 amountIn = 1 ether;
+        uint256 expectedAmountOut = 1224436610013179625;
+
+        deal(WSTETH_ADDR, address(LidoExposed), amountIn);
+        bytes memory protocolData = abi.encodePacked(
+            BOB,
+            RestrictTransferFrom.TransferType.None,
+            LidoPoolType.wstETH,
+            LidoPoolDirection.Unwrap
+        );
+        vm.startPrank(address(LidoExposed));
+        (uint256 amountOut, address tokenOut, address receiver) =
+            LidoExposed.swap(amountIn, protocolData);
+
+        uint256 finalBalance = IERC20(STETH_ADDR).balanceOf(BOB);
+        assertEq(amountOut, expectedAmountOut);
+        assertEq(finalBalance, expectedAmountOut);
+        assertEq(IERC20(WSTETH_ADDR).balanceOf(address(LidoExposed)), 0);
+        assertEq(tokenOut, STETH_ADDR);
+        assertEq(receiver, BOB);
+        vm.stopPrank();
+    }
+}
