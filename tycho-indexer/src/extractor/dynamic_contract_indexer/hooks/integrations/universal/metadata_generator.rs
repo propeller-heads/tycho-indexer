@@ -27,9 +27,6 @@ impl UniversalMetadataGenerator {
     }
 }
 
-const UNIVERSAL_LENS_BYTECODE_BYTES: &[u8] =
-    include_bytes!("./assets/UniversalJITLens.evm.runtime");
-
 // Function selectors:
 // getLiquidityForPool(address,address) = 0xcf9ded83
 // getLimitsForPool(address,address) = 0x23548892
@@ -67,15 +64,12 @@ impl MetadataRequestGenerator for UniversalMetadataGenerator {
             .get("hooks")
             .expect("Hooks attribute not found");
 
-        // Use a deterministic lens contract address for state override
-        let lens_address = "0x0000000000000000000000000000000000001337";
-        let target_str = target.to_string().split_off(2);
+        // Unichain UniversalJITLens address
+        let lens_address = "0xE48a768A9846F82407712062828fBE6Ef3cB5394";
 
-        // Load the lens contract bytecode and convert to hex
-        let lens_bytecode_hex = hex::encode(UNIVERSAL_LENS_BYTECODE_BYTES);
-
-        // Limits request: token_0 -> token_1
-        let limits_transport_0to1 = RpcTransport::new(
+        // Single Limits request covering both directions
+        // getLimitsForPool(token0, token1) returns (limit_1→0, limit_0→1)
+        let limits_transport = RpcTransport::new(
             self.rpc_url.clone(),
             "eth_call".to_string(),
             vec![
@@ -84,51 +78,19 @@ impl MetadataRequestGenerator for UniversalMetadataGenerator {
                     "to": lens_address
                 }),
                 json!(format!("0x{:x}", block.number)),
-                json!({
-                    lens_address: {
-                        "code": format!("0x{}", lens_bytecode_hex),
-                        "state": {
-                            // Slot 0: HOOK address
-                            "0x0000000000000000000000000000000000000000000000000000000000000000": format!("0x000000000000000000000000{}", target_str)
-                        }
-                    }
-                }),
             ],
         );
         requests.push(MetadataRequest::new(
             "universal".to_string(),
-            format!("universal_limits_{target}_{token_0}_to_{token_1}"),
+            format!("universal_limits_{target}"),
             component.id.clone(),
-            MetadataRequestType::Limits { token_pair: vec![(token_0.clone(), token_1.clone())] },
-            Box::new(limits_transport_0to1),
-        ));
-
-        // Limits request: token_1 -> token_0
-        let limits_transport_1to0 = RpcTransport::new(
-            self.rpc_url.clone(),
-            "eth_call".to_string(),
-            vec![
-                json!({
-                    "data": format!("0x{}000000000000000000000000{}000000000000000000000000{}", GET_LIMITS_SELECTOR, token_1_str, token_0_str),
-                    "to": lens_address
-                }),
-                json!(format!("0x{:x}", block.number)),
-                json!({
-                    lens_address: {
-                        "code": format!("0x{}", lens_bytecode_hex),
-                        "state": {
-                            "0x0000000000000000000000000000000000000000000000000000000000000000": format!("0x000000000000000000000000{}", target_str)
-                        }
-                    }
-                }),
-            ],
-        );
-        requests.push(MetadataRequest::new(
-            "universal".to_string(),
-            format!("universal_limits_{target}_{token_1}_to_{token_0}"),
-            component.id.clone(),
-            MetadataRequestType::Limits { token_pair: vec![(token_1, token_0)] },
-            Box::new(limits_transport_1to0),
+            MetadataRequestType::Limits {
+                token_pair: vec![
+                    (token_0.clone(), token_1.clone()),
+                    (token_1, token_0),
+                ],
+            },
+            Box::new(limits_transport),
         ));
 
         Ok(requests)
@@ -156,10 +118,8 @@ impl MetadataRequestGenerator for UniversalMetadataGenerator {
             .get("hooks")
             .expect("Hooks attribute not found");
 
-        let lens_address = "0x0000000000000000000000000000000000001337";
-        let target_str = target.to_string().split_off(2);
-
-        let lens_bytecode_hex = hex::encode(UNIVERSAL_LENS_BYTECODE_BYTES);
+        // Unichain UniversalJITLens address
+        let lens_address = "0xE48a768A9846F82407712062828fBE6Ef3cB5394";
 
         // Balance request using getLiquidityForPool
         let balance_transport = RpcTransport::new(
@@ -171,14 +131,6 @@ impl MetadataRequestGenerator for UniversalMetadataGenerator {
                     "to": lens_address
                 }),
                 json!(format!("0x{:x}", block.number)),
-                json!({
-                    lens_address: {
-                        "code": format!("0x{}", lens_bytecode_hex),
-                        "state": {
-                            "0x0000000000000000000000000000000000000000000000000000000000000000": format!("0x000000000000000000000000{}", target_str)
-                        }
-                    }
-                }),
             ],
         );
         requests.push(MetadataRequest::new(
@@ -234,9 +186,7 @@ impl MetadataResponseParser for UniversalMetadataResponseParser {
                     )));
                 }
 
-                // getLiquidityForPool returns (zeroForOneLiquidity, oneForZeroLiquidity)
-                // zeroForOneLiquidity = liquidity available when swapping token0 -> token1
-                // oneForZeroLiquidity = liquidity available when swapping token1 -> token0
+                // getLiquidityForPool returns (token0Liquidity, token1Liquidity)
                 let balance_0 = Bytes::from(&res_str[0..64]);
                 let balance_1 = Bytes::from(&res_str[64..128]);
 
@@ -299,14 +249,25 @@ impl MetadataResponseParser for UniversalMetadataResponseParser {
                     )));
                 }
 
-                // getLimitsForPool returns (token0Limit, token1Limit)
-                let limit_0 = Bytes::from(&res_str[0..64]);
-                let limit_1 = Bytes::from(&res_str[64..128]);
+                // getLimitsForPool(token0, token1) returns:
+                // - First uint256 (0..64): output limit for token1 → token0 swap
+                // - Second uint256 (64..128): output limit for token0 → token1 swap
+                let limit_1_to_0 = Bytes::from(&res_str[0..64]);
+                let limit_0_to_1 = Bytes::from(&res_str[64..128]);
 
-                Ok(MetadataValue::Limits(vec![(
-                    token_pair[0].clone(),
-                    (limit_0, limit_1, entrypoint),
-                )]))
+                // Return both directions (limit_1 slot is unused, set to default)
+                Ok(MetadataValue::Limits(vec![
+                    // token0 → token1: use second returned value
+                    (
+                        token_pair[0].clone(),
+                        (limit_0_to_1.clone(), Bytes::default(), entrypoint.clone()),
+                    ),
+                    // token1 → token0: use first returned value
+                    (
+                        token_pair[1].clone(),
+                        (limit_1_to_0, Bytes::default(), entrypoint),
+                    ),
+                ]))
             }
         }
     }
@@ -364,7 +325,7 @@ mod tests {
 
         let requests = generator.generate_requests(&component, &block).unwrap();
 
-        assert_eq!(requests.len(), 3);
+        assert_eq!(requests.len(), 2); // 1 balance + 1 limits (covering both directions)
 
         // Balance request
         assert_eq!(requests[0].component_id(), &component.id);
@@ -378,17 +339,17 @@ mod tests {
         );
         assert_eq!(requests[0].transport().routing_key(), "rpc_default".to_string());
 
-        // Limits request 0 to 1
+        // Single limits request covering both directions
         assert_eq!(requests[1].component_id(), &component.id);
-        assert!(matches!(requests[1].request_type(), MetadataRequestType::Limits { .. }));
-
-        // Limits request 1 to 0
-        assert_eq!(requests[2].component_id(), &component.id);
-        assert!(matches!(requests[2].request_type(), MetadataRequestType::Limits { .. }));
-
-        // Verify state overrides are included
-        assert!(requests[1].transport().deduplication_id().contains("code"));
-        assert!(requests[1].transport().deduplication_id().contains("state"));
+        if let MetadataRequestType::Limits { token_pair } = requests[1].request_type() {
+            assert_eq!(token_pair.len(), 2);
+        } else {
+            panic!("Expected MetadataRequestType::Limits");
+        }
+        assert_eq!(
+            requests[1].request_id(),
+            "universal_limits_0x000000000000000000000000000000000000beef"
+        );
     }
 
     #[test]
@@ -468,9 +429,11 @@ mod tests {
         let generator =
             UniversalMetadataGenerator::new("https://eth-mainnet.alchemyapi.io/v2/test".to_string());
         let requests = generator.generate_requests(&component, &block).unwrap();
-        let limits_request = &requests[1]; // First limits request
+        let limits_request = &requests[1]; // Limits request
 
         // Mock response: two uint256 values for limits
+        // First value (0..64): limit for token1 → token0
+        // Second value (64..128): limit for token0 → token1
         let mock_response = Value::String(
             "0x0000000000000000000000000000000000000000000000000000267d3cdc9cbf00000000000000000000000000000000000000000000000000013ccb6410e36b"
                 .to_string(),
@@ -481,13 +444,31 @@ mod tests {
             .unwrap();
 
         if let MetadataValue::Limits(limits_data) = result {
-            assert_eq!(limits_data.len(), 1);
-            let (_token_pair, (limit_0, limit_1, entrypoint)) = &limits_data[0];
-            assert!(!limit_0.is_empty());
-            assert!(!limit_1.is_empty());
-            assert!(entrypoint.is_some());
+            // Should return both directions
+            assert_eq!(limits_data.len(), 2);
 
-            if let Some(ep) = entrypoint {
+            // First entry: token0 → token1 (uses second returned value)
+            let (token_pair_0, (limit_0_to_1, limit_1_unused_0, entrypoint_0)) = &limits_data[0];
+            let mut sorted_tokens = component.tokens.clone();
+            sorted_tokens.sort_unstable();
+            assert_eq!(token_pair_0, &(sorted_tokens[0].clone(), sorted_tokens[1].clone()));
+            assert!(!limit_0_to_1.is_empty());
+            assert!(limit_1_unused_0.is_empty()); // Second slot is unused
+            assert!(entrypoint_0.is_some());
+
+            // Second entry: token1 → token0 (uses first returned value)
+            let (token_pair_1, (limit_1_to_0, limit_1_unused_1, entrypoint_1)) = &limits_data[1];
+            assert_eq!(token_pair_1, &(sorted_tokens[1].clone(), sorted_tokens[0].clone()));
+            assert!(!limit_1_to_0.is_empty());
+            assert!(limit_1_unused_1.is_empty()); // Second slot is unused
+            assert!(entrypoint_1.is_some());
+
+            // Verify the limits are correctly assigned from the response
+            // limit_1_to_0 should be the first value (0..64)
+            // limit_0_to_1 should be the second value (64..128)
+            assert_ne!(limit_0_to_1, limit_1_to_0); // Different limits for different directions
+
+            if let Some(ep) = entrypoint_0 {
                 assert_eq!(ep.entry_point.signature, "getLimitsForPool(address,address)");
             }
         } else {
