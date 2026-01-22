@@ -348,7 +348,7 @@ mod tests {
     fn create_test_block() -> Block {
         Block::new(
             12345,
-            Chain::Ethereum,
+            Chain::Unichain,
             Bytes::from("0x1234567890123456789012345678901234567890123456789012345678901234"),
             Bytes::from("0x1234567890123456789012345678901234567890123456789012345678901233"),
             NaiveDateTime::parse_from_str("2023-01-01T00:00:00", "%Y-%m-%dT%H:%M:%S").unwrap(),
@@ -508,7 +508,7 @@ mod tests {
             id: "0xc88b618c2c670c2e2a42e06b466b6f0e82a6e8a8".to_string(),
             protocol_system: "universal_swap".to_string(),
             protocol_type_name: "swap".to_string(),
-            chain: Chain::Ethereum,
+            chain: Chain::Unichain,
             tokens: vec![
                 Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
                 Bytes::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"),
@@ -527,7 +527,7 @@ mod tests {
         };
         let block = Block {
             number: 22923196,
-            chain: Chain::Ethereum,
+            chain: Chain::Unichain,
             hash: Bytes::from(
                 "0x5dae08576aa4a6d8a84a677b93f6892c82e53bb05f6df6a2f968fc012b37136e",
             ),
