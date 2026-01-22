@@ -196,14 +196,9 @@ impl PreCachedDB {
                 revert_entry.balance = Some(current_account.balance);
             }
 
-            if update_info.storage.is_some() {
+            if let Some(storage) = &update_info.storage {
                 let mut revert_storage = HashMap::default();
-                for index in update_info
-                    .storage
-                    .as_ref()
-                    .unwrap()
-                    .keys()
-                {
+                for index in storage.keys() {
                     if let Some(s) = write_guard
                         .accounts
                         .get_storage(address, index)
