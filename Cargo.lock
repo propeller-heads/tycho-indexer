@@ -7203,6 +7203,7 @@ dependencies = [
  "diesel",
  "diesel-async",
  "hex",
+ "itertools 0.10.5",
  "maplit",
  "mockall",
  "num-bigint",
