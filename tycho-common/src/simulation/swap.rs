@@ -1,4 +1,4 @@
-use std::{any::Any, collections::HashMap, fmt, fmt::Debug, sync::Arc};
+use std::{collections::HashMap, fmt, fmt::Debug, sync::Arc};
 
 use num_bigint::BigUint;
 
@@ -8,7 +8,7 @@ use crate::{
     simulation::{
         errors::SimulationError,
         indicatively_priced::IndicativelyPriced,
-        protocol_sim::{Balances, Price, ProtocolSim},
+        protocol_sim::{Balances, Price},
     },
     Bytes,
 };
@@ -72,17 +72,12 @@ macro_rules! params_with_context {
 /// Contains optional future block information that can be used for time-sensitive
 /// simulations or to simulate swaps at specific future blockchain states.
 #[derive(Debug, Clone)]
-pub struct Context {
-    /// The next block number to be used for simulation context.
-    next_block_number: Option<u32>,
-    /// The next block timestamp to be used for simulation context.
-    next_block_ts: Option<u32>,
-}
+pub struct Context {}
 
 impl Default for Context {
     /// Creates a new `Context` with no future block information.
     fn default() -> Self {
-        Self { next_block_ts: None, next_block_number: None }
+        Self {}
     }
 }
 
@@ -112,6 +107,10 @@ impl<'a> QuoteParams<'a> {
         amount_in: BigUint,
     ) -> Self {
         Self { context: Context::default(), token_in, token_out, amount_in, modify_state: false }
+    }
+
+    pub fn amount_in(&self) -> &BigUint {
+        &self.amount_in
     }
 
     /// Configures the quote to modify the state during simulation.
@@ -371,6 +370,18 @@ impl<'a> TransitionParams<'a> {
     ) -> Self {
         Self { context: Context::default(), delta, tokens, balances }
     }
+
+    pub fn delta(&self) -> &ProtocolStateDelta {
+        &self.delta
+    }
+
+    pub fn tokens(&self) -> &HashMap<Bytes, Token> {
+        self.tokens
+    }
+
+    pub fn balances(&self) -> &Balances {
+        self.balances
+    }
 }
 
 /// Result of applying a state transition to a pool.
@@ -379,9 +390,9 @@ impl<'a> TransitionParams<'a> {
 /// to contain transition metadata or validation results.
 pub struct Transition {}
 
-impl Transition {
+impl Default for Transition {
     /// Creates a new transition result.
-    pub fn new() -> Self {
+    fn default() -> Self {
         Self {}
     }
 }
@@ -635,7 +646,7 @@ pub trait SwapQuoter: fmt::Debug + Send + Sync + 'static {
     /// - Inspecting the tokens and configuration exposed by the protocol
     /// - Deriving default [`quotable_pairs`](Self::quotable_pairs)
     /// - Identifying or grouping quoters by protocol metadata
-    fn component(&self) -> Arc<ProtocolComponent>;
+    fn component(&self) -> Arc<ProtocolComponent<Arc<Token>>>;
 
     /// Returns the set of **directed token pairs** for which this quoter can produce swap quotes.
     ///
