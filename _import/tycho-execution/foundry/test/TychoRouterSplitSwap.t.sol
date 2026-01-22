@@ -344,6 +344,85 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 99654537);
     }
 
+    function testSplitMultipleTransferFromProtocolDebit() public {
+        // This test attempts to perform multiple `transferFrom`s - which is not
+        // permitted by the TychoRouter.
+        //
+        // The flow is:
+        //            ┌─ (BALANCER V2, 60% split) ──┐
+        //            │                             │
+        // WETH ──────┤                             ├────> BAL
+        //            │                             │
+        //            └─ (BALANCER V2, 40% split) ──┘
+        uint256 amountIn = 1 ether;
+        uint256 existingRouterBalance = 3 ether;
+        bytes32 WETH_BAL_POOL_ID =
+            0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014;
+
+        deal(WETH_ADDR, ALICE, amountIn + existingRouterBalance);
+        vm.startPrank(ALICE);
+
+        IERC20(WETH_ADDR)
+            .approve(tychoRouterAddr, amountIn + existingRouterBalance);
+
+        // Simulate funds already in the router in Alice's vault - we must make sure
+        // these are untouched after our swap.
+        tychoRouter.deposit(WETH_ADDR, existingRouterBalance);
+
+        // For simplicity, just use the same protocol data for both swap legs
+        bytes memory protocolData = abi.encodePacked(
+            WETH_ADDR,
+            BAL_ADDR,
+            WETH_BAL_POOL_ID,
+            tychoRouterAddr, // receiver
+            RestrictTransferFrom.TransferType.TransferFromAndProtocolWillDebit
+        );
+
+        bytes[] memory swaps = new bytes[](2);
+        // WETH -> BAL (60% split)
+        swaps[0] = encodeSplitSwap(
+            uint8(0),
+            uint8(1),
+            (0xffffff * 60) / 100, // 60%
+            address(balancerv2Executor),
+            protocolData
+        );
+
+        // WETH -> BAL (40% remainder)
+        swaps[1] = encodeSplitSwap(
+            uint8(0),
+            uint8(1),
+            uint24(0), // remaining 40%
+            address(balancerv2Executor),
+            protocolData
+        );
+        tychoRouter.splitSwap(
+            amountIn,
+            WETH_ADDR,
+            BAL_ADDR,
+            1, // min amount out
+            2, // number of tokens
+            ALICE, // receiver
+            true, // is transfer from allowed
+            0, // solver fee bps
+            address(0), // solver fee receiver
+            0, // max solver contribution
+            pleEncode(swaps)
+        );
+        assertEq(IERC20(BAL_ADDR).balanceOf(ALICE), 1328_449676114497362517);
+
+        // Vault funds untouched
+        assertEq(
+            tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR))),
+            existingRouterBalance
+        );
+
+        // Router tokens untouched
+        assertEq(
+            IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), existingRouterBalance
+        );
+    }
+
     function testSplitIllegalSplitAmounts() public {
         // A maliciously encoded split swap attempts to take more than the input amount
         // from the user's vault - REVERT
