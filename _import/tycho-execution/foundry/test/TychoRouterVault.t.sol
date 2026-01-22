@@ -7,7 +7,7 @@ import {
     RestrictTransferFrom__ExceededTransferFromAllowance,
     RestrictTransferFrom__DifferentTokenIn
 } from "@src/RestrictTransferFrom.sol";
-import {Vault__UnexpectedInputDelta} from "@src/Vault.sol";
+import {Vault__UnexpectedInputDelta, ERC6909} from "@src/Vault.sol";
 import "./TychoRouterTestSetup.sol";
 
 /**
@@ -305,5 +305,191 @@ contract TychoRouterTransferTest is TychoRouterTestSetup {
             swap
         );
         vm.stopPrank();
+    }
+}
+
+/**
+ * @title TychoRouterTransferNativeInMsgValueTest
+ * @notice Test cases for TransferNativeInMsgValue transfer type
+ * @dev Tests native ETH transfers via msg.value to protocols
+ */
+contract TychoRouterTransferNativeInMsgValueTest is TychoRouterTestSetup {
+    function _rocketpoolEthRethSwap() private returns (bytes memory swap) {
+        swap = encodeSingleSwap(
+            address(rocketpoolExecutor),
+            abi.encodePacked(
+                uint8(1), // isDeposit = true
+                uint8(0), // transferType (ignored for deposits - hardcoded in executor)
+                tychoRouterAddr // receiver (router will handle final transfer to ALICE)
+            )
+        );
+    }
+
+    function testTransferNativeInMsgValueUserSentETH() public {
+        // First swap is native ETH transfer (in msg value), user sent ETH
+        // ETH -> rETH via Rocketpool deposit
+        uint256 amountIn = 1 ether;
+        uint256 existingVaultBalance = 2 ether;
+        deal(ALICE, amountIn + existingVaultBalance);
+
+        vm.startPrank(ALICE);
+        tychoRouter.deposit{value: existingVaultBalance}(
+            address(0), existingVaultBalance
+        );
+        uint256 amountOut = tychoRouter.singleSwap{value: amountIn}(
+            amountIn,
+            address(0), // ETH
+            RETH_ADDR,
+            1, // min amount
+            ALICE, // receiver
+            false, // no transferFrom
+            0,
+            address(0),
+            0,
+            _rocketpoolEthRethSwap()
+        );
+        vm.stopPrank();
+
+        // Alice should have received rETH
+        assertEq(amountOut, 883252117460416988);
+        assertEq(IERC20(RETH_ADDR).balanceOf(ALICE), amountOut);
+
+        // Alice's ETH vault balance should be spent
+        assertEq(tychoRouterAddr.balance, existingVaultBalance);
+        assertEq(tychoRouter.balanceOf(ALICE, 0), existingVaultBalance);
+    }
+
+    function testTransferNativeInMsgValueUsesVaultBalance() public {
+        // First swap is native ETH transfer (in msg value), user didn't send ETH,
+        // so their vault balance is used
+
+        // TODO what if the user just forgets to send ETH here and didn’t expect
+        // their vault balance to be used. Is this okay that this isn't so explicit?
+
+        uint256 amountIn = 1 ether;
+        deal(ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+        // Deposit ETH to vault
+        tychoRouter.deposit{value: amountIn}(address(0), amountIn);
+
+        // Call without msg.value - should use vault balance
+        uint256 amountOut = tychoRouter.singleSwap(
+            amountIn,
+            address(0), // ETH
+            RETH_ADDR,
+            1, // min amount
+            ALICE, // receiver
+            false, // no transferFrom
+            0,
+            address(0),
+            0,
+            _rocketpoolEthRethSwap()
+        );
+        vm.stopPrank();
+
+        // Alice should have received rETH
+        assertGt(IERC20(RETH_ADDR).balanceOf(ALICE), 0);
+        assertEq(IERC20(RETH_ADDR).balanceOf(ALICE), amountOut);
+
+        // Vault balance should be zero
+        assertEq(tychoRouter.balanceOf(ALICE, 0), 0);
+    }
+
+    function testTransferNativeInMsgValueNoVaultBalance() public {
+        // First swap is native ETH transfer (in msg value), user didn't send ETH
+        // and had no vault balance - REVERT
+        uint256 amountIn = 1 ether;
+        vm.startPrank(ALICE);
+        // Router has funds - none of which belong to Alice so she can't use them.
+        deal(tychoRouterAddr, 500 ether);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ERC6909.ERC6909InsufficientBalance.selector,
+                0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2,
+                0,
+                1e18,
+                0
+            )
+        );
+        tychoRouter.singleSwap(
+            amountIn,
+            address(0), // ETH
+            RETH_ADDR,
+            1, // min amount
+            ALICE, // receiver
+            false, // no transferFrom
+            0,
+            address(0),
+            0,
+            _rocketpoolEthRethSwap()
+        );
+        vm.stopPrank();
+    }
+
+    function testSequentialSwapNativeETHCredit() public {
+        // Output of first swap is native ETH. Second swap successfully uses the
+        // credit to perform a native ETH input swap without touching vault funds.
+        // Sequential swap: USDC --(USV4)--> ETH --(rocket)--> rETH
+        bytes[] memory swaps = new bytes[](2);
+
+        // First swap: USDC -> ETH
+        bytes memory pool = abi.encodePacked(
+            address(0), // intermediary token
+            bytes3(uint24(3000)), // fee
+            int24(60), // tick spacing
+            address(0), // hook
+            bytes2(uint16(0)), // hookdata length
+            bytes("") // hookdate
+        );
+
+        bytes memory protocolData = abi.encodePacked(
+            USDC_ADDR,
+            address(0), // ETH_ADDR,
+            false, // zero for one ?? i dont know
+            RestrictTransferFrom.TransferType.TransferFrom,
+            address(tychoRouter), // receiver
+            pool
+        );
+
+        swaps[0] = encodeSingleSwap(address(usv4Executor), protocolData);
+
+        // Second swap: ETH -> rETH (use credit from first swap)
+        swaps[1] = _rocketpoolEthRethSwap();
+
+        uint256 amountIn = 1 ether; // ezETH
+        uint256 existingVaultETHBalance = 3 ether;
+
+        deal(USDC_ADDR, ALICE, amountIn);
+        deal(ALICE, existingVaultETHBalance);
+
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(tychoRouterAddr, amountIn);
+
+        tychoRouter.deposit{value: existingVaultETHBalance}(
+            address(0), existingVaultETHBalance
+        );
+
+        uint256 amountOut = tychoRouter.sequentialSwap(
+            amountIn,
+            USDC_ADDR,
+            RETH_ADDR,
+            1, // min amount
+            ALICE, // receiver
+            true, // transferFrom
+            0, // solver fee bps
+            address(0), // solver fee receiver
+            0, // max solver contribution
+            pleEncode(swaps)
+        );
+        vm.stopPrank();
+
+        // Alice should have received rETH from the last swap
+        assertEq(amountOut, 258732654855663419141);
+        assertEq(IERC20(RETH_ADDR).balanceOf(ALICE), amountOut);
+
+        // Router ETH balance should not have changed
+        assertEq(address(tychoRouter).balance, existingVaultETHBalance);
+        assertEq(tychoRouter.balanceOf(ALICE, 0), existingVaultETHBalance);
     }
 }
