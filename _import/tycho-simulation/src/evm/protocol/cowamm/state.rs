@@ -480,12 +480,13 @@ impl ProtocolSim for CowAMMState {
                         "failed to calculate token proportions out error: {e:?}"
                     ))
                 })?;
-            let _ = self.exit_pool(
+            self.exit_pool(
                 &mut new_state,
                 amount_in,
                 &[proportional_token_amount_a, proportional_token_amount_b],
                 U256::from(self.fee),
-            );
+            )
+            .map_err(|err| SimulationError::FatalError(format!("exit_pool error: {err:?}")))?;
 
             let (amount_to_swap, is_token_a_swap_in) = if token_out.address == *self.token_a_addr()
             {
@@ -540,6 +541,8 @@ impl ProtocolSim for CowAMMState {
         // JOIN POOL (TOKEN → LP)
         // ============================
         if is_lp_out && !is_lp_in {
+            // This is the TOKEN -> LP flow: we will split the input token into
+            // (1) a swap leg to balance pool proportions and (2) a join leg to mint LP.
             let fee = U256::from(self.fee);
             let (bal_in, weight_in, bal_out, weight_out, is_token_a_in) =
                 if token_in.address == *new_state.token_a_addr() {
@@ -560,25 +563,31 @@ impl ProtocolSim for CowAMMState {
                     )
                 };
 
-            // Find swap amount that matches the post-swap pool ratio to join with no dust.
+            // Binary search the swap amount (x) that makes the post-swap ratio
+            // match the join ratio, minimizing dust on the join leg.
             let mut lo = U256::ZERO;
             let mut hi = amount_in;
             let mut best_x = U256::ZERO;
             for _ in 0..128 {
+                // Midpoint in integer space (floor division).
                 let x = safe_div_u256(safe_add_u256(lo, hi)?, U256::from(2u8))?;
                 let out = calculate_out_given_in(bal_in, weight_in, bal_out, weight_out, x, fee)
                     .map_err(|e| SimulationError::FatalError(format!("amount_out error: {e:?}")))?;
 
+                // Split: x is swapped, the remainder joins as the original token.
                 let in_remaining = safe_sub_u256(amount_in, x)?;
                 let bal_in_after = safe_add_u256(bal_in, x)?;
                 let bal_out_after = safe_sub_u256(bal_out, out)?;
 
+                // Compare cross-products to decide which side of the ratio we are on.
                 let left = safe_mul_u256(in_remaining, bal_out_after)?;
                 let right = safe_mul_u256(out, bal_in_after)?;
 
                 if left > right {
+                    // Too much remaining input relative to swap output: increase swap amount.
                     lo = safe_add_u256(x, U256::from(1u8))?;
                 } else {
+                    // Swap is large enough; record candidate and try smaller to reduce dust.
                     best_x = x;
                     if x.is_zero() {
                         break;
@@ -587,10 +596,12 @@ impl ProtocolSim for CowAMMState {
                 }
             }
 
+            // Final swap leg using the best candidate x.
             let x = best_x;
             let out = calculate_out_given_in(bal_in, weight_in, bal_out, weight_out, x, fee)
                 .map_err(|e| SimulationError::FatalError(format!("amount_out error: {e:?}")))?;
 
+            // Post-swap balances that will be used for the join leg.
             let in_remaining = safe_sub_u256(amount_in, x)?;
             let bal_in_after = safe_add_u256(bal_in, x)?;
             let bal_out_after = safe_sub_u256(bal_out, out)?;
@@ -601,17 +612,19 @@ impl ProtocolSim for CowAMMState {
                 ));
             }
 
+            // Compute the LP shares implied by each side, then take the minimum
+            // to avoid over-minting relative to either asset.
             let pool_total = new_state.lp_token_supply;
             let lp_from_in = safe_div_u256(safe_mul_u256(in_remaining, pool_total)?, bal_in_after)?;
             let lp_from_out = safe_div_u256(safe_mul_u256(out, pool_total)?, bal_out_after)?;
-            let lp_out = if lp_from_in < lp_from_out { lp_from_in } else { lp_from_out };
+            let mut lp_out = if lp_from_in < lp_from_out { lp_from_in } else { lp_from_out };
 
             if lp_out.is_zero() {
                 return Err(SimulationError::FatalError(
                     "join_pool produces zero lp_out".to_string(),
                 ));
             }
-
+            // Update the local state with the post-swap balances before joining.
             if is_token_a_in {
                 new_state.token_a.1 = bal_in_after;
                 new_state.token_b.1 = bal_out_after;
@@ -620,9 +633,38 @@ impl ProtocolSim for CowAMMState {
                 new_state.token_a.1 = bal_out_after;
             }
 
+            // These are the maximum amounts we are allowed to contribute to the join.
             let (max_a, max_b) =
                 if is_token_a_in { (in_remaining, out) } else { (out, in_remaining) };
-            let _ = self.join_pool(&mut new_state, lp_out, &[max_a, max_b]);
+
+            // join_pool uses BONE-based rounding (bdiv/bmul), which can require slightly
+            // more input than the floor-based amounts above. Reduce lp_out until the
+            // implied required amounts fit within max_a/max_b.
+            loop {
+                let ratio = bdiv(lp_out, pool_total).map_err(|err| {
+                    SimulationError::FatalError(format!("join_pool ratio error: {err:?}"))
+                })?;
+                let required_a = bmul(ratio, new_state.liquidity_a()).map_err(|err| {
+                    SimulationError::FatalError(format!("join_pool amount_a error: {err:?}"))
+                })?;
+                let required_b = bmul(ratio, new_state.liquidity_b()).map_err(|err| {
+                    SimulationError::FatalError(format!("join_pool amount_b error: {err:?}"))
+                })?;
+
+                if required_a <= max_a && required_b <= max_b {
+                    break;
+                }
+                if lp_out.is_zero() {
+                    return Err(SimulationError::FatalError(
+                        "join_pool lp_out underflow while applying rounding tolerance".to_string(),
+                    ));
+                }
+                lp_out = safe_sub_u256(lp_out, U256::from(1u8))?;
+            }
+
+            // Perform the join with the adjusted lp_out so the pool accepts the inputs.
+            self.join_pool(&mut new_state, lp_out, &[max_a, max_b])
+                .map_err(|err| SimulationError::FatalError(format!("join_pool error: {err:?}")))?;
 
             return Ok(GetAmountOutResult {
                 amount: u256_to_biguint(lp_out),
@@ -806,7 +848,7 @@ mod tests {
         amount.to_f64().unwrap_or(0.0) / divisor
     }
 
-    fn create_test_tokens() -> (Token, Token, Token, Token, Token) {
+    fn create_test_tokens() -> (Token, Token, Token, Token, Token, Token, Token) {
         let t0 = Token::new(
             &Bytes::from_str("0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB").unwrap(),
             "COW",
@@ -854,7 +896,25 @@ mod tests {
             Chain::Ethereum,
             100,
         );
-        (t0, t1, t2, t3, t4)
+        let t5 = Token::new(
+            &Bytes::from_str("0xBAac2B4491727D78D2b78815144570b9f2Fe8899").unwrap(),
+            "DOG",
+            18,
+            0,
+            &[Some(10_000_000)],
+            Chain::Ethereum,
+            100,
+        );
+        let t6 = Token::new(
+            &Bytes::from_str("0x9d0e8cdf137976e03ef92ede4c30648d05e25285").unwrap(),
+            "wstETH-DOG-LP-Token",
+            18,
+            0,
+            &[Some(10_000_000)],
+            Chain::Ethereum,
+            100,
+        );
+        (t0, t1, t2, t3, t4, t5, t6)
     }
 
     #[rstest]
@@ -864,6 +924,13 @@ mod tests {
         0, 1, // token indices: t0 -> t1
         BigUint::from_str("5205849666").unwrap(),  //COW in
         BigUint::from_str("336513").unwrap(), //wstETH out
+    )]
+    #[case::test_dec(
+        U256::from_str("81297577909021519893").unwrap(), //wstETH balance
+        U256::from_str("332162411254631243300976822").unwrap(), //DOG balance
+        1, 5, // token indices: t1 -> t5
+        BigUint::from_str("1000000000000000000").unwrap(),  //wstETH in
+        BigUint::from_str("4036114059417772362872299").unwrap(), //DOG out
     )]
     #[case::diff_dec(
         U256::from_str("170286779513658066185").unwrap(), //WETH balance
@@ -880,8 +947,8 @@ mod tests {
         #[case] amount_in: BigUint,
         #[case] expected_out: BigUint,
     ) {
-        let (t0, t1, t2, t3, t4) = create_test_tokens();
-        let tokens = [&t0, &t1, &t2, &t3, &t4];
+        let (t0, t1, t2, t3, t4, t5, t6) = create_test_tokens();
+        let tokens = [&t0, &t1, &t2, &t3, &t4, &t5, &t6];
         let token_in = tokens[token_in_idx];
         let token_out = tokens[token_out_idx];
 
@@ -889,10 +956,10 @@ mod tests {
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
             token_in.address.clone(),
             token_out.address.clone(),
-            liq_a, //COW
-            liq_b, //wstETH
+            liq_a, //wstETH
+            liq_b, //DOG
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            U256::from_str("199999999999999999990").unwrap(),
+            U256::from_str("128375712183366405029").unwrap(),
             U256::from_str("1000000000000000000").unwrap(),
             U256::from_str("1000000000000000000").unwrap(),
             0,
@@ -924,24 +991,15 @@ mod tests {
         assert_eq!(state.liquidity_b(), liq_b);
     }
 
-    ////new case
-
     #[rstest]
-    // #[case::buy_lp_token( //buying lp token with COW == buying amounts of wstETH needed to join
-    // pool with COW, then joining pool with both tokens     U256::from_str("
-    // 1547000000000000000000").unwrap(),     U256::from_str("100000000000000000").unwrap(),
-    //     0, 2, // token indices: t0 -> t2
-    //     BigUint::from_str("1000000000000000000").unwrap(), //Amount of lp_token being bought
-    // (received from joining pool)     BigUint::from_str("7773869346733669088").unwrap(),
-    // //Amount of wstETH we buy to join the pool )]
-    #[case::sell_lp_token( //selling (redeeming) lp_token for COW == exiting pool and converting excess COW to wstETH
-        U256::from_str("1547000000000000000000").unwrap(),
-        U256::from_str("100000000000000000").unwrap(),
-        2, 0, // token indices: t2 -> t0
-        BigUint::from_str("1000000000000000000").unwrap(), //Amount of lp_token being sold (redeeemd)
-        BigUint::from_str("15431325000000000000").unwrap(), //COW as output, verify that we sent this amount to the pool in total
+    #[case::buy_lp_token( //buying lp token with COW == buying amounts of wstETH needed to join pool with COW, then joining pool with both tokens
+        U256::from_str("81297577909021519893").unwrap(),      // wstETH balance
+        U256::from_str("332162411254631243300976822").unwrap(), //DOG balance
+        1, 6, // token indices: wstETH -> wstETH-DOG-LP-Token
+        BigUint::from_str("1000000000000000000").unwrap(), // wstETH in
+        BigUint::from_str("787128927353433245").unwrap(), // Amount of wstETH-DOG-LP-Token we buy from join the pool
     )]
-    fn test_get_amount_out_lp_token(
+    fn test_get_amount_out_buy_lp_token(
         #[case] liq_a: U256,
         #[case] liq_b: U256,
         #[case] token_in_idx: usize,
@@ -949,8 +1007,65 @@ mod tests {
         #[case] amount_in: BigUint,
         #[case] expected_out: BigUint,
     ) {
-        let (t0, t1, t2, t3, t4) = create_test_tokens();
-        let tokens = [&t0, &t1, &t2, &t3, &t4];
+        let (t0, t1, t2, t3, t4, t5, t6) = create_test_tokens();
+        let tokens = [&t0, &t1, &t2, &t3, &t4, &t5, &t6];
+
+        let token_a = tokens[token_in_idx];
+        let token_b = tokens[token_out_idx];
+
+        let state = CowAMMState::new(
+            Bytes::from("0x9d0e8cdf137976e03ef92ede4c30648d05e25285"),
+            t1.address.clone(), //wstETH
+            t5.address.clone(), //DOG
+            liq_a,              //wstETH Liquidity
+            liq_b,              //DOG Liquidity
+            Bytes::from("0x9d0e8cdf137976e03ef92ede4c30648d05e25285"),
+            U256::from_str("128375712183366405029").unwrap(),
+            U256::from_str("1000000000000000000").unwrap(),
+            U256::from_str("1000000000000000000").unwrap(),
+            0,
+        );
+
+        let res = state
+            .get_amount_out(amount_in.clone(), token_a, token_b)
+            .unwrap();
+
+        assert_eq!(res.amount, expected_out);
+        //lp token supply reduced
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<CowAMMState>()
+            .unwrap();
+
+        assert!(
+            new_state.lp_token_supply > state.lp_token_supply,
+            "LP token supply did not increase"
+        );
+
+        // Original state unchanged
+        assert_eq!(state.liquidity_a(), liq_a);
+        assert_eq!(state.liquidity_b(), liq_b);
+    }
+
+    #[rstest]
+    #[case::sell_lp_token( //selling (redeeming) lp_token for COW == exiting pool and converting excess COW to wstETH
+        U256::from_str("1547000000000000000000").unwrap(),
+        U256::from_str("100000000000000000").unwrap(),
+        2, 0, // token indices: t2 -> t0
+        BigUint::from_str("1000000000000000000").unwrap(), //Amount of lp_token being sold (redeeemd)
+        BigUint::from_str("15431325000000000000").unwrap(), //COW as output, verify that we sent this amount to the pool in total
+    )]
+    fn test_get_amount_out_sell_lp_token(
+        #[case] liq_a: U256,
+        #[case] liq_b: U256,
+        #[case] token_in_idx: usize,
+        #[case] token_out_idx: usize,
+        #[case] amount_in: BigUint,
+        #[case] expected_out: BigUint,
+    ) {
+        let (t0, t1, t2, t3, t4, t5, t6) = create_test_tokens();
+        let tokens = [&t0, &t1, &t2, &t3, &t4, &t5, &t6];
 
         let token_a = tokens[token_in_idx];
         let token_b = tokens[token_out_idx];
@@ -1001,7 +1116,7 @@ mod tests {
     fn test_get_amount_out_overflow() {
         let max = (BigUint::one() << 256) - BigUint::one();
 
-        let (t0, t1, _, _, _) = create_test_tokens();
+        let (t0, t1, _, _, _, _, _) = create_test_tokens();
 
         let state = CowAMMState::new(
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
@@ -1023,29 +1138,29 @@ mod tests {
     }
 
     #[rstest]
-    #[case(17736000000000000000f64)]
+    #[case(244752492017f64)]
     fn test_spot_price(#[case] expected: f64) {
-        let (t0, t1, _, _, _) = create_test_tokens();
+        let (t0, _, _, _, _, t5, _) = create_test_tokens();
         let state = CowAMMState::new(
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
             t0.address.clone(),
-            t1.address.clone(),
-            U256::from_str("886800000000000000").unwrap(),
-            U256::from_str("50000000000000000").unwrap(),
+            t5.address.clone(),
+            U256::from_str("81297577909021519893").unwrap(),
+            U256::from_str("332162411254631243300976822").unwrap(),
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            U256::from_str("100000000000000000000").unwrap(),
+            U256::from_str("128375712183366405029").unwrap(),
             U256::from_str("1000000000000000000").unwrap(),
             U256::from_str("1000000000000000000").unwrap(),
             0,
         );
 
-        let price = state.spot_price(&t0, &t1).unwrap();
+        let price = state.spot_price(&t0, &t5).unwrap();
         assert_ulps_eq!(price, expected);
     }
 
     #[test]
     fn test_fee() {
-        let (t0, t1, _, _, _) = create_test_tokens();
+        let (t0, t1, _, _, _, _, _) = create_test_tokens();
 
         let state = CowAMMState::new(
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
@@ -1066,7 +1181,7 @@ mod tests {
     }
     #[test]
     fn test_delta_transition() {
-        let (t0, t1, _, _, _) = create_test_tokens();
+        let (t0, t1, _, _, _, _, _) = create_test_tokens();
 
         let mut state = CowAMMState::new(
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
@@ -1145,7 +1260,7 @@ mod tests {
 
     #[test]
     fn test_get_limits_price_impact() {
-        let (t0, t1, _, _, _) = create_test_tokens();
+        let (t0, t1, _, _, _, _, _) = create_test_tokens();
 
         let state = CowAMMState::new(
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
