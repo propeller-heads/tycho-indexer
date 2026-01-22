@@ -111,12 +111,13 @@ contract CurveExecutor is IExecutor {
                 // Due to rounding errors, 1 wei might get lost
                 IERC20(tokenOut).safeTransfer(receiver, amountOut);
             }
-        }
 
-        if (hasStETH && tokenOut == stEthAddress) {
-            castRemainderWei =
-                IERC20(stEthAddress).balanceOf(address(this)) - balanceBefore;
-            amountOut -= castRemainderWei;
+            if (hasStETH && tokenOut == stEthAddress) {
+                castRemainderWei = IERC20(stEthAddress).balanceOf(address(this))
+                    - balanceBefore;
+
+                amountOut -= castRemainderWei;
+            }
         }
 
         // This is necessary because Curve's native token is 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE and TychoRouter
