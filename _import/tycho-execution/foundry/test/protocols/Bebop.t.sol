@@ -433,14 +433,14 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 contract TychoRouterForBebopTest is TychoRouterTestSetup {
     // Override the fork block for Bebop tests
     function getForkBlock() public pure override returns (uint256) {
-        return 22667986;
+        return 24290115;
     }
 
     function testSingleBebopIntegration() public {
         // The calldata swaps 200 usdc for ondo
         address user = 0xd2068e04Cf586f76EEcE7BA5bEB779D7bB1474A1;
         deal(USDC_ADDR, user, 200000000); // 200 usdc
-        uint256 expAmountOut = 194477331556159832309; // Expected ondo amount from quote
+        uint256 expAmountOut = 582464275842264783022; // Expected ondo amount from quote
 
         uint256 ondoBefore = IERC20(ONDO_ADDR).balanceOf(user);
         vm.startPrank(user);
@@ -468,7 +468,7 @@ contract TychoRouterForBebopTest is TychoRouterTestSetup {
         // The calldata swaps 20k usdc for ondo using multiple market makers
         address user = 0xd2068e04Cf586f76EEcE7BA5bEB779D7bB1474A1;
         deal(USDC_ADDR, user, 20000000000); // 20k usdc
-        uint256 expAmountOut = 18699321819466078474202; // Expected ondo amount from quote
+        uint256 expAmountOut = 58302581300158475047842; // Expected ondo amount from quote
 
         uint256 ondoBefore = IERC20(ONDO_ADDR).balanceOf(user);
         vm.startPrank(user);

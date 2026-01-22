@@ -25,7 +25,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
 
         bytes memory protocolData = encodeUniswapV2Swap(
             DAI_WETH_UNIV2_POOL,
-            ALICE,
+            address(tychoRouter),
             false,
             RestrictTransferFrom.TransferType.TransferFrom
         );
@@ -66,7 +66,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
 
         bytes memory protocolData = encodeUniswapV2Swap(
             DAI_WETH_UNIV2_POOL,
-            ALICE,
+            address(tychoRouter),
             false,
             RestrictTransferFrom.TransferType.TransferFrom
         );
@@ -271,7 +271,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
 
         bytes memory protocolData = encodeUniswapV2Swap(
             DAI_WETH_UNIV2_POOL,
-            ALICE,
+            address(tychoRouter),
             false,
             RestrictTransferFrom.TransferType.TransferFrom
         );

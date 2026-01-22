@@ -32,7 +32,7 @@ contract BaseConstants {
 }
 
 contract Constants is Test, BaseConstants {
-    address ADMIN = makeAddr("admin"); //admin=us
+    address ADMIN = makeAddr("unique-admin"); //admin=us
     // Changed this since someone deployed a drainer contract to makeAddr("bob")
     address BOB = makeAddr("bob*"); //bob=someone!=us
     address EXECUTOR_SETTER = makeAddr("executorSetter");

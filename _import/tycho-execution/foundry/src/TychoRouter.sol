@@ -77,6 +77,10 @@ error TychoRouter__UndefinedMinAmountOut();
 contract TychoRouter is AccessControl, Dispatcher, Pausable {
     IFeeCalculator private _feeCalculator; // Fee calculator contract
 
+    // Max amount of dust that can stay behind in the TychoRouter when swapping.
+    // This is relevant for rebasing tokens like stETH where sometimes 1 WEI is lost per transfer.
+    uint256 private constant ALLOWED_DUST = 2;
+
     using SafeERC20 for IERC20;
     using LibPrefixLengthEncodedByteArray for bytes;
     using LibSwap for bytes;
@@ -496,13 +500,10 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             amountOut, minAmountOut, maxSolverContribution, tokenOut, receiver
         );
 
-        // If fees were taken, transfer the amount after fees to the receiver
-        if (amountOut < amountOutBeforeFees) {
-            if (tokenOut == address(0)) {
-                Address.sendValue(payable(receiver), amountOut);
-            } else {
-                IERC20(tokenOut).safeTransfer(receiver, amountOut);
-            }
+        if (tokenOut == address(0)) {
+            Address.sendValue(payable(receiver), amountOut);
+        } else {
+            IERC20(tokenOut).safeTransfer(receiver, amountOut);
         }
 
         _verifyAmountOutWasReceived(
@@ -564,13 +565,10 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             amountOut, minAmountOut, maxSolverContribution, tokenOut, receiver
         );
 
-        // If fees were taken, transfer the amount after fees to the receiver
-        if (amountOut < amountOutBeforeFees) {
-            if (tokenOut == address(0)) {
-                Address.sendValue(payable(receiver), amountOut);
-            } else {
-                IERC20(tokenOut).safeTransfer(receiver, amountOut);
-            }
+        if (tokenOut == address(0)) {
+            Address.sendValue(payable(receiver), amountOut);
+        } else {
+            IERC20(tokenOut).safeTransfer(receiver, amountOut);
         }
 
         _verifyAmountOutWasReceived(
@@ -628,13 +626,10 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             amountOut, minAmountOut, maxSolverContribution, tokenOut, receiver
         );
 
-        // If fees were taken, transfer the amount after fees to the receiver
-        if (amountOut < amountOutBeforeFees) {
-            if (tokenOut == address(0)) {
-                Address.sendValue(payable(receiver), amountOut);
-            } else {
-                IERC20(tokenOut).safeTransfer(receiver, amountOut);
-            }
+        if (tokenOut == address(0)) {
+            Address.sendValue(payable(receiver), amountOut);
+        } else {
+            IERC20(tokenOut).safeTransfer(receiver, amountOut);
         }
 
         _verifyAmountOutWasReceived(
@@ -910,7 +905,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             initialBalanceTokenOut -= amountIn;
         }
         uint256 userAmount = currentBalanceTokenOut - initialBalanceTokenOut;
-        if (userAmount != amountOut) {
+        if (userAmount < amountOut - ALLOWED_DUST) {
             revert TychoRouter__AmountOutNotFullyReceived(userAmount, amountOut);
         }
     }
@@ -935,11 +930,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             // Debit the solver's vault balance and transfer contribution to receiver
             _debitVault(msg.sender, tokenOut, requiredContribution);
 
-            if (tokenOut == address(0)) {
-                Address.sendValue(payable(receiver), requiredContribution);
-            } else {
-                IERC20(tokenOut).safeTransfer(receiver, requiredContribution);
-            }
             amount = minAmountOut;
         } else {
             amount = amountOut;

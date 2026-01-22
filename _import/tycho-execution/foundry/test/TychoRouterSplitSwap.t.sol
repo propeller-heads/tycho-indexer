@@ -39,7 +39,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             address(usv2Executor),
             encodeUniswapV2Swap(
                 USDC_WBTC_POOL,
-                ALICE,
+                tychoRouterAddr,
                 true,
                 RestrictTransferFrom.TransferType.Transfer
             )
@@ -63,7 +63,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             address(usv2Executor),
             encodeUniswapV2Swap(
                 DAI_USDC_POOL,
-                ALICE,
+                tychoRouterAddr,
                 true,
                 RestrictTransferFrom.TransferType.Transfer
             )
@@ -76,13 +76,13 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         // Trade 1 WETH for USDC through DAI and WBTC - see _getSplitSwaps for more info
 
         uint256 amountIn = 1 ether;
-        deal(WETH_ADDR, address(tychoRouterAddr), amountIn);
+        deal(WETH_ADDR, tychoRouterAddr, amountIn);
         vm.startPrank(ALICE);
         bytes[] memory swaps = _getSplitSwaps(false);
         tychoRouter.exposedSplitSwap(amountIn, 4, pleEncode(swaps));
         vm.stopPrank();
 
-        uint256 usdcBalance = IERC20(USDC_ADDR).balanceOf(ALICE);
+        uint256 usdcBalance = IERC20(USDC_ADDR).balanceOf(tychoRouterAddr);
         assertEq(usdcBalance, 1989737355);
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
@@ -500,8 +500,6 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         assertTrue(success, "Call Failed");
         assertGe(balanceAfter - balanceBefore, 26173932);
 
-        // All input tokens are transferred to the router at first. Make sure we used
-        // all of it (and thus our splits are correct).
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 

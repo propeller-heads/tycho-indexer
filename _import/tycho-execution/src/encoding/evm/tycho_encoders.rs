@@ -427,7 +427,7 @@ mod tests {
     }
 
     fn router_address() -> Bytes {
-        Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap()
+        Bytes::from_str("0x6bc529DC7B81A031828dDCE2BC419d01FF268C66").unwrap()
     }
 
     fn eth_chain() -> Chain {
@@ -489,7 +489,7 @@ mod tests {
             assert_eq!(transactions[0].value, BigUint::ZERO);
             assert_eq!(
                 transactions[0].to,
-                Bytes::from_str("0x3ede3eca2a72b3aecc820e955b36f38437d01395").unwrap()
+                Bytes::from_str("0x6bc529DC7B81A031828dDCE2BC419d01FF268C66").unwrap()
             );
             // single swap selector
             assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "3cbe9156");

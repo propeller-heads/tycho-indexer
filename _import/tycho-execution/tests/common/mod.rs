@@ -18,7 +18,7 @@ use tycho_contracts::encoding::{
 };
 
 pub fn router_address() -> Bytes {
-    Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap()
+    Bytes::from_str("0x6bc529DC7B81A031828dDCE2BC419d01FF268C66").unwrap()
 }
 
 pub fn bob_address() -> Bytes {

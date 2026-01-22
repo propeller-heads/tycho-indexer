@@ -164,7 +164,7 @@ fn test_sequential_swap_strategy_encoder_no_permit2_integration() {
         "003e",                                     // swap length
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
         "004375dff511095cc5a197a54140a24efef3a416", // component id (pool address)
-        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver (final user)
+        "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver (tycho router)
         "01",                                       // zero to one
         "05",                                       // transfer type None
     ));
@@ -279,7 +279,7 @@ fn test_sequential_strategy_cyclic_swap() {
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
         "0001f4",                                   // pool fee
-        "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
+        "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
         "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
         "01",                                       // zero2one
         "00",                                       // transfer type TransferFrom
@@ -288,7 +288,7 @@ fn test_sequential_strategy_cyclic_swap() {
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
         "000bb8",                                   // pool fee
-        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
+        "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
         "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
         "00",                                       // zero2one
         "02",                                       // transfer type Transfer
