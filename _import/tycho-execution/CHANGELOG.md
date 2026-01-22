@@ -1,3 +1,10 @@
+## [0.17.0](https://github.com/propeller-heads/tycho-contracts/compare/0.16.0...0.17.0) (2026-01-22)
+
+
+### Features
+
+* Remove final output transfer optimization ([57a13ec](https://github.com/propeller-heads/tycho-contracts/commit/57a13ece387ed7c27ea4ba27a061781888234b06))
+
 ## [0.16.0](https://github.com/propeller-heads/tycho-contracts/compare/0.15.0...0.16.0) (2026-01-22)
 
 
