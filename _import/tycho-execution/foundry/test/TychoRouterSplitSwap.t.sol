@@ -413,6 +413,75 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
+    function testSplitIllegalSplitAmounts() public {
+        // A maliciously encoded split swap attempts to take more than the input amount
+        // from the user's vault - REVERT
+
+        // The flow is:
+        //            ┌─ (60% split) ───┐
+        //            │                 │
+        // USDC ──────┤                 ├────> WBTC
+        //            │                 │
+        //            └─ (60% split) ───┘
+        bytes[] memory swaps = new bytes[](2);
+
+        // WETH -> WBTC (60%)
+        swaps[0] = encodeSplitSwap(
+            uint8(0),
+            uint8(1),
+            (0xffffff * 60) / 100, // 60%
+            address(usv2Executor),
+            encodeUniswapV2Swap(
+                WETH_WBTC_POOL,
+                tychoRouterAddr,
+                false,
+                RestrictTransferFrom.TransferType.Transfer
+            )
+        );
+
+        // WETH -> WBTC (60% again - illegal, total 120%)
+        swaps[1] = encodeSplitSwap(
+            uint8(0),
+            uint8(1),
+            (0xffffff * 60) / 100, // 60%
+            address(usv2Executor),
+            encodeUniswapV2Swap(
+                WETH_WBTC_POOL,
+                tychoRouterAddr,
+                false,
+                RestrictTransferFrom.TransferType.Transfer
+            )
+        );
+
+        uint256 amountIn = 1 ether;
+        uint256 existingVaultBalance = 3 ether;
+        deal(WETH_ADDR, ALICE, amountIn + existingVaultBalance);
+
+        vm.startPrank(ALICE);
+
+        // Deposit into vault
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, existingVaultBalance);
+        tychoRouter.deposit(WETH_ADDR, existingVaultBalance);
+
+        // Should revert with arithmetic underflow when trying to take 120% of the
+        // input amount (0.6 + 0.6 = 1.2 ether, but only 1 ether available)
+        vm.expectRevert(stdError.arithmeticError);
+        tychoRouter.splitSwap(
+            amountIn,
+            WETH_ADDR,
+            WBTC_ADDR,
+            1, // min amount
+            4,
+            ALICE,
+            false, // no transferFrom
+            0,
+            address(0),
+            0,
+            pleEncode(swaps)
+        );
+        vm.stopPrank();
+    }
+
     function testSplitOutputCyclicSwapInternalMethod() public {
         // This test has start and end tokens that are the same
         // The flow is:

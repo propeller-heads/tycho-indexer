@@ -67,6 +67,9 @@ import {FeeRecipient} from "../lib/FeeStructs.sol";
 
 error TychoRouter__AddressZero();
 error TychoRouter__EmptySwaps();
+error TychoRouter__MsgValueDoesNotMatchAmountIn(
+    uint256 msgValue, uint256 amountIn
+);
 error TychoRouter__NegativeSlippage(uint256 amount, uint256 minAmount);
 error TychoRouter__AmountOutNotFullyReceived(
     uint256 amountIn, uint256 amountConsumed
@@ -159,7 +162,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 maxSolverContribution,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        _updateNativeDeltaAccounting();
+        _updateNativeDeltaAccounting(amountIn);
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         _tstoreTransferFromInfo(tokenIn, amountIn, false, isTransferFromAllowed);
 
@@ -216,7 +219,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         bytes calldata signature,
         bytes calldata swaps
     ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        _updateNativeDeltaAccounting();
+        _updateNativeDeltaAccounting(amountIn);
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
@@ -272,7 +275,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 maxSolverContribution,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        _updateNativeDeltaAccounting();
+        _updateNativeDeltaAccounting(amountIn);
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         _tstoreTransferFromInfo(tokenIn, amountIn, false, isTransferFromAllowed);
 
@@ -325,7 +328,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         bytes calldata signature,
         bytes calldata swaps
     ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        _updateNativeDeltaAccounting();
+        _updateNativeDeltaAccounting(amountIn);
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
@@ -380,7 +383,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 maxSolverContribution,
         bytes calldata swapData
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        _updateNativeDeltaAccounting();
+        _updateNativeDeltaAccounting(amountIn);
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         _tstoreTransferFromInfo(tokenIn, amountIn, false, isTransferFromAllowed);
 
@@ -432,7 +435,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         bytes calldata signature,
         bytes calldata swapData
     ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        _updateNativeDeltaAccounting();
+        _updateNativeDeltaAccounting(amountIn);
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
@@ -868,8 +871,15 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @dev Updates delta accounting for native ETH received via msg.value
      * @notice This should be called at each entry point to credit the delta when ETH is sent
      */
-    function _updateNativeDeltaAccounting() internal {
+    function _updateNativeDeltaAccounting(uint256 amountIn) internal {
         if (msg.value > 0) {
+            // prevent unpredictable scenarios where the amountIn does not match exactly
+            // what the caller sent
+            if (msg.value != amountIn) {
+                revert TychoRouter__MsgValueDoesNotMatchAmountIn(
+                    msg.value, amountIn
+                );
+            }
             _updateDeltaAccounting(address(0), int256(msg.value));
         }
     }

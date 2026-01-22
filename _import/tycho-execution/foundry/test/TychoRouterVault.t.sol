@@ -4,8 +4,10 @@ pragma solidity ^0.8.26;
 import "@src/executors/UniswapV4Executor.sol";
 import {TychoRouter} from "@src/TychoRouter.sol";
 import {
-    RestrictTransferFrom__ExceededTransferFromAllowance
+    RestrictTransferFrom__ExceededTransferFromAllowance,
+    RestrictTransferFrom__DifferentTokenIn
 } from "@src/RestrictTransferFrom.sol";
+import {Vault__UnexpectedInputDelta} from "@src/Vault.sol";
 import "./TychoRouterTestSetup.sol";
 
 /**
@@ -19,7 +21,7 @@ contract TychoRouterTransferFromTest is TychoRouterTestSetup {
         //  contract. should we move this to another file?
 
         // A maliciously encoded split swap attempts to take more than the input amount
-        // from the user’s wallet. The user has accidentally allowed MAX - REVERT
+        // from the user's wallet. The user has accidentally allowed MAX - REVERT
 
         //          ->   WBTC
         // 1 WETH
@@ -31,7 +33,7 @@ contract TychoRouterTransferFromTest is TychoRouterTestSetup {
         swaps[0] = encodeSplitSwap(
             uint8(0),
             uint8(1),
-            (0xffffff * 60) / 100, // 60%
+            uint24((0xffffff * 60) / 100), // 60%
             address(usv2Executor),
             encodeUniswapV2Swap(
                 WETH_WBTC_POOL,
@@ -44,7 +46,7 @@ contract TychoRouterTransferFromTest is TychoRouterTestSetup {
         swaps[1] = encodeSplitSwap(
             uint8(0),
             uint8(1),
-            (0xffffff * 60) / 100, // 60%
+            uint24((0xffffff * 60) / 100), // 60%
             address(usv2Executor),
             encodeUniswapV2Swap(
                 WETH_WBTC_POOL,
@@ -82,5 +84,226 @@ contract TychoRouterTransferFromTest is TychoRouterTestSetup {
             0, // max solver contribution
             pleEncode(swaps)
         );
+    }
+}
+
+/**
+ * @title TychoRouterTransferTest
+ * @notice Test cases for Transfer type in the router (Transfer, TransferFromAndProtocolWillDebit, etc.)
+ * @dev Tests various malicious scenarios and proper vault usage
+ */
+contract TychoRouterTransferTest is TychoRouterTestSetup {
+    function testPreviousSwapReceiverWrongfullyEncoded() public {
+        // Malicious encoding: previous swap receiver was wrongfully encoded to be
+        // the current protocol instead of our router - REVERT
+        // Sequential swap: WETH -> DAI -> USDC
+        // First swap sends to DAI pool (malicious) instead of router
+        // Second swap expects funds in the delta accounting but they're not there
+
+        bytes[] memory swaps = new bytes[](2);
+
+        // WETH -> DAI (malicious: receiver is DAI_USDC_POOL instead of router)
+        swaps[0] = encodeSequentialSwap(
+            address(usv2Executor),
+            encodeUniswapV2Swap(
+                DAI_WETH_UNIV2_POOL,
+                DAI_USDC_POOL, // MALICIOUS: should be tychoRouterAddr
+                false,
+                RestrictTransferFrom.TransferType.TransferFrom
+            )
+        );
+
+        // DAI -> USDC (expects Transfer from router, but funds are in pool)
+        swaps[1] = encodeSequentialSwap(
+            address(usv2Executor),
+            encodeUniswapV2Swap(
+                DAI_USDC_POOL,
+                ALICE,
+                true,
+                RestrictTransferFrom.TransferType.Transfer
+            )
+        );
+
+        uint256 amountIn = 1 ether;
+        uint256 existingDaiVaultBalance = 3000 ether; // 3000 DAI
+        deal(WETH_ADDR, ALICE, amountIn);
+
+        // Alice does have some DAI in the vault. We must make sure not to use it,
+        // since Alice didn't explicitly give us permission.
+        deal(DAI_ADDR, ALICE, existingDaiVaultBalance);
+
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
+        IERC20(DAI_ADDR).approve(tychoRouterAddr, existingDaiVaultBalance);
+        tychoRouter.deposit(DAI_ADDR, existingDaiVaultBalance);
+
+        // Should revert because this causes a negative input delta for DAI
+        // The only permitted negative input delta should be the input token, which
+        // has a 0 delta, since we took funds straight form Alice's wallet and not
+        // the vault.
+        vm.expectRevert(
+            abi.encodeWithSelector(Vault__UnexpectedInputDelta.selector, 0)
+        );
+        tychoRouter.sequentialSwap(
+            amountIn,
+            WETH_ADDR,
+            USDC_ADDR,
+            1, // min amount
+            ALICE,
+            true,
+            0,
+            address(0),
+            0,
+            pleEncode(swaps)
+        );
+        vm.stopPrank();
+    }
+
+    function testSplitSwapUsesVaultBalance() public {
+        // A maliciously encoded split swap attempts to take more than the input amount
+        // from the user's vault - REVERT
+
+        //          ->   WBTC (60%)
+        // 1 WETH
+        //          ->   WBTC (40%)
+        //       (univ2)
+        bytes[] memory swaps = new bytes[](2);
+
+        // WETH -> WBTC (60%)
+        swaps[0] = encodeSplitSwap(
+            uint8(0),
+            uint8(1),
+            (0xffffff * 60) / 100, // 60%
+            address(usv2Executor),
+            encodeUniswapV2Swap(
+                WETH_WBTC_POOL,
+                tychoRouterAddr,
+                false,
+                RestrictTransferFrom.TransferType.Transfer
+            )
+        );
+
+        // WETH -> WBTC (40%)
+        swaps[1] = encodeSplitSwap(
+            uint8(0),
+            uint8(1),
+            0, // 40%
+            address(usv2Executor),
+            encodeUniswapV2Swap(
+                WETH_WBTC_POOL,
+                tychoRouterAddr,
+                false,
+                RestrictTransferFrom.TransferType.Transfer
+            )
+        );
+
+        uint256 amountIn = 1 ether;
+        uint256 existingVaultBalance = 3 ether;
+        deal(WETH_ADDR, ALICE, amountIn + existingVaultBalance);
+
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, existingVaultBalance);
+        tychoRouter.deposit(WETH_ADDR, existingVaultBalance);
+
+        uint256 amountOut = tychoRouter.splitSwap(
+            amountIn,
+            WETH_ADDR,
+            WBTC_ADDR,
+            1, // min amount
+            4,
+            ALICE, // receiver
+            false, // no transferFrom
+            0,
+            address(0),
+            0,
+            pleEncode(swaps)
+        );
+        vm.stopPrank();
+
+        // 1 ether was used from vault balance. The rest (2 ether) remains.
+        assertEq(
+            tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR))), 2 ether
+        );
+        // Alice received the amount out
+        assertEq(IERC20(WBTC_ADDR).balanceOf(ALICE), amountOut);
+    }
+
+    function testWrongInputTokenFirstSwap() public {
+        // User sends native ETH with the swap, but first pool maliciously encodes a
+        // different input token in an attempt to use the user’s vault balance of
+        // another token
+
+        bytes memory swap = encodeSingleSwap(
+            address(usv2Executor),
+            encodeUniswapV2Swap(
+                USDC_WETH_USV2,
+                tychoRouterAddr,
+                false, // swap WETH for USDC
+                RestrictTransferFrom.TransferType.Transfer
+            )
+        );
+
+        uint256 amountIn = 1 ether;
+        deal(ALICE, amountIn);
+        deal(WETH_ADDR, ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
+
+        // Alice has WETH in vault that the malicious encoder is trying to steal
+        tychoRouter.deposit(WETH_ADDR, amountIn);
+
+        // The router only allows using vault funds for the initial tokenIn, preventing
+        // vault theft
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Vault__UnexpectedInputDelta.selector, 1000000000000000000
+            )
+        );
+        tychoRouter.singleSwap{value: amountIn}(
+            amountIn,
+            address(0), // ETH
+            DAI_ADDR,
+            1, // min amount
+            ALICE, // receiver
+            false, // transferFrom allowed
+            0, // solverFeeBps
+            address(0), // solverFeeReceiver
+            0, // maxSolverContribution
+            swap
+        );
+        vm.stopPrank();
+    }
+
+    function testMsgValueDoesNotMatchAmountIn() public {
+        // Alice transfers in 1 ETH (to use in her swap) via msg.value.
+        // By accident, she specified 2 ETH as her input amount. This does not match
+        // the amount that she sent - revert.
+        uint256 amountIn = 1 ether;
+        deal(ALICE, amountIn);
+
+        bytes memory swap = new bytes(0); // IRRELEVANT - should fail before this
+
+        vm.startPrank(ALICE);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TychoRouter__MsgValueDoesNotMatchAmountIn.selector,
+                amountIn - 1,
+                amountIn
+            )
+        );
+        tychoRouter.singleSwap{value: amountIn - 1}(
+            amountIn,
+            address(0), // ETH
+            DAI_ADDR,
+            1, // min amount
+            ALICE, // receiver
+            false, // transferFrom allowed
+            0, // solverFeeBps
+            address(0), // solverFeeReceiver
+            0, // maxSolverContribution
+            swap
+        );
+        vm.stopPrank();
     }
 }
