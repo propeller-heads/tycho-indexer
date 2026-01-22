@@ -314,7 +314,7 @@ contract TychoRouterTransferTest is TychoRouterTestSetup {
  * @dev Tests native ETH transfers via msg.value to protocols
  */
 contract TychoRouterTransferNativeInMsgValueTest is TychoRouterTestSetup {
-    function _rocketpoolEthRethSwap() private returns (bytes memory swap) {
+    function _rocketpoolEthRethSwap() private view returns (bytes memory swap) {
         swap = encodeSingleSwap(
             address(rocketpoolExecutor),
             abi.encodePacked(
@@ -491,5 +491,77 @@ contract TychoRouterTransferNativeInMsgValueTest is TychoRouterTestSetup {
         // Router ETH balance should not have changed
         assertEq(address(tychoRouter).balance, existingVaultETHBalance);
         assertEq(tychoRouter.balanceOf(ALICE, 0), existingVaultETHBalance);
+    }
+}
+
+/**
+ * @title TychoRouterProtocolWillDebitTest
+ * @notice Test cases for ProtocolWillDebit transfer type
+ */
+contract TychoRouterProtocolWillDebitTest is TychoRouterTestSetup {
+    function testProtocolWillDebitWrongPreviousReceiver() public {
+        // Previous swap receiver was wrongfully encoded to be the current protocol
+        // instead of the router - REVERT
+        // Sequential swap: WETH -> DAI -> USDC
+        // First swap sends to DAI-USDC pool instead of router
+        // Second swap expects funds in the router via ProtocolWillDebit but they're not there
+
+        bytes[] memory swaps = new bytes[](2);
+
+        // WETH -> DAI (malicious: receiver is DAI_USDC_POOL instead of router)
+        swaps[0] = encodeSequentialSwap(
+            address(usv2Executor),
+            encodeUniswapV2Swap(
+                DAI_WETH_UNIV2_POOL,
+                DAI_USDC_POOL, // MALICIOUS: should be tychoRouterAddr
+                false,
+                RestrictTransferFrom.TransferType.TransferFrom
+            )
+        );
+
+        // DAI -> USDC
+        swaps[1] = encodeSequentialSwap(
+            address(usv2Executor),
+            encodeUniswapV2Swap(
+                DAI_USDC_POOL,
+                ALICE,
+                true,
+                RestrictTransferFrom.TransferType.ProtocolWillDebit
+            )
+        );
+
+        uint256 amountIn = 1 ether;
+        uint256 existingDaiVaultBalance = 3000 ether; // 3000 DAI
+        deal(WETH_ADDR, ALICE, amountIn);
+
+        // Alice does have some DAI in the vault. We must make sure not to use it,
+        // since Alice didn't explicitly give us permission.
+        deal(DAI_ADDR, ALICE, existingDaiVaultBalance);
+
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
+        IERC20(DAI_ADDR).approve(tychoRouterAddr, existingDaiVaultBalance);
+        tychoRouter.deposit(DAI_ADDR, existingDaiVaultBalance);
+
+        // Should revert because this causes a negative input delta for DAI
+        // The only permitted negative input delta should be the input token, which
+        // has a 0 delta, since we took funds straight from Alice's wallet and not
+        // the vault.
+        vm.expectRevert(
+            abi.encodeWithSelector(Vault__UnexpectedInputDelta.selector, 0)
+        );
+        tychoRouter.sequentialSwap(
+            amountIn,
+            WETH_ADDR,
+            USDC_ADDR,
+            1, // min amount
+            ALICE,
+            true,
+            0,
+            address(0),
+            0,
+            pleEncode(swaps)
+        );
+        vm.stopPrank();
     }
 }
