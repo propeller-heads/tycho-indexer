@@ -568,4 +568,47 @@ contract TychoRouterProtocolWillDebitTest is TychoRouterTestSetup {
         );
         vm.stopPrank();
     }
+
+    function testTransferNoneForProtocolWillDebit() public {
+        // Alice attempts to use vault funds that don't belong to her by encoding
+        // None transfer type when it should be ProtocolWillDebit. When Curve attempts
+        // to take the tokens, it fails due to insufficient allowance.
+
+        // DAI -> USDC on Curve TRIPOOL
+        bytes memory swap = encodeSingleSwap(
+            address(curveExecutor),
+            abi.encodePacked(
+                DAI_ADDR, // tokenIn
+                USDC_ADDR, // tokenOut
+                TRIPOOL, // pool
+                uint8(1), // poolType (1 for StableSwap)
+                uint8(0), // i (DAI index)
+                uint8(1), // j (USDC index)
+                RestrictTransferFrom.TransferType.None, // Should be ProtocolWillDebit
+                ALICE // receiver
+            )
+        );
+
+        uint256 amountIn = 1000 ether;
+        uint256 existingDaiRouterBalance = 3000 ether; // 3000 DAI
+        deal(DAI_ADDR, tychoRouterAddr, existingDaiRouterBalance);
+
+        vm.startPrank(ALICE);
+        // This reverts with Dai/insufficient-allowance - though the low-level error
+        // is caught as "ExecutionReverted" in the Dispatcher.
+        vm.expectRevert();
+        tychoRouter.singleSwap(
+            amountIn,
+            WETH_ADDR,
+            USDC_ADDR,
+            1, // min amount
+            ALICE, // receiver
+            false, // transferFrom allowed
+            0, // solver fee bps
+            address(0), // solver fee receiver
+            0, // max solver contribution
+            swap
+        );
+        vm.stopPrank();
+    }
 }
