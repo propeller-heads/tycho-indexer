@@ -659,72 +659,60 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
     }
 
     function testCircularSwapStealsWETH() public {
-        // Circular swap: WETH -> ETH -> WETH -> USDC
-        // First two swaps use mock WrapUnwrapExecutor
-        // Last swap uses UniswapV2
+        // Circular swap: ETH -> WETH -> ETH -> rETH
         //
         // Alice didn't realize that she is actually using Bob the malicious encoder.
         // She believed in a trust-less encoding system and failed to check her own
         // calldata. Luckily, our guardrails protected her.
         //
-        // 1. Alice sends 1 WETH to the router via transferFrom. Delta accounting for
-        //    WETH is 1
-        // 2. Alice swaps WETH to ETH. Delta accounting for WETH is 0.
-        // 3. Alice swaps WETH, but Bob the malicious encoder set the receiver to
-        //    himself. Delta accounting for WETH is 0.
-        // 4. The router sends WETH to USDC. Delta accounting for WETH is -1.
+        // 1. Alice sends 1 ETH to the router. Delta accounting for ETH is 1
+        // 2. Alice swaps ETH to WETH. Delta accounting for ETH is 0.
+        // 3. Alice swaps WETH to ETH, but Bob the malicious encoder set the receiver to
+        //    himself. Delta accounting for ETH is 0.
+        // 4. The router sends ETH to rETH. Delta accounting for ETH is -1.
         // 5. Since we don't allow any negative delta for the input amount, the
         //    transaction reverts, preventing Bob from stealing Alice's funds.
         bytes[] memory swaps = new bytes[](3);
 
-        // Swap 1: WETH -> ETH (unwrap)
+        // Swap 1: ETH -> WETH (wrap)
         swaps[0] = encodeSequentialSwap(
             address(wrapUnwrapExecutor),
             abi.encodePacked(
-                WETH_ADDR, // tokenIn
+                address(0), // tokenIn (ETH)
                 tychoRouterAddr, // receiver
-                RestrictTransferFrom.TransferType.TransferFrom
+                RestrictTransferFrom.TransferType.Transfer
             )
         );
 
-        // Swap 2: ETH -> WETH (wrap)
+        // Swap 2: WETH -> ETH (unwrap)
         swaps[1] = encodeSequentialSwap(
             address(wrapUnwrapExecutor),
             abi.encodePacked(
-                address(0), // tokenIn (ETH)
+                WETH_ADDR, // tokenIn
                 BOB, // receiver - BOB maliciously encoded himself as the receiver,
                 // stealing weth from Alice's Vault without her realizing
                 RestrictTransferFrom.TransferType.None // This will be replaced with ProtocolWillDebit
             )
         );
 
-        // Swap 3: WETH -> USDC (UniswapV2)
-        swaps[2] = encodeSequentialSwap(
-            address(usv2Executor),
-            encodeUniswapV2Swap(
-                USDC_WETH_USV2,
-                tychoRouterAddr, // receiver
-                false, // WETH is token0, USDC is token1, so we're swapping token0 -> token1
-                RestrictTransferFrom.TransferType.Transfer
-            )
-        );
+        // Swap 3: WETH -> rETH (rocketpool)
+        swaps[2] = _rocketpoolEthRethSwap();
 
         uint256 amountIn = 1 ether;
-        deal(WETH_ADDR, ALICE, amountIn * 2);
+        deal(ALICE, amountIn * 2);
 
         vm.startPrank(ALICE);
-        IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn * 2);
 
-        // Alice has 1 WETH in the vault, and 1 WETH in her own wallet for swapping.
-        tychoRouter.deposit(WETH_ADDR, amountIn);
+        // Alice has 1 ETH in the vault, and 1 ETH in her own wallet for swapping.
+        tychoRouter.deposit{value: amountIn}(address(0), amountIn);
 
         vm.expectRevert(
             abi.encodeWithSelector(Vault__UnexpectedNegativeCount.selector, 1)
         );
-        uint256 amountOut = tychoRouter.sequentialSwap(
+        tychoRouter.sequentialSwap{value: amountIn}(
             amountIn,
-            WETH_ADDR,
-            USDC_ADDR,
+            address(0), // in token
+            RETH_ADDR,
             1, // min amount
             ALICE, // receiver
             RestrictTransferFrom.InputSource.TransferFrom,
