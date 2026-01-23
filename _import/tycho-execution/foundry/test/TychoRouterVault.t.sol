@@ -503,30 +503,34 @@ contract TychoRouterProtocolWillDebitTest is TychoRouterTestSetup {
         // Previous swap receiver was wrongfully encoded to be the current protocol
         // instead of the router - REVERT
         // Sequential swap: WETH -> DAI -> USDC
-        // First swap sends to DAI-USDC pool instead of router
+        // First swap sends to Curve TRIPOOL instead of router
         // Second swap expects funds in the router via ProtocolWillDebit but they're not there
 
         bytes[] memory swaps = new bytes[](2);
 
-        // WETH -> DAI (malicious: receiver is DAI_USDC_POOL instead of router)
+        // WETH -> DAI (malicious: receiver is TRIPOOL instead of router)
         swaps[0] = encodeSequentialSwap(
             address(usv2Executor),
             encodeUniswapV2Swap(
                 DAI_WETH_UNIV2_POOL,
-                DAI_USDC_POOL, // MALICIOUS: should be tychoRouterAddr
+                TRIPOOL, // MALICIOUS: should be tychoRouterAddr
                 false,
                 RestrictTransferFrom.TransferType.TransferFrom
             )
         );
 
-        // DAI -> USDC
+        // DAI -> USDC on Curve TRIPOOL
         swaps[1] = encodeSequentialSwap(
-            address(usv2Executor),
-            encodeUniswapV2Swap(
-                DAI_USDC_POOL,
-                ALICE,
-                true,
-                RestrictTransferFrom.TransferType.ProtocolWillDebit
+            address(curveExecutor),
+            abi.encodePacked(
+                DAI_ADDR, // tokenIn
+                USDC_ADDR, // tokenOut
+                TRIPOOL, // pool
+                uint8(1), // poolType (1 for StableSwap)
+                uint8(0), // i (DAI index)
+                uint8(1), // j (USDC index)
+                RestrictTransferFrom.TransferType.ProtocolWillDebit,
+                ALICE // receiver
             )
         );
 
