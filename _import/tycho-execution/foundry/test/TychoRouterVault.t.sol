@@ -658,7 +658,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
-    function testCircularSwapStealsWETH() public {
+    function testCircularSwapCannotStealETH() public {
         // Circular swap: ETH -> WETH -> ETH -> rETH
         //
         // Alice didn't realize that she is actually using Bob the malicious encoder.
