@@ -785,6 +785,79 @@ fn test_single_encoding_strategy_curve_st_eth() {
 }
 
 #[test]
+fn test_single_encoding_strategy_curve_protocol_will_debit_from_vault() {
+    // Test ProtocolWillDebit with Curve where funds are taken from user's vault
+    // First swap: DAI from vault -> (Curve TriPool) -> USDC
+    //
+    // This tests the case where:
+    // 1. User has DAI in their vault
+    // 2. First swap uses InputSource.Vault
+    // 3. Curve uses ProtocolWillDebit to pull funds from router
+    // 4. Funds are successfully taken from the vault balance
+
+    let dai = Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap();
+    let usdc = Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
+
+    let static_attributes = HashMap::from([
+        (
+            "factory".to_string(),
+            Bytes::from(
+                "0x0000000000000000000000000000000000000000"
+                    .as_bytes()
+                    .to_vec(),
+            ),
+        ),
+        ("coins".to_string(), Bytes::from_str("0x5b22307836623137353437346538393039346334346461393862393534656564656163343935323731643066222c22307861306238363939316336323138623336633164313964346132653965623063653336303665623438222c22307864616331376639353864326565353233613232303632303639393435393763313364383331656337225d").unwrap()),
+    ]);
+
+    let curve_tripool = ProtocolComponent {
+        id: String::from("0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7"),
+        protocol_system: String::from("vm:curve"),
+        static_attributes,
+        ..Default::default()
+    };
+
+    let swap = Swap::new(curve_tripool, dai.clone(), usdc.clone());
+
+    let encoder = get_tycho_router_encoder(UserTransferType::UseVaultsFunds);
+
+    let solution = Solution {
+        exact_out: false,
+        token_in: dai,
+        amount_in: BigUint::from_str("1000_000000000000000000").unwrap(), // 1000 DAI
+        token_out: usdc,
+        min_amount_out: BigUint::from_str("1").unwrap(),
+        // Alice
+        sender: alice_address(),
+        receiver: alice_address(),
+        swaps: vec![swap],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::UseVaultsFunds,
+        &eth(),
+        None,
+    )
+    .unwrap()
+    .data;
+
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file(
+        "test_single_encoding_strategy_curve_protocol_will_debit_from_vault",
+        hex_calldata.as_str(),
+    );
+}
+
+#[test]
 fn test_single_encoding_strategy_balancer_v3() {
     // steakUSDTlite -> (balancer v3) -> steakUSDR
     let balancer_pool = ProtocolComponent {

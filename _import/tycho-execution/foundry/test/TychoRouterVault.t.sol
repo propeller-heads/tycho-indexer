@@ -697,6 +697,41 @@ contract TychoRouterProtocolWillDebitTest is TychoRouterTestSetup {
         );
         vm.stopPrank();
     }
+
+    function testProtocolWillDebitFromVaultIntegration() public {
+        // Integration test for ProtocolWillDebit with Curve where funds are taken from
+        // user's vault in the first swap.
+        //
+        // This test:
+        // 1. Deposits DAI to Alice's vault
+        // 2. Executes a single swap: DAI (from vault) -> (Curve TriPool) -> USDC
+        // 3. Verifies funds were successfully taken from vault and swap executed
+        // 4. Uses calldata generated from Rust encoding test
+
+        uint256 amountIn = 1000 ether; // 1000 DAI
+        uint256 vaultBalance = 3000 ether; // Alice starts with 3000 DAI in vault
+
+        deal(DAI_ADDR, ALICE, vaultBalance);
+
+        vm.startPrank(ALICE);
+        IERC20(DAI_ADDR).approve(tychoRouterAddr, vaultBalance);
+        tychoRouter.deposit(DAI_ADDR, vaultBalance);
+        bytes memory calldata_ = loadCallDataFromFile(
+            "test_single_encoding_strategy_curve_protocol_will_debit_from_vault"
+        );
+
+        (bool success,) = address(tychoRouter).call(calldata_);
+        require(success, "Swap failed");
+
+        vm.stopPrank();
+
+        assertEq(
+            tychoRouter.balanceOf(ALICE, uint256(uint160(DAI_ADDR))),
+            vaultBalance - amountIn
+        );
+
+        assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), 999821834);
+    }
 }
 
 contract CircularVaultTest is TychoRouterTestSetup {
