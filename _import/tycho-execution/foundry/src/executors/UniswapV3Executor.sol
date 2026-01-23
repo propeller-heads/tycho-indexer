@@ -61,7 +61,7 @@ contract UniswapV3Executor is IExecutor, ICallback {
         int256 amount1;
         IUniswapV3Pool pool = IUniswapV3Pool(target);
 
-        bytes memory callbackData = data[0:44];
+        bytes memory callbackData = _extractV3CallbackData(data);
 
         {
             (amount0, amount1) = pool.swap(
@@ -138,6 +138,17 @@ contract UniswapV3Executor is IExecutor, ICallback {
         receiver = address(bytes20(data[44:64]));
         target = address(bytes20(data[64:84]));
         zeroForOne = uint8(data[84]) > 0;
+    }
+
+    // This function will extract the first 44 bytes of the data,
+    // which contains the necessary Uniswap V3 callback data:
+    // tokenIn (20 bytes), tokenOut (20 bytes), fee (3 bytes), transferType (1 byte)
+    function _extractV3CallbackData(bytes calldata data)
+        internal
+        pure
+        returns (bytes calldata)
+    {
+        return data[0:44];
     }
 
     function _verifyPairAddress(
