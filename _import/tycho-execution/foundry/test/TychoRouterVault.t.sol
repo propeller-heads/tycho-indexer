@@ -4,10 +4,6 @@ pragma solidity ^0.8.26;
 import "@src/executors/UniswapV4Executor.sol";
 import {TychoRouter} from "@src/TychoRouter.sol";
 import {
-    RestrictTransferFrom__ExceededTransferFromAllowance,
-    RestrictTransferFrom__DifferentTokenIn
-} from "@src/RestrictTransferFrom.sol";
-import {
     Vault__UnexpectedInputDelta,
     Vault__UnexpectedNegativeCount,
     ERC6909
@@ -101,88 +97,12 @@ contract WrapUnwrapExecutor is IExecutor {
 }
 
 /**
- * @title TychoRouterTransferFromTest
- * @notice Test cases for the Vault
- * @dev TransferFrom transfers tokens directly from user wallet to protocol
+ * @title TychoRouterUsingVaultTest
+ * @notice Test cases for different swap scenarios relating to the Vault
  */
-contract TychoRouterTransferFromTest is TychoRouterTestSetup {
-    function testTransferFromExceedsRestriction() public {
-        // TODO this isn't vault-specific - it checks our RestrictTransferFrom
-        //  contract. should we move this to another file?
+contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
+    // ==================== Transfer tests ====================
 
-        // A maliciously encoded split swap attempts to take more than the input amount
-        // from the user's wallet. The user has accidentally allowed MAX - REVERT
-
-        //          ->   WBTC
-        // 1 WETH
-        //          ->   WBTC
-        //       (univ2)
-        bytes[] memory swaps = new bytes[](2);
-
-        // WETH -> WBTC (60%)
-        swaps[0] = encodeSplitSwap(
-            uint8(0),
-            uint8(1),
-            uint24((0xffffff * 60) / 100), // 60%
-            address(usv2Executor),
-            encodeUniswapV2Swap(
-                WETH_WBTC_POOL,
-                tychoRouterAddr,
-                false,
-                RestrictTransferFrom.TransferType.TransferFrom
-            )
-        );
-        // WETH -> WBTC (50%)
-        swaps[1] = encodeSplitSwap(
-            uint8(0),
-            uint8(1),
-            uint24((0xffffff * 60) / 100), // 60%
-            address(usv2Executor),
-            encodeUniswapV2Swap(
-                WETH_WBTC_POOL,
-                tychoRouterAddr,
-                false,
-                RestrictTransferFrom.TransferType.TransferFrom
-            )
-        );
-
-        uint256 amountIn = 100 ether;
-        deal(WETH_ADDR, ALICE, amountIn);
-
-        vm.startPrank(ALICE);
-        // Alice's mistake - too high approval. She should still be protected by our
-        // router.
-        IERC20(WETH_ADDR).approve(tychoRouterAddr, UINT256_MAX);
-
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                RestrictTransferFrom__ExceededTransferFromAllowance.selector,
-                40000000000000000000,
-                60000000000000000000
-            )
-        );
-        tychoRouter.splitSwap(
-            amountIn,
-            WETH_ADDR,
-            WBTC_ADDR,
-            200_000000, // min amount (2 WBTC)
-            4,
-            ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
-            0,
-            address(0),
-            0, // max solver contribution
-            pleEncode(swaps)
-        );
-    }
-}
-
-/**
- * @title TychoRouterTransferTest
- * @notice Test cases for Transfer type in the router (Transfer, TransferFromAndProtocolWillDebit, etc.)
- * @dev Tests various malicious scenarios and proper vault usage
- */
-contract TychoRouterTransferTest is TychoRouterTestSetup {
     function testPreviousSwapReceiverWrongfullyEncoded() public {
         // Malicious encoding: previous swap receiver was wrongfully encoded to be
         // the current protocol instead of our router - REVERT
@@ -394,14 +314,10 @@ contract TychoRouterTransferTest is TychoRouterTestSetup {
         );
         vm.stopPrank();
     }
-}
 
-/**
- * @title TychoRouterTransferNativeInMsgValueTest
- * @notice Test cases for TransferNativeInMsgValue transfer type
- * @dev Tests native ETH transfers via msg.value to protocols
- */
-contract TychoRouterTransferNativeInMsgValueTest is TychoRouterTestSetup {
+    // ==================== Native Transfer tests ====================
+    // TODO change these to use transferNativeInExecutor
+
     function _rocketpoolEthRethSwap() private view returns (bytes memory swap) {
         swap = encodeSingleSwap(
             address(rocketpoolExecutor),
@@ -450,9 +366,6 @@ contract TychoRouterTransferNativeInMsgValueTest is TychoRouterTestSetup {
     function testTransferNativeInMsgValueUsesVaultBalance() public {
         // First swap is native ETH transfer (in msg value), user didn't send ETH,
         // so their vault balance is used
-
-        // TODO what if the user just forgets to send ETH here and didn’t expect
-        // their vault balance to be used. Is this okay that this isn't so explicit?
 
         uint256 amountIn = 1 ether;
         deal(ALICE, amountIn);
@@ -580,13 +493,9 @@ contract TychoRouterTransferNativeInMsgValueTest is TychoRouterTestSetup {
         assertEq(address(tychoRouter).balance, existingVaultETHBalance);
         assertEq(tychoRouter.balanceOf(ALICE, 0), existingVaultETHBalance);
     }
-}
 
-/**
- * @title TychoRouterProtocolWillDebitTest
- * @notice Test cases for ProtocolWillDebit transfer type
- */
-contract TychoRouterProtocolWillDebitTest is TychoRouterTestSetup {
+    // ==================== ProtocolWillDebit tests ====================
+
     function testProtocolWillDebitWrongPreviousReceiver() public {
         // Previous swap receiver was wrongfully encoded to be the current protocol
         // instead of the router - REVERT
@@ -732,9 +641,9 @@ contract TychoRouterProtocolWillDebitTest is TychoRouterTestSetup {
 
         assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), 999821834);
     }
-}
 
-contract CircularVaultTest is TychoRouterTestSetup {
+    // ==================== Circular Vault tests ====================
+
     WrapUnwrapExecutor public wrapUnwrapExecutor;
 
     function setUp() public override {
