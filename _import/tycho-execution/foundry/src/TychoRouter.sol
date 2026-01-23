@@ -493,9 +493,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             solverFeeReceiver
         );
 
-        // Finalize all transient deltas to persistent storage
-        _finalizeBalances(msg.sender, tokenIn, amountIn);
-
         amountOut = _maybeAddSolverContribution(
             amountOut, minAmountOut, maxSolverContribution, tokenOut, receiver
         );
@@ -505,6 +502,10 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         } else {
             IERC20(tokenOut).safeTransfer(receiver, amountOut);
         }
+        _updateDeltaAccounting(tokenOut, -int256(amountOut));
+
+        // Finalize all transient deltas to persistent storage
+        _finalizeBalances(msg.sender, tokenIn, amountIn);
 
         _verifyAmountOutWasReceived(
             tokenIn,
@@ -558,9 +559,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             solverFeeReceiver
         );
 
-        // Finalize all transient deltas to persistent storage
-        _finalizeBalances(msg.sender, tokenIn, amountIn);
-
         amountOut = _maybeAddSolverContribution(
             amountOut, minAmountOut, maxSolverContribution, tokenOut, receiver
         );
@@ -570,7 +568,10 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         } else {
             IERC20(tokenOut).safeTransfer(receiver, amountOut);
         }
+        _updateDeltaAccounting(tokenOut, -int256(amountOut));
 
+        // Finalize all transient deltas to persistent storage
+        _finalizeBalances(msg.sender, tokenIn, amountIn);
         _verifyAmountOutWasReceived(
             tokenIn,
             tokenOut,
@@ -619,9 +620,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             solverFeeReceiver
         );
 
-        // Finalize all transient deltas to persistent storage
-        _finalizeBalances(msg.sender, tokenIn, amountIn);
-
         amountOut = _maybeAddSolverContribution(
             amountOut, minAmountOut, maxSolverContribution, tokenOut, receiver
         );
@@ -631,6 +629,10 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         } else {
             IERC20(tokenOut).safeTransfer(receiver, amountOut);
         }
+        _updateDeltaAccounting(tokenOut, -int256(amountOut));
+
+        // Finalize all transient deltas to persistent storage
+        _finalizeBalances(msg.sender, tokenIn, amountIn);
 
         _verifyAmountOutWasReceived(
             tokenIn,
@@ -929,7 +931,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             }
             // Debit the solver's vault balance and transfer contribution to receiver
             _debitVault(msg.sender, tokenOut, requiredContribution);
-
+            _updateDeltaAccounting(tokenOut, int256(requiredContribution));
             amount = minAmountOut;
         } else {
             amount = amountOut;
