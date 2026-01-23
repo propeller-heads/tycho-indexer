@@ -54,6 +54,26 @@ pub mod store_delta {
         }
     }
 }
+/// Clock is a pointer to a block with added timestamp
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Clock {
+    #[prost(string, tag="1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(uint64, tag="2")]
+    pub number: u64,
+    #[prost(message, optional, tag="3")]
+    pub timestamp: ::core::option::Option<::prost_types::Timestamp>,
+}
+/// BlockRef is a pointer to a block to which we don't know the timestamp
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BlockRef {
+    #[prost(string, tag="1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(uint64, tag="2")]
+    pub number: u64,
+}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Modules {
@@ -199,10 +219,20 @@ pub mod module {
         #[prost(string, tag="1")]
         pub output_type: ::prost::alloc::string::String,
     }
+    /// FoundationalStore represents a reference to an external foundational store
+    /// that provides pre-computed data for substreams modules. The foundational store
+    /// is resolved at runtime based on the identifier provided.
+    #[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct FoundationalStore {
+        /// Package notation: "package-name@version"
+        #[prost(string, tag="1")]
+        pub identifier: ::prost::alloc::string::String,
+    }
     #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Input {
-        #[prost(oneof="input::Input", tags="1, 2, 3, 4")]
+        #[prost(oneof="input::Input", tags="1, 2, 3, 4, 5")]
         pub input: ::core::option::Option<input::Input>,
     }
     /// Nested message and enum types in `Input`.
@@ -278,6 +308,8 @@ pub mod module {
             Store(Store),
             #[prost(message, tag="4")]
             Params(Params),
+            #[prost(message, tag="5")]
+            FoundationalStore(super::FoundationalStore),
         }
     }
     #[allow(clippy::derive_partial_eq_without_eq)]
@@ -296,26 +328,6 @@ pub mod module {
         #[prost(message, tag="10")]
         KindBlockIndex(KindBlockIndex),
     }
-}
-/// Clock is a pointer to a block with added timestamp
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Clock {
-    #[prost(string, tag="1")]
-    pub id: ::prost::alloc::string::String,
-    #[prost(uint64, tag="2")]
-    pub number: u64,
-    #[prost(message, optional, tag="3")]
-    pub timestamp: ::core::option::Option<::prost_types::Timestamp>,
-}
-/// BlockRef is a pointer to a block to which we don't know the timestamp
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BlockRef {
-    #[prost(string, tag="1")]
-    pub id: ::prost::alloc::string::String,
-    #[prost(uint64, tag="2")]
-    pub number: u64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

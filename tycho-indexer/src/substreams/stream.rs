@@ -116,6 +116,10 @@ fn stream_blocks(
                 // module.
                 production_mode: true,
                 debug_initial_store_snapshot_for_modules: vec![],
+                dev_output_modules: vec![],
+                limit_processed_blocks: u64::MAX,
+                progress_messages_interval_ms: 30 * 1000,
+                partial_blocks: false,
                 noop_mode: false,
             }).await;
 
