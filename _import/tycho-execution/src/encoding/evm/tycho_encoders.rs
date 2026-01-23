@@ -492,7 +492,7 @@ mod tests {
                 Bytes::from_str("0x6bc529DC7B81A031828dDCE2BC419d01FF268C66").unwrap()
             );
             // single swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "3cbe9156");
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "a5125e3b");
         }
 
         #[test]
@@ -516,7 +516,7 @@ mod tests {
             let transactions = transactions.unwrap();
             assert_eq!(transactions.len(), 1);
             // single swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "3cbe9156");
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "a5125e3b");
         }
 
         #[test]
@@ -561,7 +561,7 @@ mod tests {
             assert_eq!(transactions.len(), 1);
             assert_eq!(transactions[0].value, BigUint::ZERO);
             // sequential swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "eeea932d");
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "16b8bcb1");
         }
 
         #[test]

@@ -154,7 +154,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             1000_000000, // min amount
             4,
             ALICE,
-            true,
+            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -192,7 +192,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             0, // min amount
             4,
             ALICE,
-            true,
+            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -219,7 +219,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             1000_000000, // min amount
             2,
             ALICE,
-            true,
+            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -403,7 +403,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             1, // min amount out
             2, // number of tokens
             ALICE, // receiver
-            true, // is transfer from allowed
+            RestrictTransferFrom.InputSource.TransferFrom,
             0, // solver fee bps
             address(0), // solver fee receiver
             0, // max solver contribution
@@ -483,7 +483,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             1, // min amount
             4,
             ALICE,
-            false, // no transferFrom
+            RestrictTransferFrom.InputSource.Vault,
             0,
             address(0),
             0,

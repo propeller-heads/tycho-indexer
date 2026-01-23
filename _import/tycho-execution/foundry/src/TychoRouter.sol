@@ -141,7 +141,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
-     * @param isTransferFromAllowed If false, the contract will assume that the input token is already transferred to the contract and don't allow any transferFroms
+     * @param inputSource Source of input funds - TransferFrom (from wallet) or Vault (from user's vault balance)
      * @param solverFeeBps Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%)
      * @param solverFeeReceiver Address to receive the solver fee.
      * @param maxSolverContribution Maximum amount the solver will pay out of pocket to make the trade succeed.
@@ -156,7 +156,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 minAmountOut,
         uint256 nTokens,
         address receiver,
-        bool isTransferFromAllowed,
+        RestrictTransferFrom.InputSource inputSource,
         uint16 solverFeeBps,
         address solverFeeReceiver,
         uint256 maxSolverContribution,
@@ -164,7 +164,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         _updateNativeDeltaAccounting(amountIn);
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        _tstoreTransferFromInfo(tokenIn, amountIn, false, isTransferFromAllowed);
+        _tstoreTransferFromInfo(tokenIn, amountIn, false, inputSource);
 
         return _splitSwapChecked(
             amountIn,
@@ -225,7 +225,12 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         if (tokenIn != address(0)) {
             permit2.permit(msg.sender, permitSingle, signature);
         }
-        _tstoreTransferFromInfo(tokenIn, amountIn, true, true);
+        _tstoreTransferFromInfo(
+            tokenIn,
+            amountIn,
+            true,
+            RestrictTransferFrom.InputSource.TransferFrom
+        );
 
         return _splitSwapChecked(
             amountIn,
@@ -255,7 +260,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
-     * @param isTransferFromAllowed If false, the contract will assume that the input token is already transferred to the contract and don't allow any transferFroms
+     * @param inputSource Source of input funds - TransferFrom (from wallet) or Vault (from user's vault balance)
      * @param solverFeeBps Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%)
      * @param solverFeeReceiver Address to receive the solver fee.
      * @param maxSolverContribution Maximum amount the solver will pay out of pocket to make the trade succeed.
@@ -269,7 +274,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address tokenOut,
         uint256 minAmountOut,
         address receiver,
-        bool isTransferFromAllowed,
+        RestrictTransferFrom.InputSource inputSource,
         uint16 solverFeeBps,
         address solverFeeReceiver,
         uint256 maxSolverContribution,
@@ -277,7 +282,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         _updateNativeDeltaAccounting(amountIn);
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        _tstoreTransferFromInfo(tokenIn, amountIn, false, isTransferFromAllowed);
+        _tstoreTransferFromInfo(tokenIn, amountIn, false, inputSource);
 
         return _sequentialSwapChecked(
             amountIn,
@@ -335,7 +340,12 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             permit2.permit(msg.sender, permitSingle, signature);
         }
 
-        _tstoreTransferFromInfo(tokenIn, amountIn, true, true);
+        _tstoreTransferFromInfo(
+            tokenIn,
+            amountIn,
+            true,
+            RestrictTransferFrom.InputSource.TransferFrom
+        );
 
         return _sequentialSwapChecked(
             amountIn,
@@ -363,7 +373,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
-     * @param isTransferFromAllowed If false, the contract will assume that the input token is already transferred to the contract and don't allow any transferFroms
+     * @param inputSource Source of input funds - TransferFrom (from wallet) or Vault (from user's vault balance)
      * @param solverFeeBps Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%)
      * @param solverFeeReceiver Address to receive the solver fee.
      * @param maxSolverContribution Maximum amount the solver will pay out of pocket to make the trade succeed.
@@ -377,7 +387,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address tokenOut,
         uint256 minAmountOut,
         address receiver,
-        bool isTransferFromAllowed,
+        RestrictTransferFrom.InputSource inputSource,
         uint16 solverFeeBps,
         address solverFeeReceiver,
         uint256 maxSolverContribution,
@@ -385,7 +395,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         _updateNativeDeltaAccounting(amountIn);
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        _tstoreTransferFromInfo(tokenIn, amountIn, false, isTransferFromAllowed);
+        _tstoreTransferFromInfo(tokenIn, amountIn, false, inputSource);
 
         return _singleSwap(
             amountIn,
@@ -441,7 +451,12 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         if (tokenIn != address(0)) {
             permit2.permit(msg.sender, permitSingle, signature);
         }
-        _tstoreTransferFromInfo(tokenIn, amountIn, true, true);
+        _tstoreTransferFromInfo(
+            tokenIn,
+            amountIn,
+            true,
+            RestrictTransferFrom.InputSource.TransferFrom
+        );
 
         return _singleSwap(
             amountIn,

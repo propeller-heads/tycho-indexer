@@ -128,13 +128,18 @@ pub fn encode_tycho_router_call(
         .function_signature
         .contains("singleSwap")
     {
+        let input_source = if user_transfer_type == &UserTransferType::TransferFrom {
+            U256::from(0) // InputSource::TransferFrom
+        } else {
+            U256::from(1) // InputSource::Vault
+        };
         (
             given_amount,
             given_token,
             checked_token,
             min_amount_out,
             receiver,
-            *user_transfer_type == UserTransferType::TransferFrom,
+            input_source,
             solver_fee_bps,
             solver_fee_receiver,
             max_solver_contribution,
@@ -165,13 +170,18 @@ pub fn encode_tycho_router_call(
         .function_signature
         .contains("sequentialSwap")
     {
+        let input_source = if user_transfer_type == &UserTransferType::TransferFrom {
+            U256::from(0) // InputSource::TransferFrom
+        } else {
+            U256::from(1) // InputSource::Vault
+        };
         (
             given_amount,
             given_token,
             checked_token,
             min_amount_out,
             receiver,
-            *user_transfer_type == UserTransferType::TransferFrom,
+            input_source,
             solver_fee_bps,
             solver_fee_receiver,
             max_solver_contribution,
@@ -203,6 +213,11 @@ pub fn encode_tycho_router_call(
         .function_signature
         .contains("splitSwap")
     {
+        let input_source = if user_transfer_type == &UserTransferType::TransferFrom {
+            U256::from(0) // InputSource::TransferFrom
+        } else {
+            U256::from(1) // InputSource::Vault
+        };
         (
             given_amount,
             given_token,
@@ -210,7 +225,7 @@ pub fn encode_tycho_router_call(
             min_amount_out,
             n_tokens,
             receiver,
-            *user_transfer_type == UserTransferType::TransferFrom,
+            input_source,
             solver_fee_bps,
             solver_fee_receiver,
             max_solver_contribution,

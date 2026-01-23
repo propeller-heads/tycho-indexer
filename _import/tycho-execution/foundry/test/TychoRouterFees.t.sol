@@ -66,7 +66,7 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
-            true,
+            RestrictTransferFrom.InputSource.TransferFrom,
             200, // 2% solverFeeBps
             solverFeeReceiver,
             0,
@@ -149,13 +149,10 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         // 2. takeFees calculates fees (amountOut < amountOutBeforeFees)
         // 3. Router checks if it received the full amount
         // 4. Router didn't receive the tokens → reverts with
-        //    Vault__UnexpectedInputDelta(0). This happens because the
-        //    _finalizeBalances method sees a negative Delta, and expects this to be the
-        //    input delta. Since it's not the input delta (we didn't withdraw vault
-        //    balances on input), and no other negative deltas are allowed, this
-        //    reverts.
+        //    Vault__UnexpectedNegativeCount(1). This happens because when using
+        //    InputSource.TransferFrom, no negative deltas are allowed at all.
         vm.expectRevert(
-            abi.encodeWithSelector(Vault__UnexpectedInputDelta.selector, 0)
+            abi.encodeWithSelector(Vault__UnexpectedNegativeCount.selector, 1)
         );
         tychoRouter.singleSwap(
             amountIn,
@@ -163,7 +160,7 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
-            true,
+            RestrictTransferFrom.InputSource.TransferFrom,
             0, // solverFeeBps
             address(0), // solverFeeReceiver
             0,

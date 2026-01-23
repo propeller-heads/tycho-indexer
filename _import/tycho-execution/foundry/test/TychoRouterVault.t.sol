@@ -7,7 +7,11 @@ import {
     RestrictTransferFrom__ExceededTransferFromAllowance,
     RestrictTransferFrom__DifferentTokenIn
 } from "@src/RestrictTransferFrom.sol";
-import {Vault__UnexpectedInputDelta, ERC6909} from "@src/Vault.sol";
+import {
+    Vault__UnexpectedInputDelta,
+    Vault__UnexpectedNegativeCount,
+    ERC6909
+} from "@src/Vault.sol";
 import {IExecutor} from "@interfaces/IExecutor.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {
@@ -164,7 +168,7 @@ contract TychoRouterTransferFromTest is TychoRouterTestSetup {
             200_000000, // min amount (2 WBTC)
             4,
             ALICE,
-            true,
+            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0, // max solver contribution
@@ -223,12 +227,10 @@ contract TychoRouterTransferTest is TychoRouterTestSetup {
         IERC20(DAI_ADDR).approve(tychoRouterAddr, existingDaiVaultBalance);
         tychoRouter.deposit(DAI_ADDR, existingDaiVaultBalance);
 
-        // Should revert because this causes a negative input delta for DAI
-        // The only permitted negative input delta should be the input token, which
-        // has a 0 delta, since we took funds straight form Alice's wallet and not
-        // the vault.
+        // Should revert because this causes a negative delta for DAI
+        // When using InputSource.TransferFrom, no negative deltas are allowed
         vm.expectRevert(
-            abi.encodeWithSelector(Vault__UnexpectedInputDelta.selector, 0)
+            abi.encodeWithSelector(Vault__UnexpectedNegativeCount.selector, 1)
         );
         tychoRouter.sequentialSwap(
             amountIn,
@@ -236,7 +238,7 @@ contract TychoRouterTransferTest is TychoRouterTestSetup {
             USDC_ADDR,
             1, // min amount
             ALICE,
-            true,
+            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -298,7 +300,7 @@ contract TychoRouterTransferTest is TychoRouterTestSetup {
             1, // min amount
             4,
             ALICE, // receiver
-            false, // no transferFrom
+            RestrictTransferFrom.InputSource.Vault,
             0,
             address(0),
             0,
@@ -352,7 +354,7 @@ contract TychoRouterTransferTest is TychoRouterTestSetup {
             DAI_ADDR,
             1, // min amount
             ALICE, // receiver
-            false, // transferFrom allowed
+            RestrictTransferFrom.InputSource.Vault,
             0, // solverFeeBps
             address(0), // solverFeeReceiver
             0, // maxSolverContribution
@@ -384,7 +386,7 @@ contract TychoRouterTransferTest is TychoRouterTestSetup {
             DAI_ADDR,
             1, // min amount
             ALICE, // receiver
-            false, // transferFrom allowed
+            RestrictTransferFrom.InputSource.Vault,
             0, // solverFeeBps
             address(0), // solverFeeReceiver
             0, // maxSolverContribution
@@ -428,7 +430,7 @@ contract TychoRouterTransferNativeInMsgValueTest is TychoRouterTestSetup {
             RETH_ADDR,
             1, // min amount
             ALICE, // receiver
-            false, // no transferFrom
+            RestrictTransferFrom.InputSource.Vault,
             0,
             address(0),
             0,
@@ -466,7 +468,7 @@ contract TychoRouterTransferNativeInMsgValueTest is TychoRouterTestSetup {
             RETH_ADDR,
             1, // min amount
             ALICE, // receiver
-            false, // no transferFrom
+            RestrictTransferFrom.InputSource.Vault,
             0,
             address(0),
             0,
@@ -504,7 +506,7 @@ contract TychoRouterTransferNativeInMsgValueTest is TychoRouterTestSetup {
             RETH_ADDR,
             1, // min amount
             ALICE, // receiver
-            false, // no transferFrom
+            RestrictTransferFrom.InputSource.Vault,
             0,
             address(0),
             0,
@@ -562,7 +564,7 @@ contract TychoRouterTransferNativeInMsgValueTest is TychoRouterTestSetup {
             RETH_ADDR,
             1, // min amount
             ALICE, // receiver
-            true, // transferFrom
+            RestrictTransferFrom.InputSource.TransferFrom,
             0, // solver fee bps
             address(0), // solver fee receiver
             0, // max solver contribution
@@ -633,12 +635,10 @@ contract TychoRouterProtocolWillDebitTest is TychoRouterTestSetup {
         IERC20(DAI_ADDR).approve(tychoRouterAddr, existingDaiVaultBalance);
         tychoRouter.deposit(DAI_ADDR, existingDaiVaultBalance);
 
-        // Should revert because this causes a negative input delta for DAI
-        // The only permitted negative input delta should be the input token, which
-        // has a 0 delta, since we took funds straight from Alice's wallet and not
-        // the vault.
+        // Should revert because this causes a negative delta for DAI
+        // When using InputSource.TransferFrom, no negative deltas are allowed
         vm.expectRevert(
-            abi.encodeWithSelector(Vault__UnexpectedInputDelta.selector, 0)
+            abi.encodeWithSelector(Vault__UnexpectedNegativeCount.selector, 1)
         );
         tychoRouter.sequentialSwap(
             amountIn,
@@ -646,7 +646,7 @@ contract TychoRouterProtocolWillDebitTest is TychoRouterTestSetup {
             USDC_ADDR,
             1, // min amount
             ALICE,
-            true,
+            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -689,7 +689,7 @@ contract TychoRouterProtocolWillDebitTest is TychoRouterTestSetup {
             USDC_ADDR,
             1, // min amount
             ALICE, // receiver
-            false, // transferFrom allowed
+            RestrictTransferFrom.InputSource.Vault,
             0, // solver fee bps
             address(0), // solver fee receiver
             0, // max solver contribution
@@ -721,7 +721,7 @@ contract CircularVaultTest is TychoRouterTestSetup {
         //
         // Alice didn't realize that she is actually using Bob the malicious encoder.
         // She believed in a trust-less encoding system and failed to check her own
-        // calldata. Guardrails did not serve her well.
+        // calldata. Luckily, our guardrails protected her.
         //
         // 1. Alice sends 1 WETH to the router via transferFrom. Delta accounting for
         //    WETH is 1
@@ -729,8 +729,8 @@ contract CircularVaultTest is TychoRouterTestSetup {
         // 3. Alice swaps WETH, but Bob the malicious encoder set the receiver to
         //    himself. Delta accounting for WETH is 0.
         // 4. The router sends WETH to USDC. Delta accounting for WETH is -1.
-        // 5. Since we allow one negative delta for the input amount, Bob has
-        //    successfully managed to obtain 1 WETH without Alice noticing
+        // 5. Since we don't allow any negative delta for the input amount, the
+        //    transaction reverts, preventing Bob from stealing Alice's funds.
         bytes[] memory swaps = new bytes[](3);
 
         // Swap 1: WETH -> ETH (unwrap)
@@ -774,27 +774,21 @@ contract CircularVaultTest is TychoRouterTestSetup {
         // Alice has 1 WETH in the vault, and 1 WETH in her own wallet for swapping.
         tychoRouter.deposit(WETH_ADDR, amountIn);
 
+        vm.expectRevert(
+            abi.encodeWithSelector(Vault__UnexpectedNegativeCount.selector, 1)
+        );
         uint256 amountOut = tychoRouter.sequentialSwap(
             amountIn,
             WETH_ADDR,
             USDC_ADDR,
             1, // min amount
             ALICE, // receiver
-            true, // transferFrom
+            RestrictTransferFrom.InputSource.TransferFrom,
             0, // solver fee bps
             address(0), // solver fee receiver
             0, // max solver contribution
             pleEncode(swaps)
         );
         vm.stopPrank();
-
-        // Alice received her output, paid for her input, and Bob stole 1
-        // WETH from Alice
-        assertGt(amountOut, 0);
-        assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), amountOut);
-        assertEq(IERC20(WETH_ADDR).balanceOf(BOB), 1 ether);
-
-        // TychoRouter WETH is now depleted, as are Alice's vault funds.
-        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 }

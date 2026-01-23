@@ -34,6 +34,9 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
     // keccak256("TychoVault#NEGATIVE_DELTA_COUNT")
     uint256 private constant _NEGATIVE_DELTA_COUNT_SLOT =
         0x675e351c150ddfdbd3bc96ad8c0c5cc3e6f0d3c18723512ac3c7dfed159e94d5;
+    // keccak256("Vault#USE_VAULT_SLOT")
+    uint256 internal constant _USE_VAULT_SLOT =
+        0xce5ffa91873ede1b462af74ea59bab3721b06b0ff726b90311437efde2001795;
 
     // ============ ERC6909 Overrides and Extensions ============
 
@@ -237,6 +240,19 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
     }
 
     /**
+     * @dev Get the USE_VAULT flag from transient storage
+     */
+    // Assembly required for transient storage operations (tload)
+    function _getUseVault() internal view virtual returns (bool) {
+        uint256 useVault;
+        // slither-disable-next-line assembly
+        assembly {
+            useVault := tload(_USE_VAULT_SLOT)
+        }
+        return useVault == 1;
+    }
+
+    /**
      * @dev Update delta accounting (transient storage)
      * @notice Only needs token since transient storage is scoped to current transaction's sender
      * @param token The token to update
@@ -314,17 +330,26 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
         uint256 inputAmount
     ) internal {
         uint256 negativeCount = _getNegativeDeltaCount();
+        bool useVault = _getUseVault();
 
-        // Check that there is only one negative delta: the input token
-        if (negativeCount > 1) {
-            revert Vault__UnexpectedNegativeCount(negativeCount);
-        } else if (negativeCount == 1) {
-            int256 inputDelta = _getDelta(inputToken);
-            if (inputDelta != -int256(inputAmount)) {
-                revert Vault__UnexpectedInputDelta(inputDelta);
+        if (useVault) {
+            // When vault usage is allowed, allow a single negative delta
+            // Check that there is only one negative delta: the input token
+            if (negativeCount > 1) {
+                revert Vault__UnexpectedNegativeCount(negativeCount);
+            } else if (negativeCount == 1) {
+                int256 inputDelta = _getDelta(inputToken);
+                if (inputDelta != -int256(inputAmount)) {
+                    revert Vault__UnexpectedInputDelta(inputDelta);
+                }
+                uint256 id = _toId(inputToken);
+                _burnWithoutEvent(user, id, inputAmount);
             }
-            uint256 id = _toId(inputToken);
-            _burnWithoutEvent(user, id, inputAmount);
+        } else {
+            // When vault usage is NOT allowed, all deltas must be zero
+            if (negativeCount > 0) {
+                revert Vault__UnexpectedNegativeCount(negativeCount);
+            }
         }
     }
 
