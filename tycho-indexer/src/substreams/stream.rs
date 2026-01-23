@@ -48,6 +48,7 @@ impl SubstreamsStream {
         end_block: u64,
         final_blocks_only: bool,
         extractor_id: String,
+        partial_blocks: bool,
     ) -> Self {
         SubstreamsStream {
             stream: Box::pin(stream_blocks(
@@ -59,6 +60,7 @@ impl SubstreamsStream {
                 end_block,
                 final_blocks_only,
                 extractor_id,
+                partial_blocks,
             )),
         }
     }
@@ -94,6 +96,7 @@ fn stream_blocks(
     stop_block_num: u64,
     final_blocks_only: bool,
     extractor_id: String,
+    partial_blocks: bool,
 ) -> impl Stream<Item = Result<BlockResponse, Error>> {
     let mut latest_cursor = cursor.unwrap_or_default();
     let mut latest_block = start_block_num as u64;
@@ -124,7 +127,7 @@ fn stream_blocks(
                 dev_output_modules: vec![],
                 limit_processed_blocks: u64::MAX,
                 progress_messages_interval_ms: 30 * 1000,
-                partial_blocks: false,
+                partial_blocks,
                 noop_mode: false,
             }).await;
 

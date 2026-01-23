@@ -760,6 +760,7 @@ impl ExtractorBuilder {
             self.config.stop_block.unwrap_or(0) as u64,
             self.final_block_only,
             extractor_id.to_string(),
+            false, // TODO: make partial blocks configurable
         );
 
         let (ctrl_tx, ctrl_rx) = mpsc::channel(128);
