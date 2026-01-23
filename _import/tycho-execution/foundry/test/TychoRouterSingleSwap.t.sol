@@ -437,4 +437,38 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         assertTrue(success, "Call Failed");
         assertEq(balanceAfter - balanceBefore, 2018817438608734439722);
     }
+
+    function testTransferFromAndProtocolWillDebitIntegration() public {
+        // Integration test for TransferFromAndProtocolWillDebit with Curve where funds
+        // are transferred from user's wallet to router, then protocol pulls from router.
+        //
+        // This test:
+        // 1. Gives Alice DAI in her wallet (not deposited to vault)
+        // 2. Executes a single swap: DAI (from wallet) -> (Curve TriPool) -> USDC
+        // 3. Uses TransferType.TransferFromAndProtocolWillDebit
+        // 4. Verifies funds were successfully taken from wallet and swap executed
+
+        uint256 walletBalance = 1000 ether;
+        uint256 existingVaultBalance = 1000 ether;
+
+        deal(DAI_ADDR, ALICE, walletBalance + existingVaultBalance);
+
+        vm.startPrank(ALICE);
+        IERC20(DAI_ADDR)
+            .approve(tychoRouterAddr, walletBalance + existingVaultBalance);
+        tychoRouter.deposit(DAI_ADDR, existingVaultBalance);
+
+        bytes memory calldata_ = loadCallDataFromFile(
+            "test_single_encoding_strategy_curve_transfer_from_and_protocol_will_debit"
+        );
+
+        (bool success,) = address(tychoRouter).call(calldata_);
+        require(success, "Swap failed");
+
+        vm.stopPrank();
+
+        assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), 999821834);
+        // Alice's vault funds are untouched
+        tychoRouter.balanceOf(ALICE, uint256(uint160(DAI_ADDR)));
+    }
 }
