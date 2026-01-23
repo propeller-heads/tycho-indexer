@@ -305,19 +305,27 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         )
     {
         bytes4 selector = bytes4(data[:4]);
-
+        bytes calldata payData = data[36:];
         if (selector == PAY_CALLBACK_SELECTOR) {
-            bytes calldata payData = data[36:];
-
             tokenIn = address(bytes20(payData[12:32]));
             amount = uint256(uint128(bytes16(payData[32:48])));
             transferType = RestrictTransferFrom.TransferType(uint8(payData[48]));
             receiver = address(core);
         } else {
-            transferType = RestrictTransferFrom.TransferType.None;
-            receiver = address(0);
-            tokenIn = address(0);
-            amount = 0;
+            address tokenInFromCallback = address(bytes20(payData[37:57]));
+            if (tokenInFromCallback == address(0)) {
+                // ETH transfers are handled in the Executor, so we need to set the transferType to
+                // TransferNativeInExecutor to update the delta accounting accordingly.
+                tokenIn = address(0);
+                transferType =
+                RestrictTransferFrom.TransferType.TransferNativeInExecutor;
+                amount = uint256(uint128(bytes16(payData[0:16])));
+            } else {
+                transferType = RestrictTransferFrom.TransferType.None;
+                receiver = address(0);
+                tokenIn = address(0);
+                amount = 0;
+            }
         }
     }
 }

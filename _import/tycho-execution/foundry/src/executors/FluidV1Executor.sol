@@ -178,8 +178,10 @@ contract FluidV1Executor is IExecutor, ICallback {
     {
         (tokenIn, amount) = abi.decode(data[4:68], (address, uint256));
         if (tokenIn == address(0)) {
+            // ETH transfers are handled in the Executor, so we need to set the transferType to TransferNativeInExecutor
+            // to update the delta accounting accordingly.
             transferType =
-            RestrictTransferFrom.TransferType.TransferNativeInMsgValue;
+            RestrictTransferFrom.TransferType.TransferNativeInExecutor;
         } else {
             transferType = _getTransferType();
         }

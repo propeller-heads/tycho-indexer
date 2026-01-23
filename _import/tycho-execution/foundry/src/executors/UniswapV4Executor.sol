@@ -557,13 +557,20 @@ contract UniswapV4Executor is IExecutor, ICallback {
 
             bool zeroForOne = uint8(stripped[195]) != 0;
             amount = uint128(bytes16(stripped[212:228]));
-            transferType =
-                RestrictTransferFrom.TransferType(uint8(stripped[259]));
             // Extract tokenIn from PoolKey based on zeroForOne
             if (zeroForOne) {
                 tokenIn = address(bytes20(stripped[16:36])); // currency0
             } else {
                 tokenIn = address(bytes20(stripped[48:68])); // currency1
+            }
+            if (tokenIn == address(0)) {
+                // ETH transfers are handled in the Executor, so we need to set the transferType to
+                // TransferNativeInExecutor to update the delta accounting accordingly.
+                transferType =
+                RestrictTransferFrom.TransferType.TransferNativeInExecutor;
+            } else {
+                transferType =
+                    RestrictTransferFrom.TransferType(uint8(stripped[259]));
             }
         } else if (selector == SWAP_EXACT_INPUT_SELECTOR) {
             // swapExactInput(Currency currencyIn, uint128 amountIn, RestrictTransferFrom.TransferType transferType, address receiver, PathKey[] calldata path)
@@ -571,8 +578,15 @@ contract UniswapV4Executor is IExecutor, ICallback {
 
             tokenIn = address(bytes20(stripped[16:36]));
             amount = uint128(bytes16(stripped[52:68]));
-            transferType =
-                RestrictTransferFrom.TransferType(uint8(stripped[99]));
+            if (tokenIn == address(0)) {
+                // ETH transfers are handled in the Executor, so we need to set the transferType to
+                // TransferNativeInExecutor to update the delta accounting accordingly.
+                transferType =
+                RestrictTransferFrom.TransferType.TransferNativeInExecutor;
+            } else {
+                transferType =
+                    RestrictTransferFrom.TransferType(uint8(stripped[99]));
+            }
         } else {
             revert UniswapV4Executor__UnknownCallback(selector);
         }

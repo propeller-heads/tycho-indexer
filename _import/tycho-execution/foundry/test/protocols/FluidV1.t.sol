@@ -164,7 +164,7 @@ contract FluidV1ExecutorTest is Test, Constants {
 
         assertEq(
             uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.TransferNativeInMsgValue)
+            uint8(RestrictTransferFrom.TransferType.TransferNativeInExecutor)
         );
         assertEq(receiver, FLUIDV1_LIQUIDITY);
         assertEq(tokenIn, address(0));
