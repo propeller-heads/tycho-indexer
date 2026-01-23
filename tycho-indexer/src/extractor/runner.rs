@@ -754,7 +754,7 @@ impl ExtractorBuilder {
         let stream = SubstreamsStream::new(
             endpoint,
             Some(cursor),
-            spkg.modules.clone(),
+            Some(spkg),
             self.config.module_name,
             self.config.start_block,
             self.config.stop_block.unwrap_or(0) as u64,
