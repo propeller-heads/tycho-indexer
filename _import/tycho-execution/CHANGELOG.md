@@ -1,3 +1,11 @@
+## [0.18.1](https://github.com/propeller-heads/tycho-contracts/compare/0.18.0...0.18.1) (2026-01-26)
+
+
+### Bug Fixes
+
+* Aim to have all balance deltas 0 at the end of the swap ([bb23aaa](https://github.com/propeller-heads/tycho-contracts/commit/bb23aaa75aaaa4da3a6f2f379bf6af4d6543c345))
+* Handle ETH properly in Curve, Univ4 and Ekubo ([a421a46](https://github.com/propeller-heads/tycho-contracts/commit/a421a4668797eeaa8c3b650d00b2638fc84d65b0))
+
 ## [0.18.0](https://github.com/propeller-heads/tycho-contracts/compare/0.17.0...0.18.0) (2026-01-26)
 
 
