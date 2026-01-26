@@ -467,7 +467,7 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
         "6982508145454ce325ddbe47a25d4ec3d2311933", // group token in
         "00",                                       // zero2one
         "00",                                       // transfer type TransferFrom
-        "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
+        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         // First pool params
         "0000000000000000000000000000000000000000", // intermediary token (ETH)
         "000bb8",                                   // fee
@@ -1016,6 +1016,7 @@ fn test_single_encoding_strategy_bebop_aggregate() {
         .estimated_amount_in(BigUint::from_str("20000000000").unwrap())
         .protocol_state(Arc::new(bebop_state));
 
+    std::env::set_var("TYCHO_FEES_ENABLED", "true");
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
     let solution = Solution {
@@ -1048,6 +1049,7 @@ fn test_single_encoding_strategy_bebop_aggregate() {
     let hex_calldata = hex::encode(&calldata);
 
     write_calldata_to_file("test_single_encoding_strategy_bebop_aggregate", hex_calldata.as_str());
+    std::env::remove_var("TYCHO_FEES_ENABLED");
 }
 
 #[test]
@@ -1118,7 +1120,7 @@ fn test_single_encoding_strategy_hashflow() {
     let swap_usdc_wbtc = Swap::new(hashflow_component, usdc.clone(), wbtc.clone())
         .estimated_amount_in(BigUint::from_str("4308094737").unwrap())
         .protocol_state(Arc::new(hashflow_state));
-
+    std::env::set_var("TYCHO_FEES_ENABLED", "true");
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
     let solution = Solution {
@@ -1151,6 +1153,7 @@ fn test_single_encoding_strategy_hashflow() {
 
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_hashflow", hex_calldata.as_str());
+    std::env::remove_var("TYCHO_FEES_ENABLED");
 }
 
 #[test]

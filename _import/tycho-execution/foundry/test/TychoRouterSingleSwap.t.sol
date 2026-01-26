@@ -255,6 +255,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
     function testSingleSwapSolverContribution() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2
         // The minAmountOut is higher than the output amount from the pool
+        // The solver contribution is sent with the final amount out to the receiver (not optimized last transfer)
         uint256 amountIn = 1 ether;
 
         deal(WETH_ADDR, ALICE, amountIn);
@@ -396,6 +397,61 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             address(0),
             20 * 1e18,
             swap
+        );
+
+        vm.stopPrank();
+    }
+
+    function testSingleSwapSolverContributionDirectlyToReceiver() public {
+        // Trade 1 WETH for DAI with 1 swap on Uniswap V2
+        // The minAmountOut is higher than the output amount from the pool
+        // The solver contribution is sent separately to the user (the last transfer is optimized)
+        uint256 amountIn = 1 ether;
+
+        deal(WETH_ADDR, ALICE, amountIn);
+        vm.startPrank(ALICE);
+        // Approve the tokenIn to be transferred to the router
+        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
+
+        // The client will contribute to this swap with their own funds
+        uint256 maxContribution = 20 * 1e18;
+        deal(DAI_ADDR, ALICE, maxContribution);
+        IERC20(DAI_ADDR).approve(address(tychoRouterAddr), maxContribution);
+
+        tychoRouter.deposit(DAI_ADDR, maxContribution);
+
+        bytes memory protocolData = encodeUniswapV2Swap(
+            DAI_WETH_UNIV2_POOL,
+            ALICE,
+            false,
+            RestrictTransferFrom.TransferType.TransferFrom
+        );
+
+        bytes memory swap =
+            encodeSingleSwap(address(usv2Executor), protocolData);
+
+        uint256 minAmountOut = 2020 * 1e18;
+        uint256 amountOut = tychoRouter.singleSwap(
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            minAmountOut,
+            ALICE,
+            RestrictTransferFrom.InputSource.TransferFrom,
+            0,
+            address(0),
+            maxContribution,
+            swap
+        );
+
+        assertEq(amountOut, minAmountOut);
+        uint256 daiBalance = IERC20(DAI_ADDR).balanceOf(ALICE);
+        assertEq(daiBalance, minAmountOut);
+        assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), 0);
+        uint256 swapAmount = 2018817438608734439722;
+        assertEq(
+            tychoRouter.balanceOf(ALICE, uint256(uint160(DAI_ADDR))),
+            maxContribution - (minAmountOut - swapAmount)
         );
 
         vm.stopPrank();

@@ -262,7 +262,7 @@ fn test_split_input_cyclic_swap() {
         "000000",                                                 // split
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f",               // executor address,
         "b4e16d0168e52d35cacd2c6185b44281ec28c9dc",               // component id,
-        "6bc529dc7b81a031828ddce2bc419d01ff268c66",               // receiver
+        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",               // receiver
         "00",                                                     // zero2one
         "02",                                                     // transfer type Transfer
         "000000000000000000000000000000000000000000000000000000", // padding
@@ -413,7 +413,7 @@ fn test_split_output_cyclic_swap() {
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
         "0001f4",                                   // pool fee
         "02",                                       // transfer type Transfer
-        "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
+        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
         "00",                                       // zero2one
         "006e",                                     // ple encoded swaps
@@ -425,7 +425,7 @@ fn test_split_output_cyclic_swap() {
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
         "000bb8",                                   // pool fee
         "02",                                       // transfer type Transfer
-        "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
+        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
         "00",                                       // zero2one
         "000000000000000000000000000000000000000000000000000000", // padding

@@ -103,10 +103,11 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
                     "Swap encoder not found for protocol: {protocol}"
                 ))
             })?;
+        let solution_fees = solution.solver_fee_bps > 0;
 
         let (swap_receiver, _) = self
             .transfer_optimization
-            .get_receiver(&solution.receiver, None)?;
+            .get_receiver(&solution.receiver, None, solution_fees)?;
 
         let transfer = self
             .transfer_optimization
@@ -233,6 +234,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
 
         let mut swaps = vec![];
         let mut next_in_between_swap_optimization_allowed = true;
+        let solution_fees = solution.solver_fee_bps > 0;
         for (i, grouped_swap) in grouped_swaps.iter().enumerate() {
             let protocol = &grouped_swap.protocol_system;
             let swap_encoder = self
@@ -247,7 +249,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
             let next_swap = grouped_swaps.get(i + 1);
             let (swap_receiver, next_swap_optimization) = self
                 .transfer_optimization
-                .get_receiver(&solution.receiver, next_swap)?;
+                .get_receiver(&solution.receiver, next_swap, solution_fees)?;
             next_in_between_swap_optimization_allowed = next_swap_optimization;
 
             let transfer = self
@@ -426,7 +428,16 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                     ))
                 })?;
 
-            let swap_receiver = self.router_address.clone();
+            let solution_fees = solution.solver_fee_bps > 0;
+            let swap_receiver = if grouped_swap.token_out == solution.token_out {
+                let (receiver, _) = self
+                    .transfer_optimization
+                    .get_receiver(&solution.receiver, None, solution_fees)?;
+                receiver
+            } else {
+                // for split swaps all in between swaps will have the router as a receiver
+                self.router_address.clone()
+            };
             let transfer = self
                 .transfer_optimization
                 .get_transfers(grouped_swap, &solution.token_in, false);
@@ -525,7 +536,7 @@ mod tests {
     }
 
     fn router_address() -> Bytes {
-        Bytes::from_str("0x6bc529DC7B81A031828dDCE2BC419d01FF268C66").unwrap()
+        Bytes::from_str("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2").unwrap()
     }
 
     mod single {
@@ -577,7 +588,7 @@ mod tests {
                 // Swap data
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
                 "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id (pool address)
-                "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
+                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "00",                                       // zero2one
                 "00",                                       // transfer type TransferFrom
             ));
@@ -660,7 +671,7 @@ mod tests {
                 "003e",                                     // swap length
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
                 "004375dff511095cc5a197a54140a24efef3a416", // component id (pool address)
-                "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver (tycho router)
+                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver (tycho router)
                 "01",                                       // zero to one
                 "05",                                       // transfer type None
             ));
@@ -757,7 +768,7 @@ mod tests {
                 eth_chain(),
                 swap_encoder_registry,
                 UserTransferType::TransferFromPermit2,
-                Bytes::from("0x6bc529DC7B81A031828dDCE2BC419d01FF268C66"),
+                Bytes::from("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2"),
                 false,
             )
             .unwrap();
@@ -792,7 +803,7 @@ mod tests {
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
                 "0001f4",                                   // pool fee
                 "00",                                       // transfer type TransferFrom
-                "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
+                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
                 "01",                                       // zero2one
                 "006e",                                     // ple encoded swaps
@@ -804,7 +815,7 @@ mod tests {
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
                 "000bb8",                                   // pool fee
                 "00",                                       // transfer type TransferFrom
-                "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
+                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
                 "01",                                       // zero2one
                 "0043",                                     // ple encoded swaps (67 bytes)
@@ -813,7 +824,7 @@ mod tests {
                 "000000",                                   // split
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address,
                 "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id (pool address)
-                "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
+                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "00",                                       // zero2one
                 "02",                                       // transfer type Transfer
             ]
@@ -902,7 +913,7 @@ mod tests {
                 eth_chain(),
                 swap_encoder_registry,
                 UserTransferType::TransferFrom,
-                Bytes::from("0x6bc529DC7B81A031828dDCE2BC419d01FF268C66"),
+                Bytes::from("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2"),
                 false,
             )
             .unwrap();
@@ -934,7 +945,7 @@ mod tests {
                 "000000",                                   // split
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
                 "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id (pool address)
-                "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
+                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "01",                                       // zero2one
                 "00",                                       // transfer type TransferFrom
                 "006e",                                     // ple encoded swaps
@@ -946,7 +957,7 @@ mod tests {
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
                 "0001f4",                                   // pool fee
                 "02",                                       // transfer type Transfer
-                "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
+                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
                 "00",                                       // zero2one
                 "006e",                                     // ple encoded swaps
@@ -958,7 +969,7 @@ mod tests {
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
                 "000bb8",                                   // pool fee
                 "02",                                       // transfer type Transfer
-                "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
+                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
                 "00",                                       // zero2one
             ]
