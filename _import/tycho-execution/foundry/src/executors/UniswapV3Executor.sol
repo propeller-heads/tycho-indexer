@@ -52,7 +52,7 @@ contract UniswapV3Executor is IExecutor, ICallback {
         address target;
         bool zeroForOne;
         RestrictTransferFrom.TransferType transferType;
-        (tokenIn, tokenOut, fee, receiver, target, zeroForOne, transferType) =
+        (tokenIn, tokenOut, fee, transferType, receiver, target, zeroForOne) =
             _decodeData(data);
 
         _verifyPairAddress(tokenIn, tokenOut, fee, target);
@@ -61,8 +61,7 @@ contract UniswapV3Executor is IExecutor, ICallback {
         int256 amount1;
         IUniswapV3Pool pool = IUniswapV3Pool(target);
 
-        bytes memory callbackData =
-            _makeV3CallbackData(tokenIn, tokenOut, fee, transferType);
+        bytes memory callbackData = _extractV3CallbackData(data);
 
         {
             (amount0, amount1) = pool.swap(
@@ -123,10 +122,10 @@ contract UniswapV3Executor is IExecutor, ICallback {
             address tokenIn,
             address tokenOut,
             uint24 fee,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address target,
-            bool zeroForOne,
-            RestrictTransferFrom.TransferType transferType
+            bool zeroForOne
         )
     {
         if (data.length != 85) {
@@ -135,19 +134,21 @@ contract UniswapV3Executor is IExecutor, ICallback {
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
         fee = uint24(bytes3(data[40:43]));
-        receiver = address(bytes20(data[43:63]));
-        target = address(bytes20(data[63:83]));
-        zeroForOne = uint8(data[83]) > 0;
-        transferType = RestrictTransferFrom.TransferType(uint8(data[84]));
+        transferType = RestrictTransferFrom.TransferType(uint8(data[43]));
+        receiver = address(bytes20(data[44:64]));
+        target = address(bytes20(data[64:84]));
+        zeroForOne = uint8(data[84]) > 0;
     }
 
-    function _makeV3CallbackData(
-        address tokenIn,
-        address tokenOut,
-        uint24 fee,
-        RestrictTransferFrom.TransferType transferType
-    ) internal pure returns (bytes memory) {
-        return abi.encodePacked(tokenIn, tokenOut, fee, uint8(transferType));
+    // This function will extract the first 44 bytes of the data,
+    // which contains the necessary Uniswap V3 callback data:
+    // tokenIn (20 bytes), tokenOut (20 bytes), fee (3 bytes), transferType (1 byte)
+    function _extractV3CallbackData(bytes calldata data)
+        internal
+        pure
+        returns (bytes calldata)
+    {
+        return data[0:44];
     }
 
     function _verifyPairAddress(

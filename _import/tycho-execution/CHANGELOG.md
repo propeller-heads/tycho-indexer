@@ -1,3 +1,16 @@
+## [0.18.0](https://github.com/propeller-heads/tycho-contracts/compare/0.17.0...0.18.0) (2026-01-26)
+
+
+### Features
+
+* improve Uniswap V3 encoding ([981cfe4](https://github.com/propeller-heads/tycho-contracts/commit/981cfe45b10e18e13ed168e498a3f8108fc35acd))
+* uodate tests ([4817e43](https://github.com/propeller-heads/tycho-contracts/commit/4817e43d92f7498405d4bee473440022cbac2d73))
+
+
+### Bug Fixes
+
+* fix tests acciording to the field order change ([4c51415](https://github.com/propeller-heads/tycho-contracts/commit/4c51415f71c00c368d7806a0f424771f1e3f66e2))
+
 ## [0.17.0](https://github.com/propeller-heads/tycho-contracts/compare/0.16.0...0.17.0) (2026-01-22)
 
 
