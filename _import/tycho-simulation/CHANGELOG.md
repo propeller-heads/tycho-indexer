@@ -1,3 +1,10 @@
+## [0.234.0](https://github.com/propeller-heads/tycho-simulation/compare/0.233.0...0.234.0) (2026-01-26)
+
+
+### Features
+
+* Add CoWAMM protocol to Ethereum ([b38f20c](https://github.com/propeller-heads/tycho-simulation/commit/b38f20c4f2122e937442f0635c736a02bf8c3e45))
+
 ## [0.233.0](https://github.com/propeller-heads/tycho-simulation/compare/0.232.0...0.233.0) (2026-01-26)
 
 
