@@ -791,10 +791,10 @@ mod tests {
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
                 "0001f4",                                   // pool fee
+                "00",                                       // transfer type TransferFrom
                 "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
                 "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
                 "01",                                       // zero2one
-                "00",                                       // transfer type TransferFrom
                 "006e",                                     // ple encoded swaps
                 "00",                                       // token in index
                 "01",                                       // token out index
@@ -803,10 +803,10 @@ mod tests {
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
                 "000bb8",                                   // pool fee
+                "00",                                       // transfer type TransferFrom
                 "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
                 "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
                 "01",                                       // zero2one
-                "00",                                       // transfer type TransferFrom
                 "0043",                                     // ple encoded swaps (67 bytes)
                 "01",                                       // token in index
                 "00",                                       // token out index
@@ -945,10 +945,10 @@ mod tests {
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
                 "0001f4",                                   // pool fee
+                "02",                                       // transfer type Transfer
                 "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
                 "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
                 "00",                                       // zero2one
-                "02",                                       // transfer type Transfer
                 "006e",                                     // ple encoded swaps
                 "01",                                       // token in index
                 "00",                                       // token out index
@@ -957,10 +957,10 @@ mod tests {
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
                 "000bb8",                                   // pool fee
+                "02",                                       // transfer type Transfer
                 "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
                 "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
                 "00",                                       // zero2one
-                "02",                                       // transfer type Transfer
             ]
             .join("");
 
