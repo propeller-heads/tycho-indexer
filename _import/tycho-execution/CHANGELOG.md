@@ -1,3 +1,17 @@
+## [0.19.0](https://github.com/propeller-heads/tycho-contracts/compare/0.18.1...0.19.0) (2026-01-26)
+
+
+### Features
+
+* Fix circular swap vulnerability with InputSource guardrail ([55688b2](https://github.com/propeller-heads/tycho-contracts/commit/55688b283dc2601ef1f8aee1610d1816c9658a01))
+* Support arbitrage swaps starting from vault ([8d9c5d2](https://github.com/propeller-heads/tycho-contracts/commit/8d9c5d2fd6e92103fac15676388affbeb4726990))
+
+
+### Bug Fixes
+
+* After merge with main fixes ([069e5e6](https://github.com/propeller-heads/tycho-contracts/commit/069e5e64d5ce666add9aa176705e7f8ef9bced3e))
+* Rust fmt ([fdfeb9f](https://github.com/propeller-heads/tycho-contracts/commit/fdfeb9f01a787658126f8ce8ee5ee722cfeeb283))
+
 ## [0.18.1](https://github.com/propeller-heads/tycho-contracts/compare/0.18.0...0.18.1) (2026-01-26)
 
 
