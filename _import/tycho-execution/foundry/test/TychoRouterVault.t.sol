@@ -168,9 +168,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
     }
 
     function testSplitSwapUsesVaultBalance() public {
-        // A maliciously encoded split swap attempts to take more than the input amount
-        // from the user's vault - REVERT
-
+        // A correctly encoded split swap uses vault's funds
         //          ->   WBTC (60%)
         // 1 WETH
         //          ->   WBTC (40%)
@@ -355,7 +353,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         assertEq(amountOut, 883252117460416988);
         assertEq(IERC20(RETH_ADDR).balanceOf(ALICE), amountOut);
 
-        // Alice's ETH vault balance should be spent
+        // Alice's ETH vault balance should not be spent
         assertEq(tychoRouterAddr.balance, existingVaultBalance);
         assertEq(tychoRouter.balanceOf(ALICE, 0), existingVaultBalance);
     }
@@ -437,14 +435,14 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             bytes3(uint24(3000)), // fee
             int24(60), // tick spacing
             address(0), // hook
-            bytes2(uint16(0)), // hookdata length
-            bytes("") // hookdate
+            bytes2(uint16(0)), // hook data length
+            bytes("") // hook data
         );
 
         bytes memory protocolData = abi.encodePacked(
             USDC_ADDR,
             address(0), // ETH_ADDR,
-            false, // zero for one ?? i dont know
+            false,
             RestrictTransferFrom.TransferType.TransferFrom,
             address(tychoRouter), // receiver
             pool
@@ -455,7 +453,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         // Second swap: ETH -> rETH (use credit from first swap)
         swaps[1] = _rocketpoolEthRethSwap();
 
-        uint256 amountIn = 1 ether; // ezETH
+        uint256 amountIn = 1 ether;
         uint256 existingVaultETHBalance = 3 ether;
 
         deal(USDC_ADDR, ALICE, amountIn);

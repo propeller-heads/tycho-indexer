@@ -256,7 +256,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
                 RestrictTransferFrom.TransferType.TransferFrom
             )
         );
-        // WETH -> WBTC (50%)
+        // WETH -> WBTC (60%)
         swaps[1] = encodeSplitSwap(
             uint8(0),
             uint8(1),
