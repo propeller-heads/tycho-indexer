@@ -1,3 +1,24 @@
+## [0.18.1](https://github.com/propeller-heads/tycho-contracts/compare/0.18.0...0.18.1) (2026-01-26)
+
+
+### Bug Fixes
+
+* Aim to have all balance deltas 0 at the end of the swap ([bb23aaa](https://github.com/propeller-heads/tycho-contracts/commit/bb23aaa75aaaa4da3a6f2f379bf6af4d6543c345))
+* Handle ETH properly in Curve, Univ4 and Ekubo ([a421a46](https://github.com/propeller-heads/tycho-contracts/commit/a421a4668797eeaa8c3b650d00b2638fc84d65b0))
+
+## [0.18.0](https://github.com/propeller-heads/tycho-contracts/compare/0.17.0...0.18.0) (2026-01-26)
+
+
+### Features
+
+* improve Uniswap V3 encoding ([981cfe4](https://github.com/propeller-heads/tycho-contracts/commit/981cfe45b10e18e13ed168e498a3f8108fc35acd))
+* uodate tests ([4817e43](https://github.com/propeller-heads/tycho-contracts/commit/4817e43d92f7498405d4bee473440022cbac2d73))
+
+
+### Bug Fixes
+
+* fix tests acciording to the field order change ([4c51415](https://github.com/propeller-heads/tycho-contracts/commit/4c51415f71c00c368d7806a0f424771f1e3f66e2))
+
 ## [0.17.0](https://github.com/propeller-heads/tycho-contracts/compare/0.16.0...0.17.0) (2026-01-22)
 
 

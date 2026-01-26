@@ -20,10 +20,10 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
             address inToken,
             address outToken,
             uint24 fee,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address target,
-            bool zeroForOne,
-            RestrictTransferFrom.TransferType transferType
+            bool zeroForOne
         )
     {
         return _decodeData(data);
@@ -39,8 +39,10 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
     }
 
     function uniswapV3SwapCallback(
-        int256, /* amount0Delta */
-        int256, /* amount1Delta */
+        int256,
+        /* amount0Delta */
+        int256,
+        /* amount1Delta */
         bytes calldata /* data */
     )
         external
@@ -94,20 +96,20 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
             WETH_ADDR,
             DAI_ADDR,
             expectedPoolFee,
+            RestrictTransferFrom.TransferType.Transfer,
             address(2),
             address(3),
-            false,
-            RestrictTransferFrom.TransferType.Transfer
+            false
         );
 
         (
             address tokenIn,
             address tokenOut,
             uint24 fee,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address target,
-            bool zeroForOne,
-            RestrictTransferFrom.TransferType transferType
+            bool zeroForOne
         ) = uniswapV3Exposed.decodeData(data);
 
         assertEq(tokenIn, WETH_ADDR);
@@ -266,10 +268,10 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
             WETH_ADDR,
             DAI_ADDR,
             uint24(3000),
+            RestrictTransferFrom.TransferType.Transfer,
             address(this),
             fakePool,
-            zeroForOne,
-            RestrictTransferFrom.TransferType.Transfer
+            zeroForOne
         );
 
         vm.expectRevert(UniswapV3Executor__InvalidTarget.selector);
@@ -289,10 +291,10 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
             tokenIn,
             tokenOut,
             pool.fee(),
+            transferType,
             receiver,
             target,
-            zero2one,
-            transferType
+            zero2one
         );
     }
 }

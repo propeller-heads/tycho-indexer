@@ -53,10 +53,10 @@ impl SwapEncoder for UniswapV3SwapEncoder {
             token_in_address,
             token_out_address,
             pool_fee_u24,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
             bytes_to_address(&encoding_context.receiver)?,
             component_id,
             zero_to_one,
-            (encoding_context.transfer_type as u8).to_be_bytes(),
         );
 
         Ok(args.abi_encode_packed())
@@ -124,14 +124,14 @@ mod tests {
                 "6b175474e89094c44da98b954eedeac495271d0f",
                 // fee
                 "0001f4",
+                // transfer type Transfer
+                "02",
                 // receiver
                 "0000000000000000000000000000000000000001",
                 // pool id
                 "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
                 // zero for one
                 "00",
-                // transfer type Transfer
-                "02",
             ))
         );
     }

@@ -235,10 +235,10 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
             tokenIn,
             tokenOut,
             pool.fee(),
+            transferType,
             receiver,
             target,
-            zero2one,
-            transferType
+            zero2one
         );
     }
 

@@ -15,7 +15,7 @@ error Vault__InsufficientBalance(
     address user, address token, uint256 requested, uint256 available
 );
 error Vault__AmountZero();
-error Vault__UnexpectedNegativeCount(uint256 negativeCount);
+error Vault__UnexpectedNonZeroCount(uint256 nonZeroCount);
 error Vault__InvalidInputDelta(address token, int256 expected, int256 actual);
 error Vault__UnexpectedInputDelta(int256 inputDelta);
 
@@ -31,9 +31,9 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
     mapping(address => mapping(uint256 => uint256)) private _vaultBalances;
 
     // Transient storage slot for tracking deltas during swap sequences
-    // keccak256("TychoVault#NEGATIVE_DELTA_COUNT")
-    uint256 private constant _NEGATIVE_DELTA_COUNT_SLOT =
-        0x675e351c150ddfdbd3bc96ad8c0c5cc3e6f0d3c18723512ac3c7dfed159e94d5;
+    // keccak256("TychoVault#NON_ZERO_DELTA_COUNT_SLOT")
+    uint256 private constant _NON_ZERO_DELTA_COUNT_SLOT =
+        0xee3c9c434505299f2450d3624302a27b8a6978e973825330bc744ba925eec199;
     // keccak256("Vault#USE_VAULT_SLOT")
     uint256 internal constant _USE_VAULT_SLOT =
         0xce5ffa91873ede1b462af74ea59bab3721b06b0ff726b90311437efde2001795;
@@ -218,24 +218,24 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
     }
 
     /**
-     * @dev Get negative delta count from transient storage
+     * @dev Get non zero delta count from transient storage
      */
     // Assembly required for transient storage operations (tload)
-    function _getNegativeDeltaCount() internal view returns (uint256 count) {
+    function _getNonZeroDeltaCount() internal view returns (uint256 count) {
         // slither-disable-next-line assembly
         assembly {
-            count := tload(_NEGATIVE_DELTA_COUNT_SLOT)
+            count := tload(_NON_ZERO_DELTA_COUNT_SLOT)
         }
     }
 
     /**
-     * @dev Set negative delta count in transient storage
+     * @dev Set non zero delta count in transient storage
      */
     // Assembly required for transient storage operations (tstore)
-    function _setNegativeDeltaCount(uint256 count) internal {
+    function _setNonZeroDeltaCount(uint256 count) internal {
         // slither-disable-next-line assembly
         assembly {
-            tstore(_NEGATIVE_DELTA_COUNT_SLOT, count)
+            tstore(_NON_ZERO_DELTA_COUNT_SLOT, count)
         }
     }
 
@@ -267,13 +267,13 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
         int256 oldDelta = _getDelta(token);
         int256 newDelta = oldDelta + deltaChange;
 
-        // Update negative delta counter based on transitions
-        if (oldDelta < 0 && newDelta >= 0) {
-            // Was negative, now non-negative: decrement counter
-            _setNegativeDeltaCount(_getNegativeDeltaCount() - 1);
-        } else if (oldDelta >= 0 && newDelta < 0) {
-            // Was non-negative, now negative: increment counter
-            _setNegativeDeltaCount(_getNegativeDeltaCount() + 1);
+        // Update non zero delta counter based on transitions
+        if (oldDelta != 0 && newDelta == 0) {
+            // Was non zero, now zero: decrement counter
+            _setNonZeroDeltaCount(_getNonZeroDeltaCount() - 1);
+        } else if (oldDelta == 0 && newDelta != 0) {
+            // Was zero, now non zero: increment counter
+            _setNonZeroDeltaCount(_getNonZeroDeltaCount() + 1);
         }
 
         _setDelta(token, newDelta);
@@ -329,15 +329,15 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
         address inputToken,
         uint256 inputAmount
     ) internal {
-        uint256 negativeCount = _getNegativeDeltaCount();
+        uint256 nonZeroCount = _getNonZeroDeltaCount();
         bool useVault = _getUseVault();
 
         if (useVault) {
             // When vault usage is allowed, allow a single negative delta
             // Check that there is only one negative delta: the input token
-            if (negativeCount > 1) {
-                revert Vault__UnexpectedNegativeCount(negativeCount);
-            } else if (negativeCount == 1) {
+            if (nonZeroCount > 1) {
+                revert Vault__UnexpectedNonZeroCount(nonZeroCount);
+            } else if (nonZeroCount == 1) {
                 int256 inputDelta = _getDelta(inputToken);
                 if (inputDelta != -int256(inputAmount)) {
                     revert Vault__UnexpectedInputDelta(inputDelta);

@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import "./TychoRouterTestSetup.sol";
 import {FeeCalculator} from "@src/FeeCalculator.sol";
 import {
-    Vault__UnexpectedNegativeCount,
+    Vault__UnexpectedNonZeroCount,
     Vault__UnexpectedInputDelta
 } from "@src/Vault.sol";
 import {TychoRouter__AmountOutNotFullyReceived} from "@src/TychoRouter.sol";
