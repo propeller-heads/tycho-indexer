@@ -66,7 +66,6 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             200, // 2% solverFeeBps
             solverFeeReceiver,
             0,
@@ -160,7 +159,6 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0, // solverFeeBps
             address(0), // solverFeeReceiver
             0,

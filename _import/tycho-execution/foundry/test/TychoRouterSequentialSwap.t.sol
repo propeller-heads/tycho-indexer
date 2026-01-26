@@ -97,7 +97,6 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             USDC_ADDR,
             1000_000000, // min amount
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -125,7 +124,6 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             USDC_ADDR,
             0, // min amount
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -149,7 +147,6 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             USDC_ADDR,
             0, // min amount
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,

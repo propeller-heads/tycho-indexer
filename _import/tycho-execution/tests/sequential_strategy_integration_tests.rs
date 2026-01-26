@@ -68,7 +68,6 @@ fn test_sequential_swap_strategy_encoder() {
         eth_chain().id(),
         encoded_solution,
         &solution,
-        &UserTransferType::TransferFromPermit2,
         &eth(),
         Some(get_signer()),
     )
@@ -126,31 +125,24 @@ fn test_sequential_swap_strategy_encoder_no_permit2_integration() {
         .unwrap()[0]
         .clone();
 
-    let calldata = encode_tycho_router_call(
-        eth_chain().id(),
-        encoded_solution,
-        &solution,
-        &UserTransferType::TransferFrom,
-        &eth(),
-        None,
-    )
-    .unwrap()
-    .data;
+    let calldata =
+        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
+            .unwrap()
+            .data;
 
     let hex_calldata = encode(&calldata);
 
     let expected = String::from(concat!(
-        "16b8bcb1", // function selector (sequentialSwap)
+        "f0b6a46d", // function selector (sequentialSwap without InputSource)
         "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount in
         "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
         "00000000000000000000000000000000000000000000000000000000018f61ec", // min amount out
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-        "0000000000000000000000000000000000000000000000000000000000000000", // transferFrom
         "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps
         "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeReceiver
         "0000000000000000000000000000000000000000000000000000000000000000", // maxSolverContribution
-        "0000000000000000000000000000000000000000000000000000000000000140", // offset of swap bytes
+        "0000000000000000000000000000000000000000000000000000000000000120", // offset of swap bytes
         "0000000000000000000000000000000000000000000000000000000000000080", // len swaps
         // swap 1
         "003e",                                     // swap length (62 bytes)
@@ -247,7 +239,6 @@ fn test_sequential_strategy_cyclic_swap() {
         eth_chain().id(),
         encoded_solution,
         &solution,
-        &UserTransferType::TransferFromPermit2,
         &eth(),
         Some(get_signer()),
     )
@@ -372,7 +363,6 @@ fn test_sequential_strategy_cyclic_swap_and_vault() {
         eth_chain().id(),
         encoded_solution,
         &solution,
-        &UserTransferType::UseVaultsFunds,
         &eth(),
         Some(get_signer()),
     )
@@ -380,17 +370,16 @@ fn test_sequential_strategy_cyclic_swap_and_vault() {
     .data;
     let hex_calldata = alloy::hex::encode(&calldata);
     let expected_input = [
-        "16b8bcb1", // selector (sequentialSwap)
+        "e51fdfe6", // selector (sequentialSwapUsingVault)
         "0000000000000000000000000000000000000000000000000000000005f5e100", // amount in
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
         "0000000000000000000000000000000000000000000000000000000005ec8f6e", // min amount out
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-        "0000000000000000000000000000000000000000000000000000000000000001", // transferFrom
         "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps = 0
         "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeReceiver
         "0000000000000000000000000000000000000000000000000000000000000000", // maxSolverContribution
-        "0000000000000000000000000000000000000000000000000000000000000140", // offset of swap bytes
+        "0000000000000000000000000000000000000000000000000000000000000120", // offset of swap bytes
         "00000000000000000000000000000000000000000000000000000000000000d6", // length of ple encoded swaps without padding
         "0069",  // ple encoded swaps
         "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address

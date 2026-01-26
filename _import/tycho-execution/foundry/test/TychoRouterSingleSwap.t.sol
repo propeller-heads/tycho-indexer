@@ -81,7 +81,6 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -118,16 +117,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
 
         vm.expectRevert(TychoRouter__UndefinedMinAmountOut.selector);
         tychoRouter.singleSwap(
-            amountIn,
-            WETH_ADDR,
-            DAI_ADDR,
-            0,
-            ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
-            0,
-            address(0),
-            0,
-            swap
+            amountIn, WETH_ADDR, DAI_ADDR, 0, ALICE, 0, address(0), 0, swap
         );
     }
 
@@ -158,7 +148,6 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -201,7 +190,6 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -236,13 +224,12 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
                 amountIn // attempted amount
             )
         );
-        tychoRouter.singleSwap(
+        tychoRouter.singleSwapUsingVault(
             amountIn,
             WETH_ADDR,
             DAI_ADDR,
             2000 * 1e18,
             ALICE,
-            RestrictTransferFrom.InputSource.Vault,
             0,
             address(0),
             0,
@@ -287,7 +274,6 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             maxContribution,
@@ -343,7 +329,6 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -392,7 +377,6 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             20 * 1e18,
@@ -437,7 +421,6 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             maxContribution,

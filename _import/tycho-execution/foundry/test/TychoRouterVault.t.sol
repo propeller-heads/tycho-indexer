@@ -158,7 +158,6 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             USDC_ADDR,
             1, // min amount
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -211,14 +210,13 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         IERC20(WETH_ADDR).approve(tychoRouterAddr, existingVaultBalance);
         tychoRouter.deposit(WETH_ADDR, existingVaultBalance);
 
-        uint256 amountOut = tychoRouter.splitSwap(
+        uint256 amountOut = tychoRouter.splitSwapUsingVault(
             amountIn,
             WETH_ADDR,
             WBTC_ADDR,
             1, // min amount
             4,
             ALICE, // receiver
-            RestrictTransferFrom.InputSource.Vault,
             0,
             address(0),
             0,
@@ -271,7 +269,6 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             USDC_ADDR,
             1, // min amount
             ALICE, // receiver
-            RestrictTransferFrom.InputSource.Vault,
             0, // solverFeeBps
             address(0), // solverFeeReceiver
             0, // maxSolverContribution
@@ -303,7 +300,6 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             DAI_ADDR,
             1, // min amount
             ALICE, // receiver
-            RestrictTransferFrom.InputSource.Vault,
             0, // solverFeeBps
             address(0), // solverFeeReceiver
             0, // maxSolverContribution
@@ -341,7 +337,6 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             RETH_ADDR,
             1, // min amount
             ALICE, // receiver
-            RestrictTransferFrom.InputSource.Vault,
             0,
             address(0),
             0,
@@ -353,14 +348,42 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         assertEq(amountOut, 883252117460416988);
         assertEq(IERC20(RETH_ADDR).balanceOf(ALICE), amountOut);
 
-        // Alice's ETH vault balance should not be spent
+        // Alice's ETH vault balance should NOT be touched (still has 2 ether)
         assertEq(tychoRouterAddr.balance, existingVaultBalance);
         assertEq(tychoRouter.balanceOf(ALICE, 0), existingVaultBalance);
     }
 
-    function testTransferNativeInExecutorUsesVaultBalance() public {
-        // First swap is native ETH transfer (in msg value), user didn't send ETH,
-        // so their vault balance is used
+    function testTransferNativeInExecutorForgotToSendETH() public {
+        // Alice wants to swap ETH but forgets to send it via msg.value
+        // Even though she has vault balance, the regular method should revert
+        // (vault should only be used with explicit vault methods)
+        uint256 amountIn = 1 ether;
+        uint256 existingVaultBalance = 2 ether;
+        deal(ALICE, existingVaultBalance);
+
+        vm.startPrank(ALICE);
+        tychoRouter.deposit{value: existingVaultBalance}(
+            address(0), existingVaultBalance
+        );
+        vm.expectRevert(
+            abi.encodeWithSelector(Vault__UnexpectedNonZeroCount.selector, 1)
+        );
+        tychoRouter.singleSwap( // No msg.value sent!
+            amountIn,
+            address(0), // ETH
+            RETH_ADDR,
+            1, // min amount
+            ALICE, // receiver
+            0,
+            address(0),
+            0,
+            _rocketpoolEthRethSwap()
+        );
+        vm.stopPrank();
+    }
+
+    function testUseNativeVaultBalance() public {
+        // First swap is native ETH transfer using vault balance
 
         uint256 amountIn = 1 ether;
         deal(ALICE, amountIn);
@@ -369,14 +392,12 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         // Deposit ETH to vault
         tychoRouter.deposit{value: amountIn}(address(0), amountIn);
 
-        // Call without msg.value - should use vault balance
-        uint256 amountOut = tychoRouter.singleSwap(
+        uint256 amountOut = tychoRouter.singleSwapUsingVault(
             amountIn,
             address(0), // ETH
             RETH_ADDR,
             1, // min amount
             ALICE, // receiver
-            RestrictTransferFrom.InputSource.Vault,
             0,
             address(0),
             0,
@@ -392,29 +413,29 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         assertEq(tychoRouter.balanceOf(ALICE, 0), 0);
     }
 
-    function testTransferNativeInExecutorNoVaultBalance() public {
-        // First swap is native ETH transfer (in msg value), user didn't send ETH
-        // and had no vault balance - REVERT
+    function testVaultMethodWithMsgValue() public {
+        // Alice calls vault method but sends ETH via msg.value - should revert
         uint256 amountIn = 1 ether;
+        uint256 existingVaultBalance = 2 ether;
+        deal(ALICE, amountIn + existingVaultBalance);
+
         vm.startPrank(ALICE);
-        // Router has funds - none of which belong to Alice so she can't use them.
-        deal(tychoRouterAddr, 500 ether);
+        tychoRouter.deposit{value: existingVaultBalance}(
+            address(0), existingVaultBalance
+        );
+
         vm.expectRevert(
             abi.encodeWithSelector(
-                ERC6909.ERC6909InsufficientBalance.selector,
-                0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2,
-                0,
-                1e18,
-                0
+                TychoRouter__MsgValueNotAllowedWithVaultMethod.selector,
+                amountIn
             )
         );
-        tychoRouter.singleSwap(
+        tychoRouter.singleSwapUsingVault{value: amountIn}(
             amountIn,
             address(0), // ETH
             RETH_ADDR,
             1, // min amount
             ALICE, // receiver
-            RestrictTransferFrom.InputSource.Vault,
             0,
             address(0),
             0,
@@ -472,7 +493,6 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             RETH_ADDR,
             1, // min amount
             ALICE, // receiver
-            RestrictTransferFrom.InputSource.TransferFrom,
             0, // solver fee bps
             address(0), // solver fee receiver
             0, // max solver contribution
@@ -550,7 +570,6 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             USDC_ADDR,
             1, // min amount
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -587,13 +606,12 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         // This reverts with Dai/insufficient-allowance - though the low-level error
         // is caught as "ExecutionReverted" in the Dispatcher.
         vm.expectRevert();
-        tychoRouter.singleSwap(
+        tychoRouter.singleSwapUsingVault(
             amountIn,
             WETH_ADDR,
             USDC_ADDR,
             1, // min amount
             ALICE, // receiver
-            RestrictTransferFrom.InputSource.Vault,
             0, // solver fee bps
             address(0), // solver fee receiver
             0, // max solver contribution
@@ -710,7 +728,6 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             RETH_ADDR,
             1, // min amount
             ALICE, // receiver
-            RestrictTransferFrom.InputSource.TransferFrom,
             0, // solver fee bps
             address(0), // solver fee receiver
             0, // max solver contribution

@@ -31,7 +31,6 @@ use crate::encoding::{
 /// * `sequential_swap_strategy`: Encoder for sequential swaps
 /// * `split_swap_strategy`: Encoder for split swaps
 /// * `router_address`: Address of the Tycho router contract
-/// * `user_transfer_type`: Type of user transfer
 /// * `permit2`: Optional Permit2 instance for permit transfers
 /// * `signer`: Optional signer (used only for permit2 and full calldata encoding)
 #[derive(Clone)]
@@ -41,7 +40,6 @@ pub struct TychoRouterEncoder {
     sequential_swap_strategy: SequentialSwapStrategyEncoder,
     split_swap_strategy: SplitSwapStrategyEncoder,
     router_address: Bytes,
-    user_transfer_type: UserTransferType,
     permit2: Option<Permit2>,
     signer: Option<PrivateKeySigner>,
 }
@@ -78,7 +76,7 @@ impl TychoRouterEncoder {
             split_swap_strategy: SplitSwapStrategyEncoder::new(
                 chain,
                 swap_encoder_registry,
-                user_transfer_type.clone(),
+                user_transfer_type,
                 router_address.clone(),
                 historical_trade,
             )?,
@@ -86,7 +84,6 @@ impl TychoRouterEncoder {
             permit2,
             signer,
             chain,
-            user_transfer_type,
         })
     }
 
@@ -160,7 +157,6 @@ impl TychoEncoder for TychoRouterEncoder {
                 self.chain.id(),
                 encoded_solution,
                 solution,
-                &self.user_transfer_type,
                 &self.chain.native_token().address,
                 self.signer.clone(),
             )?;
@@ -492,7 +488,7 @@ mod tests {
                 Bytes::from_str("0x6bc529DC7B81A031828dDCE2BC419d01FF268C66").unwrap()
             );
             // single swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "a5125e3b");
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "d51d2a96");
         }
 
         #[test]
@@ -516,7 +512,7 @@ mod tests {
             let transactions = transactions.unwrap();
             assert_eq!(transactions.len(), 1);
             // single swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "a5125e3b");
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "d51d2a96");
         }
 
         #[test]
@@ -561,7 +557,7 @@ mod tests {
             assert_eq!(transactions.len(), 1);
             assert_eq!(transactions[0].value, BigUint::ZERO);
             // sequential swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "16b8bcb1");
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "f0b6a46d");
         }
 
         #[test]

@@ -70,6 +70,7 @@ error TychoRouter__EmptySwaps();
 error TychoRouter__MsgValueDoesNotMatchAmountIn(
     uint256 msgValue, uint256 amountIn
 );
+error TychoRouter__MsgValueNotAllowedWithVaultMethod(uint256 msgValue);
 error TychoRouter__NegativeSlippage(uint256 amount, uint256 minAmount);
 error TychoRouter__AmountOutNotFullyReceived(
     uint256 amountIn, uint256 amountConsumed
@@ -130,6 +131,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     /**
      * @notice Executes a swap operation based on a predefined swap graph, supporting internal token amount splits.
      *         This function enables multi-step swaps and validates the output amount against a user-specified minimum.
+     *         Takes funds from the user's wallet using transferFrom.
      *
      * @dev
      * - Swaps are executed sequentially using the `_swap` function.
@@ -141,7 +143,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
-     * @param inputSource Source of input funds - TransferFrom (from wallet) or Vault (from user's vault balance)
      * @param solverFeeBps Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%)
      * @param solverFeeReceiver Address to receive the solver fee.
      * @param maxSolverContribution Maximum amount the solver will pay out of pocket to make the trade succeed.
@@ -156,7 +157,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 minAmountOut,
         uint256 nTokens,
         address receiver,
-        RestrictTransferFrom.InputSource inputSource,
         uint16 solverFeeBps,
         address solverFeeReceiver,
         uint256 maxSolverContribution,
@@ -164,9 +164,65 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         _updateNativeDeltaAccounting(amountIn);
         uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
-            tokenIn, amountIn, tokenOut, receiver, inputSource
+            tokenIn, amountIn, tokenOut, receiver, true
         );
-        _tstoreTransferFromInfo(tokenIn, amountIn, false, inputSource);
+        _tstoreTransferFromInfo(tokenIn, amountIn, false, false);
+
+        return _splitSwapChecked(
+            amountIn,
+            tokenIn,
+            tokenOut,
+            minAmountOut,
+            initialBalanceTokenOut,
+            nTokens,
+            receiver,
+            solverFeeBps,
+            solverFeeReceiver,
+            maxSolverContribution,
+            swaps
+        );
+    }
+
+    /**
+     * @notice Executes a swap operation based on a predefined swap graph, supporting internal token amount splits.
+     *         This function enables multi-step swaps and validates the output amount against a user-specified minimum.
+     *         Takes funds from the user's vault balance.
+     *
+     * @dev
+     * - Swaps are executed sequentially using the `_swap` function.
+     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
+     *
+     * @param amountIn The input token amount to be swapped.
+     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
+     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
+     * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
+     * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
+     * @param receiver The address to receive the output tokens.
+     * @param solverFeeBps Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%)
+     * @param solverFeeReceiver Address to receive the solver fee.
+     * @param maxSolverContribution Maximum amount the solver will pay out of pocket to make the trade succeed.
+     * @param swaps Encoded swap graph data containing details of each swap.
+     *
+     * @return amountOut The total amount of the output token received by the receiver.
+     */
+    function splitSwapUsingVault(
+        uint256 amountIn,
+        address tokenIn,
+        address tokenOut,
+        uint256 minAmountOut,
+        uint256 nTokens,
+        address receiver,
+        uint16 solverFeeBps,
+        address solverFeeReceiver,
+        uint256 maxSolverContribution,
+        bytes calldata swaps
+    ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+        if (msg.value > 0) {
+            revert TychoRouter__MsgValueNotAllowedWithVaultMethod(msg.value);
+        }
+        _updateNativeDeltaAccounting(amountIn);
+        uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
+        _tstoreTransferFromInfo(tokenIn, amountIn, false, true);
 
         return _splitSwapChecked(
             amountIn,
@@ -223,22 +279,13 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         _updateNativeDeltaAccounting(amountIn);
         uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
-            tokenIn,
-            amountIn,
-            tokenOut,
-            receiver,
-            RestrictTransferFrom.InputSource.TransferFrom
+            tokenIn, amountIn, tokenOut, receiver, true
         );
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
             permit2.permit(msg.sender, permitSingle, signature);
         }
-        _tstoreTransferFromInfo(
-            tokenIn,
-            amountIn,
-            true,
-            RestrictTransferFrom.InputSource.TransferFrom
-        );
+        _tstoreTransferFromInfo(tokenIn, amountIn, true, false);
 
         return _splitSwapChecked(
             amountIn,
@@ -258,6 +305,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     /**
      * @notice Executes a swap operation based on a predefined swap graph with no split routes.
      *         This function enables multi-step swaps and validates the output amount against a user-specified minimum.
+     *         Takes funds from the user's wallet using transferFrom.
      *
      * @dev
      * - Swaps are executed sequentially using the `_swap` function.
@@ -268,7 +316,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
-     * @param inputSource Source of input funds - TransferFrom (from wallet) or Vault (from user's vault balance)
      * @param solverFeeBps Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%)
      * @param solverFeeReceiver Address to receive the solver fee.
      * @param maxSolverContribution Maximum amount the solver will pay out of pocket to make the trade succeed.
@@ -282,17 +329,69 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address tokenOut,
         uint256 minAmountOut,
         address receiver,
-        RestrictTransferFrom.InputSource inputSource,
         uint16 solverFeeBps,
         address solverFeeReceiver,
         uint256 maxSolverContribution,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         _updateNativeDeltaAccounting(amountIn);
-        uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
-            tokenIn, amountIn, tokenOut, receiver, inputSource
+        uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
+        _tstoreTransferFromInfo(tokenIn, amountIn, false, false);
+
+        return _sequentialSwapChecked(
+            amountIn,
+            tokenIn,
+            tokenOut,
+            minAmountOut,
+            initialBalanceTokenOut,
+            receiver,
+            solverFeeBps,
+            solverFeeReceiver,
+            maxSolverContribution,
+            swaps
         );
-        _tstoreTransferFromInfo(tokenIn, amountIn, false, inputSource);
+    }
+
+    /**
+     * @notice Executes a swap operation based on a predefined swap graph with no split routes.
+     *         This function enables multi-step swaps and validates the output amount against a user-specified minimum.
+     *         Takes funds from the user's vault balance.
+     *
+     * @dev
+     * - Swaps are executed sequentially using the `_swap` function.
+     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
+     *
+     * @param amountIn The input token amount to be swapped.
+     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
+     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
+     * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
+     * @param receiver The address to receive the output tokens.
+     * @param solverFeeBps Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%)
+     * @param solverFeeReceiver Address to receive the solver fee.
+     * @param maxSolverContribution Maximum amount the solver will pay out of pocket to make the trade succeed.
+     * @param swaps Encoded swap graph data containing details of each swap.
+     *
+     * @return amountOut The total amount of the output token received by the receiver.
+     */
+    function sequentialSwapUsingVault(
+        uint256 amountIn,
+        address tokenIn,
+        address tokenOut,
+        uint256 minAmountOut,
+        address receiver,
+        uint16 solverFeeBps,
+        address solverFeeReceiver,
+        uint256 maxSolverContribution,
+        bytes calldata swaps
+    ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+        if (msg.value > 0) {
+            revert TychoRouter__MsgValueNotAllowedWithVaultMethod(msg.value);
+        }
+        _updateNativeDeltaAccounting(amountIn);
+        uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
+            tokenIn, amountIn, tokenOut, receiver, false
+        );
+        _tstoreTransferFromInfo(tokenIn, amountIn, false, true);
 
         return _sequentialSwapChecked(
             amountIn,
@@ -345,23 +444,14 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         _updateNativeDeltaAccounting(amountIn);
         uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
-            tokenIn,
-            amountIn,
-            tokenOut,
-            receiver,
-            RestrictTransferFrom.InputSource.TransferFrom
+            tokenIn, amountIn, tokenOut, receiver, true
         );
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
             permit2.permit(msg.sender, permitSingle, signature);
         }
 
-        _tstoreTransferFromInfo(
-            tokenIn,
-            amountIn,
-            true,
-            RestrictTransferFrom.InputSource.TransferFrom
-        );
+        _tstoreTransferFromInfo(tokenIn, amountIn, true, false);
 
         return _sequentialSwapChecked(
             amountIn,
@@ -380,6 +470,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     /**
      * @notice Executes a single swap operation.
      *         This function validates the output amount against a user-specified minimum.
+     *         Takes funds from the user's wallet using transferFrom.
      *
      * @dev
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
@@ -389,7 +480,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
-     * @param inputSource Source of input funds - TransferFrom (from wallet) or Vault (from user's vault balance)
      * @param solverFeeBps Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%)
      * @param solverFeeReceiver Address to receive the solver fee.
      * @param maxSolverContribution Maximum amount the solver will pay out of pocket to make the trade succeed.
@@ -403,7 +493,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address tokenOut,
         uint256 minAmountOut,
         address receiver,
-        RestrictTransferFrom.InputSource inputSource,
         uint16 solverFeeBps,
         address solverFeeReceiver,
         uint256 maxSolverContribution,
@@ -411,9 +500,61 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         _updateNativeDeltaAccounting(amountIn);
         uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
-            tokenIn, amountIn, tokenOut, receiver, inputSource
+            tokenIn, amountIn, tokenOut, receiver, true
         );
-        _tstoreTransferFromInfo(tokenIn, amountIn, false, inputSource);
+        _tstoreTransferFromInfo(tokenIn, amountIn, false, false);
+
+        return _singleSwap(
+            amountIn,
+            tokenIn,
+            tokenOut,
+            minAmountOut,
+            initialBalanceTokenOut,
+            receiver,
+            solverFeeBps,
+            solverFeeReceiver,
+            maxSolverContribution,
+            swapData
+        );
+    }
+
+    /**
+     * @notice Executes a single swap operation.
+     *         This function validates the output amount against a user-specified minimum.
+     *         Takes funds from the user's vault balance.
+     *
+     * @dev
+     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
+     *
+     * @param amountIn The input token amount to be swapped.
+     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
+     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
+     * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
+     * @param receiver The address to receive the output tokens.
+     * @param solverFeeBps Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%)
+     * @param solverFeeReceiver Address to receive the solver fee.
+     * @param maxSolverContribution Maximum amount the solver will pay out of pocket to make the trade succeed.
+     * @param swapData Encoded swap details.
+     *
+     * @return amountOut The total amount of the output token received by the receiver.
+     */
+    function singleSwapUsingVault(
+        uint256 amountIn,
+        address tokenIn,
+        address tokenOut,
+        uint256 minAmountOut,
+        address receiver,
+        uint16 solverFeeBps,
+        address solverFeeReceiver,
+        uint256 maxSolverContribution,
+        bytes calldata swapData
+    ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
+        if (msg.value > 0) {
+            revert TychoRouter__MsgValueNotAllowedWithVaultMethod(msg.value);
+        }
+        _updateNativeDeltaAccounting(amountIn);
+        uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
+        _tstoreTransferFromInfo(tokenIn, amountIn, false, true);
 
         return _singleSwap(
             amountIn,
@@ -465,22 +606,13 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         _updateNativeDeltaAccounting(amountIn);
         uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
-            tokenIn,
-            amountIn,
-            tokenOut,
-            receiver,
-            RestrictTransferFrom.InputSource.TransferFrom
+            tokenIn, amountIn, tokenOut, receiver, true
         );
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
             permit2.permit(msg.sender, permitSingle, signature);
         }
-        _tstoreTransferFromInfo(
-            tokenIn,
-            amountIn,
-            true,
-            RestrictTransferFrom.InputSource.TransferFrom
-        );
+        _tstoreTransferFromInfo(tokenIn, amountIn, true, false);
 
         return _singleSwap(
             amountIn,
@@ -943,13 +1075,10 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 amountIn,
         address tokenOut,
         address receiver,
-        RestrictTransferFrom.InputSource inputSource
+        bool transferFrom
     ) internal view returns (uint256 initialBalanceTokenOut) {
         initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        if (
-            tokenIn == tokenOut
-                && inputSource == RestrictTransferFrom.InputSource.TransferFrom
-        ) {
+        if (tokenIn == tokenOut && transferFrom) {
             // If it is an arbitrage, we need to remove the amountIn from the initial balance to get a correct initial balance
             initialBalanceTokenOut -= amountIn;
         }
