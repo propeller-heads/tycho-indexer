@@ -1,3 +1,19 @@
+## [0.233.0](https://github.com/propeller-heads/tycho-simulation/compare/0.232.0...0.233.0) (2026-01-26)
+
+
+### Features
+
+* join pool logic ([f7c6ab9](https://github.com/propeller-heads/tycho-simulation/commit/f7c6ab97f6aea5742b6d855eeda92a540c5f34a1))
+* refactor LP swap limits and getAmountOut logic ([d497274](https://github.com/propeller-heads/tycho-simulation/commit/d49727457b24d1699fc80d6aa6f71c274fb0c295))
+* removed comments, case_sell_token test works ([b175d46](https://github.com/propeller-heads/tycho-simulation/commit/b175d4673241677984d2b2581b4201f427761cfc))
+
+
+### Bug Fixes
+
+* changed each slice decoding in try_from_with_header from U256::from_be_bytes::<BYTES> to U256::from_be_slice, which was causing silent failures in decoding ([b3750b5](https://github.com/propeller-heads/tycho-simulation/commit/b3750b5cf35349b90c6f9b11894f3577449b49c8))
+* spot price calculation for token direction ([fbd1b50](https://github.com/propeller-heads/tycho-simulation/commit/fbd1b50768464e88b36a9502ee62004032765358))
+* temporary fix for page size limit issues in tycho protocol sdk live_testing ([cdda744](https://github.com/propeller-heads/tycho-simulation/commit/cdda744993d7bbad02f9503b5b1c2c23fd1ff090))
+
 ## [0.232.0](https://github.com/propeller-heads/tycho-simulation/compare/0.231.1...0.232.0) (2026-01-22)
 
 
