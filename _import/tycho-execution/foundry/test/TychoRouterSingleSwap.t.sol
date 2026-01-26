@@ -437,7 +437,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
-            true,
+            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             maxContribution,

@@ -407,7 +407,7 @@ fn test_sequential_strategy_cyclic_swap_and_vault() {
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
         "000bb8",                                   // pool fee
         "02",                                       // transfer type Transfer
-        "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
+        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
         "00",                                       // zero2one
         "00000000000000000000",                     // padding

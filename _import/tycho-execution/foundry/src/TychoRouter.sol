@@ -985,10 +985,11 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 minAmountOut,
         uint256 maxSolverContribution,
         address tokenOut,
-        address // receiver
+        address receiver
     ) internal returns (uint256 amount) {
         if (amountOut < minAmountOut) {
-            uint256 requiredContribution = minAmountOut - amountOut;
+            uint256 requiredContribution =
+                minAmountOut - amountOut;
             if (requiredContribution > maxSolverContribution) {
                 revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
             }
