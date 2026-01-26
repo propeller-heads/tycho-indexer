@@ -894,7 +894,8 @@ pub trait SwapQuoter: fmt::Debug + Send + Sync + 'static {
     ///
     /// Returns an error if the delta cannot be applied to the current state (e.g. it is
     /// incompatible, malformed, or violates protocol invariants).
-    fn delta_transition(&mut self, params: TransitionParams) -> TransitionError<Transition>;
+    fn delta_transition(&mut self, params: TransitionParams)
+        -> Result<Transition, TransitionError>;
 
     /// Clones the protocol state as a trait object.
     ///

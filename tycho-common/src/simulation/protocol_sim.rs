@@ -347,7 +347,7 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
         delta: ProtocolStateDelta,
         tokens: &HashMap<Bytes, Token>,
         balances: &Balances,
-    ) -> Result<(), TransitionError<String>>;
+    ) -> Result<(), TransitionError>;
 
     /// Calculates the swap volume required to achieve the provided goal when trading against this
     /// pool.
