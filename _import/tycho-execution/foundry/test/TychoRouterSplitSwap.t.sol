@@ -137,7 +137,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         );
     }
 
-    function testSplitSwapNoPermit2() public {
+    function testSplitSwapTransferFrom() public {
         // Trade 1 WETH for USDC through DAI and WBTC - see _getSplitSwaps for more info
         uint256 amountIn = 1 ether;
         uint256 existingVaultBalance = 1.5 ether;

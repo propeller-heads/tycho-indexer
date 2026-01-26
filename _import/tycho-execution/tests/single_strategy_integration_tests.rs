@@ -97,8 +97,8 @@ fn test_single_swap_strategy_encoder() {
 }
 
 #[test]
-fn test_single_swap_strategy_encoder_no_permit2() {
-    // Performs a single swap from WETH to DAI on a USV2 pool, without permit2 and no
+fn test_single_swap_strategy_encoder_transfer_from() {
+    // Performs a single swap from WETH to DAI on a USV2 pool, using transfer from and no
     // grouping optimizations.
     std::env::set_var("TYCHO_FEES_ENABLED", "true");
 
@@ -165,7 +165,10 @@ fn test_single_swap_strategy_encoder_no_permit2() {
     let hex_calldata = encode(&calldata);
 
     assert_eq!(hex_calldata, expected_input);
-    write_calldata_to_file("test_single_swap_strategy_encoder_no_permit2", hex_calldata.as_str());
+    write_calldata_to_file(
+        "test_single_swap_strategy_encoder_transfer_from",
+        hex_calldata.as_str(),
+    );
 }
 
 #[test]

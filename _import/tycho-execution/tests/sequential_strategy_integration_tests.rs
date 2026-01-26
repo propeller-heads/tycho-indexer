@@ -79,7 +79,7 @@ fn test_sequential_swap_strategy_encoder() {
 }
 
 #[test]
-fn test_sequential_swap_strategy_encoder_no_permit2_integration() {
+fn test_sequential_swap_strategy_encoder_transfer_from_integration() {
     // Performs a sequential swap from WETH to USDC though WBTC using USV2 pools
     //
     //   WETH ───(USV2)──> WBTC ───(USV2)──> USDC
@@ -133,7 +133,7 @@ fn test_sequential_swap_strategy_encoder_no_permit2_integration() {
     let hex_calldata = encode(&calldata);
 
     let expected = String::from(concat!(
-        "f0b6a46d", // function selector (sequentialSwap without InputSource)
+        "f0b6a46d", // function selector (sequentialSwap)
         "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount in
         "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
@@ -162,7 +162,7 @@ fn test_sequential_swap_strategy_encoder_no_permit2_integration() {
 
     assert_eq!(hex_calldata, expected);
     write_calldata_to_file(
-        "test_sequential_swap_strategy_encoder_no_permit2",
+        "test_sequential_swap_strategy_encoder_transfer_from",
         hex_calldata.as_str(),
     );
 }

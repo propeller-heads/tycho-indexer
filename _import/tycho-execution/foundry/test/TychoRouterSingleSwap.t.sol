@@ -54,7 +54,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
-    function testSingleSwapNoPermit2() public {
+    function testSingleSwapTransferFrom() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2
         // Checks amount out at the end
         uint256 amountIn = 1 ether;
@@ -448,7 +448,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
         bytes memory callData = loadCallDataFromFile(
-            "test_single_swap_strategy_encoder_no_permit2"
+            "test_single_swap_strategy_encoder_transfer_from"
         );
         (bool success,) = tychoRouterAddr.call(callData);
 
