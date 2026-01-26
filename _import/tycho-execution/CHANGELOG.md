@@ -1,3 +1,15 @@
+## [0.20.0](https://github.com/propeller-heads/tycho-contracts/compare/0.19.0...0.20.0) (2026-01-26)
+
+
+### Features
+
+* Optimize last transfer (if possible) ([0a86b7a](https://github.com/propeller-heads/tycho-contracts/commit/0a86b7a5797c9ea6ccd9f1a3e3f7d875d7a09ec6))
+
+
+### Bug Fixes
+
+* After rebase with main fixes ([0bb26ae](https://github.com/propeller-heads/tycho-contracts/commit/0bb26aea381028267f3b27810eb9897d24123efc))
+
 ## [0.19.0](https://github.com/propeller-heads/tycho-contracts/compare/0.18.1...0.19.0) (2026-01-26)
 
 
