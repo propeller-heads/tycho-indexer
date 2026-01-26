@@ -78,7 +78,7 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         assertEq(
             uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.TransferNativeInMsgValue)
+            uint8(RestrictTransferFrom.TransferType.TransferNativeInExecutor)
         );
         assertEq(receiver, address(0));
         assertEq(tokenIn, address(0));

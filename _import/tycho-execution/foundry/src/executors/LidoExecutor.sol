@@ -155,9 +155,11 @@ contract LidoExecutor is IExecutor {
         if (pool == LidoPoolType.stETH && direction == LidoPoolDirection.Stake)
         {
             // ST_ETH staking: ETH -> ST_ETH
+            // ETH transfers are handled in the Executor, so we need to set the transferType to TransferNativeInExecutor
+            // to update the delta accounting accordingly.
             tokenIn = address(0);
             transferType =
-            RestrictTransferFrom.TransferType.TransferNativeInMsgValue;
+            RestrictTransferFrom.TransferType.TransferNativeInExecutor;
             // The token in is ETH in this case so we don't really need a receiver
             // (the funds are passed in the msg.value)
         } else if (

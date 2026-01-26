@@ -86,9 +86,11 @@ contract RocketpoolExecutor is IExecutor {
 
         bool isDeposit = uint8(data[0]) == 1;
         if (isDeposit) {
+            // ETH transfers are handled in the Executor, so we need to set the transferType to TransferNativeInExecutor
+            // to update the delta accounting accordingly.
             tokenIn = address(0);
             transferType =
-            RestrictTransferFrom.TransferType.TransferNativeInMsgValue;
+            RestrictTransferFrom.TransferType.TransferNativeInExecutor;
         } else {
             tokenIn = address(RETH);
             transferType = RestrictTransferFrom.TransferType(uint8(data[1]));

@@ -56,7 +56,7 @@ contract RestrictTransferFrom is Vault {
         TransferFrom,
         TransferFromAndProtocolWillDebit,
         Transfer,
-        TransferNativeInMsgValue,
+        TransferNativeInExecutor,
         ProtocolWillDebit,
         None
     }
@@ -91,7 +91,7 @@ contract RestrictTransferFrom is Vault {
      * - TransferFrom: Transfer from user wallet to protocol
      * - TransferFromAndProtocolWillDebit: Transfer from user wallet to router, protocol takes it
      * - Transfer: Transfer from router balance to protocol (could be from vault or previous swap)
-     * - TransferNativeInMsgValue: Native ETH sent via msg.value (hardcoded in executor for security)
+     * - TransferNativeInMsgValueTransferNativeInExecutor: Native ETH sent via the executor (hardcoded there for security)
      * - ProtocolWillDebit: Protocol takes from router/vault
      * - None: Funds already transferred from previous pool
      */
@@ -147,12 +147,8 @@ contract RestrictTransferFrom is Vault {
             // This could mean the funds come from the user's vault (first swap)
             // or funds are in the router from the previous swap.
             _updateDeltaAccounting(tokenIn, -int256(amount));
-            if (tokenIn == address(0)) {
-                Address.sendValue(payable(receiver), amount);
-            } else {
-                IERC20(tokenIn).safeTransfer(receiver, amount);
-            }
-        } else if (transferType == TransferType.TransferNativeInMsgValue) {
+            IERC20(tokenIn).safeTransfer(receiver, amount);
+        } else if (transferType == TransferType.TransferNativeInExecutor) {
             // Protocols like Fluid or Lido require us to send the ETH as
             // msg.value when calling the swap function from inside the executor.
             // This transfer type must be encoded from the executor for security purposes

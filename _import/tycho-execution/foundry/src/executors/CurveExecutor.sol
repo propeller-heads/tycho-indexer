@@ -175,7 +175,15 @@ contract CurveExecutor is IExecutor {
         )
     {
         tokenIn = address(bytes20(data[0:20]));
-        transferType = RestrictTransferFrom.TransferType(uint8(data[63]));
+        if (tokenIn == nativeToken) {
+            // ETH transfers are handled in the Executor, so we need to set the transferType to TransferNativeInExecutor
+            // to update the delta accounting accordingly.
+            tokenIn = address(0);
+            transferType =
+            RestrictTransferFrom.TransferType.TransferNativeInExecutor;
+        } else {
+            transferType = RestrictTransferFrom.TransferType(uint8(data[63]));
+        }
         // The receiver of the funds will be the pool contract.
         // This protocol will only ever have the following transferTypes:
         // - TransferFromAndProtocolWillDebit: the funds should be transferred to the TychoRouter and the pool contract needs to be approved
