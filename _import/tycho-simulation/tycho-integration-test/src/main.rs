@@ -23,6 +23,7 @@ use tracing::{debug, error, info, warn};
 use tracing_subscriber::EnvFilter;
 use tycho_common::simulation::protocol_sim::ProtocolSim;
 use tycho_simulation::{
+    evm::protocol::cowamm::constants::PROTOCOL_SYSTEM as COWAMM_PROTOCOL_SYSTEM,
     protocol::models::ProtocolComponent,
     rfq::protocols::hashflow::{client::HashflowClient, state::HashflowState},
     tycho_common::models::Chain,
@@ -997,6 +998,12 @@ async fn process_state(
         if expected_amount_out == BigUint::ZERO {
             continue;
         }
+
+        if component.protocol_system == COWAMM_PROTOCOL_SYSTEM {
+            debug!("CowAMM protocol system is not supported for execution");
+            continue;
+        }
+
         // Simulate execution amount out against the RPC
         let (solution, transaction) = match encode_swap(
             &component,
