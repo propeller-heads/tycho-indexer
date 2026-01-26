@@ -37,11 +37,9 @@ contract TychoRouterExposed is TychoRouter {
         address tokenIn,
         uint256 amountIn,
         bool isPermit2,
-        bool transferFromNeeded
+        RestrictTransferFrom.InputSource inputSource
     ) external {
-        _tstoreTransferFromInfo(
-            tokenIn, amountIn, isPermit2, transferFromNeeded
-        );
+        _tstoreTransferFromInfo(tokenIn, amountIn, isPermit2, inputSource);
     }
 
     function exposedSplitSwap(

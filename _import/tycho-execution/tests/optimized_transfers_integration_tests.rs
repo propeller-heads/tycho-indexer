@@ -1,16 +1,15 @@
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{collections::HashMap, str::FromStr};
 
 use alloy::hex::encode;
 use num_bigint::{BigInt, BigUint};
 use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 use tycho_contracts::encoding::{
-    evm::{testing_utils::MockRFQState, utils::write_calldata_to_file},
+    evm::utils::write_calldata_to_file,
     models::{Solution, Swap, UserTransferType},
 };
 
 use crate::common::{
-    encoding::encode_tycho_router_call, eth, eth_chain, get_signer, get_tycho_router_encoder, usdc,
-    wbtc, weth,
+    encoding::encode_tycho_router_call, eth, eth_chain, get_signer, get_tycho_router_encoder, weth,
 };
 
 mod common;

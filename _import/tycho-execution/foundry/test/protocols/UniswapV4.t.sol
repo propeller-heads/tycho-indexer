@@ -582,7 +582,7 @@ contract TychoRouterForUniswapV4Test is TychoRouterTestSetup {
             WBTC_ADDR,
             118280,
             ALICE,
-            true,
+            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,

@@ -34,6 +34,9 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
     // keccak256("TychoVault#NON_ZERO_DELTA_COUNT_SLOT")
     uint256 private constant _NON_ZERO_DELTA_COUNT_SLOT =
         0xee3c9c434505299f2450d3624302a27b8a6978e973825330bc744ba925eec199;
+    // keccak256("Vault#USE_VAULT_SLOT")
+    uint256 internal constant _USE_VAULT_SLOT =
+        0xce5ffa91873ede1b462af74ea59bab3721b06b0ff726b90311437efde2001795;
 
     // ============ ERC6909 Overrides and Extensions ============
 
@@ -95,8 +98,6 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      * @dev Create new _mint that does not emit a Transfer event. This should be used by inner methods of the
      * TychoRouter to save gas during swapping.
      */
-    // TODO: remove this once used
-    // slither-disable-next-line dead-code
     function _mintWithoutEvent(address to, uint256 id, uint256 amount)
         internal
     {
@@ -110,8 +111,6 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      * @dev Create new _burn that does not emit a Transfer event. This should be used by inner methods of the
      * TychoRouter to save gas during swapping.
      */
-    // TODO: remove this once used
-    // slither-disable-next-line dead-code
     function _burnWithoutEvent(address from, uint256 id, uint256 amount)
         internal
     {
@@ -237,6 +236,19 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
     }
 
     /**
+     * @dev Get the USE_VAULT flag from transient storage
+     */
+    // Assembly required for transient storage operations (tload)
+    function _getUseVault() internal view virtual returns (bool) {
+        uint256 useVault;
+        // slither-disable-next-line assembly
+        assembly {
+            useVault := tload(_USE_VAULT_SLOT)
+        }
+        return useVault == 1;
+    }
+
+    /**
      * @dev Update delta accounting (transient storage)
      * @notice Only needs token since transient storage is scoped to current transaction's sender
      * @param token The token to update
@@ -265,8 +277,6 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
 
     // ============ Vault accounting ============
 
-    // TODO: remove dead-code once used
-    // slither-disable-start dead-code
     /**
      * @dev Internal helper to debit user's actual vault balance (persistent storage)
      * @notice This debits the persistent vault balance, not the transient delta
@@ -314,21 +324,28 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
         uint256 inputAmount
     ) internal {
         uint256 nonZeroCount = _getNonZeroDeltaCount();
+        bool useVault = _getUseVault();
 
-        // Check that there is only one negative delta: the input token
-        if (nonZeroCount > 1) {
-            revert Vault__UnexpectedNonZeroCount(nonZeroCount);
-        } else if (nonZeroCount == 1) {
-            int256 inputDelta = _getDelta(inputToken);
-            if (inputDelta != -int256(inputAmount)) {
-                revert Vault__UnexpectedInputDelta(inputDelta);
+        if (useVault) {
+            // When vault usage is allowed, allow a single negative delta
+            // Check that there is only one negative delta: the input token
+            if (nonZeroCount > 1) {
+                revert Vault__UnexpectedNonZeroCount(nonZeroCount);
+            } else if (nonZeroCount == 1) {
+                int256 inputDelta = _getDelta(inputToken);
+                if (inputDelta != -int256(inputAmount)) {
+                    revert Vault__UnexpectedInputDelta(inputDelta);
+                }
+                uint256 id = _toId(inputToken);
+                _burnWithoutEvent(user, id, inputAmount);
             }
-            uint256 id = _toId(inputToken);
-            _burnWithoutEvent(user, id, inputAmount);
+        } else {
+            // When vault usage is NOT allowed, all deltas must be zero
+            if (nonZeroCount > 0) {
+                revert Vault__UnexpectedNonZeroCount(nonZeroCount);
+            }
         }
     }
-
-    // slither-disable-end dead-code
 
     // ============ Utils methods ============
 

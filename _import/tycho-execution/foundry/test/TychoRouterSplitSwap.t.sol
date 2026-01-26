@@ -5,6 +5,10 @@ import "@src/executors/UniswapV4Executor.sol";
 import {TychoRouter, RestrictTransferFrom} from "@src/TychoRouter.sol";
 import "./TychoRouterTestSetup.sol";
 
+import {
+    RestrictTransferFrom__ExceededTransferFromAllowance
+} from "@src/RestrictTransferFrom.sol";
+
 contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
     function _getSplitSwaps(bool transferFrom)
         private
@@ -91,9 +95,11 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         // Trade 1 WETH for USDC through DAI and WBTC - see _getSplitSwaps for more info
 
         uint256 amountIn = 1 ether;
-        deal(WETH_ADDR, ALICE, amountIn);
+        uint256 existingVaultBalance = 1.5 ether;
+        deal(WETH_ADDR, ALICE, amountIn + existingVaultBalance);
 
         vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, existingVaultBalance);
         (
             IAllowanceTransfer.PermitSingle memory permitSingle,
             bytes memory signature
@@ -101,6 +107,8 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
 
         bytes[] memory swaps = _getSplitSwaps(true);
 
+        // Alice has an existing Vault balance which should not be used.
+        tychoRouter.deposit(WETH_ADDR, existingVaultBalance);
         tychoRouter.splitSwapPermit2(
             amountIn,
             WETH_ADDR,
@@ -118,19 +126,31 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
 
         uint256 usdcBalance = IERC20(USDC_ADDR).balanceOf(ALICE);
         assertEq(usdcBalance, 1989737355);
-        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
+        assertEq(
+            IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), existingVaultBalance
+        );
+        assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), 0);
+        // Check that ALICE's Vault balance was not affected.
+        assertEq(
+            tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR))),
+            existingVaultBalance
+        );
     }
 
     function testSplitSwapNoPermit2() public {
         // Trade 1 WETH for USDC through DAI and WBTC - see _getSplitSwaps for more info
         uint256 amountIn = 1 ether;
-        deal(WETH_ADDR, ALICE, amountIn);
+        uint256 existingVaultBalance = 1.5 ether;
+        deal(WETH_ADDR, ALICE, amountIn + existingVaultBalance);
 
         vm.startPrank(ALICE);
-        IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
+        IERC20(WETH_ADDR)
+            .approve(tychoRouterAddr, amountIn + existingVaultBalance);
 
         bytes[] memory swaps = _getSplitSwaps(true);
 
+        // Alice has an existing Vault balance which should not be used.
+        tychoRouter.deposit(WETH_ADDR, existingVaultBalance);
         tychoRouter.splitSwap(
             amountIn,
             WETH_ADDR,
@@ -138,7 +158,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             1000_000000, // min amount
             4,
             ALICE,
-            true,
+            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -147,7 +167,15 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
 
         uint256 usdcBalance = IERC20(USDC_ADDR).balanceOf(ALICE);
         assertEq(usdcBalance, 1989737355);
+        assertEq(
+            IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), existingVaultBalance
+        );
         assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), 0);
+        // Check that ALICE's Vault balance was not affected.
+        assertEq(
+            tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR))),
+            existingVaultBalance
+        );
     }
 
     function testSplitSwapUndefinedMinAmount() public {
@@ -168,7 +196,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             0, // min amount
             4,
             ALICE,
-            true,
+            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -195,7 +223,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             1000_000000, // min amount
             2,
             ALICE,
-            true,
+            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -203,6 +231,73 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         );
 
         vm.stopPrank();
+    }
+
+    function testTransferFromExceedsRestriction() public {
+        // A maliciously encoded split swap attempts to take more than the input amount
+        // from the user's wallet. The user has accidentally allowed MAX - REVERT
+
+        //          ->   WBTC
+        // 1 WETH
+        //          ->   WBTC
+        //       (univ2)
+        bytes[] memory swaps = new bytes[](2);
+
+        // WETH -> WBTC (60%)
+        swaps[0] = encodeSplitSwap(
+            uint8(0),
+            uint8(1),
+            uint24((0xffffff * 60) / 100), // 60%
+            address(usv2Executor),
+            encodeUniswapV2Swap(
+                WETH_WBTC_POOL,
+                tychoRouterAddr,
+                false,
+                RestrictTransferFrom.TransferType.TransferFrom
+            )
+        );
+        // WETH -> WBTC (60%)
+        swaps[1] = encodeSplitSwap(
+            uint8(0),
+            uint8(1),
+            uint24((0xffffff * 60) / 100), // 60%
+            address(usv2Executor),
+            encodeUniswapV2Swap(
+                WETH_WBTC_POOL,
+                tychoRouterAddr,
+                false,
+                RestrictTransferFrom.TransferType.TransferFrom
+            )
+        );
+
+        uint256 amountIn = 100 ether;
+        deal(WETH_ADDR, ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+        // Alice's mistake - too high approval. She should still be protected by our
+        // router.
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, UINT256_MAX);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                RestrictTransferFrom__ExceededTransferFromAllowance.selector,
+                40000000000000000000,
+                60000000000000000000
+            )
+        );
+        tychoRouter.splitSwap(
+            amountIn,
+            WETH_ADDR,
+            WBTC_ADDR,
+            200_000000, // min amount (2 WBTC)
+            4,
+            ALICE,
+            RestrictTransferFrom.InputSource.TransferFrom,
+            0,
+            address(0),
+            0, // max solver contribution
+            pleEncode(swaps)
+        );
     }
 
     function testSplitSwapNegativeSlippageFailure() public {
@@ -320,67 +415,146 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 99654537);
     }
 
-    function testSplitInputIllegalTransfers() public {
+    function testSplitMultipleTransferFromProtocolDebit() public {
         // This test attempts to perform multiple `transferFrom`s - which is not
         // permitted by the TychoRouter.
         //
         // The flow is:
-        //            ┌─ (USV3, 60% split) ───┐
-        //            │                       │
-        // USDC ──────┤                       ├────> WETH
-        //            │                       │
-        //            └─ (USV3, 40% split) ───┘
-        uint256 amountIn = 100 * 10 ** 6;
+        //            ┌─ (BALANCER V2, 60% split) ──┐
+        //            │                             │
+        // WETH ──────┤                             ├────> BAL
+        //            │                             │
+        //            └─ (BALANCER V2, 40% split) ──┘
+        uint256 amountIn = 1 ether;
+        uint256 existingRouterBalance = 3 ether;
+        bytes32 WETH_BAL_POOL_ID =
+            0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014;
 
-        // Assume funds have already been transferred to tychoRouter
-        deal(USDC_ADDR, ALICE, amountIn);
+        deal(WETH_ADDR, ALICE, amountIn + existingRouterBalance);
         vm.startPrank(ALICE);
-        IERC20(USDC_ADDR).approve(tychoRouterAddr, amountIn);
 
-        bytes memory usdcWethV3Pool1ZeroOneData = encodeUniswapV3Swap(
-            USDC_ADDR,
-            WETH_ADDR,
-            tychoRouterAddr,
-            USDC_WETH_USV3,
-            true,
-            RestrictTransferFrom.TransferType.Transfer
-        );
+        IERC20(WETH_ADDR)
+            .approve(tychoRouterAddr, amountIn + existingRouterBalance);
 
-        bytes memory usdcWethV3Pool2ZeroOneData = encodeUniswapV3Swap(
-            USDC_ADDR,
+        // Simulate funds already in the router in Alice's vault - we must make sure
+        // these are untouched after our swap.
+        tychoRouter.deposit(WETH_ADDR, existingRouterBalance);
+
+        // For simplicity, just use the same protocol data for both swap legs
+        bytes memory protocolData = abi.encodePacked(
             WETH_ADDR,
-            tychoRouterAddr,
-            USDC_WETH_USV3_2,
-            true,
-            RestrictTransferFrom.TransferType.Transfer
+            BAL_ADDR,
+            WETH_BAL_POOL_ID,
+            tychoRouterAddr, // receiver
+            RestrictTransferFrom.TransferType.TransferFromAndProtocolWillDebit
         );
 
         bytes[] memory swaps = new bytes[](2);
-        // USDC -> WETH (60% split)
+        // WETH -> BAL (60% split)
         swaps[0] = encodeSplitSwap(
             uint8(0),
             uint8(1),
             (0xffffff * 60) / 100, // 60%
-            address(usv3Executor),
-            usdcWethV3Pool1ZeroOneData
+            address(balancerv2Executor),
+            protocolData
         );
-        // USDC -> WETH (40% remainder)
+
+        // WETH -> BAL (40% remainder)
         swaps[1] = encodeSplitSwap(
             uint8(0),
             uint8(1),
-            uint24(0),
-            address(usv3Executor),
-            usdcWethV3Pool2ZeroOneData
+            uint24(0), // remaining 40%
+            address(balancerv2Executor),
+            protocolData
         );
-        vm.expectRevert();
         tychoRouter.splitSwap(
             amountIn,
-            USDC_ADDR,
             WETH_ADDR,
-            1,
-            2,
+            BAL_ADDR,
+            1, // min amount out
+            2, // number of tokens
+            ALICE, // receiver
+            RestrictTransferFrom.InputSource.TransferFrom,
+            0, // solver fee bps
+            address(0), // solver fee receiver
+            0, // max solver contribution
+            pleEncode(swaps)
+        );
+        assertEq(IERC20(BAL_ADDR).balanceOf(ALICE), 1328_449676114497362517);
+
+        // Vault funds untouched
+        assertEq(
+            tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR))),
+            existingRouterBalance
+        );
+
+        // Router tokens untouched
+        assertEq(
+            IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), existingRouterBalance
+        );
+    }
+
+    function testSplitIllegalSplitAmounts() public {
+        // A maliciously encoded split swap attempts to take more than the input amount
+        // from the user's vault - REVERT
+
+        // The flow is:
+        //            ┌─ (60% split) ───┐
+        //            │                 │
+        // USDC ──────┤                 ├────> WBTC
+        //            │                 │
+        //            └─ (60% split) ───┘
+        bytes[] memory swaps = new bytes[](2);
+
+        // WETH -> WBTC (60%)
+        swaps[0] = encodeSplitSwap(
+            uint8(0),
+            uint8(1),
+            (0xffffff * 60) / 100, // 60%
+            address(usv2Executor),
+            encodeUniswapV2Swap(
+                WETH_WBTC_POOL,
+                tychoRouterAddr,
+                false,
+                RestrictTransferFrom.TransferType.Transfer
+            )
+        );
+
+        // WETH -> WBTC (60% again - illegal, total 120%)
+        swaps[1] = encodeSplitSwap(
+            uint8(0),
+            uint8(1),
+            (0xffffff * 60) / 100, // 60%
+            address(usv2Executor),
+            encodeUniswapV2Swap(
+                WETH_WBTC_POOL,
+                tychoRouterAddr,
+                false,
+                RestrictTransferFrom.TransferType.Transfer
+            )
+        );
+
+        uint256 amountIn = 1 ether;
+        uint256 existingVaultBalance = 3 ether;
+        deal(WETH_ADDR, ALICE, amountIn + existingVaultBalance);
+
+        vm.startPrank(ALICE);
+
+        // Deposit into vault
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, existingVaultBalance);
+        tychoRouter.deposit(WETH_ADDR, existingVaultBalance);
+
+        // Should revert with arithmetic underflow when trying to take 120% of the
+        // input amount (0.6 + 0.6 = 1.2 ether, but only 1 ether available)
+        vm.expectRevert(stdError.arithmeticError);
+        tychoRouter.splitSwap(
+            amountIn,
+            WETH_ADDR,
+            WBTC_ADDR,
+            1, // min amount
+            4,
             ALICE,
-            true,
+            RestrictTransferFrom.InputSource.Vault,
             0,
             address(0),
             0,

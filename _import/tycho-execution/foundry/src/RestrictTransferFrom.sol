@@ -52,6 +52,11 @@ contract RestrictTransferFrom is Vault {
         permit2 = IAllowanceTransfer(_permit2);
     }
 
+    enum InputSource {
+        TransferFrom,
+        Vault
+    }
+
     enum TransferType {
         TransferFrom,
         TransferFromAndProtocolWillDebit,
@@ -70,17 +75,27 @@ contract RestrictTransferFrom is Vault {
         address tokenIn,
         uint256 amountIn,
         bool isPermit2,
-        bool isTransferFromAllowed
+        InputSource inputSource
     ) internal {
         uint256 amountAllowed = amountIn;
-        if (!isTransferFromAllowed) {
+        uint256 useVault = 0;
+
+        if (inputSource == InputSource.TransferFrom) {
+            // Allow transferFrom for the input amount
+            amountAllowed = amountIn;
+            useVault = 0;
+        } else if (inputSource == InputSource.Vault) {
+            // Don't allow any transferFrom, and allow vault usage
             amountAllowed = 0;
+            useVault = 1;
         }
+
         assembly {
             tstore(_TOKEN_IN_SLOT, tokenIn)
             tstore(_AMOUNT_ALLOWED_SLOT, amountAllowed)
             tstore(_IS_PERMIT2_SLOT, isPermit2)
             tstore(_SENDER_SLOT, caller())
+            tstore(_USE_VAULT_SLOT, useVault)
         }
     }
 
@@ -91,7 +106,7 @@ contract RestrictTransferFrom is Vault {
      * - TransferFrom: Transfer from user wallet to protocol
      * - TransferFromAndProtocolWillDebit: Transfer from user wallet to router, protocol takes it
      * - Transfer: Transfer from router balance to protocol (could be from vault or previous swap)
-     * - TransferNativeInMsgValueTransferNativeInExecutor: Native ETH sent via the executor (hardcoded there for security)
+     * - TransferNativeInExecutor: Native ETH sent via the executor (hardcoded there for security)
      * - ProtocolWillDebit: Protocol takes from router/vault
      * - None: Funds already transferred from previous pool
      */
@@ -171,7 +186,7 @@ contract RestrictTransferFrom is Vault {
     // slither-disable-next-line assembly
     function _restrictTransferFrom(uint256 amount, address tokenIn) internal {
         //  This is important to prevent badly encoded split swaps from taking
-        //  more than the input amount out of the user's wallet or vault balance.
+        //  more than the input amount out of the user's wallet.
         address tokenInStorage;
         uint256 amountAllowed;
 

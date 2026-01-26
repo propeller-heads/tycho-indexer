@@ -41,6 +41,12 @@ contract VaultExposed is Vault {
     ) external {
         _finalizeBalances(user, inputToken, inputAmount);
     }
+
+    function setUseVault(bool useVault) external {
+        assembly {
+            tstore(_USE_VAULT_SLOT, useVault)
+        }
+    }
 }
 
 contract VaultTest is Constants, TestUtils {
@@ -344,6 +350,7 @@ contract VaultTest is Constants, TestUtils {
         int256 inputDelta = -2_000_000;
         uint256 nonZeroCount = 1;
 
+        vault.setUseVault(true);
         vault.setNonZeroDeltaCount(nonZeroCount);
         vault.setDelta(USDC_ADDR, inputDelta);
         vault.creditVault(BOB, USDC_ADDR, 3_000_000);
@@ -362,6 +369,7 @@ contract VaultTest is Constants, TestUtils {
         int256 inputDelta = -2_000_000;
         uint256 nonZeroCount = 1;
 
+        vault.setUseVault(true);
         vault.setNonZeroDeltaCount(nonZeroCount);
         vault.setDelta(USDC_ADDR, inputDelta);
         vault.creditVault(BOB, USDC_ADDR, 3_000_000);
