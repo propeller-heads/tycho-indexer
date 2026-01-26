@@ -168,4 +168,52 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         );
         vm.stopPrank();
     }
+
+    function testSingleSwapWithFeesAndContribution() public {
+        // Tests swapping WETH -> DAI on a USV2 pool with fees and solver contribution
+        // Swap is 1 WETH for 2018.8 DAI
+        // Tycho Router takes 1% -> 20.18 DAI (20188174386087344397)
+        // Solver takes 1% -> 20.18 DAI (20188174386087344397)
+        // But (for some reason) the client contributes with at most 22 DAI
+
+        vm.startPrank(FEE_SETTER);
+        feeCalculator.setRouterFeeReceiver(routerFeeReceiver);
+        feeCalculator.setRouterFeeOnOutput(100); // 1%
+        vm.stopPrank();
+
+        deal(WETH_ADDR, ALICE, 1 ether);
+        uint256 balanceBefore = IERC20(DAI_ADDR).balanceOf(ALICE);
+
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
+
+        // deal contribution to client
+        uint256 contribution = 22_000000000000000000;
+        deal(DAI_ADDR, ALICE, contribution);
+        IERC20(DAI_ADDR).approve(tychoRouterAddr, contribution);
+        tychoRouter.deposit(DAI_ADDR, contribution);
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_swap_with_fees_and_solver_contribution"
+        );
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        vm.stopPrank();
+
+        uint256 balanceAfter = IERC20(DAI_ADDR).balanceOf(ALICE);
+        assertTrue(success, "Call Failed");
+        uint256 expectedAmountOut = 2000_000000000000000000;
+        assertEq(balanceAfter - balanceBefore, expectedAmountOut);
+
+        uint256 expectedFeeAmount = 20188174386087344397;
+        // Check router fee receiver vault balance
+        uint256 routerFeeReceiverBalance = tychoRouter.balanceOf(
+            routerFeeReceiver, uint256(uint160(DAI_ADDR))
+        );
+        assertEq(routerFeeReceiverBalance, expectedFeeAmount);
+
+        // Check solver fee receiver vault balance (BOB)
+        uint256 solverFeeReceiverBalance =
+            tychoRouter.balanceOf(BOB, uint256(uint160(DAI_ADDR)));
+        assertEq(solverFeeReceiverBalance, expectedFeeAmount);
+    }
 }

@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{env, str::FromStr};
 
 use tycho_common::Bytes;
 
@@ -17,6 +17,7 @@ pub struct TransferOptimization {
     native_token: Bytes,
     user_transfer_type: UserTransferType,
     router_address: Bytes,
+    tycho_fees_enabled: bool,
 }
 
 impl TransferOptimization {
@@ -25,7 +26,15 @@ impl TransferOptimization {
         user_transfer_type: UserTransferType,
         router_address: Bytes,
     ) -> Self {
-        TransferOptimization { native_token, user_transfer_type, router_address }
+        let tycho_fees_enabled: bool =
+            env::var("TYCHO_FEES_ENABLED").unwrap_or("false".to_string()) == "true";
+
+        TransferOptimization {
+            native_token,
+            user_transfer_type,
+            router_address,
+            tycho_fees_enabled,
+        }
     }
 
     /// Returns the transfer type that should be used for the current transfer.
@@ -77,8 +86,9 @@ impl TransferOptimization {
     // is necessary for the next swap transfer type decision).
     pub fn get_receiver(
         &self,
-        _solution_receiver: &Bytes,
+        solution_receiver: &Bytes,
         next_swap: Option<&SwapGroup>,
+        solution_fees: bool,
     ) -> Result<(Bytes, bool), EncodingError> {
         if let Some(next) = next_swap {
             // if the protocol of the next swap supports transfer in optimization
@@ -101,7 +111,11 @@ impl TransferOptimization {
             }
         } else {
             // last swap - there is no next swap
-            Ok((self.router_address.clone(), false))
+            if solution_fees || self.tycho_fees_enabled {
+                Ok((self.router_address.clone(), false))
+            } else {
+                Ok((solution_receiver.clone(), false))
+            }
         }
     }
 }
@@ -195,17 +209,20 @@ mod tests {
     }
 
     #[rstest]
-    // there is no next swap -> receiver is the router
-    #[case(None, router_address(), false)]
+    // there is no next swap -> receiver is the solution receiver
+    #[case(None, receiver(), false, false)]
+    // there is no next swap and there are fees -> receiver is the router
+    #[case(None, router_address(), true, false)]
     // protocol of next swap supports transfer in optimization
-    #[case(Some("uniswap_v2"), component_id(), true)]
+    #[case(Some("uniswap_v2"), component_id(), false, true)]
     // protocol of next swap supports transfer in optimization but is callback constrained
-    #[case(Some("uniswap_v3"), router_address(), false)]
+    #[case(Some("uniswap_v3"), router_address(), false, false)]
     // protocol of next swap does not support transfer in optimization
-    #[case(Some("vm:curve"), router_address(), false)]
+    #[case(Some("vm:curve"), router_address(), false, false)]
     fn test_get_receiver(
         #[case] protocol: Option<&str>,
         #[case] expected_receiver: Bytes,
+        #[case] solution_fees: bool,
         #[case] expected_optimization: bool,
     ) {
         let optimization =
@@ -231,7 +248,7 @@ mod tests {
             })
         };
 
-        let result = optimization.get_receiver(&receiver(), next_swap.as_ref());
+        let result = optimization.get_receiver(&receiver(), next_swap.as_ref(), solution_fees);
 
         assert!(result.is_ok());
         let (actual_receiver, optimization_flag) = result.unwrap();

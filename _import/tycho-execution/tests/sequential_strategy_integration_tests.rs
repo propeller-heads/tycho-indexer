@@ -163,7 +163,7 @@ fn test_sequential_swap_strategy_encoder_no_permit2_integration() {
         "003e",                                     // swap length
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
         "004375dff511095cc5a197a54140a24efef3a416", // component id (pool address)
-        "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver (tycho router)
+        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "01",                                       // zero to one
         "05",                                       // transfer type None
     ));
@@ -287,7 +287,7 @@ fn test_sequential_strategy_cyclic_swap() {
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
         "000bb8",                                   // pool fee
         "02",                                       // transfer type Transfer
-        "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
+        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
         "00",                                       // zero2one
         "00000000000000000000",                     // padding

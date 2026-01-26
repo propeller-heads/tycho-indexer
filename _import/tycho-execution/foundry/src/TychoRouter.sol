@@ -539,12 +539,16 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             amountOut, minAmountOut, maxSolverContribution, tokenOut, receiver
         );
 
-        if (tokenOut == address(0)) {
-            Address.sendValue(payable(receiver), amountOut);
-        } else {
-            IERC20(tokenOut).safeTransfer(receiver, amountOut);
+        int256 outputDelta = _getDelta(tokenOut);
+        if (outputDelta > 0) {
+            // out tokens are still in the Router and need to be sent to the final receiver
+            if (tokenOut == address(0)) {
+                Address.sendValue(payable(receiver), amountOut);
+            } else {
+                IERC20(tokenOut).safeTransfer(receiver, amountOut);
+            }
+            _updateDeltaAccounting(tokenOut, -int256(amountOut));
         }
-        _updateDeltaAccounting(tokenOut, -int256(amountOut));
 
         // Finalize all transient deltas to persistent storage
         _finalizeBalances(msg.sender, tokenIn, amountIn);
@@ -600,12 +604,16 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             amountOut, minAmountOut, maxSolverContribution, tokenOut, receiver
         );
 
-        if (tokenOut == address(0)) {
-            Address.sendValue(payable(receiver), amountOut);
-        } else {
-            IERC20(tokenOut).safeTransfer(receiver, amountOut);
+        int256 outputDelta = _getDelta(tokenOut);
+        if (outputDelta > 0) {
+            // out tokens are still in the Router and need to be sent to the final receiver
+            if (tokenOut == address(0)) {
+                Address.sendValue(payable(receiver), amountOut);
+            } else {
+                IERC20(tokenOut).safeTransfer(receiver, amountOut);
+            }
+            _updateDeltaAccounting(tokenOut, -int256(amountOut));
         }
-        _updateDeltaAccounting(tokenOut, -int256(amountOut));
 
         // Finalize all transient deltas to persistent storage
         _finalizeBalances(msg.sender, tokenIn, amountIn);
@@ -656,12 +664,16 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             amountOut, minAmountOut, maxSolverContribution, tokenOut, receiver
         );
 
-        if (tokenOut == address(0)) {
-            Address.sendValue(payable(receiver), amountOut);
-        } else {
-            IERC20(tokenOut).safeTransfer(receiver, amountOut);
+        int256 outputDelta = _getDelta(tokenOut);
+        if (outputDelta > 0) {
+            // out tokens are still in the Router and need to be sent to the final receiver
+            if (tokenOut == address(0)) {
+                Address.sendValue(payable(receiver), amountOut);
+            } else {
+                IERC20(tokenOut).safeTransfer(receiver, amountOut);
+            }
+            _updateDeltaAccounting(tokenOut, -int256(amountOut));
         }
-        _updateDeltaAccounting(tokenOut, -int256(amountOut));
 
         // Finalize all transient deltas to persistent storage
         _finalizeBalances(msg.sender, tokenIn, amountIn);
@@ -964,6 +976,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     /**
      * @dev If the amountOut is below the minAmountOut, it tries to add a solver contribution (if within limits).
      * If it can't, it raises NegativeSlippage.
+     *   - If the out tokens are still in the Tycho Router, it adds the contribution to the amount out
+     *     (the transfer will be done later)
+     *   - If the out tokens are already in the receiver, it transfers the contribution separately
      */
     function _maybeAddSolverContribution(
         uint256 amountOut,
@@ -979,7 +994,19 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             }
             // Debit the solver's vault balance
             _debitVault(msg.sender, tokenOut, requiredContribution);
-            _updateDeltaAccounting(tokenOut, int256(requiredContribution));
+            int256 outputDelta = _getDelta(tokenOut);
+            if (outputDelta > 0) {
+                // out tokens are still in the Router
+                _updateDeltaAccounting(tokenOut, int256(requiredContribution));
+            } else {
+                // send contribution separately
+                if (tokenOut == address(0)) {
+                    Address.sendValue(payable(receiver), requiredContribution);
+                } else {
+                    IERC20(tokenOut)
+                        .safeTransfer(receiver, requiredContribution);
+                }
+            }
             amount = minAmountOut;
         } else {
             amount = amountOut;
