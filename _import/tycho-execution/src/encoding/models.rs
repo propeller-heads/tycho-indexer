@@ -277,7 +277,7 @@ pub struct EncodingContext {
 /// * - TransferFromAndProtocolWillDebit: Transfer from user wallet to router, protocol takes it
 /// * - Transfer: Transfer from router balance to protocol (could be from vault or previous swap)
 /// * - TransferNativeInExecutor: Native ETH sent via the executor (hardcoded in executor for
-///   security)
+///     security)
 /// * - ProtocolWillDebit: Protocol takes from router/vault
 /// * - None: Funds already transferred from previous pool
 #[repr(u8)]

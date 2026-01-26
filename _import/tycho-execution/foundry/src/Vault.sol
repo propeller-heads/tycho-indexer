@@ -98,8 +98,6 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      * @dev Create new _mint that does not emit a Transfer event. This should be used by inner methods of the
      * TychoRouter to save gas during swapping.
      */
-    // TODO: remove this once used
-    // slither-disable-next-line dead-code
     function _mintWithoutEvent(address to, uint256 id, uint256 amount)
         internal
     {
@@ -113,8 +111,6 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
      * @dev Create new _burn that does not emit a Transfer event. This should be used by inner methods of the
      * TychoRouter to save gas during swapping.
      */
-    // TODO: remove this once used
-    // slither-disable-next-line dead-code
     function _burnWithoutEvent(address from, uint256 id, uint256 amount)
         internal
     {
@@ -281,8 +277,6 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
 
     // ============ Vault accounting ============
 
-    // TODO: remove dead-code once used
-    // slither-disable-start dead-code
     /**
      * @dev Internal helper to debit user's actual vault balance (persistent storage)
      * @notice This debits the persistent vault balance, not the transient delta
@@ -347,8 +341,8 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
             }
         } else {
             // When vault usage is NOT allowed, all deltas must be zero
-            if (negativeCount > 0) {
-                revert Vault__UnexpectedNegativeCount(negativeCount);
+            if (nonZeroCount > 0) {
+                revert Vault__UnexpectedNonZeroCount(nonZeroCount);
             }
         }
     }

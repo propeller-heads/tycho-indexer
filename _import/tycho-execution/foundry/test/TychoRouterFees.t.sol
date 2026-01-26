@@ -149,10 +149,10 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         // 2. takeFees calculates fees (amountOut < amountOutBeforeFees)
         // 3. Router checks if it received the full amount
         // 4. Router didn't receive the tokens → reverts with
-        //    Vault__UnexpectedNegativeCount(1). This happens because when using
+        //    Vault__UnexpectedNonZeroCount(1). This happens because when using
         //    InputSource.TransferFrom, no negative deltas are allowed at all.
         vm.expectRevert(
-            abi.encodeWithSelector(Vault__UnexpectedNegativeCount.selector, 1)
+            abi.encodeWithSelector(Vault__UnexpectedNonZeroCount.selector, 1)
         );
         tychoRouter.singleSwap(
             amountIn,

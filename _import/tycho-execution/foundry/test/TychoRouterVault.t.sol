@@ -5,7 +5,7 @@ import "@src/executors/UniswapV4Executor.sol";
 import {TychoRouter} from "@src/TychoRouter.sol";
 import {
     Vault__UnexpectedInputDelta,
-    Vault__UnexpectedNegativeCount,
+    Vault__UnexpectedNonZeroCount,
     ERC6909
 } from "@src/Vault.sol";
 import {IExecutor} from "@interfaces/IExecutor.sol";
@@ -91,7 +91,7 @@ contract WrapUnwrapExecutor is IExecutor {
         } else {
             // ETH -> WETH: Need to transfer ETH via msg.value
             transferType =
-            RestrictTransferFrom.TransferType.TransferNativeInMsgValue;
+            RestrictTransferFrom.TransferType.TransferNativeInExecutor;
         }
     }
 }
@@ -128,7 +128,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             address(usv2Executor),
             encodeUniswapV2Swap(
                 DAI_USDC_POOL,
-                ALICE,
+                tychoRouterAddr,
                 true,
                 RestrictTransferFrom.TransferType.Transfer
             )
@@ -150,7 +150,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         // Should revert because this causes a negative delta for DAI
         // When using InputSource.TransferFrom, no negative deltas are allowed
         vm.expectRevert(
-            abi.encodeWithSelector(Vault__UnexpectedNegativeCount.selector, 1)
+            abi.encodeWithSelector(Vault__UnexpectedNonZeroCount.selector, 1)
         );
         tychoRouter.sequentialSwap(
             amountIn,
@@ -262,16 +262,15 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         tychoRouter.deposit(WETH_ADDR, amountIn);
 
         // The router only allows using vault funds for the initial tokenIn, preventing
-        // vault theft
+        // vault theft but even before this, it checks for the amount of NonZeroCount
+        //which in this case will be 2: one for positive for ETH and one negative for WETH
         vm.expectRevert(
-            abi.encodeWithSelector(
-                Vault__UnexpectedInputDelta.selector, 1000000000000000000
-            )
+            abi.encodeWithSelector(Vault__UnexpectedNonZeroCount.selector, 2)
         );
         tychoRouter.singleSwap{value: amountIn}(
             amountIn,
             address(0), // ETH
-            DAI_ADDR,
+            USDC_ADDR,
             1, // min amount
             ALICE, // receiver
             RestrictTransferFrom.InputSource.Vault,
@@ -316,8 +315,6 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
     }
 
     // ==================== Native Transfer tests ====================
-    // TODO change these to use transferNativeInExecutor
-
     function _rocketpoolEthRethSwap() private view returns (bytes memory swap) {
         swap = encodeSingleSwap(
             address(rocketpoolExecutor),
@@ -329,7 +326,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         );
     }
 
-    function testTransferNativeInMsgValueUserSentETH() public {
+    function testTransferNativeInExecutorUserSentETH() public {
         // First swap is native ETH transfer (in msg value), user sent ETH
         // ETH -> rETH via Rocketpool deposit
         uint256 amountIn = 1 ether;
@@ -363,7 +360,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         assertEq(tychoRouter.balanceOf(ALICE, 0), existingVaultBalance);
     }
 
-    function testTransferNativeInMsgValueUsesVaultBalance() public {
+    function testTransferNativeInExecutorUsesVaultBalance() public {
         // First swap is native ETH transfer (in msg value), user didn't send ETH,
         // so their vault balance is used
 
@@ -397,7 +394,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         assertEq(tychoRouter.balanceOf(ALICE, 0), 0);
     }
 
-    function testTransferNativeInMsgValueNoVaultBalance() public {
+    function testTransferNativeInExecutorNoVaultBalance() public {
         // First swap is native ETH transfer (in msg value), user didn't send ETH
         // and had no vault balance - REVERT
         uint256 amountIn = 1 ether;
@@ -527,7 +524,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
                 uint8(0), // i (DAI index)
                 uint8(1), // j (USDC index)
                 RestrictTransferFrom.TransferType.ProtocolWillDebit,
-                ALICE // receiver
+                tychoRouterAddr // receiver
             )
         );
 
@@ -547,7 +544,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         // Should revert because this causes a negative delta for DAI
         // When using InputSource.TransferFrom, no negative deltas are allowed
         vm.expectRevert(
-            abi.encodeWithSelector(Vault__UnexpectedNegativeCount.selector, 1)
+            abi.encodeWithSelector(Vault__UnexpectedNonZeroCount.selector, 1)
         );
         tychoRouter.sequentialSwap(
             amountIn,
@@ -668,9 +665,9 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         // 1. Alice sends 1 ETH to the router. Delta accounting for ETH is 1
         // 2. Alice swaps ETH to WETH. Delta accounting for ETH is 0.
         // 3. Alice swaps WETH to ETH, but Bob the malicious encoder set the receiver to
-        //    himself. Delta accounting for ETH is 0.
+        //    himself. Delta accounting for ETH is 0 and for WETH is 1.
         // 4. The router sends ETH to rETH. Delta accounting for ETH is -1.
-        // 5. Since we don't allow any negative delta for the input amount, the
+        // 5. Since we don't allow any non zero delta for the input amount (and for any other amount), the
         //    transaction reverts, preventing Bob from stealing Alice's funds.
         bytes[] memory swaps = new bytes[](3);
 
@@ -707,7 +704,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         tychoRouter.deposit{value: amountIn}(address(0), amountIn);
 
         vm.expectRevert(
-            abi.encodeWithSelector(Vault__UnexpectedNegativeCount.selector, 1)
+            abi.encodeWithSelector(Vault__UnexpectedNonZeroCount.selector, 2)
         );
         tychoRouter.sequentialSwap{value: amountIn}(
             amountIn,

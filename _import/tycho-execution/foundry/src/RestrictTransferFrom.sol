@@ -106,7 +106,7 @@ contract RestrictTransferFrom is Vault {
      * - TransferFrom: Transfer from user wallet to protocol
      * - TransferFromAndProtocolWillDebit: Transfer from user wallet to router, protocol takes it
      * - Transfer: Transfer from router balance to protocol (could be from vault or previous swap)
-     * - TransferNativeInMsgValueTransferNativeInExecutor: Native ETH sent via the executor (hardcoded there for security)
+     * - TransferNativeInExecutor: Native ETH sent via the executor (hardcoded there for security)
      * - ProtocolWillDebit: Protocol takes from router/vault
      * - None: Funds already transferred from previous pool
      */

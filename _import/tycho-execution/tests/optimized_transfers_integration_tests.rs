@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{collections::HashMap, str::FromStr};
 
 use alloy::hex::encode;
 use num_bigint::{BigInt, BigUint};
