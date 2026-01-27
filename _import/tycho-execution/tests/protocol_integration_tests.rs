@@ -238,7 +238,7 @@ fn test_single_encoding_strategy_usv4_eth_in() {
         eth.clone(),
         pepe.clone(),
     );
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
     let solution = Solution {
         exact_out: false,
