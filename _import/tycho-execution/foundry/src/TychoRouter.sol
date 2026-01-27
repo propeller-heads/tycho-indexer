@@ -71,6 +71,7 @@ error TychoRouter__MsgValueDoesNotMatchAmountIn(
     uint256 msgValue, uint256 amountIn
 );
 error TychoRouter__MsgValueNotAllowedWithVaultMethod(uint256 msgValue);
+error TychoRouter__MsgValueNotAllowedWithPermit2Method(uint256 msgValue);
 error TychoRouter__NegativeSlippage(uint256 amount, uint256 minAmount);
 error TychoRouter__AmountOutNotFullyReceived(
     uint256 amountIn, uint256 amountConsumed
@@ -135,7 +136,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      *
      * @dev
      * - Swaps are executed sequentially using the `_swap` function.
-     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
+     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut`
      *
      * @param amountIn The input token amount to be swapped.
      * @param tokenIn The address of the input token. Use `address(0)` for native ETH
@@ -190,7 +191,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      *
      * @dev
      * - Swaps are executed sequentially using the `_swap` function.
-     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
+     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut`.
      *
      * @param amountIn The input token amount to be swapped.
      * @param tokenIn The address of the input token. Use `address(0)` for native ETH
@@ -220,8 +221,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         if (msg.value > 0) {
             revert TychoRouter__MsgValueNotAllowedWithVaultMethod(msg.value);
         }
-        _updateNativeDeltaAccounting(amountIn);
-        uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
+        uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
+            tokenIn, amountIn, tokenOut, receiver, false
+        );
         _tstoreTransferFromInfo(tokenIn, amountIn, false, true);
 
         return _splitSwapChecked(
@@ -246,7 +248,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @dev
      * - For ERC20 tokens, Permit2 is used to approve and transfer tokens from the caller to the router.
      * - Swaps are executed sequentially using the `_swap` function.
-     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
+     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut`.
      *
      * @param amountIn The input token amount to be swapped.
      * @param tokenIn The address of the input token. Use `address(0)` for native ETH
@@ -277,7 +279,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         bytes calldata signature,
         bytes calldata swaps
     ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        _updateNativeDeltaAccounting(amountIn);
+        if (msg.value > 0) {
+            revert TychoRouter__MsgValueNotAllowedWithPermit2Method(msg.value);
+        }
         uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
             tokenIn, amountIn, tokenOut, receiver, true
         );
@@ -309,7 +313,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      *
      * @dev
      * - Swaps are executed sequentially using the `_swap` function.
-     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
+     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut`.
      *
      * @param amountIn The input token amount to be swapped.
      * @param tokenIn The address of the input token. Use `address(0)` for native ETH
@@ -335,7 +339,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         _updateNativeDeltaAccounting(amountIn);
-        uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
+        uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
+            tokenIn, amountIn, tokenOut, receiver, true
+        );
         _tstoreTransferFromInfo(tokenIn, amountIn, false, false);
 
         return _sequentialSwapChecked(
@@ -359,7 +365,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      *
      * @dev
      * - Swaps are executed sequentially using the `_swap` function.
-     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
+     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut`.
      *
      * @param amountIn The input token amount to be swapped.
      * @param tokenIn The address of the input token. Use `address(0)` for native ETH
@@ -387,7 +393,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         if (msg.value > 0) {
             revert TychoRouter__MsgValueNotAllowedWithVaultMethod(msg.value);
         }
-        _updateNativeDeltaAccounting(amountIn);
         uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
             tokenIn, amountIn, tokenOut, receiver, false
         );
@@ -413,7 +418,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      *
      * @dev
      * - For ERC20 tokens, Permit2 is used to approve and transfer tokens from the caller to the router.
-     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
+     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut`.
      *
      * @param amountIn The input token amount to be swapped.
      * @param tokenIn The address of the input token. Use `address(0)` for native ETH
@@ -442,7 +447,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         bytes calldata signature,
         bytes calldata swaps
     ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        _updateNativeDeltaAccounting(amountIn);
+        if (msg.value > 0) {
+            revert TychoRouter__MsgValueNotAllowedWithPermit2Method(msg.value);
+        }
         uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
             tokenIn, amountIn, tokenOut, receiver, true
         );
@@ -473,7 +480,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      *         Takes funds from the user's wallet using transferFrom.
      *
      * @dev
-     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
+     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut`.
      *
      * @param amountIn The input token amount to be swapped.
      * @param tokenIn The address of the input token. Use `address(0)` for native ETH
@@ -524,7 +531,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      *         Takes funds from the user's vault balance.
      *
      * @dev
-     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
+     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut`.
      *
      * @param amountIn The input token amount to be swapped.
      * @param tokenIn The address of the input token. Use `address(0)` for native ETH
@@ -552,8 +559,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         if (msg.value > 0) {
             revert TychoRouter__MsgValueNotAllowedWithVaultMethod(msg.value);
         }
-        _updateNativeDeltaAccounting(amountIn);
-        uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
+        uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
+            tokenIn, amountIn, tokenOut, receiver, false
+        );
         _tstoreTransferFromInfo(tokenIn, amountIn, false, true);
 
         return _singleSwap(
@@ -576,7 +584,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      *
      * @dev
      * - For ERC20 tokens, Permit2 is used to approve and transfer tokens from the caller to the router.
-     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
+     * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut`.
      *
      * @param amountIn The input token amount to be swapped.
      * @param tokenIn The address of the input token. Use `address(0)` for native ETH
@@ -604,7 +612,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         bytes calldata signature,
         bytes calldata swapData
     ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        _updateNativeDeltaAccounting(amountIn);
+        if (msg.value > 0) {
+            revert TychoRouter__MsgValueNotAllowedWithPermit2Method(msg.value);
+        }
         uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
             tokenIn, amountIn, tokenOut, receiver, true
         );
