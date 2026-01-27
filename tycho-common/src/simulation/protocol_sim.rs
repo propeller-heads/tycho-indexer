@@ -8,6 +8,10 @@ use crate::{
     simulation::{
         errors::{SimulationError, TransitionError},
         indicatively_priced::IndicativelyPriced,
+        swap::{
+            LimitsParams, MarginalPrice, MarginalPriceParams, QuoteParams, SwapQuoter,
+            TransitionParams,
+        },
     },
     Bytes,
 };
@@ -400,6 +404,78 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
 impl Clone for Box<dyn ProtocolSim> {
     fn clone(&self) -> Box<dyn ProtocolSim> {
         self.clone_box()
+    }
+}
+
+impl<T> ProtocolSim for T
+where
+    T: SwapQuoter + Clone + Send + Sync + 'static,
+{
+    fn fee(&self) -> f64 {
+        let component = self.component();
+        // 1 unit of token0
+        let amount = BigUint::from(10u32).pow(component.tokens[0].decimals);
+        let params =
+            QuoteParams::new(&component.tokens[0].address, &component.tokens[1].address, amount);
+        self.fee(params)
+            .map(|f| f.fee())
+            .unwrap_or(f64::MAX)
+    }
+
+    fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
+        self.marginal_price(MarginalPriceParams::new(&base.address, &quote.address))
+            .map(|r| r.price())
+    }
+
+    fn get_amount_out(
+        &self,
+        amount_in: BigUint,
+        token_in: &Token,
+        token_out: &Token,
+    ) -> Result<GetAmountOutResult, SimulationError> {
+        self.quote(QuoteParams::new(&token_in.address, &token_out.address, amount_in))
+            .map(|r| {
+                GetAmountOutResult::new(
+                    r.amount_out().clone(),
+                    r.gas().clone(),
+                    r.new_state().unwrap().to_protocol_sim(),
+                )
+            })
+    }
+
+    fn get_limits(
+        &self,
+        sell_token: Bytes,
+        buy_token: Bytes,
+    ) -> Result<(BigUint, BigUint), SimulationError> {
+        self.swap_limits(LimitsParams::new(&sell_token, &buy_token))
+            .map(|r| (r.amount_in().upper().clone(), r.amount_out().upper().clone()))
+    }
+
+    fn delta_transition(
+        &mut self,
+        delta: ProtocolStateDelta,
+        tokens: &HashMap<Bytes, Token>,
+        balances: &Balances,
+    ) -> Result<(), TransitionError> {
+        self.delta_transition(TransitionParams::new(delta, tokens, balances))
+            .map(|_| ())
+    }
+
+    fn clone_box(&self) -> Box<dyn ProtocolSim> {
+        self.to_protocol_sim()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn eq(&self, other: &dyn ProtocolSim) -> bool {
+        false
     }
 }
 
