@@ -1,3 +1,14 @@
+## [0.131.0](https://github.com/propeller-heads/tycho-indexer/compare/0.130.1...0.131.0) (2026-01-27)
+
+
+### Features
+
+* expose partial blocks flad on SubstreamsStream ([ddd0054](https://github.com/propeller-heads/tycho-indexer/commit/ddd0054cb5a427e39dda81c8fe7ae03631e07d22))
+* skip lag metrics on partial blocks ([dd2a783](https://github.com/propeller-heads/tycho-indexer/commit/dd2a783405621783662ce86944238489a37a9792))
+* update substream dependencies ([f0b04ea](https://github.com/propeller-heads/tycho-indexer/commit/f0b04ea30a2312ac285dea9de872461ef45b637d))
+* update substream stream to use v3 Request ([51dabc4](https://github.com/propeller-heads/tycho-indexer/commit/51dabc43881186ea8047bd06f0f713d9977e27bb))
+* Update substreams sink files to support partial blocks ([#830](https://github.com/propeller-heads/tycho-indexer/issues/830)) ([84fd327](https://github.com/propeller-heads/tycho-indexer/commit/84fd327f0e8fb1a5c5bfac851f8b364d7cbd983c))
+
 ## [0.130.1](https://github.com/propeller-heads/tycho-indexer/compare/0.130.0...0.130.1) (2026-01-22)
 
 ## [0.130.0](https://github.com/propeller-heads/tycho-indexer/compare/0.129.1...0.130.0) (2026-01-21)
