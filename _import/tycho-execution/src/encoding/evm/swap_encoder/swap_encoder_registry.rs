@@ -114,9 +114,6 @@ impl SwapEncoderRegistry {
             "uniswap_v4" => {
                 Ok(Box::new(UniswapV4SwapEncoder::new(executor_address, self.chain, config)?))
             }
-            "uniswap_v4_hooks" => {
-                Ok(Box::new(UniswapV4SwapEncoder::new(executor_address, self.chain, config)?))
-            }
             "ekubo_v2" => {
                 Ok(Box::new(EkuboSwapEncoder::new(executor_address, self.chain, config)?))
             }
