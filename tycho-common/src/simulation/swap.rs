@@ -9,7 +9,7 @@ use crate::{
     simulation::{
         errors::{SimulationError, TransitionError},
         indicatively_priced::IndicativelyPriced,
-        protocol_sim::{Balances, Price},
+        protocol_sim::{Balances, Price, ProtocolSim},
     },
     Bytes,
 };
@@ -920,6 +920,9 @@ pub trait SwapQuoter: fmt::Debug + Send + Sync + 'static {
     fn as_indicatively_priced(&self) -> Result<&dyn IndicativelyPriced, SimulationError> {
         Err(SimulationError::FatalError("Pool State does not implement IndicativelyPriced".into()))
     }
+
+    #[deprecated(note = "ProtocolSim is deprecated. This method will be removed in v1.0.0")]
+    fn to_protocol_sim(&self) -> Box<dyn ProtocolSim>;
 }
 
 /// Testing extension trait for SwapQuoter implementations.
