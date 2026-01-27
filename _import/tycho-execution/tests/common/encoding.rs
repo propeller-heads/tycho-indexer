@@ -14,7 +14,7 @@ use tycho_contracts::encoding::{
         utils::{biguint_to_u256, bytes_to_address},
     },
     models,
-    models::{EncodedSolution, Solution, Transaction, UserTransferType},
+    models::{EncodedSolution, Solution, Transaction},
 };
 
 /// Encodes a transaction for the Tycho Router using one of its supported swap methods.
@@ -74,7 +74,6 @@ pub fn encode_tycho_router_call(
     chain_id: u64,
     encoded_solution: EncodedSolution,
     solution: &Solution,
-    user_transfer_type: &UserTransferType,
     native_address: &Bytes,
     signer: Option<PrivateKeySigner>,
 ) -> Result<Transaction, EncodingError> {
@@ -126,20 +125,17 @@ pub fn encode_tycho_router_call(
             .abi_encode()
     } else if encoded_solution
         .function_signature
-        .contains("singleSwap")
+        .contains("singleSwapUsingVault") ||
+        encoded_solution
+            .function_signature
+            .contains("singleSwap")
     {
-        let input_source = if user_transfer_type == &UserTransferType::TransferFrom {
-            U256::from(0) // InputSource::TransferFrom
-        } else {
-            U256::from(1) // InputSource::Vault
-        };
         (
             given_amount,
             given_token,
             checked_token,
             min_amount_out,
             receiver,
-            input_source,
             solver_fee_bps,
             solver_fee_receiver,
             max_solver_contribution,
@@ -168,20 +164,17 @@ pub fn encode_tycho_router_call(
             .abi_encode()
     } else if encoded_solution
         .function_signature
-        .contains("sequentialSwap")
+        .contains("sequentialSwapUsingVault") ||
+        encoded_solution
+            .function_signature
+            .contains("sequentialSwap")
     {
-        let input_source = if user_transfer_type == &UserTransferType::TransferFrom {
-            U256::from(0) // InputSource::TransferFrom
-        } else {
-            U256::from(1) // InputSource::Vault
-        };
         (
             given_amount,
             given_token,
             checked_token,
             min_amount_out,
             receiver,
-            input_source,
             solver_fee_bps,
             solver_fee_receiver,
             max_solver_contribution,
@@ -211,13 +204,11 @@ pub fn encode_tycho_router_call(
             .abi_encode()
     } else if encoded_solution
         .function_signature
-        .contains("splitSwap")
+        .contains("splitSwapUsingVault") ||
+        encoded_solution
+            .function_signature
+            .contains("splitSwap")
     {
-        let input_source = if user_transfer_type == &UserTransferType::TransferFrom {
-            U256::from(0) // InputSource::TransferFrom
-        } else {
-            U256::from(1) // InputSource::Vault
-        };
         (
             given_amount,
             given_token,
@@ -225,7 +216,6 @@ pub fn encode_tycho_router_call(
             min_amount_out,
             n_tokens,
             receiver,
-            input_source,
             solver_fee_bps,
             solver_fee_receiver,
             max_solver_contribution,

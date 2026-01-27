@@ -52,11 +52,6 @@ contract RestrictTransferFrom is Vault {
         permit2 = IAllowanceTransfer(_permit2);
     }
 
-    enum InputSource {
-        TransferFrom,
-        Vault
-    }
-
     enum TransferType {
         TransferFrom,
         TransferFromAndProtocolWillDebit,
@@ -75,19 +70,19 @@ contract RestrictTransferFrom is Vault {
         address tokenIn,
         uint256 amountIn,
         bool isPermit2,
-        InputSource inputSource
+        bool useVault
     ) internal {
-        uint256 amountAllowed = amountIn;
-        uint256 useVault = 0;
+        uint256 amountAllowed;
+        uint256 useVaultValue;
 
-        if (inputSource == InputSource.TransferFrom) {
-            // Allow transferFrom for the input amount
-            amountAllowed = amountIn;
-            useVault = 0;
-        } else if (inputSource == InputSource.Vault) {
+        if (useVault) {
             // Don't allow any transferFrom, and allow vault usage
             amountAllowed = 0;
-            useVault = 1;
+            useVaultValue = 1;
+        } else {
+            // Allow transferFrom for the input amount
+            amountAllowed = amountIn;
+            useVaultValue = 0;
         }
 
         assembly {
@@ -95,7 +90,7 @@ contract RestrictTransferFrom is Vault {
             tstore(_AMOUNT_ALLOWED_SLOT, amountAllowed)
             tstore(_IS_PERMIT2_SLOT, isPermit2)
             tstore(_SENDER_SLOT, caller())
-            tstore(_USE_VAULT_SLOT, useVault)
+            tstore(_USE_VAULT_SLOT, useVaultValue)
         }
     }
 

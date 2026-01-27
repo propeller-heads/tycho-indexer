@@ -55,7 +55,6 @@ fn test_single_swap_strategy_encoder() {
         eth_chain().id(),
         encoded_solutions[0].clone(),
         &solution,
-        &UserTransferType::TransferFromPermit2,
         &eth(),
         Some(get_signer()),
     )
@@ -98,9 +97,10 @@ fn test_single_swap_strategy_encoder() {
 }
 
 #[test]
-fn test_single_swap_strategy_encoder_no_permit2() {
-    // Performs a single swap from WETH to DAI on a USV2 pool, without permit2 and no
+fn test_single_swap_strategy_encoder_transfer_from() {
+    // Performs a single swap from WETH to DAI on a USV2 pool, using transfer from and no
     // grouping optimizations.
+    std::env::set_var("TYCHO_FEES_ENABLED", "true");
 
     let weth = weth();
     let dai = dai();
@@ -135,34 +135,27 @@ fn test_single_swap_strategy_encoder_no_permit2() {
         .encode_solutions(vec![solution.clone()])
         .unwrap()[0]
         .clone();
-    let calldata = encode_tycho_router_call(
-        eth_chain().id(),
-        encoded_solution,
-        &solution,
-        &UserTransferType::TransferFrom,
-        &eth(),
-        None,
-    )
-    .unwrap()
-    .data;
+    let calldata =
+        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
+            .unwrap()
+            .data;
     let expected_min_amount_encoded = encode(U256::abi_encode(&expected_min_amount));
     let expected_input = [
-        "a5125e3b", // Function selector (singleSwap)
+        "d51d2a96", // Function selector
         "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount in
         "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f", // token out
         &expected_min_amount_encoded, // min amount out
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-        "0000000000000000000000000000000000000000000000000000000000000000", // InputSource.TransferFrom
         "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps
         "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeReceiver
         "0000000000000000000000000000000000000000000000000000000000000000", // solverMaxContribution
-        "0000000000000000000000000000000000000000000000000000000000000140", // offset of swap bytes
+        "0000000000000000000000000000000000000000000000000000000000000120", // offset of swap bytes
         "000000000000000000000000000000000000000000000000000000000000003e", // len swap (62 bytes)
         // Swap data
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
         "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id (pool address)
-        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
+        "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
         "00",                                       // zero2one
         "00",                                       // transfer type TransferFrom
         "0000",                                     // padding to 32-byte boundary
@@ -172,7 +165,10 @@ fn test_single_swap_strategy_encoder_no_permit2() {
     let hex_calldata = encode(&calldata);
 
     assert_eq!(hex_calldata, expected_input);
-    write_calldata_to_file("test_single_swap_strategy_encoder_no_permit2", hex_calldata.as_str());
+    write_calldata_to_file(
+        "test_single_swap_strategy_encoder_transfer_from",
+        hex_calldata.as_str(),
+    );
 }
 
 #[test]
@@ -220,7 +216,6 @@ fn test_single_swap_with_fees_and_solver_contribution() {
         eth_chain().id(),
         encoded_solutions[0].clone(),
         &solution,
-        &UserTransferType::TransferFrom,
         &eth(),
         None,
     )

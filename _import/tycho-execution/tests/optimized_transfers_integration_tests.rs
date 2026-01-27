@@ -75,16 +75,10 @@ fn test_uniswap_v3_uniswap_v2() {
         .unwrap()[0]
         .clone();
 
-    let calldata = encode_tycho_router_call(
-        eth_chain().id(),
-        encoded_solution,
-        &solution,
-        &UserTransferType::TransferFrom,
-        &eth(),
-        None,
-    )
-    .unwrap()
-    .data;
+    let calldata =
+        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
+            .unwrap()
+            .data;
 
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_uniswap_v3_uniswap_v2", hex_calldata.as_str());
@@ -158,16 +152,10 @@ fn test_uniswap_v3_uniswap_v3() {
         .unwrap()[0]
         .clone();
 
-    let calldata = encode_tycho_router_call(
-        eth_chain().id(),
-        encoded_solution,
-        &solution,
-        &UserTransferType::TransferFrom,
-        &eth(),
-        None,
-    )
-    .unwrap()
-    .data;
+    let calldata =
+        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
+            .unwrap()
+            .data;
 
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_uniswap_v3_uniswap_v3", hex_calldata.as_str());
@@ -250,16 +238,10 @@ fn test_uniswap_v3_curve() {
         .unwrap()[0]
         .clone();
 
-    let calldata = encode_tycho_router_call(
-        eth_chain().id(),
-        encoded_solution,
-        &solution,
-        &UserTransferType::TransferFrom,
-        &eth(),
-        None,
-    )
-    .unwrap()
-    .data;
+    let calldata =
+        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
+            .unwrap()
+            .data;
 
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_uniswap_v3_curve", hex_calldata.as_str());
@@ -317,16 +299,10 @@ fn test_balancer_v2_uniswap_v2() {
         .unwrap()[0]
         .clone();
 
-    let calldata = encode_tycho_router_call(
-        eth_chain().id(),
-        encoded_solution,
-        &solution,
-        &UserTransferType::TransferFrom,
-        &eth(),
-        None,
-    )
-    .unwrap()
-    .data;
+    let calldata =
+        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
+            .unwrap()
+            .data;
 
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_balancer_v2_uniswap_v2", hex_calldata.as_str());
@@ -463,7 +439,6 @@ fn test_multi_protocol() {
         eth_chain().id(),
         encoded_solution,
         &solution,
-        &UserTransferType::TransferFromPermit2,
         &eth,
         Some(get_signer()),
     )
@@ -530,16 +505,10 @@ fn test_uniswap_v3_balancer_v3() {
         .unwrap()[0]
         .clone();
 
-    let calldata = encode_tycho_router_call(
-        eth_chain().id(),
-        encoded_solution,
-        &solution,
-        &UserTransferType::TransferFrom,
-        &eth(),
-        None,
-    )
-    .unwrap()
-    .data;
+    let calldata =
+        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
+            .unwrap()
+            .data;
 
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_uniswap_v3_balancer_v3", hex_calldata.as_str());

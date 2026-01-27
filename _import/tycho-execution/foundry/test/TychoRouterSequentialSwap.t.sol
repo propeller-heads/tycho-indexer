@@ -82,7 +82,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         );
     }
 
-    function testSequentialSwapNoPermit2() public {
+    function testSequentialSwapTransferFrom() public {
         // Trade 1 WETH for USDC through DAI - see _getSequentialSwaps for more info
         uint256 amountIn = 1 ether;
         deal(WETH_ADDR, ALICE, amountIn);
@@ -97,7 +97,6 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             USDC_ADDR,
             1000_000000, // min amount
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -125,7 +124,6 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             USDC_ADDR,
             0, // min amount
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -149,7 +147,6 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             USDC_ADDR,
             0, // min amount
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -268,7 +265,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
         bytes memory callData = loadCallDataFromFile(
-            "test_sequential_swap_strategy_encoder_no_permit2"
+            "test_sequential_swap_strategy_encoder_transfer_from"
         );
         (bool success,) = tychoRouterAddr.call(callData);
 

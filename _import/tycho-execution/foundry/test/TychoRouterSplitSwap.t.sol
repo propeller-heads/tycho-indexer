@@ -137,7 +137,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         );
     }
 
-    function testSplitSwapNoPermit2() public {
+    function testSplitSwapTransferFrom() public {
         // Trade 1 WETH for USDC through DAI and WBTC - see _getSplitSwaps for more info
         uint256 amountIn = 1 ether;
         uint256 existingVaultBalance = 1.5 ether;
@@ -158,7 +158,6 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             1000_000000, // min amount
             4,
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -196,7 +195,6 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             0, // min amount
             4,
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -223,7 +221,6 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             1000_000000, // min amount
             2,
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0,
@@ -292,7 +289,6 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             200_000000, // min amount (2 WBTC)
             4,
             ALICE,
-            RestrictTransferFrom.InputSource.TransferFrom,
             0,
             address(0),
             0, // max solver contribution
@@ -474,7 +470,6 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             1, // min amount out
             2, // number of tokens
             ALICE, // receiver
-            RestrictTransferFrom.InputSource.TransferFrom,
             0, // solver fee bps
             address(0), // solver fee receiver
             0, // max solver contribution
@@ -547,14 +542,13 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         // Should revert with arithmetic underflow when trying to take 120% of the
         // input amount (0.6 + 0.6 = 1.2 ether, but only 1 ether available)
         vm.expectRevert(stdError.arithmeticError);
-        tychoRouter.splitSwap(
+        tychoRouter.splitSwapUsingVault(
             amountIn,
             WETH_ADDR,
             WBTC_ADDR,
             1, // min amount
             4,
             ALICE,
-            RestrictTransferFrom.InputSource.Vault,
             0,
             address(0),
             0,
