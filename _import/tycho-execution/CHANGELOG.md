@@ -1,3 +1,10 @@
+## [0.21.0](https://github.com/propeller-heads/tycho-contracts/compare/0.20.0...0.21.0) (2026-01-27)
+
+
+### Features
+
+* Separate methods for using Vault ([50b515e](https://github.com/propeller-heads/tycho-contracts/commit/50b515e6b7eeab8590a54c9bc73396f496edd54f))
+
 ## [0.20.0](https://github.com/propeller-heads/tycho-contracts/compare/0.19.0...0.20.0) (2026-01-26)
 
 
