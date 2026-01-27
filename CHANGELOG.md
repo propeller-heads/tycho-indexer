@@ -1,3 +1,11 @@
+## [0.132.0](https://github.com/propeller-heads/tycho-indexer/compare/0.131.0...0.132.0) (2026-01-27)
+
+
+### Features
+
+* add enable_partial_blocks option to indexer CLI ([951cb15](https://github.com/propeller-heads/tycho-indexer/commit/951cb15f60e93a7891afef218c715327cb78b234))
+* add enable_partial_blocks option to indexer CLI ([#831](https://github.com/propeller-heads/tycho-indexer/issues/831)) ([8fdb033](https://github.com/propeller-heads/tycho-indexer/commit/8fdb033fa708fad5771619057a394f7221773c62))
+
 ## [0.131.0](https://github.com/propeller-heads/tycho-indexer/compare/0.130.1...0.131.0) (2026-01-27)
 
 
