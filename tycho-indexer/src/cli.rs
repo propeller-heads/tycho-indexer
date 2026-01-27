@@ -153,6 +153,9 @@ pub struct SubstreamsArgs {
     /// Substreams API token
     #[clap(long, env, hide_env_values = true, alias = "api_token")]
     pub substreams_api_token: String,
+    /// Enable partial blocks
+    #[clap(long, default_value = "false")]
+    pub enable_partial_blocks: bool,
 }
 
 #[derive(Args, Debug, Clone, PartialEq)]
@@ -327,6 +330,7 @@ mod cli_tests {
                 stop_block: None,
                 substreams_args: SubstreamsArgs {
                     substreams_api_token: "your_api_token".to_string(),
+                    enable_partial_blocks: false,
                 },
                 initialized_accounts: vec![],
                 initialization_block: 0,
@@ -358,6 +362,7 @@ mod cli_tests {
             "/opt/extractors.yaml",
             "--api_token",
             "your_api_token",
+            "--enable-partial-blocks",
         ])
         .expect("parse errored");
 
@@ -385,6 +390,7 @@ mod cli_tests {
             command: Command::Index(IndexArgs {
                 substreams_args: SubstreamsArgs {
                     substreams_api_token: "your_api_token".to_string(),
+                    enable_partial_blocks: true,
                 },
                 chains: vec!["ethereum".to_string()],
                 extractors_config: "/opt/extractors.yaml".to_string(),
