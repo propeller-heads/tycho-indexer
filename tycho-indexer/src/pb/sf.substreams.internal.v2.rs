@@ -175,11 +175,21 @@ pub struct ProcessRangeRequest {
     /// needs to back process stores while in development mode.
     #[prost(bool, tag="16")]
     pub production_mode: bool,
+    #[prost(bool, tag="17")]
+    pub stream_output: bool,
+    #[prost(map="string, string", tag="18")]
+    pub foundational_store_endpoints: ::std::collections::HashMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
+    /// if non-zero, above this duration in nanoseconds, the eth_calls will use "latest" instead of block ref. It will also automatically retry 'block not found' with 'latest'. It has precedence over eth_call_fallback_to_number_duration.
+    #[prost(int64, tag="19")]
+    pub eth_call_fallback_to_latest_duration: i64,
+    /// if non-zero, above this duration in nanoseconds, the eth_calls will use block number instead of block hash
+    #[prost(int64, tag="20")]
+    pub eth_call_fallback_to_number_duration: i64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ProcessRangeResponse {
-    #[prost(oneof="process_range_response::Type", tags="4, 5, 6")]
+    #[prost(oneof="process_range_response::Type", tags="4, 5, 6, 7")]
     pub r#type: ::core::option::Option<process_range_response::Type>,
 }
 /// Nested message and enum types in `ProcessRangeResponse`.
@@ -193,7 +203,17 @@ pub mod process_range_response {
         Completed(super::Completed),
         #[prost(message, tag="6")]
         Update(super::Update),
+        #[prost(message, tag="7")]
+        BlockScopedData(super::BlockScopedData),
     }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BlockScopedData {
+    #[prost(message, optional, tag="1")]
+    pub output: ::core::option::Option<::prost_types::Any>,
+    #[prost(message, optional, tag="2")]
+    pub clock: ::core::option::Option<super::super::v1::Clock>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -201,7 +221,7 @@ pub struct Update {
     #[prost(uint64, tag="1")]
     pub duration_ms: u64,
     #[prost(uint64, tag="2")]
-    pub processed_blocks: u64,
+    pub progress_blocks: u64,
     #[prost(uint64, tag="3")]
     pub total_bytes_read: u64,
     #[prost(uint64, tag="4")]
@@ -245,16 +265,12 @@ pub struct ExternalCallMetric {
 pub struct Completed {
     #[prost(message, repeated, tag="1")]
     pub all_processed_ranges: ::prost::alloc::vec::Vec<BlockRange>,
-    /// TraceId represents the producer's trace id that produced the partial files.
-    /// This is present here so that the consumer can use it to identify the
-    /// right partial files that needs to be squashed together.
-    ///
-    /// The TraceId can be empty in which case it should be assumed by the tier1
-    /// consuming this message that the tier2 that produced those partial files
-    /// is not yet updated to produce a trace id and a such, the tier1 should
-    /// generate a legacy partial file name.
-    #[prost(string, tag="2")]
-    pub trace_id: ::prost::alloc::string::String,
+    /// actual processed blocks (excluding blocks skipped by indexes)
+    #[prost(uint64, tag="3")]
+    pub processed_blocks: u64,
+    /// confirms that streaming mode was used (compatibility check)
+    #[prost(bool, tag="4")]
+    pub streaming_mode: bool,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
