@@ -41,7 +41,6 @@ impl SwapEncoder for BalancerV2SwapEncoder {
             bytes_to_address(swap.token_out())?,
             component_id,
             bytes_to_address(&encoding_context.receiver)?,
-            (encoding_context.transfer_type as u8).to_be_bytes(),
         );
         Ok(args.abi_encode_packed())
     }
@@ -62,7 +61,7 @@ mod tests {
     use super::*;
     use crate::encoding::{
         evm::{swap_encoder::balancer_v2::BalancerV2SwapEncoder, utils::write_calldata_to_file},
-        models::{Swap, TransferType},
+        models::Swap,
     };
     #[test]
     fn test_encode_balancer_v2() {
@@ -81,7 +80,6 @@ mod tests {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::None,
             historical_trade: true,
         };
         let encoder = BalancerV2SwapEncoder::new(
@@ -109,8 +107,6 @@ mod tests {
                 "5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014",
                 // receiver
                 "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
-                // transfer type None
-                "05"
             ))
         );
         write_calldata_to_file("test_encode_balancer_v2", hex_swap.as_str());

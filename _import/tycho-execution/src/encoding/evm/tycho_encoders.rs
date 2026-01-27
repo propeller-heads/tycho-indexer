@@ -7,7 +7,7 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::permit2::Permit2,
-        constants::{FUNDS_IN_ROUTER_PROTOCOLS, GROUPABLE_PROTOCOLS},
+        constants::GROUPABLE_PROTOCOLS,
         encoding_utils::encode_tycho_router_call,
         group_swaps::group_swaps,
         strategy_encoder::strategy_encoders::{
@@ -16,9 +16,7 @@ use crate::encoding::{
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         utils::ple_encode,
     },
-    models::{
-        EncodedSolution, EncodingContext, Solution, Transaction, TransferType, UserTransferType,
-    },
+    models::{EncodedSolution, EncodingContext, Solution, Transaction, UserTransferType},
     strategy_encoder::StrategyEncoder,
     tycho_encoder::TychoEncoder,
 };
@@ -265,23 +263,12 @@ impl TychoExecutorEncoder {
                 ))
             })?;
 
-        let transfer = if !FUNDS_IN_ROUTER_PROTOCOLS.contains(
-            &grouped_swap.swaps[0]
-                .component()
-                .protocol_system
-                .as_str(),
-        ) {
-            TransferType::Transfer
-        } else {
-            TransferType::None
-        };
         let encoding_context = EncodingContext {
             receiver: solution.receiver.clone(),
             exact_out: solution.exact_out,
             router_address: None,
             group_token_in: grouped_swap.token_in.clone(),
             group_token_out: grouped_swap.token_out.clone(),
-            transfer_type: transfer,
             historical_trade: false,
         };
         let mut grouped_protocol_data: Vec<Vec<u8>> = vec![];
@@ -847,8 +834,6 @@ mod tests {
                     "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                     // zero for one
                     "00",
-                    // transfer type Transfer
-                    "02",
                 ))
             );
         }
@@ -927,8 +912,6 @@ mod tests {
                     "6982508145454ce325ddbe47a25d4ec3d2311933",
                     // zero for one
                     "00",
-                    // transfer type Transfer
-                    "02",
                     // receiver
                     "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
                     // first pool intermediary token (ETH)

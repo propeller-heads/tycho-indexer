@@ -216,10 +216,9 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     function encodeUniswapV2Swap(
         address target,
         address receiver,
-        bool zero2one,
-        RestrictTransferFrom.TransferType transferType
+        bool zero2one
     ) internal pure returns (bytes memory) {
-        return abi.encodePacked(target, receiver, zero2one, transferType);
+        return abi.encodePacked(target, receiver, zero2one);
     }
 
     function encodeUniswapV3Swap(
@@ -227,18 +226,11 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         address tokenOut,
         address receiver,
         address target,
-        bool zero2one,
-        RestrictTransferFrom.TransferType transferType
+        bool zero2one
     ) internal view returns (bytes memory) {
         IUniswapV3Pool pool = IUniswapV3Pool(target);
         return abi.encodePacked(
-            tokenIn,
-            tokenOut,
-            pool.fee(),
-            transferType,
-            receiver,
-            target,
-            zero2one
+            tokenIn, tokenOut, pool.fee(), receiver, target, zero2one
         );
     }
 
@@ -247,18 +239,11 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         address tokenOut,
         address receiver,
         address target,
-        bool zero2one,
-        RestrictTransferFrom.TransferType transferType
+        bool zero2one
     ) internal view returns (bytes memory) {
         IUniswapV3Pool pool = IUniswapV3Pool(target);
         return abi.encodePacked(
-            tokenIn,
-            tokenOut,
-            pool.tickSpacing(),
-            receiver,
-            target,
-            zero2one,
-            transferType
+            tokenIn, tokenOut, pool.tickSpacing(), receiver, target, zero2one
         );
     }
 }

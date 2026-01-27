@@ -148,7 +148,9 @@ contract RestrictTransferFrom is Vault {
                 // slither-disable-next-line arbitrary-send-erc20
                 IERC20(tokenIn).safeTransferFrom(sender, address(this), amount);
             }
-            if (tokenIn != address(0)) {
+            // For special cases like Rocketpool, the contract burns the user's
+            // balance without physically transferring the input token.
+            if (receiver != address(this)) {
                 // Approve receiver (usually a pool/vault/router) to use the TychoRouter's funds
                 IERC20(tokenIn).forceApprove(receiver, amount);
             }
@@ -167,7 +169,10 @@ contract RestrictTransferFrom is Vault {
             // Funds are either in the router from the previous swap, or will
             // be taken from our vault (in the case of the first swap).
             _updateDeltaAccounting(tokenIn, -int256(amount));
-            if (tokenIn != address(0)) {
+            // For special cases like Rocketpool, the contract burns the user's
+            // balance without physically transferring the input token. We would like
+            // to perform vault accounting without requiring an approval.
+            if (receiver != address(this)) {
                 IERC20(tokenIn).forceApprove(receiver, amount);
             }
         } else if (transferType == TransferType.None) {

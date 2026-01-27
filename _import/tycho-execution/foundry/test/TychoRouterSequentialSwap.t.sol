@@ -18,20 +18,14 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             encodeUniswapV2Swap(
                 DAI_WETH_UNIV2_POOL,
                 DAI_USDC_POOL, // receiver (direct to next pool)
-                false,
-                RestrictTransferFrom.TransferType.TransferFrom // transfer to protocol from router
+                false
             )
         );
 
         // DAI -> USDC
         swaps[1] = encodeSequentialSwap(
             address(usv2Executor),
-            encodeUniswapV2Swap(
-                DAI_USDC_POOL,
-                address(tychoRouter),
-                true,
-                RestrictTransferFrom.TransferType.None // funds already sent to pool
-            )
+            encodeUniswapV2Swap(DAI_USDC_POOL, address(tychoRouter), true)
         );
         return swaps;
     }
@@ -197,24 +191,16 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         // The flow is:
         // USDC --(USV3)--> WETH --(USV3)--> USDC
         uint256 amountIn = 100 * 10 ** 6;
-        deal(USDC_ADDR, tychoRouterAddr, amountIn);
+        deal(USDC_ADDR, ALICE, amountIn);
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(tychoRouterAddr, amountIn);
 
         bytes memory usdcWethV3Pool1ZeroOneData = encodeUniswapV3Swap(
-            USDC_ADDR,
-            WETH_ADDR,
-            tychoRouterAddr,
-            USDC_WETH_USV3,
-            true,
-            RestrictTransferFrom.TransferType.Transfer
+            USDC_ADDR, WETH_ADDR, tychoRouterAddr, USDC_WETH_USV3, true
         );
 
         bytes memory usdcWethV3Pool2OneZeroData = encodeUniswapV3Swap(
-            WETH_ADDR,
-            USDC_ADDR,
-            tychoRouterAddr,
-            USDC_WETH_USV3_2,
-            false,
-            RestrictTransferFrom.TransferType.Transfer
+            WETH_ADDR, USDC_ADDR, tychoRouterAddr, USDC_WETH_USV3_2, false
         );
 
         bytes[] memory swaps = new bytes[](2);
@@ -227,8 +213,12 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             address(usv3Executor), usdcWethV3Pool2OneZeroData
         );
 
+        // Set transient storage to allow transferFrom from ALICE
+        tychoRouter.tstoreExposed(USDC_ADDR, amountIn, false, false);
         tychoRouter.exposedSequentialSwap(amountIn, pleEncode(swaps));
         assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 99792554);
+        assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), 0);
+        vm.stopPrank();
     }
 
     function testSequentialSwapIntegrationPermit2() public {

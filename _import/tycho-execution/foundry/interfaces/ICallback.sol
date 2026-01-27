@@ -33,7 +33,7 @@ interface ICallback {
      * to happen within the callback context rather than before swap execution.
      *
      * @param data The encoded callback data.
-     * @return transferType The type of transfer to perform during the callback.
+     * @return baseTransferType The base transfer type for this executor (None, ProtocolWillDebit, or Transfer).
      * @return receiver The address that should receive the pre swap tokens (usually a pool or the TychoRouter - depending on the protocol)
      * @return tokenIn The address of the input token to transfer.
      * @return amountIn The amount of tokens to transfer.
@@ -41,10 +41,5 @@ interface ICallback {
     function getCallbackTransferData(bytes calldata data)
     external
     payable
-    returns (
-        RestrictTransferFrom.TransferType transferType,
-        address receiver,
-        address tokenIn,
-        uint256 amountIn
-    );
+    returns (RestrictTransferFrom.TransferType baseTransferType, address receiver, address tokenIn, uint256 amountIn);
 }

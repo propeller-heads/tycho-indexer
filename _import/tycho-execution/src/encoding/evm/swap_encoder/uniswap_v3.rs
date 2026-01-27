@@ -53,7 +53,6 @@ impl SwapEncoder for UniswapV3SwapEncoder {
             token_in_address,
             token_out_address,
             pool_fee_u24,
-            (encoding_context.transfer_type as u8).to_be_bytes(),
             bytes_to_address(&encoding_context.receiver)?,
             component_id,
             zero_to_one,
@@ -77,10 +76,7 @@ mod tests {
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
-    use crate::encoding::{
-        evm::swap_encoder::uniswap_v3::UniswapV3SwapEncoder,
-        models::{Swap, TransferType},
-    };
+    use crate::encoding::{evm::swap_encoder::uniswap_v3::UniswapV3SwapEncoder, models::Swap};
     #[test]
     fn test_encode_uniswap_v3() {
         let fee = BigInt::from(500);
@@ -102,7 +98,6 @@ mod tests {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::Transfer,
             historical_trade: false,
         };
         let encoder = UniswapV3SwapEncoder::new(
@@ -124,8 +119,6 @@ mod tests {
                 "6b175474e89094c44da98b954eedeac495271d0f",
                 // fee
                 "0001f4",
-                // transfer type Transfer
-                "02",
                 // receiver
                 "0000000000000000000000000000000000000001",
                 // pool id

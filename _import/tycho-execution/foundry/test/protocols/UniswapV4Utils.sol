@@ -8,7 +8,6 @@ library UniswapV4Utils {
         address tokenIn,
         address tokenOut,
         bool zeroForOne,
-        RestrictTransferFrom.TransferType transferType,
         address receiver,
         UniswapV4Executor.UniswapV4Pool[] memory pools
     ) public pure returns (bytes memory) {
@@ -39,7 +38,6 @@ library UniswapV4Utils {
             tokenIn,
             tokenOut,
             zeroForOne,
-            transferType,
             receiver,
             firstPool,
             pleEncode(encodedExtraPools)

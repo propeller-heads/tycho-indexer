@@ -46,12 +46,7 @@ impl SwapEncoder for UniswapV2SwapEncoder {
         let component_id = Address::from_str(&swap.component().id)
             .map_err(|_| EncodingError::FatalError("Invalid USV2 component id".to_string()))?;
 
-        let args = (
-            component_id,
-            bytes_to_address(&encoding_context.receiver)?,
-            zero_to_one,
-            (encoding_context.transfer_type as u8).to_be_bytes(),
-        );
+        let args = (component_id, bytes_to_address(&encoding_context.receiver)?, zero_to_one);
 
         Ok(args.abi_encode_packed())
     }
@@ -73,7 +68,7 @@ mod tests {
     use super::*;
     use crate::encoding::{
         evm::{swap_encoder::uniswap_v2::UniswapV2SwapEncoder, utils::write_calldata_to_file},
-        models::{Swap, TransferType},
+        models::Swap,
     };
     #[test]
     fn test_encode_uniswap_v2() {
@@ -91,7 +86,6 @@ mod tests {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::Transfer,
             historical_trade: false,
         };
         let encoder = UniswapV2SwapEncoder::new(
@@ -113,8 +107,6 @@ mod tests {
                 "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
                 // zero for one
                 "00",
-                // transfer type Transfer
-                "02",
             ))
         );
         write_calldata_to_file("test_encode_uniswap_v2", hex_swap.as_str());

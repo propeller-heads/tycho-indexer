@@ -36,7 +36,6 @@ impl SwapEncoder for ERC4626SwapEncoder {
             bytes_to_address(swap.token_in())?,
             component_id,
             bytes_to_address(&encoding_context.receiver)?,
-            (encoding_context.transfer_type as u8).to_be_bytes(),
         );
         Ok(args.abi_encode_packed())
     }
@@ -55,7 +54,6 @@ mod tests {
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
-    use crate::encoding::models::TransferType;
     #[test]
     fn test_encode_erc4626_deposit() {
         // WETH -> (spETH) -> spETH
@@ -74,7 +72,6 @@ mod tests {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::TransferFrom,
             historical_trade: false,
         };
         let encoder = ERC4626SwapEncoder::new(
@@ -98,8 +95,6 @@ mod tests {
                 "fE6eb3b609a7C8352A241f7F3A21CEA4e9209B8f",
                 // receiver
                 "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
-                // transfer from
-                "00",
             ))
             .to_lowercase()
         );
@@ -123,7 +118,6 @@ mod tests {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::TransferFrom,
             historical_trade: false,
         };
         let encoder = ERC4626SwapEncoder::new(
@@ -147,8 +141,6 @@ mod tests {
                 "fE6eb3b609a7C8352A241f7F3A21CEA4e9209B8f",
                 // receiver
                 "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
-                // transfer from
-                "00",
             ))
             .to_lowercase()
         );

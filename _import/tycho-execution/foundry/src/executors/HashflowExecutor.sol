@@ -79,25 +79,25 @@ contract HashflowExecutor is IExecutor {
         pure
         returns (IHashflowRouter.RFQTQuote memory quote)
     {
-        if (data.length != 326) {
+        if (data.length != 325) {
             revert HashflowExecutor__InvalidDataLength();
         }
 
-        quote.pool = address(bytes20(data[1:21]));
-        quote.externalAccount = address(bytes20(data[21:41]));
-        quote.trader = address(bytes20(data[41:61]));
+        quote.pool = address(bytes20(data[0:20]));
+        quote.externalAccount = address(bytes20(data[20:40]));
+        quote.trader = address(bytes20(data[40:60]));
         // Assumes we never set the effectiveTrader when requesting a quote.
         quote.effectiveTrader = quote.trader;
-        quote.baseToken = address(bytes20(data[61:81]));
-        quote.quoteToken = address(bytes20(data[81:101]));
+        quote.baseToken = address(bytes20(data[60:80]));
+        quote.quoteToken = address(bytes20(data[80:100]));
         // Not included in the calldata. Will be set in the swap function.
         quote.effectiveBaseTokenAmount = 0;
-        quote.baseTokenAmount = uint256(bytes32(data[101:133]));
-        quote.quoteTokenAmount = uint256(bytes32(data[133:165]));
-        quote.quoteExpiry = uint256(bytes32(data[165:197]));
-        quote.nonce = uint256(bytes32(data[197:229]));
-        quote.txid = bytes32(data[229:261]);
-        quote.signature = data[261:326];
+        quote.baseTokenAmount = uint256(bytes32(data[100:132]));
+        quote.quoteTokenAmount = uint256(bytes32(data[132:164]));
+        quote.quoteExpiry = uint256(bytes32(data[164:196]));
+        quote.nonce = uint256(bytes32(data[196:228]));
+        quote.txid = bytes32(data[228:260]);
+        quote.signature = data[260:325];
     }
 
     function _balanceOf(address trader, address token)
@@ -114,21 +114,18 @@ contract HashflowExecutor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            RestrictTransferFrom.TransferType baseTransferType,
             address receiver,
             address tokenIn
         )
     {
-        if (data.length != 326) {
+        if (data.length != 325) {
             revert HashflowExecutor__InvalidDataLength();
         }
 
-        transferType = RestrictTransferFrom.TransferType(uint8(data[0]));
-        tokenIn = address(bytes20(data[61:81]));
+        baseTransferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
+        tokenIn = address(bytes20(data[60:80]));
         // The receiver of the funds will be the Hashflow Router.
-        // This protocol will only ever have the following transferTypes:
-        // - TransferFromAndProtocolWillDebit: the funds should be transferred to the TychoRouter and the Hashflow Router needs to be approved
-        // - ProtocolWillDebit: Hashflow Router needs to be approved
         receiver = hashflowRouter;
     }
 }

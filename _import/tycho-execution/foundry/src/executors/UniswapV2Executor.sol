@@ -76,7 +76,7 @@ contract UniswapV2Executor is IExecutor {
         pure
         returns (address target, address receiver, bool zeroForOne)
     {
-        if (data.length != 42) {
+        if (data.length != 41) {
             revert UniswapV2Executor__InvalidDataLength();
         }
         target = address(bytes20(data[0:20]));
@@ -130,12 +130,12 @@ contract UniswapV2Executor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            RestrictTransferFrom.TransferType baseTransferType,
             address receiver,
             address tokenIn
         )
     {
-        if (data.length != 42) {
+        if (data.length != 41) {
             revert UniswapV2Executor__InvalidDataLength();
         }
         address target = address(bytes20(data[0:20]));
@@ -147,6 +147,6 @@ contract UniswapV2Executor is IExecutor {
         tokenIn = zeroForOne ? token0 : token1;
 
         receiver = target;
-        transferType = RestrictTransferFrom.TransferType(uint8(data[41]));
+        baseTransferType = RestrictTransferFrom.TransferType.Transfer;
     }
 }

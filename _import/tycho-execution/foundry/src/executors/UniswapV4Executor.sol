@@ -52,8 +52,8 @@ contract UniswapV4Executor is IExecutor, ICallback {
     using TransientStateLibrary for IPoolManager;
     using LibPrefixLengthEncodedByteArray for bytes;
 
-    bytes4 private constant SWAP_EXACT_INPUT_SELECTOR = 0xae17ced7;
-    bytes4 private constant SWAP_EXACT_INPUT_SINGLE_SELECTOR = 0x6022fbcd;
+    bytes4 private constant SWAP_EXACT_INPUT_SELECTOR = 0xc4881bc7;
+    bytes4 private constant SWAP_EXACT_INPUT_SINGLE_SELECTOR = 0x105c1b93;
 
     IPoolManager public immutable poolManager;
     address private immutable _angstromHookAddress;
@@ -93,10 +93,8 @@ contract UniswapV4Executor is IExecutor, ICallback {
     {
         address tokenIn;
         bool zeroForOne;
-        RestrictTransferFrom.TransferType transferType;
         UniswapV4Executor.UniswapV4Pool[] memory pools;
-        (tokenIn, tokenOut, zeroForOne, transferType, receiver, pools) =
-            _decodeData(data);
+        (tokenIn, tokenOut, zeroForOne, receiver, pools) = _decodeData(data);
         bytes memory swapData;
         if (pools.length == 1) {
             PoolKey memory key = PoolKey({
@@ -111,7 +109,6 @@ contract UniswapV4Executor is IExecutor, ICallback {
                 key,
                 zeroForOne,
                 amountIn,
-                transferType,
                 receiver,
                 pools[0].hookData
             );
@@ -134,7 +131,6 @@ contract UniswapV4Executor is IExecutor, ICallback {
                 this.swapExactInput.selector,
                 currencyIn,
                 amountIn,
-                transferType,
                 receiver,
                 path
             );
@@ -153,22 +149,20 @@ contract UniswapV4Executor is IExecutor, ICallback {
             address tokenIn,
             address tokenOut,
             bool zeroForOne,
-            RestrictTransferFrom.TransferType transferType,
             address receiver,
             UniswapV4Pool[] memory pools
         )
     {
-        if (data.length < 108) {
+        if (data.length < 109) {
             revert UniswapV4Executor__InvalidDataLength();
         }
 
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
         zeroForOne = data[40] != 0;
-        transferType = RestrictTransferFrom.TransferType(uint8(data[41]));
-        receiver = address(bytes20(data[42:62]));
+        receiver = address(bytes20(data[41:61]));
 
-        bytes calldata remaining = data[62:];
+        bytes calldata remaining = data[61:];
 
         // Decode first pool with hook data
         if (remaining.length < 48) {
@@ -311,8 +305,6 @@ contract UniswapV4Executor is IExecutor, ICallback {
         PoolKey memory poolKey,
         bool zeroForOne,
         uint128 amountIn,
-        RestrictTransferFrom.TransferType,
-        /*transferType*/
         address receiver,
         bytes calldata hookData
     ) external returns (uint128) {
@@ -338,8 +330,6 @@ contract UniswapV4Executor is IExecutor, ICallback {
     function swapExactInput(
         Currency currencyIn,
         uint128 amountIn,
-        RestrictTransferFrom.TransferType,
-        /*transferType*/
         address receiver,
         PathKey[] calldata path
     ) external returns (uint128) {
@@ -523,7 +513,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            RestrictTransferFrom.TransferType baseTransferType,
             address receiver,
             address tokenIn
         )
@@ -535,7 +525,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            RestrictTransferFrom.TransferType baseTransferType,
             address receiver,
             address tokenIn,
             uint256 amount
@@ -545,15 +535,14 @@ contract UniswapV4Executor is IExecutor, ICallback {
         bytes4 selector = bytes4(stripped[:4]);
         receiver = address(poolManager);
         if (selector == SWAP_EXACT_INPUT_SINGLE_SELECTOR) {
-            // swapExactInputSingle(PoolKey memory poolKey, bool zeroForOne, uint128 amountIn, RestrictTransferFrom.TransferType transferType, address receiver, bytes calldata hookData)
-            // Data layout: selector(4) + PoolKey(160) + bool(32) + uint128(32) + TransferType(32) + address(32) + hookData(variable)
+            // swapExactInputSingle(PoolKey memory poolKey, bool zeroForOne, uint128 amountIn, address receiver, bytes calldata hookData)
+            // Data layout: selector(4) + PoolKey(160) + bool(32) + uint128(32) + address(32) + hookData(variable)
 
             // PoolKey starts at offset 4, each field is 32 bytes:
             // currency0: data[4:36], currency1: data[36:68], fee: data[68:100], tickSpacing: data[100:132], hooks: data[132:164]
             // zeroForOne: data[164:196]
             // amountIn: data[196:228]
-            // transferType: data[228:260]
-            // receiver: data[260:292]
+            // receiver: data[228:260]
 
             bool zeroForOne = uint8(stripped[195]) != 0;
             amount = uint128(bytes16(stripped[212:228]));
@@ -566,26 +555,24 @@ contract UniswapV4Executor is IExecutor, ICallback {
             if (tokenIn == address(0)) {
                 // ETH transfers are handled in the Executor, so we need to set the transferType to
                 // TransferNativeInExecutor to update the delta accounting accordingly.
-                transferType =
+                baseTransferType =
                 RestrictTransferFrom.TransferType.TransferNativeInExecutor;
             } else {
-                transferType =
-                    RestrictTransferFrom.TransferType(uint8(stripped[259]));
+                baseTransferType = RestrictTransferFrom.TransferType.Transfer;
             }
         } else if (selector == SWAP_EXACT_INPUT_SELECTOR) {
-            // swapExactInput(Currency currencyIn, uint128 amountIn, RestrictTransferFrom.TransferType transferType, address receiver, PathKey[] calldata path)
-            // Data layout: selector(4) + Currency(32) + uint128(32) + TransferType(32) + address(32) + PathKey[](variable)
+            // swapExactInput(Currency currencyIn, uint128 amountIn, address receiver, PathKey[] calldata path)
+            // Data layout: selector(4) + Currency(32) + uint128(32) + address(32) + PathKey[](variable)
 
             tokenIn = address(bytes20(stripped[16:36]));
             amount = uint128(bytes16(stripped[52:68]));
             if (tokenIn == address(0)) {
                 // ETH transfers are handled in the Executor, so we need to set the transferType to
                 // TransferNativeInExecutor to update the delta accounting accordingly.
-                transferType =
+                baseTransferType =
                 RestrictTransferFrom.TransferType.TransferNativeInExecutor;
             } else {
-                transferType =
-                    RestrictTransferFrom.TransferType(uint8(stripped[99]));
+                baseTransferType = RestrictTransferFrom.TransferType.Transfer;
             }
         } else {
             revert UniswapV4Executor__UnknownCallback(selector);

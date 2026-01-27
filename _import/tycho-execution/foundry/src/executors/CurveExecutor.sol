@@ -62,7 +62,7 @@ contract CurveExecutor is IExecutor {
         payable
         returns (uint256 amountOut, address tokenOut, address receiver)
     {
-        if (data.length != 84) {
+        if (data.length != 83) {
             revert CurveExecutor__InvalidDataLength();
         }
         address tokenIn;
@@ -147,7 +147,7 @@ contract CurveExecutor is IExecutor {
         poolType = uint8(data[60]);
         i = int128(uint128(uint8(data[61])));
         j = int128(uint128(uint8(data[62])));
-        receiver = address(bytes20(data[64:84]));
+        receiver = address(bytes20(data[63:83]));
     }
 
     /**
@@ -169,7 +169,7 @@ contract CurveExecutor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            RestrictTransferFrom.TransferType baseTransferType,
             address receiver,
             address tokenIn
         )
@@ -179,15 +179,14 @@ contract CurveExecutor is IExecutor {
             // ETH transfers are handled in the Executor, so we need to set the transferType to TransferNativeInExecutor
             // to update the delta accounting accordingly.
             tokenIn = address(0);
-            transferType =
+            baseTransferType =
             RestrictTransferFrom.TransferType.TransferNativeInExecutor;
         } else {
-            transferType = RestrictTransferFrom.TransferType(uint8(data[63]));
+            baseTransferType =
+            RestrictTransferFrom.TransferType.ProtocolWillDebit;
         }
-        // The receiver of the funds will be the pool contract.
-        // This protocol will only ever have the following transferTypes:
-        // - TransferFromAndProtocolWillDebit: the funds should be transferred to the TychoRouter and the pool contract needs to be approved
-        // - ProtocolWillDebit: pool contract needs to be approved
+        // The receiver of the funds will be the pool contract. This is only relevant
+        // for performing an approval in the case of ProtocolWillDebit.
         receiver = address(bytes20(data[40:60]));
     }
 }

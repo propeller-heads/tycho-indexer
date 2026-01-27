@@ -31,7 +31,7 @@ contract BalancerV3Executor is IExecutor, ICallback {
         payable
         returns (uint256 amountOut, address tokenOut, address receiver)
     {
-        if (data.length != 81) {
+        if (data.length != 80) {
             revert BalancerV3Executor__InvalidDataLength();
         }
         bytes memory result = VAULT.unlock(abi.encodePacked(amountIn, data));
@@ -111,7 +111,7 @@ contract BalancerV3Executor is IExecutor, ICallback {
         tokenIn = IERC20(address(bytes20(data[32:52])));
         tokenOut = IERC20(address(bytes20(data[52:72])));
         poolId = address(bytes20(data[72:92]));
-        receiver = address(bytes20(data[93:113]));
+        receiver = address(bytes20(data[92:112]));
     }
 
     function getTransferData(
@@ -120,7 +120,7 @@ contract BalancerV3Executor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            RestrictTransferFrom.TransferType baseTransferType,
             address receiver,
             address tokenIn
         )
@@ -132,7 +132,7 @@ contract BalancerV3Executor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            RestrictTransferFrom.TransferType baseTransferType,
             address receiver,
             address tokenIn,
             uint256 amount
@@ -141,6 +141,6 @@ contract BalancerV3Executor is IExecutor, ICallback {
         receiver = address(VAULT);
         amount = uint256(bytes32(data[0:32]));
         tokenIn = address(bytes20(data[32:52]));
-        transferType = RestrictTransferFrom.TransferType(uint8(data[92]));
+        baseTransferType = RestrictTransferFrom.TransferType.Transfer;
     }
 }

@@ -733,7 +733,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             swap_.decodeSingleSwap();
 
         uint256 amountOutBeforeFees =
-            _callSwapOnExecutor(executor, amountIn, protocolData);
+            _callSwapOnExecutor(executor, amountIn, protocolData, true, false);
         amountOut = _takeFees(
             tokenOut,
             amountOutBeforeFees,
@@ -882,8 +882,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
                 ? (amounts[tokenInIndex] * split) / 0xffffff
                 : remainingAmounts[tokenInIndex];
 
-            currentAmountOut =
-                _callSwapOnExecutor(executor, currentAmountIn, protocolData);
+            currentAmountOut = _callSwapOnExecutor(
+                executor, currentAmountIn, protocolData, tokenInIndex == 0, true
+            );
             // Checks if the output token is the same as the input token
             if (tokenOutIndex == 0) {
                 cyclicSwapAmountOut += currentAmountOut;
@@ -910,14 +911,17 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     {
         bytes calldata swap;
         calculatedAmount = amountIn;
+        bool isFirstSwap = true;
         while (swaps_.length > 0) {
             (swap, swaps_) = swaps_.next();
 
             (address executor, bytes calldata protocolData) =
                 swap.decodeSingleSwap();
 
-            calculatedAmount =
-                _callSwapOnExecutor(executor, calculatedAmount, protocolData);
+            calculatedAmount = _callSwapOnExecutor(
+                executor, calculatedAmount, protocolData, isFirstSwap, false
+            );
+            isFirstSwap = false;
         }
     }
 

@@ -9,12 +9,12 @@ import {Constants} from "../Constants.sol";
 contract HashflowUtils is Test {
     constructor() {}
 
-    function encodeRfqtQuote(
-        IHashflowRouter.RFQTQuote memory quote,
-        RestrictTransferFrom.TransferType transferType
-    ) internal pure returns (bytes memory) {
+    function encodeRfqtQuote(IHashflowRouter.RFQTQuote memory quote)
+        internal
+        pure
+        returns (bytes memory)
+    {
         return abi.encodePacked(
-            uint8(transferType), // transferType (1 byte)
             quote.pool, // pool (20 bytes)
             quote.externalAccount, // externalAccount (20 bytes)
             quote.trader, // trader (20 bytes)
@@ -34,7 +34,7 @@ contract HashflowUtils is Test {
         pure
         returns (bytes memory)
     {
-        return encodeRfqtQuote(quote, RestrictTransferFrom.TransferType.None);
+        return encodeRfqtQuote(quote);
     }
 }
 
@@ -113,19 +113,11 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
     function testGetTransferData() public {
         IHashflowRouter.RFQTQuote memory expected_quote = rfqtQuote();
         bytes memory encodedQuote = encodeRfqtQuoteWithDefaults(expected_quote);
-        (
-            RestrictTransferFrom.TransferType transferType,
-            address receiver,
-            address tokenIn
-        ) = executor.getTransferData(encodedQuote);
+        (, address receiver, address tokenIn) =
+            executor.getTransferData(encodedQuote);
 
         assertEq(tokenIn, expected_quote.baseToken, "baseToken mismatch");
         assertEq(receiver, HASHFLOW_ROUTER);
-        assertEq(
-            uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.None),
-            "Transfer type mismatch"
-        );
     }
 
     function testSwapNoSlippage() public {

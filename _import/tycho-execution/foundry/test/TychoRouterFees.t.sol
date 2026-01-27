@@ -51,8 +51,7 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         bytes memory protocolData = encodeUniswapV2Swap(
             DAI_WETH_UNIV2_POOL,
             address(tychoRouter), // Swap sends to router since fees > 0
-            false,
-            RestrictTransferFrom.TransferType.TransferFrom
+            false
         );
 
         bytes memory swap =
@@ -134,8 +133,7 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         bytes memory protocolData = encodeUniswapV2Swap(
             DAI_WETH_UNIV2_POOL,
             ALICE, // WILL REVERT: Should be TychoRouter when fees > 0
-            false,
-            RestrictTransferFrom.TransferType.TransferFrom
+            false
         );
 
         bytes memory swap =

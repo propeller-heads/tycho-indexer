@@ -41,7 +41,6 @@ impl SwapEncoder for BalancerV3SwapEncoder {
             bytes_to_address(swap.token_in())?,
             bytes_to_address(swap.token_out())?,
             pool,
-            (encoding_context.transfer_type as u8).to_be_bytes(),
             bytes_to_address(&encoding_context.receiver)?,
         );
         Ok(args.abi_encode_packed())
@@ -62,9 +61,8 @@ mod tests {
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
-    use crate::encoding::{
-        evm::{swap_encoder::balancer_v3::BalancerV3SwapEncoder, utils::write_calldata_to_file},
-        models::TransferType,
+    use crate::encoding::evm::{
+        swap_encoder::balancer_v3::BalancerV3SwapEncoder, utils::write_calldata_to_file,
     };
 
     #[test]
@@ -84,7 +82,6 @@ mod tests {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::Transfer,
             historical_trade: false,
         };
         let encoder = BalancerV3SwapEncoder::new(
@@ -107,8 +104,6 @@ mod tests {
                 "c71ea051a5f82c67adcf634c36ffe6334793d24c",
                 // pool id
                 "85b2b559bc2d21104c4defdd6efca8a20343361d",
-                // transfer type Transfer
-                "02",
                 // receiver
                 "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))

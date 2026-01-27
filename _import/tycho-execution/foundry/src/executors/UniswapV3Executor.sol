@@ -51,8 +51,7 @@ contract UniswapV3Executor is IExecutor, ICallback {
         uint24 fee;
         address target;
         bool zeroForOne;
-        RestrictTransferFrom.TransferType transferType;
-        (tokenIn, tokenOut, fee, transferType, receiver, target, zeroForOne) =
+        (tokenIn, tokenOut, fee, receiver, target, zeroForOne) =
             _decodeData(data);
 
         _verifyPairAddress(tokenIn, tokenOut, fee, target);
@@ -122,33 +121,31 @@ contract UniswapV3Executor is IExecutor, ICallback {
             address tokenIn,
             address tokenOut,
             uint24 fee,
-            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address target,
             bool zeroForOne
         )
     {
-        if (data.length != 85) {
+        if (data.length != 84) {
             revert UniswapV3Executor__InvalidDataLength();
         }
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
         fee = uint24(bytes3(data[40:43]));
-        transferType = RestrictTransferFrom.TransferType(uint8(data[43]));
-        receiver = address(bytes20(data[44:64]));
-        target = address(bytes20(data[64:84]));
-        zeroForOne = uint8(data[84]) > 0;
+        receiver = address(bytes20(data[43:63]));
+        target = address(bytes20(data[63:83]));
+        zeroForOne = uint8(data[83]) > 0;
     }
 
-    // This function will extract the first 44 bytes of the data,
+    // This function will extract the first 43 bytes of the data,
     // which contains the necessary Uniswap V3 callback data:
-    // tokenIn (20 bytes), tokenOut (20 bytes), fee (3 bytes), transferType (1 byte)
+    // tokenIn (20 bytes), tokenOut (20 bytes), fee (3 bytes)
     function _extractV3CallbackData(bytes calldata data)
         internal
         pure
         returns (bytes calldata)
     {
-        return data[0:44];
+        return data[0:43];
     }
 
     function _verifyPairAddress(
@@ -184,7 +181,7 @@ contract UniswapV3Executor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            RestrictTransferFrom.TransferType baseTransferType,
             address receiver,
             address tokenIn
         )
@@ -196,7 +193,7 @@ contract UniswapV3Executor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            RestrictTransferFrom.TransferType baseTransferType,
             address receiver,
             address tokenIn,
             uint256 amount
@@ -207,7 +204,7 @@ contract UniswapV3Executor is IExecutor, ICallback {
         amount =
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
         tokenIn = address(bytes20(data[132:152]));
-        transferType = RestrictTransferFrom.TransferType(uint8(data[175]));
+        baseTransferType = RestrictTransferFrom.TransferType.Transfer;
         receiver = msg.sender;
     }
 }

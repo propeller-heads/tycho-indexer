@@ -60,12 +60,12 @@ contract RocketpoolExecutor is IExecutor {
         pure
         returns (bool isDeposit, address receiver)
     {
-        if (data.length != 22) {
+        if (data.length != 21) {
             revert RocketpoolExecutor__InvalidDataLength();
         }
 
         isDeposit = uint8(data[0]) == 1;
-        receiver = address(bytes20(data[2:22]));
+        receiver = address(bytes20(data[1:21]));
     }
 
     /// @dev Required to receive ETH from RETH.burn()
@@ -75,29 +75,29 @@ contract RocketpoolExecutor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            RestrictTransferFrom.TransferType baseTransferType,
             address receiver,
             address tokenIn
         )
     {
-        if (data.length != 22) {
+        if (data.length != 21) {
             revert RocketpoolExecutor__InvalidDataLength();
         }
 
         bool isDeposit = uint8(data[0]) == 1;
         if (isDeposit) {
-            // ETH transfers are handled in the Executor, so we need to set the transferType to TransferNativeInExecutor
-            // to update the delta accounting accordingly.
+            // ETH transfers are handled in the Executor
             tokenIn = address(0);
-            transferType =
+            baseTransferType =
             RestrictTransferFrom.TransferType.TransferNativeInExecutor;
         } else {
             tokenIn = address(RETH);
-            transferType = RestrictTransferFrom.TransferType(uint8(data[1]));
+            baseTransferType =
+            RestrictTransferFrom.TransferType.ProtocolWillDebit;
         }
         // Since burning withdraws the funds from the msg.sender, the user's funds need to sent to the
-        // TychoRouter initially (address(this))
-        // For depositing, theRestrictTransferFrom.TransferType should be None
+        // TychoRouter initially (address(this)). This does not require an actual
+        // approval since our router is interacting directly with the token contract.
         receiver = address(this);
     }
 }

@@ -41,7 +41,6 @@ impl SwapEncoder for MaverickV2SwapEncoder {
             component_id,
             bytes_to_address(swap.token_out())?,
             bytes_to_address(&encoding_context.receiver)?,
-            (encoding_context.transfer_type as u8).to_be_bytes(),
         );
         Ok(args.abi_encode_packed())
     }
@@ -60,9 +59,8 @@ mod tests {
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
-    use crate::encoding::{
-        evm::{swap_encoder::maverick_v2::MaverickV2SwapEncoder, utils::write_calldata_to_file},
-        models::TransferType,
+    use crate::encoding::evm::{
+        swap_encoder::maverick_v2::MaverickV2SwapEncoder, utils::write_calldata_to_file,
     };
     #[test]
     fn test_encode_maverick_v2() {
@@ -82,7 +80,6 @@ mod tests {
             router_address: Some(Bytes::default()),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::Transfer,
             historical_trade: false,
         };
         let encoder = MaverickV2SwapEncoder::new(
@@ -108,8 +105,6 @@ mod tests {
                 "A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
                 // receiver
                 "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
-                // transfer type Transfer
-                "02",
             ))
             .to_lowercase()
         );
