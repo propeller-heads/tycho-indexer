@@ -444,6 +444,7 @@ pub struct ExtractorBuilder {
     extractor: Option<Arc<dyn Extractor>>,
     database_insert_batch_size: Option<usize>,
     final_block_only: bool,
+    partial_blocks: bool,
     /// Handle of the tokio runtime on which the extraction tasks will be run.
     /// If 'None' the default runtime will be used.
     runtime_handle: Option<Handle>,
@@ -464,6 +465,7 @@ impl ExtractorBuilder {
             extractor: None,
             database_insert_batch_size: None,
             final_block_only: false,
+            partial_blocks: false,
             runtime_handle: None,
         }
     }
@@ -496,6 +498,11 @@ impl ExtractorBuilder {
 
     pub fn set_runtime(mut self, runtime: Handle) -> Self {
         self.runtime_handle = Some(runtime);
+        self
+    }
+
+    pub fn partial_blocks(mut self, val: bool) -> Self {
+        self.partial_blocks = val;
         self
     }
 
@@ -760,7 +767,7 @@ impl ExtractorBuilder {
             self.config.stop_block.unwrap_or(0) as u64,
             self.final_block_only,
             extractor_id.to_string(),
-            false, // TODO: make partial blocks configurable
+            self.partial_blocks,
         );
 
         let (ctrl_tx, ctrl_rx) = mpsc::channel(128);
