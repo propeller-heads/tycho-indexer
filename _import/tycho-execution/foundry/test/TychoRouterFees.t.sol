@@ -169,8 +169,8 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
 
     function testSingleSwapWithSolverFees() public {
         // Tests swapping WETH -> DAI on a USV2 pool with fees and solver contribution
-        // Swap is 1 WETH for 2018.8 DAI
-        // Solver takes 1% -> 20.18 DAI (20188174386087344397)
+        // Swap is 1 WETH for 2018.8 DAI (2018817438608734439722)
+        // Solver takes 1% ->  20.18 DAI (20188174386087344397)
 
         deal(WETH_ADDR, ALICE, 1 ether);
         uint256 balanceBefore = IERC20(DAI_ADDR).balanceOf(ALICE);
@@ -199,9 +199,9 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
 
     function testSingleSwapWithFeesAndContribution() public {
         // Tests swapping WETH -> DAI on a USV2 pool with fees and solver contribution
-        // Swap is 1 WETH for 2018.8 DAI
+        // Swap is 1 WETH for      2018.8 DAI (2018817438608734439722)
         // Tycho Router takes 1% -> 20.18 DAI (20188174386087344397)
-        // Solver takes 1% -> 20.18 DAI (20188174386087344397)
+        // Solver takes 1% ->       20.18 DAI (20188174386087344397)
         // But (for some reason) the client contributes with at most 22 DAI
 
         vm.startPrank(FEE_SETTER);
