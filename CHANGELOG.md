@@ -1,3 +1,11 @@
+## [0.132.2](https://github.com/propeller-heads/tycho-indexer/compare/0.132.1...0.132.2) (2026-01-28)
+
+
+### Bug Fixes
+
+* handle missing protocol component gracefully in PostgresGateway ([1074b45](https://github.com/propeller-heads/tycho-indexer/commit/1074b453bd33b2d350957aa07f83dc7a24cc7249))
+* handle missing protocol component gracefully in PostgresGateway ([#833](https://github.com/propeller-heads/tycho-indexer/issues/833)) ([fbabc39](https://github.com/propeller-heads/tycho-indexer/commit/fbabc39fdbe4879a9528c8be855b07d774355112))
+
 ## [0.132.1](https://github.com/propeller-heads/tycho-indexer/compare/0.132.0...0.132.1) (2026-01-28)
 
 
