@@ -1304,4 +1304,13 @@ mod tests {
             "New token balance should be unchanged"
         );
     }
+
+    #[test]
+    fn should_not_panic_at_typetag_deserialize() {
+        let deserialized: Result<Box<dyn ProtocolSim>, _> = serde_json::from_str(
+            r#"{"protocol":"EVMPoolState","state":{"reserve_0":1,"reserve_1":2}}"#,
+        );
+
+        assert!(deserialized.is_err());
+    }
 }
