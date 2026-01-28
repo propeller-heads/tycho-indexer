@@ -9,7 +9,7 @@ use crate::{
         errors::{SimulationError, TransitionError},
         indicatively_priced::IndicativelyPriced,
         swap::{
-            LimitsParams, MarginalPrice, MarginalPriceParams, QuoteParams, SwapQuoter,
+            self, LimitsParams, MarginalPrice, MarginalPriceParams, QuoteParams, SwapQuoter,
             TransitionParams,
         },
     },
@@ -460,6 +460,40 @@ where
     ) -> Result<(), TransitionError> {
         self.delta_transition(TransitionParams::new(delta, tokens, balances))
             .map(|_| ())
+    }
+
+    fn query_pool_swap(&self, params: &QueryPoolSwapParams) -> Result<PoolSwap, SimulationError> {
+        let constraint = match params.swap_constraint.clone() {
+            SwapConstraint::TradeLimitPrice { limit, tolerance, min_amount_in, max_amount_in } => {
+                swap::SwapConstraint::TradeLimitPrice {
+                    limit,
+                    tolerance,
+                    min_amount_in,
+                    max_amount_in,
+                }
+            }
+            SwapConstraint::PoolTargetPrice { target, tolerance, min_amount_in, max_amount_in } => {
+                swap::SwapConstraint::PoolTargetPrice {
+                    target,
+                    tolerance,
+                    min_amount_in,
+                    max_amount_in,
+                }
+            }
+        };
+        self.query_swap(swap::QuerySwapParams::new(
+            &params.token_in.address,
+            &params.token_out.address,
+            constraint,
+        ))
+        .map(|r| {
+            PoolSwap::new(
+                r.amount_in().clone(),
+                r.amount_out().clone(),
+                r.new_state().unwrap().to_protocol_sim(),
+                r.price_points().clone(),
+            )
+        })
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {
