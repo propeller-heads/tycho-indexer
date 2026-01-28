@@ -226,41 +226,38 @@ fn test_split_input_cyclic_swap() {
     // time) it's hard to assert back
 
     let expected_swaps = [
-        "0000000000000000000000000000000000000000000000000000000000000122", /* length of ple
+        "00000000000000000000000000000000000000000000000000000000000000e6", /* length of ple
                                                                              * encoded swaps
                                                                              * without padding
-                                                                             * (290 bytes) */
-        "006d",                                     // ple encoded swaps (109 bytes)
-        "00",                                       // token in index
-        "01",                                       // token out index
-        "999999",                                   // split
-        "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
-        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
-        "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
-        "0001f4",                                   // pool fee
-        "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
-        "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
-        "01",                                       // zero2one
-        "006d",                                     // ple encoded swaps (109 bytes)
-        "00",                                       // token in index
-        "01",                                       // token out index
-        "000000",                                   // split
-        "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
-        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
-        "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
-        "000bb8",                                   // pool fee
-        "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
-        "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
-        "01",                                       // zero2one
-        "0042",                                     // ple encoded swaps (66 bytes)
-        "01",                                       // token in index
-        "00",                                       // token out index
-        "000000",                                   // split
-        "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address,
-        "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id,
-        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-        "00",                                       // zero2one
-        "000000000000000000000000000000000000000000000000000000000000", // padding
+                                                                             * (230 bytes) */
+        "0059",                                                 // ple encoded swaps (89 bytes)
+        "00",                                                   // token in index
+        "01",                                                   // token out index
+        "999999",                                               // split
+        "2e234dae75c793f67a35089c9d99245e1c58470b",             // executor address
+        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",             // token in
+        "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",             // token out
+        "0001f4",                                               // pool fee
+        "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",             // component id
+        "01",                                                   // zero2one
+        "0059",                                                 // ple encoded swaps (89 bytes)
+        "00",                                                   // token in index
+        "01",                                                   // token out index
+        "000000",                                               // split
+        "2e234dae75c793f67a35089c9d99245e1c58470b",             // executor address
+        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",             // token in
+        "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",             // token out
+        "000bb8",                                               // pool fee
+        "8ad599c3a0ff1de082011efddc58f1908eb6e6d8",             // component id
+        "01",                                                   // zero2one
+        "002e",                                                 // ple encoded swaps (46 bytes)
+        "01",                                                   // token in index
+        "00",                                                   // token out index
+        "000000",                                               // split
+        "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f",             // executor address,
+        "b4e16d0168e52d35cacd2c6185b44281ec28c9dc",             // component id,
+        "00",                                                   // zero2one
+        "0000000000000000000000000000000000000000000000000000", // padding
     ]
     .join("");
     assert_eq!(hex_calldata[..584], expected_input);
@@ -385,41 +382,38 @@ fn test_split_output_cyclic_swap() {
     // time) it's hard to assert back
 
     let expected_swaps = [
-        "0000000000000000000000000000000000000000000000000000000000000122", /* length of ple
+        "00000000000000000000000000000000000000000000000000000000000000e6", /* length of ple
                                                                              * encoded swaps
                                                                              * without padding
-                                                                             * (290 bytes) */
-        "0042",                                     // ple encoded swaps (66 bytes)
-        "00",                                       // token in index
-        "01",                                       // token out index
-        "000000",                                   // split
-        "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
-        "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id
-        "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
-        "01",                                       // zero2one
-        "006d",                                     // ple encoded swaps (109 bytes)
-        "01",                                       // token in index
-        "00",                                       // token out index
-        "999999",                                   // split
-        "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
-        "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
-        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
-        "0001f4",                                   // pool fee
-        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-        "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
-        "00",                                       // zero2one
-        "006d",                                     // ple encoded swaps (109 bytes)
-        "01",                                       // token in index
-        "00",                                       // token out index
-        "000000",                                   // split
-        "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
-        "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
-        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
-        "000bb8",                                   // pool fee
-        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-        "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
-        "00",                                       // zero2one
-        "000000000000000000000000000000000000000000000000000000000000", // padding
+                                                                             * (230 bytes) */
+        "002e",                                                 // ple encoded swaps (46 bytes)
+        "00",                                                   // token in index
+        "01",                                                   // token out index
+        "000000",                                               // split
+        "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f",             // executor address
+        "b4e16d0168e52d35cacd2c6185b44281ec28c9dc",             // component id
+        "01",                                                   // zero2one
+        "0059",                                                 // ple encoded swaps (89 bytes)
+        "01",                                                   // token in index
+        "00",                                                   // token out index
+        "999999",                                               // split
+        "2e234dae75c793f67a35089c9d99245e1c58470b",             // executor address
+        "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",             // token in
+        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",             // token out
+        "0001f4",                                               // pool fee
+        "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",             // component id
+        "00",                                                   // zero2one
+        "0059",                                                 // ple encoded swaps (89 bytes)
+        "01",                                                   // token in index
+        "00",                                                   // token out index
+        "000000",                                               // split
+        "2e234dae75c793f67a35089c9d99245e1c58470b",             // executor address
+        "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",             // token in
+        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",             // token out
+        "000bb8",                                               // pool fee
+        "8ad599c3a0ff1de082011efddc58f1908eb6e6d8",             // component id
+        "00",                                                   // zero2one
+        "0000000000000000000000000000000000000000000000000000", // padding
     ]
     .join("");
 

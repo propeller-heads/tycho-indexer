@@ -45,16 +45,18 @@ contract TychoRouterExposed is TychoRouter {
     function exposedSplitSwap(
         uint256 amountIn,
         uint256 nTokens,
-        bytes calldata swaps
+        bytes calldata swaps,
+        address receiver
     ) external returns (uint256) {
-        return _splitSwap(amountIn, nTokens, swaps);
+        return _splitSwap(amountIn, nTokens, swaps, receiver);
     }
 
-    function exposedSequentialSwap(uint256 amountIn, bytes calldata swaps)
-        external
-        returns (uint256)
-    {
-        return _sequentialSwap(amountIn, swaps);
+    function exposedSequentialSwap(
+        uint256 amountIn,
+        bytes calldata swaps,
+        address receiver
+    ) external returns (uint256) {
+        return _sequentialSwap(amountIn, swaps, receiver);
     }
 
     function exposedDeltaAccounting(address token, uint256 amount) external {
@@ -213,37 +215,21 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         );
     }
 
-    function encodeUniswapV2Swap(
-        address target,
-        address receiver,
-        bool zero2one
-    ) internal pure returns (bytes memory) {
-        return abi.encodePacked(target, receiver, zero2one);
+    function encodeUniswapV2Swap(address target, bool zero2one)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodePacked(target, zero2one);
     }
 
     function encodeUniswapV3Swap(
         address tokenIn,
         address tokenOut,
-        address receiver,
         address target,
         bool zero2one
     ) internal view returns (bytes memory) {
         IUniswapV3Pool pool = IUniswapV3Pool(target);
-        return abi.encodePacked(
-            tokenIn, tokenOut, pool.fee(), receiver, target, zero2one
-        );
-    }
-
-    function encodeSlipstreamsSwap(
-        address tokenIn,
-        address tokenOut,
-        address receiver,
-        address target,
-        bool zero2one
-    ) internal view returns (bytes memory) {
-        IUniswapV3Pool pool = IUniswapV3Pool(target);
-        return abi.encodePacked(
-            tokenIn, tokenOut, pool.tickSpacing(), receiver, target, zero2one
-        );
+        return abi.encodePacked(tokenIn, tokenOut, pool.fee(), target, zero2one);
     }
 }

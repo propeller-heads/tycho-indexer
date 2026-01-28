@@ -12,7 +12,7 @@ contract ERC4626ExecutorExposed is ERC4626Executor {
     function decodeParams(bytes calldata data)
         external
         pure
-        returns (IERC20 inToken, address target, address receiver)
+        returns (IERC20 inToken, address target)
     {
         return _decodeData(data);
     }
@@ -32,29 +32,25 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
     }
 
     function testDecodeParams() public view {
-        bytes memory params =
-            abi.encodePacked(WETH_ADDR, address(spETH), address(2));
+        bytes memory params = abi.encodePacked(WETH_ADDR, address(spETH));
 
-        (IERC20 inToken, address target, address receiver) =
-            ERC4626Exposed.decodeParams(params);
+        (IERC20 inToken, address target) = ERC4626Exposed.decodeParams(params);
 
         assertEq(address(inToken), WETH_ADDR);
         assertEq(address(target), address(spETH));
-        assertEq(receiver, address(2));
     }
 
     function testDecodeParamsInvalidDataLength() public {
         // Pass 61 bytes (one extra) to trigger invalid length error
         bytes memory invalidParams =
-            abi.encodePacked(WETH_ADDR, address(spETH), address(2), uint8(0));
+            abi.encodePacked(WETH_ADDR, address(spETH), uint8(0));
 
         vm.expectRevert(ERC4626Executor__InvalidDataLength.selector);
         ERC4626Exposed.decodeParams(invalidParams);
     }
 
     function testGetTransferData() public {
-        bytes memory params =
-            abi.encodePacked(WETH_ADDR, address(spETH), address(2));
+        bytes memory params = abi.encodePacked(WETH_ADDR, address(spETH));
 
         (, address receiver, address tokenIn) =
             ERC4626Exposed.getTransferData(params);
@@ -65,8 +61,7 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
 
     function testDeposit() public {
         uint256 amountIn = 10 ** 18;
-        bytes memory protocolData =
-            abi.encodePacked(WETH_ADDR, address(spETH), BOB);
+        bytes memory protocolData = abi.encodePacked(WETH_ADDR, address(spETH));
 
         deal(WETH_ADDR, address(ERC4626Exposed), amountIn);
 
@@ -74,33 +69,31 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
 
         vm.prank(address(ERC4626Exposed));
         IERC20(WETH_ADDR).approve(address(spETH), amountIn);
-        (uint256 amountOut, address tokenOut, address receiver) =
-            ERC4626Exposed.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut) =
+            ERC4626Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 balanceAfter = spETH.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertEq(tokenOut, address(spETH));
-        assertEq(receiver, BOB);
     }
 
     function testRedeem() public {
         uint256 amountIn = 10 ** 18;
         bytes memory protocolData =
-            abi.encodePacked(address(spETH), address(spETH), BOB);
+            abi.encodePacked(address(spETH), address(spETH));
 
         deal(address(spETH), address(ERC4626Exposed), amountIn);
 
         uint256 balanceBefore = WETH.balanceOf(BOB);
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            ERC4626Exposed.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut) =
+            ERC4626Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 balanceAfter = WETH.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertEq(tokenOut, WETH_ADDR);
-        assertEq(receiver, BOB);
     }
 }
 

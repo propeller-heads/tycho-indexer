@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {IExecutor} from "@interfaces/IExecutor.sol";
+import {IExecutor, ProtocolType} from "@interfaces/IExecutor.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {
     SafeERC20
@@ -21,14 +21,18 @@ contract RocketpoolExecutor is IExecutor {
 
     constructor() {}
 
+    function protocolType() external returns (ProtocolType) {
+        return ProtocolType.FundsInRouter;
+    }
+
     // slither-disable-next-line locked-ether
-    function swap(uint256 amountIn, bytes calldata data)
+    function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut)
     {
         bool isDeposit;
-        (isDeposit, receiver) = _decodeData(data);
+        (isDeposit) = _decodeData(data);
 
         if (isDeposit) {
             tokenOut = address(RETH);
@@ -58,14 +62,13 @@ contract RocketpoolExecutor is IExecutor {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (bool isDeposit, address receiver)
+        returns (bool isDeposit)
     {
-        if (data.length != 21) {
+        if (data.length != 1) {
             revert RocketpoolExecutor__InvalidDataLength();
         }
 
         isDeposit = uint8(data[0]) == 1;
-        receiver = address(bytes20(data[1:21]));
     }
 
     /// @dev Required to receive ETH from RETH.burn()
@@ -80,7 +83,7 @@ contract RocketpoolExecutor is IExecutor {
             address tokenIn
         )
     {
-        if (data.length != 21) {
+        if (data.length != 1) {
             revert RocketpoolExecutor__InvalidDataLength();
         }
 

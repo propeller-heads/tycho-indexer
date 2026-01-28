@@ -37,7 +37,7 @@ impl SwapEncoder for UniswapV2SwapEncoder {
     fn encode_swap(
         &self,
         swap: &Swap,
-        encoding_context: &EncodingContext,
+        _encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let token_in_address = bytes_to_address(swap.token_in())?;
         let token_out_address = bytes_to_address(swap.token_out())?;
@@ -46,7 +46,7 @@ impl SwapEncoder for UniswapV2SwapEncoder {
         let component_id = Address::from_str(&swap.component().id)
             .map_err(|_| EncodingError::FatalError("Invalid USV2 component id".to_string()))?;
 
-        let args = (component_id, bytes_to_address(&encoding_context.receiver)?, zero_to_one);
+        let args = (component_id, zero_to_one);
 
         Ok(args.abi_encode_packed())
     }
@@ -103,8 +103,6 @@ mod tests {
             String::from(concat!(
                 // component id (pool address)
                 "a478c2975ab1ea89e8196811f51a7b7ade33eb11",
-                // receiver
-                "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
                 // zero for one
                 "00",
             ))

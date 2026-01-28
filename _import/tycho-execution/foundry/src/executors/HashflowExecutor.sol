@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
-import {IExecutor} from "@interfaces/IExecutor.sol";
+import {IExecutor, ProtocolType} from "@interfaces/IExecutor.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {
     SafeERC20
@@ -47,10 +47,14 @@ contract HashflowExecutor is IExecutor {
         hashflowRouter = _hashflowRouter;
     }
 
-    function swap(uint256 amountIn, bytes calldata data)
+    function protocolType() external returns (ProtocolType) {
+        return ProtocolType.FundsInRouter;
+    }
+
+    function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut)
     {
         (IHashflowRouter.RFQTQuote memory quote) = _decodeData(data);
 
@@ -71,7 +75,6 @@ contract HashflowExecutor is IExecutor {
         uint256 balanceAfter = _balanceOf(quote.trader, quote.quoteToken);
         amountOut = balanceAfter - balanceBefore;
         tokenOut = quote.quoteToken;
-        receiver = quote.trader;
     }
 
     function _decodeData(bytes calldata data)

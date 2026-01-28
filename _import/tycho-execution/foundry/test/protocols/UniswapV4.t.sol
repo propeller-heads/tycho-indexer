@@ -24,7 +24,6 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
             address tokenIn,
             address tokenOut,
             bool zeroForOne,
-            address receiver,
             UniswapV4Pool[] memory pools
         )
     {
@@ -92,21 +91,19 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR, USDT_ADDR, zeroForOne, ALICE, pools
+            USDE_ADDR, USDT_ADDR, zeroForOne, pools
         );
 
         (
             address tokenIn,
             address tokenOut,
             bool zeroForOneDecoded,
-            address receiver,
             UniswapV4Executor.UniswapV4Pool[] memory decodedPools
         ) = uniswapV4Exposed.decodeData(data);
 
         assertEq(tokenIn, USDE_ADDR);
         assertEq(tokenOut, USDT_ADDR);
         assertEq(zeroForOneDecoded, zeroForOne);
-        assertEq(receiver, ALICE);
         assertEq(decodedPools[0].hook, address(0));
         assertEq(decodedPools.length, 2);
         assertEq(decodedPools[0].intermediaryToken, USDT_ADDR);
@@ -118,7 +115,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         assertEq(decodedPools[1].hookData, bytes("0x12345"));
     }
 
-    function testSingleSwapUniq() public {
+    function testSingleSwap() public {
         uint256 amountIn = 100 ether;
         deal(USDE_ADDR, address(uniswapV4Exposed), amountIn);
         uint256 usdeBalanceBeforePool = USDE.balanceOf(POOL_MANAGER);
@@ -135,12 +132,11 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             hookData: bytes("")
         });
 
-        bytes memory data = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR, USDT_ADDR, true, ALICE, pools
-        );
+        bytes memory data =
+            UniswapV4Utils.encodeExactInput(USDE_ADDR, USDT_ADDR, true, pools);
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            uniswapV4Exposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            uniswapV4Exposed.swap(amountIn, data, ALICE);
         assertEq(USDE.balanceOf(POOL_MANAGER), usdeBalanceBeforePool + amountIn);
         assertEq(
             USDE.balanceOf(address(uniswapV4Exposed)),
@@ -148,7 +144,6 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         );
         assertTrue(USDT.balanceOf(ALICE) == amountOut);
         assertEq(tokenOut, USDT_ADDR);
-        assertEq(receiver, ALICE);
     }
 
     function testSingleSwapIntegration() public {
@@ -161,15 +156,14 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         uint256 usdeBalanceBeforeSwapExecutor =
             USDE.balanceOf(address(uniswapV4Exposed));
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            uniswapV4Exposed.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut) =
+            uniswapV4Exposed.swap(amountIn, protocolData, ALICE);
         assertEq(USDE.balanceOf(POOL_MANAGER), usdeBalanceBeforePool + amountIn);
         assertEq(
             USDE.balanceOf(ALICE), usdeBalanceBeforeSwapExecutor - amountIn
         );
         assertTrue(USDT.balanceOf(ALICE) == amountOut);
         assertEq(tokenOut, USDT_ADDR);
-        assertEq(receiver, ALICE);
     }
 
     function testMultipleSwap() public {
@@ -197,12 +191,11 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             hookData: bytes("")
         });
 
-        bytes memory data = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR, WBTC_ADDR, true, ALICE, pools
-        );
+        bytes memory data =
+            UniswapV4Utils.encodeExactInput(USDE_ADDR, WBTC_ADDR, true, pools);
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            uniswapV4Exposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            uniswapV4Exposed.swap(amountIn, data, ALICE);
         assertEq(USDE.balanceOf(POOL_MANAGER), usdeBalanceBeforePool + amountIn);
         assertEq(
             USDE.balanceOf(address(uniswapV4Exposed)),
@@ -210,7 +203,6 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         );
         assertTrue(IERC20(WBTC_ADDR).balanceOf(ALICE) == amountOut);
         assertEq(tokenOut, WBTC_ADDR);
-        assertEq(receiver, ALICE);
     }
 
     function testMultipleSwapIntegration() public {
@@ -224,8 +216,8 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         uint256 usdeBalanceBeforeSwapExecutor =
             USDE.balanceOf(address(uniswapV4Exposed));
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            uniswapV4Exposed.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut) =
+            uniswapV4Exposed.swap(amountIn, protocolData, ALICE);
         assertEq(USDE.balanceOf(POOL_MANAGER), usdeBalanceBeforePool + amountIn);
         assertEq(
             USDE.balanceOf(address(uniswapV4Exposed)),
@@ -233,7 +225,6 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         );
         assertTrue(IERC20(WBTC_ADDR).balanceOf(ALICE) == amountOut);
         assertEq(tokenOut, WBTC_ADDR);
-        assertEq(receiver, ALICE);
     }
 
     function testSingleSwapEulerHook() public {
@@ -255,12 +246,11 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             hookData: bytes("")
         });
 
-        bytes memory data = UniswapV4Utils.encodeExactInput(
-            USDC_ADDR, WETH_ADDR, true, ALICE, pools
-        );
+        bytes memory data =
+            UniswapV4Utils.encodeExactInput(USDC_ADDR, WETH_ADDR, true, pools);
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            uniswapV4Exposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            uniswapV4Exposed.swap(amountIn, data, ALICE);
         assertEq(amountOut, 2681115183499232721);
         assertEq(
             USDC.balanceOf(address(uniswapV4Exposed)),
@@ -268,7 +258,6 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         );
         assertTrue(IERC20(WETH_ADDR).balanceOf(ALICE) == amountOut);
         assertEq(tokenOut, WETH_ADDR);
-        assertEq(receiver, ALICE);
     }
 }
 
@@ -315,18 +304,16 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
             hookData: bytes("")
         });
 
-        bytes memory data = UniswapV4Utils.encodeExactInput(
-            RLUSD_ADDR, USDT_ADDR, true, ALICE, pools
-        );
+        bytes memory data =
+            UniswapV4Utils.encodeExactInput(RLUSD_ADDR, USDT_ADDR, true, pools);
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            uniswapV4Exposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            uniswapV4Exposed.swap(amountIn, data, ALICE);
         assertEq(
             RLUSD.balanceOf(eulerProxy), rlusdEulerBalanceBefore + amountIn
         );
         assertTrue(USDT.balanceOf(ALICE) == amountOut);
         assertEq(tokenOut, USDT_ADDR);
-        assertEq(receiver, ALICE);
     }
 
     function testMultipleSwapEulerLowBalance() public {
@@ -353,18 +340,16 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
             hookData: bytes("")
         });
 
-        bytes memory data = UniswapV4Utils.encodeExactInput(
-            RLUSD_ADDR, WBTC_ADDR, true, ALICE, pools
-        );
+        bytes memory data =
+            UniswapV4Utils.encodeExactInput(RLUSD_ADDR, WBTC_ADDR, true, pools);
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            uniswapV4Exposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            uniswapV4Exposed.swap(amountIn, data, ALICE);
         assertEq(
             RLUSD.balanceOf(eulerProxy), rlusdEulerBalanceBefore + amountIn
         );
         assertTrue(WBTC.balanceOf(ALICE) == amountOut);
         assertEq(tokenOut, WBTC_ADDR);
-        assertEq(receiver, ALICE);
     }
 
     function testDoubleEulerSwapLowBalance() public {
@@ -396,16 +381,14 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
             hookData: bytes("")
         });
 
-        bytes memory data = UniswapV4Utils.encodeExactInput(
-            USDC_ADDR, USDT_ADDR, true, ALICE, pools
-        );
+        bytes memory data =
+            UniswapV4Utils.encodeExactInput(USDC_ADDR, USDT_ADDR, true, pools);
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            uniswapV4Exposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            uniswapV4Exposed.swap(amountIn, data, ALICE);
         assertEq(USDC.balanceOf(eulerProxy), usdcEulerBalanceBefore + amountIn);
         assertTrue(USDT.balanceOf(ALICE) == amountOut);
         assertEq(tokenOut, USDT_ADDR);
-        assertEq(receiver, ALICE);
     }
 
     function testMultipleSwapLastSwapEuler() public {
@@ -431,15 +414,13 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
             hookData: bytes("")
         });
 
-        bytes memory data = UniswapV4Utils.encodeExactInput(
-            USDC_ADDR, USDT_ADDR, false, ALICE, pools
-        );
+        bytes memory data =
+            UniswapV4Utils.encodeExactInput(USDC_ADDR, USDT_ADDR, false, pools);
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            uniswapV4Exposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            uniswapV4Exposed.swap(amountIn, data, ALICE);
         assertTrue(USDT.balanceOf(ALICE) == amountOut);
         assertEq(tokenOut, USDT_ADDR);
-        assertEq(receiver, ALICE);
     }
 }
 
@@ -463,9 +444,8 @@ contract TychoRouterForUniswapV4Test is TychoRouterTestSetup {
             hookData: bytes("")
         });
 
-        bytes memory protocolData = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR, USDT_ADDR, true, address(tychoRouter), pools
-        );
+        bytes memory protocolData =
+            UniswapV4Utils.encodeExactInput(USDE_ADDR, USDT_ADDR, true, pools);
 
         bytes memory swap =
             encodeSingleSwap(address(usv4Executor), protocolData);
@@ -511,9 +491,8 @@ contract TychoRouterForUniswapV4Test is TychoRouterTestSetup {
             hookData: bytes("")
         });
 
-        bytes memory protocolData = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR, WBTC_ADDR, true, address(tychoRouter), pools
-        );
+        bytes memory protocolData =
+            UniswapV4Utils.encodeExactInput(USDE_ADDR, WBTC_ADDR, true, pools);
 
         bytes memory swap =
             encodeSingleSwap(address(usv4Executor), protocolData);

@@ -143,20 +143,18 @@ fn test_sequential_swap_strategy_encoder_transfer_from_integration() {
         "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeReceiver
         "0000000000000000000000000000000000000000000000000000000000000000", // maxSolverContribution
         "0000000000000000000000000000000000000000000000000000000000000120", // offset of swap bytes
-        "000000000000000000000000000000000000000000000000000000000000007e", // len swaps (126 bytes)
+        "0000000000000000000000000000000000000000000000000000000000000056", // len swaps (86 bytes)
         // swap 1
-        "003d",                                     // swap length (61 bytes)
+        "0029",                                     // swap length (41 bytes)
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
         "bb2b8038a1640196fbe3e38816f3e67cba72d940", // component id (pool address)
-        "004375dff511095cc5a197a54140a24efef3a416", // receiver (next pool)
         "00",                                       // zero to one
         // swap 2
-        "003d",                                     // swap length (61 bytes)
+        "0029",                                     // swap length (41 bytes)
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
         "004375dff511095cc5a197a54140a24efef3a416", // component id (pool address)
-        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "01",                                       // zero to one
-        "0000",                                     // padding (2 bytes)
+        "00000000000000000000",                     // padding (2 bytes)
     ));
 
     assert_eq!(hex_calldata, expected);
@@ -261,27 +259,25 @@ fn test_sequential_strategy_cyclic_swap() {
     // time) it's hard to assert back
 
     let expected_swaps = [
-        "00000000000000000000000000000000000000000000000000000000000000d4", /* length of ple
+        "00000000000000000000000000000000000000000000000000000000000000ac", /* length of ple
                                                                              * encoded swaps
                                                                              * without padding
-                                                                             * (212 bytes) */
-        "0068",                                     // ple encoded swaps (104 bytes)
+                                                                             * (172 bytes) */
+        "0054",                                     // ple encoded swaps (84 bytes)
         "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
         "0001f4",                                   // pool fee
-        "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
         "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
         "01",                                       // zero2one
-        "0068",                                     // ple encoded swaps (104 bytes)
+        "0054",                                     // ple encoded swaps (84 bytes)
         "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
         "000bb8",                                   // pool fee
-        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
         "00",                                       // zero2one
-        "000000000000000000000000",                 // padding (12 bytes)
+        "0000000000000000000000000000000000000000", // padding
     ]
     .join("");
 
@@ -380,27 +376,25 @@ fn test_sequential_strategy_cyclic_swap_and_vault() {
         "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeReceiver
         "0000000000000000000000000000000000000000000000000000000000000000", // maxSolverContribution
         "0000000000000000000000000000000000000000000000000000000000000120", // offset of swap bytes
-        "00000000000000000000000000000000000000000000000000000000000000d4", /* length of ple
+        "00000000000000000000000000000000000000000000000000000000000000ac", /* length of ple
                      * encoded swaps
                      * without padding
-                     * (212 bytes) */
-        "0068",                                     // ple encoded swaps (104 bytes)
+                     * (172 bytes) */
+        "0054",                                     // ple encoded swaps (84 bytes)
         "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
         "0001f4",                                   // pool fee
-        "6bc529dc7b81a031828ddce2bc419d01ff268c66", // receiver
         "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
         "01",                                       // zero2one
-        "0068",                                     // ple encoded swaps (104 bytes)
+        "0054",                                     // ple encoded swaps (84 bytes)
         "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
         "000bb8",                                   // pool fee
-        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
         "00",                                       // zero2one
-        "000000000000000000000000",                 // padding (12 bytes)
+        "0000000000000000000000000000000000000000", // padding (12 bytes)
     ]
     .join("");
 

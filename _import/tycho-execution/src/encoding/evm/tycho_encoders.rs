@@ -830,8 +830,6 @@ mod tests {
                 String::from(concat!(
                     // component id (pool address)
                     "a478c2975ab1ea89e8196811f51a7b7ade33eb11",
-                    // receiver
-                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                     // zero for one
                     "00",
                 ))
@@ -912,8 +910,6 @@ mod tests {
                     "6982508145454ce325ddbe47a25d4ec3d2311933",
                     // zero for one
                     "00",
-                    // receiver
-                    "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
                     // first pool intermediary token (ETH)
                     "0000000000000000000000000000000000000000",
                     // fee

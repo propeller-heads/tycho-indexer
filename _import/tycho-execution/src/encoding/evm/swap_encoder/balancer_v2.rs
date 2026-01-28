@@ -31,17 +31,13 @@ impl SwapEncoder for BalancerV2SwapEncoder {
     fn encode_swap(
         &self,
         swap: &Swap,
-        encoding_context: &EncodingContext,
+        _encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let component_id = AlloyBytes::from_str(&swap.component().id)
             .map_err(|_| EncodingError::FatalError("Invalid component ID".to_string()))?;
 
-        let args = (
-            bytes_to_address(swap.token_in())?,
-            bytes_to_address(swap.token_out())?,
-            component_id,
-            bytes_to_address(&encoding_context.receiver)?,
-        );
+        let args =
+            (bytes_to_address(swap.token_in())?, bytes_to_address(swap.token_out())?, component_id);
         Ok(args.abi_encode_packed())
     }
 
@@ -105,8 +101,6 @@ mod tests {
                 "ba100000625a3754423978a60c9317c58a424e3d",
                 // pool id
                 "5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014",
-                // receiver
-                "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))
         );
         write_calldata_to_file("test_encode_balancer_v2", hex_swap.as_str());

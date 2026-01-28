@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {IExecutor} from "@interfaces/IExecutor.sol";
+import {IExecutor, ProtocolType} from "@interfaces/IExecutor.sol";
 import {
     SafeERC20,
     IERC20
@@ -56,13 +56,17 @@ contract CurveExecutor is IExecutor {
         stEthAddress = _stEthAddress;
     }
 
+    function protocolType() external returns (ProtocolType) {
+        return ProtocolType.FundsInRouter;
+    }
+
     // slither-disable-next-line locked-ether
-    function swap(uint256 amountIn, bytes calldata data)
+    function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut)
     {
-        if (data.length != 83) {
+        if (data.length != 63) {
             revert CurveExecutor__InvalidDataLength();
         }
         address tokenIn;
@@ -70,7 +74,7 @@ contract CurveExecutor is IExecutor {
         uint8 poolType;
         int128 i;
         int128 j;
-        (tokenIn, tokenOut, pool, poolType, i, j, receiver) = _decodeData(data);
+        (tokenIn, tokenOut, pool, poolType, i, j) = _decodeData(data);
 
         /// Inspired by Curve's router contract: https://github.com/curvefi/curve-router-ng/blob/9ab006ca848fc7f1995b6fbbecfecc1e0eb29e2a/contracts/Router.vy#L44
         uint256 balanceBefore = _balanceOf(tokenOut);
@@ -137,8 +141,7 @@ contract CurveExecutor is IExecutor {
             address pool,
             uint8 poolType,
             int128 i,
-            int128 j,
-            address receiver
+            int128 j
         )
     {
         tokenIn = address(bytes20(data[0:20]));
@@ -147,7 +150,6 @@ contract CurveExecutor is IExecutor {
         poolType = uint8(data[60]);
         i = int128(uint128(uint8(data[61])));
         j = int128(uint128(uint8(data[62])));
-        receiver = address(bytes20(data[63:83]));
     }
 
     /**

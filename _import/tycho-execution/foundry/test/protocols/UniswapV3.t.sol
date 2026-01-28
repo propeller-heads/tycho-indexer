@@ -20,7 +20,6 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
             address inToken,
             address outToken,
             uint24 fee,
-            address receiver,
             address target,
             bool zeroForOne
         )
@@ -83,14 +82,13 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
     function testDecodeParams() public view {
         uint24 expectedPoolFee = 500;
         bytes memory data = abi.encodePacked(
-            WETH_ADDR, DAI_ADDR, expectedPoolFee, address(2), address(3), false
+            WETH_ADDR, DAI_ADDR, expectedPoolFee, address(3), false
         );
 
         (
             address tokenIn,
             address tokenOut,
             uint24 fee,
-            address receiver,
             address target,
             bool zeroForOne
         ) = uniswapV3Exposed.decodeData(data);
@@ -98,7 +96,6 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
         assertEq(tokenIn, WETH_ADDR);
         assertEq(tokenOut, DAI_ADDR);
         assertEq(fee, expectedPoolFee);
-        assertEq(receiver, address(2));
         assertEq(target, address(3));
         assertEq(zeroForOne, false);
     }
@@ -144,18 +141,16 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
         uint256 expAmountOut = 1205_128428842122129186; //Swap 1 WETH for 1205.12 DAI
         bool zeroForOne = false;
 
-        bytes memory data = encodeUniswapV3Swap(
-            WETH_ADDR, DAI_ADDR, address(this), DAI_WETH_USV3, zeroForOne
-        );
+        bytes memory data =
+            encodeUniswapV3Swap(WETH_ADDR, DAI_ADDR, DAI_WETH_USV3, zeroForOne);
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            uniswapV3Exposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            uniswapV3Exposed.swap(amountIn, data, address(this));
 
         assertGe(amountOut, expAmountOut);
         assertEq(IERC20(WETH_ADDR).balanceOf(address(uniswapV3Exposed)), 0);
         assertGe(IERC20(DAI_ADDR).balanceOf(address(this)), expAmountOut);
         assertEq(tokenOut, DAI_ADDR);
-        assertEq(receiver, address(this));
     }
 
     function testDecodeParamsInvalidDataLength() public {
@@ -164,7 +159,6 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
             DAI_ADDR,
             uint24(500),
             RestrictTransferFrom.TransferType.Transfer,
-            address(2),
             address(3),
             false
         );
@@ -191,9 +185,8 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
         deal(WETH_ADDR, address(uniswapV3Exposed), amountOwed);
         uint256 initialPoolReserve = IERC20(WETH_ADDR).balanceOf(DAI_WETH_USV3);
 
-        bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR, DAI_ADDR, poolFee, address(uniswapV3Exposed)
-        );
+        bytes memory protocolData =
+            abi.encodePacked(WETH_ADDR, DAI_ADDR, poolFee);
         uint256 dataOffset = 3; // some offset
         uint256 dataLength = protocolData.length;
 
@@ -224,29 +217,21 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
         address fakePool = DUMMY; // Contract with minimal code
 
         bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR,
-            DAI_ADDR,
-            uint24(3000),
-            address(this),
-            fakePool,
-            zeroForOne
+            WETH_ADDR, DAI_ADDR, uint24(3000), fakePool, zeroForOne
         );
 
         vm.expectRevert(UniswapV3Executor__InvalidTarget.selector);
-        uniswapV3Exposed.swap(amountIn, protocolData);
+        uniswapV3Exposed.swap(amountIn, protocolData, BOB);
     }
 
     function encodeUniswapV3Swap(
         address tokenIn,
         address tokenOut,
-        address receiver,
         address target,
         bool zero2one
     ) internal view returns (bytes memory) {
         IUniswapV3Pool pool = IUniswapV3Pool(target);
-        return abi.encodePacked(
-            tokenIn, tokenOut, pool.fee(), receiver, target, zero2one
-        );
+        return abi.encodePacked(tokenIn, tokenOut, pool.fee(), target, zero2one);
     }
 }
 
@@ -266,9 +251,8 @@ contract TychoRouterForUniswapV3Test is TychoRouterTestSetup {
 
         uint256 expAmountOut = 1205_128428842122129186; //Swap 1 WETH for 1205.12 DAI
         bool zeroForOne = false;
-        bytes memory protocolData = encodeUniswapV3Swap(
-            WETH_ADDR, DAI_ADDR, address(tychoRouter), DAI_WETH_USV3, zeroForOne
-        );
+        bytes memory protocolData =
+            encodeUniswapV3Swap(WETH_ADDR, DAI_ADDR, DAI_WETH_USV3, zeroForOne);
         bytes memory swap =
             encodeSingleSwap(address(usv3Executor), protocolData);
 
@@ -306,16 +290,12 @@ contract TychoRouterForUniswapV3Test is TychoRouterTestSetup {
         uint256 amountIn = 1000 * 10 ** 6;
         bool zeroForOne = true;
         bytes memory protocolData = encodeUniswapV3Swap(
-            BASE_USDC,
-            BASE_cbBTC,
-            BOB,
-            PANCAKESWAPV3_cbBTC_USDC_POOL,
-            zeroForOne
+            BASE_USDC, BASE_cbBTC, PANCAKESWAPV3_cbBTC_USDC_POOL, zeroForOne
         );
 
         deal(BASE_USDC, address(basePancakeV3Exposed), amountIn);
 
-        basePancakeV3Exposed.swap(amountIn, protocolData);
+        basePancakeV3Exposed.swap(amountIn, protocolData, BOB);
 
         // 1000 USDC ~= 0.0095 BTC -> 1 BTC ~= 105k USDC ✅
         assertEq(IERC20(BASE_cbBTC).balanceOf(BOB), 950567);

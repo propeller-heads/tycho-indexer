@@ -5,7 +5,6 @@ use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::utils::bytes_to_address,
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
 };
@@ -69,7 +68,7 @@ impl SwapEncoder for LidoSwapEncoder {
     fn encode_swap(
         &self,
         swap: &Swap,
-        encoding_context: &EncodingContext,
+        _encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let (pool, direction) =
             if *swap.token_in() == self.eth_address && *swap.token_out() == self.st_eth_address {
@@ -86,11 +85,7 @@ impl SwapEncoder for LidoSwapEncoder {
                 return Err(EncodingError::InvalidInput("Combination not allowed".to_owned()))
             };
 
-        let args = (
-            bytes_to_address(&encoding_context.receiver)?,
-            (pool as u8).to_be_bytes(),
-            (direction as u8).to_be_bytes(),
-        );
+        let args = ((pool as u8).to_be_bytes(), (direction as u8).to_be_bytes());
 
         Ok(args.abi_encode_packed())
     }
@@ -156,11 +151,8 @@ mod tests {
         assert_eq!(
             hex_swap,
             String::from(concat!(
-                // receiver
-                "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                 // pool
-                "00",
-                // direction
+                "00", // direction
                 "00",
             ))
         );
@@ -197,11 +189,8 @@ mod tests {
         assert_eq!(
             hex_swap,
             String::from(concat!(
-                // receiver
-                "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                 // pool
-                "01",
-                // direction
+                "01", // direction
                 "01",
             ))
         );
@@ -238,11 +227,8 @@ mod tests {
         assert_eq!(
             hex_swap,
             String::from(concat!(
-                // receiver
-                "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                 // pool
-                "01",
-                // direction
+                "01", // direction
                 "02",
             ))
         );

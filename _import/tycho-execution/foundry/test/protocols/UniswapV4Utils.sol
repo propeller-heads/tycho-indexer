@@ -8,7 +8,6 @@ library UniswapV4Utils {
         address tokenIn,
         address tokenOut,
         bool zeroForOne,
-        address receiver,
         UniswapV4Executor.UniswapV4Pool[] memory pools
     ) public pure returns (bytes memory) {
         require(pools.length > 0, "Must have at least one pool");
@@ -38,7 +37,6 @@ library UniswapV4Utils {
             tokenIn,
             tokenOut,
             zeroForOne,
-            receiver,
             firstPool,
             pleEncode(encodedExtraPools)
         );

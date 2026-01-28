@@ -205,13 +205,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         )
             .abi_encode_packed();
 
-        let args = (
-            group_token_in_address,
-            group_token_out_address,
-            zero_to_one,
-            bytes_to_address(&encoding_context.receiver)?,
-            pool_params,
-        );
+        let args = (group_token_in_address, group_token_out_address, zero_to_one, pool_params);
 
         Ok(args.abi_encode_packed())
     }
@@ -308,8 +302,6 @@ mod tests {
                 "dac17f958d2ee523a2206206994597c13d831ec7",
                 // zero for one
                 "01",
-                // receiver
-                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
                 // pool params:
                 // - intermediary token
                 "dac17f958d2ee523a2206206994597c13d831ec7",
@@ -473,8 +465,6 @@ mod tests {
                 "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
                 // zero for one
                 "01",
-                // receiver
-                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
                 // pool params:
                 // - intermediary token USDT
                 "dac17f958d2ee523a2206206994597c13d831ec7",

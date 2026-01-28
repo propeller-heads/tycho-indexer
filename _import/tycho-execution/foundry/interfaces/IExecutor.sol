@@ -6,6 +6,16 @@ import "../src/RestrictTransferFrom.sol";
 
 pragma abicoder v2;
 
+enum ProtocolType {
+    /// @dev Requires external token transfer to pool. Transfer can be from router, user or previous pool.
+    InTransferRequired,
+    /// @dev Expects funds in router at swap time. Protocol transfers from `msg.sender` internally.
+    FundsInRouter,
+    /// @dev Requires transfer inside callback logic. Tokens go to router first, then pool during callback.
+    CallbackConstrained
+}
+
+
 interface IExecutor {
     /**
      * @notice Performs a swap on a liquidity pool.
@@ -16,18 +26,18 @@ interface IExecutor {
      * Note Part of the informal interface is that the executor supports sending the received
      *  tokens to a receiver address. If the underlying smart contract does not provide this
      *  functionality consider adding an additional transfer in the implementation.
-     *Cu
+     *
      * @param amountIn The amount of the input token to swap.
      * @param data Data that holds information necessary to perform the swap.
+     * @param receiver The address where the output tokens will be sent.
      * @return amountOut The amount of the output token swapped, depending on
      * the amountIn.
      * @return tokenOut The address of the output token.
-     * @return receiver The address where the output tokens were sent.
      */
-    function swap(uint256 amountIn, bytes calldata data)
+    function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut, address receiver);
+        returns (uint256 amountOut, address tokenOut);
 
     /**
      * @notice Gets transfer data for pre-swap token transfers.
@@ -44,6 +54,13 @@ interface IExecutor {
         external
         payable
         returns (RestrictTransferFrom.TransferType baseTransferType, address receiver, address tokenIn);
+
+    /**
+     * @dev Returns the protocol type indicating how this executor handles token transfers
+     * @return The ProtocolType enum value for this executor
+     */
+    function protocolType()
+    external returns (ProtocolType);
 
 }
 

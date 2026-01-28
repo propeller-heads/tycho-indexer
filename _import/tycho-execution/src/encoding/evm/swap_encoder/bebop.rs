@@ -111,17 +111,14 @@ impl SwapEncoder for BebopSwapEncoder {
             )
         };
 
-        let receiver = bytes_to_address(&encoding_context.receiver)?;
-
         // Encode packed data for the executor
         // Format: token_in | token_out | partial_fill_offset |
-        //         original_filled_taker_amount | approval_needed | receiver | bebop_calldata
+        //         original_filled_taker_amount | approval_needed | bebop_calldata
         let args = (
             token_in,
             token_out,
             partial_fill_offset.to_be_bytes(),
             original_filled_taker_amount.to_be_bytes::<32>(),
-            receiver,
             &bebop_calldata[..],
         );
 
@@ -214,8 +211,6 @@ mod tests {
             "0c",
             //  original taker amount
             "0000000000000000000000000000000000000000000000000de0b6b3a7640000",
-            //receiver,
-            "c5564c13a157e6240659fb81882a28091add8670",
         ));
         assert_eq!(hex_swap, expected_swap + &bebop_calldata.to_string()[2..]);
     }

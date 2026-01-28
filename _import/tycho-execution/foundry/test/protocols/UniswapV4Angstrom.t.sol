@@ -128,10 +128,10 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
 
         // Encode data with attestations
         bytes memory data =
-            abi.encodePacked(USDC_ADDR, WETH_ADDR, true, ALICE, firstPool);
+            abi.encodePacked(USDC_ADDR, WETH_ADDR, true, firstPool);
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            angstromExecutor.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            angstromExecutor.swap(amountIn, data, ALICE);
 
         assertEq(
             USDC.balanceOf(POOL_MANAGER), poolManagerBalanceBefore + amountIn
@@ -139,7 +139,6 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
         assertTrue(WETH.balanceOf(ALICE) == amountOut);
         assertTrue(amountOut > 0);
         assertEq(tokenOut, WETH_ADDR);
-        assertEq(receiver, ALICE);
     }
 
     function testSwapWithExpiredAttestations() public {
@@ -169,7 +168,7 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
         // The executor no longer reverts, but the Angstrom hook will reject empty attestations
         // This demonstrates that empty hook data is successfully passed to Angstrom
         vm.expectRevert();
-        angstromExecutor.swap(amountIn, data);
+        angstromExecutor.swap(amountIn, data, BOB);
     }
 
     function testGroupedSwapIntegration() public {
@@ -185,8 +184,8 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
         uint256 usdcBalanceBeforePool = USDC.balanceOf(POOL_MANAGER);
         uint256 usdcBalanceBeforeExecutor =
             USDC.balanceOf(address(angstromExecutor));
-        (uint256 amountOut, address tokenOut, address receiver) =
-            angstromExecutor.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut) =
+            angstromExecutor.swap(amountIn, protocolData, ALICE);
 
         // Verify USDC was transferred to pool manager
         assertEq(USDC.balanceOf(POOL_MANAGER), usdcBalanceBeforePool + amountIn);
@@ -199,6 +198,5 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
         assertTrue(IERC20(USDT_ADDR).balanceOf(ALICE) == amountOut);
         assertTrue(amountOut > 0);
         assertEq(tokenOut, USDT_ADDR);
-        assertEq(receiver, ALICE);
     }
 }

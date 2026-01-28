@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {IExecutor} from "@interfaces/IExecutor.sol";
+import {IExecutor, ProtocolType} from "@interfaces/IExecutor.sol";
 import {ICallback} from "@interfaces/ICallback.sol";
 import {RestrictTransferFrom} from "./RestrictTransferFrom.sol";
 
@@ -72,7 +72,8 @@ contract Dispatcher is RestrictTransferFrom {
         uint256 amount,
         bytes calldata data,
         bool isFirstSwap,
-        bool isSplitSwap
+        bool isSplitSwap,
+        address receiver
     ) internal returns (uint256 calculatedAmount) {
         if (!executors[executor]) {
             revert Dispatcher__UnapprovedExecutor(executor);
@@ -114,7 +115,9 @@ contract Dispatcher is RestrictTransferFrom {
 
         // slither-disable-next-line controlled-delegatecall,low-level-calls,calls-loop
         (bool success, bytes memory result) = executor.delegatecall(
-            abi.encodeWithSelector(IExecutor.swap.selector, amount, data)
+            abi.encodeWithSelector(
+                IExecutor.swap.selector, amount, data, receiver
+            )
         );
 
         // Clear transient storage in case no callback was performed
@@ -135,9 +138,7 @@ contract Dispatcher is RestrictTransferFrom {
         }
 
         address tokenOut;
-        address receiver;
-        (calculatedAmount, tokenOut, receiver) =
-            abi.decode(result, (uint256, address, address));
+        (calculatedAmount, tokenOut) = abi.decode(result, (uint256, address));
 
         // Update delta accounting (transient storage) if tokens stayed in router
         if (receiver == address(this)) {
@@ -291,5 +292,16 @@ contract Dispatcher is RestrictTransferFrom {
         // The result from `handleCallback` is always ABI encoded.
         bytes memory decodedResult = abi.decode(result, (bytes));
         return decodedResult;
+    }
+
+    function _callProtocolTypeOnExecutor(address executor)
+        internal
+        returns (ProtocolType protocolType)
+    {
+        if (!executors[executor]) {
+            revert Dispatcher__UnapprovedExecutor(executor);
+        }
+        // slither-disable-next-line calls-loop
+        protocolType = IExecutor(executor).protocolType();
     }
 }

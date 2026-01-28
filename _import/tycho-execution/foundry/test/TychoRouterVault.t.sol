@@ -35,14 +35,18 @@ contract WrapUnwrapExecutor is IExecutor {
         weth = IWETH(_weth);
     }
 
+    function protocolType() external returns (ProtocolType) {
+        return ProtocolType.FundsInRouter;
+    }
+
     // slither-disable-next-line locked-ether
-    function swap(uint256 amountIn, bytes calldata data)
+    function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut)
     {
         address tokenIn;
-        (tokenIn, receiver) = _decodeData(data);
+        (tokenIn,) = _decodeData(data);
 
         if (tokenIn == address(weth)) {
             // WETH -> ETH: Unwrap
@@ -68,10 +72,10 @@ contract WrapUnwrapExecutor is IExecutor {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (address tokenIn, address receiver)
+        returns (address tokenIn, address)
     {
         tokenIn = address(bytes20(data[0:20]));
-        receiver = address(bytes20(data[20:40]));
+        return (tokenIn, address(0)); // receiver is no longer encoded in data
     }
 
     /// @dev Required to receive ETH
@@ -87,7 +91,7 @@ contract WrapUnwrapExecutor is IExecutor {
         )
     {
         tokenIn = address(bytes20(data[0:20]));
-        receiver = address(bytes20(data[20:40]));
+        receiver = address(0); // receiver is no longer encoded in data
 
         if (tokenIn == address(weth)) {
             // WETH -> ETH: Unwrap, transfer WETH to executor
@@ -106,74 +110,6 @@ contract WrapUnwrapExecutor is IExecutor {
  */
 contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
     // ==================== Transfer tests ====================
-
-    function testPreviousSwapReceiverWrongfullyEncoded() public {
-        // Malicious encoding: previous swap receiver was wrongfully encoded to be
-        // the current protocol instead of our router (as should be the case with
-        // all split swaps) - REVERT
-        // Sequential swap through split swap method: WETH -> DAI -> USDC
-        // First swap sends to DAI pool (malicious) instead of router
-        // Second swap expects funds in the delta accounting, so it calculated a
-        // transferType.NONE, but funds are not there. Our vault accounting detects
-        // this as an unexpected nonzero delta, and reverts.
-
-        bytes[] memory swaps = new bytes[](2);
-
-        // WETH -> DAI (malicious: receiver is DAI_USDC_POOL instead of router)
-        swaps[0] = encodeSplitSwap(
-            0,
-            1,
-            0,
-            address(usv2Executor),
-            encodeUniswapV2Swap(
-                DAI_WETH_UNIV2_POOL, // target
-                DAI_USDC_POOL, // MALICIOUS: should be tychoRouterAddr
-                false // zero for one
-            )
-        );
-
-        // DAI -> USDC (expects Transfer from router, but funds are in pool)
-        swaps[1] = encodeSplitSwap(
-            1,
-            2,
-            0,
-            address(usv2Executor),
-            encodeUniswapV2Swap(DAI_USDC_POOL, tychoRouterAddr, true)
-        );
-
-        uint256 amountIn = 1 ether;
-        uint256 existingDaiVaultBalance = 3000 ether; // 3000 DAI
-        deal(WETH_ADDR, ALICE, amountIn);
-
-        // Alice does have some DAI in the vault. We must make sure not to use it,
-        // since Alice didn't explicitly give us permission.
-        deal(DAI_ADDR, ALICE, existingDaiVaultBalance);
-
-        vm.startPrank(ALICE);
-        IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
-        IERC20(DAI_ADDR).approve(tychoRouterAddr, existingDaiVaultBalance);
-        tychoRouter.deposit(DAI_ADDR, existingDaiVaultBalance);
-
-        // Should revert because this causes a negative delta for DAI
-        // When using InputSource.Transfer, no negative deltas are allowed
-        vm.expectRevert(
-            abi.encodeWithSelector(Vault__UnexpectedNonZeroCount.selector, 1)
-        );
-        tychoRouter.splitSwap(
-            amountIn,
-            WETH_ADDR,
-            USDC_ADDR,
-            1, // min amount
-            3, // number of tokens
-            ALICE,
-            0,
-            address(0),
-            0,
-            pleEncode(swaps)
-        );
-        vm.stopPrank();
-    }
-
     function testSplitSwapUsesVaultBalance() public {
         // A correctly encoded split swap uses vault's funds
         //          ->   WBTC (60%)
@@ -188,7 +124,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             uint8(1),
             (0xffffff * 60) / 100, // 60%
             address(usv2Executor),
-            encodeUniswapV2Swap(WETH_WBTC_POOL, tychoRouterAddr, false)
+            encodeUniswapV2Swap(WETH_WBTC_POOL, false)
         );
 
         // WETH -> WBTC (40%)
@@ -197,7 +133,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             uint8(1),
             0, // 40%
             address(usv2Executor),
-            encodeUniswapV2Swap(WETH_WBTC_POOL, tychoRouterAddr, false)
+            encodeUniswapV2Swap(WETH_WBTC_POOL, false)
         );
 
         uint256 amountIn = 1 ether;
@@ -266,8 +202,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         swap = encodeSingleSwap(
             address(rocketpoolExecutor),
             abi.encodePacked(
-                uint8(1), // isDeposit = true
-                tychoRouterAddr // receiver (router will handle final transfer to ALICE)
+                uint8(1) // isDeposit = true
             )
         );
     }
@@ -416,7 +351,6 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             USDC_ADDR,
             address(0), // ETH_ADDR
             false,
-            address(tychoRouter), // receiver
             pool
         );
 
@@ -461,71 +395,6 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
     }
 
     // ==================== ProtocolWillDebit tests ====================
-
-    function testProtocolWillDebitWrongPreviousReceiver() public {
-        // Previous swap receiver was wrongfully encoded to be the current protocol
-        // instead of the router - REVERT
-        // Sequential swap: WETH -> DAI -> USDC
-        // First swap sends to Curve TRIPOOL instead of router
-        // Second swap expects funds in the router via ProtocolWillDebit but they're not there
-
-        bytes[] memory swaps = new bytes[](2);
-
-        // WETH -> DAI (malicious: receiver is TRIPOOL instead of router)
-        swaps[0] = encodeSequentialSwap(
-            address(usv2Executor),
-            encodeUniswapV2Swap(
-                DAI_WETH_UNIV2_POOL,
-                TRIPOOL, // MALICIOUS: should be tychoRouterAddr
-                false
-            )
-        );
-
-        // DAI -> USDC on Curve TRIPOOL
-        swaps[1] = encodeSequentialSwap(
-            address(curveExecutor),
-            abi.encodePacked(
-                DAI_ADDR, // tokenIn
-                USDC_ADDR, // tokenOut
-                TRIPOOL, // pool
-                uint8(1), // poolType (1 for StableSwap)
-                uint8(0), // i (DAI index)
-                uint8(1), // j (USDC index)
-                tychoRouterAddr // receiver
-            )
-        );
-
-        uint256 amountIn = 1 ether;
-        uint256 existingDaiVaultBalance = 3000 ether; // 3000 DAI
-        deal(WETH_ADDR, ALICE, amountIn);
-
-        // Alice does have some DAI in the vault. We must make sure not to use it,
-        // since Alice didn't explicitly give us permission.
-        deal(DAI_ADDR, ALICE, existingDaiVaultBalance);
-
-        vm.startPrank(ALICE);
-        IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
-        IERC20(DAI_ADDR).approve(tychoRouterAddr, existingDaiVaultBalance);
-        tychoRouter.deposit(DAI_ADDR, existingDaiVaultBalance);
-
-        // Should revert because this causes a negative delta for DAI
-        // When using InputSource.TransferFrom, no negative deltas are allowed
-        vm.expectRevert(
-            abi.encodeWithSelector(Vault__UnexpectedNonZeroCount.selector, 1)
-        );
-        tychoRouter.sequentialSwap(
-            amountIn,
-            WETH_ADDR,
-            USDC_ADDR,
-            1, // min amount
-            ALICE,
-            0,
-            address(0),
-            0,
-            pleEncode(swaps)
-        );
-        vm.stopPrank();
-    }
 
     function testProtocolWillDebitFromVaultIntegration() public {
         // Integration test for ProtocolWillDebit with Curve where funds are taken from
@@ -575,69 +444,6 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         executors[0] = address(wrapUnwrapExecutor);
         vm.startPrank(EXECUTOR_SETTER);
         tychoRouter.setExecutors(executors);
-        vm.stopPrank();
-    }
-
-    function testCircularSwapCannotStealETH() public {
-        // Circular swap: ETH -> WETH -> ETH -> rETH
-        //
-        // Alice didn't realize that she is actually using Bob the malicious encoder.
-        // She believed in a trust-less encoding system and failed to check her own
-        // calldata. Luckily, our guardrails protected her.
-        //
-        // 1. Alice sends 1 ETH to the router. Delta accounting for ETH is 1
-        // 2. Alice swaps ETH to WETH. Delta accounting for ETH is 0.
-        // 3. Alice swaps WETH to ETH, but Bob the malicious encoder set the receiver to
-        //    himself. Delta accounting for ETH is 0 and for WETH is 1.
-        // 4. The router sends ETH to rETH. Delta accounting for ETH is -1.
-        // 5. Since we don't allow any non zero delta for the input amount (and for any other amount), the
-        //    transaction reverts, preventing Bob from stealing Alice's funds.
-        bytes[] memory swaps = new bytes[](3);
-
-        // Swap 1: ETH -> WETH (wrap)
-        swaps[0] = encodeSequentialSwap(
-            address(wrapUnwrapExecutor),
-            abi.encodePacked(
-                address(0), // tokenIn (ETH)
-                tychoRouterAddr // receiver
-            )
-        );
-
-        // Swap 2: WETH -> ETH (unwrap)
-        swaps[1] = encodeSequentialSwap(
-            address(wrapUnwrapExecutor),
-            abi.encodePacked(
-                WETH_ADDR, // tokenIn
-                BOB // receiver - BOB maliciously encoded himself as the receiver,
-                // stealing weth from Alice's Vault without her realizing
-            )
-        );
-
-        // Swap 3: WETH -> rETH (rocketpool)
-        swaps[2] = _rocketpoolEthRethSwap();
-
-        uint256 amountIn = 1 ether;
-        deal(ALICE, amountIn * 2);
-
-        vm.startPrank(ALICE);
-
-        // Alice has 1 ETH in the vault, and 1 ETH in her own wallet for swapping.
-        tychoRouter.deposit{value: amountIn}(address(0), amountIn);
-
-        vm.expectRevert(
-            abi.encodeWithSelector(Vault__UnexpectedNonZeroCount.selector, 2)
-        );
-        tychoRouter.sequentialSwap{value: amountIn}(
-            amountIn,
-            address(0), // in token
-            RETH_ADDR,
-            1, // min amount
-            ALICE, // receiver
-            0, // solver fee bps
-            address(0), // solver fee receiver
-            0, // max solver contribution
-            pleEncode(swaps)
-        );
         vm.stopPrank();
     }
 

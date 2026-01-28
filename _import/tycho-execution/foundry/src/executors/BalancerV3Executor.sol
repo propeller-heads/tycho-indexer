@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {IExecutor} from "@interfaces/IExecutor.sol";
+import {IExecutor, ProtocolType} from "@interfaces/IExecutor.sol";
 import {
     IERC20,
     SafeERC20
@@ -25,19 +25,23 @@ contract BalancerV3Executor is IExecutor, ICallback {
 
     constructor() {}
 
+    function protocolType() external returns (ProtocolType) {
+        return ProtocolType.CallbackConstrained;
+    }
+
     // slither-disable-next-line locked-ether
-    function swap(uint256 amountIn, bytes calldata data)
+    function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut)
     {
-        if (data.length != 80) {
+        if (data.length != 60) {
             revert BalancerV3Executor__InvalidDataLength();
         }
-        bytes memory result = VAULT.unlock(abi.encodePacked(amountIn, data));
-        (amountOut, tokenOut, receiver) = abi.decode(
-            abi.decode(result, (bytes)), (uint256, address, address)
-        );
+        bytes memory result =
+            VAULT.unlock(abi.encodePacked(amountIn, data, receiver));
+        (amountOut, tokenOut) =
+            abi.decode(abi.decode(result, (bytes)), (uint256, address));
     }
 
     function verifyCallback(
@@ -82,7 +86,7 @@ contract BalancerV3Executor is IExecutor, ICallback {
         // slither-disable-next-line unused-return
         VAULT.settle(tokenIn, amountIn);
         VAULT.sendTo(tokenOut, receiver, amountOut);
-        return abi.encode(amountCalculated, tokenOut, receiver);
+        return abi.encode(amountCalculated, tokenOut);
     }
 
     function handleCallback(bytes calldata data)

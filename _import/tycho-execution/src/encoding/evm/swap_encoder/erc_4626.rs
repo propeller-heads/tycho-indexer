@@ -27,16 +27,12 @@ impl SwapEncoder for ERC4626SwapEncoder {
     fn encode_swap(
         &self,
         swap: &Swap,
-        encoding_context: &EncodingContext,
+        _encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let component_id = AlloyBytes::from_str(&swap.component().id)
             .map_err(|_| EncodingError::FatalError("Invalid component ID".to_string()))?;
 
-        let args = (
-            bytes_to_address(swap.token_in())?,
-            component_id,
-            bytes_to_address(&encoding_context.receiver)?,
-        );
+        let args = (bytes_to_address(swap.token_in())?, component_id);
         Ok(args.abi_encode_packed())
     }
 
@@ -93,8 +89,6 @@ mod tests {
                 "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
                 // target
                 "fE6eb3b609a7C8352A241f7F3A21CEA4e9209B8f",
-                // receiver
-                "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
             ))
             .to_lowercase()
         );
@@ -139,8 +133,6 @@ mod tests {
                 "fE6eb3b609a7C8352A241f7F3A21CEA4e9209B8f",
                 // target
                 "fE6eb3b609a7C8352A241f7F3A21CEA4e9209B8f",
-                // receiver
-                "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
             ))
             .to_lowercase()
         );

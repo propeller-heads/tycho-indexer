@@ -31,18 +31,13 @@ impl SwapEncoder for BalancerV3SwapEncoder {
     fn encode_swap(
         &self,
         swap: &Swap,
-        encoding_context: &EncodingContext,
+        _encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let pool = Address::from_str(&swap.component().id).map_err(|_| {
             EncodingError::FatalError("Invalid pool address for Balancer v3".to_string())
         })?;
 
-        let args = (
-            bytes_to_address(swap.token_in())?,
-            bytes_to_address(swap.token_out())?,
-            pool,
-            bytes_to_address(&encoding_context.receiver)?,
-        );
+        let args = (bytes_to_address(swap.token_in())?, bytes_to_address(swap.token_out())?, pool);
         Ok(args.abi_encode_packed())
     }
 
@@ -104,8 +99,6 @@ mod tests {
                 "c71ea051a5f82c67adcf634c36ffe6334793d24c",
                 // pool id
                 "85b2b559bc2d21104c4defdd6efca8a20343361d",
-                // receiver
-                "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))
         );
         write_calldata_to_file("test_encode_balancer_v3", hex_swap.as_str());

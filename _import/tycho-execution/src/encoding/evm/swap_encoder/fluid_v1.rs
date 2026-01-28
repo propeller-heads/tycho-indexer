@@ -33,7 +33,7 @@ impl SwapEncoder for FluidV1SwapEncoder {
     fn encode_swap(
         &self,
         swap: &Swap,
-        encoding_context: &EncodingContext,
+        _encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let dex_address = Address::from_str(&swap.component().id).map_err(|_| {
             EncodingError::FatalError(format!(
@@ -47,7 +47,6 @@ impl SwapEncoder for FluidV1SwapEncoder {
             self.coerce_native_address(swap.token_in()) <
                 self.coerce_native_address(swap.token_out()),
             bytes_to_address(swap.token_out())?,
-            bytes_to_address(&encoding_context.receiver)?,
             *swap.token_in() == self.chain.native_token().address,
         );
         Ok(args.abi_encode_packed())
@@ -121,8 +120,6 @@ mod tests {
                 "01",
                 // outputToken
                 "dac17f958d2ee523a2206206994597c13d831ec7",
-                // receiver
-                "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
                 // isNativeSell
                 "00"
             ))

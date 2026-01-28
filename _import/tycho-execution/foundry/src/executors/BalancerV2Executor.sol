@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {IExecutor} from "@interfaces/IExecutor.sol";
+import {IExecutor, ProtocolType} from "@interfaces/IExecutor.sol";
 import {
     IERC20,
     SafeERC20
@@ -21,16 +21,20 @@ contract BalancerV2Executor is IExecutor {
 
     constructor() {}
 
+    function protocolType() external returns (ProtocolType) {
+        return ProtocolType.FundsInRouter;
+    }
+
     // slither-disable-next-line locked-ether
-    function swap(uint256 amountIn, bytes calldata data)
+    function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut)
     {
         address tokenIn;
         bytes32 poolId;
 
-        (tokenIn, tokenOut, poolId, receiver) = _decodeData(data);
+        (tokenIn, tokenOut, poolId) = _decodeData(data);
 
         IVault.SingleSwap memory singleSwap = IVault.SingleSwap({
             poolId: poolId,
@@ -57,21 +61,15 @@ contract BalancerV2Executor is IExecutor {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (
-            address tokenIn,
-            address tokenOut,
-            bytes32 poolId,
-            address receiver
-        )
+        returns (address tokenIn, address tokenOut, bytes32 poolId)
     {
-        if (data.length != 92) {
+        if (data.length != 72) {
             revert BalancerV2Executor__InvalidDataLength();
         }
 
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
         poolId = bytes32(data[40:72]);
-        receiver = address(bytes20(data[72:92]));
     }
 
     function getTransferData(bytes calldata data)
@@ -83,7 +81,7 @@ contract BalancerV2Executor is IExecutor {
             address tokenIn
         )
     {
-        if (data.length != 92) {
+        if (data.length != 72) {
             revert BalancerV2Executor__InvalidDataLength();
         }
 

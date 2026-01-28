@@ -142,7 +142,7 @@ impl SwapEncoder for CurveSwapEncoder {
     fn encode_swap(
         &self,
         swap: &Swap,
-        encoding_context: &EncodingContext,
+        _encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let native_token_curve_address = Address::from_slice(&self.native_token_curve_address);
         let token_in = if *swap.token_in() == self.native_token_address {
@@ -183,7 +183,6 @@ impl SwapEncoder for CurveSwapEncoder {
             pool_type.to_be_bytes::<1>(),
             i.to_be_bytes::<1>(),
             j.to_be_bytes::<1>(),
-            bytes_to_address(&encoding_context.receiver)?,
         );
 
         Ok(args.abi_encode_packed())
@@ -354,8 +353,6 @@ mod tests {
                 "00",
                 // j index
                 "01",
-                // receiver,
-                "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))
         );
     }
@@ -416,8 +413,6 @@ mod tests {
                 "01",
                 // j index
                 "00",
-                // receiver
-                "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))
         );
     }
@@ -488,8 +483,6 @@ mod tests {
                 "00",
                 // j index
                 "01",
-                // receiver
-                "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))
         );
     }

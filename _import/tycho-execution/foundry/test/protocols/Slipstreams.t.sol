@@ -20,7 +20,6 @@ contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
             address inToken,
             address outToken,
             int24 tick_spacing,
-            address receiver,
             address target,
             bool zeroForOne
         )
@@ -77,19 +76,13 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
     function testDecodeParams() public view {
         int24 expectedTickSpacing = 100;
         bytes memory data = abi.encodePacked(
-            BASE_WETH,
-            BASE_USDC,
-            expectedTickSpacing,
-            address(2),
-            address(3),
-            false
+            BASE_WETH, BASE_USDC, expectedTickSpacing, address(3), false
         );
 
         (
             address tokenIn,
             address tokenOut,
             int24 tick_spacing,
-            address receiver,
             address target,
             bool zeroForOne
         ) = slipstreamsExposed.decodeData(data);
@@ -97,7 +90,6 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
         assertEq(tokenIn, BASE_WETH);
         assertEq(tokenOut, BASE_USDC);
         assertEq(tick_spacing, expectedTickSpacing);
-        assertEq(receiver, address(2));
         assertEq(target, address(3));
         assertEq(zeroForOne, false);
     }
@@ -115,9 +107,8 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
         uint24 poolTickSpacing = 100;
         uint256 amountOwed = 1000000000000000000;
 
-        bytes memory protocolData = abi.encodePacked(
-            BASE_WETH, BASE_USDC, poolTickSpacing, address(slipstreamsExposed)
-        );
+        bytes memory protocolData =
+            abi.encodePacked(BASE_WETH, BASE_USDC, poolTickSpacing);
         uint256 dataOffset = 3; // some offset
         uint256 dataLength = protocolData.length;
 
@@ -147,18 +138,16 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             BASE_WETH,
             BASE_USDC,
             IUniswapV3Pool(SLIPSTREAMS_WETH_USDC_POOL).tickSpacing(),
-            address(this),
             SLIPSTREAMS_WETH_USDC_POOL,
             zeroForOne
         );
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            slipstreamsExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            slipstreamsExposed.swap(amountIn, data, address(this));
 
         assertEq(IERC20(BASE_WETH).balanceOf(address(slipstreamsExposed)), 0);
         assertGe(IERC20(BASE_USDC).balanceOf(address(this)), amountOut);
         assertEq(tokenOut, BASE_USDC);
-        assertEq(receiver, address(this));
     }
 
     function testSwapNewFactory() public {
@@ -171,18 +160,16 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             BASE_WETH,
             BASE_BMI,
             IUniswapV3Pool(SLIPSTREAMS_WETH_BMI_POOL).tickSpacing(),
-            address(this),
             SLIPSTREAMS_WETH_BMI_POOL,
             zeroForOne
         );
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            slipstreamsExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            slipstreamsExposed.swap(amountIn, data, address(this));
 
         assertEq(IERC20(BASE_WETH).balanceOf(address(slipstreamsExposed)), 0);
         assertGe(IERC20(BASE_BMI).balanceOf(address(this)), amountOut);
         assertEq(tokenOut, BASE_BMI);
-        assertEq(receiver, address(this));
     }
 
     function testDecodeParamsInvalidDataLength() public {
@@ -206,9 +193,8 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
         uint256 initialPoolReserve =
             IERC20(BASE_WETH).balanceOf(SLIPSTREAMS_WETH_USDC_POOL);
 
-        bytes memory protocolData = abi.encodePacked(
-            BASE_WETH, BASE_USDC, poolTickSpacing, address(slipstreamsExposed)
-        );
+        bytes memory protocolData =
+            abi.encodePacked(BASE_WETH, BASE_USDC, poolTickSpacing);
         uint256 dataOffset = 3; // some offset
         uint256 dataLength = protocolData.length;
 
@@ -239,29 +225,11 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
         address fakePool = DUMMY; // Contract with minimal code
 
         bytes memory protocolData = abi.encodePacked(
-            BASE_WETH,
-            BASE_USDC,
-            uint24(100),
-            address(this),
-            fakePool,
-            zeroForOne
+            BASE_WETH, BASE_USDC, uint24(100), fakePool, zeroForOne
         );
 
         vm.expectRevert(SlipstreamsExecutor__InvalidTarget.selector);
-        slipstreamsExposed.swap(amountIn, protocolData);
-    }
-
-    function encodeSlipstreamsSwap(
-        address tokenIn,
-        address tokenOut,
-        address receiver,
-        address target,
-        bool zero2one
-    ) internal view returns (bytes memory) {
-        IUniswapV3Pool pool = IUniswapV3Pool(target);
-        return abi.encodePacked(
-            tokenIn, tokenOut, pool.tickSpacing(), receiver, target, zero2one
-        );
+        slipstreamsExposed.swap(amountIn, protocolData, BOB);
     }
 }
 

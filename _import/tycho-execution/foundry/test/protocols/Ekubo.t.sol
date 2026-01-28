@@ -53,14 +53,13 @@ contract EkuboExecutorTest is Constants, TestUtils {
         uint256 usdcBalanceBeforeExecutor = USDC.balanceOf(address(executor));
 
         bytes memory data = abi.encodePacked(
-            address(executor), // receiver
             NATIVE_TOKEN_ADDRESS, // tokenIn
             USDC_ADDR, // tokenOut
             ORACLE_CONFIG // poolConfig
         );
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            executor.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            executor.swap(amountIn, data, address(executor));
 
         assertEq(CORE_ADDRESS.balance, ethBalanceBeforeCore + amountIn);
         assertEq(address(executor).balance, ethBalanceBeforeExecutor - amountIn);
@@ -72,7 +71,6 @@ contract EkuboExecutorTest is Constants, TestUtils {
             USDC.balanceOf(address(executor)),
             usdcBalanceBeforeExecutor + amountOut
         );
-        assertEq(receiver, address(executor));
         assertEq(tokenOut, USDC_ADDR);
     }
 
@@ -88,8 +86,8 @@ contract EkuboExecutorTest is Constants, TestUtils {
         uint256 usdtBalanceBeforeCore = USDT.balanceOf(CORE_ADDRESS);
         uint256 usdtBalanceBeforeExecutor = USDT.balanceOf(address(executor));
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            executor.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            executor.swap(amountIn, data, address(executor));
 
         assertEq(CORE_ADDRESS.balance, ethBalanceBeforeCore + amountIn);
         assertEq(address(executor).balance, ethBalanceBeforeExecutor - amountIn);
@@ -101,14 +99,12 @@ contract EkuboExecutorTest is Constants, TestUtils {
             USDT.balanceOf(address(executor)),
             usdtBalanceBeforeExecutor + amountOut
         );
-        assertEq(receiver, address(executor));
         assertEq(tokenOut, USDT_ADDR);
     }
 
     // Same test case as in swap_encoder::tests::ekubo::test_encode_swap_multi
     function testMultiHopSwap() public setUpFork(22082754) {
         bytes memory data = abi.encodePacked(
-            address(executor), // receiver
             NATIVE_TOKEN_ADDRESS, // tokenIn
             USDC_ADDR, // tokenOut of 1st swap
             ORACLE_CONFIG, // config of 1st swap

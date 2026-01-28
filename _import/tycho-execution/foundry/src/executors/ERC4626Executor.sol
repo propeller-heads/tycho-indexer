@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {IExecutor} from "@interfaces/IExecutor.sol";
+import {IExecutor, ProtocolType} from "@interfaces/IExecutor.sol";
 import {
     SafeERC20,
     IERC20
@@ -18,16 +18,20 @@ contract ERC4626Executor is IExecutor {
 
     constructor() {}
 
+    function protocolType() external returns (ProtocolType) {
+        return ProtocolType.FundsInRouter;
+    }
+
     // slither-disable-next-line locked-ether
-    function swap(uint256 amountIn, bytes calldata data)
+    function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut)
     {
         address target;
         IERC20 tokenIn;
 
-        (tokenIn, target, receiver) = _decodeData(data);
+        (tokenIn, target) = _decodeData(data);
 
         if (address(tokenIn) == target) {
             // shares --> asset
@@ -46,14 +50,13 @@ contract ERC4626Executor is IExecutor {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (IERC20 tokenIn, address target, address receiver)
+        returns (IERC20 tokenIn, address target)
     {
-        if (data.length != 60) {
+        if (data.length != 40) {
             revert ERC4626Executor__InvalidDataLength();
         }
         tokenIn = IERC20(address(bytes20(data[0:20])));
         target = address(bytes20(data[20:40]));
-        receiver = address(bytes20(data[40:60]));
     }
 
     function getTransferData(bytes calldata data)
@@ -65,7 +68,7 @@ contract ERC4626Executor is IExecutor {
             address tokenIn
         )
     {
-        if (data.length != 60) {
+        if (data.length != 40) {
             revert ERC4626Executor__InvalidDataLength();
         }
         tokenIn = address(bytes20(data[0:20]));

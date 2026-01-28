@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {IExecutor} from "@interfaces/IExecutor.sol";
+import {IExecutor, ProtocolType} from "@interfaces/IExecutor.sol";
 import {
     SafeERC20,
     IERC20
@@ -28,16 +28,20 @@ contract MaverickV2Executor is IExecutor {
         factory = _factory;
     }
 
+    function protocolType() external returns (ProtocolType) {
+        return ProtocolType.InTransferRequired;
+    }
+
     // slither-disable-next-line locked-ether
-    function swap(uint256 amountIn, bytes calldata data)
+    function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut)
     {
         address target;
         IERC20 tokenIn;
 
-        (tokenIn, target, tokenOut, receiver) = _decodeData(data);
+        (target, tokenIn, tokenOut) = _decodeData(data);
 
         _verifyPairAddress(target);
         IMaverickV2Pool pool = IMaverickV2Pool(target);
@@ -58,20 +62,14 @@ contract MaverickV2Executor is IExecutor {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (
-            IERC20 inToken,
-            address target,
-            address tokenOut,
-            address receiver
-        )
+        returns (address target, IERC20 inToken, address tokenOut)
     {
-        if (data.length != 80) {
+        if (data.length != 60) {
             revert MaverickV2Executor__InvalidDataLength();
         }
-        inToken = IERC20(address(bytes20(data[0:20])));
-        target = address(bytes20(data[20:40]));
+        target = address(bytes20(data[0:20]));
+        inToken = IERC20(address(bytes20(data[20:40])));
         tokenOut = address(bytes20(data[40:60]));
-        receiver = address(bytes20(data[60:80]));
     }
 
     function _verifyPairAddress(address target) internal view {
@@ -90,11 +88,11 @@ contract MaverickV2Executor is IExecutor {
             address tokenIn
         )
     {
-        if (data.length != 80) {
+        if (data.length != 60) {
             revert MaverickV2Executor__InvalidDataLength();
         }
-        tokenIn = address(bytes20(data[0:20]));
-        receiver = address(bytes20(data[20:40]));
+        receiver = address(bytes20(data[0:20]));
+        tokenIn = address(bytes20(data[20:40]));
         baseTransferType = RestrictTransferFrom.TransferType.Transfer;
     }
 }

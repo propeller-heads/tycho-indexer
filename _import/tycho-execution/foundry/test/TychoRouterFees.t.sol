@@ -48,11 +48,8 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
 
         // When fees are present, encode receiver as TychoRouter (not ALICE)
-        bytes memory protocolData = encodeUniswapV2Swap(
-            DAI_WETH_UNIV2_POOL,
-            address(tychoRouter), // Swap sends to router since fees > 0
-            false
-        );
+        bytes memory protocolData =
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, false);
 
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);

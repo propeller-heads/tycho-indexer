@@ -36,8 +36,7 @@ contract CurveExecutorExposed is CurveExecutor {
             address pool,
             uint8 poolType,
             int128 i,
-            int128 j,
-            address receiver
+            int128 j
         )
     {
         return _decodeData(data);
@@ -60,13 +59,7 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
 
     function testDecodeParams() public view {
         bytes memory data = abi.encodePacked(
-            WETH_ADDR,
-            USDC_ADDR,
-            TRICRYPTO_POOL,
-            uint8(3),
-            uint8(2),
-            uint8(0),
-            ALICE
+            WETH_ADDR, USDC_ADDR, TRICRYPTO_POOL, uint8(3), uint8(2), uint8(0)
         );
 
         (
@@ -75,8 +68,7 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             address pool,
             uint8 poolType,
             int128 i,
-            int128 j,
-            address receiver
+            int128 j
         ) = curveExecutorExposed.decodeData(data);
 
         assertEq(tokenIn, WETH_ADDR);
@@ -85,18 +77,11 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         assertEq(poolType, 3);
         assertEq(i, 2);
         assertEq(j, 0);
-        assertEq(receiver, ALICE);
     }
 
     function testGetTransferData() public {
         bytes memory data = abi.encodePacked(
-            WETH_ADDR,
-            USDC_ADDR,
-            TRICRYPTO_POOL,
-            uint8(3),
-            uint8(2),
-            uint8(0),
-            ALICE
+            WETH_ADDR, USDC_ADDR, TRICRYPTO_POOL, uint8(3), uint8(2), uint8(0)
         );
 
         (, address receiver, address tokenIn) =
@@ -111,17 +96,16 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 1 ether;
         deal(DAI_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data = _getData(DAI_ADDR, USDC_ADDR, TRIPOOL, 1, ALICE);
+        bytes memory data = _getData(DAI_ADDR, USDC_ADDR, TRIPOOL, 1);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(DAI_ADDR).approve(TRIPOOL, amountIn);
-        (uint256 amountOut, address tokenOut, address receiver) =
-            curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            curveExecutorExposed.swap(amountIn, data, ALICE);
 
         assertEq(amountOut, 999797);
         assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), amountOut);
         assertEq(tokenOut, USDC_ADDR);
-        assertEq(receiver, ALICE);
     }
 
     function testStEthPool() public {
@@ -130,15 +114,14 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         deal(address(curveExecutorExposed), amountIn);
 
         bytes memory data =
-            _getData(ETH_ADDR_FOR_CURVE, STETH_ADDR, STETH_POOL, 1, ALICE);
+            _getData(ETH_ADDR_FOR_CURVE, STETH_ADDR, STETH_POOL, 1);
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            curveExecutorExposed.swap(amountIn, data, ALICE);
 
         assertEq(amountOut, 1001072414418410896);
         assertEq(IERC20(STETH_ADDR).balanceOf(ALICE), amountOut);
         assertEq(tokenOut, STETH_ADDR);
-        assertEq(receiver, ALICE);
     }
 
     // This test verifies that amountOut for stETH is calculated correctly by
@@ -151,24 +134,22 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountInForTest = 1 ether;
 
         bytes memory data1 =
-            _getData(ETH_ADDR_FOR_CURVE, STETH_ADDR, STETH_POOL, 1, ALICE);
+            _getData(ETH_ADDR_FOR_CURVE, STETH_ADDR, STETH_POOL, 1);
 
-        (uint256 amountOut1, address tokenOut1, address receiver1) =
-            curveExecutorExposed.swap(amountInForTest, data1);
+        (uint256 amountOut1, address tokenOut1) =
+            curveExecutorExposed.swap(amountInForTest, data1, ALICE);
 
         bytes memory data2 =
-            _getData(ETH_ADDR_FOR_CURVE, STETH_ADDR, STETH_POOL, 1, ALICE);
+            _getData(ETH_ADDR_FOR_CURVE, STETH_ADDR, STETH_POOL, 1);
 
-        (uint256 amountOut2, address tokenOut2, address receiver2) =
-            curveExecutorExposed.swap(amountInForTest, data2);
+        (uint256 amountOut2, address tokenOut2) =
+            curveExecutorExposed.swap(amountInForTest, data2, ALICE);
 
         assertEq(amountOut1, 1001072414418410896);
         assertEq(amountOut2, 1001072213238226892);
         assertEq(IERC20(STETH_ADDR).balanceOf(ALICE), amountOut1 + amountOut2);
         assertEq(tokenOut1, STETH_ADDR);
         assertEq(tokenOut2, STETH_ADDR);
-        assertEq(receiver1, ALICE);
-        assertEq(receiver2, ALICE);
     }
 
     function testTricrypto2Pool() public {
@@ -176,18 +157,16 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 1 ether;
         deal(WETH_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data =
-            _getData(WETH_ADDR, WBTC_ADDR, TRICRYPTO2_POOL, 3, ALICE);
+        bytes memory data = _getData(WETH_ADDR, WBTC_ADDR, TRICRYPTO2_POOL, 3);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(WETH_ADDR).approve(TRICRYPTO2_POOL, amountIn);
-        (uint256 amountOut, address tokenOut, address receiver) =
-            curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            curveExecutorExposed.swap(amountIn, data, ALICE);
 
         assertEq(amountOut, 2279618);
         assertEq(IERC20(WBTC_ADDR).balanceOf(ALICE), amountOut);
         assertEq(tokenOut, WBTC_ADDR);
-        assertEq(receiver, ALICE);
     }
 
     function testSUSDPool() public {
@@ -195,17 +174,16 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 100 * 10 ** 6;
         deal(USDC_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data = _getData(USDC_ADDR, SUSD_ADDR, SUSD_POOL, 1, ALICE);
+        bytes memory data = _getData(USDC_ADDR, SUSD_ADDR, SUSD_POOL, 1);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(USDC_ADDR).approve(SUSD_POOL, amountIn);
-        (uint256 amountOut, address tokenOut, address receiver) =
-            curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            curveExecutorExposed.swap(amountIn, data, ALICE);
 
         assertEq(amountOut, 100488101605550214590);
         assertEq(IERC20(SUSD_ADDR).balanceOf(ALICE), amountOut);
         assertEq(tokenOut, SUSD_ADDR);
-        assertEq(receiver, ALICE);
     }
 
     function testFraxUsdcPool() public {
@@ -213,18 +191,16 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 1 ether;
         deal(FRAX_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data =
-            _getData(FRAX_ADDR, USDC_ADDR, FRAX_USDC_POOL, 1, ALICE);
+        bytes memory data = _getData(FRAX_ADDR, USDC_ADDR, FRAX_USDC_POOL, 1);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(FRAX_ADDR).approve(FRAX_USDC_POOL, amountIn);
-        (uint256 amountOut, address tokenOut, address receiver) =
-            curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            curveExecutorExposed.swap(amountIn, data, ALICE);
 
         assertEq(amountOut, 998097);
         assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), amountOut);
         assertEq(tokenOut, USDC_ADDR);
-        assertEq(receiver, ALICE);
     }
 
     function testUsdeUsdcPool() public {
@@ -232,18 +208,16 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 100 * 10 ** 6;
         deal(USDC_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data =
-            _getData(USDC_ADDR, USDE_ADDR, USDE_USDC_POOL, 1, ALICE);
+        bytes memory data = _getData(USDC_ADDR, USDE_ADDR, USDE_USDC_POOL, 1);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(USDC_ADDR).approve(USDE_USDC_POOL, amountIn);
-        (uint256 amountOut, address tokenOut, address receiver) =
-            curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            curveExecutorExposed.swap(amountIn, data, ALICE);
 
         assertEq(amountOut, 100064812138999986170);
         assertEq(IERC20(USDE_ADDR).balanceOf(ALICE), amountOut);
         assertEq(tokenOut, USDE_ADDR);
-        assertEq(receiver, ALICE);
     }
 
     function testDolaFraxPyusdPool() public {
@@ -252,17 +226,16 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         deal(DOLA_ADDR, address(curveExecutorExposed), amountIn);
 
         bytes memory data =
-            _getData(DOLA_ADDR, FRAXPYUSD_POOL, DOLA_FRAXPYUSD_POOL, 1, ALICE);
+            _getData(DOLA_ADDR, FRAXPYUSD_POOL, DOLA_FRAXPYUSD_POOL, 1);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(DOLA_ADDR).approve(DOLA_FRAXPYUSD_POOL, amountIn);
-        (uint256 amountOut, address tokenOut, address receiver) =
-            curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            curveExecutorExposed.swap(amountIn, data, ALICE);
 
         assertEq(amountOut, 99688992);
         assertEq(IERC20(FRAXPYUSD_POOL).balanceOf(ALICE), amountOut);
         assertEq(tokenOut, FRAXPYUSD_POOL);
-        assertEq(receiver, ALICE);
     }
 
     function testCryptoPoolWithETH() public {
@@ -272,17 +245,16 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         deal(XYO_ADDR, address(curveExecutorExposed), amountIn);
 
         bytes memory data =
-            _getData(XYO_ADDR, ETH_ADDR_FOR_CURVE, ETH_XYO_POOL, 2, ALICE);
+            _getData(XYO_ADDR, ETH_ADDR_FOR_CURVE, ETH_XYO_POOL, 2);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(XYO_ADDR).approve(ETH_XYO_POOL, amountIn);
-        (uint256 amountOut, address tokenOut, address receiver) =
-            curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            curveExecutorExposed.swap(amountIn, data, ALICE);
 
         assertEq(amountOut, 6081816039338);
         assertEq(ALICE.balance, initialBalance + amountOut);
         assertEq(tokenOut, address(0));
-        assertEq(receiver, ALICE);
     }
 
     function testCryptoPool() public {
@@ -290,18 +262,16 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 1000 ether;
         deal(BSGG_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data =
-            _getData(BSGG_ADDR, USDT_ADDR, BSGG_USDT_POOL, 2, ALICE);
+        bytes memory data = _getData(BSGG_ADDR, USDT_ADDR, BSGG_USDT_POOL, 2);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(BSGG_ADDR).approve(BSGG_USDT_POOL, amountIn);
-        (uint256 amountOut, address tokenOut, address receiver) =
-            curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            curveExecutorExposed.swap(amountIn, data, ALICE);
 
         assertEq(amountOut, 23429);
         assertEq(IERC20(USDT_ADDR).balanceOf(ALICE), amountOut);
         assertEq(tokenOut, USDT_ADDR);
-        assertEq(receiver, ALICE);
     }
 
     function testTricryptoPool() public {
@@ -309,18 +279,16 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 1 ether;
         deal(WETH_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data =
-            _getData(WETH_ADDR, USDC_ADDR, TRICRYPTO_POOL, 2, ALICE);
+        bytes memory data = _getData(WETH_ADDR, USDC_ADDR, TRICRYPTO_POOL, 2);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(WETH_ADDR).approve(TRICRYPTO_POOL, amountIn);
-        (uint256 amountOut, address tokenOut, address receiver) =
-            curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            curveExecutorExposed.swap(amountIn, data, ALICE);
 
         assertEq(amountOut, 1861130974);
         assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), amountOut);
         assertEq(tokenOut, USDC_ADDR);
-        assertEq(receiver, ALICE);
     }
 
     function testTwoCryptoPool() public {
@@ -328,18 +296,16 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 1 ether;
         deal(UWU_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data =
-            _getData(UWU_ADDR, WETH_ADDR, UWU_WETH_POOL, 2, ALICE);
+        bytes memory data = _getData(UWU_ADDR, WETH_ADDR, UWU_WETH_POOL, 2);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(UWU_ADDR).approve(UWU_WETH_POOL, amountIn);
-        (uint256 amountOut, address tokenOut, address receiver) =
-            curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            curveExecutorExposed.swap(amountIn, data, ALICE);
 
         assertEq(amountOut, 2873786684675);
         assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), amountOut);
         assertEq(tokenOut, WETH_ADDR);
-        assertEq(receiver, ALICE);
     }
 
     function testStableSwapPool() public {
@@ -348,17 +314,16 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         deal(USDT_ADDR, address(curveExecutorExposed), amountIn);
 
         bytes memory data =
-            _getData(USDT_ADDR, CRVUSD_ADDR, CRVUSD_USDT_POOL, 1, ALICE);
+            _getData(USDT_ADDR, CRVUSD_ADDR, CRVUSD_USDT_POOL, 1);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(USDT_ADDR).forceApprove(CRVUSD_USDT_POOL, amountIn);
-        (uint256 amountOut, address tokenOut, address receiver) =
-            curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            curveExecutorExposed.swap(amountIn, data, ALICE);
 
         assertEq(amountOut, 10436946786333182306400100);
         assertEq(IERC20(CRVUSD_ADDR).balanceOf(ALICE), amountOut);
         assertEq(tokenOut, CRVUSD_ADDR);
-        assertEq(receiver, ALICE);
     }
 
     function testMetaPool() public {
@@ -367,25 +332,23 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         deal(WTAO_ADDR, address(curveExecutorExposed), amountIn);
 
         bytes memory data =
-            _getData(WTAO_ADDR, WSTTAO_ADDR, WSTTAO_WTAO_POOL, 1, ALICE);
+            _getData(WTAO_ADDR, WSTTAO_ADDR, WSTTAO_WTAO_POOL, 1);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(WTAO_ADDR).approve(WSTTAO_WTAO_POOL, amountIn);
-        (uint256 amountOut, address tokenOut, address receiver) =
-            curveExecutorExposed.swap(amountIn, data);
+        (uint256 amountOut, address tokenOut) =
+            curveExecutorExposed.swap(amountIn, data, ALICE);
 
         assertEq(amountOut, 32797923610);
         assertEq(IERC20(WSTTAO_ADDR).balanceOf(ALICE), amountOut);
         assertEq(tokenOut, WSTTAO_ADDR);
-        assertEq(receiver, ALICE);
     }
 
     function _getData(
         address tokenIn,
         address tokenOut,
         address pool,
-        uint8 poolType,
-        address receiver
+        uint8 poolType
     ) internal view returns (bytes memory data) {
         (int128 i, int128 j) = _getIndexes(tokenIn, tokenOut, pool);
         data = abi.encodePacked(
@@ -394,8 +357,7 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             pool,
             poolType,
             uint8(uint256(uint128(i))),
-            uint8(uint256(uint128(j))),
-            receiver
+            uint8(uint256(uint128(j)))
         );
     }
 

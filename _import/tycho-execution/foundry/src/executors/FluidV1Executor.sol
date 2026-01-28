@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {IExecutor} from "@interfaces/IExecutor.sol";
+import {IExecutor, ProtocolType} from "@interfaces/IExecutor.sol";
 import {ICallback} from "@interfaces/ICallback.sol";
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 
@@ -42,16 +42,20 @@ contract FluidV1Executor is IExecutor, ICallback {
         liquidity = _liquidity;
     }
 
-    function swap(uint256 amountIn, bytes calldata data)
+    function protocolType() external returns (ProtocolType) {
+        return ProtocolType.CallbackConstrained;
+    }
+
+    function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut)
     {
         IFluidV1Dex dex;
         bool zero2one;
         bool isNativeSell;
 
-        (dex, zero2one, tokenOut, receiver, isNativeSell) = _decodeData(data);
+        (dex, zero2one, tokenOut, isNativeSell) = _decodeData(data);
 
         if (!isNativeSell) {
             _setCurrentDex(dex);
@@ -86,7 +90,6 @@ contract FluidV1Executor is IExecutor, ICallback {
             IFluidV1Dex dex,
             bool zero2one,
             address tokenOut,
-            address receiver,
             bool isNativeSell
         )
     {
@@ -95,17 +98,15 @@ contract FluidV1Executor is IExecutor, ICallback {
         // 0  | dex address
         // 20 | zero2one
         // 21 | tokenOut
-        // 41 | receiver
-        // 61 | is_native
-        // 62 | EOF
-        if (data.length != 62) {
+        // 41 | is_native
+        // 42 | EOF
+        if (data.length != 42) {
             revert FluidV1Executor__InvalidDataLength();
         }
         dex = IFluidV1Dex(address(bytes20(data[0:20])));
         zero2one = uint8(data[20]) > 0;
         tokenOut = address(bytes20(data[21:41]));
-        receiver = address(bytes20(data[41:61]));
-        isNativeSell = uint8(data[61]) > 0;
+        isNativeSell = uint8(data[41]) > 0;
     }
 
     function handleCallback(bytes calldata data)

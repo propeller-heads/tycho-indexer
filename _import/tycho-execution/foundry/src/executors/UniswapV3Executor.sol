@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {IExecutor} from "@interfaces/IExecutor.sol";
+import {IExecutor, ProtocolType} from "@interfaces/IExecutor.sol";
 import {
     SafeERC20,
     IERC20
@@ -41,18 +41,21 @@ contract UniswapV3Executor is IExecutor, ICallback {
         self = address(this);
     }
 
+    function protocolType() external returns (ProtocolType) {
+        return ProtocolType.CallbackConstrained;
+    }
+
     // slither-disable-next-line locked-ether
-    function swap(uint256 amountIn, bytes calldata data)
+    function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut)
     {
         address tokenIn;
         uint24 fee;
         address target;
         bool zeroForOne;
-        (tokenIn, tokenOut, fee, receiver, target, zeroForOne) =
-            _decodeData(data);
+        (tokenIn, tokenOut, fee, target, zeroForOne) = _decodeData(data);
 
         _verifyPairAddress(tokenIn, tokenOut, fee, target);
 
@@ -121,20 +124,18 @@ contract UniswapV3Executor is IExecutor, ICallback {
             address tokenIn,
             address tokenOut,
             uint24 fee,
-            address receiver,
             address target,
             bool zeroForOne
         )
     {
-        if (data.length != 84) {
+        if (data.length != 64) {
             revert UniswapV3Executor__InvalidDataLength();
         }
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
         fee = uint24(bytes3(data[40:43]));
-        receiver = address(bytes20(data[43:63]));
-        target = address(bytes20(data[63:83]));
-        zeroForOne = uint8(data[83]) > 0;
+        target = address(bytes20(data[43:63]));
+        zeroForOne = uint8(data[63]) > 0;
     }
 
     // This function will extract the first 43 bytes of the data,

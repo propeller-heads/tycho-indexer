@@ -24,6 +24,7 @@ import {LibSwap} from "../lib/LibSwap.sol";
 import {RestrictTransferFrom} from "./RestrictTransferFrom.sol";
 import {IFeeCalculator} from "@interfaces/IFeeCalculator.sol";
 import {FeeRecipient} from "../lib/FeeStructs.sol";
+import {ProtocolType} from "../interfaces/IExecutor.sol";
 
 //                                         ✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷
 //                                   ✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷
@@ -668,7 +669,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             revert TychoRouter__UndefinedMinAmountOut();
         }
 
-        uint256 amountOutBeforeFees = _splitSwap(amountIn, nTokens, swaps);
+        uint256 amountOutBeforeFees =
+            _splitSwap(amountIn, nTokens, swaps, receiver);
         amountOut = _takeFees(
             tokenOut,
             amountOutBeforeFees,
@@ -732,8 +734,11 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         (address executor, bytes calldata protocolData) =
             swap_.decodeSingleSwap();
 
-        uint256 amountOutBeforeFees =
-            _callSwapOnExecutor(executor, amountIn, protocolData, true, false);
+        address finalReceiver =
+            determineFinalReceiver(receiver, solverFeeBps > 0);
+        uint256 amountOutBeforeFees = _callSwapOnExecutor(
+            executor, amountIn, protocolData, true, false, finalReceiver
+        );
         amountOut = _takeFees(
             tokenOut,
             amountOutBeforeFees,
@@ -792,8 +797,10 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         if (minAmountOut == 0) {
             revert TychoRouter__UndefinedMinAmountOut();
         }
-
-        uint256 amountOutBeforeFees = _sequentialSwap(amountIn, swaps);
+        address finalReceiver =
+            determineFinalReceiver(receiver, solverFeeBps > 0);
+        uint256 amountOutBeforeFees =
+            _sequentialSwap(amountIn, swaps, finalReceiver);
         amountOut = _takeFees(
             tokenOut,
             amountOutBeforeFees,
@@ -851,7 +858,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     function _splitSwap(
         uint256 amountIn,
         uint256 nTokens,
-        bytes calldata swaps_
+        bytes calldata swaps_,
+        address receiver
     ) internal returns (uint256) {
         if (swaps_.length == 0) {
             revert TychoRouter__EmptySwaps();
@@ -883,7 +891,12 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
                 : remainingAmounts[tokenInIndex];
 
             currentAmountOut = _callSwapOnExecutor(
-                executor, currentAmountIn, protocolData, tokenInIndex == 0, true
+                executor,
+                currentAmountIn,
+                protocolData,
+                tokenInIndex == 0,
+                true,
+                address(this) //TODO: can this be optimized?
             );
             // Checks if the output token is the same as the input token
             if (tokenOutIndex == 0) {
@@ -902,25 +915,60 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      *
      * @param amountIn The initial amount of the sell token to be swapped.
      * @param swaps_ Encoded swap graph data containing the details of each swap operation.
+     * @param finalReceiver Address of the receiver of the last swap.
      *
      * @return calculatedAmount The total amount of the buy token obtained after all swaps have been executed.
      */
-    function _sequentialSwap(uint256 amountIn, bytes calldata swaps_)
-        internal
-        returns (uint256 calculatedAmount)
-    {
-        bytes calldata swap;
+    function _sequentialSwap(
+        uint256 amountIn,
+        bytes calldata swaps_,
+        address finalReceiver
+    ) internal returns (uint256 calculatedAmount) {
+        bytes calldata currentSwap;
         calculatedAmount = amountIn;
+        (currentSwap, swaps_) = swaps_.next();
+        bytes calldata nextSwap;
         bool isFirstSwap = true;
-        while (swaps_.length > 0) {
-            (swap, swaps_) = swaps_.next();
 
+        while (true) {
             (address executor, bytes calldata protocolData) =
-                swap.decodeSingleSwap();
+                currentSwap.decodeSequentialSwap();
+            address receiver;
+            if (swaps_.length > 0) {
+                (nextSwap, swaps_) = swaps_.next();
+                address nextExecutor = nextSwap.decodeExecutor();
+                ProtocolType protocolType =
+                    _callProtocolTypeOnExecutor(nextExecutor);
+
+                if (protocolType == ProtocolType.InTransferRequired) {
+                    // decode target -> ASSUME first 20 bytes
+                    receiver = nextSwap.decodeTarget();
+                } else {
+                    receiver = address(this);
+                }
+                currentSwap = nextSwap; // Set up for next iteration
+            } else {
+                // last swap
+                calculatedAmount = _callSwapOnExecutor(
+                    executor,
+                    calculatedAmount,
+                    protocolData,
+                    isFirstSwap,
+                    false,
+                    finalReceiver
+                );
+                break; // Break after processing the last swap
+            }
 
             calculatedAmount = _callSwapOnExecutor(
-                executor, calculatedAmount, protocolData, isFirstSwap, false
+                executor,
+                calculatedAmount,
+                protocolData,
+                isFirstSwap,
+                false,
+                receiver
             );
+
             isFirstSwap = false;
         }
     }
@@ -990,6 +1038,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         external
         onlyRole(ROUTER_FEE_SETTER_ROLE)
     {
+        // TODO: we should allow 0 (in case we don't want to take fees after taking fees)
         if (feeCalculator == address(0)) {
             revert TychoRouter__AddressZero();
         }
@@ -1155,5 +1204,23 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         } else {
             amount = amountOut;
         }
+    }
+
+    /**
+     * @dev Determines the final receiver address for the last swap output tokens
+     * @param receiver The receiver address
+     * @param solverFees Whether solver fees are being applied
+     * @return The final receiver address - either the router (for fee processing) or the intended receiver
+     */
+    function determineFinalReceiver(address receiver, bool solverFees)
+        internal
+        returns (address)
+    {
+        address feeCalculator = this.getFeeCalculator();
+        address finalReceiver = address(this);
+        if (feeCalculator == address(0) && !solverFees) {
+            finalReceiver = receiver;
+        }
+        return finalReceiver;
     }
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {IExecutor} from "@interfaces/IExecutor.sol";
+import {IExecutor, ProtocolType} from "@interfaces/IExecutor.sol";
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {
@@ -33,16 +33,20 @@ contract BebopExecutor is IExecutor {
         bebopSettlement = _bebopSettlement;
     }
 
+    function protocolType() external returns (ProtocolType) {
+        return ProtocolType.FundsInRouter;
+    }
+
     /// @notice Executes a swap through Bebop's PMM RFQ system
     /// @param amountIn The amount of input token to swap
     /// @param data Encoded swap data containing tokens and bebop calldata
+    /// @param receiver The address to receive output tokens
     /// @return amountOut The amount of output token received
-    /// @return tokenOut
-    /// @return receiver
-    function swap(uint256 amountIn, bytes calldata data)
+    /// @return tokenOut The address of the output token
+    function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut)
     {
         address tokenIn;
         uint8 partialFillOffset;
@@ -53,7 +57,6 @@ contract BebopExecutor is IExecutor {
             tokenOut,
             partialFillOffset,
             originalFilledTakerAmount,
-            receiver,
             bebopCalldata
         ) = _decodeData(data);
 
@@ -87,20 +90,18 @@ contract BebopExecutor is IExecutor {
             address tokenOut,
             uint8 partialFillOffset,
             uint256 originalFilledTakerAmount,
-            address receiver,
             bytes memory bebopCalldata
         )
     {
-        // Need at least 93 bytes for the minimum fixed fields
-        // 20 + 20 + 1 (offset) + 32 (original amount) + 20 (receiver) = 93
-        if (data.length < 93) revert BebopExecutor__InvalidDataLength();
+        // Need at least 73 bytes for the minimum fixed fields
+        // 20 + 20 + 1 (offset) + 32 (original amount) = 73
+        if (data.length < 73) revert BebopExecutor__InvalidDataLength();
 
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
         partialFillOffset = uint8(data[40]);
         originalFilledTakerAmount = uint256(bytes32(data[41:73]));
-        receiver = address(bytes20(data[73:93]));
-        bebopCalldata = data[93:];
+        bebopCalldata = data[73:];
     }
 
     /// @dev Modifies the filledTakerAmount in the bebop calldata to handle slippage
@@ -176,7 +177,7 @@ contract BebopExecutor is IExecutor {
             address tokenIn
         )
     {
-        if (data.length < 93) {
+        if (data.length < 73) {
             revert BebopExecutor__InvalidDataLength();
         }
 

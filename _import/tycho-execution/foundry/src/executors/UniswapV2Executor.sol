@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {IExecutor} from "@interfaces/IExecutor.sol";
+import {IExecutor, ProtocolType} from "@interfaces/IExecutor.sol";
 import {
     SafeERC20,
     IERC20
@@ -41,16 +41,20 @@ contract UniswapV2Executor is IExecutor {
         self = address(this);
     }
 
+    function protocolType() external returns (ProtocolType) {
+        return ProtocolType.InTransferRequired;
+    }
+
     // slither-disable-next-line locked-ether
-    function swap(uint256 amountIn, bytes calldata data)
+    function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 calculatedAmount, address tokenOut, address receiver)
+        returns (uint256 calculatedAmount, address tokenOut)
     {
         address target;
         bool zeroForOne;
 
-        (target, receiver, zeroForOne) = _decodeData(data);
+        (target, zeroForOne) = _decodeData(data);
 
         // Get token0 and token1 once to avoid redundant external calls
         IUniswapV2Pair pool = IUniswapV2Pair(target);
@@ -74,14 +78,13 @@ contract UniswapV2Executor is IExecutor {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (address target, address receiver, bool zeroForOne)
+        returns (address target, bool zeroForOne)
     {
-        if (data.length != 41) {
+        if (data.length != 21) {
             revert UniswapV2Executor__InvalidDataLength();
         }
         target = address(bytes20(data[0:20]));
-        receiver = address(bytes20(data[20:40]));
-        zeroForOne = data[40] != 0;
+        zeroForOne = data[20] != 0;
     }
 
     function _getAmountOut(address target, uint256 amountIn, bool zeroForOne)
@@ -135,11 +138,11 @@ contract UniswapV2Executor is IExecutor {
             address tokenIn
         )
     {
-        if (data.length != 41) {
+        if (data.length != 21) {
             revert UniswapV2Executor__InvalidDataLength();
         }
         address target = address(bytes20(data[0:20]));
-        bool zeroForOne = data[40] != 0;
+        bool zeroForOne = data[20] != 0;
 
         IUniswapV2Pair pool = IUniswapV2Pair(target);
         address token0 = pool.token0();
