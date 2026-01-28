@@ -433,14 +433,18 @@ where
         token_in: &Token,
         token_out: &Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
-        self.quote(QuoteParams::new(&token_in.address, &token_out.address, amount_in))
-            .map(|r| {
-                GetAmountOutResult::new(
-                    r.amount_out().clone(),
-                    r.gas().clone(),
-                    r.new_state().unwrap().to_protocol_sim(),
-                )
-            })
+        self.quote(
+            QuoteParams::new(&token_in.address, &token_out.address, amount_in).with_new_state(),
+        )
+        .map(|r| {
+            GetAmountOutResult::new(
+                r.amount_out().clone(),
+                r.gas().clone(),
+                r.new_state()
+                    .expect("quote includes new state")
+                    .to_protocol_sim(),
+            )
+        })
     }
 
     fn get_limits(
