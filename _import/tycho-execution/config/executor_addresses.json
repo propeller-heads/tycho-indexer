@@ -6,7 +6,6 @@
     "uniswap_v3": "0xbab7124C9662B15C6b9AF0b1f329907dD55a24FC",
     "pancakeswap_v3": "0x9D32e9F569B22Ae8d8C6f788037C1CD53632A059",
     "uniswap_v4": "0xE49B916032c734CD89cDfe80A868805c738A6ceB",
-    "uniswap_v4_hooks": "0xE49B916032c734CD89cDfe80A868805c738A6ceB",
     "vm:balancer_v2": "0xB5b8dc3F0a1Be99685a0DEd015Af93bFBB55C411",
     "ekubo_v2": "0x263DD7AD20983b5E0392bf1F09C4493500EDb333",
     "vm:curve": "0xc8031d1457D19D5F0e074f74960bAF2010beA795",
@@ -23,7 +22,6 @@
     "uniswap_v3": "0x647bffbf8bd72bf6341ecba8b0279e090313a40d",
     "pancakeswap_v3": "0x21A97f2Aa8D9AE7144BfD080266Ee87cC2369656",
     "uniswap_v4": "0x8a3520889fE0bbF9E1F4a9724C27d8D6Ed9f0e29",
-    "uniswap_v4_hooks": "0x8a3520889fE0bbF9E1F4a9724C27d8D6Ed9f0e29",
     "rfq:bebop": "0x489A3f531dA3873D6585BF3f8E0dEE48CAC6F7BC",
     "aerodrome_slipstreams": "0x772f58A21a1E64c5677cDf16630205264caD2b6A"
   },
@@ -31,7 +29,6 @@
     "uniswap_v2": "0x00C1b81e3C8f6347E69e2DDb90454798A6Be975E",
     "uniswap_v3": "0xD26A838A41af3d4815DfD745a080B2062c4124d1",
     "uniswap_v4": "0x052a40Ab2875437e0fF7f68976954AD62aB1f235",
-    "uniswap_v4_hooks": "0x052a40Ab2875437e0fF7f68976954AD62aB1f235",
     "velodrome_slipstreams": "0x772f58a21a1e64c5677cdf16630205264cad2b6a",
     "vm:curve": "0x21A97f2Aa8D9AE7144BfD080266Ee87cC2369656"
   }
