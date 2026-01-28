@@ -141,7 +141,7 @@ fn stream_blocks(
                                     // TODO: substreams is looking to update the partial block service to be faster than the final block confirmation.
                                     // This means .is_last_partial will be unset for the last partial. We'd need to update this logic when that happens
                                     // to monitor for the first partial of the next block as the indicator that the previous block is complete.
-                                    if !block_scoped_data.is_partial && block_scoped_data.is_last_partial.is_some_and(|last_partial| last_partial) {
+                                    if !block_scoped_data.is_partial || block_scoped_data.is_last_partial.is_some_and(|last_partial| last_partial) {
                                         if let Some(block_ts) = block.timestamp {
                                             let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards!?").as_millis();
                                             let lag = now.saturating_sub((block_ts.seconds * 1000) as u128);
