@@ -1,3 +1,11 @@
+## [0.132.1](https://github.com/propeller-heads/tycho-indexer/compare/0.132.0...0.132.1) (2026-01-28)
+
+
+### Bug Fixes
+
+* substreams_lag_millis conditional on partial blocks ([ae17442](https://github.com/propeller-heads/tycho-indexer/commit/ae174423759190389199c23152821cdd6d475fa6))
+* substreams_lag_millis conditional on partial blocks ([#832](https://github.com/propeller-heads/tycho-indexer/issues/832)) ([b3d6bf0](https://github.com/propeller-heads/tycho-indexer/commit/b3d6bf003f6aef7c74d8906b52311556901ee226))
+
 ## [0.132.0](https://github.com/propeller-heads/tycho-indexer/compare/0.131.0...0.132.0) (2026-01-27)
 
 
