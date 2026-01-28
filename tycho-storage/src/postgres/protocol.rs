@@ -1207,7 +1207,12 @@ impl PostgresGateway {
                     StorageError::NotFound("Transaction".to_string(), component_balance.modify_tx.to_string())
                 })?;
 
-            let protocol_component_id = protocol_component_ids[&component_balance.component_id];
+            let protocol_component_id = protocol_component_ids
+                .get(&component_balance.component_id)
+                .ok_or_else(|| {
+                    error!(?chain, ?component_balance.component_id, ?component_balance, "Protocol component not found");
+                    StorageError::NotFound("ProtocolComponent".to_string(), component_balance.component_id.to_string())
+                })?;
 
             let new_component_balance = orm::NewComponentBalance::new(
                 *token_id,
@@ -1215,7 +1220,7 @@ impl PostgresGateway {
                 component_balance.balance_float,
                 None,
                 *transaction_id,
-                protocol_component_id,
+                *protocol_component_id,
                 *transaction_ts,
             );
             new_component_balances.push(WithOrdinal::new(
