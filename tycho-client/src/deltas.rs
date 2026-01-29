@@ -965,7 +965,7 @@ impl DeltasClient for WsDeltasClient {
 
 #[cfg(test)]
 mod tests {
-    use std::net::SocketAddr;
+    use std::{net::SocketAddr, str::FromStr};
 
     use tokio::{net::TcpListener, time::timeout};
     use tycho_common::dto::Chain;
@@ -1034,6 +1034,8 @@ mod tests {
         });
         (addr, jh)
     }
+
+    const SUBSCRIPTION_ID: &str = "30b740d1-cf09-4e0e-8cfe-b1434d447ece";
 
     fn subscribe() -> String {
         subscribe_with_compression(false)
@@ -1797,7 +1799,7 @@ mod tests {
         use tycho_common::dto::{Response, WebSocketMessage, WebsocketError};
 
         let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "vm:ambient");
-        let subscription_id = Uuid::new_v4();
+        let subscription_id = Uuid::from_str(SUBSCRIPTION_ID).unwrap();
 
         let error_response = WebSocketMessage::Response(Response::Error(
             WebsocketError::SubscriptionNotFound(subscription_id),
@@ -1807,18 +1809,9 @@ mod tests {
         let exp_comm = [
             // 1. Client subscribes successfully
             ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(format!(
-                r#"{{"method":"newsubscription","extractor_id":{{"chain":"ethereum","name":"vm:ambient"}},"subscription_id":"{}"}}"#,
-                subscription_id
-            ))),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_confirmation())),
             // 2. Client tries to unsubscribe (server has "restarted" and lost subscription)
-            ExpectedComm::Receive(
-                100,
-                tungstenite::protocol::Message::Text(format!(
-                    r#"{{"method":"unsubscribe","subscription_id":"{}"}}"#,
-                    subscription_id
-                )),
-            ),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(unsubscribe())),
             // 3. Server responds with SubscriptionNotFound (simulating server restart)
             ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
         ];
@@ -1915,7 +1908,7 @@ mod tests {
         use tycho_common::dto::{Response, WebSocketMessage, WebsocketError};
 
         let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "vm:ambient");
-        let subscription_id = Uuid::new_v4();
+        let subscription_id = Uuid::from_str(SUBSCRIPTION_ID).unwrap();
         let error_response = WebSocketMessage::Response(Response::Error(
             WebsocketError::CompressionError(subscription_id, "Compression failed".to_string()),
         ));
@@ -2087,26 +2080,14 @@ mod tests {
         // Test that force_unsubscribe prevents sending duplicate unsubscribe commands
         // when called multiple times for the same subscription_id
 
-        let subscription_id = Uuid::new_v4();
+        let subscription_id = Uuid::from_str(SUBSCRIPTION_ID).unwrap();
 
         let exp_comm = [
             ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(format!(
-                r#"{{"method":"newsubscription","extractor_id":{{"chain":"ethereum","name":"vm:ambient"}},"subscription_id":"{}"}}"#,
-                subscription_id
-            ))),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_confirmation())),
             // Expect only ONE unsubscribe message, even though force_unsubscribe is called twice
-            ExpectedComm::Receive(
-                100,
-                tungstenite::protocol::Message::Text(format!(
-                    r#"{{"method":"unsubscribe","subscription_id":"{}"}}"#,
-                    subscription_id
-                )),
-            ),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(format!(
-                r#"{{"method":"subscriptionended","subscription_id":"{}"}}"#,
-                subscription_id
-            ))),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(unsubscribe())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_ended())),
         ];
 
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
