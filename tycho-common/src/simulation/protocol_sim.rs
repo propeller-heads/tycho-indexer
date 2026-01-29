@@ -1,6 +1,5 @@
 use std::{any::Any, collections::HashMap, fmt};
 
-use itertools::Itertools;
 use num_bigint::BigUint;
 
 use crate::{
@@ -10,8 +9,7 @@ use crate::{
         errors::{SimulationError, TransitionError},
         indicatively_priced::IndicativelyPriced,
         swap::{
-            self, LimitsParams, MarginalPrice, MarginalPriceParams, QuoteParams, SwapQuoter,
-            TransitionParams,
+            self, LimitsParams, MarginalPriceParams, QuoteParams, SwapQuoter, TransitionParams,
         },
     },
     Bytes,
@@ -417,7 +415,7 @@ where
             .iter()
             .map(|(t0, t1)| {
                 let amount = BigUint::from(10u32).pow(t0.decimals);
-                let params = QuoteParams::new(&t0.address, &t1.address, amount);
+                let params = QuoteParams::fixed_in(&t0.address, &t1.address, amount);
                 self.fee(params)
                     .map(|f| f.fee())
                     .unwrap_or(f64::MAX)
@@ -437,8 +435,10 @@ where
         token_in: &Token,
         token_out: &Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
+        #[allow(deprecated)]
         self.quote(
-            QuoteParams::new(&token_in.address, &token_out.address, amount_in).with_new_state(),
+            QuoteParams::fixed_in(&token_in.address, &token_out.address, amount_in)
+                .with_new_state(),
         )
         .map(|r| {
             GetAmountOutResult::new(
@@ -489,6 +489,7 @@ where
                 }
             }
         };
+        #[allow(deprecated)]
         self.query_swap(swap::QuerySwapParams::new(
             &params.token_in.address,
             &params.token_out.address,
@@ -505,6 +506,7 @@ where
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {
+        #[allow(deprecated)]
         self.to_protocol_sim()
     }
 

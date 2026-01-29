@@ -90,28 +90,60 @@ params_with_context! {
 pub struct QuoteParams<'a>{
         token_in: &'a TokenAddress,
         token_out: &'a TokenAddress,
-        amount_in: BigUint,
+        amount: QuoteAmount,
         modify_state: bool,
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum QuoteAmount {
+    FixedIn(BigUint),
+    FixedOut(BigUint),
+}
+
 impl<'a> QuoteParams<'a> {
-    /// Creates new quote parameters with default settings (no state modification).
+    /// Creates new fixed input parameters with default settings (no state modification).
     ///
     /// # Arguments
     /// * `token_in` - The token to sell
     /// * `token_out` - The token to buy
-    /// * `amount_in` - The amount of input token to sell
-    pub fn new(
+    /// * `amount` - The amount of input token to sell
+    pub fn fixed_in(
         token_in: &'a TokenAddress,
         token_out: &'a TokenAddress,
-        amount_in: BigUint,
+        amount: BigUint,
     ) -> Self {
-        Self { context: Context::default(), token_in, token_out, amount_in, modify_state: false }
+        Self {
+            context: Context::default(),
+            token_in,
+            token_out,
+            amount: QuoteAmount::FixedIn(amount),
+            modify_state: false,
+        }
     }
 
-    pub fn amount_in(&self) -> &BigUint {
-        &self.amount_in
+    /// Creates new fixed output parameters with default settings (no state modification).
+    ///
+    /// # Arguments
+    /// * `token_in` - The token to sell
+    /// * `token_out` - The token to buy
+    /// * `amount` - The amount of output token to buy
+    pub fn fixed_out(
+        token_in: &'a TokenAddress,
+        token_out: &'a TokenAddress,
+        amount: BigUint,
+    ) -> Self {
+        Self {
+            context: Context::default(),
+            token_in,
+            token_out,
+            amount: QuoteAmount::FixedOut(amount),
+            modify_state: false,
+        }
+    }
+
+    pub fn amount(&self) -> &QuoteAmount {
+        &self.amount
     }
 
     /// Configures the quote to modify the state during simulation.
