@@ -691,13 +691,13 @@ pub trait SwapQuoter: fmt::Debug + Send + Sync + 'static {
     /// This method is primarily intended for routing, discovery, and validation logic,
     /// allowing callers to determine whether a quote request is meaningful before invoking
     /// [`quote`].
-    fn quotable_pairs(&self) -> Vec<(TokenAddress, TokenAddress)> {
+    fn quotable_pairs(&self) -> Vec<(Arc<Token>, Arc<Token>)> {
         let component = self.component();
         component
             .tokens
             .iter()
             .permutations(2)
-            .map(|t| (t[0].address.clone(), t[1].address.clone()))
+            .map(|token| (token[0].clone(), token[1].clone()))
             .collect()
     }
 
