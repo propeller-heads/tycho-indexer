@@ -170,6 +170,59 @@ fn test_single_swap_strategy_encoder_transfer_from() {
 }
 
 #[test]
+fn test_single_swap_with_solver_fees() {
+    // Performs a single swap from WETH to DAI on a USV2 pool, with fees
+    // Swap is 1 WETH for 2018.8 DAI
+    // Solver takes 1% -> 20.18 DAI (20188174386087344397)
+    let checked_amount = BigUint::from_str("1995_000000000000000000").unwrap();
+    let weth = weth();
+    let dai = dai();
+
+    let swap = Swap::new(
+        ProtocolComponent {
+            id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+            protocol_system: "uniswap_v2".to_string(),
+            ..Default::default()
+        },
+        weth.clone(),
+        dai.clone(),
+    );
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        token_in: weth,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out: dai,
+        min_amount_out: checked_amount.clone(),
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap],
+        solver_fee_bps: 100, // 1% fee
+        solver_fee_receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
+        max_solver_contribution: BigUint::ZERO,
+    };
+
+    let encoded_solutions = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solutions[0].clone(),
+        &solution,
+        &eth(),
+        None,
+    )
+    .unwrap()
+    .data;
+
+    let hex_calldata = encode(&calldata);
+
+    write_calldata_to_file("test_single_swap_with_solver_fees", &hex_calldata.to_string());
+}
+
+#[test]
 fn test_single_swap_with_fees_and_solver_contribution() {
     // Performs a single swap from WETH to DAI on a USV2 pool, with fees
     // Swap is 1 WETH for 2018.8 DAI

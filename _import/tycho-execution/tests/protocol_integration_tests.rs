@@ -1703,3 +1703,66 @@ fn test_encoding_strategy_curve_lido_sequential_swap() {
         hex_calldata.as_str(),
     );
 }
+
+#[test]
+#[ignore] // Performs real Angstrom API call
+fn test_single_swap_with_univ4_angstrom() {
+    //  USDC ─── (USV4-angstrom) ──> WETH
+
+    dotenv::dotenv().ok();
+
+    let weth = weth();
+    let usdc = usdc();
+
+    // USDC -> WETH (Uniswap v4 with Angstrom hook)
+    let angstrom_hook = Bytes::from("0x0000000aa232009084Bd71A5797d089AA4Edfad4");
+    let mut usdc_weth_attributes: HashMap<String, Bytes> = HashMap::new();
+    usdc_weth_attributes.insert("key_lp_fee".into(), Bytes::from("0x800000")); // 8388608
+    usdc_weth_attributes.insert("tick_spacing".into(), Bytes::from("0x0a")); // 10
+    usdc_weth_attributes.insert("hooks".into(), angstrom_hook.clone());
+    let swap = Swap::new(
+        ProtocolComponent {
+            id: "0x000000000004444c5dc75cB358380D2e3dE08A90".to_string(),
+            protocol_system: "uniswap_v4_hooks".to_string(),
+            static_attributes: usdc_weth_attributes,
+            ..Default::default()
+        },
+        usdc.clone(),
+        weth.clone(),
+    );
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        token_in: usdc.clone(),
+        amount_in: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
+        token_out: weth.clone(),
+        min_amount_out: BigUint::from_str("99574171").unwrap(),
+        sender: alice_address(),
+        receiver: alice_address(),
+        swaps: vec![swap],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        Some(get_signer()),
+    )
+    .unwrap()
+    .data;
+
+    let hex_calldata = encode(&calldata);
+
+    // The angstrom attestation adds calldata at the end. If they are not being encoded the
+    // following assert would fail
+    assert_eq!(hex_calldata[904..].len(), 1152);
+}

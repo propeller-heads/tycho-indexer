@@ -1,3 +1,11 @@
+## [0.21.1](https://github.com/propeller-heads/tycho-contracts/compare/0.21.0...0.21.1) (2026-01-28)
+
+
+### Bug Fixes
+
+* Remove option for uniswap_v4_hooks encoder entirely ([6ad4eeb](https://github.com/propeller-heads/tycho-contracts/commit/6ad4eeb7b791e92ce9eb0033a6bb76cc54621265))
+* Remove uniswap_v4_hooks for base and unichain as well ([99f6ac2](https://github.com/propeller-heads/tycho-contracts/commit/99f6ac22d34446222696f52b0d07277b0fd01eaf))
+
 ## [0.21.0](https://github.com/propeller-heads/tycho-contracts/compare/0.20.0...0.21.0) (2026-01-27)
 
 
