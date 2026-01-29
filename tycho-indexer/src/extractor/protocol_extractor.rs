@@ -1379,6 +1379,7 @@ where
             db_committed_block_height: None,
             finalized_block_height,
             revert: true,
+            is_partial: false, // Revert messages are always complete
             state_deltas,
             account_deltas,
             new_tokens: HashMap::new(),
@@ -3263,6 +3264,7 @@ mod test_serial_db {
                 db_committed_block_height: None,
                 finalized_block_height: 3,
                 revert: true,
+                is_partial: false,
                 state_deltas: HashMap::from([
                     ("pc_1".to_string(), ProtocolComponentStateDelta {
                         component_id: "pc_1".to_string(),
@@ -3450,6 +3452,7 @@ mod test_serial_db {
                 db_committed_block_height: None,
                 finalized_block_height: 3,
                 revert: true,
+                is_partial: false,
                 account_deltas: HashMap::from([
                     (account1.clone(), AccountDelta::new(
                         Chain::Ethereum,

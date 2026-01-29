@@ -247,6 +247,7 @@ impl BlockChanges {
             db_committed_block_height,
             finalized_block_height: self.finalized_block_height,
             revert: self.revert,
+            is_partial: false, // TODO: extract this from the BlockChanges once available
             new_protocol_components: aggregated_changes.protocol_components,
             new_tokens: self.new_tokens,
             deleted_protocol_components: HashMap::new(),
