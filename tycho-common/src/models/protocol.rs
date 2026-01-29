@@ -1,4 +1,7 @@
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet},
+    sync::Arc,
+};
 
 use chrono::NaiveDateTime;
 use deepsize::{Context, DeepSizeOf};
@@ -8,8 +11,8 @@ use tracing::warn;
 
 use crate::{
     models::{
-        blockchain::Transaction, Address, AttrStoreKey, Balance, Chain, ChangeType, ComponentId,
-        MergeError, StoreVal, TxHash,
+        blockchain::Transaction, token::Token, Address, AttrStoreKey, Balance, Chain, ChangeType,
+        ComponentId, MergeError, StoreVal, TxHash,
     },
     Bytes,
 };
@@ -68,6 +71,15 @@ where
             creation_tx,
             created_at,
         }
+    }
+}
+
+impl ProtocolComponent<Arc<Token>> {
+    pub fn get_token(&self, address: &Address) -> Option<Arc<Token>> {
+        self.tokens
+            .iter()
+            .find(|t| &t.address == address)
+            .map(Arc::clone)
     }
 }
 
