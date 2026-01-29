@@ -1,3 +1,10 @@
+## [0.22.0](https://github.com/propeller-heads/tycho-contracts/compare/0.21.1...0.22.0) (2026-01-29)
+
+
+### Features
+
+* Do not encode transferTypes ([4f37d05](https://github.com/propeller-heads/tycho-contracts/commit/4f37d05ed4f24c77de2309ac6a6ea4ebc28f1274))
+
 ## [0.21.1](https://github.com/propeller-heads/tycho-contracts/compare/0.21.0...0.21.1) (2026-01-28)
 
 
