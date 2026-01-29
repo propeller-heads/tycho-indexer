@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {IExecutor, ProtocolType} from "@interfaces/IExecutor.sol";
+import {IExecutor} from "@interfaces/IExecutor.sol";
 import {
     SafeERC20,
     IERC20
@@ -53,8 +53,11 @@ contract LidoExecutor is IExecutor {
         wstEth = _wstEthAddress;
     }
 
-    function protocolType() external returns (ProtocolType) {
-        return ProtocolType.FundsInRouter;
+    function canReceiveFromPreviousSwap(bytes calldata data)
+        external
+        returns (bool isOptimizable, address receiver)
+    {
+        return (false, address(0));
     }
 
     // slither-disable-next-line locked-ether

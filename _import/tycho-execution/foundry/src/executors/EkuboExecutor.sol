@@ -5,7 +5,7 @@ import {
     SafeERC20,
     IERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IExecutor, ProtocolType} from "@interfaces/IExecutor.sol";
+import {IExecutor} from "@interfaces/IExecutor.sol";
 import {ICallback} from "@interfaces/ICallback.sol";
 import {ICore} from "@ekubo/interfaces/ICore.sol";
 import {ILocker, IPayer} from "@ekubo/interfaces/IFlashAccountant.sol";
@@ -49,8 +49,11 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         mevResist = _mevResist;
     }
 
-    function protocolType() external returns (ProtocolType) {
-        return ProtocolType.CallbackConstrained;
+    function canReceiveFromPreviousSwap(bytes calldata data)
+        external
+        returns (bool isOptimizable, address receiver)
+    {
+        return (false, address(0));
     }
 
     function swap(uint256 amountIn, bytes calldata data, address receiver)

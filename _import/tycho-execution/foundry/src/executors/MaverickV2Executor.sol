@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {IExecutor, ProtocolType} from "@interfaces/IExecutor.sol";
+import {IExecutor} from "@interfaces/IExecutor.sol";
 import {
     SafeERC20,
     IERC20
@@ -28,8 +28,12 @@ contract MaverickV2Executor is IExecutor {
         factory = _factory;
     }
 
-    function protocolType() external returns (ProtocolType) {
-        return ProtocolType.InTransferRequired;
+    function canReceiveFromPreviousSwap(bytes calldata data)
+        external
+        returns (bool isOptimizable, address receiver)
+    {
+        address target = address(bytes20(data[0:20]));
+        return (true, target);
     }
 
     // slither-disable-next-line locked-ether

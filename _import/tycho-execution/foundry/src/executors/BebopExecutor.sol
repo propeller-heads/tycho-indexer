@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {IExecutor, ProtocolType} from "@interfaces/IExecutor.sol";
+import {IExecutor} from "@interfaces/IExecutor.sol";
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {
@@ -33,8 +33,11 @@ contract BebopExecutor is IExecutor {
         bebopSettlement = _bebopSettlement;
     }
 
-    function protocolType() external returns (ProtocolType) {
-        return ProtocolType.FundsInRouter;
+    function canReceiveFromPreviousSwap(bytes calldata data)
+        external
+        returns (bool isOptimizable, address receiver)
+    {
+        return (false, address(0));
     }
 
     /// @notice Executes a swap through Bebop's PMM RFQ system

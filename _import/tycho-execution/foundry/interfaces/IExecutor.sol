@@ -56,11 +56,16 @@ interface IExecutor {
         returns (RestrictTransferFrom.TransferType baseTransferType, address receiver, address tokenIn);
 
     /**
-     * @dev Returns the protocol type indicating how this executor handles token transfers
-     * @return The ProtocolType enum value for this executor
+     * @dev Defines if the current protocol can be used in an optimization from the previous swap (this is only used for the sequential swap case).
+     * For example we might have a swap WETH --(1)--> USDC --(2)--> DAI.
+     * Before we perform swap 1 we need to know the receiver of the token out. If the protocol of swap 2 can support
+     * optimization then the receiver should be pool 2.
+     * @param data The encoded swap data.
+     * @return isOptimizable Bool where true means that the transfer is optimizable
+     * @return receiver Address where to send the funds to. If the bool is false, it should be set to address(0)
      */
-    function protocolType()
-    external returns (ProtocolType);
+    function canReceiveFromPreviousSwap(bytes calldata data)
+    external returns (bool isOptimizable, address receiver);
 
 }
 

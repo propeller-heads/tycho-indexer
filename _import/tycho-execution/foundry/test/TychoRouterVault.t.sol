@@ -35,8 +35,11 @@ contract WrapUnwrapExecutor is IExecutor {
         weth = IWETH(_weth);
     }
 
-    function protocolType() external returns (ProtocolType) {
-        return ProtocolType.FundsInRouter;
+    function canReceiveFromPreviousSwap(bytes calldata data)
+        external
+        returns (bool isOptimizable, address receiver)
+    {
+        return (false, address(0));
     }
 
     // slither-disable-next-line locked-ether

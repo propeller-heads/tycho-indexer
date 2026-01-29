@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {IExecutor, ProtocolType} from "@interfaces/IExecutor.sol";
+import {IExecutor} from "@interfaces/IExecutor.sol";
 import {ICallback} from "@interfaces/ICallback.sol";
 import {
     IERC20,
@@ -76,8 +76,11 @@ contract UniswapV4Executor is IExecutor, ICallback {
         _self = address(this);
     }
 
-    function protocolType() external returns (ProtocolType) {
-        return ProtocolType.CallbackConstrained;
+    function canReceiveFromPreviousSwap(bytes calldata data)
+        external
+        returns (bool isOptimizable, address receiver)
+    {
+        return (false, address(0));
     }
 
     /**

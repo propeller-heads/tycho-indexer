@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {IExecutor, ProtocolType} from "@interfaces/IExecutor.sol";
+import {IExecutor} from "@interfaces/IExecutor.sol";
 import {ICallback} from "@interfaces/ICallback.sol";
 import {RestrictTransferFrom} from "./RestrictTransferFrom.sol";
 
@@ -294,14 +294,32 @@ contract Dispatcher is RestrictTransferFrom {
         return decodedResult;
     }
 
-    function _callProtocolTypeOnExecutor(address executor)
-        internal
-        returns (ProtocolType protocolType)
-    {
+    function _callCanReceiveFromPreviousSwap(
+        address executor,
+        bytes calldata data
+    ) internal returns (bool isOptimizable, address receiver) {
         if (!executors[executor]) {
             revert Dispatcher__UnapprovedExecutor(executor);
         }
         // slither-disable-next-line calls-loop
-        protocolType = IExecutor(executor).protocolType();
+        (bool success, bytes memory optimizableData) = executor.staticcall(
+            abi.encodeWithSelector(
+                IExecutor.canReceiveFromPreviousSwap.selector, data
+            )
+        );
+
+        if (!success) {
+            revert(
+                string(
+                    optimizableData.length > 0
+                        ? optimizableData
+                        : abi.encodePacked(
+                            "Getting protocol optimizable data failed"
+                        )
+                )
+            );
+        }
+
+        (isOptimizable, receiver) = abi.decode(optimizableData, (bool, address));
     }
 }
