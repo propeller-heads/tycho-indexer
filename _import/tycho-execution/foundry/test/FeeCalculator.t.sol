@@ -8,9 +8,6 @@ import "./Constants.sol";
 contract FeeCalculatorTest is Constants {
     FeeCalculator feeCalculator;
 
-    bytes32 public constant ROUTER_FEE_SETTER_ROLE =
-        0x9939157be7760e9462f1d5a0dcad88b616ddc64138e317108b40b1cf55601348;
-
     function setUp() public {
         feeCalculator = new FeeCalculator();
         feeCalculator.grantRole(ROUTER_FEE_SETTER_ROLE, FEE_SETTER);
@@ -271,9 +268,6 @@ contract FeeCalculatorTest is Constants {
 contract FeeCalculatorConfigTest is Constants {
     FeeCalculator feeCalculator;
 
-    bytes32 public constant ROUTER_FEE_SETTER_ROLE =
-        0x9939157be7760e9462f1d5a0dcad88b616ddc64138e317108b40b1cf55601348;
-
     function setUp() public {
         feeCalculator = new FeeCalculator();
         feeCalculator.grantRole(ROUTER_FEE_SETTER_ROLE, FEE_SETTER);
@@ -310,10 +304,10 @@ contract FeeCalculatorConfigTest is Constants {
         feeCalculator.setCustomRouterFeeOnOutput(BOB, userFee);
 
         // Check user gets custom fee
-        assertEq(feeCalculator.getCustomRouterFeeOnOutput(BOB), userFee);
+        assertEq(feeCalculator.getEffectiveRouterFeeOnOutput(BOB), userFee);
 
         // Check other users still get default fee
-        assertEq(feeCalculator.getCustomRouterFeeOnOutput(ALICE), defaultFee);
+        assertEq(feeCalculator.getEffectiveRouterFeeOnOutput(ALICE), defaultFee);
     }
 
     function testSetCustomRouterFeeOnOutputUnauthorized() public {
@@ -327,7 +321,7 @@ contract FeeCalculatorConfigTest is Constants {
         uint16 userFee = 75;
         vm.prank(FEE_SETTER);
         feeCalculator.setCustomRouterFeeOnOutput(ALICE, userFee);
-        assertEq(feeCalculator.getCustomRouterFeeOnOutput(ALICE), userFee);
+        assertEq(feeCalculator.getEffectiveRouterFeeOnOutput(ALICE), userFee);
     }
 
     function testRemoveCustomRouterFeeOnOutput() public {
@@ -339,14 +333,14 @@ contract FeeCalculatorConfigTest is Constants {
         feeCalculator.setCustomRouterFeeOnOutput(ALICE, customFee);
         vm.stopPrank();
 
-        assertEq(feeCalculator.getCustomRouterFeeOnOutput(ALICE), customFee);
+        assertEq(feeCalculator.getEffectiveRouterFeeOnOutput(ALICE), customFee);
 
         // Remove custom fee
         vm.prank(FEE_SETTER);
         feeCalculator.removeCustomRouterFeeOnOutput(ALICE);
 
         // Should now return default fee
-        assertEq(feeCalculator.getCustomRouterFeeOnOutput(ALICE), defaultFee);
+        assertEq(feeCalculator.getEffectiveRouterFeeOnOutput(ALICE), defaultFee);
     }
 
     function testRemoveCustomRouterFeeOnOutputUnauthorized() public {
@@ -498,7 +492,7 @@ contract FeeCalculatorConfigTest is Constants {
 
         // Verify each user has correct fees
         assertEq(
-            feeCalculator.getCustomRouterFeeOnOutput(user1), user1FeeOnOutput
+            feeCalculator.getEffectiveRouterFeeOnOutput(user1), user1FeeOnOutput
         );
         assertEq(
             feeCalculator.getCustomRouterFeeOnSolverFee(user1),
@@ -506,7 +500,7 @@ contract FeeCalculatorConfigTest is Constants {
         );
 
         assertEq(
-            feeCalculator.getCustomRouterFeeOnOutput(user2), user2FeeOnOutput
+            feeCalculator.getEffectiveRouterFeeOnOutput(user2), user2FeeOnOutput
         );
         assertEq(
             feeCalculator.getCustomRouterFeeOnSolverFee(user2),
@@ -515,7 +509,7 @@ contract FeeCalculatorConfigTest is Constants {
 
         // User3 should get default fees
         assertEq(
-            feeCalculator.getCustomRouterFeeOnOutput(user3),
+            feeCalculator.getEffectiveRouterFeeOnOutput(user3),
             defaultRouterFeeOnOutput
         );
         assertEq(
@@ -541,11 +535,12 @@ contract FeeCalculatorConfigTest is Constants {
         vm.stopPrank();
 
         // User should still have custom fee
-        assertEq(feeCalculator.getCustomRouterFeeOnOutput(BOB), bobFee);
+        assertEq(feeCalculator.getEffectiveRouterFeeOnOutput(BOB), bobFee);
 
         // Other users should get new default
         assertEq(
-            feeCalculator.getCustomRouterFeeOnOutput(ALICE), updatedDefaultFee
+            feeCalculator.getEffectiveRouterFeeOnOutput(ALICE),
+            updatedDefaultFee
         );
     }
 
@@ -553,7 +548,7 @@ contract FeeCalculatorConfigTest is Constants {
         // Default fees should be zero
         assertEq(feeCalculator.getRouterFeeOnOutput(), 0);
         assertEq(feeCalculator.getRouterFeeOnSolverFee(), 0);
-        assertEq(feeCalculator.getCustomRouterFeeOnOutput(ALICE), 0);
+        assertEq(feeCalculator.getEffectiveRouterFeeOnOutput(ALICE), 0);
         assertEq(feeCalculator.getCustomRouterFeeOnSolverFee(ALICE), 0);
         // Default fee receiver should be the contract deployer
         assertEq(feeCalculator.getRouterFeeReceiver(), address(this));

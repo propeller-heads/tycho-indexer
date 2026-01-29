@@ -46,7 +46,7 @@ interface IExecutor {
      * to be transferred upfront, while others handle transfers in callbacks.
      *
      * @param data The encoded swap data.
-     * @return baseTransferType The base transfer type for this executor (None, ProtocolWillDebit, or Transfer).
+     * @return baseTransferType The base transfer type for this executor (None, ProtocolWillDebit, Transfer or TransferNativeInExecutor).
      * @return receiver The address that should receive the pre swap tokens (usually a pool or the TychoRouter - depending on the protocol).
      * @return tokenIn The address of the input token to transfer.
      */

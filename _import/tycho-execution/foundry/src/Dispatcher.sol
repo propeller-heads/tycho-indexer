@@ -30,6 +30,9 @@ contract Dispatcher is RestrictTransferFrom {
     // keccak256("Dispatcher#IS_SPLIT_SWAP_SLOT")
     uint256 private constant _IS_SPLIT_SWAP_SLOT =
         0x7b3c4e5f6a8d9e0f1c2b3a4d5e6f7c8d9e0f1c2b3a4d5e6f7c8d9e0f1c2b3a4d;
+    // keccak256("Dispatcher#IS_FIRST_SWAP_SLOT")
+    uint256 private constant _IS_FIRST_SWAP_SLOT =
+        0x8c47a7e3f4c2e1b5a6d9f0e8c7b3a2d1e4f5c6b7a8d9e0f1c2b3a4d5e6f7c8d9;
 
     event ExecutorSet(address indexed executor);
     event ExecutorRemoved(address indexed executor);
@@ -146,10 +149,6 @@ contract Dispatcher is RestrictTransferFrom {
             _updateDeltaAccounting(tokenOut, int256(calculatedAmount));
         }
     }
-
-    // keccak256("Dispatcher#IS_FIRST_SWAP_SLOT")
-    uint256 private constant _IS_FIRST_SWAP_SLOT =
-        0x8c47a7e3f4c2e1b5a6d9f0e8c7b3a2d1e4f5c6b7a8d9e0f1c2b3a4d5e6f7c8d9;
 
     /**
      * @dev Determines the appropriate TransferType based on executor characteristics and context.

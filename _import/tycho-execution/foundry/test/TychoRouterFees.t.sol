@@ -10,28 +10,6 @@ import {
 import {TychoRouter__AmountOutNotFullyReceived} from "@src/TychoRouter.sol";
 
 contract TychoRouterFeesTest is TychoRouterTestSetup {
-    FeeCalculator feeCalculator;
-    address routerFeeReceiver;
-    address solverFeeReceiver;
-
-    bytes32 public constant ROUTER_FEE_SETTER_ROLE =
-        0x9939157be7760e9462f1d5a0dcad88b616ddc64138e317108b40b1cf55601348;
-
-    function setUp() public override {
-        super.setUp();
-
-        // Deploy and configure FeeCalculator
-        feeCalculator = new FeeCalculator();
-        feeCalculator.grantRole(ROUTER_FEE_SETTER_ROLE, FEE_SETTER);
-
-        routerFeeReceiver = makeAddr("routerFeeReceiver");
-        solverFeeReceiver = makeAddr("solverFeeReceiver");
-
-        // Set fee calculator in router
-        vm.prank(FEE_SETTER);
-        tychoRouter.setFeeCalculator(address(feeCalculator));
-    }
-
     function testSingleSwapWithAllFeeTypes() public {
         // Set up fees: 1% router fee on output, 2% solver fee, 10% router fee on solver fee
         vm.startPrank(FEE_SETTER);

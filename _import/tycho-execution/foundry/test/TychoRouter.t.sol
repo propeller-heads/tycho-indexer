@@ -119,9 +119,4 @@ contract TychoRouterTest is TychoRouterTestSetup {
 
         assertEq(tychoRouter.getFeeCalculator(), newFeeCalculator);
     }
-
-    function testDefaultFeeCalculator() public view {
-        // Calculator should be zero if not explicitly set
-        assertEq(tychoRouter.getFeeCalculator(), address(0));
-    }
 }

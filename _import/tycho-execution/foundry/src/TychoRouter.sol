@@ -108,12 +108,13 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address indexed oldCalculator, address indexed newCalculator
     );
 
-    constructor(address _permit2) Dispatcher(_permit2) {
+    constructor(address _permit2, address feeCalculator) Dispatcher(_permit2) {
         if (_permit2 == address(0)) {
             revert TychoRouter__AddressZero();
         }
         permit2 = IAllowanceTransfer(_permit2);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _feeCalculator = IFeeCalculator(feeCalculator);
     }
 
     /**
@@ -1230,9 +1231,11 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         view
         returns (address)
     {
-        address feeCalculator = this.getFeeCalculator();
+        uint16 routerFees =
+            _feeCalculator.getEffectiveRouterFeeOnOutput(msg.sender);
         address finalReceiver = address(this);
-        if (feeCalculator == address(0) && !solverFees) {
+        if (routerFees == 0 && !solverFees) {
+            // if no fees are taken, the receiver can be the user directly
             finalReceiver = receiver;
         }
         return finalReceiver;

@@ -209,7 +209,7 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
      * @param user The user address to check
      * @return The fee in basis points (custom if set, otherwise default)
      */
-    function getCustomRouterFeeOnOutput(address user)
+    function getEffectiveRouterFeeOnOutput(address user)
         external
         view
         returns (uint16)

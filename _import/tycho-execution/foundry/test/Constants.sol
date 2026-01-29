@@ -38,6 +38,8 @@ contract Constants is Test, BaseConstants {
     address EXECUTOR_SETTER = makeAddr("executorSetter");
     address FEE_CALCULATOR = makeAddr("feeCalculator");
     address FEE_SETTER = makeAddr("feeSetter");
+    bytes32 ROUTER_FEE_SETTER_ROLE =
+        0x9939157be7760e9462f1d5a0dcad88b616ddc64138e317108b40b1cf55601348;
     address ALICE = 0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2;
     uint256 ALICE_PK =
         0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234;
