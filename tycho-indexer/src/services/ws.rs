@@ -241,7 +241,8 @@ impl WsActor {
 
                             // If a block is a revert, always include it
                             // Otherwise, send only block types matching partial_block preference
-                            if !item.revert && partial_blocks != item.is_partial {
+                            let matches_preference = partial_blocks != item.partial_block_index.is_some();
+                            if !item.revert && matches_preference {
                                 continue;
                             }
 
@@ -570,7 +571,6 @@ mod tests {
                 db_committed_block_height: None,
                 finalized_block_height: 1,
                 revert: false,
-                is_partial: false,
                 ..Default::default()
             }
         }
@@ -1426,7 +1426,7 @@ mod tests {
         let extractor_id = ExtractorIdentity::new(Chain::Ethereum, &extractor_name);
 
         let mut block = MyMessageSender::default_block(&extractor_name);
-        block.is_partial = block_is_partial;
+        block.partial_block_index = if block_is_partial { Some(0) } else { None };
         block.revert = block_revert;
 
         let message_sender = Arc::new(MyMessageSender::new(extractor_id.clone()).with_block(block));

@@ -309,8 +309,6 @@ pub struct BlockChanges {
     pub block: Block,
     pub finalized_block_height: u64,
     pub revert: bool,
-    #[serde(default)]
-    pub is_partial: bool,
     #[serde(with = "hex_hashmap_key", default)]
     pub new_tokens: HashMap<Bytes, ResponseToken>,
     #[serde(alias = "account_deltas", with = "hex_hashmap_key")]
@@ -336,7 +334,6 @@ impl BlockChanges {
         block: Block,
         finalized_block_height: u64,
         revert: bool,
-        is_partial: bool,
         account_updates: HashMap<Bytes, AccountUpdate>,
         state_updates: HashMap<String, ProtocolStateDelta>,
         new_protocol_components: HashMap<String, ProtocolComponent>,
@@ -351,7 +348,6 @@ impl BlockChanges {
             block,
             finalized_block_height,
             revert,
-            is_partial,
             new_tokens: HashMap::new(),
             account_updates,
             state_updates,
@@ -522,7 +518,6 @@ impl From<BlockAggregatedChanges> for BlockChanges {
             block: value.block.into(),
             finalized_block_height: value.finalized_block_height,
             revert: value.revert,
-            is_partial: value.is_partial,
             account_updates: value
                 .account_deltas
                 .into_iter()
@@ -2220,17 +2215,13 @@ mod test {
         }));
     }
 
-    /// Test backward compatibility for BlockChanges deserialization with is_partial field.
-    /// - None: legacy format without field, should default to false
-    /// - Some(true): new format with is_partial=true
-    /// - Some(false): new format with is_partial=false
     #[rstest]
-    #[case::legacy_format_defaults_to_false(None, false)]
-    #[case::explicit_true(Some(true), true)]
-    #[case::explicit_false(Some(false), false)]
+    #[case::legacy_format(None, None)]
+    #[case::full_block(Some(None), None)]
+    #[case::partial_block(Some(Some(1)), Some(1))]
     fn test_block_changes_is_partial_backward_compatibility(
-        #[case] is_partial_value: Option<bool>,
-        #[case] expected: bool,
+        #[case] has_partial_value: Option<Option<u32>>,
+        #[case] expected: Option<u32>,
     ) {
         use serde_json::json;
 
@@ -2262,14 +2253,14 @@ mod test {
         });
 
         // Add is_partial field only if specified
-        if let Some(value) = is_partial_value {
-            json_value["is_partial"] = json!(value);
+        if let Some(partial_value) = has_partial_value {
+            json_value["partial_block_index"] = json!(partial_value);
         }
 
         let block_changes: BlockChanges =
             serde_json::from_value(json_value).expect("Failed to deserialize BlockChanges");
 
-        assert_eq!(block_changes.is_partial, expected);
+        assert_eq!(block_changes.partial_block_index, expected);
     }
 
     #[test]
