@@ -301,7 +301,7 @@ contract Dispatcher is RestrictTransferFrom {
         if (!executors[executor]) {
             revert Dispatcher__UnapprovedExecutor(executor);
         }
-        // slither-disable-next-line calls-loop
+        // slither-disable-next-line calls-loop,low-level-calls
         (bool success, bytes memory optimizableData) = executor.staticcall(
             abi.encodeWithSelector(
                 IExecutor.canReceiveFromPreviousSwap.selector, data

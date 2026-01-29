@@ -924,52 +924,46 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         bytes calldata swaps_,
         address finalReceiver
     ) internal returns (uint256 calculatedAmount) {
-        bytes calldata currentSwap;
         calculatedAmount = amountIn;
-        (currentSwap, swaps_) = swaps_.next();
-        bytes calldata nextSwap;
-        bool isFirstSwap = true;
+        uint256 swapCount = swaps_.size();
+        bytes calldata remainingSwaps = swaps_;
 
-        while (true) {
+        for (uint256 i = 0; i < swapCount; i++) {
+            bytes calldata currentSwap;
+            (currentSwap, remainingSwaps) = remainingSwaps.next();
+
             (address executor, bytes calldata protocolData) =
                 currentSwap.decodeSequentialSwap();
-            address receiver;
-            if (swaps_.length > 0) {
-                (nextSwap, swaps_) = swaps_.next();
-                address nextExecutor = nextSwap.decodeExecutor();
-                ProtocolType protocolType =
-                    _callProtocolTypeOnExecutor(nextExecutor);
 
-                if (protocolType == ProtocolType.InTransferRequired) {
-                    // decode target -> ASSUME first 20 bytes
-                    receiver = nextSwap.decodeTarget();
-                } else {
+            address receiver;
+            bool isLastSwap = (i == swapCount - 1);
+
+            if (isLastSwap) {
+                receiver = finalReceiver;
+            } else {
+                bytes calldata nextSwap;
+                // slither-disable-next-line unused-return
+                (nextSwap,) = remainingSwaps.next();
+                (address nextExecutor, bytes calldata nextProtocolData) =
+                    nextSwap.decodeSequentialSwap();
+                bool isOptimizable;
+                (isOptimizable, receiver) = _callCanReceiveFromPreviousSwap(
+                    nextExecutor, nextProtocolData
+                );
+
+                if (!isOptimizable) {
                     receiver = address(this);
                 }
-                currentSwap = nextSwap; // Set up for next iteration
-            } else {
-                // last swap
-                calculatedAmount = _callSwapOnExecutor(
-                    executor,
-                    calculatedAmount,
-                    protocolData,
-                    isFirstSwap,
-                    false,
-                    finalReceiver
-                );
-                break; // Break after processing the last swap
             }
 
             calculatedAmount = _callSwapOnExecutor(
                 executor,
                 calculatedAmount,
                 protocolData,
-                isFirstSwap,
+                i == 0, // isFirstSwap
                 false,
                 receiver
             );
-
-            isFirstSwap = false;
         }
     }
 

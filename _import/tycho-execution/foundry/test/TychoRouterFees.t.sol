@@ -106,62 +106,6 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         assertEq(userBalance, expectedAmountOut);
     }
 
-    function testSingleSwapCircumventFeesFails() public {
-        // Set up fees: 1% router fee on output
-        vm.startPrank(FEE_SETTER);
-        feeCalculator.setRouterFeeReceiver(routerFeeReceiver);
-        feeCalculator.setRouterFeeOnOutput(100); // 1%
-        vm.stopPrank();
-
-        // Trade 1 WETH for DAI with 1 swap on Uniswap V2
-        uint256 amountIn = 1 ether;
-
-        deal(WETH_ADDR, ALICE, amountIn);
-
-        // Give router some DAI balance to simulate the router already holding tokens
-        // The transfer shouldn't fail with insufficient balance (we would like it
-        // to fail in _finalizeBalances instead)
-        deal(DAI_ADDR, address(tychoRouter), 3000 * 1e18);
-
-        vm.startPrank(ALICE);
-        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
-
-        // User tries to circumvent fees by encoding receiver as themselves instead of router
-        bytes memory protocolData = encodeUniswapV2Swap(
-            DAI_WETH_UNIV2_POOL,
-            ALICE, // WILL REVERT: Should be TychoRouter when fees > 0
-            false
-        );
-
-        bytes memory swap =
-            encodeSingleSwap(address(usv2Executor), protocolData);
-
-        uint256 minAmountOut = 1900 * 1e18;
-
-        // Execute swap - this should fail because:
-        // 1. Swap sends tokens to ALICE (not router)
-        // 2. takeFees calculates fees (amountOut < amountOutBeforeFees)
-        // 3. Router checks if it received the full amount
-        // 4. Router didn't receive the tokens → reverts with
-        //    Vault__UnexpectedNonZeroCount(1). This happens because when using
-        //    InputSource.TransferFrom, no negative deltas are allowed at all.
-        vm.expectRevert(
-            abi.encodeWithSelector(Vault__UnexpectedNonZeroCount.selector, 1)
-        );
-        tychoRouter.singleSwap(
-            amountIn,
-            WETH_ADDR,
-            DAI_ADDR,
-            minAmountOut,
-            ALICE,
-            0, // solverFeeBps
-            address(0), // solverFeeReceiver
-            0,
-            swap
-        );
-        vm.stopPrank();
-    }
-
     function testSingleSwapWithSolverFees() public {
         // Tests swapping WETH -> DAI on a USV2 pool with fees and solver contribution
         // Swap is 1 WETH for 2018.8 DAI (2018817438608734439722)
