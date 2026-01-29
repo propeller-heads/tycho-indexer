@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use chrono::NaiveDateTime;
 use deepsize::{Context, DeepSizeOf};
@@ -7,8 +10,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     models::{
-        Address, AttrStoreKey, Balance, Chain, ChangeType, ComponentId, MergeError, StoreVal,
-        TxHash,
+        token::Token, Address, AttrStoreKey, Balance, Chain, ChangeType,
+        ComponentId, MergeError, StoreVal, TxHash,
     },
     Bytes,
 };
@@ -67,6 +70,15 @@ where
             creation_tx,
             created_at,
         }
+    }
+}
+
+impl ProtocolComponent<Arc<Token>> {
+    pub fn get_token(&self, address: &Address) -> Option<Arc<Token>> {
+        self.tokens
+            .iter()
+            .find(|t| &t.address == address)
+            .map(Arc::clone)
     }
 }
 
