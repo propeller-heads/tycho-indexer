@@ -309,6 +309,8 @@ pub struct BlockChanges {
     pub block: Block,
     pub finalized_block_height: u64,
     pub revert: bool,
+    #[serde(default)]
+    pub is_partial: bool,
     #[serde(with = "hex_hashmap_key", default)]
     pub new_tokens: HashMap<Bytes, ResponseToken>,
     #[serde(alias = "account_deltas", with = "hex_hashmap_key")]
@@ -334,6 +336,7 @@ impl BlockChanges {
         block: Block,
         finalized_block_height: u64,
         revert: bool,
+        is_partial: bool,
         account_updates: HashMap<Bytes, AccountUpdate>,
         state_updates: HashMap<String, ProtocolStateDelta>,
         new_protocol_components: HashMap<String, ProtocolComponent>,
@@ -348,6 +351,7 @@ impl BlockChanges {
             block,
             finalized_block_height,
             revert,
+            is_partial,
             new_tokens: HashMap::new(),
             account_updates,
             state_updates,
@@ -365,6 +369,7 @@ impl BlockChanges {
     }
 
     pub fn merge(mut self, other: Self) -> Self {
+        // TODO: consider how should we merge if partial flags differ?
         other
             .account_updates
             .into_iter()
@@ -517,6 +522,7 @@ impl From<BlockAggregatedChanges> for BlockChanges {
             block: value.block.into(),
             finalized_block_height: value.finalized_block_height,
             revert: value.revert,
+            is_partial: value.is_partial,
             account_updates: value
                 .account_deltas
                 .into_iter()
@@ -2235,6 +2241,120 @@ mod test {
         assert!(retriggers_vec2.iter().any(|(k, v)| {
             k == &Bytes::from("0x03") && v.key == Bytes::from("0x04") && v.offset == 5
         }));
+    }
+
+    #[test]
+    fn test_block_changes_is_partial_backward_compatibility() {
+        // Test old format (without is_partial field) - should default to false
+        let json_without_is_partial = r#"{
+            "extractor": "test_extractor",
+            "chain": "ethereum",
+            "block": {
+                "number": 100,
+                "hash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+                "parent_hash": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+                "chain": "ethereum",
+                "ts": "2024-01-01T00:00:00"
+            },
+            "finalized_block_height": 99,
+            "revert": false,
+            "new_tokens": {},
+            "account_updates": {},
+            "state_updates": {},
+            "new_protocol_components": {},
+            "deleted_protocol_components": {},
+            "component_balances": {},
+            "account_balances": {},
+            "component_tvl": {},
+            "dci_update": {
+                "new_entrypoints": {},
+                "new_entrypoint_params": {},
+                "trace_results": {}
+            }
+        }"#;
+
+        let block_changes: BlockChanges = serde_json::from_str(json_without_is_partial)
+            .expect("Failed to deserialize BlockChanges without is_partial field");
+
+        assert!(
+            !block_changes.is_partial,
+            "is_partial should default to false when not specified"
+        );
+
+        // Test new format (with is_partial: true)
+        let json_with_is_partial_true = r#"{
+            "extractor": "test_extractor",
+            "chain": "ethereum",
+            "block": {
+                "number": 100,
+                "hash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+                "parent_hash": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+                "chain": "ethereum",
+                "ts": "2024-01-01T00:00:00"
+            },
+            "finalized_block_height": 99,
+            "revert": false,
+            "is_partial": true,
+            "new_tokens": {},
+            "account_updates": {},
+            "state_updates": {},
+            "new_protocol_components": {},
+            "deleted_protocol_components": {},
+            "component_balances": {},
+            "account_balances": {},
+            "component_tvl": {},
+            "dci_update": {
+                "new_entrypoints": {},
+                "new_entrypoint_params": {},
+                "trace_results": {}
+            }
+        }"#;
+
+        let block_changes_partial: BlockChanges = serde_json::from_str(json_with_is_partial_true)
+            .expect("Failed to deserialize BlockChanges with is_partial=true");
+
+        assert!(
+            block_changes_partial.is_partial,
+            "is_partial should be true as specified in the JSON"
+        );
+
+        // Test new format (with is_partial: false explicitly)
+        let json_with_is_partial_false = r#"{
+            "extractor": "test_extractor",
+            "chain": "ethereum",
+            "block": {
+                "number": 100,
+                "hash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+                "parent_hash": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+                "chain": "ethereum",
+                "ts": "2024-01-01T00:00:00"
+            },
+            "finalized_block_height": 99,
+            "revert": false,
+            "is_partial": false,
+            "new_tokens": {},
+            "account_updates": {},
+            "state_updates": {},
+            "new_protocol_components": {},
+            "deleted_protocol_components": {},
+            "component_balances": {},
+            "account_balances": {},
+            "component_tvl": {},
+            "dci_update": {
+                "new_entrypoints": {},
+                "new_entrypoint_params": {},
+                "trace_results": {}
+            }
+        }"#;
+
+        let block_changes_not_partial: BlockChanges =
+            serde_json::from_str(json_with_is_partial_false)
+                .expect("Failed to deserialize BlockChanges with is_partial=false");
+
+        assert!(
+            !block_changes_not_partial.is_partial,
+            "is_partial should be false as specified in the JSON"
+        );
     }
 
     #[test]
