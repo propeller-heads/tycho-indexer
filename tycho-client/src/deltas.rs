@@ -758,6 +758,7 @@ impl DeltasClient for WsDeltasClient {
                 extractor_id,
                 include_state: options.include_state,
                 compression: options.compression,
+                partial_blocks: false, // TODO: expose this as option
             };
             inner
                 .ws_send(tungstenite::protocol::Message::Text(
@@ -966,7 +967,6 @@ impl DeltasClient for WsDeltasClient {
 mod tests {
     use std::net::SocketAddr;
 
-    use test_log::test;
     use tokio::{net::TcpListener, time::timeout};
     use tycho_common::dto::Chain;
 
@@ -1035,18 +1035,26 @@ mod tests {
         (addr, jh)
     }
 
-    const SUBSCRIBE: &str = r#"
-        {
-            "method":"subscribe",
-            "extractor_id":{
-                "chain":"ethereum",
-                "name":"vm:ambient"
+    fn subscribe() -> String {
+        subscribe_with_compression(false)
+    }
+
+    fn subscribe_with_compression(compression: bool) -> String {
+        serde_json::json!({
+            "method": "subscribe",
+            "extractor_id": {
+                "chain": "ethereum",
+                "name": "vm:ambient"
             },
             "include_state": true,
-            "compression": false
-        }"#;
+            "compression": compression,
+            "partial_blocks": false
+        })
+        .to_string()
+    }
 
-    const SUBSCRIPTION_CONFIRMATION: &str = r#"
+    fn subscription_confirmation() -> String {
+        r#"
         {
             "method": "newsubscription",
             "extractor_id":{
@@ -1054,9 +1062,13 @@ mod tests {
                 "name": "vm:ambient"
             },
             "subscription_id": "30b740d1-cf09-4e0e-8cfe-b1434d447ece"
-        }"#;
+        }
+        "#
+        .replace(|c: char| c.is_whitespace(), "")
+    }
 
-    const BLOCK_DELTAS: &str = r#"
+    fn block_deltas() -> String {
+        r#"
         {
             "subscription_id": "30b740d1-cf09-4e0e-8cfe-b1434d447ece",
             "deltas": {
@@ -1136,39 +1148,35 @@ mod tests {
                 }
             }
         }
-        "#;
+        "#.replace(|c: char| c.is_whitespace(), "")
+    }
 
-    const UNSUBSCRIBE: &str = r#"
+    fn unsubscribe() -> String {
+        r#"
         {
             "method": "unsubscribe",
             "subscription_id": "30b740d1-cf09-4e0e-8cfe-b1434d447ece"
         }
-        "#;
+        "#
+        .replace(|c: char| c.is_whitespace(), "")
+    }
 
-    const SUBSCRIPTION_ENDED: &str = r#"
+    fn subscription_ended() -> String {
+        r#"
         {
             "method": "subscriptionended",
             "subscription_id": "30b740d1-cf09-4e0e-8cfe-b1434d447ece"
         }
-        "#;
+        "#
+        .replace(|c: char| c.is_whitespace(), "")
+    }
 
     #[tokio::test]
     async fn test_uncompressed_subscribe_receive() {
         let exp_comm = [
-            ExpectedComm::Receive(
-                100,
-                tungstenite::protocol::Message::Text(
-                    SUBSCRIBE
-                        .to_owned()
-                        .replace(|c: char| c.is_whitespace(), ""),
-                ),
-            ),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(
-                SUBSCRIPTION_CONFIRMATION
-                    .to_owned()
-                    .replace(|c: char| c.is_whitespace(), ""),
-            )),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(BLOCK_DELTAS.to_owned())),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_confirmation())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(block_deltas())),
         ];
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
 
@@ -1204,7 +1212,7 @@ mod tests {
     #[tokio::test]
     async fn test_compressed_subscribe_receive() {
         let compressed_block_deltas = zstd::encode_all(
-            BLOCK_DELTAS.as_bytes(),
+            block_deltas().as_bytes(),
             0, // default compression level
         )
         .expect("Failed to compress block deltas message");
@@ -1212,26 +1220,9 @@ mod tests {
         let exp_comm = [
             ExpectedComm::Receive(
                 100,
-                tungstenite::protocol::Message::Text(
-                    r#"
-                {
-                    "method":"subscribe",
-                    "extractor_id":{
-                        "chain":"ethereum",
-                        "name":"vm:ambient"
-                    },
-                    "include_state": true,
-                    "compression": true
-                }"#
-                    .to_owned()
-                    .replace(|c: char| c.is_whitespace(), ""),
-                ),
+                tungstenite::protocol::Message::Text(subscribe_with_compression(true)),
             ),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(
-                SUBSCRIPTION_CONFIRMATION
-                    .to_owned()
-                    .replace(|c: char| c.is_whitespace(), ""),
-            )),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_confirmation())),
             ExpectedComm::Send(tungstenite::protocol::Message::Binary(compressed_block_deltas)),
         ];
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
@@ -1268,32 +1259,10 @@ mod tests {
     #[tokio::test]
     async fn test_unsubscribe() {
         let exp_comm = [
-            ExpectedComm::Receive(
-                100,
-                tungstenite::protocol::Message::Text(
-                    SUBSCRIBE
-                        .to_owned()
-                        .replace(|c: char| c.is_whitespace(), ""),
-                ),
-            ),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(
-                SUBSCRIPTION_CONFIRMATION
-                    .to_owned()
-                    .replace(|c: char| c.is_whitespace(), ""),
-            )),
-            ExpectedComm::Receive(
-                100,
-                tungstenite::protocol::Message::Text(
-                    UNSUBSCRIBE
-                        .to_owned()
-                        .replace(|c: char| c.is_whitespace(), ""),
-                ),
-            ),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(
-                SUBSCRIPTION_ENDED
-                    .to_owned()
-                    .replace(|c: char| c.is_whitespace(), ""),
-            )),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_confirmation())),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(unsubscribe())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_ended())),
         ];
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
 
@@ -1337,24 +1306,9 @@ mod tests {
     #[tokio::test]
     async fn test_subscription_unexpected_end() {
         let exp_comm = [
-            ExpectedComm::Receive(
-                100,
-                tungstenite::protocol::Message::Text(
-                    SUBSCRIBE
-                        .to_owned()
-                        .replace(|c: char| c.is_whitespace(), ""),
-                ),
-            ),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(
-                SUBSCRIPTION_CONFIRMATION
-                    .to_owned()
-                    .replace(|c: char| c.is_whitespace(), ""),
-            )),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(
-                SUBSCRIPTION_ENDED
-                    .to_owned()
-                    .replace(|c: char| c.is_whitespace(), ""),
-            )),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_confirmation())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_ended())),
         ];
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
 
@@ -1393,10 +1347,10 @@ mod tests {
     #[test_log::test(tokio::test)]
     async fn test_reconnect() {
         let exp_comm = [
-            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(SUBSCRIBE.to_owned().replace(|c: char| c.is_whitespace(), "")
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe()
             )),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(
-                SUBSCRIPTION_CONFIRMATION.to_owned().replace(|c: char| c.is_whitespace(), "")
+                subscription_confirmation()
             )),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(r#"
                 {
@@ -1551,7 +1505,7 @@ mod tests {
         (addr, jh)
     }
 
-    #[test(tokio::test)]
+    #[test_log::test(tokio::test)]
     async fn test_subscribe_dead_client_after_max_attempts() {
         let (addr, _) = mock_bad_connection_tycho_ws(true).await;
         let client = WsDeltasClient::new_with_reconnects(
@@ -1579,7 +1533,7 @@ mod tests {
         assert!(subscription_res.is_err());
     }
 
-    #[test(tokio::test)]
+    #[test_log::test(tokio::test)]
     async fn test_ws_client_retry_cooldown() {
         let start = std::time::Instant::now();
         let (addr, _) = mock_bad_connection_tycho_ws(false).await;
@@ -1620,16 +1574,12 @@ mod tests {
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    SUBSCRIBE
-                    .to_owned()
-                    .replace(|c: char| c.is_whitespace(), ""),
+                    subscribe(),
                 ),
             ),
             // 2. Server confirms subscription
             ExpectedComm::Send(tungstenite::protocol::Message::Text(
-                SUBSCRIPTION_CONFIRMATION
-                .to_owned()
-                .replace(|c: char| c.is_whitespace(), ""),
+                subscription_confirmation(),
             )),
             // 3. Server sends first message (fills buffer)
             ExpectedComm::Send(tungstenite::protocol::Message::Text(
@@ -1703,16 +1653,12 @@ mod tests {
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    UNSUBSCRIBE
-                    .to_owned()
-                    .replace(|c: char| c.is_whitespace(), ""),
+                    unsubscribe(),
                 ),
             ),
             // 6. Server confirms unsubscription
             ExpectedComm::Send(tungstenite::protocol::Message::Text(
-                SUBSCRIPTION_ENDED
-                .to_owned()
-                .replace(|c: char| c.is_whitespace(), ""),
+                subscription_ended(),
             )),
         ]
         };
@@ -1798,7 +1744,7 @@ mod tests {
     async fn test_server_error_handling() {
         use tycho_common::dto::{Response, WebSocketMessage, WebsocketError};
 
-        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "test_extractor");
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "vm:ambient");
 
         // Test ExtractorNotFound error
         let error_response = WebSocketMessage::Response(Response::Error(
@@ -1807,12 +1753,7 @@ mod tests {
         let error_json = serde_json::to_string(&error_response).unwrap();
 
         let exp_comm = [
-            ExpectedComm::Receive(
-                100,
-                tungstenite::protocol::Message::Text(
-                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true,"compression":true}"#.to_string()
-                ),
-            ),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
         ];
 
@@ -1826,7 +1767,7 @@ mod tests {
 
         let result = timeout(
             Duration::from_millis(100),
-            client.subscribe(extractor_id, SubscriptionOptions::new()),
+            client.subscribe(extractor_id, SubscriptionOptions::new().with_compression(false)),
         )
         .await
         .expect("subscription timed out");
@@ -1855,7 +1796,7 @@ mod tests {
         // Test scenario: Server restart causes subscription loss
         use tycho_common::dto::{Response, WebSocketMessage, WebsocketError};
 
-        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "test_extractor");
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "vm:ambient");
         let subscription_id = Uuid::new_v4();
 
         let error_response = WebSocketMessage::Response(Response::Error(
@@ -1865,14 +1806,9 @@ mod tests {
 
         let exp_comm = [
             // 1. Client subscribes successfully
-            ExpectedComm::Receive(
-                100,
-                tungstenite::protocol::Message::Text(
-                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true,"compression":true}"#.to_string()
-                ),
-            ),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(format!(
-                r#"{{"method":"newsubscription","extractor_id":{{"chain":"ethereum","name":"test_extractor"}},"subscription_id":"{}"}}"#,
+                r#"{{"method":"newsubscription","extractor_id":{{"chain":"ethereum","name":"vm:ambient"}},"subscription_id":"{}"}}"#,
                 subscription_id
             ))),
             // 2. Client tries to unsubscribe (server has "restarted" and lost subscription)
@@ -1898,7 +1834,7 @@ mod tests {
         // Subscribe successfully
         let (received_sub_id, _rx) = timeout(
             Duration::from_millis(100),
-            client.subscribe(extractor_id, SubscriptionOptions::new()),
+            client.subscribe(extractor_id, SubscriptionOptions::new().with_compression(false)),
         )
         .await
         .expect("subscription timed out")
@@ -1932,7 +1868,7 @@ mod tests {
     async fn test_parse_error_handling() {
         use tycho_common::dto::{Response, WebSocketMessage, WebsocketError};
 
-        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "test_extractor");
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "vm:ambient");
         let error_response = WebSocketMessage::Response(Response::Error(
             WebsocketError::ParseError("}2sdf".to_string(), "malformed JSON".to_string()),
         ));
@@ -1940,13 +1876,8 @@ mod tests {
 
         let exp_comm = [
             // subscribe first so connect can finish successfully
-            ExpectedComm::Receive(
-                100,
-                tungstenite::protocol::Message::Text(
-                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true,"compression":true}"#.to_string()
-                ),
-            ),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json))
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
         ];
 
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
@@ -1960,7 +1891,7 @@ mod tests {
         // Subscribe successfully
         let _ = timeout(
             Duration::from_millis(100),
-            client.subscribe(extractor_id, SubscriptionOptions::new()),
+            client.subscribe(extractor_id, SubscriptionOptions::new().with_compression(false)),
         )
         .await
         .expect("subscription timed out");
@@ -1983,7 +1914,7 @@ mod tests {
     async fn test_compression_error_handling() {
         use tycho_common::dto::{Response, WebSocketMessage, WebsocketError};
 
-        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "test_extractor");
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "vm:ambient");
         let subscription_id = Uuid::new_v4();
         let error_response = WebSocketMessage::Response(Response::Error(
             WebsocketError::CompressionError(subscription_id, "Compression failed".to_string()),
@@ -1994,11 +1925,9 @@ mod tests {
             // subscribe first so connect can finish successfully
             ExpectedComm::Receive(
                 100,
-                tungstenite::protocol::Message::Text(
-                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true,"compression":true}"#.to_string()
-                ),
+                tungstenite::protocol::Message::Text(subscribe_with_compression(true)),
             ),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json))
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
         ];
 
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
@@ -2035,7 +1964,7 @@ mod tests {
     async fn test_subscribe_error_handling() {
         use tycho_common::dto::{Response, WebSocketMessage, WebsocketError};
 
-        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "failing_extractor");
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "vm:ambient");
 
         let error_response = WebSocketMessage::Response(Response::Error(
             WebsocketError::SubscribeError(extractor_id.clone()),
@@ -2043,12 +1972,7 @@ mod tests {
         let error_json = serde_json::to_string(&error_response).unwrap();
 
         let exp_comm = [
-            ExpectedComm::Receive(
-                100,
-                tungstenite::protocol::Message::Text(
-                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"failing_extractor"},"include_state":true,"compression":true}"#.to_string()
-                ),
-            ),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
         ];
 
@@ -2062,7 +1986,7 @@ mod tests {
 
         let result = timeout(
             Duration::from_millis(100),
-            client.subscribe(extractor_id, SubscriptionOptions::new()),
+            client.subscribe(extractor_id, SubscriptionOptions::new().with_compression(false)),
         )
         .await
         .expect("subscription timed out");
@@ -2091,7 +2015,7 @@ mod tests {
         // This test verifies that pending subscriptions are properly cancelled when errors occur
         use tycho_common::dto::{Response, WebSocketMessage, WebsocketError};
 
-        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "test_extractor");
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "vm:ambient");
 
         let error_response = WebSocketMessage::Response(Response::Error(
             WebsocketError::ExtractorNotFound(extractor_id.clone()),
@@ -2099,12 +2023,7 @@ mod tests {
         let error_json = serde_json::to_string(&error_response).unwrap();
 
         let exp_comm = [
-            ExpectedComm::Receive(
-                100,
-                tungstenite::protocol::Message::Text(
-                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true,"compression":true}"#.to_string()
-                ),
-            ),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
         ];
 
@@ -2124,7 +2043,7 @@ mod tests {
             let client_for_spawn = client.clone();
             async move {
                 client_for_spawn
-                    .subscribe(extractor_id, SubscriptionOptions::new())
+                    .subscribe(extractor_id, SubscriptionOptions::new().with_compression(false))
                     .await
             }
         });
@@ -2171,12 +2090,7 @@ mod tests {
         let subscription_id = Uuid::new_v4();
 
         let exp_comm = [
-            ExpectedComm::Receive(
-                100,
-                tungstenite::protocol::Message::Text(
-                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"vm:ambient"},"include_state":true,"compression":true}"#.to_string()
-                ),
-            ),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(format!(
                 r#"{{"method":"newsubscription","extractor_id":{{"chain":"ethereum","name":"vm:ambient"}},"subscription_id":"{}"}}"#,
                 subscription_id
@@ -2207,7 +2121,7 @@ mod tests {
             Duration::from_millis(100),
             client.subscribe(
                 ExtractorIdentity::new(Chain::Ethereum, "vm:ambient"),
-                SubscriptionOptions::new(),
+                SubscriptionOptions::new().with_compression(false),
             ),
         )
         .await
