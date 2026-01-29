@@ -674,15 +674,25 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             isCyclical = true;
         }
 
+        // Get router fee once and pass it down to avoid duplicate external calls
+        uint16 routerFeeOnOutputBps =
+            _feeCalculator.getEffectiveRouterFeeOnOutput(msg.sender);
+
         uint256 amountOutBeforeFees =
             _splitSwap(amountIn, nTokens, swaps, receiver, isCyclical);
-        amountOut = _takeFees(
-            tokenOut,
-            amountOutBeforeFees,
-            msg.sender,
-            solverFeeBps,
-            solverFeeReceiver
-        );
+
+        // Skip _takeFees call if no fees exist
+        if (solverFeeBps == 0 && routerFeeOnOutputBps == 0) {
+            amountOut = amountOutBeforeFees;
+        } else {
+            amountOut = _takeFees(
+                tokenOut,
+                amountOutBeforeFees,
+                msg.sender,
+                solverFeeBps,
+                solverFeeReceiver
+            );
+        }
 
         amountOut = _maybeAddSolverContribution(
             amountOut, minAmountOut, maxSolverContribution, tokenOut, receiver
@@ -739,18 +749,29 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         (address executor, bytes calldata protocolData) =
             swap_.decodeSingleSwap();
 
-        address finalReceiver =
-            determineFinalReceiver(receiver, solverFeeBps > 0);
+        // Get router fee once and pass it down to avoid duplicate external calls
+        uint16 routerFeeOnOutputBps =
+            _feeCalculator.getEffectiveRouterFeeOnOutput(msg.sender);
+
+        address finalReceiver = determineFinalReceiver(
+            receiver, solverFeeBps, routerFeeOnOutputBps
+        );
         uint256 amountOutBeforeFees = _callSwapOnExecutor(
             executor, amountIn, protocolData, true, false, finalReceiver
         );
-        amountOut = _takeFees(
-            tokenOut,
-            amountOutBeforeFees,
-            msg.sender,
-            solverFeeBps,
-            solverFeeReceiver
-        );
+
+        // Skip _takeFees call if no fees exist
+        if (solverFeeBps == 0 && routerFeeOnOutputBps == 0) {
+            amountOut = amountOutBeforeFees;
+        } else {
+            amountOut = _takeFees(
+                tokenOut,
+                amountOutBeforeFees,
+                msg.sender,
+                solverFeeBps,
+                solverFeeReceiver
+            );
+        }
 
         amountOut = _maybeAddSolverContribution(
             amountOut, minAmountOut, maxSolverContribution, tokenOut, receiver
@@ -802,17 +823,29 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         if (minAmountOut == 0) {
             revert TychoRouter__UndefinedMinAmountOut();
         }
-        address finalReceiver =
-            determineFinalReceiver(receiver, solverFeeBps > 0);
+
+        // Get router fee once and pass it down to avoid duplicate external calls
+        uint16 routerFeeOnOutputBps =
+            _feeCalculator.getEffectiveRouterFeeOnOutput(msg.sender);
+
+        address finalReceiver = determineFinalReceiver(
+            receiver, solverFeeBps, routerFeeOnOutputBps
+        );
         uint256 amountOutBeforeFees =
             _sequentialSwap(amountIn, swaps, finalReceiver);
-        amountOut = _takeFees(
-            tokenOut,
-            amountOutBeforeFees,
-            msg.sender,
-            solverFeeBps,
-            solverFeeReceiver
-        );
+
+        // Skip _takeFees call if no fees exist
+        if (solverFeeBps == 0 && routerFeeOnOutputBps == 0) {
+            amountOut = amountOutBeforeFees;
+        } else {
+            amountOut = _takeFees(
+                tokenOut,
+                amountOutBeforeFees,
+                msg.sender,
+                solverFeeBps,
+                solverFeeReceiver
+            );
+        }
 
         amountOut = _maybeAddSolverContribution(
             amountOut, minAmountOut, maxSolverContribution, tokenOut, receiver
@@ -1084,19 +1117,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint16 solverFeeBps,
         address solverFeeReceiver
     ) internal returns (uint256 amountOut) {
-        // If no fee calculator is set, return the full amount without taking fees
-        if (address(_feeCalculator) == address(0)) {
-            return amountIn;
-        }
-
-        // Fast path: skip expensive calculateFee call if no fees are configured
-        if (
-            solverFeeBps == 0
-                && _feeCalculator.getEffectiveRouterFeeOnOutput(user) == 0
-        ) {
-            return amountIn;
-        }
-
         FeeRecipient[] memory fees;
         (amountOut, fees) = _feeCalculator.calculateFee(
             amountIn, user, solverFeeBps, solverFeeReceiver
@@ -1231,21 +1251,20 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     /**
      * @dev Determines the final receiver address for the last swap output tokens
      * @param receiver The receiver address
-     * @param solverFees Whether solver fees are being applied
+     * @param solverFeeBps Solver fee in basis points
+     * @param routerFeeOnOutputBps Router fee on output in basis points
      * @return The final receiver address - either the router (for fee processing) or the intended receiver
      */
-    function determineFinalReceiver(address receiver, bool solverFees)
-        internal
-        view
-        returns (address)
-    {
-        uint16 routerFees =
-            _feeCalculator.getEffectiveRouterFeeOnOutput(msg.sender);
-        address finalReceiver = address(this);
-        if (routerFees == 0 && !solverFees) {
-            // if no fees are taken, the receiver can be the user directly
-            finalReceiver = receiver;
+    function determineFinalReceiver(
+        address receiver,
+        uint16 solverFeeBps,
+        uint16 routerFeeOnOutputBps
+    ) internal view returns (address) {
+        // Fast path: if no fees at all, send directly to receiver
+        if (solverFeeBps == 0 && routerFeeOnOutputBps == 0) {
+            return receiver;
         }
-        return finalReceiver;
+        // Fees exist, must route through this contract
+        return address(this);
     }
 }
