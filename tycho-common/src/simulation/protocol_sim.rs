@@ -1,5 +1,6 @@
 use std::{any::Any, collections::HashMap, fmt};
 
+use itertools::Itertools;
 use num_bigint::BigUint;
 
 use crate::{
@@ -409,16 +410,19 @@ impl Clone for Box<dyn ProtocolSim> {
 
 impl<T> ProtocolSim for T
 where
-    T: SwapQuoter + Clone + Send + Sync + 'static,
+    T: SwapQuoter + Clone + Send + Sync + Eq + 'static,
 {
     fn fee(&self) -> f64 {
-        let component = self.component();
-        // 1 unit of token0
-        let amount = BigUint::from(10u32).pow(component.tokens[0].decimals);
-        let params =
-            QuoteParams::new(&component.tokens[0].address, &component.tokens[1].address, amount);
-        self.fee(params)
-            .map(|f| f.fee())
+        self.quotable_pairs()
+            .iter()
+            .map(|(t0, t1)| {
+                let amount = BigUint::from(10u32).pow(t0.decimals);
+                let params = QuoteParams::new(&t0.address, &t1.address, amount);
+                self.fee(params)
+                    .map(|f| f.fee())
+                    .unwrap_or(f64::MAX)
+            })
+            .reduce(f64::min)
             .unwrap_or(f64::MAX)
     }
 
@@ -513,7 +517,11 @@ where
     }
 
     fn eq(&self, other: &dyn ProtocolSim) -> bool {
-        false
+        if let Some(other) = other.as_any().downcast_ref::<T>() {
+            self == other
+        } else {
+            false
+        }
     }
 }
 
