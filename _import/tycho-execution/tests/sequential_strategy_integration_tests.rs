@@ -143,18 +143,20 @@ fn test_sequential_swap_strategy_encoder_transfer_from_integration() {
         "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeReceiver
         "0000000000000000000000000000000000000000000000000000000000000000", // maxSolverContribution
         "0000000000000000000000000000000000000000000000000000000000000120", // offset of swap bytes
-        "0000000000000000000000000000000000000000000000000000000000000056", // len swaps (86 bytes)
-        // swap 1
-        "0029",                                     // swap length (41 bytes)
+        "00000000000000000000000000000000000000000000000000000000000000a4", // len swaps (164 bytes)
+        // swap 1: WETH -> WBTC
+        "0050", // swap length (80 bytes hex = 60 bytes actual)
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
         "bb2b8038a1640196fbe3e38816f3e67cba72d940", // component id (pool address)
-        "00",                                       // zero to one
-        // swap 2
-        "0029",                                     // swap length (41 bytes)
+        "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // tokenIn (WETH)
+        "2260fac5e5542a773aa44fbcfedf7c193bc2c599", // tokenOut (WBTC)
+        // swap 2: WBTC -> USDC
+        "0050", // swap length (80 bytes hex = 60 bytes actual)
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
         "004375dff511095cc5a197a54140a24efef3a416", // component id (pool address)
-        "01",                                       // zero to one
-        "00000000000000000000",                     // padding (2 bytes)
+        "2260fac5e5542a773aa44fbcfedf7c193bc2c599", // tokenIn (WBTC)
+        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // tokenOut (USDC)
+        "00000000000000000000000000000000000000000000000000000000", // padding to 32-byte boundary
     ));
 
     assert_eq!(hex_calldata, expected);

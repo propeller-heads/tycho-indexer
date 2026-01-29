@@ -817,8 +817,10 @@ mod tests {
                 String::from(concat!(
                     // component id (pool address)
                     "a478c2975ab1ea89e8196811f51a7b7ade33eb11",
-                    // zero for one
-                    "00",
+                    // tokenIn (WETH)
+                    "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                    // tokenOut (DAI)
+                    "6b175474e89094c44da98b954eedeac495271d0f",
                 ))
             );
         }

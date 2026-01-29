@@ -1089,6 +1089,14 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             return amountIn;
         }
 
+        // Fast path: skip expensive calculateFee call if no fees are configured
+        if (
+            solverFeeBps == 0
+                && _feeCalculator.getEffectiveRouterFeeOnOutput(user) == 0
+        ) {
+            return amountIn;
+        }
+
         FeeRecipient[] memory fees;
         (amountOut, fees) = _feeCalculator.calculateFee(
             amountIn, user, solverFeeBps, solverFeeReceiver

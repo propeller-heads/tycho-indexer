@@ -45,7 +45,8 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
     IERC20 WETH = IERC20(WETH_ADDR);
 
     function setUp() public {
-        uint256 forkBlock = 23873662;
+        // Block must match or be close to attestation block in test_encode_angstrom_grouped_swap
+        uint256 forkBlock = 24343805;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
         angstromExecutor = new UniswapV4ExecutorExposed(
             IPoolManager(POOL_MANAGER), ANGSTROM_HOOK

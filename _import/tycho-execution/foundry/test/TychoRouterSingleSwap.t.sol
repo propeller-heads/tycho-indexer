@@ -24,7 +24,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         ) = handlePermit2Approval(WETH_ADDR, tychoRouterAddr, amountIn);
 
         bytes memory protocolData =
-            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, false);
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR);
 
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);
@@ -61,7 +61,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
 
         bytes memory protocolData =
-            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, false);
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR);
 
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);
@@ -98,7 +98,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
 
         bytes memory protocolData =
-            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, false);
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR);
 
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);
@@ -119,7 +119,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn - 1);
 
         bytes memory protocolData =
-            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, false);
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR);
 
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);
@@ -150,7 +150,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
 
         bytes memory protocolData =
-            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, false);
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR);
 
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);
@@ -196,7 +196,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         tychoRouter.deposit(DAI_ADDR, maxContribution);
 
         bytes memory protocolData =
-            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, false);
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR);
 
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);
@@ -239,7 +239,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
 
         bytes memory protocolData =
-            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, false);
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR);
 
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);
@@ -280,7 +280,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
 
         bytes memory protocolData =
-            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, false);
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR);
 
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);
@@ -331,7 +331,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         tychoRouter.deposit(DAI_ADDR, maxContribution);
 
         bytes memory protocolData =
-            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, false);
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR);
 
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);
