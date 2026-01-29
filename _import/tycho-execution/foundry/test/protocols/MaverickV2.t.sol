@@ -37,13 +37,8 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
     }
 
     function testDecodeParams() public view {
-        bytes memory params = abi.encodePacked(
-            GHO_ADDR,
-            GHO_USDC_POOL,
-            USDC_ADDR,
-            address(2),
-            RestrictTransferFrom.TransferType.Transfer
-        );
+        bytes memory params =
+            abi.encodePacked(GHO_ADDR, GHO_USDC_POOL, USDC_ADDR, address(2));
 
         (IERC20 tokenIn, address target, address tokenOut, address receiver) =
             maverickV2Exposed.decodeParams(params);
@@ -63,37 +58,20 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
     }
 
     function testGetTransferData() public {
-        bytes memory params = abi.encodePacked(
-            GHO_ADDR,
-            GHO_USDC_POOL,
-            USDC_ADDR,
-            address(2),
-            RestrictTransferFrom.TransferType.Transfer
-        );
+        bytes memory params =
+            abi.encodePacked(GHO_ADDR, GHO_USDC_POOL, USDC_ADDR, address(2));
 
-        (
-            RestrictTransferFrom.TransferType transferType,
-            address receiver,
-            address tokenIn
-        ) = maverickV2Exposed.getTransferData(params);
+        (, address receiver, address tokenIn) =
+            maverickV2Exposed.getTransferData(params);
 
         assertEq(tokenIn, GHO_ADDR);
         assertEq(receiver, GHO_USDC_POOL);
-        assertEq(
-            uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.Transfer)
-        );
     }
 
     function testSwap() public {
         uint256 amountIn = 10e18;
-        bytes memory protocolData = abi.encodePacked(
-            GHO_ADDR,
-            GHO_USDC_POOL,
-            USDC_ADDR,
-            BOB,
-            RestrictTransferFrom.TransferType.Transfer
-        );
+        bytes memory protocolData =
+            abi.encodePacked(GHO_ADDR, GHO_USDC_POOL, USDC_ADDR, BOB);
 
         deal(GHO_ADDR, address(maverickV2Exposed), amountIn);
         uint256 balanceBefore = USDC.balanceOf(BOB);

@@ -111,16 +111,12 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
             .transfer_optimization
             .get_receiver(&solution.receiver, None, solution_fees)?;
 
-        let transfer = self
-            .transfer_optimization
-            .get_transfers(grouped_swap, &solution.token_in, false);
         let encoding_context = EncodingContext {
             receiver: swap_receiver,
             exact_out: solution.exact_out,
             router_address: Some(self.router_address.clone()),
             group_token_in: grouped_swap.token_in.clone(),
             group_token_out: grouped_swap.token_out.clone(),
-            transfer_type: transfer,
             historical_trade: self.historical_trade,
         };
 
@@ -255,20 +251,12 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 .get_receiver(&solution.receiver, next_swap, solution_fees)?;
             next_in_between_swap_optimization_allowed = next_swap_optimization;
 
-            let transfer = self
-                .transfer_optimization
-                .get_transfers(
-                    grouped_swap,
-                    &solution.token_in,
-                    in_between_swap_optimization_allowed,
-                );
             let encoding_context = EncodingContext {
                 receiver: swap_receiver,
                 exact_out: solution.exact_out,
                 router_address: Some(self.router_address.clone()),
                 group_token_in: grouped_swap.token_in.clone(),
                 group_token_out: grouped_swap.token_out.clone(),
-                transfer_type: transfer,
                 historical_trade: self.historical_trade,
             };
 
@@ -443,16 +431,12 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 // for split swaps all in between swaps will have the router as a receiver
                 self.router_address.clone()
             };
-            let transfer = self
-                .transfer_optimization
-                .get_transfers(grouped_swap, &solution.token_in, false);
             let encoding_context = EncodingContext {
                 receiver: swap_receiver,
                 exact_out: solution.exact_out,
                 router_address: Some(self.router_address.clone()),
                 group_token_in: grouped_swap.token_in.clone(),
                 group_token_out: grouped_swap.token_out.clone(),
-                transfer_type: transfer,
                 historical_trade: self.historical_trade,
             };
 
@@ -595,7 +579,6 @@ mod tests {
                 "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id (pool address)
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "00",                                       // zero2one
-                "00",                                       // transfer type TransferFrom
             ));
             let hex_calldata = encode(&encoded_solution.swaps);
 
@@ -666,19 +649,17 @@ mod tests {
 
             let expected = String::from(concat!(
                 // swap 1
-                "003e",                                     // swap length (62 bytes)
+                "003d",                                     // swap length (61 bytes)
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
                 "bb2b8038a1640196fbe3e38816f3e67cba72d940", // component id (pool address)
                 "004375dff511095cc5a197a54140a24efef3a416", // receiver (next pool)
                 "00",                                       // zero to one
-                "00",                                       // transfer type TransferFrom
                 // swap 2
-                "003e",                                     // swap length
+                "003d",                                     // swap length (61 bytes)
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
                 "004375dff511095cc5a197a54140a24efef3a416", // component id (pool address)
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver (tycho router)
                 "01",                                       // zero to one
-                "05",                                       // transfer type None
             ));
 
             assert_eq!(hex_calldata, expected);
@@ -799,7 +780,7 @@ mod tests {
             let hex_calldata = hex::encode(&encoded_solution.swaps);
 
             let expected_swaps = [
-                "006e",                                     // ple encoded swaps
+                "006d",                                     // ple encoded swaps (109 bytes)
                 "00",                                       // token in index
                 "01",                                       // token out index
                 "999999",                                   // split
@@ -807,11 +788,10 @@ mod tests {
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
                 "0001f4",                                   // pool fee
-                "00",                                       // transfer type TransferFrom
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
                 "01",                                       // zero2one
-                "006e",                                     // ple encoded swaps
+                "006d",                                     // ple encoded swaps (109 bytes)
                 "00",                                       // token in index
                 "01",                                       // token out index
                 "000000",                                   // split
@@ -819,11 +799,10 @@ mod tests {
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
                 "000bb8",                                   // pool fee
-                "00",                                       // transfer type TransferFrom
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
                 "01",                                       // zero2one
-                "0043",                                     // ple encoded swaps (67 bytes)
+                "0042",                                     // ple encoded swaps (66 bytes)
                 "01",                                       // token in index
                 "00",                                       // token out index
                 "000000",                                   // split
@@ -831,7 +810,6 @@ mod tests {
                 "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id (pool address)
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "00",                                       // zero2one
-                "02",                                       // transfer type Transfer
             ]
             .join("");
             assert_eq!(hex_calldata, expected_swaps);
@@ -944,7 +922,7 @@ mod tests {
             let hex_calldata = hex::encode(&encoded_solution.swaps);
 
             let expected_swaps = [
-                "0043",                                     // ple encoded swaps (67 bytes)
+                "0042",                                     // ple encoded swaps (66 bytes)
                 "00",                                       // token in index
                 "01",                                       // token out index
                 "000000",                                   // split
@@ -952,8 +930,7 @@ mod tests {
                 "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id (pool address)
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "01",                                       // zero2one
-                "00",                                       // transfer type TransferFrom
-                "006e",                                     // ple encoded swaps
+                "006d",                                     // ple encoded swaps (109 bytes)
                 "01",                                       // token in index
                 "00",                                       // token out index
                 "999999",                                   // split
@@ -961,11 +938,10 @@ mod tests {
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
                 "0001f4",                                   // pool fee
-                "02",                                       // transfer type Transfer
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
                 "00",                                       // zero2one
-                "006e",                                     // ple encoded swaps
+                "006d",                                     // ple encoded swaps (109 bytes)
                 "01",                                       // token in index
                 "00",                                       // token out index
                 "000000",                                   // split
@@ -973,7 +949,6 @@ mod tests {
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
                 "000bb8",                                   // pool fee
-                "02",                                       // transfer type Transfer
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
                 "00",                                       // zero2one

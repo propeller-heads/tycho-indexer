@@ -66,7 +66,6 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             uint8(3),
             uint8(2),
             uint8(0),
-            RestrictTransferFrom.TransferType.None,
             ALICE
         );
 
@@ -97,20 +96,13 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             uint8(3),
             uint8(2),
             uint8(0),
-            RestrictTransferFrom.TransferType.None,
             ALICE
         );
 
-        (
-            RestrictTransferFrom.TransferType transferType,
-            address receiver,
-            address tokenIn
-        ) = curveExecutorExposed.getTransferData(data);
+        (, address receiver, address tokenIn) =
+            curveExecutorExposed.getTransferData(data);
 
         assertEq(tokenIn, WETH_ADDR);
-        assertEq(
-            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
-        );
         assertEq(receiver, TRICRYPTO_POOL);
     }
 
@@ -119,14 +111,7 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 1 ether;
         deal(DAI_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data = _getData(
-            DAI_ADDR,
-            USDC_ADDR,
-            TRIPOOL,
-            1,
-            ALICE,
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory data = _getData(DAI_ADDR, USDC_ADDR, TRIPOOL, 1, ALICE);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(DAI_ADDR).approve(TRIPOOL, amountIn);
@@ -144,14 +129,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 1 ether;
         deal(address(curveExecutorExposed), amountIn);
 
-        bytes memory data = _getData(
-            ETH_ADDR_FOR_CURVE,
-            STETH_ADDR,
-            STETH_POOL,
-            1,
-            ALICE,
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory data =
+            _getData(ETH_ADDR_FOR_CURVE, STETH_ADDR, STETH_POOL, 1, ALICE);
 
         (uint256 amountOut, address tokenOut, address receiver) =
             curveExecutorExposed.swap(amountIn, data);
@@ -171,26 +150,14 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
 
         uint256 amountInForTest = 1 ether;
 
-        bytes memory data1 = _getData(
-            ETH_ADDR_FOR_CURVE,
-            STETH_ADDR,
-            STETH_POOL,
-            1,
-            ALICE,
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory data1 =
+            _getData(ETH_ADDR_FOR_CURVE, STETH_ADDR, STETH_POOL, 1, ALICE);
 
         (uint256 amountOut1, address tokenOut1, address receiver1) =
             curveExecutorExposed.swap(amountInForTest, data1);
 
-        bytes memory data2 = _getData(
-            ETH_ADDR_FOR_CURVE,
-            STETH_ADDR,
-            STETH_POOL,
-            1,
-            ALICE,
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory data2 =
+            _getData(ETH_ADDR_FOR_CURVE, STETH_ADDR, STETH_POOL, 1, ALICE);
 
         (uint256 amountOut2, address tokenOut2, address receiver2) =
             curveExecutorExposed.swap(amountInForTest, data2);
@@ -209,14 +176,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 1 ether;
         deal(WETH_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data = _getData(
-            WETH_ADDR,
-            WBTC_ADDR,
-            TRICRYPTO2_POOL,
-            3,
-            ALICE,
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory data =
+            _getData(WETH_ADDR, WBTC_ADDR, TRICRYPTO2_POOL, 3, ALICE);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(WETH_ADDR).approve(TRICRYPTO2_POOL, amountIn);
@@ -234,14 +195,7 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 100 * 10 ** 6;
         deal(USDC_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data = _getData(
-            USDC_ADDR,
-            SUSD_ADDR,
-            SUSD_POOL,
-            1,
-            ALICE,
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory data = _getData(USDC_ADDR, SUSD_ADDR, SUSD_POOL, 1, ALICE);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(USDC_ADDR).approve(SUSD_POOL, amountIn);
@@ -259,14 +213,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 1 ether;
         deal(FRAX_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data = _getData(
-            FRAX_ADDR,
-            USDC_ADDR,
-            FRAX_USDC_POOL,
-            1,
-            ALICE,
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory data =
+            _getData(FRAX_ADDR, USDC_ADDR, FRAX_USDC_POOL, 1, ALICE);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(FRAX_ADDR).approve(FRAX_USDC_POOL, amountIn);
@@ -284,14 +232,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 100 * 10 ** 6;
         deal(USDC_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data = _getData(
-            USDC_ADDR,
-            USDE_ADDR,
-            USDE_USDC_POOL,
-            1,
-            ALICE,
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory data =
+            _getData(USDC_ADDR, USDE_ADDR, USDE_USDC_POOL, 1, ALICE);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(USDC_ADDR).approve(USDE_USDC_POOL, amountIn);
@@ -309,14 +251,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 100 * 10 ** 6;
         deal(DOLA_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data = _getData(
-            DOLA_ADDR,
-            FRAXPYUSD_POOL,
-            DOLA_FRAXPYUSD_POOL,
-            1,
-            ALICE,
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory data =
+            _getData(DOLA_ADDR, FRAXPYUSD_POOL, DOLA_FRAXPYUSD_POOL, 1, ALICE);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(DOLA_ADDR).approve(DOLA_FRAXPYUSD_POOL, amountIn);
@@ -335,14 +271,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 initialBalance = address(ALICE).balance; // this address already has some ETH assigned to it
         deal(XYO_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data = _getData(
-            XYO_ADDR,
-            ETH_ADDR_FOR_CURVE,
-            ETH_XYO_POOL,
-            2,
-            ALICE,
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory data =
+            _getData(XYO_ADDR, ETH_ADDR_FOR_CURVE, ETH_XYO_POOL, 2, ALICE);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(XYO_ADDR).approve(ETH_XYO_POOL, amountIn);
@@ -360,14 +290,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 1000 ether;
         deal(BSGG_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data = _getData(
-            BSGG_ADDR,
-            USDT_ADDR,
-            BSGG_USDT_POOL,
-            2,
-            ALICE,
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory data =
+            _getData(BSGG_ADDR, USDT_ADDR, BSGG_USDT_POOL, 2, ALICE);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(BSGG_ADDR).approve(BSGG_USDT_POOL, amountIn);
@@ -385,14 +309,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 1 ether;
         deal(WETH_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data = _getData(
-            WETH_ADDR,
-            USDC_ADDR,
-            TRICRYPTO_POOL,
-            2,
-            ALICE,
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory data =
+            _getData(WETH_ADDR, USDC_ADDR, TRICRYPTO_POOL, 2, ALICE);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(WETH_ADDR).approve(TRICRYPTO_POOL, amountIn);
@@ -410,14 +328,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 1 ether;
         deal(UWU_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data = _getData(
-            UWU_ADDR,
-            WETH_ADDR,
-            UWU_WETH_POOL,
-            2,
-            ALICE,
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory data =
+            _getData(UWU_ADDR, WETH_ADDR, UWU_WETH_POOL, 2, ALICE);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(UWU_ADDR).approve(UWU_WETH_POOL, amountIn);
@@ -435,14 +347,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 1 ether;
         deal(USDT_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data = _getData(
-            USDT_ADDR,
-            CRVUSD_ADDR,
-            CRVUSD_USDT_POOL,
-            1,
-            ALICE,
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory data =
+            _getData(USDT_ADDR, CRVUSD_ADDR, CRVUSD_USDT_POOL, 1, ALICE);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(USDT_ADDR).forceApprove(CRVUSD_USDT_POOL, amountIn);
@@ -460,14 +366,8 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         uint256 amountIn = 100 * 10 ** 9; // 9 decimals
         deal(WTAO_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data = _getData(
-            WTAO_ADDR,
-            WSTTAO_ADDR,
-            WSTTAO_WTAO_POOL,
-            1,
-            ALICE,
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory data =
+            _getData(WTAO_ADDR, WSTTAO_ADDR, WSTTAO_WTAO_POOL, 1, ALICE);
 
         vm.prank(address(curveExecutorExposed));
         IERC20(WTAO_ADDR).approve(WSTTAO_WTAO_POOL, amountIn);
@@ -485,8 +385,7 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         address tokenOut,
         address pool,
         uint8 poolType,
-        address receiver,
-        RestrictTransferFrom.TransferType transferType
+        address receiver
     ) internal view returns (bytes memory data) {
         (int128 i, int128 j) = _getIndexes(tokenIn, tokenOut, pool);
         data = abi.encodePacked(
@@ -496,7 +395,6 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             poolType,
             uint8(uint256(uint128(i))),
             uint8(uint256(uint128(j))),
-            transferType,
             receiver
         );
     }

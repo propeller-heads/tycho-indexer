@@ -59,7 +59,7 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         int24 tickSpacing;
         address target;
         bool zeroForOne;
-        (tokenIn, tokenOut, tickSpacing,, receiver, target, zeroForOne) =
+        (tokenIn, tokenOut, tickSpacing, receiver, target, zeroForOne) =
             _decodeData(data);
 
         _verifyPairAddress(tokenIn, tokenOut, tickSpacing, target);
@@ -68,7 +68,7 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         int256 amount1;
         IUniswapV3Pool pool = IUniswapV3Pool(target);
 
-        bytes memory callbackData = data[0:44];
+        bytes memory callbackData = data[0:43];
 
         {
             (amount0, amount1) = pool.swap(
@@ -128,22 +128,20 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
             address tokenIn,
             address tokenOut,
             int24 tickSpacing,
-            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address target,
             bool zeroForOne
         )
     {
-        if (data.length != 85) {
+        if (data.length != 84) {
             revert SlipstreamsExecutor__InvalidDataLength();
         }
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
         tickSpacing = int24(uint24(bytes3(data[40:43])));
-        transferType = RestrictTransferFrom.TransferType(uint8(data[43]));
-        receiver = address(bytes20(data[44:64]));
-        target = address(bytes20(data[64:84]));
-        zeroForOne = uint8(data[84]) > 0;
+        receiver = address(bytes20(data[43:63]));
+        target = address(bytes20(data[63:83]));
+        zeroForOne = uint8(data[83]) > 0;
     }
 
     function getPoolKey(address tokenA, address tokenB, int24 tickSpacing)
@@ -189,7 +187,7 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            RestrictTransferFrom.TransferType baseTransferType,
             address receiver,
             address tokenIn
         )
@@ -201,7 +199,7 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            RestrictTransferFrom.TransferType baseTransferType,
             address receiver,
             address tokenIn,
             uint256 amount
@@ -212,7 +210,7 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         amount =
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
         tokenIn = address(bytes20(data[132:152]));
-        transferType = RestrictTransferFrom.TransferType(uint8(data[175]));
+        baseTransferType = RestrictTransferFrom.TransferType.Transfer;
         receiver = msg.sender;
     }
 }

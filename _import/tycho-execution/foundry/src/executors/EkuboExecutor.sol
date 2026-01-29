@@ -30,7 +30,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
     ICore immutable core;
     address immutable mevResist;
 
-    uint256 constant POOL_DATA_OFFSET = 57;
+    uint256 constant POOL_DATA_OFFSET = 56;
     uint256 constant HOP_BYTE_LEN = 52;
 
     bytes4 constant LOCKED_SELECTOR = 0xb45a3c0e; // locked(uint256)
@@ -153,10 +153,8 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
     {
         int128 nextAmountIn = int128(uint128(bytes16(swapData[0:16])));
         uint128 tokenInDebtAmount = uint128(nextAmountIn);
-        RestrictTransferFrom.TransferType transferType =
-            RestrictTransferFrom.TransferType(uint8(swapData[16]));
-        address receiver = address(bytes20(swapData[17:37]));
-        address tokenIn = address(bytes20(swapData[37:57]));
+        address receiver = address(bytes20(swapData[16:36]));
+        address tokenIn = address(bytes20(swapData[36:56]));
 
         address nextTokenIn = tokenIn;
         address nextTokenOut = address(0);
@@ -215,7 +213,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         // After the loop, nextTokenOut is the final output token
         address tokenOut = nextTokenOut;
 
-        _pay(tokenIn, tokenInDebtAmount, transferType);
+        _pay(tokenIn, tokenInDebtAmount);
         core.withdraw(nextTokenIn, receiver, uint128(nextAmountIn));
         return (nextAmountIn, tokenOut, receiver);
     }
@@ -245,19 +243,14 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         return returnData;
     }
 
-    function _pay(
-        address token,
-        uint128 amount,
-        RestrictTransferFrom.TransferType transferType
-    ) internal {
+    function _pay(address token, uint128 amount) internal {
         if (token == NATIVE_TOKEN_ADDRESS) {
             SafeTransferLib.safeTransferETH(address(core), amount);
         } else {
             bytes memory callData = abi.encodePacked(
                 bytes4(0x0c11dedd), // pay(address) selector
                 bytes32(uint256(uint160(token))),
-                bytes16(amount),
-                bytes1(uint8(transferType))
+                bytes16(amount)
             );
 
             // slither-disable-next-line low-level-calls
@@ -286,7 +279,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            RestrictTransferFrom.TransferType baseTransferType,
             address receiver,
             address tokenIn
         )
@@ -298,7 +291,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            RestrictTransferFrom.TransferType baseTransferType,
             address receiver,
             address tokenIn,
             uint256 amount
@@ -309,19 +302,20 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         if (selector == PAY_CALLBACK_SELECTOR) {
             tokenIn = address(bytes20(payData[12:32]));
             amount = uint256(uint128(bytes16(payData[32:48])));
-            transferType = RestrictTransferFrom.TransferType(uint8(payData[48]));
+            baseTransferType = RestrictTransferFrom.TransferType.Transfer;
             receiver = address(core);
         } else {
-            address tokenInFromCallback = address(bytes20(payData[37:57]));
+            // LOCKED_SELECTOR
+            address tokenInFromCallback = address(bytes20(payData[36:56]));
             if (tokenInFromCallback == address(0)) {
                 // ETH transfers are handled in the Executor, so we need to set the transferType to
                 // TransferNativeInExecutor to update the delta accounting accordingly.
                 tokenIn = address(0);
-                transferType =
+                baseTransferType =
                 RestrictTransferFrom.TransferType.TransferNativeInExecutor;
                 amount = uint256(uint128(bytes16(payData[0:16])));
             } else {
-                transferType = RestrictTransferFrom.TransferType.None;
+                baseTransferType = RestrictTransferFrom.TransferType.None;
                 receiver = address(0);
                 tokenIn = address(0);
                 amount = 0;

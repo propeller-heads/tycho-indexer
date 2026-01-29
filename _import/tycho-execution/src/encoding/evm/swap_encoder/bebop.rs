@@ -114,12 +114,11 @@ impl SwapEncoder for BebopSwapEncoder {
         let receiver = bytes_to_address(&encoding_context.receiver)?;
 
         // Encode packed data for the executor
-        // Format: token_in | token_out | transfer_type | partial_fill_offset |
+        // Format: token_in | token_out | partial_fill_offset |
         //         original_filled_taker_amount | approval_needed | receiver | bebop_calldata
         let args = (
             token_in,
             token_out,
-            (encoding_context.transfer_type as u8).to_be_bytes(),
             partial_fill_offset.to_be_bytes(),
             original_filled_taker_amount.to_be_bytes::<32>(),
             receiver,
@@ -147,9 +146,8 @@ mod tests {
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
-    use crate::encoding::{
-        evm::{swap_encoder::bebop::BebopSwapEncoder, testing_utils::MockRFQState},
-        models::TransferType,
+    use crate::encoding::evm::{
+        swap_encoder::bebop::BebopSwapEncoder, testing_utils::MockRFQState,
     };
 
     #[test]
@@ -192,7 +190,6 @@ mod tests {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::Transfer,
             historical_trade: false,
         };
 
@@ -213,8 +210,6 @@ mod tests {
             "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
             // token out
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-            // transfer type
-            "02",
             // partiall filled offset
             "0c",
             //  original taker amount

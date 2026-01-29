@@ -42,7 +42,6 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
     function testDecodeParams() public view {
         bytes memory params = abi.encodePacked(
             uint8(1), // isDeposit = true
-            RestrictTransferFrom.TransferType.Transfer,
             BOB
         );
 
@@ -56,7 +55,6 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
     function testDecodeParamsBurn() public view {
         bytes memory params = abi.encodePacked(
             uint8(0), // isDeposit = false (burn)
-            RestrictTransferFrom.TransferType.Transfer,
             ALICE
         );
 
@@ -68,7 +66,7 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
     }
 
     function testDecodeParamsInvalidDataLength() public {
-        bytes memory invalidParams = abi.encodePacked(uint8(1), BOB);
+        bytes memory invalidParams = abi.encodePacked(BOB);
 
         vm.expectRevert(RocketpoolExecutor__InvalidDataLength.selector);
         rocketpoolExecutor.decodeParams(invalidParams);
@@ -77,7 +75,6 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
     function testGetTransferData() public {
         bytes memory params = abi.encodePacked(
             uint8(1), // isDeposit = true
-            RestrictTransferFrom.TransferType.Transfer,
             BOB
         );
 
@@ -98,7 +95,6 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
     function testGetTransferDataBurn() public {
         bytes memory params = abi.encodePacked(
             uint8(0), // isDeposit = false (burn)
-            RestrictTransferFrom.TransferType.Transfer,
             BOB
         );
 
@@ -111,7 +107,7 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
         assertEq(receiver, address(rocketpoolExecutor));
         assertEq(
             uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.Transfer)
+            uint8(RestrictTransferFrom.TransferType.ProtocolWillDebit)
         );
         assertEq(tokenIn, RETH_ADDR);
     }
@@ -125,7 +121,6 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
         uint256 amountIn = 4.5 ether;
         bytes memory protocolData = abi.encodePacked(
             uint8(1), // isDeposit = true
-            RestrictTransferFrom.TransferType.Transfer,
             BOB
         );
 
@@ -152,7 +147,6 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
         uint256 amountIn = 1 ether;
         bytes memory protocolData = abi.encodePacked(
             uint8(0), // isDeposit = false (burn)
-            RestrictTransferFrom.TransferType.Transfer,
             BOB
         );
 

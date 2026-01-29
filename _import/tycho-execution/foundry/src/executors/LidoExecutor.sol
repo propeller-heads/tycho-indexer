@@ -127,30 +127,30 @@ contract LidoExecutor is IExecutor {
             LidoPoolDirection direction
         )
     {
-        if (data.length != 23) {
+        if (data.length != 22) {
             revert LidoExecutor__InvalidDataLength();
         }
 
         receiver = address(bytes20(data[0:20]));
-        pool = LidoPoolType(uint8(data[21]));
-        direction = LidoPoolDirection(uint8(data[22]));
+        pool = LidoPoolType(uint8(data[20]));
+        direction = LidoPoolDirection(uint8(data[21]));
     }
 
     function getTransferData(bytes calldata data)
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            RestrictTransferFrom.TransferType baseTransferType,
             address receiver,
             address tokenIn
         )
     {
-        if (data.length != 23) {
+        if (data.length != 22) {
             revert LidoExecutor__InvalidDataLength();
         }
 
-        LidoPoolType pool = LidoPoolType(uint8(data[21]));
-        LidoPoolDirection direction = LidoPoolDirection(uint8(data[22]));
+        LidoPoolType pool = LidoPoolType(uint8(data[20]));
+        LidoPoolDirection direction = LidoPoolDirection(uint8(data[21]));
 
         if (pool == LidoPoolType.stETH && direction == LidoPoolDirection.Stake)
         {
@@ -158,27 +158,25 @@ contract LidoExecutor is IExecutor {
             // ETH transfers are handled in the Executor, so we need to set the transferType to TransferNativeInExecutor
             // to update the delta accounting accordingly.
             tokenIn = address(0);
-            transferType =
+            baseTransferType =
             RestrictTransferFrom.TransferType.TransferNativeInExecutor;
             // The token in is ETH in this case so we don't really need a receiver
-            // (the funds are passed in the msg.value)
         } else if (
             pool == LidoPoolType.wstETH && direction == LidoPoolDirection.Wrap
         ) {
             // WST_ETH wrapping: ST_ETH -> WST_ETH
             tokenIn = stEthAddress;
-            transferType = RestrictTransferFrom.TransferType(uint8(data[20]));
+            baseTransferType =
+            RestrictTransferFrom.TransferType.ProtocolWillDebit;
             // The receiver of the funds will be the wstEth contract.
-            // This protocol will only ever have the following transferTypes:
-            // - TransferFromAndProtocolWillDebit: the funds should be transferred to the TychoRouter and the wstEth contract needs to be approved
-            // - ProtocolWillDebit: wstEth needs to be approved
             receiver = wstEth;
         } else if (
             pool == LidoPoolType.wstETH && direction == LidoPoolDirection.Unwrap
         ) {
             // WST_ETH unwrapping: WST_ETH -> ST_ETH
             tokenIn = wstEth;
-            transferType = RestrictTransferFrom.TransferType(uint8(data[20]));
+            baseTransferType =
+            RestrictTransferFrom.TransferType.ProtocolWillDebit;
             // The receiver needs to be TychoRouter because the wstETH contract will burn it from the msg.sender
             receiver = address(this);
         } else {

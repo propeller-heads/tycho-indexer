@@ -39,13 +39,8 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
     }
 
     function testDecodeParams() public view {
-        bytes memory params = abi.encodePacked(
-            WETH_ADDR,
-            BAL_ADDR,
-            WETH_BAL_POOL_ID,
-            address(2),
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory params =
+            abi.encodePacked(WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID, address(2));
 
         (address tokenIn, address tokenOut, bytes32 poolId, address receiver) =
             balancerV2Exposed.decodeParams(params);
@@ -57,7 +52,18 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
     }
 
     function testGetTransferData() public {
-        bytes memory params = abi.encodePacked(
+        bytes memory params =
+            abi.encodePacked(WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID, address(2));
+
+        (, address receiver, address tokenIn) =
+            balancerV2Exposed.getTransferData(params);
+
+        assertEq(address(tokenIn), WETH_ADDR);
+        assertEq(receiver, VAULT);
+    }
+
+    function testDecodeParamsInvalidDataLength() public {
+        bytes memory invalidParams = abi.encodePacked(
             WETH_ADDR,
             BAL_ADDR,
             WETH_BAL_POOL_ID,
@@ -65,36 +71,14 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
             RestrictTransferFrom.TransferType.None
         );
 
-        (
-            RestrictTransferFrom.TransferType transferType,
-            address receiver,
-            address tokenIn
-        ) = balancerV2Exposed.getTransferData(params);
-
-        assertEq(address(tokenIn), WETH_ADDR);
-        assertEq(receiver, VAULT);
-        assertEq(
-            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
-        );
-    }
-
-    function testDecodeParamsInvalidDataLength() public {
-        bytes memory invalidParams =
-            abi.encodePacked(WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID, address(2));
-
         vm.expectRevert(BalancerV2Executor__InvalidDataLength.selector);
         balancerV2Exposed.decodeParams(invalidParams);
     }
 
     function testSwap() public {
         uint256 amountIn = 10 ** 18;
-        bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR,
-            BAL_ADDR,
-            WETH_BAL_POOL_ID,
-            BOB,
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory protocolData =
+            abi.encodePacked(WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID, BOB);
 
         deal(WETH_ADDR, address(balancerV2Exposed), amountIn);
         uint256 balanceBefore = BAL.balanceOf(BOB);

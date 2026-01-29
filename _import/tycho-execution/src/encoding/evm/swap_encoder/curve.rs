@@ -183,7 +183,6 @@ impl SwapEncoder for CurveSwapEncoder {
             pool_type.to_be_bytes::<1>(),
             i.to_be_bytes::<1>(),
             j.to_be_bytes::<1>(),
-            (encoding_context.transfer_type as u8).to_be_bytes(),
             bytes_to_address(&encoding_context.receiver)?,
         );
 
@@ -205,7 +204,7 @@ mod tests {
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
-    use crate::encoding::{evm::swap_encoder::curve::CurveSwapEncoder, models::TransferType};
+    use crate::encoding::evm::swap_encoder::curve::CurveSwapEncoder;
 
     fn curve_config() -> Option<HashMap<String, String>> {
         Some(HashMap::from([
@@ -327,7 +326,6 @@ mod tests {
             router_address: None,
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::None,
             historical_trade: false,
         };
         let encoder = CurveSwapEncoder::new(
@@ -356,8 +354,6 @@ mod tests {
                 "00",
                 // j index
                 "01",
-                // transfer type None
-                "05",
                 // receiver,
                 "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))
@@ -392,7 +388,6 @@ mod tests {
             router_address: None,
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::None,
             historical_trade: false,
         };
         let encoder = CurveSwapEncoder::new(
@@ -421,8 +416,6 @@ mod tests {
                 "01",
                 // j index
                 "00",
-                // transfer type None
-                "05",
                 // receiver
                 "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))
@@ -458,7 +451,6 @@ mod tests {
             router_address: None,
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::None,
             historical_trade: false,
         };
         let encoder = CurveSwapEncoder::new(
@@ -496,8 +488,6 @@ mod tests {
                 "00",
                 // j index
                 "01",
-                // transfer type None
-                "05",
                 // receiver
                 "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))

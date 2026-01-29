@@ -91,16 +91,16 @@ contract BebopExecutor is IExecutor {
             bytes memory bebopCalldata
         )
     {
-        // Need at least 95 bytes for the minimum fixed fields
-        // 20 + 20 + 1 + 1 (offset) + 32 (original amount) + 20 (receiver) = 95
-        if (data.length < 94) revert BebopExecutor__InvalidDataLength();
+        // Need at least 93 bytes for the minimum fixed fields
+        // 20 + 20 + 1 (offset) + 32 (original amount) + 20 (receiver) = 93
+        if (data.length < 93) revert BebopExecutor__InvalidDataLength();
 
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
-        partialFillOffset = uint8(data[41]);
-        originalFilledTakerAmount = uint256(bytes32(data[42:74]));
-        receiver = address(bytes20(data[74:94]));
-        bebopCalldata = data[94:];
+        partialFillOffset = uint8(data[40]);
+        originalFilledTakerAmount = uint256(bytes32(data[41:73]));
+        receiver = address(bytes20(data[73:93]));
+        bebopCalldata = data[93:];
     }
 
     /// @dev Modifies the filledTakerAmount in the bebop calldata to handle slippage
@@ -171,21 +171,17 @@ contract BebopExecutor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            RestrictTransferFrom.TransferType baseTransferType,
             address receiver,
             address tokenIn
         )
     {
-        if (data.length < 94) {
+        if (data.length < 93) {
             revert BebopExecutor__InvalidDataLength();
         }
 
         tokenIn = address(bytes20(data[0:20]));
-        transferType = RestrictTransferFrom.TransferType(uint8(data[40]));
-        // The receiver of the funds will be the Bebop Settlement contract.
-        // This protocol will only ever have the following transferTypes:
-        // - TransferFromAndProtocolWillDebit: the funds should be transferred to the TychoRouter and the Bebop Settlement contract needs to be approved
-        // - ProtocolWillDebit: Bebop Settlement contract needs to be approved
+        baseTransferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
         receiver = bebopSettlement;
     }
 }

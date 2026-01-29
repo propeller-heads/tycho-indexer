@@ -265,7 +265,6 @@ pub struct EncodingContext {
     pub router_address: Option<Bytes>,
     pub group_token_in: Bytes,
     pub group_token_out: Bytes,
-    pub transfer_type: TransferType,
     pub historical_trade: bool,
 }
 

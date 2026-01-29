@@ -64,7 +64,7 @@ contract BalancerV2Executor is IExecutor {
             address receiver
         )
     {
-        if (data.length != 93) {
+        if (data.length != 92) {
             revert BalancerV2Executor__InvalidDataLength();
         }
 
@@ -78,21 +78,17 @@ contract BalancerV2Executor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            RestrictTransferFrom.TransferType baseTransferType,
             address receiver,
             address tokenIn
         )
     {
-        if (data.length != 93) {
+        if (data.length != 92) {
             revert BalancerV2Executor__InvalidDataLength();
         }
 
         tokenIn = address(bytes20(data[0:20]));
-        // The receiver of the funds will be the Balancer Vault.
-        // This protocol will only ever have the following transferTypes:
-        // - TransferFromAndProtocolWillDebit: the funds should be transferred to the TychoRouter and the Balancer Vault needs to be approved
-        // - ProtocolWillDebit: Balancer Vault needs to be approved
         receiver = VAULT;
-        transferType = RestrictTransferFrom.TransferType(uint8(data[92]));
+        baseTransferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
     }
 }

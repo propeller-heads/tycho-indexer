@@ -8,7 +8,7 @@ use crate::encoding::{
         constants::{CALLBACK_CONSTRAINED_PROTOCOLS, FUNDS_IN_ROUTER_PROTOCOLS},
         group_swaps::SwapGroup,
     },
-    models::{TransferType, UserTransferType},
+    models::UserTransferType,
 };
 
 /// A struct that defines how the tokens will be transferred into the given pool given the solution.
@@ -34,49 +34,6 @@ impl TransferOptimization {
             user_transfer_type,
             router_address,
             tycho_fees_enabled,
-        }
-    }
-
-    /// Returns the transfer type that should be used for the current transfer.
-    pub fn get_transfers(
-        &self,
-        swap: &SwapGroup,
-        given_token: &Bytes,
-        in_between_swap_optimization: bool,
-    ) -> TransferType {
-        let is_first_swap = swap.token_in == *given_token;
-        let in_transfer_required: bool =
-            !FUNDS_IN_ROUTER_PROTOCOLS.contains(&swap.protocol_system.as_str());
-
-        if swap.token_in == self.native_token {
-            // Funds are already in router. All protocols currently take care of native transfers.
-            TransferType::None
-        } else if is_first_swap {
-            if in_transfer_required {
-                if self.user_transfer_type == UserTransferType::UseVaultsFunds {
-                    // Use vault's funds: Transfer from router to pool.
-                    TransferType::Transfer
-                } else {
-                    // Transfer from swapper to pool
-                    TransferType::TransferFrom
-                }
-            // in transfer is not necessary for these protocols. Only make a transfer from the
-            // swapper to the router if the tokens are not already in the router
-            } else if self.user_transfer_type != UserTransferType::UseVaultsFunds {
-                // Transfer from swapper to router
-                TransferType::TransferFromAndProtocolWillDebit
-            } else {
-                TransferType::ProtocolWillDebit
-            }
-        // all other swaps that not the first one
-        } else if in_between_swap_optimization && in_transfer_required {
-            // funds should already be in the next pool
-            TransferType::None
-        } else if !in_transfer_required {
-            // funds should already be in the router and the protocol will debit them
-            TransferType::ProtocolWillDebit
-        } else {
-            TransferType::Transfer
         }
     }
 
@@ -129,10 +86,6 @@ mod tests {
     use super::*;
     use crate::encoding::models::Swap;
 
-    fn weth() -> Bytes {
-        Bytes::from(hex!("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").to_vec())
-    }
-
     fn eth() -> Bytes {
         Bytes::from(hex!("0000000000000000000000000000000000000000").to_vec())
     }
@@ -147,57 +100,6 @@ mod tests {
 
     fn router_address() -> Bytes {
         Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f")
-    }
-
-    #[rstest]
-    // First swap tests
-    // WETH -(univ2)-> DAI we expect a transfer from the user to the protocol
-    #[case(weth(), weth(), "uniswap_v2".to_string(), UserTransferType::TransferFrom,false, TransferType::TransferFrom)]
-    // Native token swap. No transfer is needed
-    #[case(eth(), eth(),  "uniswap_v2".to_string(), UserTransferType::TransferFrom,false, TransferType::None)]
-    // USDC -(univ2)-> DAI and the tokens are already in the router. Only a transfer from the router
-    // to the protocol is needed
-    #[case(usdc(), usdc(), "uniswap_v2".to_string(), UserTransferType::UseVaultsFunds,false, TransferType::Transfer)]
-    // USDC -(curve)-> DAI and the tokens are already in the router. ProtocolWillDebit
-    #[case(usdc(), usdc(), "vm:curve".to_string(), UserTransferType::UseVaultsFunds, false,TransferType::ProtocolWillDebit)]
-    // other swaps tests
-    // tokens need to be transferred into the pool
-    #[case(weth(), usdc(), "uniswap_v2".to_string(), UserTransferType::TransferFrom,false, TransferType::Transfer)]
-    // tokens are already in the pool (optimization)
-    #[case(weth(), usdc(), "uniswap_v2".to_string(), UserTransferType::TransferFrom, true, TransferType::None)]
-    // tokens are already in the router and protocol will debit
-    #[case(weth(), usdc(), "vm:curve".to_string(), UserTransferType::TransferFrom, false, TransferType::ProtocolWillDebit)]
-    // tokens are already in the next pool and don't need a transfer
-    #[case(weth(), usdc(), "uniswap_v2".to_string(), UserTransferType::TransferFrom, true, TransferType::None)]
-    fn test_get_transfers(
-        #[case] given_token: Bytes,
-        #[case] swap_token_in: Bytes,
-        #[case] protocol: String,
-        #[case] user_transfer_type: UserTransferType,
-        #[case] in_between_swap_optimization: bool,
-        #[case] expected_transfer: TransferType,
-    ) {
-        // The swap token is the same as the given token, which is not the native token
-        let swaps = vec![Swap::new(
-            ProtocolComponent {
-                protocol_system: "uniswap_v2".to_string(),
-                id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
-                ..Default::default()
-            },
-            swap_token_in.clone(),
-            dai(),
-        )];
-        let swap = SwapGroup {
-            protocol_system: protocol,
-            token_in: swap_token_in,
-            token_out: dai(),
-            split: 0f64,
-            swaps,
-        };
-        let optimization = TransferOptimization::new(eth(), user_transfer_type, router_address());
-        let transfer =
-            optimization.get_transfers(&swap, &given_token, in_between_swap_optimization);
-        assert_eq!(transfer, expected_transfer);
     }
 
     fn receiver() -> Bytes {

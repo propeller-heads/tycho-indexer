@@ -24,7 +24,6 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
             address tokenIn,
             address tokenOut,
             bool zeroForOne,
-            RestrictTransferFrom.TransferType transferType,
             address receiver,
             UniswapV4Pool[] memory pools
         )
@@ -93,19 +92,13 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR,
-            USDT_ADDR,
-            zeroForOne,
-            RestrictTransferFrom.TransferType.Transfer,
-            ALICE,
-            pools
+            USDE_ADDR, USDT_ADDR, zeroForOne, ALICE, pools
         );
 
         (
             address tokenIn,
             address tokenOut,
             bool zeroForOneDecoded,
-            RestrictTransferFrom.TransferType transferType,
             address receiver,
             UniswapV4Executor.UniswapV4Pool[] memory decodedPools
         ) = uniswapV4Exposed.decodeData(data);
@@ -113,10 +106,6 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         assertEq(tokenIn, USDE_ADDR);
         assertEq(tokenOut, USDT_ADDR);
         assertEq(zeroForOneDecoded, zeroForOne);
-        assertEq(
-            uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.Transfer)
-        );
         assertEq(receiver, ALICE);
         assertEq(decodedPools[0].hook, address(0));
         assertEq(decodedPools.length, 2);
@@ -147,12 +136,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR,
-            USDT_ADDR,
-            true,
-            RestrictTransferFrom.TransferType.Transfer,
-            ALICE,
-            pools
+            USDE_ADDR, USDT_ADDR, true, ALICE, pools
         );
 
         (uint256 amountOut, address tokenOut, address receiver) =
@@ -214,12 +198,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR,
-            WBTC_ADDR,
-            true,
-            RestrictTransferFrom.TransferType.Transfer,
-            ALICE,
-            pools
+            USDE_ADDR, WBTC_ADDR, true, ALICE, pools
         );
 
         (uint256 amountOut, address tokenOut, address receiver) =
@@ -277,12 +256,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
-            USDC_ADDR,
-            WETH_ADDR,
-            true,
-            RestrictTransferFrom.TransferType.Transfer,
-            ALICE,
-            pools
+            USDC_ADDR, WETH_ADDR, true, ALICE, pools
         );
 
         (uint256 amountOut, address tokenOut, address receiver) =
@@ -342,12 +316,7 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
-            RLUSD_ADDR,
-            USDT_ADDR,
-            true,
-            RestrictTransferFrom.TransferType.Transfer,
-            ALICE,
-            pools
+            RLUSD_ADDR, USDT_ADDR, true, ALICE, pools
         );
 
         (uint256 amountOut, address tokenOut, address receiver) =
@@ -385,12 +354,7 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
-            RLUSD_ADDR,
-            WBTC_ADDR,
-            true,
-            RestrictTransferFrom.TransferType.Transfer,
-            ALICE,
-            pools
+            RLUSD_ADDR, WBTC_ADDR, true, ALICE, pools
         );
 
         (uint256 amountOut, address tokenOut, address receiver) =
@@ -433,12 +397,7 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
-            USDC_ADDR,
-            USDT_ADDR,
-            true,
-            RestrictTransferFrom.TransferType.Transfer,
-            ALICE,
-            pools
+            USDC_ADDR, USDT_ADDR, true, ALICE, pools
         );
 
         (uint256 amountOut, address tokenOut, address receiver) =
@@ -473,12 +432,7 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
-            USDC_ADDR,
-            USDT_ADDR,
-            false,
-            RestrictTransferFrom.TransferType.Transfer,
-            ALICE,
-            pools
+            USDC_ADDR, USDT_ADDR, false, ALICE, pools
         );
 
         (uint256 amountOut, address tokenOut, address receiver) =
@@ -510,12 +464,7 @@ contract TychoRouterForUniswapV4Test is TychoRouterTestSetup {
         });
 
         bytes memory protocolData = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR,
-            USDT_ADDR,
-            true,
-            RestrictTransferFrom.TransferType.TransferFrom,
-            address(tychoRouter),
-            pools
+            USDE_ADDR, USDT_ADDR, true, address(tychoRouter), pools
         );
 
         bytes memory swap =
@@ -563,12 +512,7 @@ contract TychoRouterForUniswapV4Test is TychoRouterTestSetup {
         });
 
         bytes memory protocolData = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR,
-            WBTC_ADDR,
-            true,
-            RestrictTransferFrom.TransferType.TransferFrom,
-            address(tychoRouter),
-            pools
+            USDE_ADDR, WBTC_ADDR, true, address(tychoRouter), pools
         );
 
         bytes memory swap =

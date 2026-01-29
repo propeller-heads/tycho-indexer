@@ -88,7 +88,6 @@ impl SwapEncoder for LidoSwapEncoder {
 
         let args = (
             bytes_to_address(&encoding_context.receiver)?,
-            (encoding_context.transfer_type as u8).to_be_bytes(),
             (pool as u8).to_be_bytes(),
             (direction as u8).to_be_bytes(),
         );
@@ -111,10 +110,7 @@ mod tests {
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
-    use crate::encoding::{
-        evm::swap_encoder::lido::LidoSwapEncoder,
-        models::{Swap, TransferType},
-    };
+    use crate::encoding::{evm::swap_encoder::lido::LidoSwapEncoder, models::Swap};
 
     fn lido_config() -> HashMap<String, String> {
         HashMap::from([
@@ -145,7 +141,6 @@ mod tests {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::None,
             historical_trade: false,
         };
         let encoder = LidoSwapEncoder::new(
@@ -163,8 +158,6 @@ mod tests {
             String::from(concat!(
                 // receiver
                 "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
-                // transfer type None
-                "05",
                 // pool
                 "00",
                 // direction
@@ -189,7 +182,6 @@ mod tests {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::None,
             historical_trade: false,
         };
         let encoder = LidoSwapEncoder::new(
@@ -207,8 +199,6 @@ mod tests {
             String::from(concat!(
                 // receiver
                 "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
-                // transfer type None
-                "05",
                 // pool
                 "01",
                 // direction
@@ -233,7 +223,6 @@ mod tests {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::None,
             historical_trade: false,
         };
         let encoder = LidoSwapEncoder::new(
@@ -251,8 +240,6 @@ mod tests {
             String::from(concat!(
                 // receiver
                 "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
-                // transfer type None
-                "05",
                 // pool
                 "01",
                 // direction
@@ -277,7 +264,6 @@ mod tests {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::None,
             historical_trade: false,
         };
         let encoder = LidoSwapEncoder::new(

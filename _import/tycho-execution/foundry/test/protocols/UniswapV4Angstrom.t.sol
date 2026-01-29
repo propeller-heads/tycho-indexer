@@ -29,15 +29,9 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
         external
         returns (bytes memory)
     {
-        (
-            RestrictTransferFrom.TransferType transferType,
-            address receiver,
-            address tokenIn,
-            uint256 amount
-        ) = this.getCallbackTransferData(msg.data);
-        if (transferType == RestrictTransferFrom.TransferType.Transfer) {
-            IERC20(tokenIn).safeTransfer(receiver, amount);
-        }
+        (, address receiver, address tokenIn, uint256 amount) =
+            this.getCallbackTransferData(msg.data);
+        IERC20(tokenIn).safeTransfer(receiver, amount);
         bytes calldata stripped = msg.data[68:];
         return abi.encode(_unlockCallback(stripped));
     }
@@ -133,14 +127,8 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
         );
 
         // Encode data with attestations
-        bytes memory data = abi.encodePacked(
-            USDC_ADDR,
-            WETH_ADDR,
-            true,
-            RestrictTransferFrom.TransferType.Transfer,
-            ALICE,
-            firstPool
-        );
+        bytes memory data =
+            abi.encodePacked(USDC_ADDR, WETH_ADDR, true, ALICE, firstPool);
 
         (uint256 amountOut, address tokenOut, address receiver) =
             angstromExecutor.swap(amountIn, data);
@@ -175,14 +163,8 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
             attestation
         );
 
-        bytes memory data = abi.encodePacked(
-            USDC_ADDR,
-            WETH_ADDR,
-            true,
-            RestrictTransferFrom.TransferType.Transfer,
-            ALICE,
-            firstPool
-        );
+        bytes memory data =
+            abi.encodePacked(USDC_ADDR, WETH_ADDR, true, ALICE, firstPool);
 
         // The executor no longer reverts, but the Angstrom hook will reject empty attestations
         // This demonstrates that empty hook data is successfully passed to Angstrom

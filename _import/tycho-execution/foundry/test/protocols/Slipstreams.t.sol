@@ -20,7 +20,6 @@ contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
             address inToken,
             address outToken,
             int24 tick_spacing,
-            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address target,
             bool zeroForOne
@@ -52,19 +51,10 @@ contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
             address(this).delegatecall(callData);
         require(success, "Delegatecall failed");
 
-        (
-            RestrictTransferFrom.TransferType transferType,
-            address receiver,
-            address tokenIn,
-            uint256 amount
-        ) = abi.decode(
-            result,
-            (RestrictTransferFrom.TransferType, address, address, uint256)
-        );
+        (, address receiver, address tokenIn, uint256 amount) =
+            abi.decode(result, (uint8, address, address, uint256));
 
-        if (transferType == RestrictTransferFrom.TransferType.Transfer) {
-            IERC20(tokenIn).transfer(receiver, amount);
-        }
+        IERC20(tokenIn).transfer(receiver, amount);
         handleCallback(msg.data);
     }
 }
@@ -90,7 +80,6 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             BASE_WETH,
             BASE_USDC,
             expectedTickSpacing,
-            RestrictTransferFrom.TransferType.Transfer,
             address(2),
             address(3),
             false
@@ -100,7 +89,6 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             address tokenIn,
             address tokenOut,
             int24 tick_spacing,
-            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address target,
             bool zeroForOne
@@ -112,23 +100,13 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
         assertEq(receiver, address(2));
         assertEq(target, address(3));
         assertEq(zeroForOne, false);
-        assertEq(
-            uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.Transfer)
-        );
     }
 
     function testGetTransferData() public {
         bytes memory params = "";
-        (
-            RestrictTransferFrom.TransferType transferType,
-            address receiver,
-            address tokenIn
-        ) = slipstreamsExposed.getTransferData(params);
+        (, address receiver, address tokenIn) =
+            slipstreamsExposed.getTransferData(params);
 
-        assertEq(
-            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
-        );
         assertEq(receiver, address(0));
         assertEq(tokenIn, address(0));
     }
@@ -138,11 +116,7 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
         uint256 amountOwed = 1000000000000000000;
 
         bytes memory protocolData = abi.encodePacked(
-            BASE_WETH,
-            BASE_USDC,
-            poolTickSpacing,
-            RestrictTransferFrom.TransferType.Transfer,
-            address(slipstreamsExposed)
+            BASE_WETH, BASE_USDC, poolTickSpacing, address(slipstreamsExposed)
         );
         uint256 dataOffset = 3; // some offset
         uint256 dataLength = protocolData.length;
@@ -155,17 +129,9 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             dataLength,
             protocolData
         );
-        (
-            RestrictTransferFrom.TransferType transferType,
-            address receiver,
-            address tokenIn,
-            uint256 amount
-        ) = slipstreamsExposed.getCallbackTransferData(callbackData);
+        (, address receiver, address tokenIn, uint256 amount) =
+            slipstreamsExposed.getCallbackTransferData(callbackData);
 
-        assertEq(
-            uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.Transfer)
-        );
         assertEq(receiver, address(this));
         assertEq(tokenIn, BASE_WETH);
         assertEq(amount, amountOwed);
@@ -181,7 +147,6 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             BASE_WETH,
             BASE_USDC,
             IUniswapV3Pool(SLIPSTREAMS_WETH_USDC_POOL).tickSpacing(),
-            RestrictTransferFrom.TransferType.Transfer,
             address(this),
             SLIPSTREAMS_WETH_USDC_POOL,
             zeroForOne
@@ -206,7 +171,6 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             BASE_WETH,
             BASE_BMI,
             IUniswapV3Pool(SLIPSTREAMS_WETH_BMI_POOL).tickSpacing(),
-            RestrictTransferFrom.TransferType.Transfer,
             address(this),
             SLIPSTREAMS_WETH_BMI_POOL,
             zeroForOne
@@ -243,11 +207,7 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             IERC20(BASE_WETH).balanceOf(SLIPSTREAMS_WETH_USDC_POOL);
 
         bytes memory protocolData = abi.encodePacked(
-            BASE_WETH,
-            BASE_USDC,
-            poolTickSpacing,
-            RestrictTransferFrom.TransferType.Transfer,
-            address(slipstreamsExposed)
+            BASE_WETH, BASE_USDC, poolTickSpacing, address(slipstreamsExposed)
         );
         uint256 dataOffset = 3; // some offset
         uint256 dataLength = protocolData.length;
@@ -282,7 +242,6 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             BASE_WETH,
             BASE_USDC,
             uint24(100),
-            RestrictTransferFrom.TransferType.Transfer,
             address(this),
             fakePool,
             zeroForOne
@@ -297,18 +256,11 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
         address tokenOut,
         address receiver,
         address target,
-        bool zero2one,
-        RestrictTransferFrom.TransferType transferType
+        bool zero2one
     ) internal view returns (bytes memory) {
         IUniswapV3Pool pool = IUniswapV3Pool(target);
         return abi.encodePacked(
-            tokenIn,
-            tokenOut,
-            pool.tickSpacing(),
-            transferType,
-            receiver,
-            target,
-            zero2one
+            tokenIn, tokenOut, pool.tickSpacing(), receiver, target, zero2one
         );
     }
 }

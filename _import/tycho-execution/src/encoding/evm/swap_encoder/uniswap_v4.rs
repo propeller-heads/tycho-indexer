@@ -209,7 +209,6 @@ impl SwapEncoder for UniswapV4SwapEncoder {
             group_token_in_address,
             group_token_out_address,
             zero_to_one,
-            (encoding_context.transfer_type as u8).to_be_bytes(),
             bytes_to_address(&encoding_context.receiver)?,
             pool_params,
         );
@@ -256,7 +255,7 @@ mod tests {
     use super::*;
     use crate::encoding::{
         evm::utils::{ple_encode, write_calldata_to_file},
-        models::{Swap, TransferType},
+        models::Swap,
     };
 
     #[test]
@@ -287,7 +286,6 @@ mod tests {
 
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::Transfer,
             historical_trade: false,
         };
         let encoder = UniswapV4SwapEncoder::new(
@@ -310,8 +308,6 @@ mod tests {
                 "dac17f958d2ee523a2206206994597c13d831ec7",
                 // zero for one
                 "01",
-                // transfer type Transfer
-                "02",
                 // receiver
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
                 // pool params:
@@ -358,7 +354,6 @@ mod tests {
             group_token_in: group_token_in.clone(),
             // Token out is the same as the group token out
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::Transfer,
             historical_trade: false,
         };
 
@@ -406,7 +401,6 @@ mod tests {
             router_address: Some(router_address.clone()),
             group_token_in: usde_address.clone(),
             group_token_out: wbtc_address.clone(),
-            transfer_type: TransferType::Transfer,
             historical_trade: false,
         };
 
@@ -479,8 +473,6 @@ mod tests {
                 "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
                 // zero for one
                 "01",
-                // transfer type Transfer
-                "02",
                 // receiver
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
                 // pool params:
@@ -582,7 +574,6 @@ mod tests {
                 router_address: Some(Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f")),
                 group_token_in: usdc_address.clone(),
                 group_token_out: usdt_address.clone(),
-                transfer_type: TransferType::Transfer,
                 historical_trade: false,
             };
 

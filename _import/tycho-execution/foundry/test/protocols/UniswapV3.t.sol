@@ -20,7 +20,6 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
             address inToken,
             address outToken,
             uint24 fee,
-            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address target,
             bool zeroForOne
@@ -54,19 +53,10 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
             address(this).delegatecall(callData);
         require(success, "Delegatecall failed");
 
-        (
-            RestrictTransferFrom.TransferType transferType,
-            address receiver,
-            address tokenIn,
-            uint256 amount
-        ) = abi.decode(
-            result,
-            (RestrictTransferFrom.TransferType, address, address, uint256)
-        );
+        (, address receiver, address tokenIn, uint256 amount) =
+            abi.decode(result, (uint8, address, address, uint256));
 
-        if (transferType == RestrictTransferFrom.TransferType.Transfer) {
-            IERC20(tokenIn).transfer(receiver, amount);
-        }
+        IERC20(tokenIn).transfer(receiver, amount);
         handleCallback(msg.data);
     }
 }
@@ -93,20 +83,13 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
     function testDecodeParams() public view {
         uint24 expectedPoolFee = 500;
         bytes memory data = abi.encodePacked(
-            WETH_ADDR,
-            DAI_ADDR,
-            expectedPoolFee,
-            RestrictTransferFrom.TransferType.Transfer,
-            address(2),
-            address(3),
-            false
+            WETH_ADDR, DAI_ADDR, expectedPoolFee, address(2), address(3), false
         );
 
         (
             address tokenIn,
             address tokenOut,
             uint24 fee,
-            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address target,
             bool zeroForOne
@@ -118,23 +101,13 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
         assertEq(receiver, address(2));
         assertEq(target, address(3));
         assertEq(zeroForOne, false);
-        assertEq(
-            uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.Transfer)
-        );
     }
 
     function testGetTransferData() public {
         bytes memory params = "";
-        (
-            RestrictTransferFrom.TransferType transferType,
-            address receiver,
-            address tokenIn
-        ) = uniswapV3Exposed.getTransferData(params);
+        (, address receiver, address tokenIn) =
+            uniswapV3Exposed.getTransferData(params);
 
-        assertEq(
-            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
-        );
         assertEq(receiver, address(0));
         assertEq(tokenIn, address(0));
     }
@@ -143,11 +116,7 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
         uint24 poolFee = 3000;
         uint256 amountOwed = 1000000000000000000;
         bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR,
-            DAI_ADDR,
-            poolFee,
-            RestrictTransferFrom.TransferType.Transfer,
-            address(uniswapV3Exposed)
+            WETH_ADDR, DAI_ADDR, poolFee, address(uniswapV3Exposed)
         );
         uint256 dataOffset = 3; // some offset
         uint256 dataLength = protocolData.length;
@@ -160,17 +129,9 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
             dataLength,
             protocolData
         );
-        (
-            RestrictTransferFrom.TransferType transferType,
-            address receiver,
-            address tokenIn,
-            uint256 amount
-        ) = uniswapV3Exposed.getCallbackTransferData(callbackData);
+        (, address receiver, address tokenIn, uint256 amount) =
+            uniswapV3Exposed.getCallbackTransferData(callbackData);
 
-        assertEq(
-            uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.Transfer)
-        );
         assertEq(receiver, address(this));
         assertEq(tokenIn, WETH_ADDR);
         assertEq(amount, amountOwed);
@@ -184,12 +145,7 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
         bool zeroForOne = false;
 
         bytes memory data = encodeUniswapV3Swap(
-            WETH_ADDR,
-            DAI_ADDR,
-            address(this),
-            DAI_WETH_USV3,
-            zeroForOne,
-            RestrictTransferFrom.TransferType.Transfer
+            WETH_ADDR, DAI_ADDR, address(this), DAI_WETH_USV3, zeroForOne
         );
 
         (uint256 amountOut, address tokenOut, address receiver) =
@@ -203,8 +159,15 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
     }
 
     function testDecodeParamsInvalidDataLength() public {
-        bytes memory invalidParams =
-            abi.encodePacked(WETH_ADDR, address(2), address(3));
+        bytes memory invalidParams = abi.encodePacked(
+            WETH_ADDR,
+            DAI_ADDR,
+            uint24(500),
+            RestrictTransferFrom.TransferType.Transfer,
+            address(2),
+            address(3),
+            false
+        );
 
         vm.expectRevert(UniswapV3Executor__InvalidDataLength.selector);
         uniswapV3Exposed.decodeData(invalidParams);
@@ -229,11 +192,7 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
         uint256 initialPoolReserve = IERC20(WETH_ADDR).balanceOf(DAI_WETH_USV3);
 
         bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR,
-            DAI_ADDR,
-            poolFee,
-            RestrictTransferFrom.TransferType.Transfer,
-            address(uniswapV3Exposed)
+            WETH_ADDR, DAI_ADDR, poolFee, address(uniswapV3Exposed)
         );
         uint256 dataOffset = 3; // some offset
         uint256 dataLength = protocolData.length;
@@ -268,7 +227,6 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
             WETH_ADDR,
             DAI_ADDR,
             uint24(3000),
-            RestrictTransferFrom.TransferType.Transfer,
             address(this),
             fakePool,
             zeroForOne
@@ -283,18 +241,11 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
         address tokenOut,
         address receiver,
         address target,
-        bool zero2one,
-        RestrictTransferFrom.TransferType transferType
+        bool zero2one
     ) internal view returns (bytes memory) {
         IUniswapV3Pool pool = IUniswapV3Pool(target);
         return abi.encodePacked(
-            tokenIn,
-            tokenOut,
-            pool.fee(),
-            transferType,
-            receiver,
-            target,
-            zero2one
+            tokenIn, tokenOut, pool.fee(), receiver, target, zero2one
         );
     }
 }
@@ -316,12 +267,7 @@ contract TychoRouterForUniswapV3Test is TychoRouterTestSetup {
         uint256 expAmountOut = 1205_128428842122129186; //Swap 1 WETH for 1205.12 DAI
         bool zeroForOne = false;
         bytes memory protocolData = encodeUniswapV3Swap(
-            WETH_ADDR,
-            DAI_ADDR,
-            address(tychoRouter),
-            DAI_WETH_USV3,
-            zeroForOne,
-            RestrictTransferFrom.TransferType.TransferFrom
+            WETH_ADDR, DAI_ADDR, address(tychoRouter), DAI_WETH_USV3, zeroForOne
         );
         bytes memory swap =
             encodeSingleSwap(address(usv3Executor), protocolData);
@@ -364,8 +310,7 @@ contract TychoRouterForUniswapV3Test is TychoRouterTestSetup {
             BASE_cbBTC,
             BOB,
             PANCAKESWAPV3_cbBTC_USDC_POOL,
-            zeroForOne,
-            RestrictTransferFrom.TransferType.Transfer
+            zeroForOne
         );
 
         deal(BASE_USDC, address(basePancakeV3Exposed), amountIn);

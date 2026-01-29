@@ -65,7 +65,7 @@ contract MaverickV2Executor is IExecutor {
             address receiver
         )
     {
-        if (data.length != 81) {
+        if (data.length != 80) {
             revert MaverickV2Executor__InvalidDataLength();
         }
         inToken = IERC20(address(bytes20(data[0:20])));
@@ -85,17 +85,17 @@ contract MaverickV2Executor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            RestrictTransferFrom.TransferType baseTransferType,
             address receiver,
             address tokenIn
         )
     {
-        if (data.length != 81) {
+        if (data.length != 80) {
             revert MaverickV2Executor__InvalidDataLength();
         }
         tokenIn = address(bytes20(data[0:20]));
         receiver = address(bytes20(data[20:40]));
-        transferType = RestrictTransferFrom.TransferType(uint8(data[80]));
+        baseTransferType = RestrictTransferFrom.TransferType.Transfer;
     }
 }
 

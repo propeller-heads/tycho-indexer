@@ -32,12 +32,8 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
     }
 
     function testDecodeParams() public view {
-        bytes memory params = abi.encodePacked(
-            WETH_ADDR,
-            address(spETH),
-            address(2),
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory params =
+            abi.encodePacked(WETH_ADDR, address(spETH), address(2));
 
         (IERC20 inToken, address target, address receiver) =
             ERC4626Exposed.decodeParams(params);
@@ -48,42 +44,29 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
     }
 
     function testDecodeParamsInvalidDataLength() public {
+        // Pass 61 bytes (one extra) to trigger invalid length error
         bytes memory invalidParams =
-            abi.encodePacked(WETH_ADDR, address(spETH), address(2));
+            abi.encodePacked(WETH_ADDR, address(spETH), address(2), uint8(0));
 
         vm.expectRevert(ERC4626Executor__InvalidDataLength.selector);
         ERC4626Exposed.decodeParams(invalidParams);
     }
 
     function testGetTransferData() public {
-        bytes memory params = abi.encodePacked(
-            WETH_ADDR,
-            address(spETH),
-            address(2),
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory params =
+            abi.encodePacked(WETH_ADDR, address(spETH), address(2));
 
-        (
-            RestrictTransferFrom.TransferType transferType,
-            address receiver,
-            address tokenIn
-        ) = ERC4626Exposed.getTransferData(params);
+        (, address receiver, address tokenIn) =
+            ERC4626Exposed.getTransferData(params);
 
         assertEq(tokenIn, WETH_ADDR);
         assertEq(receiver, address(spETH));
-        assertEq(
-            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
-        );
     }
 
     function testDeposit() public {
         uint256 amountIn = 10 ** 18;
-        bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR,
-            address(spETH),
-            BOB,
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory protocolData =
+            abi.encodePacked(WETH_ADDR, address(spETH), BOB);
 
         deal(WETH_ADDR, address(ERC4626Exposed), amountIn);
 
@@ -103,12 +86,8 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
 
     function testRedeem() public {
         uint256 amountIn = 10 ** 18;
-        bytes memory protocolData = abi.encodePacked(
-            address(spETH),
-            address(spETH),
-            BOB,
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory protocolData =
+            abi.encodePacked(address(spETH), address(spETH), BOB);
 
         deal(address(spETH), address(ERC4626Exposed), amountIn);
 

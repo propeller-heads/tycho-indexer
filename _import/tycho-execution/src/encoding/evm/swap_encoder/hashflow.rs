@@ -76,7 +76,7 @@ impl SwapEncoder for HashflowSwapEncoder {
         })?;
 
         // Encode packed data for the executor
-        // Format: approval_needed | transfer_type | hashflow_calldata[..]
+        // Format: approval_needed | hashflow_calldata[..]
         let hashflow_fields = [
             "pool",
             "external_account",
@@ -100,7 +100,7 @@ impl SwapEncoder for HashflowSwapEncoder {
                 )))?;
             hashflow_calldata.extend_from_slice(value);
         }
-        let args = ((encoding_context.transfer_type as u8).to_be_bytes(), &hashflow_calldata[..]);
+        let args = (&hashflow_calldata[..],);
         Ok(args.abi_encode_packed())
     }
 
@@ -127,7 +127,7 @@ mod test {
             swap_encoder::hashflow::HashflowSwapEncoder, testing_utils::MockRFQState,
             utils::biguint_to_u256,
         },
-        models::{Swap, TransferType},
+        models::Swap,
     };
 
     fn hashflow_config() -> Option<HashMap<String, String>> {
@@ -158,7 +158,6 @@ mod test {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::Transfer,
             historical_trade: false,
         };
 
@@ -251,7 +250,6 @@ mod test {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::Transfer,
             historical_trade: false,
         };
 
@@ -267,9 +265,7 @@ mod test {
             .unwrap();
         let hex_swap = encode(&encoded_swap);
 
-        let expected_swap = String::from(
-            "02", // transfer type
-        );
-        assert_eq!(hex_swap, expected_swap + &hashflow_calldata.to_string()[2..]);
+        let expected_swap = hashflow_calldata.to_string()[2..].to_string();
+        assert_eq!(hex_swap, expected_swap);
     }
 }

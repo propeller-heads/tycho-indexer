@@ -60,7 +60,6 @@ impl SwapEncoder for EkuboSwapEncoder {
         let mut encoded = vec![];
 
         if encoding_context.group_token_in == *swap.token_in() {
-            encoded.extend((encoding_context.transfer_type as u8).to_be_bytes());
             encoded.extend(bytes_to_address(&encoding_context.receiver)?);
             encoded.extend(bytes_to_address(swap.token_in())?);
         }
@@ -86,9 +85,8 @@ mod tests {
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
-    use crate::encoding::{
-        evm::{swap_encoder::ekubo::EkuboSwapEncoder, utils::write_calldata_to_file},
-        models::TransferType,
+    use crate::encoding::evm::{
+        swap_encoder::ekubo::EkuboSwapEncoder, utils::write_calldata_to_file,
     };
 
     const RECEIVER: &str = "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6"; // Random address
@@ -114,7 +112,6 @@ mod tests {
             group_token_out: token_out.clone(),
             exact_out: false,
             router_address: Some(Bytes::default()),
-            transfer_type: TransferType::Transfer,
             historical_trade: false,
         };
 
@@ -129,8 +126,6 @@ mod tests {
         assert_eq!(
             hex_swap,
             concat!(
-                // transfer type Transfer
-                "02",
                 // receiver
                 "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6",
                 // group token in
@@ -157,7 +152,6 @@ mod tests {
             group_token_out: group_token_out.clone(),
             exact_out: false,
             router_address: Some(Bytes::default()),
-            transfer_type: TransferType::Transfer,
             historical_trade: false,
         };
 
@@ -203,10 +197,7 @@ mod tests {
 
         assert_eq!(
             combined_hex,
-            // transfer type
             concat!(
-                // transfer type Transfer
-                "02",
                 // receiver
                 "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6",
                 // group token in

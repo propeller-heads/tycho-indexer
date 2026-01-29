@@ -44,11 +44,7 @@ impl SwapEncoder for RocketpoolSwapEncoder {
     ) -> Result<Vec<u8>, EncodingError> {
         let is_deposit = *swap.token_in() == self.native_token_address;
 
-        let args = (
-            is_deposit,
-            (encoding_context.transfer_type as u8).to_be_bytes(),
-            bytes_to_address(&encoding_context.receiver)?,
-        );
+        let args = (is_deposit, bytes_to_address(&encoding_context.receiver)?);
 
         Ok(args.abi_encode_packed())
     }
@@ -68,9 +64,8 @@ mod tests {
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
-    use crate::encoding::{
-        evm::{swap_encoder::rocketpool::RocketpoolSwapEncoder, utils::write_calldata_to_file},
-        models::TransferType,
+    use crate::encoding::evm::{
+        swap_encoder::rocketpool::RocketpoolSwapEncoder, utils::write_calldata_to_file,
     };
     #[test]
     fn test_encode_rocketpool_deposit() {
@@ -90,7 +85,6 @@ mod tests {
             router_address: Some(Bytes::default()),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::Transfer,
             historical_trade: false,
         };
         let encoder = RocketpoolSwapEncoder::new(
@@ -110,8 +104,6 @@ mod tests {
             String::from(concat!(
                 // is deposit
                 "01",
-                // transfer type Transfer
-                "02",
                 // receiver
                 "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))
@@ -139,7 +131,6 @@ mod tests {
             router_address: Some(Bytes::default()),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::Transfer,
             historical_trade: false,
         };
         let encoder = RocketpoolSwapEncoder::new(
@@ -159,8 +150,6 @@ mod tests {
             String::from(concat!(
                 // is deposit
                 "00",
-                // transfer type Transfer
-                "02",
                 // receiver
                 "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))
