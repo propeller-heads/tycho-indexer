@@ -2099,94 +2099,71 @@ mod test {
 
     use super::*;
 
-    #[test]
-    fn test_compression_backward_compatibility() {
-        // Test old format (without compression field) - should default to false
-        let json_without_compression = r#"{
+    /// Test backward compatibility for Command::Subscribe compression field.
+    /// Should default to false when not specified.
+    #[rstest]
+    #[case::legacy_format(None, false)]
+    #[case::explicit_true(Some(true), true)]
+    #[case::explicit_false(Some(false), false)]
+    fn test_subscribe_compression_backward_compatibility(
+        #[case] compression: Option<bool>,
+        #[case] expected: bool,
+    ) {
+        use serde_json::json;
+
+        let mut json_value = json!({
             "method": "subscribe",
             "extractor_id": {
                 "chain": "ethereum",
                 "name": "test"
             },
             "include_state": true
-        }"#;
+        });
 
-        let command: Command = serde_json::from_str(json_without_compression)
-            .expect("Failed to deserialize Subscribe without compression field");
-
-        if let Command::Subscribe { compression, .. } = command {
-            assert_eq!(
-                compression, false,
-                "compression should default to false when not specified"
-            );
-        } else {
-            panic!("Expected Subscribe command");
+        if let Some(value) = compression {
+            json_value["compression"] = json!(value);
         }
 
-        // Test new format (with compression field)
-        let json_with_compression = r#"{
-            "method": "subscribe",
-            "extractor_id": {
-                "chain": "ethereum",
-                "name": "test"
-            },
-            "include_state": true,
-            "compression": true
-        }"#;
+        let command: Command =
+            serde_json::from_value(json_value).expect("Failed to deserialize Subscribe command");
 
-        let command_with_compression: Command = serde_json::from_str(json_with_compression)
-            .expect("Failed to deserialize Subscribe with compression field");
-
-        if let Command::Subscribe { compression, .. } = command_with_compression {
-            assert_eq!(compression, true, "compression should be true as specified in the JSON");
+        if let Command::Subscribe { compression, .. } = command {
+            assert_eq!(compression, expected);
         } else {
             panic!("Expected Subscribe command");
         }
     }
 
-    #[test]
-    fn test_partial_blocks_backward_compatibility() {
-        // Test old format (without partial_blocks field) - should default to false
-        let json_without_partial_blocks = r#"{
+    /// Test backward compatibility for Command::Subscribe partial_blocks field.
+    /// Should default to false when not specified.
+    #[rstest]
+    #[case::legacy_format(None, false)]
+    #[case::explicit_true(Some(true), true)]
+    #[case::explicit_false(Some(false), false)]
+    fn test_subscribe_partial_blocks_backward_compatibility(
+        #[case] partial_blocks: Option<bool>,
+        #[case] expected: bool,
+    ) {
+        use serde_json::json;
+
+        let mut json_value = json!({
             "method": "subscribe",
             "extractor_id": {
                 "chain": "ethereum",
                 "name": "test"
             },
             "include_state": true
-        }"#;
+        });
 
-        let command: Command = serde_json::from_str(json_without_partial_blocks)
-            .expect("Failed to deserialize Subscribe without partial_blocks field");
-
-        if let Command::Subscribe { partial_blocks, .. } = command {
-            assert_eq!(
-                partial_blocks, false,
-                "partial_blocks should default to false when not specified"
-            );
-        } else {
-            panic!("Expected Subscribe command");
+        if let Some(value) = partial_blocks {
+            json_value["partial_blocks"] = json!(value);
         }
 
-        // Test new format (with partial_blocks field)
-        let json_with_partial_blocks = r#"{
-            "method": "subscribe",
-            "extractor_id": {
-                "chain": "ethereum",
-                "name": "test"
-            },
-            "include_state": true,
-            "partial_blocks": true
-        }"#;
+        let command: Command =
+            serde_json::from_value(json_value).expect("Failed to deserialize Subscribe command");
 
-        let command_with_partial_blocks: Command = serde_json::from_str(json_with_partial_blocks)
-            .expect("Failed to deserialize Subscribe with partial_blocks field");
-
-        if let Command::Subscribe { partial_blocks, .. } = command_with_partial_blocks {
-            assert_eq!(
-                partial_blocks, true,
-                "partial_blocks should be true as specified in the JSON"
-            );
+        if let Command::Subscribe { partial_blocks, .. } = command {
+            assert_eq!(partial_blocks, expected);
         } else {
             panic!("Expected Subscribe command");
         }
@@ -2243,10 +2220,21 @@ mod test {
         }));
     }
 
-    #[test]
-    fn test_block_changes_is_partial_backward_compatibility() {
-        // Test old format (without is_partial field) - should default to false
-        let json_without_is_partial = r#"{
+    /// Test backward compatibility for BlockChanges deserialization with is_partial field.
+    /// - None: legacy format without field, should default to false
+    /// - Some(true): new format with is_partial=true
+    /// - Some(false): new format with is_partial=false
+    #[rstest]
+    #[case::legacy_format_defaults_to_false(None, false)]
+    #[case::explicit_true(Some(true), true)]
+    #[case::explicit_false(Some(false), false)]
+    fn test_block_changes_is_partial_backward_compatibility(
+        #[case] is_partial_value: Option<bool>,
+        #[case] expected: bool,
+    ) {
+        use serde_json::json;
+
+        let mut json_value = json!({
             "extractor": "test_extractor",
             "chain": "ethereum",
             "block": {
@@ -2271,90 +2259,17 @@ mod test {
                 "new_entrypoint_params": {},
                 "trace_results": {}
             }
-        }"#;
+        });
 
-        let block_changes: BlockChanges = serde_json::from_str(json_without_is_partial)
-            .expect("Failed to deserialize BlockChanges without is_partial field");
+        // Add is_partial field only if specified
+        if let Some(value) = is_partial_value {
+            json_value["is_partial"] = json!(value);
+        }
 
-        assert!(
-            !block_changes.is_partial,
-            "is_partial should default to false when not specified"
-        );
+        let block_changes: BlockChanges =
+            serde_json::from_value(json_value).expect("Failed to deserialize BlockChanges");
 
-        // Test new format (with is_partial: true)
-        let json_with_is_partial_true = r#"{
-            "extractor": "test_extractor",
-            "chain": "ethereum",
-            "block": {
-                "number": 100,
-                "hash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-                "parent_hash": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-                "chain": "ethereum",
-                "ts": "2024-01-01T00:00:00"
-            },
-            "finalized_block_height": 99,
-            "revert": false,
-            "is_partial": true,
-            "new_tokens": {},
-            "account_updates": {},
-            "state_updates": {},
-            "new_protocol_components": {},
-            "deleted_protocol_components": {},
-            "component_balances": {},
-            "account_balances": {},
-            "component_tvl": {},
-            "dci_update": {
-                "new_entrypoints": {},
-                "new_entrypoint_params": {},
-                "trace_results": {}
-            }
-        }"#;
-
-        let block_changes_partial: BlockChanges = serde_json::from_str(json_with_is_partial_true)
-            .expect("Failed to deserialize BlockChanges with is_partial=true");
-
-        assert!(
-            block_changes_partial.is_partial,
-            "is_partial should be true as specified in the JSON"
-        );
-
-        // Test new format (with is_partial: false explicitly)
-        let json_with_is_partial_false = r#"{
-            "extractor": "test_extractor",
-            "chain": "ethereum",
-            "block": {
-                "number": 100,
-                "hash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-                "parent_hash": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-                "chain": "ethereum",
-                "ts": "2024-01-01T00:00:00"
-            },
-            "finalized_block_height": 99,
-            "revert": false,
-            "is_partial": false,
-            "new_tokens": {},
-            "account_updates": {},
-            "state_updates": {},
-            "new_protocol_components": {},
-            "deleted_protocol_components": {},
-            "component_balances": {},
-            "account_balances": {},
-            "component_tvl": {},
-            "dci_update": {
-                "new_entrypoints": {},
-                "new_entrypoint_params": {},
-                "trace_results": {}
-            }
-        }"#;
-
-        let block_changes_not_partial: BlockChanges =
-            serde_json::from_str(json_with_is_partial_false)
-                .expect("Failed to deserialize BlockChanges with is_partial=false");
-
-        assert!(
-            !block_changes_not_partial.is_partial,
-            "is_partial should be false as specified in the JSON"
-        );
+        assert_eq!(block_changes.is_partial, expected);
     }
 
     #[test]
