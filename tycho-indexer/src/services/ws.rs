@@ -442,7 +442,12 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsActor {
                         debug!(actor_id = %self.id, "Parsed command successfully");
                         // Handle the message based on its variant
                         match message {
-                            Command::Subscribe { extractor_id, include_state, compression } => {
+                            Command::Subscribe {
+                                extractor_id,
+                                include_state,
+                                compression,
+                                partial_blocks,
+                            } => {
                                 debug!(actor_id = %self.id, %extractor_id, "Message handler: Processing subscribe request");
                                 self.subscribe(
                                     ctx,
@@ -783,6 +788,7 @@ mod tests {
             extractor_id: extractor_id.clone().into(),
             include_state: true,
             compression: false,
+            partial_blocks: false,
         };
         connection
             .send(Message::Text(serde_json::to_string(&action).unwrap()))
@@ -816,6 +822,7 @@ mod tests {
             extractor_id: extractor_id2.clone().into(),
             include_state: true,
             compression: false,
+            partial_blocks: false,
         };
         connection
             .send(Message::Text(serde_json::to_string(&action).unwrap()))
@@ -929,6 +936,7 @@ mod tests {
             extractor_id: extractor_id.clone().into(),
             include_state: true,
             compression: true,
+            partial_blocks: false,
         };
         connection
             .send(Message::Text(serde_json::to_string(&action).unwrap()))
@@ -991,6 +999,7 @@ mod tests {
             extractor_id: extractor_id.into(),
             include_state: true,
             compression: false,
+            partial_blocks: false,
         };
         let res = serde_json::to_string(&action).unwrap();
         println!("{res}");
@@ -1099,6 +1108,7 @@ mod tests {
             extractor_id: extractor_id.clone().into(),
             include_state: true,
             compression: false,
+            partial_blocks: false,
         };
         let msg_text = serde_json::to_string(&subscribe_msg).unwrap();
 
@@ -1186,6 +1196,7 @@ mod tests {
             extractor_id: extractor_id.clone().into(),
             include_state: true,
             compression: false,
+            partial_blocks: false,
         };
         connection
             .send(Message::Text(serde_json::to_string(&action).unwrap()))
@@ -1390,6 +1401,7 @@ mod tests {
             extractor_id: extractor_id.clone().into(),
             include_state: true,
             compression: false,
+            partial_blocks: false,
         };
         connection
             .send(Message::Text(serde_json::to_string(&action).unwrap()))

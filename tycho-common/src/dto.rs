@@ -165,6 +165,10 @@ pub enum Command {
         /// Defaults to false for backward compatibility.
         #[serde(default)]
         compression: bool,
+        /// Enables receiving partial block update messages in this subscription.
+        /// Defaults to false for backward compatibility.
+        #[serde(default)]
+        partial_blocks: bool,
     },
     Unsubscribe {
         subscription_id: Uuid,
@@ -2129,6 +2133,54 @@ mod test {
 
         if let Command::Subscribe { compression, .. } = command_with_compression {
             assert_eq!(compression, true, "compression should be true as specified in the JSON");
+        } else {
+            panic!("Expected Subscribe command");
+        }
+    }
+
+    #[test]
+    fn test_partial_blocks_backward_compatibility() {
+        // Test old format (without partial_blocks field) - should default to false
+        let json_without_partial_blocks = r#"{
+            "method": "subscribe",
+            "extractor_id": {
+                "chain": "ethereum",
+                "name": "test"
+            },
+            "include_state": true
+        }"#;
+
+        let command: Command = serde_json::from_str(json_without_partial_blocks)
+            .expect("Failed to deserialize Subscribe without partial_blocks field");
+
+        if let Command::Subscribe { partial_blocks, .. } = command {
+            assert_eq!(
+                partial_blocks, false,
+                "partial_blocks should default to false when not specified"
+            );
+        } else {
+            panic!("Expected Subscribe command");
+        }
+
+        // Test new format (with partial_blocks field)
+        let json_with_partial_blocks = r#"{
+            "method": "subscribe",
+            "extractor_id": {
+                "chain": "ethereum",
+                "name": "test"
+            },
+            "include_state": true,
+            "partial_blocks": true
+        }"#;
+
+        let command_with_partial_blocks: Command = serde_json::from_str(json_with_partial_blocks)
+            .expect("Failed to deserialize Subscribe with partial_blocks field");
+
+        if let Command::Subscribe { partial_blocks, .. } = command_with_partial_blocks {
+            assert_eq!(
+                partial_blocks, true,
+                "partial_blocks should be true as specified in the JSON"
+            );
         } else {
             panic!("Expected Subscribe command");
         }
