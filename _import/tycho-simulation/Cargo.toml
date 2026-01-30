@@ -1,5 +1,5 @@
 [workspace.package]
-version = "0.234.0"
+version = "0.236.0"
 
 [package]
 name = "tycho-simulation"
@@ -42,10 +42,10 @@ hex = "0.4.3"
 async-trait = "0.1.88"
 
 # Tycho dependencies
-tycho-client = "0.127.0"
-tycho-common = "0.127.0"
-tycho-ethereum = "0.127.0"
-tycho-execution = ">=0.154.0"
+tycho-client = ">=0.133.0"
+tycho-common = ">=0.133.0"
+tycho-ethereum = ">=0.133.0"
+tycho-execution = ">=0.155.0"
 
 # EVM dependencies
 # Alloy's dyn-abi 1.4.0 has a security vulnerability, so we require at least 1.4.1
@@ -104,7 +104,7 @@ dialoguer = "0.10.4"
 
 # Ekubo
 evm_ekubo_sdk = {version = "0.6.5", features = ["serde"]}
-ekubo_sdk = { version = "1.0.2", features = ["evm", "serde"] }
+ekubo_sdk = { version = "=1.0.2", features = ["evm", "serde"] }
 
 # rfq
 reqwest = { version = "0.12.22", optional = true }
