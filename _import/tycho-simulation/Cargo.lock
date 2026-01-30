@@ -2785,9 +2785,9 @@ dependencies = [
 
 [[package]]
 name = "ekubo_sdk"
-version = "1.0.2"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d67ac9c433e72ae7bd9fe5bae74e8f04e6d89fb67a7763decb3fe77fd11476f3"
+checksum = "aacbfe3234cdce98a39cbfb9260b11fef3684838e9f6cc5c61aa605cab6c8ce2"
 dependencies = [
  "alloy-primitives",
  "derive_more",
@@ -6332,9 +6332,9 @@ dependencies = [
 
 [[package]]
 name = "serde_with"
-version = "3.16.1"
+version = "3.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fa237f2807440d238e0364a218270b98f767a00d3dada77b1c53ae88940e2e7"
+checksum = "6093cd8c01b25262b84927e0f7151692158fab02d961e04c979d3903eba7ecc5"
 dependencies = [
  "base64",
  "chrono",
@@ -6351,9 +6351,9 @@ dependencies = [
 
 [[package]]
 name = "serde_with_macros"
-version = "3.16.1"
+version = "3.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52a8e3ca0ca629121f70ab50f95249e5a6f925cc0f6ffe8256c45b728875706c"
+checksum = "a7e6c180db0816026a61afa1cff5344fb7ebded7e4d3062772179f2501481c27"
 dependencies = [
  "darling 0.21.3",
  "proc-macro2",
@@ -7300,9 +7300,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.130.1"
+version = "0.123.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea414186aa7a224e5df17260ac2eb6ca9803426d12215d71846829d1be939557"
+checksum = "cb4377f5b6efc27790d78dbbdfdabfa5e4609f32524b60c39f5b6ba5ae5ac56b"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7330,9 +7330,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-common"
-version = "0.130.1"
+version = "0.123.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a6c62bf4a768eaa312a62f74fe7b479fceee520dd4677666c8870ebee16daf3"
+checksum = "95563f417c09a005d759b9d0059ead752001e9e7c26ba4933fa096bef634faa1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7356,20 +7356,18 @@ dependencies = [
 
 [[package]]
 name = "tycho-ethereum"
-version = "0.130.1"
+version = "0.123.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0690a6c4f22c8dfaa13cb32ee8b0a94661352c5f5c8c0a63b2b2655a0ae980e3"
+checksum = "d0b12b6be5b4c3ebb5f2b0caba7ddd37c0e08093202ae6732c60bddbb95f0b56"
 dependencies = [
  "alloy",
  "async-trait",
  "backoff",
  "chrono",
  "futures 0.3.31",
- "num-bigint",
  "rand 0.8.5",
  "serde",
  "serde_json",
- "serde_with",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
