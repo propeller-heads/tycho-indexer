@@ -41,10 +41,10 @@ hex = "0.4.3"
 async-trait = "0.1.88"
 
 # Tycho dependencies
-tycho-client = ">=0.123.0"
-tycho-common = ">=0.123.0"
-tycho-ethereum = ">=0.123.0"
-tycho-execution = ">=0.154.0"
+tycho-client = "<=0.132.2"
+tycho-common = "<=0.132.2"
+tycho-ethereum = "<=0.132.2"
+tycho-execution = ">=0.155.0"
 
 # EVM dependencies
 # Alloy's dyn-abi 1.4.0 has a security vulnerability, so we require at least 1.4.1
@@ -102,7 +102,7 @@ dialoguer = "0.10.4"
 
 # Ekubo
 evm_ekubo_sdk = "0.6.2"
-ekubo_sdk = { version = "1.0.2", features = ["evm"] }
+ekubo_sdk = { version = "=1.0.2", features = ["evm"] }
 
 # rfq
 reqwest = { version = "0.12.22", optional = true }
