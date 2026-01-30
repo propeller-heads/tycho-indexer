@@ -279,6 +279,11 @@ impl BlockChanges {
     pub fn is_partial_block(&self) -> bool {
         self.partial_block_index.is_some()
     }
+
+    /// Sets the partial block index.
+    pub fn set_partial_block_index(&mut self, index: Option<u32>) {
+        self.partial_block_index = index;
+    }
 }
 
 /// Inserts or updates a state attribute for a protocol component within a specific transaction.

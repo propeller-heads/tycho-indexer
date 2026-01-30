@@ -726,7 +726,7 @@ impl TryFromMessage for BlockChanges {
                 txs_with_update,
                 block_storage_changes,
             );
-            block_changes.partial_block_index = partial_block_index;
+            block_changes.set_partial_block_index(partial_block_index);
 
             Ok(block_changes)
         } else {
