@@ -891,7 +891,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 cyclicSwapAmountOut = 0;
         amounts[0] = amountIn;
         remainingAmounts[0] = amountIn;
-        uint256 nSwaps = swaps_.length;
 
         while (swaps_.length > 0) {
             (swapData, swaps_) = swaps_.next();
@@ -1228,6 +1227,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      */
     function determineFinalReceiver(address receiver, bool solverFees)
         internal
+        view
         returns (address)
     {
         address feeCalculator = this.getFeeCalculator();

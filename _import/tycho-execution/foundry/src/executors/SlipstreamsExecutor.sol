@@ -49,8 +49,11 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         self = address(this);
     }
 
-    function canReceiveFromPreviousSwap(bytes calldata data)
+    function canReceiveFromPreviousSwap(
+        bytes calldata /* data */
+    )
         external
+        pure
         returns (bool isOptimizable, address receiver)
     {
         return (false, address(0));

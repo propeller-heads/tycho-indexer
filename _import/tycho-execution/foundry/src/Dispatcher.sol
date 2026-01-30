@@ -297,7 +297,7 @@ contract Dispatcher is RestrictTransferFrom {
     function _callCanReceiveFromPreviousSwap(
         address executor,
         bytes calldata data
-    ) internal returns (bool isOptimizable, address receiver) {
+    ) internal view returns (bool isOptimizable, address receiver) {
         if (!executors[executor]) {
             revert Dispatcher__UnapprovedExecutor(executor);
         }

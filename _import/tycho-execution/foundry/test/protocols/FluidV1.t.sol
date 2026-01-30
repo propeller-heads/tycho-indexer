@@ -106,6 +106,7 @@ contract FluidV1ExecutorTest is Test, Constants {
         (, address receiver, address tokenIn, uint256 amount) =
             executor.getCallbackTransferData(data);
 
+        assertEq(receiver, FLUIDV1_LIQUIDITY);
         assertEq(tokenIn, address(0));
         assertEq(amount, amountOwed);
     }

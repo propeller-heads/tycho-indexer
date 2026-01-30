@@ -76,8 +76,11 @@ contract UniswapV4Executor is IExecutor, ICallback {
         _self = address(this);
     }
 
-    function canReceiveFromPreviousSwap(bytes calldata data)
+    function canReceiveFromPreviousSwap(
+        bytes calldata /* data */
+    )
         external
+        pure
         returns (bool isOptimizable, address receiver)
     {
         return (false, address(0));

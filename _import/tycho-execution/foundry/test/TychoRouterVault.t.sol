@@ -35,8 +35,11 @@ contract WrapUnwrapExecutor is IExecutor {
         weth = IWETH(_weth);
     }
 
-    function canReceiveFromPreviousSwap(bytes calldata data)
+    function canReceiveFromPreviousSwap(
+        bytes calldata /* data */
+    )
         external
+        pure
         returns (bool isOptimizable, address receiver)
     {
         return (false, address(0));

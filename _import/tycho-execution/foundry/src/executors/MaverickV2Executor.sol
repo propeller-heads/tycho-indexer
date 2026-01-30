@@ -30,6 +30,7 @@ contract MaverickV2Executor is IExecutor {
 
     function canReceiveFromPreviousSwap(bytes calldata data)
         external
+        pure
         returns (bool isOptimizable, address receiver)
     {
         address target = address(bytes20(data[0:20]));

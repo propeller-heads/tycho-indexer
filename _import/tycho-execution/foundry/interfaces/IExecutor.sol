@@ -65,7 +65,7 @@ interface IExecutor {
      * @return receiver Address where to send the funds to. If the bool is false, it should be set to address(0)
      */
     function canReceiveFromPreviousSwap(bytes calldata data)
-    external returns (bool isOptimizable, address receiver);
+    external pure returns (bool isOptimizable, address receiver);
 
 }
 
