@@ -15,6 +15,7 @@ use tycho_simulation::{
         engine_db::tycho_db::PreCachedDB,
         protocol::{
             aerodrome_slipstreams::state::AerodromeSlipstreamsState,
+            cowamm::state::CowAMMState,
             ekubo::state::EkuboState,
             ekubo_v3::state::EkuboV3State,
             erc4626::state::ERC4626State,
@@ -125,6 +126,7 @@ impl ProtocolStreamProcessor {
             Some(protocols) => protocols.clone(),
             None => self.get_default_protocols_for_chain(),
         };
+        info!("Building protocol stream for protocols: {:?}", protocols_to_enable);
 
         for protocol in &protocols_to_enable {
             protocol_stream =
@@ -159,6 +161,7 @@ impl ProtocolStreamProcessor {
                 "fluid_v1".to_string(),
                 "rocketpool".to_string(),
                 "erc4626".to_string(),
+                "cowamm".to_string(),
             ],
             Chain::Base => vec![
                 "uniswap_v2".to_string(),
@@ -274,6 +277,9 @@ impl ProtocolStreamProcessor {
                     tvl_filter.clone(),
                     None,
                 );
+            }
+            "cowamm" => {
+                stream = stream.exchange::<CowAMMState>("cowamm", tvl_filter.clone(), None);
             }
             _ => {
                 return Err(miette::miette!("Unknown protocol: {}", protocol));

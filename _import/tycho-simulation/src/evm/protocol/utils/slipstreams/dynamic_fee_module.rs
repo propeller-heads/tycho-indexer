@@ -1,3 +1,5 @@
+use tycho_common::simulation::errors::SimulationError;
+
 use crate::evm::protocol::utils::slipstreams::observations::Observations;
 
 pub(crate) const ZERO_FEE_INDICATOR: u32 = 420;
@@ -39,9 +41,9 @@ pub(crate) fn get_dynamic_fee(
     observation_cardinality: u16,
     observations: &Observations,
     blocktime: u32,
-) -> u32 {
+) -> Result<u32, SimulationError> {
     if dfc.base_fee == ZERO_FEE_INDICATOR {
-        return 0;
+        return Ok(0);
     }
     let base_fee = if dfc.base_fee != 0 { dfc.base_fee } else { default_base_fee };
 
@@ -59,8 +61,8 @@ pub(crate) fn get_dynamic_fee(
             observations,
             blocktime,
             scaling_factor,
-        );
-    total_fee.min(fee_cap)
+        )?;
+    Ok(total_fee.min(fee_cap))
 }
 
 fn calculate_dynamic_fee(
@@ -71,9 +73,9 @@ fn calculate_dynamic_fee(
     observations: &Observations,
     blocktime: u32,
     scaling_factor: u64,
-) -> u32 {
+) -> Result<u32, SimulationError> {
     if observation_cardinality < (DEFAULT_SECONDS_AGO / MIN_SECONDS_AGO) as u16 {
-        return 0;
+        return Ok(0);
     };
     let tw_avg_tick = match observations.observe(
         blocktime,
@@ -82,17 +84,17 @@ fn calculate_dynamic_fee(
         observation_index,
         liquidity,
         observation_cardinality,
-    ) {
-        Ok((tick_cumulatives, _)) if tick_cumulatives.len() >= 2 => {
+    )? {
+        (tick_cumulatives, _) if tick_cumulatives.len() >= 2 => {
             ((tick_cumulatives[1] - tick_cumulatives[0]) / DEFAULT_SECONDS_AGO as i64) as i32
         }
-        _ => return 0,
+        _ => return Ok(0),
     };
 
     let abs_tick_delta = (current_tick - tw_avg_tick).unsigned_abs();
 
     let dynamic_fee = (abs_tick_delta as u128 * scaling_factor as u128) / SCALING_PRECISION;
-    dynamic_fee as u32
+    Ok(dynamic_fee as u32)
 }
 
 #[cfg(test)]
@@ -136,7 +138,8 @@ mod tests {
         }
 
         let dynamic_fee =
-            get_dynamic_fee(&dfc, 362, -195239, 1102101691356476042, 534, 3010, &obs, 1762330021);
+            get_dynamic_fee(&dfc, 362, -195239, 1102101691356476042, 534, 3010, &obs, 1762330021)
+                .expect("Failed to calculate dynamic fee");
 
         assert_eq!(dynamic_fee, 380);
     }
