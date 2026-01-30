@@ -103,7 +103,8 @@ tokio-stream = "0.1.16"
 dialoguer = "0.10.4"
 
 # Ekubo
-evm_ekubo_sdk = {version = "0.6.2", features = ["serde", "evm"]}
+evm_ekubo_sdk = {version = "0.6.5", features = ["serde"]}
+ekubo_sdk = { version = "1.0.2", features = ["evm"] }
 
 # rfq
 reqwest = { version = "0.12.22", optional = true }
