@@ -1,3 +1,15 @@
+## [0.236.0](https://github.com/propeller-heads/tycho-simulation/compare/0.235.0...0.236.0) (2026-01-30)
+
+
+### Features
+
+* Fix tycho-indexer dependencies ([042d64c](https://github.com/propeller-heads/tycho-simulation/commit/042d64c9559b5bd5f382dc97ae11b3fd24f2bb3e))
+
+
+### Bug Fixes
+
+* pin ekubo sdk version ([4cbb735](https://github.com/propeller-heads/tycho-simulation/commit/4cbb7354669ba8b7398dcdfc5787bf2134e11016))
+
 ## [0.235.0](https://github.com/propeller-heads/tycho-simulation/compare/0.234.0...0.235.0) (2026-01-30)
 
 

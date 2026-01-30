@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "_tycho_simulation_py"
-version = "0.235.0"
+version = "0.236.0"
 dependencies = [
  "alloy",
  "num-bigint",
@@ -7400,7 +7400,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-integration-test"
-version = "0.235.0"
+version = "0.236.0"
 dependencies = [
  "actix-web",
  "alloy",
@@ -7429,7 +7429,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.235.0"
+version = "0.236.0"
 dependencies = [
  "alloy",
  "alloy-chains",
@@ -7487,7 +7487,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-test"
-version = "0.235.0"
+version = "0.236.0"
 dependencies = [
  "alloy",
  "alloy-chains",
