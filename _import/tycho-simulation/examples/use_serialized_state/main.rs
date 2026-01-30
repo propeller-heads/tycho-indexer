@@ -31,8 +31,8 @@ fn main() {
                     .amount
                     .to_string()
                     .parse::<f64>()
-                    .unwrap()
-                    / 10f64.powi(token_out.decimals as i32);
+                    .unwrap() /
+                    10f64.powi(token_out.decimals as i32);
                 println!(
                     "  Amount Out: {} ({:.3} {})",
                     result.amount, amount_out_human, token_out.symbol
