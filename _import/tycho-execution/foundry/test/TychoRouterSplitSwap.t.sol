@@ -29,7 +29,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         // WBTC -> USDC
         swaps[1] = encodeSplitSwap(
             uint8(1),
-            uint8(2),
+            uint8(3),
             uint24(0),
             address(usv2Executor),
             encodeUniswapV2Swap(USDC_WBTC_POOL, true)
@@ -37,7 +37,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         // WETH -> DAI
         swaps[2] = encodeSplitSwap(
             uint8(0),
-            uint8(3),
+            uint8(2),
             uint24(0),
             address(usv2Executor),
             encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, false)
@@ -45,8 +45,8 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
 
         // DAI -> USDC
         swaps[3] = encodeSplitSwap(
-            uint8(3),
             uint8(2),
+            uint8(3),
             uint24(0),
             address(usv2Executor),
             encodeUniswapV2Swap(DAI_USDC_POOL, true)
@@ -66,7 +66,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         // Set transient storage to allow transferFrom from ALICE
         tychoRouter.tstoreExposed(WETH_ADDR, amountIn, false, false);
         tychoRouter.exposedSplitSwap(
-            amountIn, 4, pleEncode(swaps), tychoRouterAddr
+            amountIn, 4, pleEncode(swaps), tychoRouterAddr, false
         );
         vm.stopPrank();
 
@@ -313,7 +313,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         uint256 amountIn = 10 ** 18;
         bytes memory swaps = "";
         vm.expectRevert(TychoRouter__EmptySwaps.selector);
-        tychoRouter.exposedSplitSwap(amountIn, 2, swaps, tychoRouterAddr);
+        tychoRouter.exposedSplitSwap(amountIn, 2, swaps, tychoRouterAddr, false);
     }
 
     function testSplitInputCyclicSwapInternalMethod() public {
@@ -367,7 +367,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         // Set transient storage to allow transferFrom from ALICE
         tychoRouter.tstoreExposed(USDC_ADDR, amountIn, false, false);
         tychoRouter.exposedSplitSwap(
-            amountIn, 2, pleEncode(swaps), tychoRouterAddr
+            amountIn, 2, pleEncode(swaps), tychoRouterAddr, false
         );
         vm.stopPrank();
         assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 99654537);
@@ -553,7 +553,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         // Set transient storage to allow transferFrom from ALICE
         tychoRouter.tstoreExposed(USDC_ADDR, amountIn, false, false);
         tychoRouter.exposedSplitSwap(
-            amountIn, 2, pleEncode(swaps), tychoRouterAddr
+            amountIn, 2, pleEncode(swaps), tychoRouterAddr, true
         );
         assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 99444510);
         assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), 0);
@@ -577,7 +577,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         swaps[0] = swap;
 
         tychoRouter.exposedSplitSwap(
-            amountIn, 2, pleEncode(swaps), tychoRouterAddr
+            amountIn, 2, pleEncode(swaps), tychoRouterAddr, false
         );
         assertGt(IERC20(BASE_MAG7).balanceOf(tychoRouterAddr), 1379830606);
     }

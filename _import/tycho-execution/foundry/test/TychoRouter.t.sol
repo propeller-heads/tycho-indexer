@@ -86,7 +86,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         uint256 amountIn = 10 ** 18;
         bytes memory swaps = "";
         vm.expectRevert(TychoRouter__EmptySwaps.selector);
-        tychoRouter.exposedSplitSwap(amountIn, 2, swaps, address(0));
+        tychoRouter.exposedSplitSwap(amountIn, 2, swaps, address(0), false);
     }
 
     // FEE CALCULATOR TESTS

@@ -668,9 +668,13 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         if (minAmountOut == 0) {
             revert TychoRouter__UndefinedMinAmountOut();
         }
+        bool isCyclical = false;
+        if (tokenIn == tokenOut) {
+            isCyclical = true;
+        }
 
         uint256 amountOutBeforeFees =
-            _splitSwap(amountIn, nTokens, swaps, receiver);
+            _splitSwap(amountIn, nTokens, swaps, receiver, isCyclical);
         amountOut = _takeFees(
             tokenOut,
             amountOutBeforeFees,
@@ -839,7 +843,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * - The indices of the input and output tokens (via `tokenInIndex()` and `tokenOutIndex()`).
      * - The portion of the available amount to be used for the swap, indicated by the `split` value.
      *
-     * Three important notes:
+     * Four important notes:
      * - The contract assumes that token indexes follow a specific order: the sell token is at index 0, followed by any
      *  intermediary tokens, and finally the buy token.
      * - A `split` value of 0 is interpreted as 100% of the available amount (i.e., the entire remaining balance).
@@ -848,10 +852,17 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * - In case of cyclic swaps, the output token is the same as the input token.
      *  `cyclicSwapAmountOut` is used to track the amount of the output token, and is updated when
      *  the `tokenOutIndex` is 0.
+     * - The receiver of the hop is chosen depending on the position:
+     *     - if it's any other than not the last hops (to the token out), the receiver is address(this)
+     *     - if it's the last hops, the receiver will be the one passed in the input arguments. Note that for regular
+     * split swaps, checking that the `tokenOutIndex` is the last value is enough for this but for cyclical split swaps
+     * we need to rely on the `isCyclical` passed from the outside.
      *
      * @param amountIn The initial amount of the sell token to be swapped.
      * @param nTokens The total number of tokens involved in the swap path, used to initialize arrays for internal tracking.
      * @param swaps_ Encoded swap graph data containing the details of each swap operation.
+     * @param receiver The address of the receiver of the swap
+     * @param isCyclical Bool to determine if the swap is cyclical or not (token in == token out)
      *
      * @return The total amount of the buy token obtained after all swaps have been executed.
      */
@@ -859,7 +870,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 amountIn,
         uint256 nTokens,
         bytes calldata swaps_,
-        address receiver
+        address receiver,
+        bool isCyclical
     ) internal returns (uint256) {
         if (swaps_.length == 0) {
             revert TychoRouter__EmptySwaps();
@@ -879,6 +891,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 cyclicSwapAmountOut = 0;
         amounts[0] = amountIn;
         remainingAmounts[0] = amountIn;
+        uint256 nSwaps = swaps_.length;
 
         while (swaps_.length > 0) {
             (swapData, swaps_) = swaps_.next();
@@ -890,13 +903,21 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
                 ? (amounts[tokenInIndex] * split) / 0xffffff
                 : remainingAmounts[tokenInIndex];
 
+            address swapReceiver = address(this);
+            if (
+                (tokenOutIndex == nTokens - 1 && !isCyclical)
+                    || (isCyclical && tokenOutIndex == 0)
+            ) {
+                swapReceiver = receiver;
+            }
+
             currentAmountOut = _callSwapOnExecutor(
                 executor,
                 currentAmountIn,
                 protocolData,
                 tokenInIndex == 0,
                 true,
-                address(this) //TODO: can this be optimized?
+                swapReceiver
             );
             // Checks if the output token is the same as the input token
             if (tokenOutIndex == 0) {
@@ -1032,7 +1053,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         external
         onlyRole(ROUTER_FEE_SETTER_ROLE)
     {
-        // TODO: we should allow 0 (in case we don't want to take fees after taking fees)
         if (feeCalculator == address(0)) {
             revert TychoRouter__AddressZero();
         }

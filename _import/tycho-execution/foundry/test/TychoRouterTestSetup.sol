@@ -46,9 +46,10 @@ contract TychoRouterExposed is TychoRouter {
         uint256 amountIn,
         uint256 nTokens,
         bytes calldata swaps,
-        address receiver
+        address receiver,
+        bool isCyclical
     ) external returns (uint256) {
-        return _splitSwap(amountIn, nTokens, swaps, receiver);
+        return _splitSwap(amountIn, nTokens, swaps, receiver, isCyclical);
     }
 
     function exposedSequentialSwap(
