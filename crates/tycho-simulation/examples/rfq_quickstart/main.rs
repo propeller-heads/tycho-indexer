@@ -41,6 +41,7 @@ use tycho_simulation::{
         protocols::{
             bebop::{client_builder::BebopClientBuilder, state::BebopState},
             hashflow::{client_builder::HashflowClientBuilder, state::HashflowState},
+            liquorice::{client_builder::LiquoriceClientBuilder, state::LiquoriceState},
         },
         stream::RFQStreamBuilder,
     },
@@ -123,10 +124,13 @@ async fn main() {
     let (bebop_user, bebop_key) = (env::var("BEBOP_USER").ok(), env::var("BEBOP_KEY").ok());
     let (hashflow_user, hashflow_key) =
         (env::var("HASHFLOW_USER").ok(), env::var("HASHFLOW_KEY").ok());
+    let (liquorice_user, liquorice_key) =
+        (env::var("LIQUORICE_USER").ok(), env::var("LIQUORICE_KEY").ok());
     if (bebop_user.is_none() || bebop_key.is_none()) &&
-        (hashflow_user.is_none() || hashflow_key.is_none())
+        (hashflow_user.is_none() || hashflow_key.is_none()) &&
+        (liquorice_user.is_none() || liquorice_key.is_none())
     {
-        panic!("No RFQ credentials found. Please set BEBOP_USER and BEBOP_KEY or HASHFLOW_USER and HASHFLOW_KEY environment variables.");
+        panic!("No RFQ credentials found. Please set BEBOP_USER and BEBOP_KEY, HASHFLOW_USER and HASHFLOW_KEY, or LIQUORICE_USER and LIQUORICE_KEY environment variables.");
     }
 
     println!("Loading tokens from Tycho... {url}", url = tycho_url.as_str());
@@ -203,13 +207,23 @@ async fn main() {
     if let (Some(user), Some(key)) = (hashflow_user, hashflow_key) {
         println!("Setting up Hashflow RFQ client...\n");
         let hashflow_client = HashflowClientBuilder::new(chain, user, key)
-            .tokens(rfq_tokens)
+            .tokens(rfq_tokens.clone())
             .tvl_threshold(cli.tvl_threshold)
             .poll_time(Duration::from_secs(5))
             .build()
             .expect("Failed to create Hashflow RFQ client");
         rfq_stream_builder =
             rfq_stream_builder.add_client::<HashflowState>("hashflow", Box::new(hashflow_client))
+    }
+    if let (Some(user), Some(key)) = (liquorice_user, liquorice_key) {
+        println!("Setting up Liquorice RFQ client...\n");
+        let liquorice_client = LiquoriceClientBuilder::new(chain, user, key)
+            .tokens(rfq_tokens.clone())
+            .tvl_threshold(cli.tvl_threshold)
+            .build()
+            .expect("Failed to create Liquorice RFQ client");
+        rfq_stream_builder =
+            rfq_stream_builder.add_client::<LiquoriceState>("liquorice", Box::new(liquorice_client))
     }
 
     // Start the RFQ stream in a background task
