@@ -104,7 +104,7 @@ dialoguer = "0.10.4"
 
 # Ekubo
 evm_ekubo_sdk = {version = "0.6.5", features = ["serde"]}
-ekubo_sdk = { version = "1.0.2", features = ["evm"] }
+ekubo_sdk = { version = "1.0.2", features = ["evm", "serde"] }
 
 # rfq
 reqwest = { version = "0.12.22", optional = true }
