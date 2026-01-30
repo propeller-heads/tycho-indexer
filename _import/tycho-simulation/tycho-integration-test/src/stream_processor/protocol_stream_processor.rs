@@ -162,6 +162,7 @@ impl ProtocolStreamProcessor {
                 "rocketpool".to_string(),
                 "erc4626".to_string(),
                 "cowamm".to_string(),
+                "ekubo_v3".to_string(),
             ],
             Chain::Base => vec![
                 "uniswap_v2".to_string(),
