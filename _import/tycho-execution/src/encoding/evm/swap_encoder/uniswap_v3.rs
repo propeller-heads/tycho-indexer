@@ -86,12 +86,10 @@ mod tests {
         let token_out = Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f");
         let swap = Swap::new(usv3_pool, token_in.clone(), token_out.clone());
         let encoding_context = EncodingContext {
-            receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
             exact_out: false,
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            historical_trade: false,
         };
         let encoder = UniswapV3SwapEncoder::new(
             Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),

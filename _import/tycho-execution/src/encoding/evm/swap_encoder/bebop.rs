@@ -70,7 +70,7 @@ impl SwapEncoder for BebopSwapEncoder {
                 ))?;
             let token_in = swap.token_in().clone();
             let token_out = swap.token_out().clone();
-            let router_address =encoding_context
+            let router_address = encoding_context
                 .router_address
                 .clone()
                 .ok_or(EncodingError::FatalError(
@@ -183,12 +183,10 @@ mod tests {
             .protocol_state(Arc::new(bebop_state));
 
         let encoding_context = EncodingContext {
-            receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"),
             exact_out: false,
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            historical_trade: false,
         };
 
         let encoder = BebopSwapEncoder::new(

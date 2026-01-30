@@ -91,13 +91,10 @@ mod tests {
         let token_out = Bytes::from("0xdac17f958d2ee523a2206206994597c13d831ec7");
         let swap = Swap::new(fluid_dex, token_in.clone(), token_out.clone());
         let encoding_context = EncodingContext {
-            // The receiver was generated with `makeAddr("bob*") using forge`
-            receiver: Bytes::from("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de"),
             exact_out: false,
             router_address: Some(Bytes::default()),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            historical_trade: false,
         };
         let encoder = FluidV1SwapEncoder::new(
             Bytes::from("0x212224D2F2d262cd093eE13240ca4873fcCBbA3C"),

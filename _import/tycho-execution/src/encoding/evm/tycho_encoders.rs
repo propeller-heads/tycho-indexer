@@ -49,7 +49,6 @@ impl TychoRouterEncoder {
         router_address: Bytes,
         user_transfer_type: UserTransferType,
         signer: Option<PrivateKeySigner>,
-        historical_trade: bool,
     ) -> Result<Self, EncodingError> {
         let permit2 = if user_transfer_type == UserTransferType::TransferFromPermit2 {
             Some(Permit2::new()?)
@@ -58,25 +57,19 @@ impl TychoRouterEncoder {
         };
         Ok(TychoRouterEncoder {
             single_swap_strategy: SingleSwapStrategyEncoder::new(
-                chain,
                 swap_encoder_registry.clone(),
                 user_transfer_type.clone(),
                 router_address.clone(),
-                historical_trade,
             )?,
             sequential_swap_strategy: SequentialSwapStrategyEncoder::new(
-                chain,
                 swap_encoder_registry.clone(),
                 user_transfer_type.clone(),
                 router_address.clone(),
-                historical_trade,
             )?,
             split_swap_strategy: SplitSwapStrategyEncoder::new(
-                chain,
                 swap_encoder_registry,
                 user_transfer_type,
                 router_address.clone(),
-                historical_trade,
             )?,
             router_address,
             permit2,
@@ -264,12 +257,10 @@ impl TychoExecutorEncoder {
             })?;
 
         let encoding_context = EncodingContext {
-            receiver: solution.receiver.clone(),
             exact_out: solution.exact_out,
             router_address: None,
             group_token_in: grouped_swap.token_in.clone(),
             group_token_out: grouped_swap.token_out.clone(),
-            historical_trade: false,
         };
         let mut grouped_protocol_data: Vec<Vec<u8>> = vec![];
         let mut initial_protocol_data: Vec<u8> = vec![];
@@ -432,7 +423,6 @@ mod tests {
             router_address(),
             user_transfer_type,
             None,
-            false,
         )
         .unwrap()
     }
@@ -559,7 +549,6 @@ mod tests {
                 token_out: eth(),
                 min_amount_out: BigUint::from_str("105_152_000000000000000000").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_eth, swap_usdc_eth_univ4()],
                 ..Default::default()
             };
@@ -808,8 +797,6 @@ mod tests {
                 token_out,
                 min_amount_out: BigUint::from(1000000000000000000u64),
                 sender: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
-                // The receiver was generated with `makeAddr("bob") using forge`
-                receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
                 swaps: vec![swap],
                 ..Default::default()
             };
@@ -861,7 +848,6 @@ mod tests {
                 token_out,
                 min_amount_out: BigUint::from(1000000000000000000u64),
                 sender: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
-                receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
                 swaps: vec![swap.clone(), swap],
                 ..Default::default()
             };
@@ -885,7 +871,6 @@ mod tests {
                 token_out: pepe,
                 min_amount_out: BigUint::from(1000000000000000000u64),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_eth_univ4(), swap_eth_pepe_univ4()],
                 ..Default::default()
             };

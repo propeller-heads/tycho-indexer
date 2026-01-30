@@ -153,12 +153,10 @@ mod test {
             .estimated_amount_in(BigUint::from_str("3000000000").unwrap());
 
         let encoding_context = EncodingContext {
-            receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"),
             exact_out: false,
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            historical_trade: false,
         };
 
         let encoder = HashflowSwapEncoder::new(
@@ -245,12 +243,10 @@ mod test {
             .protocol_state(Arc::new(hashflow_state));
 
         let encoding_context = EncodingContext {
-            receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"),
             exact_out: false,
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            historical_trade: false,
         };
 
         let encoder = HashflowSwapEncoder::new(

@@ -88,8 +88,6 @@ mod tests {
         swap_encoder::ekubo::EkuboSwapEncoder, utils::write_calldata_to_file,
     };
 
-    const RECEIVER: &str = "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6"; // Random address
-
     #[test]
     fn test_encode_swap_simple() {
         let token_in = Bytes::from(Address::ZERO.as_slice());
@@ -106,12 +104,10 @@ mod tests {
         let swap = Swap::new(component, token_in.clone(), token_out.clone());
 
         let encoding_context = EncodingContext {
-            receiver: RECEIVER.into(),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
             exact_out: false,
             router_address: Some(Bytes::default()),
-            historical_trade: false,
         };
 
         let encoder = EkuboSwapEncoder::new(Bytes::default(), Chain::Ethereum, None).unwrap();
@@ -144,12 +140,10 @@ mod tests {
         let encoder = EkuboSwapEncoder::new(Bytes::default(), Chain::Ethereum, None).unwrap();
 
         let encoding_context = EncodingContext {
-            receiver: RECEIVER.into(),
             group_token_in: group_token_in.clone(),
             group_token_out: group_token_out.clone(),
             exact_out: false,
             router_address: Some(Bytes::default()),
-            historical_trade: false,
         };
 
         let first_swap = Swap::new(
