@@ -6,6 +6,7 @@ use ekubo_sdk::{
     U256,
 };
 use revm::primitives::Address;
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     simulation::errors::{SimulationError, TransitionError},
     Bytes,
@@ -14,7 +15,7 @@ use tycho_common::{
 use super::{full_range::FullRangePool, EkuboPool, EkuboPoolQuote};
 use crate::protocol::errors::InvalidSnapshotError;
 
-#[derive(Debug, Eq, Clone)]
+#[derive(Debug, Eq, Clone, Serialize, Deserialize)]
 pub struct OraclePool {
     imp: EvmOraclePool,
     state: EvmOraclePoolState,
@@ -98,8 +99,8 @@ impl EkuboPool for OraclePool {
         Ok(EkuboPoolQuote {
             consumed_amount: quote.consumed_amount,
             calculated_amount: quote.calculated_amount,
-            gas: FullRangePool::gas_costs() +
-                u64::from(
+            gas: FullRangePool::gas_costs()
+                + u64::from(
                     quote
                         .execution_resources
                         .snapshots_written,

@@ -14,6 +14,7 @@ use ekubo_sdk::{
 };
 use num_traits::Zero;
 use revm::primitives::Address;
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     simulation::errors::{SimulationError, TransitionError},
     Bytes,
@@ -28,7 +29,7 @@ use crate::{
     protocol::errors::InvalidSnapshotError,
 };
 
-#[derive(Debug, Eq, Clone)]
+#[derive(Debug, Eq, Clone, Serialize, Deserialize)]
 pub struct MevCapturePool {
     imp: EvmMevCapturePool,
 
@@ -41,10 +42,10 @@ pub struct MevCapturePool {
 
 impl PartialEq for MevCapturePool {
     fn eq(&self, other: &Self) -> bool {
-        self.key() == other.key() &&
-            self.base_pool_state == other.base_pool_state &&
-            self.ticks == other.ticks &&
-            self.last_tick == other.last_tick
+        self.key() == other.key()
+            && self.base_pool_state == other.base_pool_state
+            && self.ticks == other.ticks
+            && self.last_tick == other.last_tick
     }
 }
 
@@ -128,13 +129,13 @@ impl EkuboPool for MevCapturePool {
         Ok(EkuboPoolQuote {
             consumed_amount: quote.consumed_amount,
             calculated_amount: quote.calculated_amount,
-            gas: Self::BASE_GAS_COST +
-                u64::from(
+            gas: Self::BASE_GAS_COST
+                + u64::from(
                     quote
                         .execution_resources
                         .state_update_count,
-                ) * Self::GAS_COST_OF_ONE_STATE_UPDATE +
-                BasePool::gas_costs(
+                ) * Self::GAS_COST_OF_ONE_STATE_UPDATE
+                + BasePool::gas_costs(
                     quote
                         .execution_resources
                         .base_pool_resources,
