@@ -1,3 +1,11 @@
+## [0.235.0](https://github.com/propeller-heads/tycho-simulation/compare/0.234.0...0.235.0) (2026-01-30)
+
+
+### Features
+
+* add Ekubo V3 to integration test protocols ([5746b0c](https://github.com/propeller-heads/tycho-simulation/commit/5746b0cd399baac03667db5fb6ab9c15630fecb2))
+* update tycho-execution to 0.155.0 ([d6e1ed3](https://github.com/propeller-heads/tycho-simulation/commit/d6e1ed322f041594bf7595070571be463980476c))
+
 ## [0.234.0](https://github.com/propeller-heads/tycho-simulation/compare/0.233.0...0.234.0) (2026-01-26)
 
 
