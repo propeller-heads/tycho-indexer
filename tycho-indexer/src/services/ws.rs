@@ -239,8 +239,7 @@ impl WsActor {
                         while let Some(item) = rx.recv().await {
                             // If a block is a revert, always include it
                             // Otherwise, only send blocks with type matching subscr preference
-                            let is_partial = item.partial_block_index.is_some();
-                            let matches_preference = send_partials == is_partial;
+                            let matches_preference = send_partials == item.is_partial();
                             if !item.revert && !matches_preference  {
                                 continue;
                             }
