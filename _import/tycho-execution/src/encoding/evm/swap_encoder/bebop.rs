@@ -70,18 +70,19 @@ impl SwapEncoder for BebopSwapEncoder {
                 ))?;
             let token_in = swap.token_in().clone();
             let token_out = swap.token_out().clone();
+            let router_address =encoding_context
+                .router_address
+                .clone()
+                .ok_or(EncodingError::FatalError(
+                    "The router address is needed to perform a Bebop swap".to_string(),
+                ))?;
 
             let params = GetAmountOutParams {
                 amount_in: estimated_amount_in,
                 token_in,
                 token_out,
-                sender: encoding_context
-                    .router_address
-                    .clone()
-                    .ok_or(EncodingError::FatalError(
-                        "The router address is needed to perform a Bebop swap".to_string(),
-                    ))?,
-                receiver: encoding_context.receiver.clone(),
+                sender: router_address.clone(),
+                receiver: router_address,
             };
             let signed_quote = block_in_place(|| {
                 self.runtime_handle.block_on(async {

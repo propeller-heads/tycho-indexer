@@ -68,8 +68,8 @@ impl SwapEncoder for HashflowSwapEncoder {
                         amount_in,
                         token_in: swap.token_in().clone(),
                         token_out: swap.token_out().clone(),
-                        sender,
-                        receiver: encoding_context.receiver.clone(),
+                        sender: sender.clone(),
+                        receiver: sender,
                     })
                     .await
             })

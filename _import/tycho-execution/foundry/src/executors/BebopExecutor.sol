@@ -72,16 +72,19 @@ contract BebopExecutor is IExecutor {
             partialFillOffset
         );
 
-        uint256 balanceBefore = _balanceOf(tokenOut, receiver);
-        uint256 ethValue = tokenIn == address(0) ? amountIn : 0;
+        // Bebop quotes are always made with the router as the receiver
+        uint256 balanceBefore = _balanceOf(tokenOut, address(this));
 
-        // Use OpenZeppelin's Address library for safe call with value
+        // Use OpenZeppelin's Address library for safe call
         // This will revert if the call fails
         // slither-disable-next-line unused-return
-        bebopSettlement.functionCallWithValue(finalCalldata, ethValue);
-
-        uint256 balanceAfter = _balanceOf(tokenOut, receiver);
+        bebopSettlement.functionCall(finalCalldata);
+        uint256 balanceAfter = _balanceOf(tokenOut, address(this));
         amountOut = balanceAfter - balanceBefore;
+
+        if (receiver != address(this)) {
+            IERC20(tokenOut).safeTransfer(receiver, amountOut);
+        }
     }
 
     /// @dev Decodes the packed calldata

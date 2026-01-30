@@ -135,7 +135,7 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
 
         vm.prank(trader);
         (uint256 amountOut, address tokenOut) =
-            executor.swap(amountIn, encodedQuote, trader);
+            executor.swap(amountIn, encodedQuote, address(executor));
 
         uint256 balanceAfter = USDC.balanceOf(trader);
         assertGt(balanceAfter, balanceBefore);
@@ -159,7 +159,7 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
 
         vm.prank(trader);
         (uint256 amountOut, address tokenOut) =
-            executor.swap(amountIn, encodedQuote, trader);
+            executor.swap(amountIn, encodedQuote, address(executor));
 
         uint256 balanceAfter = USDC.balanceOf(trader);
         assertGt(balanceAfter, balanceBefore);
@@ -183,7 +183,7 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
 
         vm.prank(trader);
         (uint256 amountOut, address tokenOut) =
-            executor.swap(amountIn, encodedQuote, trader);
+            executor.swap(amountIn, encodedQuote, address(executor));
 
         uint256 balanceAfter = USDC.balanceOf(trader);
         assertGt(balanceAfter, balanceBefore);
@@ -247,7 +247,7 @@ contract HashflowExecutorNativeTest is Constants, HashflowUtils {
 
         vm.prank(trader);
         (uint256 amountOut, address tokenOut) =
-            executor.swap(amountIn, encodedQuote, trader);
+            executor.swap(amountIn, encodedQuote, address(executor));
 
         uint256 balanceAfter = USDC.balanceOf(trader);
         assertGt(balanceAfter, balanceBefore);
@@ -299,7 +299,7 @@ contract HashflowExecutorExposed is HashflowExecutor {
 
 contract TychoRouterSingleSwapTestForHashflow is TychoRouterTestSetup {
     function getForkBlock() public pure override returns (uint256) {
-        return 24334309;
+        return 24290334;
     }
 
     function testHashflowIntegration() public {
@@ -311,7 +311,7 @@ contract TychoRouterSingleSwapTestForHashflow is TychoRouterTestSetup {
         // - 4308094737 USDC input -> 4795673 WBTC output
 
         uint256 amountIn = 4308094737;
-        uint256 expectedAmountOut = 4829826;
+        uint256 expectedAmountOut = 4795673;
         deal(USDC_ADDR, ALICE, amountIn);
         uint256 balanceBefore = IERC20(WBTC_ADDR).balanceOf(ALICE);
 
