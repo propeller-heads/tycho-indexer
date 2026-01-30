@@ -664,11 +664,26 @@ impl TryFromMessage for TxWithContractChanges {
 }
 
 impl TryFromMessage for BlockChanges {
-    type Args<'a> =
-        (substreams::BlockChanges, &'a str, Chain, &'a str, &'a HashMap<String, ProtocolType>, u64);
+    type Args<'a> = (
+        substreams::BlockChanges,
+        &'a str,
+        Chain,
+        &'a str,
+        &'a HashMap<String, ProtocolType>,
+        u64,
+        Option<u32>,
+    );
 
     fn try_from_message(args: Self::Args<'_>) -> Result<Self, ExtractionError> {
-        let (msg, extractor, chain, protocol_system, protocol_types, finalized_block_height) = args;
+        let (
+            msg,
+            extractor,
+            chain,
+            protocol_system,
+            protocol_types,
+            finalized_block_height,
+            partial_block_index,
+        ) = args;
 
         if let Some(block) = msg.block {
             let block = Block::try_from_message((block, chain))?;
@@ -702,7 +717,7 @@ impl TryFromMessage for BlockChanges {
                 .map(|change| TxWithContractChanges::try_from_message((change, &block)))
                 .collect::<Result<Vec<TxWithContractChanges>, ExtractionError>>()?;
 
-            Ok(Self::new(
+            let mut block_changes = Self::new(
                 extractor.to_string(),
                 chain,
                 block,
@@ -710,7 +725,10 @@ impl TryFromMessage for BlockChanges {
                 false,
                 txs_with_update,
                 block_storage_changes,
-            ))
+            );
+            block_changes.set_partial_block_index(partial_block_index);
+
+            Ok(block_changes)
         } else {
             Err(ExtractionError::Empty)
         }

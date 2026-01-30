@@ -729,6 +729,7 @@ where
                     &self.protocol_system,
                     &self.protocol_types,
                     inp.final_block_height,
+                    inp.partial_index,
                 ))
             }
             url if url.ends_with("BlockContractChanges") => {
@@ -1387,6 +1388,7 @@ where
             account_balances: combined_account_balances,
             component_tvl: HashMap::new(),
             dci_update: DCIUpdate::default(), // TODO: get reverted entrypoint info?
+            partial_block_index: None,
         };
 
         debug!("Successfully retrieved all previous states during revert!");

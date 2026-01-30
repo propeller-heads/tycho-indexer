@@ -100,6 +100,9 @@ pub struct BlockAggregatedChanges {
     pub account_balances: HashMap<Address, HashMap<Address, AccountBalance>>,
     pub component_tvl: HashMap<String, f64>,
     pub dci_update: DCIUpdate,
+    /// The index of the partial block. None if it's a full block.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub partial_block_index: Option<u32>,
 }
 
 impl BlockAggregatedChanges {
@@ -137,17 +140,10 @@ impl BlockAggregatedChanges {
             account_balances,
             component_tvl,
             dci_update,
+            partial_block_index: None,
         }
     }
-}
 
-impl std::fmt::Display for BlockAggregatedChanges {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "block_number: {}, extractor: {}", self.block.number, self.extractor)
-    }
-}
-
-impl BlockAggregatedChanges {
     pub fn drop_state(&self) -> Self {
         Self {
             extractor: self.extractor.clone(),
@@ -165,7 +161,14 @@ impl BlockAggregatedChanges {
             account_balances: self.account_balances.clone(),
             component_tvl: self.component_tvl.clone(),
             dci_update: self.dci_update.clone(),
+            partial_block_index: self.partial_block_index,
         }
+    }
+}
+
+impl std::fmt::Display for BlockAggregatedChanges {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "block_number: {}, extractor: {}", self.block.number, self.extractor)
     }
 }
 

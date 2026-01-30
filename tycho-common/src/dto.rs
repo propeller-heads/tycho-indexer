@@ -317,6 +317,9 @@ pub struct BlockChanges {
     pub account_balances: HashMap<Bytes, HashMap<Bytes, AccountBalance>>,
     pub component_tvl: HashMap<String, f64>,
     pub dci_update: DCIUpdate,
+    /// The index of the partial block. None if it's a full block.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub partial_block_index: Option<u32>,
 }
 
 impl BlockChanges {
@@ -353,6 +356,7 @@ impl BlockChanges {
             account_balances,
             component_tvl: HashMap::new(),
             dci_update,
+            partial_block_index: None,
         }
     }
 
@@ -457,7 +461,12 @@ impl BlockChanges {
             account_balances: self.account_balances.clone(),
             component_tvl: self.component_tvl.clone(),
             dci_update: self.dci_update.clone(),
+            partial_block_index: self.partial_block_index,
         }
+    }
+
+    pub fn is_partial_block(&self) -> bool {
+        self.partial_block_index.is_some()
     }
 }
 
@@ -554,6 +563,7 @@ impl From<BlockAggregatedChanges> for BlockChanges {
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
             component_tvl: value.component_tvl,
+            partial_block_index: value.partial_block_index,
         }
     }
 }
