@@ -175,7 +175,7 @@ impl WsActor {
         extractor_id: &ExtractorIdentity,
         include_state: bool,
         compression: bool,
-        partial_blocks: bool,
+        send_partials: bool,
     ) {
         let extractor_id = extractor_id.clone();
         // Step 1: Direct HashMap access (no mutex needed since map is read-only after
@@ -237,17 +237,16 @@ impl WsActor {
 
                     let stream = async_stream::stream! {
                         while let Some(item) = rx.recv().await {
-                            let item = &*item;
-
                             // If a block is a revert, always include it
-                            // Otherwise, send only block types matching partial_block preference
-                            let matches_preference = partial_blocks != item.partial_block_index.is_some();
-                            if !item.revert && matches_preference {
+                            // Otherwise, only send blocks with type matching subscr preference
+                            let is_partial = item.partial_block_index.is_some();
+                            let matches_preference = send_partials == is_partial;
+                            if !item.revert && !matches_preference  {
                                 continue;
                             }
 
                             let result = if include_state {
-                                item.clone().into()
+                                (*item).clone().into()
                             } else {
                                 item.drop_state().into()
                             };
@@ -288,7 +287,7 @@ impl WsActor {
                         "extractor" => extractor_id.name.to_string(),
                         "user_identity" => user_identity.unwrap_or("unknown".to_string()),
                         "compression" => compression.to_string(),
-                        "partial_blocks" => partial_blocks.to_string(),
+                        "partial_blocks" => send_partials.to_string(),
                     )
                     .increment(1);
 
