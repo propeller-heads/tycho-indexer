@@ -102,14 +102,9 @@ impl ProtocolSim for LiquoriceState {
             SimulationError::RecoverableError("Can't convert amount in to f64".into())
         })? / 10f64.powi(token_in.decimals as i32);
 
-        let min_amount = self.levels.levels[0].quantity;
-        if amount_in < min_amount {
-            return Err(SimulationError::RecoverableError(format!(
-                "Amount below minimum. Input amount: {amount_in}, min amount: {min_amount}"
-            )));
-        }
-
-        let (amount_out, remaining_amount_in) = self.levels.get_amount_out_from_levels(amount_in);
+        let (amount_out, remaining_amount_in) = self
+            .levels
+            .get_amount_out_from_levels(amount_in);
 
         let res = GetAmountOutResult {
             amount: BigUint::from_f64(amount_out * 10f64.powi(token_out.decimals as i32))
@@ -149,8 +144,7 @@ impl ProtocolSim for LiquoriceState {
 
         let sell_limit =
             BigUint::from((total_sell_amount * 10_f64.pow(sell_decimals as f64)) as u128);
-        let buy_limit =
-            BigUint::from((total_buy_amount * 10_f64.pow(buy_decimals as f64)) as u128);
+        let buy_limit = BigUint::from((total_buy_amount * 10_f64.pow(buy_decimals as f64)) as u128);
 
         Ok((sell_limit, buy_limit))
     }
@@ -181,7 +175,10 @@ impl ProtocolSim for LiquoriceState {
     }
 
     fn eq(&self, other: &dyn ProtocolSim) -> bool {
-        if let Some(other_state) = other.as_any().downcast_ref::<LiquoriceState>() {
+        if let Some(other_state) = other
+            .as_any()
+            .downcast_ref::<LiquoriceState>()
+        {
             self.base_token == other_state.base_token
                 && self.quote_token == other_state.quote_token
                 && self.levels == other_state.levels
@@ -197,7 +194,10 @@ impl IndicativelyPriced for LiquoriceState {
         &self,
         params: GetAmountOutParams,
     ) -> Result<SignedQuote, SimulationError> {
-        Ok(self.client.request_binding_quote(&params).await?)
+        Ok(self
+            .client
+            .request_binding_quote(&params)
+            .await?)
     }
 }
 
@@ -270,10 +270,8 @@ mod tests {
             base_token: weth(),
             quote_token: usdc(),
             levels: LiquoriceMarketMakerLevels {
-                base_token: Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
-                    .unwrap(),
-                quote_token: Bytes::from_str("0xa0b86991c6218a76c1d19d4a2e9eb0ce3606eb48")
-                    .unwrap(),
+                base_token: Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
+                quote_token: Bytes::from_str("0xa0b86991c6218a76c1d19d4a2e9eb0ce3606eb48").unwrap(),
                 levels: vec![
                     LiquoricePriceLevel { quantity: 0.5, price: 3000.0 },
                     LiquoricePriceLevel { quantity: 1.5, price: 3000.0 },
@@ -292,7 +290,9 @@ mod tests {
         #[test]
         fn returns_best_price() {
             let state = create_test_liquorice_state();
-            let price = state.spot_price(&state.base_token, &state.quote_token).unwrap();
+            let price = state
+                .spot_price(&state.base_token, &state.quote_token)
+                .unwrap();
             assert_eq!(price, 3000.0);
         }
 
@@ -330,11 +330,7 @@ mod tests {
             let state = create_test_liquorice_state();
 
             let amount_out_result = state
-                .get_amount_out(
-                    BigUint::from_str("1500000000000000000").unwrap(),
-                    &weth(),
-                    &usdc(),
-                )
+                .get_amount_out(BigUint::from_str("1500000000000000000").unwrap(), &weth(), &usdc())
                 .unwrap();
 
             assert_eq!(amount_out_result.amount, BigUint::from_str("4500000000").unwrap());
@@ -345,11 +341,8 @@ mod tests {
         fn usdc_to_weth() {
             let state = create_test_liquorice_state();
 
-            let result = state.get_amount_out(
-                BigUint::from_str("10000000000").unwrap(),
-                &usdc(),
-                &weth(),
-            );
+            let result =
+                state.get_amount_out(BigUint::from_str("10000000000").unwrap(), &usdc(), &weth());
 
             assert!(result.is_err());
             if let Err(SimulationError::InvalidInput(msg, ..)) = result {
@@ -399,11 +392,8 @@ mod tests {
         fn invalid_token_pair() {
             let state = create_test_liquorice_state();
 
-            let result = state.get_amount_out(
-                BigUint::from_str("100000000").unwrap(),
-                &wbtc(),
-                &usdc(),
-            );
+            let result =
+                state.get_amount_out(BigUint::from_str("100000000").unwrap(), &wbtc(), &usdc());
 
             assert!(result.is_err());
             if let Err(SimulationError::InvalidInput(msg, ..)) = result {
