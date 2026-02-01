@@ -65,6 +65,7 @@ pub struct TychoStreamBuilder {
     no_tls: bool,
     include_tvl: bool,
     compression: bool,
+    send_partials: bool,
 }
 
 impl TychoStreamBuilder {
@@ -93,6 +94,7 @@ impl TychoStreamBuilder {
             no_tls: true,
             include_tvl: false,
             compression: true,
+            send_partials: false,
         }
     }
 
@@ -197,6 +199,13 @@ impl TychoStreamBuilder {
     /// By default, messages are compressed using zstd.
     pub fn disable_compression(mut self) -> Self {
         self.compression = false;
+        self
+    }
+
+    /// Configures the client to receive partial block updates (flashblocks).
+    /// When enabled, the client will receive incremental updates within a block.
+    pub fn with_partial_blocks(mut self, val: bool) -> Self {
+        self.send_partials = val;
         self
     }
 
@@ -392,9 +401,10 @@ mod tests {
     }
 
     #[test]
-    fn test_default_compression() {
+    fn test_default_stream_builder() {
         let builder = TychoStreamBuilder::new("localhost:4242", Chain::Ethereum);
         assert!(builder.compression, "Compression should be enabled by default.");
+        assert!(!builder.send_partials, "send_partials should be disabled by default.");
     }
 
     #[tokio::test]
