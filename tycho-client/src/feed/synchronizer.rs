@@ -146,6 +146,50 @@ where
     H: HeaderLike,
 {
     pub fn merge(mut self, other: Self) -> Result<Self, SynchronizerError> {
+        // Validate partial block consistency using deltas' partial_block_index
+        let self_partial = self
+            .deltas
+            .as_ref()
+            .and_then(|d| d.partial_block_index);
+        let other_partial = other
+            .deltas
+            .as_ref()
+            .and_then(|d| d.partial_block_index);
+
+        match (self_partial, other_partial) {
+            (Some(_), None) | (None, Some(_)) => {
+                return Err(SynchronizerError::Internal(format!(
+                    "Cannot merge partial block (index: {:?}) with full block",
+                    self_partial.or(other_partial)
+                )));
+            }
+            (Some(self_idx), Some(other_idx)) if other_idx <= self_idx => {
+                return Err(SynchronizerError::Internal(format!(
+                    "Cannot merge partial blocks out of order: self index {} >= other index {}",
+                    self_idx, other_idx
+                )));
+            }
+            _ => {} // Both None or Some with correct ordering is valid
+        }
+
+        // Validate block number ordering using deltas' block number
+        let self_block_num = self
+            .deltas
+            .as_ref()
+            .map(|d| d.block.number);
+        let other_block_num = other
+            .deltas
+            .as_ref()
+            .map(|d| d.block.number);
+        if let (Some(self_num), Some(other_num)) = (self_block_num, other_block_num) {
+            if other_num < self_num {
+                return Err(SynchronizerError::Internal(format!(
+                    "Cannot merge blocks out of order: self block {} > other block {}",
+                    self_num, other_num
+                )));
+            }
+        }
+
         // be careful with removed and snapshots attributes here, these can be ambiguous.
         self.removed_components
             .retain(|k, _| !other.snapshots.states.contains_key(k));
@@ -155,7 +199,7 @@ where
 
         self.snapshots.extend(other.snapshots);
         let deltas = match (self.deltas, other.deltas) {
-            (Some(l), Some(r)) => Some(l.merge(r).map_err(SynchronizerError::Internal)?),
+            (Some(l), Some(r)) => Some(l.merge(r)),
             (None, Some(r)) => Some(r),
             (Some(l), None) => Some(l),
             (None, None) => None,
@@ -672,7 +716,7 @@ mod test {
 
     use std::{collections::HashSet, sync::Arc};
 
-    use test_log::test;
+    use rstest::rstest;
     use tycho_common::dto::{
         AddressStorageLocation, Block, Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse,
         DCIUpdate, EntryPoint, PaginationResponse, ProtocolComponentRequestResponse,
@@ -2782,6 +2826,72 @@ mod test {
             Ok(None) => {
                 // Channel closed is also acceptable
             }
+        }
+    }
+
+    #[rstest]
+    #[case::partial_in_order_ok(Some(1), Some(2), true)]
+    #[case::partial_out_of_order_error(Some(2), Some(1), false)]
+    #[case::partial_same_index_error(Some(1), Some(1), false)]
+    #[case::partial_full_mismatch_error(Some(1), None, false)]
+    #[case::full_partial_mismatch_error(None, Some(2), false)]
+    #[case::full_blocks_ok(None, None, true)]
+    fn test_state_sync_message_merge_partial(
+        #[case] self_partial_index: Option<u32>,
+        #[case] other_partial_index: Option<u32>,
+        #[case] should_succeed: bool,
+    ) {
+        let msg1 = create_message_with_deltas(self_partial_index, 100);
+        let msg2 = create_message_with_deltas(other_partial_index, 100);
+
+        let result = msg1.merge(msg2);
+
+        if should_succeed {
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .deltas
+                    .unwrap()
+                    .partial_block_index,
+                other_partial_index
+            );
+        } else {
+            assert!(result.is_err());
+        }
+    }
+
+    #[rstest]
+    #[case::same_block_ok(100, 100, true)]
+    #[case::increasing_block_ok(100, 101, true)]
+    #[case::decreasing_block_error(101, 100, false)]
+    fn test_state_sync_message_merge_block_number(
+        #[case] self_block_num: u64,
+        #[case] other_block_num: u64,
+        #[case] should_succeed: bool,
+    ) {
+        let msg1 = create_message_with_deltas(None, self_block_num);
+        let msg2 = create_message_with_deltas(None, other_block_num);
+
+        let result = msg1.merge(msg2);
+
+        if should_succeed {
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .deltas
+                    .unwrap()
+                    .block
+                    .number,
+                other_block_num
+            );
+        } else {
+            assert!(result.is_err());
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("out of order"));
         }
     }
 }
