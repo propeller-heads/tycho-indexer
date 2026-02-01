@@ -384,19 +384,31 @@ impl SynchronizerStream {
             }
         }
 
-        let merged = results
+        // Merge all results, failing if any merge fails
+        let merged: Result<Option<StateSyncMessage<BlockHeader>>, SynchronizerError> = results
             .into_iter()
-            .reduce(|l, r| l.merge(r));
+            .try_fold(None, |acc: Option<StateSyncMessage<BlockHeader>>, msg| match acc {
+                None => Ok(Some(msg)),
+                Some(prev) => prev.merge(msg).map(Some),
+            });
 
-        if let Some(msg) = merged {
-            // we were able to get at least one block out
-            debug!(%extractor_id, "Delayed extractor made progress!");
-            self.transition(msg.header.clone(), block_history, stale_threshold)?;
-            Ok(Some(msg))
-        } else {
-            // No progress made during catch-up, check if we should go stale
-            self.check_and_transition_to_stale_if_needed(stale_threshold, None)?;
-            Ok(None)
+        match merged {
+            Ok(Some(msg)) => {
+                // we were able to get at least one block out
+                debug!(%extractor_id, "Delayed extractor made progress!");
+                self.transition(msg.header.clone(), block_history, stale_threshold)?;
+                Ok(Some(msg))
+            }
+            Ok(None) => {
+                // No progress made during catch-up, check if we should go stale
+                self.check_and_transition_to_stale_if_needed(stale_threshold, None)?;
+                Ok(None)
+            }
+            Err(e) => {
+                // Merge failed during catch up
+                self.mark_errored(e);
+                Ok(None)
+            }
         }
     }
 

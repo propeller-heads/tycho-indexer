@@ -56,6 +56,10 @@ pub enum SynchronizerError {
     /// Connection closed
     #[error("Connection closed")]
     ConnectionClosed,
+
+    /// Internal error that should not happen under normal operation.
+    #[error("Internal error: {0}")]
+    Internal(String),
 }
 
 pub type SyncResult<T> = Result<T, SynchronizerError>;
@@ -140,7 +144,7 @@ impl<H> StateSyncMessage<H>
 where
     H: HeaderLike,
 {
-    pub fn merge(mut self, other: Self) -> Self {
+    pub fn merge(mut self, other: Self) -> Result<Self, SynchronizerError> {
         // be careful with removed and snapshots attributes here, these can be ambiguous.
         self.removed_components
             .retain(|k, _| !other.snapshots.states.contains_key(k));
@@ -150,19 +154,19 @@ where
 
         self.snapshots.extend(other.snapshots);
         let deltas = match (self.deltas, other.deltas) {
-            (Some(l), Some(r)) => Some(l.merge(r)),
+            (Some(l), Some(r)) => Some(l.merge(r).map_err(SynchronizerError::Internal)?),
             (None, Some(r)) => Some(r),
             (Some(l), None) => Some(l),
             (None, None) => None,
         };
         self.removed_components
             .extend(other.removed_components);
-        Self {
+        Ok(Self {
             header: other.header,
             snapshots: self.snapshots,
             deltas,
             removed_components: self.removed_components,
-        }
+        })
     }
 }
 
@@ -424,7 +428,7 @@ where
                         None,
                     )
                     .await?
-                    .merge(deltas_msg);
+                    .merge(deltas_msg)?;
                 let n_components = self.component_tracker.components.len();
                 let n_snapshots = snapshot.snapshots.states.len();
                 info!(n_components, n_snapshots, "Initial snapshot retrieved, starting delta message feed");
