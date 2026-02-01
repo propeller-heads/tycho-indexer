@@ -145,51 +145,7 @@ impl<H> StateSyncMessage<H>
 where
     H: HeaderLike,
 {
-    pub fn merge(mut self, other: Self) -> Result<Self, SynchronizerError> {
-        // Validate partial block consistency using deltas' partial_block_index
-        let self_partial = self
-            .deltas
-            .as_ref()
-            .and_then(|d| d.partial_block_index);
-        let other_partial = other
-            .deltas
-            .as_ref()
-            .and_then(|d| d.partial_block_index);
-
-        match (self_partial, other_partial) {
-            (Some(_), None) | (None, Some(_)) => {
-                return Err(SynchronizerError::Internal(format!(
-                    "Cannot merge partial block (index: {:?}) with full block",
-                    self_partial.or(other_partial)
-                )));
-            }
-            (Some(self_idx), Some(other_idx)) if other_idx <= self_idx => {
-                return Err(SynchronizerError::Internal(format!(
-                    "Cannot merge partial blocks out of order: self index {} >= other index {}",
-                    self_idx, other_idx
-                )));
-            }
-            _ => {} // Both None or Some with correct ordering is valid
-        }
-
-        // Validate block number ordering using deltas' block number
-        let self_block_num = self
-            .deltas
-            .as_ref()
-            .map(|d| d.block.number);
-        let other_block_num = other
-            .deltas
-            .as_ref()
-            .map(|d| d.block.number);
-        if let (Some(self_num), Some(other_num)) = (self_block_num, other_block_num) {
-            if other_num < self_num {
-                return Err(SynchronizerError::Internal(format!(
-                    "Cannot merge blocks out of order: self block {} > other block {}",
-                    self_num, other_num
-                )));
-            }
-        }
-
+    pub fn merge(mut self, other: Self) -> Self {
         // be careful with removed and snapshots attributes here, these can be ambiguous.
         self.removed_components
             .retain(|k, _| !other.snapshots.states.contains_key(k));
@@ -206,12 +162,12 @@ where
         };
         self.removed_components
             .extend(other.removed_components);
-        Ok(Self {
+        Self {
             header: other.header,
             snapshots: self.snapshots,
             deltas,
             removed_components: self.removed_components,
-        })
+        }
     }
 }
 
@@ -410,7 +366,8 @@ where
         // initialisation
         let subscription_options = SubscriptionOptions::new()
             .with_state(self.include_snapshots)
-            .with_compression(self.compression);
+            .with_compression(self.compression)
+            .with_partial_blocks(self.send_partials);
         let (subscription_id, mut msg_rx) = match self
             .deltas_client
             .subscribe(self.extractor_id.clone(), subscription_options)
@@ -423,6 +380,9 @@ where
         let result = async {
             info!("Waiting for deltas...");
             let mut warned = false;
+            // Track the last seen partial index to detect when a new block starts
+            // (indicated by partial index being less than the previous one = reset)
+            let mut last_partial_index: Option<u32> = None;
             let mut first_msg = loop {
                 let msg = select! {
                     deltas_result = timeout(Duration::from_secs(self.timeout), msg_rx.recv()) => {
@@ -445,14 +405,55 @@ where
                     }
                 };
 
-                let incoming = BlockHeader::from_block(msg.get_block(), msg.is_revert());
+                let incoming: BlockHeader = (&msg).into();
+
+                // Determine if this message is a candidate for starting synchronization.
+                // In partial mode, we wait for a new block to start (partial index decreases).
+                // In non-partial mode, all messages are candidates.
+                let is_new_block_candidate = if self.send_partials {
+                    match msg.partial_block_index {
+                        None => {
+                            // Full block is likely a revert, skipping it for now.
+                            if !warned {
+                                info!(extractor=%self.extractor_id, block=incoming.number, "Syncing. Skipping full block in partial mode");
+                            }
+                            false
+                        }
+                        Some(current_partial_idx) => {
+                            // A new block starts when the partial index decreases (resets)
+                            let is_new_block = last_partial_index
+                                .map(|prev_idx| current_partial_idx < prev_idx)
+                                .unwrap_or(false);
+
+                            if !warned {
+                                info!(
+                                    extractor=%self.extractor_id,
+                                    block=incoming.number,
+                                    partial_idx=current_partial_idx,
+                                    "Syncing. Waiting for new block to start"
+                                );
+                                warned = true;
+                            }
+                            last_partial_index = Some(current_partial_idx);
+                            is_new_block
+                        }
+                    }
+                } else {
+                    true // Non-partial mode: all messages are candidates
+                };
+
+                if !is_new_block_candidate {
+                    continue;
+                }
+
+                // Check if we've already synced this block (applies to both modes)
                 if let Some(current) = &self.last_synced_block {
                     if current.number >= incoming.number && !self.is_next_expected(&incoming) {
                         if !warned {
-                            info!(extractor=%self.extractor_id, from=incoming.number, to=current.number, "Syncing. Skipping messages");
+                            info!(extractor=%self.extractor_id, from=incoming.number, to=current.number, "Syncing. Skipping already synced block");
                             warned = true;
                         }
-                        continue
+                        continue;
                     }
                 }
                 break msg;
@@ -461,11 +462,10 @@ where
             self.filter_deltas(&mut first_msg);
 
             // initial snapshot
-            let block = first_msg.get_block().clone();
-            info!(height = &block.number, "First deltas received");
-            let header = BlockHeader::from_block(first_msg.get_block(), first_msg.is_revert());
+            info!(height = first_msg.get_block().number, "First deltas received");
+            let header: BlockHeader = (&first_msg).into();
             let deltas_msg = StateSyncMessage {
-                header: BlockHeader::from_block(first_msg.get_block(), first_msg.is_revert()),
+                header: header.clone(),
                 snapshots: Default::default(),
                 deltas: Some(first_msg),
                 removed_components: Default::default(),
@@ -474,13 +474,14 @@ where
             // If possible skip retrieving snapshots
             let msg = if !self.is_next_expected(&header) {
                 info!("Retrieving snapshot");
+                 let snapshot_header = BlockHeader { revert: false, ..header.clone() };
                 let snapshot = self
                     .get_snapshots::<Vec<&String>>(
-                        BlockHeader::from_block(&block, false),
+                        snapshot_header,
                         None,
                     )
                     .await?
-                    .merge(deltas_msg)?;
+                    .merge(deltas_msg);
                 let n_components = self.component_tracker.components.len();
                 let n_snapshots = snapshot.snapshots.states.len();
                 info!(n_components, n_snapshots, "Initial snapshot retrieved, starting delta message feed");
@@ -494,7 +495,7 @@ where
                 select! {
                     deltas_opt = msg_rx.recv() => {
                         if let Some(mut deltas) = deltas_opt {
-                            let header = BlockHeader::from_block(deltas.get_block(), deltas.is_revert());
+                            let header: BlockHeader = (&deltas).into();
                             debug!(block_number=?header.number, "Received delta message");
 
                             let (snapshots, removed_components) = {
@@ -716,7 +717,6 @@ mod test {
 
     use std::{collections::HashSet, sync::Arc};
 
-    use rstest::rstest;
     use tycho_common::dto::{
         AddressStorageLocation, Block, Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse,
         DCIUpdate, EntryPoint, PaginationResponse, ProtocolComponentRequestResponse,
@@ -900,7 +900,7 @@ mod test {
         m
     }
 
-    #[test(tokio::test)]
+    #[test_log::test(tokio::test)]
     async fn test_get_snapshots_native() {
         let header = BlockHeader::default();
         let mut rpc = make_mock_client();
@@ -975,7 +975,7 @@ mod test {
         assert_eq!(snap, exp);
     }
 
-    #[test(tokio::test)]
+    #[test_log::test(tokio::test)]
     async fn test_get_snapshots_native_with_tvl() {
         let header = BlockHeader::default();
         let mut rpc = make_mock_client();
@@ -1094,7 +1094,7 @@ mod test {
         }
     }
 
-    #[test(tokio::test)]
+    #[test_log::test(tokio::test)]
     async fn test_get_snapshots_vm() {
         let header = BlockHeader::default();
         let mut rpc = make_mock_client();
@@ -1210,7 +1210,7 @@ mod test {
         assert_eq!(snap, exp);
     }
 
-    #[test(tokio::test)]
+    #[test_log::test(tokio::test)]
     async fn test_get_snapshots_vm_with_tvl() {
         let header = BlockHeader::default();
         let mut rpc = make_mock_client();
@@ -1449,7 +1449,7 @@ mod test {
     /// - send 2 dummy messages, containing only blocks
     /// - third message contains a new component with some significant tvl, one initial component
     ///   slips below tvl threshold, another one is above tvl but does not get re-requested.
-    #[test(tokio::test)]
+    #[test_log::test(tokio::test)]
     async fn test_state_sync() {
         let (rpc_client, deltas_client, tx) = mock_clients_for_state_sync();
         let deltas = [
@@ -1664,7 +1664,7 @@ mod test {
         assert_eq!(second_msg.unwrap(), exp2);
     }
 
-    #[test(tokio::test)]
+    #[test_log::test(tokio::test)]
     async fn test_state_sync_with_tvl_range() {
         // Define the range for testing
         let remove_tvl_threshold = 5.0;
@@ -1945,7 +1945,7 @@ mod test {
         assert_eq!(second_msg, expected_second_msg);
     }
 
-    #[test(tokio::test)]
+    #[test_log::test(tokio::test)]
     async fn test_public_close_api_functionality() {
         // Tests the public close() API through the StateSynchronizer trait:
         // - close() fails before start() is called
@@ -2011,7 +2011,7 @@ mod test {
         jh.await.expect("Task should not panic");
     }
 
-    #[test(tokio::test)]
+    #[test_log::test(tokio::test)]
     async fn test_cleanup_runs_when_state_sync_processing_errors() {
         // Tests that cleanup code runs when state_sync() errors during delta processing.
         // Specifically tests: RPC errors during snapshot retrieval cause proper cleanup.
@@ -2119,6 +2119,7 @@ mod test {
             parent_hash: Bytes::from("0xbadbeef0"),
             revert: false,
             timestamp: 123456789,
+            partial_block_index: None,
         });
 
         // Create a channel for state_sync to send messages to
@@ -2136,7 +2137,7 @@ mod test {
         // but the cleanup logic is still tested by the fact that the method returns properly.
     }
 
-    #[test(tokio::test)]
+    #[test_log::test(tokio::test)]
     async fn test_close_signal_while_waiting_for_first_deltas() {
         // Tests close signal handling during the initial "waiting for deltas" phase.
         // This is the earliest possible close scenario - before any deltas are received.
@@ -2206,7 +2207,7 @@ mod test {
         println!("SUCCESS: Close signal handled correctly while waiting for first deltas");
     }
 
-    #[test(tokio::test)]
+    #[test_log::test(tokio::test)]
     async fn test_close_signal_during_main_processing_loop() {
         // Tests close signal handling during the main delta processing loop.
         // This tests the scenario where first message is processed successfully,
@@ -2345,7 +2346,7 @@ mod test {
         );
     }
 
-    #[test(tokio::test)]
+    #[test_log::test(tokio::test)]
     async fn test_max_retries_exceeded_error_propagation() {
         // Test that when max_retries is exceeded, the final error is sent through the channel
         // to the receiver and the synchronizer task exits cleanly
@@ -2423,7 +2424,7 @@ mod test {
         assert!(task_result.is_ok(), "Synchronizer task should complete after max retries");
     }
 
-    #[test(tokio::test)]
+    #[test_log::test(tokio::test)]
     async fn test_is_next_expected() {
         // Test the is_next_expected function to ensure it correctly identifies
         // when an incoming block is the expected next block in the chain
@@ -2439,6 +2440,7 @@ mod test {
             ),
             revert: false,
             timestamp: 123456789,
+            partial_block_index: None,
         };
         assert!(
             !state_sync.is_next_expected(&incoming_header),
@@ -2454,6 +2456,7 @@ mod test {
             ),
             revert: false,
             timestamp: 123456788,
+            partial_block_index: None,
         };
         state_sync.last_synced_block = Some(previous_header.clone());
 
@@ -2471,6 +2474,7 @@ mod test {
             ), // Wrong parent hash
             revert: false,
             timestamp: 123456789,
+            partial_block_index: None,
         };
         assert!(
             !state_sync.is_next_expected(&non_matching_header),
@@ -2478,7 +2482,7 @@ mod test {
         );
     }
 
-    #[test(tokio::test)]
+    #[test_log::test(tokio::test)]
     async fn test_synchronizer_restart_skip_snapshot_on_expected_block() {
         // Test that on synchronizer restart with the next expected block,
         // get_snapshot is not called and only deltas are sent
@@ -2564,6 +2568,7 @@ mod test {
             ),
             revert: false,
             timestamp: 123456789,
+            partial_block_index: None,
         });
 
         let (mut block_tx, mut block_rx) = channel(10);
@@ -2613,7 +2618,7 @@ mod test {
         }
     }
 
-    #[test(tokio::test)]
+    #[test_log::test(tokio::test)]
     async fn test_skip_previously_processed_messages() {
         // Test that the synchronizer skips messages for blocks that have already been processed
         // This simulates a service restart scenario where old messages are re-emitted
@@ -2771,6 +2776,7 @@ mod test {
             ),
             revert: false,
             timestamp: 1234567892,
+            partial_block_index: None,
         });
 
         let (mut block_tx, mut block_rx) = channel(10);
@@ -2829,69 +2835,185 @@ mod test {
         }
     }
 
-    #[rstest]
-    #[case::partial_in_order_ok(Some(1), Some(2), true)]
-    #[case::partial_out_of_order_error(Some(2), Some(1), false)]
-    #[case::partial_same_index_error(Some(1), Some(1), false)]
-    #[case::partial_full_mismatch_error(Some(1), None, false)]
-    #[case::full_partial_mismatch_error(None, Some(2), false)]
-    #[case::full_blocks_ok(None, None, true)]
-    fn test_state_sync_message_merge_partial(
-        #[case] self_partial_index: Option<u32>,
-        #[case] other_partial_index: Option<u32>,
-        #[case] should_succeed: bool,
-    ) {
-        let msg1 = create_message_with_deltas(self_partial_index, 100);
-        let msg2 = create_message_with_deltas(other_partial_index, 100);
-
-        let result = msg1.merge(msg2);
-
-        if should_succeed {
-            assert!(result.is_ok());
-            assert_eq!(
-                result
-                    .unwrap()
-                    .deltas
-                    .unwrap()
-                    .partial_block_index,
-                other_partial_index
-            );
-        } else {
-            assert!(result.is_err());
+    fn make_block_changes(block_num: u64, partial_idx: Option<u32>) -> BlockChanges {
+        // Use vec to create Bytes from block number
+        let hash = Bytes::from(vec![block_num as u8; 32]);
+        let parent_hash = Bytes::from(vec![block_num.saturating_sub(1) as u8; 32]);
+        BlockChanges {
+            extractor: "uniswap-v2".to_string(),
+            chain: Chain::Ethereum,
+            block: Block {
+                number: block_num,
+                hash,
+                parent_hash,
+                chain: Chain::Ethereum,
+                ts: Default::default(),
+            },
+            revert: false,
+            partial_block_index: partial_idx,
+            ..Default::default()
         }
     }
 
-    #[rstest]
-    #[case::same_block_ok(100, 100, true)]
-    #[case::increasing_block_ok(100, 101, true)]
-    #[case::decreasing_block_error(101, 100, false)]
-    fn test_state_sync_message_merge_block_number(
-        #[case] self_block_num: u64,
-        #[case] other_block_num: u64,
-        #[case] should_succeed: bool,
-    ) {
-        let msg1 = create_message_with_deltas(None, self_block_num);
-        let msg2 = create_message_with_deltas(None, other_block_num);
+    /// Test that partial mode skips messages until a new block starts (partial index decreases)
+    #[test_log::test(tokio::test)]
+    async fn test_partial_mode_waits_for_new_block() {
+        let (rpc_client, deltas_client, tx) = mock_clients_for_state_sync();
+        let mut state_sync = with_mocked_clients(true, true, Some(rpc_client), Some(deltas_client))
+            .with_partial_blocks(true);
+        state_sync
+            .initialize()
+            .await
+            .expect("Init failed");
 
-        let result = msg1.merge(msg2);
+        let (handle, mut block_rx) = state_sync.start().await;
+        let (jh, close_tx) = handle.split();
 
-        if should_succeed {
-            assert!(result.is_ok());
-            assert_eq!(
-                result
-                    .unwrap()
-                    .deltas
-                    .unwrap()
-                    .block
-                    .number,
-                other_block_num
-            );
-        } else {
-            assert!(result.is_err());
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("out of order"));
+        // Send partial messages for block 1: indices 0, 1, 2 (should all be skipped)
+        tx.send(make_block_changes(1, Some(0)))
+            .await
+            .unwrap();
+        tx.send(make_block_changes(1, Some(1)))
+            .await
+            .unwrap();
+        tx.send(make_block_changes(1, Some(4)))
+            .await
+            .unwrap();
+
+        // Verify no message received yet (all skipped waiting for new block)
+        match timeout(Duration::from_millis(50), block_rx.recv()).await {
+            Err(_) => { /* Expected: timeout, no message yet */ }
+            Ok(_) => panic!("Should not receive message while waiting for new block"),
         }
+
+        // Now send partial with index 2 for block 2 (new block detected!)
+        tx.send(make_block_changes(2, Some(2)))
+            .await
+            .unwrap();
+
+        // Should now receive the message for block 2
+        let msg = timeout(Duration::from_millis(100), block_rx.recv())
+            .await
+            .expect("Should receive message")
+            .expect("Channel open")
+            .expect("No error");
+
+        assert_eq!(msg.header.number, 2, "Should use block 2 (new block)");
+        assert_eq!(msg.header.partial_block_index, Some(2));
+
+        let _ = close_tx.send(());
+        jh.await.expect("Task should not panic");
+    }
+
+    /// Test that full blocks are skipped in partial mode
+    #[test_log::test(tokio::test)]
+    async fn test_partial_mode_skips_full_blocks() {
+        let (rpc_client, deltas_client, tx) = mock_clients_for_state_sync();
+        let mut state_sync = with_mocked_clients(true, true, Some(rpc_client), Some(deltas_client))
+            .with_partial_blocks(true);
+        state_sync
+            .initialize()
+            .await
+            .expect("Init failed");
+
+        let (handle, mut block_rx) = state_sync.start().await;
+        let (jh, close_tx) = handle.split();
+
+        // Send full blocks (partial_block_index = None) - should be skipped
+        tx.send(make_block_changes(1, None))
+            .await
+            .unwrap();
+        tx.send(make_block_changes(2, None))
+            .await
+            .unwrap();
+
+        // Then send partial to establish baseline
+        tx.send(make_block_changes(3, Some(5)))
+            .await
+            .unwrap();
+
+        // No message yet - full blocks skipped, waiting for new block
+        match timeout(Duration::from_millis(50), block_rx.recv()).await {
+            Err(_) => { /* Expected */ }
+            Ok(_) => panic!("Should not receive message - full blocks should be skipped"),
+        }
+
+        // Send partial with lower index (new block)
+        tx.send(make_block_changes(4, Some(0)))
+            .await
+            .unwrap();
+
+        let msg = timeout(Duration::from_millis(100), block_rx.recv())
+            .await
+            .expect("Should receive message")
+            .expect("Channel open")
+            .expect("No error");
+
+        assert_eq!(msg.header.number, 4, "Should use block 4");
+
+        let _ = close_tx.send(());
+        jh.await.expect("Task should not panic");
+    }
+
+    /// Test that partial mode skips new blocks that are already synced
+    #[test_log::test(tokio::test)]
+    async fn test_partial_mode_skips_already_synced_blocks() {
+        let (rpc_client, deltas_client, tx) = mock_clients_for_state_sync();
+        let mut state_sync = with_mocked_clients(true, true, Some(rpc_client), Some(deltas_client))
+            .with_partial_blocks(true);
+        state_sync
+            .initialize()
+            .await
+            .expect("Init failed");
+
+        // Set last_synced_block to block 5 - we've already synced up to here
+        state_sync.last_synced_block = Some(BlockHeader {
+            number: 5,
+            hash: Bytes::from("0x05"),
+            parent_hash: Bytes::from("0x04"),
+            revert: false,
+            timestamp: 0,
+            partial_block_index: None,
+        });
+
+        let (handle, mut block_rx) = state_sync.start().await;
+        let (jh, close_tx) = handle.split();
+
+        // Send partial for block 3 to establish baseline
+        tx.send(make_block_changes(3, Some(2)))
+            .await
+            .unwrap();
+
+        // Send "new block" for block 4 (partial index decreased) - but block 4 < last_synced (5)
+        tx.send(make_block_changes(4, Some(0)))
+            .await
+            .unwrap();
+
+        // Should be skipped because block 4 is already synced
+        match timeout(Duration::from_millis(50), block_rx.recv()).await {
+            Err(_) => { /* Expected: skipped because already synced */ }
+            Ok(_) => panic!("Should skip block 4 because it's already synced"),
+        }
+
+        // Now send new block for block 6 (after last_synced)
+        // First establish new partial index
+        tx.send(make_block_changes(5, Some(3)))
+            .await
+            .unwrap();
+        // Then trigger new block detection
+        tx.send(make_block_changes(6, Some(0)))
+            .await
+            .unwrap();
+
+        let msg = timeout(Duration::from_millis(100), block_rx.recv())
+            .await
+            .expect("Should receive message")
+            .expect("Channel open")
+            .expect("No error");
+
+        assert_eq!(msg.header.number, 6, "Should use block 6 (after last synced)");
+
+        let _ = close_tx.send(());
+        jh.await.expect("Task should not panic");
     }
 }

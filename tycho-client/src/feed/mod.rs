@@ -23,7 +23,7 @@ use tokio::{
 use tracing::{debug, error, info, trace, warn};
 use tycho_common::{
     display::opt,
-    dto::{Block, ExtractorIdentity},
+    dto::{BlockChanges, ExtractorIdentity},
     Bytes,
 };
 
@@ -52,6 +52,9 @@ pub struct BlockHeader {
     pub parent_hash: Bytes,
     pub revert: bool,
     pub timestamp: u64,
+    /// Index of a partial block update within a block. None for full blocks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub partial_block_index: Option<u32>,
 }
 
 impl Display for BlockHeader {
@@ -63,18 +66,23 @@ impl Display for BlockHeader {
             hex::encode(&self.hash)
         };
 
-        write!(f, "Block #{} [0x{}..]", self.number, short_hash)
+        match self.partial_block_index {
+            Some(idx) => write!(f, "Block #{} [0x{}..] (partial {})", self.number, short_hash, idx),
+            None => write!(f, "Block #{} [0x{}..]", self.number, short_hash),
+        }
     }
 }
 
-impl BlockHeader {
-    fn from_block(block: &Block, revert: bool) -> Self {
+impl From<&BlockChanges> for BlockHeader {
+    fn from(block_changes: &BlockChanges) -> Self {
+        let block = &block_changes.block;
         Self {
             hash: block.hash.clone(),
             number: block.number,
             parent_hash: block.parent_hash.clone(),
-            revert,
+            revert: block_changes.revert,
             timestamp: block.ts.and_utc().timestamp() as u64,
+            partial_block_index: block_changes.partial_block_index,
         }
     }
 }
@@ -384,31 +392,19 @@ impl SynchronizerStream {
             }
         }
 
-        // Merge all results, failing if any merge fails
-        let merged: Result<Option<StateSyncMessage<BlockHeader>>, SynchronizerError> = results
+        let merged = results
             .into_iter()
-            .try_fold(None, |acc: Option<StateSyncMessage<BlockHeader>>, msg| match acc {
-                None => Ok(Some(msg)),
-                Some(prev) => prev.merge(msg).map(Some),
-            });
+            .reduce(|l, r| l.merge(r));
 
-        match merged {
-            Ok(Some(msg)) => {
-                // we were able to get at least one block out
-                debug!(%extractor_id, "Delayed extractor made progress!");
-                self.transition(msg.header.clone(), block_history, stale_threshold)?;
-                Ok(Some(msg))
-            }
-            Ok(None) => {
-                // No progress made during catch-up, check if we should go stale
-                self.check_and_transition_to_stale_if_needed(stale_threshold, None)?;
-                Ok(None)
-            }
-            Err(e) => {
-                // Merge failed during catch up
-                self.mark_errored(e);
-                Ok(None)
-            }
+        if let Some(msg) = merged {
+            // we were able to get at least one block out
+            debug!(%extractor_id, "Delayed extractor made progress!");
+            self.transition(msg.header.clone(), block_history, stale_threshold)?;
+            Ok(Some(msg))
+        } else {
+            // No progress made during catch-up, check if we should go stale
+            self.check_and_transition_to_stale_if_needed(stale_threshold, None)?;
+            Ok(None)
         }
     }
 
@@ -1140,6 +1136,7 @@ mod tests {
                 parent_hash: Bytes::from(vec![block - 1]),
                 revert: false,
                 timestamp: 1000,
+                partial_block_index: None,
             },
             ..Default::default()
         }
