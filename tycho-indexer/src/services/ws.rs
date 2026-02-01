@@ -237,11 +237,18 @@ impl WsActor {
 
                     let stream = async_stream::stream! {
                         while let Some(item) = rx.recv().await {
-                            // If a block is a revert, always include it
-                            // Otherwise, only send blocks with type matching subscr preference
-                            let matches_preference = send_partials == item.is_partial();
-                            if !item.revert && !matches_preference  {
-                                continue;
+                            if item.revert {
+                                // For reverts
+                                // Exclude partials if the client requested full blocks
+                                if !send_partials && item.is_partial() {
+                                    continue;
+                                }
+                            } else {
+                                // For new blocks
+                                // Only forward items matching the partial/full preference
+                                if send_partials != item.is_partial() {
+                                    continue;
+                                }
                             }
 
                             let result = if include_state {
@@ -1398,18 +1405,20 @@ mod tests {
     /// Test for partial_blocks subscription filter.
     ///
     /// Filter logic:
-    /// - Reverts are always delivered
     /// - Non-reverts: only delivered when `sub_partial_blocks == is_partial`
+    /// - Reverts:
+    ///   - Partial subscribers (`send_partials: true`): receive ALL reverts
+    ///   - Full block subscribers (`send_partials: false`): only receive full block reverts
     #[rstest]
     // Non-revert blocks: only received when subscription partial_blocks matches is_partial
     #[case::full_block_want_full(false, false, false, true)]
     #[case::full_block_want_partial(false, false, true, false)]
     #[case::partial_block_want_full(true, false, false, false)]
     #[case::partial_block_want_partial(true, false, true, true)]
-    // Revert blocks: always received regardless of partial_blocks setting
+    // Revert blocks: partial subscribers get all reverts, full subscribers only get full reverts
     #[case::revert_full_want_full(false, true, false, true)]
     #[case::revert_full_want_partial(false, true, true, true)]
-    #[case::revert_partial_want_full(true, true, false, true)]
+    #[case::revert_partial_want_full(true, true, false, false)]
     #[case::revert_partial_want_partial(true, true, true, true)]
     #[actix_rt::test]
     async fn test_partial_blocks_filter(
