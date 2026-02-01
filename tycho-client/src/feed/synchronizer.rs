@@ -379,10 +379,10 @@ where
 
         let result = async {
             info!("Waiting for deltas...");
-            let mut warned = false;
-            // Track the last seen partial index to detect when a new block starts
-            // (indicated by partial index being less than the previous one = reset)
-            let mut last_partial_index: Option<u32> = None;
+            let mut warned_waiting_for_new_block = false;
+            let mut warned_skipping_synced = false;
+            // Track the last seen block number such that we know when we get the first partial for a block
+            let mut last_block_number: Option<u64> = None;
             let mut first_msg = loop {
                 let msg = select! {
                     deltas_result = timeout(Duration::from_secs(self.timeout), msg_rx.recv()) => {
@@ -408,33 +408,30 @@ where
                 let incoming: BlockHeader = (&msg).into();
 
                 // Determine if this message is a candidate for starting synchronization.
-                // In partial mode, we wait for a new block to start (partial index decreases).
+                // In partial mode, we wait for a new block to start (block number increases).
                 // In non-partial mode, all messages are candidates.
                 let is_new_block_candidate = if self.send_partials {
                     match msg.partial_block_index {
                         None => {
-                            // Full block is likely a revert, skipping it for now.
-                            if !warned {
-                                info!(extractor=%self.extractor_id, block=incoming.number, "Syncing. Skipping full block in partial mode");
-                            }
-                            false
+                            // If we get a full block, it is a candidate
+                            last_block_number = Some(incoming.number);
+                            true
                         }
                         Some(current_partial_idx) => {
-                            // A new block starts when the partial index decreases (resets)
-                            let is_new_block = last_partial_index
-                                .map(|prev_idx| current_partial_idx < prev_idx)
+                            let is_new_block = last_block_number
+                                .map(|prev_block| incoming.number > prev_block)
                                 .unwrap_or(false);
 
-                            if !warned {
+                            if !warned_waiting_for_new_block {
                                 info!(
                                     extractor=%self.extractor_id,
                                     block=incoming.number,
                                     partial_idx=current_partial_idx,
                                     "Syncing. Waiting for new block to start"
                                 );
-                                warned = true;
+                                warned_waiting_for_new_block = true;
                             }
-                            last_partial_index = Some(current_partial_idx);
+                            last_block_number = Some(incoming.number);
                             is_new_block
                         }
                     }
@@ -449,9 +446,9 @@ where
                 // Check if we've already synced this block (applies to both modes)
                 if let Some(current) = &self.last_synced_block {
                     if current.number >= incoming.number && !self.is_next_expected(&incoming) {
-                        if !warned {
+                        if !warned_skipping_synced {
                             info!(extractor=%self.extractor_id, from=incoming.number, to=current.number, "Syncing. Skipping already synced block");
-                            warned = true;
+                            warned_skipping_synced = true;
                         }
                         continue;
                     }
@@ -2855,9 +2852,9 @@ mod test {
         }
     }
 
-    /// Test that partial mode skips messages until a new block starts (partial index decreases)
+    /// Test that full block as first message in partial mode is accepted
     #[test_log::test(tokio::test)]
-    async fn test_partial_mode_waits_for_new_block() {
+    async fn test_partial_mode_accepts_full_block_as_first_message() {
         let (rpc_client, deltas_client, tx) = mock_clients_for_state_sync();
         let mut state_sync = with_mocked_clients(true, true, Some(rpc_client), Some(deltas_client))
             .with_partial_blocks(true);
@@ -2869,45 +2866,28 @@ mod test {
         let (handle, mut block_rx) = state_sync.start().await;
         let (jh, close_tx) = handle.split();
 
-        // Send partial messages for block 1: indices 0, 1, 2 (should all be skipped)
-        tx.send(make_block_changes(1, Some(0)))
-            .await
-            .unwrap();
-        tx.send(make_block_changes(1, Some(1)))
-            .await
-            .unwrap();
-        tx.send(make_block_changes(1, Some(4)))
+        // Send full block as first message - should be accepted
+        tx.send(make_block_changes(1, None))
             .await
             .unwrap();
 
-        // Verify no message received yet (all skipped waiting for new block)
-        match timeout(Duration::from_millis(50), block_rx.recv()).await {
-            Err(_) => { /* Expected: timeout, no message yet */ }
-            Ok(_) => panic!("Should not receive message while waiting for new block"),
-        }
-
-        // Now send partial with index 2 for block 2 (new block detected!)
-        tx.send(make_block_changes(2, Some(2)))
-            .await
-            .unwrap();
-
-        // Should now receive the message for block 2
+        // Should receive the full block immediately
         let msg = timeout(Duration::from_millis(100), block_rx.recv())
             .await
             .expect("Should receive message")
             .expect("Channel open")
             .expect("No error");
 
-        assert_eq!(msg.header.number, 2, "Should use block 2 (new block)");
-        assert_eq!(msg.header.partial_block_index, Some(2));
+        assert_eq!(msg.header.number, 1, "Should use block 1 (full block)");
+        assert_eq!(msg.header.partial_block_index, None, "Should be a full block");
 
         let _ = close_tx.send(());
         jh.await.expect("Task should not panic");
     }
 
-    /// Test that full blocks are skipped in partial mode
+    /// Test that block number increase is detected as new block
     #[test_log::test(tokio::test)]
-    async fn test_partial_mode_skips_full_blocks() {
+    async fn test_partial_mode_detects_block_number_increase() {
         let (rpc_client, deltas_client, tx) = mock_clients_for_state_sync();
         let mut state_sync = with_mocked_clients(true, true, Some(rpc_client), Some(deltas_client))
             .with_partial_blocks(true);
@@ -2919,37 +2899,35 @@ mod test {
         let (handle, mut block_rx) = state_sync.start().await;
         let (jh, close_tx) = handle.split();
 
-        // Send full blocks (partial_block_index = None) - should be skipped
-        tx.send(make_block_changes(1, None))
+        // Send partial messages for block 1 (will be skipped - waiting for new block)
+        tx.send(make_block_changes(1, Some(0)))
             .await
             .unwrap();
-        tx.send(make_block_changes(2, None))
-            .await
-            .unwrap();
-
-        // Then send partial to establish baseline
-        tx.send(make_block_changes(3, Some(5)))
+        tx.send(make_block_changes(1, Some(3)))
             .await
             .unwrap();
 
-        // No message yet - full blocks skipped, waiting for new block
+        // Verify no message received yet
         match timeout(Duration::from_millis(50), block_rx.recv()).await {
-            Err(_) => { /* Expected */ }
-            Ok(_) => panic!("Should not receive message - full blocks should be skipped"),
+            Err(_) => { /* Expected: timeout, no message yet */ }
+            Ok(_) => panic!("Should not receive message while waiting for new block"),
         }
 
-        // Send partial with lower index (new block)
-        tx.send(make_block_changes(4, Some(0)))
+        // Send partial for block 2 with HIGHER index (5 > 3) - should still be detected
+        // because block number increased
+        tx.send(make_block_changes(2, Some(5)))
             .await
             .unwrap();
 
+        // Should receive the message for block 2
         let msg = timeout(Duration::from_millis(100), block_rx.recv())
             .await
             .expect("Should receive message")
             .expect("Channel open")
             .expect("No error");
 
-        assert_eq!(msg.header.number, 4, "Should use block 4");
+        assert_eq!(msg.header.number, 2, "Should use block 2 (block number increased)");
+        assert_eq!(msg.header.partial_block_index, Some(5));
 
         let _ = close_tx.send(());
         jh.await.expect("Task should not panic");
