@@ -65,7 +65,7 @@ pub struct TychoStreamBuilder {
     no_tls: bool,
     include_tvl: bool,
     compression: bool,
-    send_partials: bool,
+    partial_blocks: bool,
 }
 
 impl TychoStreamBuilder {
@@ -94,7 +94,7 @@ impl TychoStreamBuilder {
             no_tls: true,
             include_tvl: false,
             compression: true,
-            send_partials: false,
+            partial_blocks: false,
         }
     }
 
@@ -205,7 +205,7 @@ impl TychoStreamBuilder {
     /// Configures the client to receive partial block updates (flashblocks).
     /// When enabled, the client will receive incremental updates within a block.
     pub fn with_partial_blocks(mut self, val: bool) -> Self {
-        self.send_partials = val;
+        self.partial_blocks = val;
         self
     }
 
@@ -293,7 +293,8 @@ impl TychoStreamBuilder {
                     rpc_client.clone(),
                     ws_client.clone(),
                     self.block_time + self.timeout,
-                ),
+                )
+                .with_partial_blocks(self.partial_blocks),
             };
             block_sync = block_sync.register_synchronizer(id, sync);
         }
@@ -404,7 +405,7 @@ mod tests {
     fn test_default_stream_builder() {
         let builder = TychoStreamBuilder::new("localhost:4242", Chain::Ethereum);
         assert!(builder.compression, "Compression should be enabled by default.");
-        assert!(!builder.send_partials, "send_partials should be disabled by default.");
+        assert!(!builder.partial_blocks, "partial_blocks should be disabled by default.");
     }
 
     #[tokio::test]

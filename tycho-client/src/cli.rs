@@ -293,7 +293,8 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
             rpc_client.clone(),
             ws_client.clone(),
             args.block_time + args.timeout,
-        );
+        )
+        .with_partial_blocks(args.partial_blocks);
         block_sync = block_sync.register_synchronizer(id, sync);
     }
 

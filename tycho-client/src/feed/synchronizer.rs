@@ -92,6 +92,7 @@ pub struct ProtocolStateSynchronizer<R: RPCClient, D: DeltasClient> {
     timeout: u64,
     include_tvl: bool,
     compression: bool,
+    send_partials: bool,
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -252,7 +253,14 @@ where
             timeout,
             include_tvl,
             compression,
+            send_partials: false,
         }
+    }
+
+    /// Enables receiving partial block updates.
+    pub fn with_partial_blocks(mut self, partial_blocks: bool) -> Self {
+        self.send_partials = partial_blocks;
+        self
     }
 
     /// Retrieves state snapshots of the requested components
