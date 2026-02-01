@@ -19,6 +19,10 @@ pub enum BlockHistoryError {
     RevertPositionNotFound,
     #[error("Pushing a detached block is unsafe")]
     DetachedBlock,
+    #[error("Expected latest block to be a partial block for NextPartial position")]
+    ExpectedPartialBlock,
+    #[error("Partial block reverts are not supported - received revert for partial block")]
+    PartialBlockRevert,
 }
 
 pub struct BlockHistory {
@@ -94,6 +98,11 @@ impl BlockHistory {
     /// May error if the block does not fit the tip of the chain, or if history is empty and the
     /// block is a revert.
     pub fn push(&mut self, block: BlockHeader) -> Result<(), BlockHistoryError> {
+        // Partial block reverts are not supported.
+        if block.revert && block.is_partial() {
+            return Err(BlockHistoryError::PartialBlockRevert);
+        }
+
         let pos = self.determine_block_position(&block)?;
         match pos {
             BlockPosition::NextExpected => {
@@ -143,6 +152,22 @@ impl BlockHistory {
                 // Pop the latest partial block and add the new one instead.
                 // This is because they are not connected to each other using parent hashes, so
                 // managing them would add unnecessary complexity.
+                let latest = self
+                    .history
+                    .back()
+                    .ok_or(BlockHistoryError::EmptyHistory)?;
+
+                // Safety check: the latest block must be a partial block. If it's not, something
+                // went wrong in determine_block_position or there's an unexpected state.
+                if !latest.is_partial() {
+                    error!(
+                        latest_block = ?latest,
+                        incoming_block = ?block,
+                        "NextPartial returned but latest block is not a partial"
+                    );
+                    return Err(BlockHistoryError::ExpectedPartialBlock);
+                }
+
                 debug!(
                     tip = ?block.parent_hash,
                     "BlockHistoryPartialUpdate"
@@ -620,5 +645,32 @@ mod test {
             Some(0)
         );
         assert_eq!(history.latest().unwrap().hash, new_p0.hash);
+    }
+
+    #[test]
+    fn test_partial_block_revert_is_rejected() {
+        // Partial block reverts are not supported and should error
+        let blocks = generate_blocks(10, 0, None);
+        let parent_hash = blocks.last().unwrap().hash.clone();
+        let mut history = BlockHistory::new(blocks, 20).unwrap();
+
+        // Add a partial block first
+        history
+            .push(partial_block(10, 0, parent_hash.clone()))
+            .unwrap();
+
+        // Try to push a partial block with revert=true - should error
+        let partial_revert = BlockHeader {
+            number: 9,
+            hash: int_hash(9),
+            parent_hash: int_hash(8),
+            revert: true,
+            partial_block_index: Some(0), // This makes it a partial revert
+            ..Default::default()
+        };
+
+        let result = history.push(partial_revert);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), BlockHistoryError::PartialBlockRevert));
     }
 }
