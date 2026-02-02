@@ -246,12 +246,7 @@ impl ExecutionSimulator {
                         }
 
                         // Try to get revert reason from multiple possible locations
-                        let reason = if let Some(revert_reason) = trace_value
-                            .get("revertReason")
-                            .and_then(|r| r.as_str())
-                        {
-                            revert_reason.to_string()
-                        } else if let Some(output) = trace_value
+                        let reason = if let Some(output) = trace_value
                             .get("output")
                             .and_then(|o| o.as_str())
                         {
