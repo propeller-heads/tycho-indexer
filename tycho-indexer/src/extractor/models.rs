@@ -162,6 +162,8 @@ pub struct BlockChanges {
     /// finalized.
     /// Populated by the `DynamicContractIndexer`
     pub trace_results: Vec<TracedEntryPoint>,
+    /// The index of the partial block. None if it's a full block.
+    pub partial_block_index: Option<u32>,
 }
 
 impl BlockChanges {
@@ -184,6 +186,7 @@ impl BlockChanges {
             txs_with_update,
             block_contract_changes,
             trace_results: Vec::new(),
+            partial_block_index: None,
         }
     }
 
@@ -257,6 +260,7 @@ impl BlockChanges {
                 new_entrypoint_params: aggregated_changes.entrypoint_params,
                 trace_results: aggregated_trace_results,
             },
+            partial_block_index: self.partial_block_index,
         })
     }
 
@@ -269,6 +273,16 @@ impl BlockChanges {
                     .cloned()
             })
             .collect()
+    }
+
+    /// Returns true if the block is a partial block.
+    pub fn is_partial_block(&self) -> bool {
+        self.partial_block_index.is_some()
+    }
+
+    /// Sets the partial block index.
+    pub fn set_partial_block_index(&mut self, index: Option<u32>) {
+        self.partial_block_index = index;
     }
 }
 
