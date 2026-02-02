@@ -504,6 +504,14 @@ where
             false
         }
     }
+
+    fn typetag_name(&self) -> &'static str {
+        self.typetag_name()
+    }
+
+    fn typetag_deserialize(&self) {
+        self.typetag_deserialize()
+    }
 }
 
 #[cfg(test)]
@@ -569,7 +577,7 @@ mod tests {
                 _delta: ProtocolStateDelta,
                 _tokens: &HashMap<Bytes, Token>,
                 _balances: &Balances,
-            ) -> Result<(), TransitionError<String>> {
+            ) -> Result<(), TransitionError> {
                 todo!()
             }
         }
