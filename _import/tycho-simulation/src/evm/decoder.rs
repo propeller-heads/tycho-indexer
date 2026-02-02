@@ -1019,6 +1019,9 @@ mock! {
 }
 
 #[cfg(test)]
+crate::impl_non_serializable_protocol!(MockProtocolSim, "test protocol");
+
+#[cfg(test)]
 impl ProtocolSim for MockProtocolSim {
     fn fee(&self) -> f64 {
         self.fee()
@@ -1068,6 +1071,14 @@ impl ProtocolSim for MockProtocolSim {
 
     fn eq(&self, other: &dyn ProtocolSim) -> bool {
         self.eq(other)
+    }
+
+    fn typetag_name(&self) -> &'static str {
+        unreachable!()
+    }
+
+    fn typetag_deserialize(&self) {
+        unreachable!()
     }
 }
 

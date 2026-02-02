@@ -11,6 +11,7 @@ use http::Request;
 use num_bigint::BigUint;
 use prost::Message as ProstMessage;
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use tokio::time::{sleep, timeout, Duration};
 use tokio_tungstenite::{
     connect_async_with_config,
@@ -55,7 +56,7 @@ fn chain_to_bebop_url(chain: Chain) -> Result<String, RFQError> {
     Ok(url)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BebopClient {
     chain: Chain,
     price_ws: String,
@@ -65,8 +66,10 @@ pub struct BebopClient {
     // Min tvl value in the quote token.
     tvl: f64,
     // name header for authentication
+    #[serde(skip_serializing, default)]
     ws_user: String,
     // key header for authentication
+    #[serde(skip_serializing, default)]
     ws_key: String,
     // quote tokens to normalize to for TVL purposes. Should have the same prices.
     quote_tokens: HashSet<Bytes>,
@@ -1170,5 +1173,65 @@ mod tests {
         // Verify exactly 3 requests were made (2 failures + 1 success)
         let final_count = *request_count.lock().unwrap();
         assert_eq!(final_count, 3, "Expected 3 requests, got {}", final_count);
+    }
+
+    #[test]
+    fn test_bebop_client_serialize_deserialize_roundtrip() {
+        let token_in = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
+        let token_out = Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap();
+        let quote_token = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+
+        let original = BebopClient {
+            chain: Chain::Ethereum,
+            price_ws: "wss://api.bebop.xyz/pricing".to_string(),
+            quote_endpoint: "https://api.bebop.xyz/quote".to_string(),
+            tokens: HashSet::from([token_in.clone(), token_out.clone()]),
+            tvl: 50.5,
+            ws_user: "secret_user".to_string(),
+            ws_key: "secret_key".to_string(),
+            quote_tokens: HashSet::from([quote_token.clone()]),
+            quote_timeout: Duration::from_millis(5500),
+        };
+
+        let serialized = serde_json::to_string(&original).unwrap();
+        let deserialized: BebopClient = serde_json::from_str(&serialized).unwrap();
+
+        // Fields that should round-trip correctly
+        assert_eq!(deserialized.chain, original.chain);
+        assert_eq!(deserialized.price_ws, original.price_ws);
+        assert_eq!(deserialized.quote_endpoint, original.quote_endpoint);
+        assert_eq!(deserialized.tokens, original.tokens);
+        assert_eq!(deserialized.tvl, original.tvl);
+        assert_eq!(deserialized.quote_tokens, original.quote_tokens);
+        assert_eq!(deserialized.quote_timeout, original.quote_timeout);
+
+        // ws_user and ws_key should NOT round-trip (skip_serializing + default)
+        assert_eq!(deserialized.ws_user, "");
+        assert_eq!(deserialized.ws_key, "");
+        assert_ne!(deserialized.ws_user, original.ws_user);
+        assert_ne!(deserialized.ws_key, original.ws_key);
+    }
+
+    #[test]
+    fn test_bebop_client_deserialize_with_credentials() {
+        // When ws_user and ws_key are provided in JSON, they should be deserialized
+        // (skip_serializing only affects serialization, not deserialization)
+        let json = r#"{
+            "chain": "ethereum",
+            "price_ws": "wss://api.bebop.xyz/pricing",
+            "quote_endpoint": "https://api.bebop.xyz/quote",
+            "tokens": [],
+            "tvl": 10.0,
+            "ws_user": "provided_user",
+            "ws_key": "provided_key",
+            "quote_tokens": [],
+            "quote_timeout": {"secs": 30, "nanos": 0}
+        }"#;
+
+        let client: BebopClient = serde_json::from_str(json).unwrap();
+
+        // Credentials should be deserialized from JSON
+        assert_eq!(client.ws_user, "provided_user");
+        assert_eq!(client.ws_key, "provided_key");
     }
 }

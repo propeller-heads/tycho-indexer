@@ -8,6 +8,7 @@ use ekubo_sdk::{
     U256,
 };
 use revm::primitives::Address;
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     simulation::errors::{SimulationError, TransitionError},
     Bytes,
@@ -18,7 +19,7 @@ use crate::protocol::errors::InvalidSnapshotError;
 
 const BASE_GAS_COST: u64 = 20_000;
 
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone, Eq, Serialize, Deserialize)]
 pub struct StableswapPool {
     imp: EvmStableswapPool,
     state: EvmStableswapPoolState,

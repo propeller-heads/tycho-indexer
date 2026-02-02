@@ -252,11 +252,10 @@ pub async fn print_call_trace(call: &Value, depth: usize) {
 
         // Check if call failed
         let has_error = call_obj.get("error").is_some();
-        let has_revert = call_obj.get("revertReason").is_some();
         let has_other_error = ["revert", "reverted", "message", "errorMessage", "reason"]
             .iter()
             .any(|field| call_obj.get(*field).is_some());
-        let call_failed = has_error || has_revert || has_other_error;
+        let call_failed = has_error || has_other_error;
 
         // Create tree structure prefix
         let tree_prefix = if depth == 0 { "".to_string() } else { "  ".repeat(depth) + "├─ " };
@@ -294,11 +293,6 @@ pub async fn print_call_trace(call: &Value, depth: usize) {
 
         if let Some(error) = call_obj.get("error") {
             println!("{result_indent} [Error] {error}");
-            found_error = true;
-        }
-
-        if let Some(revert_reason) = call_obj.get("revertReason") {
-            println!("{}[Revert] {}", result_indent, revert_reason);
             found_error = true;
         }
 

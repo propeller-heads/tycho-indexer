@@ -3,6 +3,7 @@ use std::{any::Any, collections::HashMap};
 use alloy::primitives::{Sign, I256, U256};
 use num_bigint::BigUint;
 use num_traits::Zero;
+use serde::{Deserialize, Serialize};
 use tracing::trace;
 use tycho_common::{
     dto::ProtocolStateDelta,
@@ -47,7 +48,7 @@ const GAS_PER_TICK: u64 = 2_500;
 const MAX_SWAP_GAS: u64 = 16_700_000;
 const MAX_TICKS_CROSSED: u64 = (MAX_SWAP_GAS - SWAP_BASE_GAS) / GAS_PER_TICK;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UniswapV3State {
     liquidity: u128,
     sqrt_price: U256,
@@ -239,6 +240,7 @@ impl UniswapV3State {
     }
 }
 
+#[typetag::serde]
 impl ProtocolSim for UniswapV3State {
     fn fee(&self) -> f64 {
         (self.fee as u32) as f64 / 1_000_000.0

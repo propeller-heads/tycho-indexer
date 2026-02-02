@@ -13,6 +13,7 @@ use evm_ekubo_sdk::{
 };
 use itertools::Itertools;
 use num_traits::Zero;
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     simulation::errors::{SimulationError, TransitionError},
     Bytes,
@@ -24,7 +25,7 @@ use crate::{
     protocol::errors::InvalidSnapshotError,
 };
 
-#[derive(Debug, Eq, Clone)]
+#[derive(Debug, Eq, Clone, Serialize, Deserialize)]
 pub struct TwammPool {
     imp: quoting::twamm_pool::TwammPool,
     state: TwammPoolState,

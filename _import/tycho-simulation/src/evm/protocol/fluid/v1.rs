@@ -17,6 +17,7 @@ use std::{
 use alloy::primitives::U256;
 use num_bigint::{BigUint, ToBigUint};
 use num_traits::Euclid;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::trace;
 use tycho_common::{
@@ -54,7 +55,7 @@ mod constant {
     pub const RESERVES_RESOLVER: &[u8] = &hex!("0xc93876c0eed99645dd53937b25433e311881a27c");
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FluidV1 {
     pool_address: Bytes,
     token0: Token,
@@ -69,7 +70,7 @@ pub struct FluidV1 {
     pool_reserve1: U256,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(super) struct CollateralReserves {
     pub(super) token0_real_reserves: U256,
     pub(super) token1_real_reserves: U256,
@@ -77,7 +78,7 @@ pub(super) struct CollateralReserves {
     pub(super) token1_imaginary_reserves: U256,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(super) struct DebtReserves {
     pub(super) token0_real_reserves: U256,
     pub(super) token1_real_reserves: U256,
@@ -85,7 +86,7 @@ pub(super) struct DebtReserves {
     pub(super) token1_imaginary_reserves: U256,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(super) struct DexLimits {
     pub(super) borrowable_token0: TokenLimit,
     pub(super) borrowable_token1: TokenLimit,
@@ -93,7 +94,7 @@ pub(super) struct DexLimits {
     pub(super) withdrawable_token1: TokenLimit,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(super) struct TokenLimit {
     pub(super) available: U256,
     pub(super) expands_to: U256,
@@ -185,6 +186,7 @@ impl FluidV1 {
     }
 }
 
+#[typetag::serde]
 impl ProtocolSim for FluidV1 {
     fn fee(&self) -> f64 {
         let fee = u256_to_f64(self.fee).expect("Fluid fee values are safe to convert");
@@ -249,7 +251,7 @@ impl ProtocolSim for FluidV1 {
         if amount_in_adjusted < constant::SIX_DECIMALS ||
             amount_in_after_fee < constant::TWO_DECIMALS
         {
-            return Err(SwapError::InvalidAmountIn.into())
+            return Err(SwapError::InvalidAmountIn.into());
         }
         let mut new_col_reserves = self.collateral_reserves.clone();
         let mut new_debt_reserves = self.debt_reserves.clone();
@@ -268,7 +270,7 @@ impl ProtocolSim for FluidV1 {
 
         let reserve = if zero2one { self.pool_reserve1 } else { self.pool_reserve0 };
         if amount_out > reserve {
-            return Err(SwapError::InsufficientReserve.into())
+            return Err(SwapError::InsufficientReserve.into());
         }
 
         let result = GetAmountOutResult::new(

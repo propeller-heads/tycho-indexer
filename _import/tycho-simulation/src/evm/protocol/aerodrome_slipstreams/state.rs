@@ -3,6 +3,7 @@ use std::{any::Any, collections::HashMap};
 use alloy::primitives::{Sign, I256, U256};
 use num_bigint::{BigInt, BigUint};
 use num_traits::{ToPrimitive, Zero};
+use serde::{Deserialize, Serialize};
 use tracing::{error, trace};
 use tycho_common::{
     dto::ProtocolStateDelta,
@@ -37,7 +38,7 @@ use crate::evm::protocol::{
     },
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AerodromeSlipstreamsState {
     id: String,
     block_timestamp: u64,
@@ -268,6 +269,7 @@ impl AerodromeSlipstreamsState {
     }
 }
 
+#[typetag::serde]
 impl ProtocolSim for AerodromeSlipstreamsState {
     fn fee(&self) -> f64 {
         match self.get_fee() {

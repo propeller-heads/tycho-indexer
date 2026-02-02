@@ -9,6 +9,7 @@ use ekubo_sdk::{
     U256,
 };
 use revm::primitives::Address;
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     simulation::errors::{SimulationError, TransitionError},
     Bytes,
@@ -17,7 +18,7 @@ use tycho_common::{
 use super::{EkuboPool, EkuboPoolQuote};
 use crate::protocol::errors::InvalidSnapshotError;
 
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone, Eq, Serialize, Deserialize)]
 pub struct FullRangePool {
     imp: EvmFullRangePool,
     state: FullRangePoolState,

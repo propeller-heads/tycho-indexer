@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use tycho_common::simulation::errors::SimulationError;
 
 use crate::evm::protocol::utils::slipstreams::observations::Observations;
@@ -9,7 +10,7 @@ pub(crate) const DEFAULT_SCALING_FACTOR: u64 = 0;
 pub(crate) const DEFAULT_FEE_CAP: u32 = 10000;
 const SCALING_PRECISION: u128 = 1_000_000;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DynamicFeeConfig {
     base_fee: u32,
     fee_cap: u32,
