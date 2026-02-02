@@ -1,3 +1,10 @@
+## [0.237.1](https://github.com/propeller-heads/tycho-simulation/compare/0.237.0...0.237.1) (2026-02-02)
+
+
+### Bug Fixes
+
+* Fix gibberish execution traces ([ce88300](https://github.com/propeller-heads/tycho-simulation/commit/ce88300f064b9243ce2c2495676bba0727a1ada6))
+
 ## [0.237.0](https://github.com/propeller-heads/tycho-simulation/compare/0.236.0...0.237.0) (2026-02-02)
 
 
