@@ -53,16 +53,26 @@ contract LidoExecutor is IExecutor {
         wstEth = _wstEthAddress;
     }
 
+    function canReceiveFromPreviousSwap(
+        bytes calldata /* data */
+    )
+        external
+        view
+        returns (bool isOptimizable, address receiver)
+    {
+        return (false, msg.sender);
+    }
+
     // slither-disable-next-line locked-ether
-    function swap(uint256 amountIn, bytes calldata data)
+    function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut)
     {
         LidoPoolType pool;
         LidoPoolDirection direction;
 
-        (receiver, pool, direction) = _decodeData(data);
+        (pool, direction) = _decodeData(data);
 
         if (pool == LidoPoolType.stETH && direction == LidoPoolDirection.Stake)
         {
@@ -121,19 +131,14 @@ contract LidoExecutor is IExecutor {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (
-            address receiver,
-            LidoPoolType pool,
-            LidoPoolDirection direction
-        )
+        returns (LidoPoolType pool, LidoPoolDirection direction)
     {
-        if (data.length != 22) {
+        if (data.length != 2) {
             revert LidoExecutor__InvalidDataLength();
         }
 
-        receiver = address(bytes20(data[0:20]));
-        pool = LidoPoolType(uint8(data[20]));
-        direction = LidoPoolDirection(uint8(data[21]));
+        pool = LidoPoolType(uint8(data[0]));
+        direction = LidoPoolDirection(uint8(data[1]));
     }
 
     function getTransferData(bytes calldata data)
@@ -145,12 +150,12 @@ contract LidoExecutor is IExecutor {
             address tokenIn
         )
     {
-        if (data.length != 22) {
+        if (data.length != 2) {
             revert LidoExecutor__InvalidDataLength();
         }
 
-        LidoPoolType pool = LidoPoolType(uint8(data[20]));
-        LidoPoolDirection direction = LidoPoolDirection(uint8(data[21]));
+        LidoPoolType pool = LidoPoolType(uint8(data[0]));
+        LidoPoolDirection direction = LidoPoolDirection(uint8(data[1]));
 
         if (pool == LidoPoolType.stETH && direction == LidoPoolDirection.Stake)
         {

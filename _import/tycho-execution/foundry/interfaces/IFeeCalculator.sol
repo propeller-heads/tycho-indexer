@@ -25,4 +25,14 @@ interface IFeeCalculator {
         external
         view
         returns (uint256 amountOut, FeeRecipient[] memory feeRecipients);
+
+    /**
+     * @dev Returns the effective router fee on output amount for a specific user
+     * @param user The user address to check
+     * @return The fee in basis points (custom if set, otherwise default)
+     */
+    function getEffectiveRouterFeeOnOutput(address user)
+    external
+    view
+    returns (uint16);
 }

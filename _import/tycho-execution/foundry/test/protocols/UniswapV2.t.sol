@@ -25,7 +25,7 @@ contract UniswapV2ExecutorExposed is UniswapV2Executor {
     function decodeParams(bytes calldata data)
         external
         pure
-        returns (address target, address receiver, bool zeroForOne)
+        returns (address target, bool zeroForOne)
     {
         return _decodeData(data);
     }
@@ -79,22 +79,18 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
     }
 
     function testDecodeParams() public view {
-        bytes memory params = abi.encodePacked(address(2), address(3), false);
+        bytes memory params = abi.encodePacked(address(2), false);
 
-        (address target, address receiver, bool zeroForOne) =
+        (address target, bool zeroForOne) =
             uniswapV2Exposed.decodeParams(params);
 
         assertEq(target, address(2));
-        assertEq(receiver, address(3));
         assertEq(zeroForOne, false);
     }
 
     function testDecodeParamsInvalidDataLength() public {
         bytes memory invalidParams = abi.encodePacked(
-            address(2),
-            address(3),
-            false,
-            RestrictTransferFrom.TransferType.Transfer
+            address(2), false, RestrictTransferFrom.TransferType.Transfer
         );
 
         vm.expectRevert(UniswapV2Executor__InvalidDataLength.selector);
@@ -102,7 +98,7 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
     }
 
     function testGetTransferData() public {
-        bytes memory params = abi.encodePacked(DAI_WETH_UNIV2_POOL, BOB, true);
+        bytes memory params = abi.encodePacked(DAI_WETH_UNIV2_POOL, true);
 
         (, address receiver, address tokenIn) =
             uniswapV2Exposed.getTransferData(params);
@@ -152,14 +148,14 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 amountOut = 1847751195973566072891;
         bool zeroForOne = false;
         bytes memory protocolData =
-            abi.encodePacked(DAI_WETH_UNIV2_POOL, BOB, zeroForOne);
+            abi.encodePacked(DAI_WETH_UNIV2_POOL, zeroForOne);
 
         deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
         // transfer funds into the pool - this is taken cared of by the Dispatcher now
         vm.prank(address(uniswapV2Exposed));
         IERC20(WETH_ADDR).transfer(DAI_WETH_UNIV2_POOL, amountIn);
 
-        uniswapV2Exposed.swap(amountIn, protocolData);
+        uniswapV2Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 finalBalance = dai.balanceOf(BOB);
         assertGe(finalBalance, amountOut);
@@ -170,11 +166,11 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 amountOut = 1847751195973566072891;
         bool zeroForOne = false;
         bytes memory protocolData =
-            abi.encodePacked(DAI_WETH_UNIV2_POOL, BOB, zeroForOne);
+            abi.encodePacked(DAI_WETH_UNIV2_POOL, zeroForOne);
 
         deal(WETH_ADDR, address(this), amountIn);
         IERC20(WETH_ADDR).transfer(address(DAI_WETH_UNIV2_POOL), amountIn);
-        uniswapV2Exposed.swap(amountIn, protocolData);
+        uniswapV2Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 finalBalance = dai.balanceOf(BOB);
         assertGe(finalBalance, amountOut);
@@ -182,13 +178,12 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
     function testDecodeIntegration() public view {
         bytes memory protocolData =
-            hex"88e6a0c2ddd26feeb64f039a2c41296fcb3f5640000000000000000000000000000000000000000100";
+            hex"88e6a0c2ddd26feeb64f039a2c41296fcb3f564000";
 
-        (address target, address receiver, bool zeroForOne) =
+        (address target, bool zeroForOne) =
             uniswapV2Exposed.decodeParams(protocolData);
 
         assertEq(target, 0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640);
-        assertEq(receiver, 0x0000000000000000000000000000000000000001);
         assertEq(zeroForOne, false);
     }
 
@@ -201,7 +196,7 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
         // transfer funds into the pool - this is taken cared of by the Dispatcher now
         vm.prank(address(uniswapV2Exposed));
         IERC20(WETH_ADDR).transfer(DAI_WETH_UNIV2_POOL, amountIn);
-        uniswapV2Exposed.swap(amountIn, protocolData);
+        uniswapV2Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 finalBalance = dai.balanceOf(BOB);
         assertGe(finalBalance, amountOut);
@@ -211,11 +206,11 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 amountIn = 10 ** 18;
         bool zeroForOne = false;
         address fakePool = address(new FakeUniswapV2Pool(WETH_ADDR, DAI_ADDR));
-        bytes memory protocolData = abi.encodePacked(fakePool, BOB, zeroForOne);
+        bytes memory protocolData = abi.encodePacked(fakePool, zeroForOne);
 
         deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
         vm.expectRevert(UniswapV2Executor__InvalidTarget.selector);
-        uniswapV2Exposed.swap(amountIn, protocolData);
+        uniswapV2Exposed.swap(amountIn, protocolData, BOB);
     }
 
     // Base Network Tests
@@ -225,12 +220,11 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
         vm.rollFork(26857267);
         uint256 amountIn = 10 * 10 ** 6;
         bool zeroForOne = true;
-        bytes memory protocolData =
-            abi.encodePacked(USDC_MAG7_POOL, BOB, zeroForOne);
+        bytes memory protocolData = abi.encodePacked(USDC_MAG7_POOL, zeroForOne);
 
         deal(BASE_USDC, address(uniswapV2Exposed), amountIn);
 
-        uniswapV2Exposed.swap(amountIn, protocolData);
+        uniswapV2Exposed.swap(amountIn, protocolData, BOB);
 
         assertEq(IERC20(BASE_MAG7).balanceOf(BOB), 1379830606);
     }

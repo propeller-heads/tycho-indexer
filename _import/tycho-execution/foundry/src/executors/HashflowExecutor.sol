@@ -7,6 +7,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {
     SafeERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 error HashflowExecutor__InvalidHashflowRouter();
 error HashflowExecutor__InvalidDataLength();
@@ -47,10 +48,20 @@ contract HashflowExecutor is IExecutor {
         hashflowRouter = _hashflowRouter;
     }
 
-    function swap(uint256 amountIn, bytes calldata data)
+    function canReceiveFromPreviousSwap(
+        bytes calldata /* data */
+    )
+        external
+        view
+        returns (bool isOptimizable, address receiver)
+    {
+        return (false, msg.sender);
+    }
+
+    function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut)
     {
         (IHashflowRouter.RFQTQuote memory quote) = _decodeData(data);
 
@@ -66,12 +77,20 @@ contract HashflowExecutor is IExecutor {
             ethValue = quote.effectiveBaseTokenAmount;
         }
 
+        // The quote.trader is hardcoded to always be address(this)
         uint256 balanceBefore = _balanceOf(quote.trader, quote.quoteToken);
         IHashflowRouter(hashflowRouter).tradeRFQT{value: ethValue}(quote);
         uint256 balanceAfter = _balanceOf(quote.trader, quote.quoteToken);
         amountOut = balanceAfter - balanceBefore;
         tokenOut = quote.quoteToken;
-        receiver = quote.trader;
+
+        if (receiver != address(this)) {
+            if (tokenOut == address(0)) {
+                Address.sendValue(payable(receiver), amountOut);
+            } else {
+                IERC20(tokenOut).safeTransfer(receiver, amountOut);
+            }
+        }
     }
 
     function _decodeData(bytes calldata data)

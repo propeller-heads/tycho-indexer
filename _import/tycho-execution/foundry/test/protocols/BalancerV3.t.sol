@@ -97,26 +97,25 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
         );
 
         vm.expectRevert(BalancerV3Executor__InvalidDataLength.selector);
-        balancerV3Exposed.swap(1 ether, invalidParams);
+        balancerV3Exposed.swap(1 ether, invalidParams, BOB);
     }
 
     function testSwap() public {
         uint256 amountIn = 10 ** 18;
         bytes memory protocolData =
-            abi.encodePacked(osETH_ADDR, waEthWETH_ADDR, WETH_osETH_pool, BOB);
+            abi.encodePacked(osETH_ADDR, waEthWETH_ADDR, WETH_osETH_pool);
 
         deal(osETH_ADDR, address(balancerV3Exposed), amountIn);
 
         uint256 balanceBefore = IERC20(waEthWETH_ADDR).balanceOf(BOB);
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            balancerV3Exposed.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut) =
+            balancerV3Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 balanceAfter = IERC20(waEthWETH_ADDR).balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertEq(tokenOut, waEthWETH_ADDR);
-        assertEq(receiver, BOB);
     }
 
     function testSwapIntegration() public {
@@ -131,14 +130,13 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
         deal(waEthUSDT_ADDR, address(balancerV3Exposed), amountIn);
         uint256 balanceBefore = IERC20(aaveGHO_ADDR).balanceOf(BOB);
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            balancerV3Exposed.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut) =
+            balancerV3Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 balanceAfter = IERC20(aaveGHO_ADDR).balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertEq(tokenOut, aaveGHO_ADDR);
-        assertEq(receiver, BOB);
     }
 }
 

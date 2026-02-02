@@ -11,12 +11,7 @@ contract BalancerV2ExecutorExposed is BalancerV2Executor {
     function decodeParams(bytes calldata data)
         external
         pure
-        returns (
-            address tokenIn,
-            address tokenOut,
-            bytes32 poolId,
-            address receiver
-        )
+        returns (address tokenIn, address tokenOut, bytes32 poolId)
     {
         return _decodeData(data);
     }
@@ -40,20 +35,19 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
 
     function testDecodeParams() public view {
         bytes memory params =
-            abi.encodePacked(WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID, address(2));
+            abi.encodePacked(WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID);
 
-        (address tokenIn, address tokenOut, bytes32 poolId, address receiver) =
+        (address tokenIn, address tokenOut, bytes32 poolId) =
             balancerV2Exposed.decodeParams(params);
 
         assertEq(tokenIn, WETH_ADDR);
         assertEq(tokenOut, BAL_ADDR);
         assertEq(poolId, WETH_BAL_POOL_ID);
-        assertEq(receiver, address(2));
     }
 
     function testGetTransferData() public {
         bytes memory params =
-            abi.encodePacked(WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID, address(2));
+            abi.encodePacked(WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID);
 
         (, address receiver, address tokenIn) =
             balancerV2Exposed.getTransferData(params);
@@ -63,13 +57,8 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
     }
 
     function testDecodeParamsInvalidDataLength() public {
-        bytes memory invalidParams = abi.encodePacked(
-            WETH_ADDR,
-            BAL_ADDR,
-            WETH_BAL_POOL_ID,
-            address(2),
-            RestrictTransferFrom.TransferType.None
-        );
+        bytes memory invalidParams =
+            abi.encodePacked(WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID, address(2));
 
         vm.expectRevert(BalancerV2Executor__InvalidDataLength.selector);
         balancerV2Exposed.decodeParams(invalidParams);
@@ -78,33 +67,31 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
     function testSwap() public {
         uint256 amountIn = 10 ** 18;
         bytes memory protocolData =
-            abi.encodePacked(WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID, BOB);
+            abi.encodePacked(WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID);
 
         deal(WETH_ADDR, address(balancerV2Exposed), amountIn);
         uint256 balanceBefore = BAL.balanceOf(BOB);
 
         vm.prank(address(balancerV2Exposed));
         IERC20(WETH_ADDR).approve(VAULT, amountIn);
-        (uint256 amountOut, address tokenOut, address receiver) =
-            balancerV2Exposed.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut) =
+            balancerV2Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 balanceAfter = BAL.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertEq(tokenOut, BAL_ADDR);
-        assertEq(receiver, BOB);
     }
 
     function testDecodeIntegration() public view {
         bytes memory protocolData =
             loadCallDataFromFile("test_encode_balancer_v2");
-        (address tokenIn, address tokenOut, bytes32 poolId, address receiver) =
+        (address tokenIn, address tokenOut, bytes32 poolId) =
             balancerV2Exposed.decodeParams(protocolData);
 
         assertEq(tokenIn, WETH_ADDR);
         assertEq(tokenOut, BAL_ADDR);
         assertEq(poolId, WETH_BAL_POOL_ID);
-        assertEq(receiver, BOB);
     }
 
     function testSwapIntegration() public {
@@ -118,13 +105,12 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
 
         vm.prank(address(balancerV2Exposed));
         IERC20(WETH_ADDR).approve(VAULT, amountIn);
-        (uint256 amountOut, address tokenOut, address receiver) =
-            balancerV2Exposed.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut) =
+            balancerV2Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 balanceAfter = BAL.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertEq(tokenOut, BAL_ADDR);
-        assertEq(receiver, BOB);
     }
 }

@@ -22,7 +22,6 @@ contract BebopExecutorExposed is BebopExecutor {
             address tokenOut,
             uint8 partialFillOffset,
             uint256 originalFilledTakerAmount,
-            address receiver,
             bytes memory bebopCalldata
         )
     {
@@ -53,12 +52,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         uint256 originalAmountIn = 200000000; // 200 USDC
         bytes memory params = abi.encodePacked(
-            USDC_ADDR,
-            ONDO_ADDR,
-            uint8(2),
-            originalAmountIn,
-            address(123),
-            bebopCalldata
+            USDC_ADDR, ONDO_ADDR, uint8(2), originalAmountIn, bebopCalldata
         );
 
         (
@@ -66,7 +60,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             address tokenOut,
             uint8 decodedPartialFillOffset,
             uint256 decodedOriginalAmountIn,
-            address decodedReceiver,
             bytes memory decodedBebopCalldata
         ) = bebopExecutor.decodeData(params);
 
@@ -83,7 +76,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             originalAmountIn,
             "originalAmountIn mismatch"
         );
-        assertEq(decodedReceiver, address(123), "receiver mismatch");
     }
 
     function testGetTransferData() public {
@@ -97,12 +89,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         uint256 originalAmountIn = 200000000; // 200 USDC
         bytes memory params = abi.encodePacked(
-            USDC_ADDR,
-            ONDO_ADDR,
-            uint8(2),
-            originalAmountIn,
-            address(123),
-            bebopCalldata
+            USDC_ADDR, ONDO_ADDR, uint8(2), originalAmountIn, bebopCalldata
         );
 
         (, address decodedReceiver, address tokenIn) =
@@ -131,20 +118,15 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         deal(tokenIn, address(bebopExecutor), amountIn);
 
         bytes memory params = abi.encodePacked(
-            tokenIn,
-            tokenOut,
-            partialFillOffset,
-            amountIn,
-            address(bebopExecutor),
-            bebopCalldata
+            tokenIn, tokenOut, partialFillOffset, amountIn, bebopCalldata
         );
 
         uint256 initialTokenOutBalance =
             IERC20(tokenOut).balanceOf(address(bebopExecutor));
         vm.prank(address(bebopExecutor));
         IERC20(tokenIn).approve(BEBOP_SETTLEMENT, amountIn);
-        (uint256 amountOut, address tokenOutReturned, address receiver) =
-            bebopExecutor.swap(amountIn, params);
+        (uint256 amountOut, address tokenOutReturned) =
+            bebopExecutor.swap(amountIn, params, address(bebopExecutor));
 
         assertEq(amountOut, expectedAmountOut, "Incorrect amount out");
         assertEq(
@@ -159,51 +141,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             "weth left in executor"
         );
         assertEq(tokenOutReturned, tokenOut);
-        assertEq(receiver, address(bebopExecutor));
-    }
-
-    function testSingleOrderSellingETH() public {
-        // 1 weth -> wbtc
-        vm.createSelectFork(vm.rpcUrl("mainnet"), 23124275);
-
-        bebopExecutor = new BebopExecutorExposed(BEBOP_SETTLEMENT);
-
-        // Quote made manually using the BebopExecutor as the taker and receiver
-        bytes memory bebopCalldata =
-            hex"4dcebcba00000000000000000000000000000000000000000000000000000000689ca0cd0000000000000000000000005615deb798bb3e4dfa0139dfa1b3d433cc23b72f00000000000000000000000051c72848c68a965f66fa7a88855f9f7784502a7f0000000000000000000000000000000000000000000000002a65384e77863d8e000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20000000000000000000000002260fac5e5542a773aa44fbcfedf7c193bc2c5990000000000000000000000000000000000000000000000000de0b6b3a764000000000000000000000000000000000000000000000000000000000000003a96a10000000000000000000000005615deb798bb3e4dfa0139dfa1b3d433cc23b72f0000000000000000000000000000000000000000000000000000000000000001c6d9e514c7a64e5c0e239b532e1a3ea00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000041905d474b362c4a7c901c6a4ccb5c30670a0c602456f52761b47a0a35fc3944ec1fa224bc3bc6e8925cb15258efad2cf79e22ce9720f2302d4a1a2811c54fb4341c00000000000000000000000000000000000000000000000000000000000000";
-        address tokenIn = address(0);
-        address tokenOut = WBTC_ADDR;
-        uint8 partialFillOffset = 12;
-        uint256 amountIn = 1000000000000000000;
-        uint256 expectedAmountOut = 3839649;
-
-        vm.deal(address(bebopExecutor), amountIn);
-
-        bytes memory params = abi.encodePacked(
-            tokenIn,
-            tokenOut,
-            partialFillOffset,
-            amountIn,
-            address(bebopExecutor),
-            bebopCalldata
-        );
-
-        uint256 initialTokenOutBalance =
-            IERC20(tokenOut).balanceOf(address(bebopExecutor));
-
-        (uint256 amountOut, address tokenOutReturned, address receiver) =
-            bebopExecutor.swap(amountIn, params);
-
-        assertEq(amountOut, expectedAmountOut, "Incorrect amount out");
-        assertEq(
-            IERC20(tokenOut).balanceOf(address(bebopExecutor))
-                - initialTokenOutBalance,
-            expectedAmountOut,
-            "wbtc should be at receiver"
-        );
-        assertEq(address(bebopExecutor).balance, 0, "ETH left in executor");
-        assertEq(tokenOutReturned, tokenOut);
-        assertEq(receiver, address(bebopExecutor));
     }
 
     function testSingleOrder_PartialFill() public {
@@ -229,7 +166,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             tokenOut,
             partialFillOffset,
             amountIn * 2, // this is the original amount in
-            address(bebopExecutor),
             bebopCalldata
         );
 
@@ -237,8 +173,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             IERC20(tokenOut).balanceOf(address(bebopExecutor));
         vm.prank(address(bebopExecutor));
         IERC20(tokenIn).approve(BEBOP_SETTLEMENT, amountIn);
-        (uint256 amountOut, address tokenOutReturned, address receiver) =
-            bebopExecutor.swap(amountIn, params);
+        (uint256 amountOut, address tokenOutReturned) =
+            bebopExecutor.swap(amountIn, params, address(bebopExecutor));
 
         assertEq(amountOut, expectedAmountOut, "Incorrect partial amount out");
         assertEq(
@@ -253,7 +189,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             "wbtc left in executor"
         );
         assertEq(tokenOutReturned, tokenOut);
-        assertEq(receiver, address(bebopExecutor));
     }
 
     // Aggregate Order Tests
@@ -277,12 +212,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         deal(tokenIn, address(bebopExecutor), amountIn);
 
         bytes memory params = abi.encodePacked(
-            tokenIn,
-            tokenOut,
-            partialFillOffset,
-            amountIn,
-            address(bebopExecutor),
-            bebopCalldata
+            tokenIn, tokenOut, partialFillOffset, amountIn, bebopCalldata
         );
 
         uint256 initialTokenOutBalance =
@@ -290,8 +220,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         vm.prank(address(bebopExecutor));
         IERC20(tokenIn).approve(BEBOP_SETTLEMENT, amountIn);
-        (uint256 amountOut, address tokenOutReturned, address receiver) =
-            bebopExecutor.swap(amountIn, params);
+        (uint256 amountOut, address tokenOutReturned) =
+            bebopExecutor.swap(amountIn, params, address(bebopExecutor));
 
         assertEq(amountOut, expectedAmountOut, "Incorrect amount out");
 
@@ -307,7 +237,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             "usdc left in executor"
         );
         assertEq(tokenOutReturned, tokenOut);
-        assertEq(receiver, address(bebopExecutor));
     }
 
     function testAggregateOrder_PartialFill() public {
@@ -334,7 +263,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             tokenOut,
             partialFillOffset,
             amountIn * 2, // this is the original amount from the quote
-            address(bebopExecutor),
             bebopCalldata
         );
 
@@ -342,8 +270,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             IERC20(tokenOut).balanceOf(address(bebopExecutor));
         vm.prank(address(bebopExecutor));
         IERC20(tokenIn).approve(BEBOP_SETTLEMENT, amountIn);
-        (uint256 amountOut, address tokenOutReturned, address receiver) =
-            bebopExecutor.swap(amountIn, params);
+        (uint256 amountOut, address tokenOutReturned) =
+            bebopExecutor.swap(amountIn, params, address(bebopExecutor));
 
         assertEq(amountOut, expectedAmountOut, "Incorrect amount out");
 
@@ -359,7 +287,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             "usdc left in executor"
         );
         assertEq(tokenOutReturned, tokenOut);
-        assertEq(receiver, address(bebopExecutor));
     }
 
     function testInvalidDataLength() public {
@@ -373,12 +300,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         // Create params with correct length first
         uint256 originalAmountIn = 1e18;
         bytes memory validParams = abi.encodePacked(
-            WETH_ADDR,
-            USDC_ADDR,
-            uint8(2),
-            originalAmountIn,
-            address(bebopExecutor),
-            bebopCalldata
+            WETH_ADDR, USDC_ADDR, uint8(2), originalAmountIn, bebopCalldata
         );
 
         // Verify valid params work

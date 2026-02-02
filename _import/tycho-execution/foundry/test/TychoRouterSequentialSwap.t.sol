@@ -15,17 +15,12 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         // WETH -> DAI
         swaps[0] = encodeSequentialSwap(
             address(usv2Executor),
-            encodeUniswapV2Swap(
-                DAI_WETH_UNIV2_POOL,
-                DAI_USDC_POOL, // receiver (direct to next pool)
-                false
-            )
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, false)
         );
 
         // DAI -> USDC
         swaps[1] = encodeSequentialSwap(
-            address(usv2Executor),
-            encodeUniswapV2Swap(DAI_USDC_POOL, address(tychoRouter), true)
+            address(usv2Executor), encodeUniswapV2Swap(DAI_USDC_POOL, true)
         );
         return swaps;
     }
@@ -195,13 +190,11 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         IERC20(USDC_ADDR).approve(tychoRouterAddr, amountIn);
 
-        bytes memory usdcWethV3Pool1ZeroOneData = encodeUniswapV3Swap(
-            USDC_ADDR, WETH_ADDR, tychoRouterAddr, USDC_WETH_USV3, true
-        );
+        bytes memory usdcWethV3Pool1ZeroOneData =
+            encodeUniswapV3Swap(USDC_ADDR, WETH_ADDR, USDC_WETH_USV3, true);
 
-        bytes memory usdcWethV3Pool2OneZeroData = encodeUniswapV3Swap(
-            WETH_ADDR, USDC_ADDR, tychoRouterAddr, USDC_WETH_USV3_2, false
-        );
+        bytes memory usdcWethV3Pool2OneZeroData =
+            encodeUniswapV3Swap(WETH_ADDR, USDC_ADDR, USDC_WETH_USV3_2, false);
 
         bytes[] memory swaps = new bytes[](2);
         // USDC -> WETH
@@ -215,7 +208,9 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
 
         // Set transient storage to allow transferFrom from ALICE
         tychoRouter.tstoreExposed(USDC_ADDR, amountIn, false, false);
-        tychoRouter.exposedSequentialSwap(amountIn, pleEncode(swaps));
+        tychoRouter.exposedSequentialSwap(
+            amountIn, pleEncode(swaps), tychoRouterAddr
+        );
         assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 99792554);
         assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), 0);
         vm.stopPrank();

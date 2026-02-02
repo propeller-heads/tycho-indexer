@@ -5,7 +5,6 @@ use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::utils::bytes_to_address,
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
 };
@@ -69,7 +68,7 @@ impl SwapEncoder for LidoSwapEncoder {
     fn encode_swap(
         &self,
         swap: &Swap,
-        encoding_context: &EncodingContext,
+        _encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let (pool, direction) =
             if *swap.token_in() == self.eth_address && *swap.token_out() == self.st_eth_address {
@@ -86,11 +85,7 @@ impl SwapEncoder for LidoSwapEncoder {
                 return Err(EncodingError::InvalidInput("Combination not allowed".to_owned()))
             };
 
-        let args = (
-            bytes_to_address(&encoding_context.receiver)?,
-            (pool as u8).to_be_bytes(),
-            (direction as u8).to_be_bytes(),
-        );
+        let args = ((pool as u8).to_be_bytes(), (direction as u8).to_be_bytes());
 
         Ok(args.abi_encode_packed())
     }
@@ -136,12 +131,10 @@ mod tests {
         let token_out = Bytes::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84");
         let swap = Swap::new(lido_steth_pool, token_in.clone(), token_out.clone());
         let encoding_context = EncodingContext {
-            receiver: Bytes::from("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e"), // BOB
             exact_out: false,
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            historical_trade: false,
         };
         let encoder = LidoSwapEncoder::new(
             Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -156,11 +149,8 @@ mod tests {
         assert_eq!(
             hex_swap,
             String::from(concat!(
-                // receiver
-                "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                 // pool
-                "00",
-                // direction
+                "00", // direction
                 "00",
             ))
         );
@@ -177,12 +167,10 @@ mod tests {
         let token_out = Bytes::from("0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0");
         let swap = Swap::new(lido_wsteth_pool, token_in.clone(), token_out.clone());
         let encoding_context = EncodingContext {
-            receiver: Bytes::from("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e"), // BOB
             exact_out: false,
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            historical_trade: false,
         };
         let encoder = LidoSwapEncoder::new(
             Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -197,11 +185,8 @@ mod tests {
         assert_eq!(
             hex_swap,
             String::from(concat!(
-                // receiver
-                "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                 // pool
-                "01",
-                // direction
+                "01", // direction
                 "01",
             ))
         );
@@ -218,12 +203,10 @@ mod tests {
         let token_out = Bytes::from("0xae7ab96520de3a18e5e111b5eaab095312d7fe84");
         let swap = Swap::new(lido_wsteth_pool, token_in.clone(), token_out.clone());
         let encoding_context = EncodingContext {
-            receiver: Bytes::from("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e"), // BOB
             exact_out: false,
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            historical_trade: false,
         };
         let encoder = LidoSwapEncoder::new(
             Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -238,11 +221,8 @@ mod tests {
         assert_eq!(
             hex_swap,
             String::from(concat!(
-                // receiver
-                "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                 // pool
-                "01",
-                // direction
+                "01", // direction
                 "02",
             ))
         );
@@ -259,12 +239,10 @@ mod tests {
         let token_out = Bytes::from("0x0000000000000000000000000000000000000000");
         let swap = Swap::new(lido_wsteth_pool, token_in.clone(), token_out.clone());
         let encoding_context = EncodingContext {
-            receiver: Bytes::from("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e"), // BOB
             exact_out: false,
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            historical_trade: false,
         };
         let encoder = LidoSwapEncoder::new(
             Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),

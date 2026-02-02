@@ -36,7 +36,7 @@ impl SwapEncoder for UniswapV3SwapEncoder {
     fn encode_swap(
         &self,
         swap: &Swap,
-        encoding_context: &EncodingContext,
+        _encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let token_in_address = bytes_to_address(swap.token_in())?;
         let token_out_address = bytes_to_address(swap.token_out())?;
@@ -49,14 +49,7 @@ impl SwapEncoder for UniswapV3SwapEncoder {
         let pool_fee_u24 = pad_or_truncate_to_size::<3>(&pool_fee_bytes)
             .map_err(|_| EncodingError::FatalError("Failed to extract fee bytes".to_string()))?;
 
-        let args = (
-            token_in_address,
-            token_out_address,
-            pool_fee_u24,
-            bytes_to_address(&encoding_context.receiver)?,
-            component_id,
-            zero_to_one,
-        );
+        let args = (token_in_address, token_out_address, pool_fee_u24, component_id, zero_to_one);
 
         Ok(args.abi_encode_packed())
     }
@@ -93,12 +86,10 @@ mod tests {
         let token_out = Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f");
         let swap = Swap::new(usv3_pool, token_in.clone(), token_out.clone());
         let encoding_context = EncodingContext {
-            receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
             exact_out: false,
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            historical_trade: false,
         };
         let encoder = UniswapV3SwapEncoder::new(
             Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -119,8 +110,6 @@ mod tests {
                 "6b175474e89094c44da98b954eedeac495271d0f",
                 // fee
                 "0001f4",
-                // receiver
-                "0000000000000000000000000000000000000001",
                 // pool id
                 "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
                 // zero for one

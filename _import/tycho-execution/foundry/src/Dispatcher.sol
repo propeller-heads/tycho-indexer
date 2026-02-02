@@ -30,6 +30,9 @@ contract Dispatcher is RestrictTransferFrom {
     // keccak256("Dispatcher#IS_SPLIT_SWAP_SLOT")
     uint256 private constant _IS_SPLIT_SWAP_SLOT =
         0x7b3c4e5f6a8d9e0f1c2b3a4d5e6f7c8d9e0f1c2b3a4d5e6f7c8d9e0f1c2b3a4d;
+    // keccak256("Dispatcher#IS_FIRST_SWAP_SLOT")
+    uint256 private constant _IS_FIRST_SWAP_SLOT =
+        0x8c47a7e3f4c2e1b5a6d9f0e8c7b3a2d1e4f5c6b7a8d9e0f1c2b3a4d5e6f7c8d9;
 
     event ExecutorSet(address indexed executor);
     event ExecutorRemoved(address indexed executor);
@@ -72,7 +75,8 @@ contract Dispatcher is RestrictTransferFrom {
         uint256 amount,
         bytes calldata data,
         bool isFirstSwap,
-        bool isSplitSwap
+        bool isSplitSwap,
+        address receiver
     ) internal returns (uint256 calculatedAmount) {
         if (!executors[executor]) {
             revert Dispatcher__UnapprovedExecutor(executor);
@@ -114,7 +118,9 @@ contract Dispatcher is RestrictTransferFrom {
 
         // slither-disable-next-line controlled-delegatecall,low-level-calls,calls-loop
         (bool success, bytes memory result) = executor.delegatecall(
-            abi.encodeWithSelector(IExecutor.swap.selector, amount, data)
+            abi.encodeWithSelector(
+                IExecutor.swap.selector, amount, data, receiver
+            )
         );
 
         // Clear transient storage in case no callback was performed
@@ -135,9 +141,7 @@ contract Dispatcher is RestrictTransferFrom {
         }
 
         address tokenOut;
-        address receiver;
-        (calculatedAmount, tokenOut, receiver) =
-            abi.decode(result, (uint256, address, address));
+        (calculatedAmount, tokenOut) = abi.decode(result, (uint256, address));
 
         // Update delta accounting (transient storage) if tokens stayed in router
         if (receiver == address(this)) {
@@ -145,10 +149,6 @@ contract Dispatcher is RestrictTransferFrom {
             _updateDeltaAccounting(tokenOut, int256(calculatedAmount));
         }
     }
-
-    // keccak256("Dispatcher#IS_FIRST_SWAP_SLOT")
-    uint256 private constant _IS_FIRST_SWAP_SLOT =
-        0x8c47a7e3f4c2e1b5a6d9f0e8c7b3a2d1e4f5c6b7a8d9e0f1c2b3a4d5e6f7c8d9;
 
     /**
      * @dev Determines the appropriate TransferType based on executor characteristics and context.
@@ -291,5 +291,34 @@ contract Dispatcher is RestrictTransferFrom {
         // The result from `handleCallback` is always ABI encoded.
         bytes memory decodedResult = abi.decode(result, (bytes));
         return decodedResult;
+    }
+
+    function _callCanReceiveFromPreviousSwap(
+        address executor,
+        bytes calldata data
+    ) internal view returns (bool isOptimizable, address receiver) {
+        if (!executors[executor]) {
+            revert Dispatcher__UnapprovedExecutor(executor);
+        }
+        // slither-disable-next-line calls-loop,low-level-calls
+        (bool success, bytes memory optimizableData) = executor.staticcall(
+            abi.encodeWithSelector(
+                IExecutor.canReceiveFromPreviousSwap.selector, data
+            )
+        );
+
+        if (!success) {
+            revert(
+                string(
+                    optimizableData.length > 0
+                        ? optimizableData
+                        : abi.encodePacked(
+                            "Getting protocol optimizable data failed"
+                        )
+                )
+            );
+        }
+
+        (isOptimizable, receiver) = abi.decode(optimizableData, (bool, address));
     }
 }

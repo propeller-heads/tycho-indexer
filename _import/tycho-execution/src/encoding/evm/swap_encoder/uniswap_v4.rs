@@ -205,13 +205,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         )
             .abi_encode_packed();
 
-        let args = (
-            group_token_in_address,
-            group_token_out_address,
-            zero_to_one,
-            bytes_to_address(&encoding_context.receiver)?,
-            pool_params,
-        );
+        let args = (group_token_in_address, group_token_out_address, zero_to_one, pool_params);
 
         Ok(args.abi_encode_packed())
     }
@@ -278,15 +272,11 @@ mod tests {
         };
         let swap = Swap::new(usv4_pool, token_in.clone(), token_out.clone());
         let encoding_context = EncodingContext {
-            // The receiver is ALICE to match the solidity tests
-            receiver: Bytes::from("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2"),
             exact_out: false,
             // Same as the executor address
             router_address: Some(Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f")),
-
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            historical_trade: false,
         };
         let encoder = UniswapV4SwapEncoder::new(
             Bytes::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
@@ -308,8 +298,6 @@ mod tests {
                 "dac17f958d2ee523a2206206994597c13d831ec7",
                 // zero for one
                 "01",
-                // receiver
-                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
                 // pool params:
                 // - intermediary token
                 "dac17f958d2ee523a2206206994597c13d831ec7",
@@ -348,13 +336,11 @@ mod tests {
         let swap = Swap::new(usv4_pool, token_in.clone(), token_out.clone());
 
         let encoding_context = EncodingContext {
-            receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
             exact_out: false,
             router_address: Some(Bytes::zero(20)),
             group_token_in: group_token_in.clone(),
             // Token out is the same as the group token out
             group_token_out: token_out.clone(),
-            historical_trade: false,
         };
 
         let encoder = UniswapV4SwapEncoder::new(
@@ -395,13 +381,10 @@ mod tests {
 
         // The context is the same for both swaps, since the group token in and out are the same
         let context = EncodingContext {
-            // The receiver is ALICE to match the solidity tests
-            receiver: Bytes::from("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2"),
             exact_out: false,
             router_address: Some(router_address.clone()),
             group_token_in: usde_address.clone(),
             group_token_out: wbtc_address.clone(),
-            historical_trade: false,
         };
 
         // Setup - First sequence: USDE -> USDT
@@ -473,8 +456,6 @@ mod tests {
                 "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
                 // zero for one
                 "01",
-                // receiver
-                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
                 // pool params:
                 // - intermediary token USDT
                 "dac17f958d2ee523a2206206994597c13d831ec7",
@@ -569,12 +550,10 @@ mod tests {
 
             // Context for the grouped swap
             let context = EncodingContext {
-                receiver: Bytes::from("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2"), // ALICE
                 exact_out: false,
                 router_address: Some(Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f")),
                 group_token_in: usdc_address.clone(),
                 group_token_out: usdt_address.clone(),
-                historical_trade: false,
             };
 
             // Setup first pool: USDC -> WETH (use real tick spacing and fee from on-chain)

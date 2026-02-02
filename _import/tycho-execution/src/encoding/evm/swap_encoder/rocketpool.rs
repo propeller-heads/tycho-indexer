@@ -5,7 +5,6 @@ use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::utils::bytes_to_address,
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
 };
@@ -40,11 +39,11 @@ impl SwapEncoder for RocketpoolSwapEncoder {
     fn encode_swap(
         &self,
         swap: &Swap,
-        encoding_context: &EncodingContext,
+        _encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let is_deposit = *swap.token_in() == self.native_token_address;
 
-        let args = (is_deposit, bytes_to_address(&encoding_context.receiver)?);
+        let args = is_deposit;
 
         Ok(args.abi_encode_packed())
     }
@@ -79,13 +78,10 @@ mod tests {
         let token_out = Bytes::from("0xae78736Cd615f374D3085123A210448E74Fc6393");
         let swap = Swap::new(rocketpool_pool, token_in.clone(), token_out.clone());
         let encoding_context = EncodingContext {
-            // The receiver was generated with `makeAddr("bob*") using forge`
-            receiver: Bytes::from("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de"),
             exact_out: false,
             router_address: Some(Bytes::default()),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            historical_trade: false,
         };
         let encoder = RocketpoolSwapEncoder::new(
             Bytes::from("0xDeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF"),
@@ -99,16 +95,7 @@ mod tests {
             .unwrap();
         let hex_swap = encode(&encoded_swap);
 
-        assert_eq!(
-            hex_swap,
-            String::from(concat!(
-                // is deposit
-                "01",
-                // receiver
-                "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
-            ))
-            .to_lowercase()
-        );
+        assert_eq!(hex_swap, String::from("01").to_lowercase());
 
         write_calldata_to_file("test_encode_rocketpool_deposit", hex_swap.as_str());
     }
@@ -125,13 +112,10 @@ mod tests {
         let token_out = Bytes::from("0x0000000000000000000000000000000000000000");
         let swap = Swap::new(rocketpool_pool, token_in.clone(), token_out.clone());
         let encoding_context = EncodingContext {
-            // The receiver was generated with `makeAddr("bob*") using forge`
-            receiver: Bytes::from("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de"),
             exact_out: false,
             router_address: Some(Bytes::default()),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            historical_trade: false,
         };
         let encoder = RocketpoolSwapEncoder::new(
             Bytes::from("0xDeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF"),
@@ -145,16 +129,7 @@ mod tests {
             .unwrap();
         let hex_swap = encode(&encoded_swap);
 
-        assert_eq!(
-            hex_swap,
-            String::from(concat!(
-                // is deposit
-                "00",
-                // receiver
-                "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
-            ))
-            .to_lowercase()
-        );
+        assert_eq!(hex_swap, String::from("00").to_lowercase());
 
         write_calldata_to_file("test_encode_rocketpool_burn", hex_swap.as_str());
     }

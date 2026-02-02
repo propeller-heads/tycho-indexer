@@ -25,13 +25,16 @@ import {LidoExecutor} from "../src/executors/LidoExecutor.sol";
 import "./Constants.sol";
 import "./TestUtils.sol";
 import {Permit2TestHelper} from "./Permit2TestHelper.sol";
-
-// Core contracts and interfaces
-import "@src/TychoRouter.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 
+// Core contracts
+import "@src/TychoRouter.sol";
+import "@src/FeeCalculator.sol";
+
 contract TychoRouterExposed is TychoRouter {
-    constructor(address _permit2) TychoRouter(_permit2) {}
+    constructor(address _permit2, address feeCalculator)
+        TychoRouter(_permit2, feeCalculator)
+    {}
 
     function tstoreExposed(
         address tokenIn,
@@ -45,16 +48,19 @@ contract TychoRouterExposed is TychoRouter {
     function exposedSplitSwap(
         uint256 amountIn,
         uint256 nTokens,
-        bytes calldata swaps
+        bytes calldata swaps,
+        address receiver,
+        bool isCyclical
     ) external returns (uint256) {
-        return _splitSwap(amountIn, nTokens, swaps);
+        return _splitSwap(amountIn, nTokens, swaps, receiver, isCyclical);
     }
 
-    function exposedSequentialSwap(uint256 amountIn, bytes calldata swaps)
-        external
-        returns (uint256)
-    {
-        return _sequentialSwap(amountIn, swaps);
+    function exposedSequentialSwap(
+        uint256 amountIn,
+        bytes calldata swaps,
+        address receiver
+    ) external returns (uint256) {
+        return _sequentialSwap(amountIn, swaps, receiver);
     }
 
     function exposedDeltaAccounting(address token, uint256 amount) external {
@@ -83,6 +89,10 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     ERC4626Executor public erc4626Executor;
     LidoExecutor public lidoExecutor;
 
+    FeeCalculator feeCalculator;
+    address routerFeeReceiver;
+    address solverFeeReceiver;
+
     function getChain() public view virtual returns (string memory) {
         return "mainnet";
     }
@@ -105,10 +115,16 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         vm.startPrank(EXECUTOR_SETTER);
         tychoRouter.setExecutors(executors);
         vm.stopPrank();
+
+        // The fee calculator is only deployed here because if we do it before the router and executors ALL the addresses will change and this will break a lot of tests
+        deployFeeCalculator();
+        vm.prank(FEE_SETTER);
+        tychoRouter.setFeeCalculator(address(feeCalculator));
+        vm.stopPrank();
     }
 
     function deployRouter() public returns (TychoRouterExposed) {
-        tychoRouter = new TychoRouterExposed(PERMIT2_ADDRESS);
+        tychoRouter = new TychoRouterExposed(PERMIT2_ADDRESS, address(123)); // address(123) is just a placeholder until we set the real FeeCalculator
         tychoRouterAddr = address(tychoRouter);
         tychoRouter.grantRole(keccak256("PAUSER_ROLE"), PAUSER);
         tychoRouter.grantRole(keccak256("UNPAUSER_ROLE"), UNPAUSER);
@@ -172,6 +188,15 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         return executors;
     }
 
+    function deployFeeCalculator() public {
+        // Deploy and configure FeeCalculator
+        feeCalculator = new FeeCalculator();
+        feeCalculator.grantRole(ROUTER_FEE_SETTER_ROLE, FEE_SETTER);
+
+        routerFeeReceiver = makeAddr("routerFeeReceiver");
+        solverFeeReceiver = makeAddr("solverFeeReceiver");
+    }
+
     function pleEncode(bytes[] memory data)
         public
         pure
@@ -213,37 +238,21 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         );
     }
 
-    function encodeUniswapV2Swap(
-        address target,
-        address receiver,
-        bool zero2one
-    ) internal pure returns (bytes memory) {
-        return abi.encodePacked(target, receiver, zero2one);
+    function encodeUniswapV2Swap(address target, bool zero2one)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodePacked(target, zero2one);
     }
 
     function encodeUniswapV3Swap(
         address tokenIn,
         address tokenOut,
-        address receiver,
         address target,
         bool zero2one
     ) internal view returns (bytes memory) {
         IUniswapV3Pool pool = IUniswapV3Pool(target);
-        return abi.encodePacked(
-            tokenIn, tokenOut, pool.fee(), receiver, target, zero2one
-        );
-    }
-
-    function encodeSlipstreamsSwap(
-        address tokenIn,
-        address tokenOut,
-        address receiver,
-        address target,
-        bool zero2one
-    ) internal view returns (bytes memory) {
-        IUniswapV3Pool pool = IUniswapV3Pool(target);
-        return abi.encodePacked(
-            tokenIn, tokenOut, pool.tickSpacing(), receiver, target, zero2one
-        );
+        return abi.encodePacked(tokenIn, tokenOut, pool.fee(), target, zero2one);
     }
 }

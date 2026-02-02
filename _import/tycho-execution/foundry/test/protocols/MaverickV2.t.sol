@@ -12,12 +12,7 @@ contract MaverickV2ExecutorExposed is MaverickV2Executor {
     function decodeParams(bytes calldata data)
         external
         pure
-        returns (
-            IERC20 tokenIn,
-            address target,
-            address tokenOut,
-            address receiver
-        )
+        returns (address target, IERC20 tokenIn, address tokenOut)
     {
         return _decodeData(data);
     }
@@ -38,20 +33,18 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
 
     function testDecodeParams() public view {
         bytes memory params =
-            abi.encodePacked(GHO_ADDR, GHO_USDC_POOL, USDC_ADDR, address(2));
+            abi.encodePacked(GHO_USDC_POOL, GHO_ADDR, USDC_ADDR);
 
-        (IERC20 tokenIn, address target, address tokenOut, address receiver) =
+        (address target, IERC20 tokenIn, address tokenOut) =
             maverickV2Exposed.decodeParams(params);
 
         assertEq(address(tokenIn), GHO_ADDR);
         assertEq(target, GHO_USDC_POOL);
         assertEq(tokenOut, USDC_ADDR);
-        assertEq(receiver, address(2));
     }
 
     function testDecodeParamsInvalidDataLength() public {
-        bytes memory invalidParams =
-            abi.encodePacked(GHO_ADDR, GHO_USDC_POOL, address(2));
+        bytes memory invalidParams = abi.encodePacked(GHO_USDC_POOL, GHO_ADDR);
 
         vm.expectRevert(MaverickV2Executor__InvalidDataLength.selector);
         maverickV2Exposed.decodeParams(invalidParams);
@@ -59,7 +52,7 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
 
     function testGetTransferData() public {
         bytes memory params =
-            abi.encodePacked(GHO_ADDR, GHO_USDC_POOL, USDC_ADDR, address(2));
+            abi.encodePacked(GHO_USDC_POOL, GHO_ADDR, USDC_ADDR);
 
         (, address receiver, address tokenIn) =
             maverickV2Exposed.getTransferData(params);
@@ -71,7 +64,7 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
     function testSwap() public {
         uint256 amountIn = 10e18;
         bytes memory protocolData =
-            abi.encodePacked(GHO_ADDR, GHO_USDC_POOL, USDC_ADDR, BOB);
+            abi.encodePacked(GHO_USDC_POOL, GHO_ADDR, USDC_ADDR);
 
         deal(GHO_ADDR, address(maverickV2Exposed), amountIn);
         uint256 balanceBefore = USDC.balanceOf(BOB);
@@ -80,14 +73,13 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         vm.prank(address(maverickV2Exposed));
         IERC20(GHO_ADDR).transfer(GHO_USDC_POOL, amountIn);
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            maverickV2Exposed.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut) =
+            maverickV2Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 balanceAfter = USDC.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertEq(tokenOut, USDC_ADDR);
-        assertEq(receiver, BOB);
     }
 
     function testDecodeIntegration() public view {
@@ -95,13 +87,12 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         bytes memory protocolData =
             loadCallDataFromFile("test_encode_maverick_v2");
 
-        (IERC20 tokenIn, address pool, address tokenOut, address receiver) =
+        (address target, IERC20 tokenIn, address tokenOut) =
             maverickV2Exposed.decodeParams(protocolData);
 
         assertEq(address(tokenIn), GHO_ADDR);
-        assertEq(pool, GHO_USDC_POOL);
+        assertEq(target, GHO_USDC_POOL);
         assertEq(tokenOut, USDC_ADDR);
-        assertEq(receiver, BOB);
     }
 
     function testSwapIntegration() public {
@@ -117,14 +108,13 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         vm.prank(address(maverickV2Exposed));
         IERC20(GHO_ADDR).transfer(GHO_USDC_POOL, amountIn);
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            maverickV2Exposed.swap(amountIn, protocolData);
+        (uint256 amountOut, address tokenOut) =
+            maverickV2Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 balanceAfter = USDC.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertEq(tokenOut, USDC_ADDR);
-        assertEq(receiver, BOB);
     }
 }
 

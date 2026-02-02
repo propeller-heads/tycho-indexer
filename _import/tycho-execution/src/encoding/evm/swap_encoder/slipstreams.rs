@@ -37,7 +37,7 @@ impl SwapEncoder for SlipstreamsSwapEncoder {
     fn encode_swap(
         &self,
         swap: &Swap,
-        encoding_context: &EncodingContext,
+        _encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let token_in_address = bytes_to_address(swap.token_in())?;
         let token_out_address = bytes_to_address(swap.token_out())?;
@@ -57,7 +57,6 @@ impl SwapEncoder for SlipstreamsSwapEncoder {
             token_in_address,
             token_out_address,
             tick_spacing_bytes_u24,
-            bytes_to_address(&encoding_context.receiver)?,
             component_id,
             zero_to_one,
         );

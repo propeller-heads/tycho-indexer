@@ -1,16 +1,15 @@
 use std::collections::HashSet;
 
 use alloy::primitives::{aliases::U24, U8};
-use tycho_common::{models::Chain, Bytes};
+use tycho_common::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
     evm::{
         constants::NON_PLE_ENCODED_PROTOCOLS,
         group_swaps::group_swaps,
-        strategy_encoder::{
-            strategy_validators::{SequentialSwapValidator, SplitSwapValidator, SwapValidator},
-            transfer_optimizations::TransferOptimization,
+        strategy_encoder::strategy_validators::{
+            SequentialSwapValidator, SplitSwapValidator, SwapValidator,
         },
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         utils::{get_token_position, percentage_to_uint24, ple_encode},
@@ -26,25 +25,18 @@ use crate::encoding::{
 /// * `swap_encoder_registry`: SwapEncoderRegistry, containing all possible swap encoders
 /// * `function_signature`: String, the signature for the swap function in the router contract
 /// * `router_address`: Address of the router to be used to execute swaps
-/// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
-/// * `historical_trade`: Whether the swap is to be done in the current block or in an historical
-///   one. This is relevant for checking token approvals in some protocols (like Balancer v2).
 #[derive(Clone)]
 pub struct SingleSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
     function_signature: String,
     router_address: Bytes,
-    transfer_optimization: TransferOptimization,
-    historical_trade: bool,
 }
 
 impl SingleSwapStrategyEncoder {
     pub fn new(
-        chain: Chain,
         swap_encoder_registry: SwapEncoderRegistry,
         user_transfer_type: UserTransferType,
         router_address: Bytes,
-        historical_trade: bool,
     ) -> Result<Self, EncodingError> {
         let function_signature = if user_transfer_type == UserTransferType::TransferFromPermit2 {
             "singleSwapPermit2(uint256,address,address,uint256,address,uint16,address,uint256,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)"
@@ -58,12 +50,6 @@ impl SingleSwapStrategyEncoder {
             function_signature,
             swap_encoder_registry,
             router_address: router_address.clone(),
-            transfer_optimization: TransferOptimization::new(
-                chain.native_token().address,
-                user_transfer_type,
-                router_address,
-            ),
-            historical_trade,
         })
     }
 
@@ -105,19 +91,12 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
                     "Swap encoder not found for protocol: {protocol}"
                 ))
             })?;
-        let solution_fees = solution.solver_fee_bps > 0;
-
-        let (swap_receiver, _) = self
-            .transfer_optimization
-            .get_receiver(&solution.receiver, None, solution_fees)?;
 
         let encoding_context = EncodingContext {
-            receiver: swap_receiver,
             exact_out: solution.exact_out,
             router_address: Some(self.router_address.clone()),
             group_token_in: grouped_swap.token_in.clone(),
             group_token_out: grouped_swap.token_out.clone(),
-            historical_trade: self.historical_trade,
         };
 
         let mut grouped_protocol_data: Vec<Vec<u8>> = vec![];
@@ -172,26 +151,19 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
 /// * `router_address`: Address of the router to be used to execute swaps
 /// * `sequential_swap_validator`: SequentialSwapValidator, responsible for checking validity of
 ///   sequential swap solutions
-/// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
-/// * `historical_trade`: Whether the swap is to be done in the current block or in an historical
-///   one. This is relevant for checking token approvals in some protocols (like Balancer v2).
 #[derive(Clone)]
 pub struct SequentialSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
     function_signature: String,
     router_address: Bytes,
     sequential_swap_validator: SequentialSwapValidator,
-    transfer_optimization: TransferOptimization,
-    historical_trade: bool,
 }
 
 impl SequentialSwapStrategyEncoder {
     pub fn new(
-        chain: Chain,
         swap_encoder_registry: SwapEncoderRegistry,
         user_transfer_type: UserTransferType,
         router_address: Bytes,
-        historical_trade: bool,
     ) -> Result<Self, EncodingError> {
         let function_signature = if user_transfer_type == UserTransferType::TransferFromPermit2 {
             "sequentialSwapPermit2(uint256,address,address,uint256,address,uint16,address,uint256,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)"
@@ -205,12 +177,6 @@ impl SequentialSwapStrategyEncoder {
             swap_encoder_registry,
             router_address: router_address.clone(),
             sequential_swap_validator: SequentialSwapValidator,
-            transfer_optimization: TransferOptimization::new(
-                chain.native_token().address,
-                user_transfer_type,
-                router_address,
-            ),
-            historical_trade,
         })
     }
 
@@ -232,9 +198,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
         let grouped_swaps = group_swaps(&solution.swaps);
 
         let mut swaps = vec![];
-        let mut next_in_between_swap_optimization_allowed = true;
-        let solution_fees = solution.solver_fee_bps > 0;
-        for (i, grouped_swap) in grouped_swaps.iter().enumerate() {
+        for grouped_swap in grouped_swaps.iter() {
             let protocol = &grouped_swap.protocol_system;
             let swap_encoder = self
                 .get_swap_encoder(protocol)
@@ -244,20 +208,11 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                     ))
                 })?;
 
-            let in_between_swap_optimization_allowed = next_in_between_swap_optimization_allowed;
-            let next_swap = grouped_swaps.get(i + 1);
-            let (swap_receiver, next_swap_optimization) = self
-                .transfer_optimization
-                .get_receiver(&solution.receiver, next_swap, solution_fees)?;
-            next_in_between_swap_optimization_allowed = next_swap_optimization;
-
             let encoding_context = EncodingContext {
-                receiver: swap_receiver,
                 exact_out: solution.exact_out,
                 router_address: Some(self.router_address.clone()),
                 group_token_in: grouped_swap.token_in.clone(),
                 group_token_out: grouped_swap.token_out.clone(),
-                historical_trade: self.historical_trade,
             };
 
             let mut grouped_protocol_data: Vec<Vec<u8>> = vec![];
@@ -316,26 +271,19 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
 /// * `split_swap_validator`: SplitSwapValidator, responsible for checking validity of split swap
 ///   solutions
 /// * `router_address`: Address of the router to be used to execute swaps
-/// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
-/// * `historical_trade`: Whether the swap is to be done in the current block or in an historical
-///   one. This is relevant for checking token approvals in some protocols (like Balancer v2).
 #[derive(Clone)]
 pub struct SplitSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
     function_signature: String,
     split_swap_validator: SplitSwapValidator,
     router_address: Bytes,
-    transfer_optimization: TransferOptimization,
-    historical_trade: bool,
 }
 
 impl SplitSwapStrategyEncoder {
     pub fn new(
-        chain: Chain,
         swap_encoder_registry: SwapEncoderRegistry,
         user_transfer_type: UserTransferType,
         router_address: Bytes,
-        historical_trade: bool,
     ) -> Result<Self, EncodingError> {
         let function_signature = if user_transfer_type == UserTransferType::TransferFromPermit2 {
            "splitSwapPermit2(uint256,address,address,uint256,uint256,address,uint16,address,uint256,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)"
@@ -349,12 +297,6 @@ impl SplitSwapStrategyEncoder {
             swap_encoder_registry,
             split_swap_validator: SplitSwapValidator,
             router_address: router_address.clone(),
-            transfer_optimization: TransferOptimization::new(
-                chain.native_token().address,
-                user_transfer_type,
-                router_address,
-            ),
-            historical_trade,
         })
     }
 
@@ -421,23 +363,11 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                     ))
                 })?;
 
-            let solution_fees = solution.solver_fee_bps > 0;
-            let swap_receiver = if grouped_swap.token_out == solution.token_out {
-                let (receiver, _) = self
-                    .transfer_optimization
-                    .get_receiver(&solution.receiver, None, solution_fees)?;
-                receiver
-            } else {
-                // for split swaps all in between swaps will have the router as a receiver
-                self.router_address.clone()
-            };
             let encoding_context = EncodingContext {
-                receiver: swap_receiver,
                 exact_out: solution.exact_out,
                 router_address: Some(self.router_address.clone()),
                 group_token_in: grouped_swap.token_in.clone(),
                 group_token_out: grouped_swap.token_out.clone(),
-                historical_trade: self.historical_trade,
             };
 
             let mut grouped_protocol_data: Vec<Vec<u8>> = vec![];
@@ -550,11 +480,9 @@ mod tests {
             );
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SingleSwapStrategyEncoder::new(
-                eth_chain(),
                 swap_encoder_registry,
                 UserTransferType::TransferFromPermit2,
                 router_address(),
-                false,
             )
             .unwrap();
             let solution = Solution {
@@ -564,7 +492,6 @@ mod tests {
                 token_out: dai,
                 min_amount_out: checked_amount.clone(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap],
                 ..Default::default()
             };
@@ -577,7 +504,6 @@ mod tests {
                 // Swap data
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
                 "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id (pool address)
-                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "00",                                       // zero2one
             ));
             let hex_calldata = encode(&encoded_solution.swaps);
@@ -622,11 +548,9 @@ mod tests {
             );
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SequentialSwapStrategyEncoder::new(
-                eth_chain(),
                 swap_encoder_registry,
                 UserTransferType::TransferFrom,
                 router_address(),
-                false,
             )
             .unwrap();
             let solution = Solution {
@@ -636,7 +560,6 @@ mod tests {
                 token_out: usdc,
                 min_amount_out: BigUint::from_str("26173932").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
                 ..Default::default()
             };
@@ -649,16 +572,14 @@ mod tests {
 
             let expected = String::from(concat!(
                 // swap 1
-                "003d",                                     // swap length (61 bytes)
+                "0029",                                     // swap length (41 bytes)
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
                 "bb2b8038a1640196fbe3e38816f3e67cba72d940", // component id (pool address)
-                "004375dff511095cc5a197a54140a24efef3a416", // receiver (next pool)
                 "00",                                       // zero to one
                 // swap 2
-                "003d",                                     // swap length (61 bytes)
+                "0029",                                     // swap length (61 bytes)
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
                 "004375dff511095cc5a197a54140a24efef3a416", // component id (pool address)
-                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver (tycho router)
                 "01",                                       // zero to one
             ));
 
@@ -751,11 +672,9 @@ mod tests {
             );
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SplitSwapStrategyEncoder::new(
-                eth_chain(),
                 swap_encoder_registry,
                 UserTransferType::TransferFromPermit2,
                 Bytes::from("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2"),
-                false,
             )
             .unwrap();
 
@@ -768,7 +687,6 @@ mod tests {
                                                                          * from
                                                                          * test */
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_weth_pool1, swap_usdc_weth_pool2, swap_weth_usdc_pool2],
                 ..Default::default()
             };
@@ -780,7 +698,7 @@ mod tests {
             let hex_calldata = hex::encode(&encoded_solution.swaps);
 
             let expected_swaps = [
-                "006d",                                     // ple encoded swaps (109 bytes)
+                "0059",                                     // ple encoded swaps (89 bytes)
                 "00",                                       // token in index
                 "01",                                       // token out index
                 "999999",                                   // split
@@ -788,10 +706,9 @@ mod tests {
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
                 "0001f4",                                   // pool fee
-                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
                 "01",                                       // zero2one
-                "006d",                                     // ple encoded swaps (109 bytes)
+                "0059",                                     // ple encoded swaps (89 bytes)
                 "00",                                       // token in index
                 "01",                                       // token out index
                 "000000",                                   // split
@@ -799,16 +716,14 @@ mod tests {
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
                 "000bb8",                                   // pool fee
-                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
                 "01",                                       // zero2one
-                "0042",                                     // ple encoded swaps (66 bytes)
+                "002e",                                     // ple encoded swaps (46 bytes)
                 "01",                                       // token in index
                 "00",                                       // token out index
                 "000000",                                   // split
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address,
                 "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id (pool address)
-                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "00",                                       // zero2one
             ]
             .join("");
@@ -893,11 +808,9 @@ mod tests {
 
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SplitSwapStrategyEncoder::new(
-                eth_chain(),
                 swap_encoder_registry,
                 UserTransferType::TransferFrom,
                 Bytes::from("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2"),
-                false,
             )
             .unwrap();
 
@@ -910,7 +823,6 @@ mod tests {
                                                                          * from
                                                                          * test */
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_weth_v2, swap_weth_usdc_v3_pool1, swap_weth_usdc_v3_pool2],
                 ..Default::default()
             };
@@ -922,15 +834,14 @@ mod tests {
             let hex_calldata = hex::encode(&encoded_solution.swaps);
 
             let expected_swaps = [
-                "0042",                                     // ple encoded swaps (66 bytes)
+                "002e",                                     // ple encoded swaps (46 bytes)
                 "00",                                       // token in index
                 "01",                                       // token out index
                 "000000",                                   // split
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
                 "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id (pool address)
-                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "01",                                       // zero2one
-                "006d",                                     // ple encoded swaps (109 bytes)
+                "0059",                                     // ple encoded swaps (89 bytes)
                 "01",                                       // token in index
                 "00",                                       // token out index
                 "999999",                                   // split
@@ -938,10 +849,9 @@ mod tests {
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
                 "0001f4",                                   // pool fee
-                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
                 "00",                                       // zero2one
-                "006d",                                     // ple encoded swaps (109 bytes)
+                "0059",                                     // ple encoded swaps (89 bytes)
                 "01",                                       // token in index
                 "00",                                       // token out index
                 "000000",                                   // split
@@ -949,7 +859,6 @@ mod tests {
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
                 "000bb8",                                   // pool fee
-                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
                 "00",                                       // zero2one
             ]

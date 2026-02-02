@@ -76,6 +76,16 @@ contract UniswapV4Executor is IExecutor, ICallback {
         _self = address(this);
     }
 
+    function canReceiveFromPreviousSwap(
+        bytes calldata /* data */
+    )
+        external
+        view
+        returns (bool isOptimizable, address receiver)
+    {
+        return (false, msg.sender);
+    }
+
     /**
      * @dev Modifier to restrict access to only the pool manager.
      */
@@ -86,15 +96,15 @@ contract UniswapV4Executor is IExecutor, ICallback {
         _;
     }
 
-    function swap(uint256 amountIn, bytes calldata data)
+    function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut)
     {
         address tokenIn;
         bool zeroForOne;
         UniswapV4Executor.UniswapV4Pool[] memory pools;
-        (tokenIn, tokenOut, zeroForOne, receiver, pools) = _decodeData(data);
+        (tokenIn, tokenOut, zeroForOne, pools) = _decodeData(data);
         bytes memory swapData;
         if (pools.length == 1) {
             PoolKey memory key = PoolKey({
@@ -149,20 +159,18 @@ contract UniswapV4Executor is IExecutor, ICallback {
             address tokenIn,
             address tokenOut,
             bool zeroForOne,
-            address receiver,
             UniswapV4Pool[] memory pools
         )
     {
-        if (data.length < 109) {
+        if (data.length < 89) {
             revert UniswapV4Executor__InvalidDataLength();
         }
 
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
         zeroForOne = data[40] != 0;
-        receiver = address(bytes20(data[41:61]));
 
-        bytes calldata remaining = data[61:];
+        bytes calldata remaining = data[41:];
 
         // Decode first pool with hook data
         if (remaining.length < 48) {

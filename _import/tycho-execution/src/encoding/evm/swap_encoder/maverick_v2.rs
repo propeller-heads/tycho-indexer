@@ -31,17 +31,13 @@ impl SwapEncoder for MaverickV2SwapEncoder {
     fn encode_swap(
         &self,
         swap: &Swap,
-        encoding_context: &EncodingContext,
+        _encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let component_id = AlloyBytes::from_str(&swap.component().id)
             .map_err(|_| EncodingError::FatalError("Invalid component ID".to_string()))?;
 
-        let args = (
-            bytes_to_address(swap.token_in())?,
-            component_id,
-            bytes_to_address(swap.token_out())?,
-            bytes_to_address(&encoding_context.receiver)?,
-        );
+        let args =
+            (component_id, bytes_to_address(swap.token_in())?, bytes_to_address(swap.token_out())?);
         Ok(args.abi_encode_packed())
     }
 
@@ -74,13 +70,10 @@ mod tests {
         let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
         let swap = Swap::new(maverick_pool, token_in.clone(), token_out.clone());
         let encoding_context = EncodingContext {
-            // The receiver was generated with `makeAddr("bob*") using forge`
-            receiver: Bytes::from("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de"),
             exact_out: false,
             router_address: Some(Bytes::default()),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            historical_trade: false,
         };
         let encoder = MaverickV2SwapEncoder::new(
             Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -97,14 +90,12 @@ mod tests {
         assert_eq!(
             hex_swap,
             String::from(concat!(
-                // token in
-                "40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f",
                 // pool
                 "14Cf6D2Fe3E1B326114b07d22A6F6bb59e346c67",
+                // token in
+                "40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f",
                 // token out
                 "A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-                // receiver
-                "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))
             .to_lowercase()
         );

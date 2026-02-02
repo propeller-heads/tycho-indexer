@@ -49,18 +49,31 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         mevResist = _mevResist;
     }
 
-    function swap(uint256 amountIn, bytes calldata data)
+    function canReceiveFromPreviousSwap(
+        bytes calldata /* data */
+    )
+        external
+        view
+        returns (bool isOptimizable, address receiver)
+    {
+        return (false, msg.sender);
+    }
+
+    function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut, address receiver)
+        returns (uint256 amountOut, address tokenOut)
     {
-        if (data.length < 92) {
+        if (data.length < 72) {
             revert EkuboExecutor__InvalidDataLength();
         }
 
         // amountIn must be at most type(int128).MAX
-        (amountOut, tokenOut, receiver) =
-            _lock(abi.encodePacked(bytes16(uint128(amountIn)), data));
+        (amountOut, tokenOut) = _lock(
+            abi.encodePacked(
+                bytes16(uint128(amountIn)), bytes20(receiver), data
+            )
+        );
     }
 
     function handleCallback(bytes calldata raw)
@@ -76,9 +89,8 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
 
         bytes memory result = "";
         if (selector == LOCKED_SELECTOR) {
-            (int128 amountOut, address tokenOut, address receiver) =
-                _locked(stripped);
-            result = abi.encodePacked(amountOut, tokenOut, receiver);
+            (int128 amountOut, address tokenOut) = _locked(stripped);
+            result = abi.encodePacked(amountOut, tokenOut);
         } else if (selector == PAY_CALLBACK_SELECTOR) {
             // The paying is done in the Dispatcher using getCallbackTransferData. Nothing to do here
         } else {
@@ -92,11 +104,10 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
 
     function locked(uint256) external coreOnly {
         // Without selector and locker id
-        (int128 amountOut, address tokenOut, address receiver) =
-            _locked(msg.data[36:]);
+        (int128 amountOut, address tokenOut) = _locked(msg.data[36:]);
 
-        // Pack: 16 bytes int128 + 20 bytes address + 20 bytes address = 56 bytes total
-        bytes memory result = abi.encodePacked(amountOut, tokenOut, receiver);
+        // Pack: 16 bytes int128 + 20 bytes address = 36 bytes total
+        bytes memory result = abi.encodePacked(amountOut, tokenOut);
 
         // slither-disable-next-line assembly
         assembly ("memory-safe") {
@@ -117,7 +128,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
 
     function _lock(bytes memory data)
         internal
-        returns (uint128 swappedAmount, address tokenOut, address receiver)
+        returns (uint128 swappedAmount, address tokenOut)
     {
         // Prepend selector of lock() to calldata
         // We must use assembly here since the Ekubo Core's lock method expects the raw
@@ -134,7 +145,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
             }
         }
 
-        // Decode 56 bytes: 16 bytes for int128 + 20 bytes for address + 20 bytes for address
+        // Decode 36 bytes: 16 bytes for int128 + 20 bytes for address
         // Data is packed with values left-shifted in each position
         // Assembly is necessary since the input is bytes memory and not bytes calldata
         int128 amountOut;
@@ -142,14 +153,13 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         assembly ("memory-safe") {
             amountOut := shr(128, mload(add(result, 32)))
             tokenOut := shr(96, mload(add(result, 48)))
-            receiver := shr(96, mload(add(result, 68)))
         }
         swappedAmount = uint128(amountOut);
     }
 
     function _locked(bytes calldata swapData)
         internal
-        returns (int128, address, address)
+        returns (int128, address)
     {
         int128 nextAmountIn = int128(uint128(bytes16(swapData[0:16])));
         uint128 tokenInDebtAmount = uint128(nextAmountIn);
@@ -215,7 +225,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
 
         _pay(tokenIn, tokenInDebtAmount);
         core.withdraw(nextTokenIn, receiver, uint128(nextAmountIn));
-        return (nextAmountIn, tokenOut, receiver);
+        return (nextAmountIn, tokenOut);
     }
 
     function _forward(address to, bytes memory data)

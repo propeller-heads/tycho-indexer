@@ -107,12 +107,13 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address indexed oldCalculator, address indexed newCalculator
     );
 
-    constructor(address _permit2) Dispatcher(_permit2) {
+    constructor(address _permit2, address feeCalculator) Dispatcher(_permit2) {
         if (_permit2 == address(0)) {
             revert TychoRouter__AddressZero();
         }
         permit2 = IAllowanceTransfer(_permit2);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _feeCalculator = IFeeCalculator(feeCalculator);
     }
 
     /**
@@ -667,8 +668,13 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         if (minAmountOut == 0) {
             revert TychoRouter__UndefinedMinAmountOut();
         }
+        bool isCyclical = false;
+        if (tokenIn == tokenOut) {
+            isCyclical = true;
+        }
 
-        uint256 amountOutBeforeFees = _splitSwap(amountIn, nTokens, swaps);
+        uint256 amountOutBeforeFees =
+            _splitSwap(amountIn, nTokens, swaps, receiver, isCyclical);
         amountOut = _takeFees(
             tokenOut,
             amountOutBeforeFees,
@@ -732,8 +738,11 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         (address executor, bytes calldata protocolData) =
             swap_.decodeSingleSwap();
 
-        uint256 amountOutBeforeFees =
-            _callSwapOnExecutor(executor, amountIn, protocolData, true, false);
+        address finalReceiver =
+            determineFinalReceiver(receiver, solverFeeBps > 0);
+        uint256 amountOutBeforeFees = _callSwapOnExecutor(
+            executor, amountIn, protocolData, true, false, finalReceiver
+        );
         amountOut = _takeFees(
             tokenOut,
             amountOutBeforeFees,
@@ -792,8 +801,10 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         if (minAmountOut == 0) {
             revert TychoRouter__UndefinedMinAmountOut();
         }
-
-        uint256 amountOutBeforeFees = _sequentialSwap(amountIn, swaps);
+        address finalReceiver =
+            determineFinalReceiver(receiver, solverFeeBps > 0);
+        uint256 amountOutBeforeFees =
+            _sequentialSwap(amountIn, swaps, finalReceiver);
         amountOut = _takeFees(
             tokenOut,
             amountOutBeforeFees,
@@ -832,7 +843,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * - The indices of the input and output tokens (via `tokenInIndex()` and `tokenOutIndex()`).
      * - The portion of the available amount to be used for the swap, indicated by the `split` value.
      *
-     * Three important notes:
+     * Four important notes:
      * - The contract assumes that token indexes follow a specific order: the sell token is at index 0, followed by any
      *  intermediary tokens, and finally the buy token.
      * - A `split` value of 0 is interpreted as 100% of the available amount (i.e., the entire remaining balance).
@@ -841,17 +852,26 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * - In case of cyclic swaps, the output token is the same as the input token.
      *  `cyclicSwapAmountOut` is used to track the amount of the output token, and is updated when
      *  the `tokenOutIndex` is 0.
+     * - The receiver of the hop is chosen depending on the position:
+     *     - if it's any other than not the last hops (to the token out), the receiver is address(this)
+     *     - if it's the last hops, the receiver will be the one passed in the input arguments. Note that for regular
+     * split swaps, checking that the `tokenOutIndex` is the last value is enough for this but for cyclical split swaps
+     * we need to rely on the `isCyclical` passed from the outside.
      *
      * @param amountIn The initial amount of the sell token to be swapped.
      * @param nTokens The total number of tokens involved in the swap path, used to initialize arrays for internal tracking.
      * @param swaps_ Encoded swap graph data containing the details of each swap operation.
+     * @param receiver The address of the receiver of the swap
+     * @param isCyclical Bool to determine if the swap is cyclical or not (token in == token out)
      *
      * @return The total amount of the buy token obtained after all swaps have been executed.
      */
     function _splitSwap(
         uint256 amountIn,
         uint256 nTokens,
-        bytes calldata swaps_
+        bytes calldata swaps_,
+        address receiver,
+        bool isCyclical
     ) internal returns (uint256) {
         if (swaps_.length == 0) {
             revert TychoRouter__EmptySwaps();
@@ -882,8 +902,21 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
                 ? (amounts[tokenInIndex] * split) / 0xffffff
                 : remainingAmounts[tokenInIndex];
 
+            address swapReceiver = address(this);
+            if (
+                (tokenOutIndex == nTokens - 1 && !isCyclical)
+                    || (isCyclical && tokenOutIndex == 0)
+            ) {
+                swapReceiver = receiver;
+            }
+
             currentAmountOut = _callSwapOnExecutor(
-                executor, currentAmountIn, protocolData, tokenInIndex == 0, true
+                executor,
+                currentAmountIn,
+                protocolData,
+                tokenInIndex == 0,
+                true,
+                swapReceiver
             );
             // Checks if the output token is the same as the input token
             if (tokenOutIndex == 0) {
@@ -902,26 +935,51 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      *
      * @param amountIn The initial amount of the sell token to be swapped.
      * @param swaps_ Encoded swap graph data containing the details of each swap operation.
+     * @param finalReceiver Address of the receiver of the last swap.
      *
      * @return calculatedAmount The total amount of the buy token obtained after all swaps have been executed.
      */
-    function _sequentialSwap(uint256 amountIn, bytes calldata swaps_)
-        internal
-        returns (uint256 calculatedAmount)
-    {
-        bytes calldata swap;
+    function _sequentialSwap(
+        uint256 amountIn,
+        bytes calldata swaps_,
+        address finalReceiver
+    ) internal returns (uint256 calculatedAmount) {
         calculatedAmount = amountIn;
-        bool isFirstSwap = true;
-        while (swaps_.length > 0) {
-            (swap, swaps_) = swaps_.next();
+        uint256 swapCount = swaps_.size();
+        bytes calldata remainingSwaps = swaps_;
+
+        for (uint256 i = 0; i < swapCount; i++) {
+            bytes calldata currentSwap;
+            (currentSwap, remainingSwaps) = remainingSwaps.next();
 
             (address executor, bytes calldata protocolData) =
-                swap.decodeSingleSwap();
+                currentSwap.decodeSequentialSwap();
+
+            address receiver;
+            bool isLastSwap = (i == swapCount - 1);
+
+            if (isLastSwap) {
+                receiver = finalReceiver;
+            } else {
+                bytes calldata nextSwap;
+                // slither-disable-next-line unused-return
+                (nextSwap,) = remainingSwaps.next();
+                (address nextExecutor, bytes calldata nextProtocolData) =
+                    nextSwap.decodeSequentialSwap();
+                bool isOptimizable;
+                (isOptimizable, receiver) = _callCanReceiveFromPreviousSwap(
+                    nextExecutor, nextProtocolData
+                );
+            }
 
             calculatedAmount = _callSwapOnExecutor(
-                executor, calculatedAmount, protocolData, isFirstSwap, false
+                executor,
+                calculatedAmount,
+                protocolData,
+                i == 0, // isFirstSwap
+                false,
+                receiver
             );
-            isFirstSwap = false;
         }
     }
 
@@ -1155,5 +1213,26 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         } else {
             amount = amountOut;
         }
+    }
+
+    /**
+     * @dev Determines the final receiver address for the last swap output tokens
+     * @param receiver The receiver address
+     * @param solverFees Whether solver fees are being applied
+     * @return The final receiver address - either the router (for fee processing) or the intended receiver
+     */
+    function determineFinalReceiver(address receiver, bool solverFees)
+        internal
+        view
+        returns (address)
+    {
+        uint16 routerFees =
+            _feeCalculator.getEffectiveRouterFeeOnOutput(msg.sender);
+        address finalReceiver = address(this);
+        if (routerFees == 0 && !solverFees) {
+            // if no fees are taken, the receiver can be the user directly
+            finalReceiver = receiver;
+        }
+        return finalReceiver;
     }
 }

@@ -70,18 +70,19 @@ impl SwapEncoder for BebopSwapEncoder {
                 ))?;
             let token_in = swap.token_in().clone();
             let token_out = swap.token_out().clone();
+            let router_address = encoding_context
+                .router_address
+                .clone()
+                .ok_or(EncodingError::FatalError(
+                    "The router address is needed to perform a Bebop swap".to_string(),
+                ))?;
 
             let params = GetAmountOutParams {
                 amount_in: estimated_amount_in,
                 token_in,
                 token_out,
-                sender: encoding_context
-                    .router_address
-                    .clone()
-                    .ok_or(EncodingError::FatalError(
-                        "The router address is needed to perform a Bebop swap".to_string(),
-                    ))?,
-                receiver: encoding_context.receiver.clone(),
+                sender: router_address.clone(),
+                receiver: router_address,
             };
             let signed_quote = block_in_place(|| {
                 self.runtime_handle.block_on(async {
@@ -111,17 +112,14 @@ impl SwapEncoder for BebopSwapEncoder {
             )
         };
 
-        let receiver = bytes_to_address(&encoding_context.receiver)?;
-
         // Encode packed data for the executor
         // Format: token_in | token_out | partial_fill_offset |
-        //         original_filled_taker_amount | approval_needed | receiver | bebop_calldata
+        //         original_filled_taker_amount | approval_needed | bebop_calldata
         let args = (
             token_in,
             token_out,
             partial_fill_offset.to_be_bytes(),
             original_filled_taker_amount.to_be_bytes::<32>(),
-            receiver,
             &bebop_calldata[..],
         );
 
@@ -185,12 +183,10 @@ mod tests {
             .protocol_state(Arc::new(bebop_state));
 
         let encoding_context = EncodingContext {
-            receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"),
             exact_out: false,
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            historical_trade: false,
         };
 
         let encoder = BebopSwapEncoder::new(
@@ -214,8 +210,6 @@ mod tests {
             "0c",
             //  original taker amount
             "0000000000000000000000000000000000000000000000000de0b6b3a7640000",
-            //receiver,
-            "c5564c13a157e6240659fb81882a28091add8670",
         ));
         assert_eq!(hex_swap, expected_swap + &bebop_calldata.to_string()[2..]);
     }

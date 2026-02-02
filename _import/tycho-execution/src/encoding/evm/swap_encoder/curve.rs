@@ -142,7 +142,7 @@ impl SwapEncoder for CurveSwapEncoder {
     fn encode_swap(
         &self,
         swap: &Swap,
-        encoding_context: &EncodingContext,
+        _encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let native_token_curve_address = Address::from_slice(&self.native_token_curve_address);
         let token_in = if *swap.token_in() == self.native_token_address {
@@ -183,7 +183,6 @@ impl SwapEncoder for CurveSwapEncoder {
             pool_type.to_be_bytes::<1>(),
             i.to_be_bytes::<1>(),
             j.to_be_bytes::<1>(),
-            bytes_to_address(&encoding_context.receiver)?,
         );
 
         Ok(args.abi_encode_packed())
@@ -320,13 +319,10 @@ mod tests {
         let swap = Swap::new(curve_tri_pool, token_in.clone(), token_out.clone());
 
         let encoding_context = EncodingContext {
-            // The receiver was generated with `makeAddr("bob*") using forge`
-            receiver: Bytes::from("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de"),
             exact_out: false,
             router_address: None,
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            historical_trade: false,
         };
         let encoder = CurveSwapEncoder::new(
             Bytes::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
@@ -354,8 +350,6 @@ mod tests {
                 "00",
                 // j index
                 "01",
-                // receiver,
-                "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))
         );
     }
@@ -382,13 +376,10 @@ mod tests {
         let token_out = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3");
         let swap = Swap::new(curve_pool, token_in.clone(), token_out.clone());
         let encoding_context = EncodingContext {
-            // The receiver was generated with `makeAddr("bob*") using forge`
-            receiver: Bytes::from("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de"),
             exact_out: false,
             router_address: None,
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            historical_trade: false,
         };
         let encoder = CurveSwapEncoder::new(
             Bytes::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
@@ -416,8 +407,6 @@ mod tests {
                 "01",
                 // j index
                 "00",
-                // receiver
-                "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))
         );
     }
@@ -445,13 +434,10 @@ mod tests {
         let token_out = Bytes::from("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84");
         let swap = Swap::new(curve_pool, token_in.clone(), token_out.clone());
         let encoding_context = EncodingContext {
-            // The receiver was generated with `makeAddr("bob*") using forge`
-            receiver: Bytes::from("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de"),
             exact_out: false,
             router_address: None,
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            historical_trade: false,
         };
         let encoder = CurveSwapEncoder::new(
             Bytes::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
@@ -488,8 +474,6 @@ mod tests {
                 "00",
                 // j index
                 "01",
-                // receiver
-                "9964bff29baa37b47604f3f3f51f3b3c5149d6de",
             ))
         );
     }

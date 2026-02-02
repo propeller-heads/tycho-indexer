@@ -249,44 +249,17 @@ impl PartialEq for PermitDetails {
 ///
 /// # Fields
 ///
-/// * `receiver`: Address of the receiver of the out token after the swaps are completed.
 /// * `exact_out`: true if the solution is a buy order, false if it is a sell order.
 /// * `router_address`: Address of the router contract to be used for the swaps. Zero address if
 ///   solution does not require router address.
 /// * `group_token_in`: Token to be used as the input for the group swap.
 /// * `group_token_out`: Token to be used as the output for the group swap.
-/// * `transfer`: Type of transfer to be performed. See `TransferType` for more details.
-/// * `historical_trade`: Whether the swap is to be done in the current block or in an historical
-///   one. This is relevant for checking token approvals in some protocols (like Balancer v2).
 #[derive(Clone, Debug)]
 pub struct EncodingContext {
-    pub receiver: Bytes,
     pub exact_out: bool,
     pub router_address: Option<Bytes>,
     pub group_token_in: Bytes,
     pub group_token_out: Bytes,
-    pub historical_trade: bool,
-}
-
-/// Represents the type of transfer to be performed into the pool.
-///
-/// # Fields
-///
-/// * - TransferFrom: Transfer from user wallet to protocol
-/// * - TransferFromAndProtocolWillDebit: Transfer from user wallet to router, protocol takes it
-/// * - Transfer: Transfer from router balance to protocol (could be from vault or previous swap)
-/// * - TransferNativeInExecutor: Native ETH sent in executor (hardcoded in executor for security)
-/// * - ProtocolWillDebit: Protocol takes from router/vault
-/// * - None: Funds already transferred from previous pool
-#[repr(u8)]
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum TransferType {
-    TransferFrom = 0,
-    TransferFromAndProtocolWillDebit = 1,
-    Transfer = 2,
-    TransferNativeInExecutor = 3,
-    ProtocolWillDebit = 4,
-    None = 5,
 }
 
 mod tests {

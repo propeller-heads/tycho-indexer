@@ -16,7 +16,6 @@ contract FluidV1ExecutorExposed is FluidV1Executor {
             IFluidV1Dex dex,
             bool zero2one,
             address outputToken,
-            address receiver,
             bool isNative
         )
     {
@@ -59,20 +58,17 @@ contract FluidV1ExecutorTest is Test, Constants {
     function testDecodeData() public view {
         address dex = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
         address outputToken = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
-        bytes memory params =
-            abi.encodePacked(dex, true, outputToken, address(this), false);
+        bytes memory params = abi.encodePacked(dex, true, outputToken, false);
         IFluidV1Dex dexVal;
         bool zero2oneVal;
         address outputTokenVal;
-        address receiverVal;
         bool isNative;
 
-        (dexVal, zero2oneVal, outputTokenVal, receiverVal, isNative) =
+        (dexVal, zero2oneVal, outputTokenVal, isNative) =
             executor.decodeData(params);
 
         assertEq(address(dexVal), dex);
         assert(zero2oneVal);
-        assertEq(receiverVal, address(this));
         assertEq(outputTokenVal, outputToken);
     }
 
@@ -158,17 +154,15 @@ contract FluidV1ExecutorTest is Test, Constants {
         IERC20 sUSDe = IERC20(0x9D39A5DE30e57443BfF2A8307A4256c8797A3497);
         IERC20 USDT = IERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
         uint256 amountIn = 10e18;
-        bytes memory params =
-            abi.encodePacked(dex, true, address(USDT), address(BOB), false);
+        bytes memory params = abi.encodePacked(dex, true, address(USDT), false);
         deal(address(sUSDe), address(executor), amountIn);
         uint256 balanceBefore = USDT.balanceOf(BOB);
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            executor.swap(amountIn, params);
+        (uint256 amountOut, address tokenOut) =
+            executor.swap(amountIn, params, BOB);
 
         uint256 balanceAfter = USDT.balanceOf(BOB);
         assertEq(balanceAfter - balanceBefore, amountOut);
-        assertEq(receiver, BOB);
         assertEq(tokenOut, USDT_ADDR);
     }
 
@@ -176,17 +170,15 @@ contract FluidV1ExecutorTest is Test, Constants {
         address dex = 0xDD72157A021804141817d46D9852A97addfB9F59;
         IERC20 ezETH = IERC20(0xbf5495Efe5DB9ce00f80364C8B423567e58d2110);
         uint256 amountIn = 10e18;
-        bytes memory params =
-            abi.encodePacked(dex, false, address(ezETH), address(BOB), true);
+        bytes memory params = abi.encodePacked(dex, false, address(ezETH), true);
         deal(address(executor), amountIn);
         uint256 balanceBefore = ezETH.balanceOf(BOB);
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            executor.swap(amountIn, params);
+        (uint256 amountOut, address tokenOut) =
+            executor.swap(amountIn, params, BOB);
 
         uint256 balanceAfter = ezETH.balanceOf(BOB);
         assertEq(balanceAfter - balanceBefore, amountOut);
-        assertEq(receiver, BOB);
         assertEq(tokenOut, address(ezETH));
     }
 
@@ -194,17 +186,15 @@ contract FluidV1ExecutorTest is Test, Constants {
         address dex = 0xDD72157A021804141817d46D9852A97addfB9F59;
         IERC20 ezETH = IERC20(0xbf5495Efe5DB9ce00f80364C8B423567e58d2110);
         uint256 amountIn = 10e18;
-        bytes memory params =
-            abi.encodePacked(dex, true, address(0), address(BOB), false);
+        bytes memory params = abi.encodePacked(dex, true, address(0), false);
         deal(address(ezETH), address(executor), amountIn);
         uint256 balanceBefore = BOB.balance;
 
-        (uint256 amountOut, address tokenOut, address receiver) =
-            executor.swap(amountIn, params);
+        (uint256 amountOut, address tokenOut) =
+            executor.swap(amountIn, params, BOB);
 
         uint256 balanceAfter = BOB.balance;
         assertEq(balanceAfter - balanceBefore, amountOut);
-        assertEq(receiver, BOB);
         assertEq(tokenOut, address(0));
     }
 }
