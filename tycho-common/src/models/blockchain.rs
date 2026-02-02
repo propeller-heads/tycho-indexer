@@ -164,6 +164,10 @@ impl BlockAggregatedChanges {
             partial_block_index: self.partial_block_index,
         }
     }
+
+    pub fn is_partial(&self) -> bool {
+        self.partial_block_index.is_some()
+    }
 }
 
 impl std::fmt::Display for BlockAggregatedChanges {
