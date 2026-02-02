@@ -365,7 +365,6 @@ impl BlockChanges {
     }
 
     pub fn merge(mut self, other: Self) -> Self {
-        // TODO: consider how should we merge if partial flags differ?
         other
             .account_updates
             .into_iter()
