@@ -421,3 +421,90 @@ fn test_split_output_cyclic_swap() {
     assert_eq!(hex_calldata[1352..], expected_swaps);
     write_calldata_to_file("test_split_output_cyclic_swap", hex_calldata.as_str());
 }
+
+#[test]
+fn test_split_swap_strategy_with_fees() {
+    // Performs a split swap from WETH to USDC though WBTC and DAI using USV2 pools
+    //
+    //         ┌──(USV2)──> WBTC ───(USV2)──> USDC
+    //   WETH ─┤
+    //         └──(USV2)──> DAI  ───(USV2)──> USDC
+    //
+    // Solver takes 1%
+
+    let weth = weth();
+    let dai = dai();
+    let wbtc = wbtc();
+    let usdc = usdc();
+
+    let swap_weth_dai = Swap::new(
+        ProtocolComponent {
+            id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+            protocol_system: "uniswap_v2".to_string(),
+            ..Default::default()
+        },
+        weth.clone(),
+        dai.clone(),
+    )
+    .split(0.5f64);
+    let swap_weth_wbtc = Swap::new(
+        ProtocolComponent {
+            id: "0xBb2b8038a1640196FbE3e38816F3e67Cba72D940".to_string(),
+            protocol_system: "uniswap_v2".to_string(),
+            ..Default::default()
+        },
+        weth.clone(),
+        wbtc.clone(),
+    );
+    let swap_dai_usdc = Swap::new(
+        ProtocolComponent {
+            id: "0xAE461cA67B15dc8dc81CE7615e0320dA1A9aB8D5".to_string(),
+            protocol_system: "uniswap_v2".to_string(),
+            ..Default::default()
+        },
+        dai.clone(),
+        usdc.clone(),
+    );
+    let swap_wbtc_usdc = Swap::new(
+        ProtocolComponent {
+            id: "0x004375Dff511095CC5A197A54140a24eFEF3A416".to_string(),
+            protocol_system: "uniswap_v2".to_string(),
+            ..Default::default()
+        },
+        wbtc.clone(),
+        usdc.clone(),
+    );
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        token_in: weth,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out: usdc,
+        min_amount_out: BigUint::from_str("26173932").unwrap(),
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap_weth_dai, swap_weth_wbtc, swap_dai_usdc, swap_wbtc_usdc],
+        solver_fee_bps: 100, // 1% fee
+        solver_fee_receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        Some(get_signer()),
+    )
+    .unwrap()
+    .data;
+
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_split_swap_strategy_with_fees", hex_calldata.as_str());
+}
