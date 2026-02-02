@@ -381,7 +381,7 @@ where
             info!("Waiting for deltas...");
             let mut warned_waiting_for_new_block = false;
             let mut warned_skipping_synced = false;
-            // Track the last seen block number such that we know when we get the first partial for a block
+            // Track the last seen block number such that we know when we get the first partial
             let mut last_block_number: Option<u64> = None;
             let mut first_msg = loop {
                 let msg = select! {
