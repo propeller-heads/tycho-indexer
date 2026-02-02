@@ -29,28 +29,28 @@ This test runs continuously in the cluster but it can also be run locally for de
 
 ### Command Line Arguments
 
-| Argument                     | Default    | Description                                                          |
-|------------------------------|------------|----------------------------------------------------------------------|
-| `--chain`                    | `ethereum` | Blockchain to test against                                           |
-| `--protocols`                | -          | Comma-separated list of protocols to test. Defaults to all protocols |
-| `--max-simulations`          | `10`       | Maximum simulations (of updated states) per update                   |
-| `--max-simulations-stale`    | `10`       | Maximum simulations (of stale states) per update per protocol        |
-| `--parallel-simulations`     | `5`        | Number of concurrent simulations                                     |
-| `--parallel-updates`         | `5`        | Number of concurrent update processors                               |
-| `--tvl-threshold`            | `100.0`    | TVL threshold in native tokens for filtering                         |
-| `--metrics-port`             | `9898`     | Port for Prometheus metrics server                                   |
-| `--disable-onchain`          | `false`    | Skip on-chain protocol testing                                       |
-| `--disable-rfq`              | `false`    | Skip RFQ protocol testing                                            |
-| `--skip-messages-duration`   | `600`      | RFQ stream skip duration (seconds) after processing a message        |
-| `--block-wait-time`          | `12`       | Time to wait (seconds) for block N+1 before executing debug_traceCall |
-| `--always-test-components`   | -          | Comma-separated list of component IDs to test every block            |
-| `--max-blocks`               | `0`        | Maximum number of blocks to process before exiting (0 = run indefinitely). When set, prints a summary at the end |
+| Argument                   | Default    | Description                                                                                                      |
+|----------------------------|------------|------------------------------------------------------------------------------------------------------------------|
+| `--chain`                  | `ethereum` | Blockchain to test against                                                                                       |
+| `--protocols`              | -          | Comma-separated list of protocols to test. Defaults to all protocols                                             |
+| `--max-simulations`        | `10`       | Maximum simulations (of updated states) per update                                                               |
+| `--max-simulations-stale`  | `10`       | Maximum simulations (of stale states) per update per protocol                                                    |
+| `--parallel-simulations`   | `5`        | Number of concurrent simulations                                                                                 |
+| `--parallel-updates`       | `5`        | Number of concurrent update processors                                                                           |
+| `--tvl-threshold`          | `100.0`    | TVL threshold in native tokens for filtering                                                                     |
+| `--metrics-port`           | `9898`     | Port for Prometheus metrics server                                                                               |
+| `--disable-onchain`        | `false`    | Skip on-chain protocol testing                                                                                   |
+| `--disable-rfq`            | `false`    | Skip RFQ protocol testing                                                                                        |
+| `--skip-messages-duration` | `600`      | RFQ stream skip duration (seconds) after processing a message                                                    |
+| `--block-wait-time`        | `12`       | Time to wait (seconds) for block N+1 before executing debug_traceCall                                            |
+| `--always-test-components` | -          | Comma-separated list of component IDs to test every block                                                        |
+| `--max-blocks`             | `0`        | Maximum number of blocks to process before exiting (0 = run indefinitely). When set, prints a summary at the end |
 
 ## Running Locally
 
 ```bash
 # Set required environment variables
-export RUST_LOG=tycho_integration_test=info,error
+export RUST_LOG=tycho_integration_test=info,tycho_test=debug,error
 export TYCHO_URL=tycho-dev.propellerheads.xyz
 export RPC_URL=https://your-rpc-endpoint
 
@@ -60,6 +60,7 @@ cargo run --package tycho-integration-test
 # Run with custom parameters
 cargo run --package tycho-integration-test -- \
   --chain ethereum \
+  --disable-rfq \
   --protocols uniswap_v2 \
   --max-simulations 20 \
   --parallel-simulations 10
