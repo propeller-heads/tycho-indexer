@@ -1,3 +1,11 @@
+## [0.134.0](https://github.com/propeller-heads/tycho-indexer/compare/0.133.0...0.134.0) (2026-02-02)
+
+
+### Features
+
+* add optionnal partial block index to our block message structs ([bacca66](https://github.com/propeller-heads/tycho-indexer/commit/bacca66390cb0e29e3af5a0df0983d4e366ca6f6))
+* add optionnal partial block index to our block message structs ([#834](https://github.com/propeller-heads/tycho-indexer/issues/834)) ([25d3623](https://github.com/propeller-heads/tycho-indexer/commit/25d3623346477f3605849cf8c91c0e8948959965))
+
 ## [0.133.0](https://github.com/propeller-heads/tycho-indexer/compare/0.132.2...0.133.0) (2026-01-30)
 
 
