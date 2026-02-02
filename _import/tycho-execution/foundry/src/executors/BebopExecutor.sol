@@ -37,10 +37,10 @@ contract BebopExecutor is IExecutor {
         bytes calldata /* data */
     )
         external
-        pure
+        view
         returns (bool isOptimizable, address receiver)
     {
-        return (false, address(0));
+        return (false, msg.sender);
     }
 
     /// @notice Executes a swap through Bebop's PMM RFQ system

@@ -22,10 +22,10 @@ contract ERC4626Executor is IExecutor {
         bytes calldata /* data */
     )
         external
-        pure
+        view
         returns (bool isOptimizable, address receiver)
     {
-        return (false, address(0));
+        return (false, msg.sender);
     }
 
     // slither-disable-next-line locked-ether

@@ -970,10 +970,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
                 (isOptimizable, receiver) = _callCanReceiveFromPreviousSwap(
                     nextExecutor, nextProtocolData
                 );
-
-                if (!isOptimizable) {
-                    receiver = address(this);
-                }
             }
 
             calculatedAmount = _callSwapOnExecutor(
