@@ -401,3 +401,68 @@ fn test_sequential_strategy_cyclic_swap_and_vault() {
     assert_eq!(hex_calldata, expected_input);
     write_calldata_to_file("test_sequential_strategy_cyclic_swap_and_vault", hex_calldata.as_str());
 }
+
+#[test]
+fn test_sequential_swap_strategy_encoder_with_fees() {
+    // Performs a sequential swap from WETH to USDC through WBTC using USV2 pools
+    //
+    //   WETH ───(USV2)──> WBTC ───(USV2)──> USDC
+    //
+    // Solver takes 1%
+
+    let weth = weth();
+    let wbtc = wbtc();
+    let usdc = usdc();
+
+    let swap_weth_wbtc = Swap::new(
+        ProtocolComponent {
+            id: "0xBb2b8038a1640196FbE3e38816F3e67Cba72D940".to_string(),
+            protocol_system: "uniswap_v2".to_string(),
+            ..Default::default()
+        },
+        weth.clone(),
+        wbtc.clone(),
+    );
+    let swap_wbtc_usdc = Swap::new(
+        ProtocolComponent {
+            id: "0x004375Dff511095CC5A197A54140a24eFEF3A416".to_string(),
+            protocol_system: "uniswap_v2".to_string(),
+            ..Default::default()
+        },
+        wbtc.clone(),
+        usdc.clone(),
+    );
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        token_in: weth,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out: usdc,
+        min_amount_out: BigUint::from_str("26173932").unwrap(),
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
+        solver_fee_bps: 100, // 1% fee
+        solver_fee_receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        Some(get_signer()),
+    )
+    .unwrap()
+    .data;
+
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_sequential_swap_strategy_with_fees", hex_calldata.as_str());
+}

@@ -673,8 +673,10 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             isCyclical = true;
         }
 
+        address finalReceiver =
+            determineFinalReceiver(receiver, solverFeeBps > 0);
         uint256 amountOutBeforeFees =
-            _splitSwap(amountIn, nTokens, swaps, receiver, isCyclical);
+            _splitSwap(amountIn, nTokens, swaps, finalReceiver, isCyclical);
         amountOut = _takeFees(
             tokenOut,
             amountOutBeforeFees,
