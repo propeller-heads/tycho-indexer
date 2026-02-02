@@ -1,3 +1,16 @@
+## [0.237.0](https://github.com/propeller-heads/tycho-simulation/compare/0.236.0...0.237.0) (2026-02-02)
+
+
+### Features
+
+* add `serde` support for protocol states ([734894b](https://github.com/propeller-heads/tycho-simulation/commit/734894bc9218bbaf5a651c8ee8a435c48f3051b8))
+
+
+### Bug Fixes
+
+* fmt with nightly ([7bbaba9](https://github.com/propeller-heads/tycho-simulation/commit/7bbaba9ac7b967e768df4b7cec1499f8fd4e0c7e))
+* make cowamm serde ([b807773](https://github.com/propeller-heads/tycho-simulation/commit/b8077736a4d64a49946cd0bd035896a37256138d))
+
 ## [0.236.0](https://github.com/propeller-heads/tycho-simulation/compare/0.235.0...0.236.0) (2026-01-30)
 
 
