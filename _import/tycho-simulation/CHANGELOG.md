@@ -1,3 +1,10 @@
+## [0.237.2](https://github.com/propeller-heads/tycho-simulation/compare/0.237.1...0.237.2) (2026-02-02)
+
+
+### Bug Fixes
+
+* **integration-test:** Don't select components from non ready protocols ([2e1b9df](https://github.com/propeller-heads/tycho-simulation/commit/2e1b9dfff811d3460be76a048f2f1c72e8660ccc))
+
 ## [0.237.1](https://github.com/propeller-heads/tycho-simulation/compare/0.237.0...0.237.1) (2026-02-02)
 
 
