@@ -1,3 +1,17 @@
+## [0.135.0](https://github.com/propeller-heads/tycho-indexer/compare/0.134.0...0.135.0) (2026-02-02)
+
+
+### Features
+
+* add partial block support to the ws ([#835](https://github.com/propeller-heads/tycho-indexer/issues/835)) ([e936191](https://github.com/propeller-heads/tycho-indexer/commit/e936191e0a3a829d40cbaf55e467614a81289cda))
+* **blockchain:** add `is_partial` field to `BlockAggregatedChanges` ([156a92c](https://github.com/propeller-heads/tycho-indexer/commit/156a92c226c7cb2ba5d345cfd6333d794d5eb1d1))
+* **common:** add is_partial method to check for partial block presence ([cea6371](https://github.com/propeller-heads/tycho-indexer/commit/cea63710ce9d44bbf5853d2df9c47a0e6ba76323))
+* **dto:** add `is_partial` field to BlockChanges for partial block handling ([74d9631](https://github.com/propeller-heads/tycho-indexer/commit/74d9631db9d1b65a63eebea9f50092e4303c1a56))
+* **dto:** add `partial_blocks` field to Subscribe command for partial block updates subscriptions ([8c67ff0](https://github.com/propeller-heads/tycho-indexer/commit/8c67ff0572838d559e4d67acae1395f4618282bb))
+* **ws:** implement partial block filtering in subscription logic ([0ea7532](https://github.com/propeller-heads/tycho-indexer/commit/0ea7532d70d9d67fded35b918b9d69855dfe9a63))
+* **ws:** rename partial_blocks parameter to send_partials and update related logic for block filtering ([66de802](https://github.com/propeller-heads/tycho-indexer/commit/66de80205047628f672ffaba6c305898742da927))
+* **ws:** update block filtering logic for partial and revert subscriptions ([d862f04](https://github.com/propeller-heads/tycho-indexer/commit/d862f04a4e65371bb4f1335086b9d8b2e7c9b03f))
+
 ## [0.134.0](https://github.com/propeller-heads/tycho-indexer/compare/0.133.0...0.134.0) (2026-02-02)
 
 
