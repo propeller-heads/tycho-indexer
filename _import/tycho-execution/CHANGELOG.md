@@ -1,3 +1,10 @@
+## [0.23.1](https://github.com/propeller-heads/tycho-contracts/compare/0.23.0...0.23.1) (2026-02-02)
+
+
+### Bug Fixes
+
+* Compute final receiver for split swap too (BUG) ([9c7ba34](https://github.com/propeller-heads/tycho-contracts/commit/9c7ba34ef19fa8195287d6aaa5573ac244206f92))
+
 ## [0.23.0](https://github.com/propeller-heads/tycho-contracts/compare/0.22.0...0.23.0) (2026-02-02)
 
 
