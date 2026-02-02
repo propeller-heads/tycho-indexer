@@ -13,6 +13,7 @@ use evm_ekubo_sdk::{
     },
 };
 use num_traits::Zero;
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     simulation::errors::{SimulationError, TransitionError},
     Bytes,
@@ -23,7 +24,7 @@ use crate::{
     evm::protocol::ekubo::attributes::ticks_from_attributes, protocol::errors::InvalidSnapshotError,
 };
 
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone, Eq, Serialize, Deserialize)]
 pub struct BasePool {
     imp: quoting::base_pool::BasePool,
     state: BasePoolState,

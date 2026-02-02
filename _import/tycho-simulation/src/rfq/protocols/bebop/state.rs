@@ -3,6 +3,7 @@ use std::{any::Any, collections::HashMap, fmt};
 use async_trait::async_trait;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Pow, ToPrimitive};
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::{protocol::GetAmountOutParams, token::Token},
@@ -19,7 +20,7 @@ use crate::rfq::{
     protocols::bebop::{client::BebopClient, models::BebopPriceData},
 };
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct BebopState {
     pub base_token: Token,
     pub quote_token: Token,
@@ -47,6 +48,7 @@ impl BebopState {
     }
 }
 
+#[typetag::serde]
 impl ProtocolSim for BebopState {
     fn fee(&self) -> f64 {
         0.0

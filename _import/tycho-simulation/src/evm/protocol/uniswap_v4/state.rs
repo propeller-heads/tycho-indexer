@@ -19,33 +19,36 @@ use tycho_common::{
 };
 
 use super::hooks::utils::{has_permission, HookOptions};
-use crate::evm::protocol::{
-    clmm::clmm_swap_to_price,
-    safe_math::{safe_add_u256, safe_sub_u256},
-    u256_num::u256_to_biguint,
-    uniswap_v4::hooks::{
-        hook_handler::HookHandler,
-        models::{
-            AfterSwapParameters, BalanceDelta, BeforeSwapDelta, BeforeSwapParameters, StateContext,
-            SwapParams,
-        },
-    },
-    utils::{
-        add_fee_markup,
-        uniswap::{
-            i24_be_bytes_to_i32, liquidity_math, lp_fee,
-            lp_fee::is_dynamic,
-            sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
-            swap_math,
-            tick_list::{TickInfo, TickList, TickListErrorKind},
-            tick_math::{
-                get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
-                MIN_SQRT_RATIO, MIN_TICK,
+use crate::{
+    evm::protocol::{
+        clmm::clmm_swap_to_price,
+        safe_math::{safe_add_u256, safe_sub_u256},
+        u256_num::u256_to_biguint,
+        uniswap_v4::hooks::{
+            hook_handler::HookHandler,
+            models::{
+                AfterSwapParameters, BalanceDelta, BeforeSwapDelta, BeforeSwapParameters,
+                StateContext, SwapParams,
             },
-            StepComputation, SwapResults, SwapState,
         },
+        utils::{
+            add_fee_markup,
+            uniswap::{
+                i24_be_bytes_to_i32, liquidity_math,
+                lp_fee::{self, is_dynamic},
+                sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
+                swap_math,
+                tick_list::{TickInfo, TickList, TickListErrorKind},
+                tick_math::{
+                    get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
+                    MIN_SQRT_RATIO, MIN_TICK,
+                },
+                StepComputation, SwapResults, SwapState,
+            },
+        },
+        vm::constants::EXTERNAL_ACCOUNT,
     },
-    vm::constants::EXTERNAL_ACCOUNT,
+    impl_non_serializable_protocol,
 };
 
 // Gas limit constants for capping get_limits calculations
@@ -67,6 +70,8 @@ pub struct UniswapV4State {
     tick_spacing: i32,
     pub hook: Option<Box<dyn HookHandler>>,
 }
+
+impl_non_serializable_protocol!(UniswapV4State, "not supported due vm state deps");
 
 impl fmt::Debug for UniswapV4State {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -407,6 +412,7 @@ impl UniswapV4State {
     }
 }
 
+#[typetag::serde]
 impl ProtocolSim for UniswapV4State {
     // Not possible to implement correctly with the current interface because we need to know the
     // swap direction.

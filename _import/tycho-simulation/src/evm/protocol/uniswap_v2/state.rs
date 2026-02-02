@@ -3,6 +3,7 @@ use std::{any::Any, collections::HashMap};
 use alloy::primitives::U256;
 use num_bigint::BigUint;
 use num_traits::Zero;
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -30,7 +31,7 @@ const UNISWAP_V2_FEE_BPS: u32 = 30; // 0.3% fee
 const FEE_PRECISION: U256 = U256::from_limbs([10000, 0, 0, 0]);
 const FEE_NUMERATOR: U256 = U256::from_limbs([9970, 0, 0, 0]);
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UniswapV2State {
     pub reserve0: U256,
     pub reserve1: U256,
@@ -48,6 +49,7 @@ impl UniswapV2State {
     }
 }
 
+#[typetag::serde]
 impl ProtocolSim for UniswapV2State {
     fn fee(&self) -> f64 {
         cpmm_fee(UNISWAP_V2_FEE_BPS)
