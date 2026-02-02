@@ -21,6 +21,7 @@ use rand::prelude::IndexedRandom;
 use tokio::{signal, sync::Semaphore};
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::EnvFilter;
+use tycho_client::feed::SynchronizerState;
 use tycho_common::simulation::protocol_sim::ProtocolSim;
 use tycho_simulation::{
     evm::protocol::cowamm::constants::PROTOCOL_SYSTEM as COWAMM_PROTOCOL_SYSTEM,
@@ -765,27 +766,32 @@ fn select_components_to_process(
                 }
             }
 
-            for component_ids in current_state
-                .component_ids_by_protocol
-                .values()
-            {
-                let available_ids: Vec<_> = component_ids
-                    .iter()
-                    .filter(|id| {
-                        !update.update.states.keys().contains(id) && !all_selected_ids.contains(id)
-                    })
-                    .cloned()
-                    .collect();
+            for (protocol, component_ids) in &current_state.component_ids_by_protocol {
+                let protocol_sync_state = update.update.sync_states.get(protocol);
+                match protocol_sync_state {
+                    None => continue,
+                    Some(SynchronizerState::Ready(_)) => {
+                        let available_ids: Vec<_> = component_ids
+                            .iter()
+                            .filter(|id| {
+                                !update.update.states.keys().contains(id) &&
+                                    !all_selected_ids.contains(id)
+                            })
+                            .cloned()
+                            .collect();
 
-                let protocol_selected_ids: Vec<_> = available_ids
-                    .choose_multiple(
-                        &mut rand::rng(),
-                        (cli.max_simulations_stale as usize).min(available_ids.len()),
-                    )
-                    .cloned()
-                    .collect();
+                        let protocol_selected_ids: Vec<_> = available_ids
+                            .choose_multiple(
+                                &mut rand::rng(),
+                                (cli.max_simulations_stale as usize).min(available_ids.len()),
+                            )
+                            .cloned()
+                            .collect();
 
-                all_selected_ids.extend(protocol_selected_ids);
+                        all_selected_ids.extend(protocol_selected_ids);
+                    }
+                    _ => continue,
+                }
             }
             all_selected_ids
         };
