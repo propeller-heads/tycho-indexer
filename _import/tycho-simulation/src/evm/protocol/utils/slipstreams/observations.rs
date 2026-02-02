@@ -1,10 +1,10 @@
 use alloy::primitives::U256;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tycho_common::simulation::errors::SimulationError;
 
 use crate::evm::protocol::safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256};
 
-#[derive(Default, Copy, Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Default, Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Observation {
     pub(crate) block_timestamp: u32,
     pub(crate) tick_cumulative: i64,
@@ -59,7 +59,7 @@ impl Observation {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Observations {
     observations: Vec<Observation>,
 }

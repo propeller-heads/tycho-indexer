@@ -3,6 +3,7 @@ use std::{any::Any, collections::HashMap, fmt};
 use async_trait::async_trait;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Pow, ToPrimitive};
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::{protocol::GetAmountOutParams, token::Token},
@@ -19,7 +20,7 @@ use crate::rfq::{
     protocols::hashflow::{client::HashflowClient, models::HashflowMarketMakerLevels},
 };
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct HashflowState {
     pub base_token: Token,
     pub quote_token: Token,
@@ -75,6 +76,7 @@ impl HashflowState {
     }
 }
 
+#[typetag::serde]
 impl ProtocolSim for HashflowState {
     fn fee(&self) -> f64 {
         todo!()

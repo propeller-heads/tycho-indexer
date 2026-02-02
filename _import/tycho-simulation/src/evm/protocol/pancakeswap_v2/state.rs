@@ -3,6 +3,7 @@ use std::{any::Any, collections::HashMap};
 use alloy::primitives::U256;
 use num_bigint::BigUint;
 use num_traits::Zero;
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -30,7 +31,7 @@ const PANCAKESWAP_V2_FEE: u32 = 25; // 0.25% fee
 const FEE_PRECISION: U256 = U256::from_limbs([10000, 0, 0, 0]);
 const FEE_NUMERATOR: U256 = U256::from_limbs([9975, 0, 0, 0]);
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PancakeswapV2State {
     pub reserve0: U256,
     pub reserve1: U256,
@@ -48,6 +49,7 @@ impl PancakeswapV2State {
     }
 }
 
+#[typetag::serde]
 impl ProtocolSim for PancakeswapV2State {
     fn fee(&self) -> f64 {
         cpmm_fee(PANCAKESWAP_V2_FEE)

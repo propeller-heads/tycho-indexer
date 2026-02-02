@@ -1,5 +1,5 @@
 [workspace.package]
-version = "0.236.0"
+version = "0.237.0"
 
 [package]
 name = "tycho-simulation"
@@ -21,6 +21,7 @@ members = ["tycho-integration-test", "tycho-test", "tycho_simulation_py"]
 # Serialization/Deserialization
 serde = { version = "1.0", features = ["rc", "derive"] }
 serde_json = "1.0.105"
+typetag = "0.2.21"
 
 # Async & concurrency
 tokio = { version = "1.47.1", features = ["full"] }
@@ -41,9 +42,9 @@ hex = "0.4.3"
 async-trait = "0.1.88"
 
 # Tycho dependencies
-tycho-client = "<=0.132.2"
-tycho-common = "<=0.132.2"
-tycho-ethereum = "<=0.132.2"
+tycho-client = ">=0.133.0"
+tycho-common = ">=0.133.0"
+tycho-ethereum = ">=0.133.0"
 tycho-execution = ">=0.155.0"
 
 # EVM dependencies
@@ -58,6 +59,7 @@ serde_json = { workspace = true }
 uuid = { version = "1.4.1", features = ["serde", "v4", "fast-rng", "macro-diagnostics"] }
 hex = { workspace = true }
 chrono = { version = "0.4.26", features = ["serde"] }
+typetag = { workspace = true }
 
 # Error handling
 thiserror = "1"
@@ -101,8 +103,8 @@ tokio-stream = "0.1.16"
 dialoguer = "0.10.4"
 
 # Ekubo
-evm_ekubo_sdk = "0.6.2"
-ekubo_sdk = { version = "=1.0.2", features = ["evm"] }
+evm_ekubo_sdk = {version = "0.6.5", features = ["serde"]}
+ekubo_sdk = { version = "=1.0.2", features = ["evm", "serde"] }
 
 # rfq
 reqwest = { version = "0.12.22", optional = true }

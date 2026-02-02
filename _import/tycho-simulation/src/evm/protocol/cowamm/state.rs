@@ -2,6 +2,7 @@ use std::{any::Any, collections::HashMap, fmt::Debug};
 
 use alloy::primitives::U256;
 use num_bigint::{BigUint, ToBigUint};
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -27,7 +28,7 @@ const COWAMM_FEE: f64 = 0.0; // 0% fee
 // Token 3 tuple: (address, liquidity, weight)
 type TokenInfo = (Bytes, U256, U256);
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CowAMMState {
     /// The Pool Address
     pub address: Bytes,
@@ -386,6 +387,7 @@ impl CowAMMState {
     }
 }
 
+#[typetag::serde]
 impl ProtocolSim for CowAMMState {
     fn fee(&self) -> f64 {
         COWAMM_FEE

@@ -2,6 +2,7 @@ use std::{any::Any, collections::HashMap};
 
 use alloy::primitives::U256;
 use num_bigint::BigUint;
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -29,7 +30,7 @@ fn queue_capacity() -> U256 {
     U256::from(1) << 255
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RocketpoolState {
     pub reth_supply: U256,
     pub total_eth: U256,
@@ -228,6 +229,7 @@ impl RocketpoolState {
     }
 }
 
+#[typetag::serde]
 impl ProtocolSim for RocketpoolState {
     fn fee(&self) -> f64 {
         unimplemented!("Rocketpool has asymmetric fees; use spot_price or get_amount_out instead")
