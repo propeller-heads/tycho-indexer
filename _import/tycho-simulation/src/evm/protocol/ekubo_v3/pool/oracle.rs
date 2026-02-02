@@ -103,6 +103,7 @@ impl EkuboPool for OraclePool {
                 u64::from(
                     quote
                         .execution_resources
+                        .oracle
                         .snapshots_written,
                 ) * Self::GAS_COST_OF_UPDATING_ORACLE_SNAPSHOT,
             new_state: Self {

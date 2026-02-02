@@ -133,13 +133,10 @@ impl EkuboPool for MevCapturePool {
                 u64::from(
                     quote
                         .execution_resources
+                        .mev_capture
                         .state_update_count,
                 ) * Self::GAS_COST_OF_ONE_STATE_UPDATE +
-                BasePool::gas_costs(
-                    quote
-                        .execution_resources
-                        .base_pool_resources,
-                ),
+                BasePool::gas_costs(quote.execution_resources.base),
             new_state: Self {
                 imp: self.imp.clone(),
                 ticks: self.ticks.clone(),
@@ -158,7 +155,7 @@ impl EkuboPool for MevCapturePool {
             &self.imp,
             MevCapturePoolState { last_update_time: 0, base_pool_state: self.base_pool_state },
             0,
-            |r| r.base_pool_resources,
+            |r| r.base,
         )
     }
 
