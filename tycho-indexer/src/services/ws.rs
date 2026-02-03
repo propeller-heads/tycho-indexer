@@ -175,7 +175,7 @@ impl WsActor {
         extractor_id: &ExtractorIdentity,
         include_state: bool,
         compression: bool,
-        send_partials: bool,
+        partial_blocks: bool,
     ) {
         let extractor_id = extractor_id.clone();
         // Step 1: Direct HashMap access (no mutex needed since map is read-only after
@@ -240,13 +240,13 @@ impl WsActor {
                             if item.revert {
                                 // For reverts
                                 // Exclude partials if the client requested full blocks
-                                if !send_partials && item.is_partial() {
+                                if !partial_blocks && item.is_partial() {
                                     continue;
                                 }
                             } else {
                                 // For new blocks
                                 // Only forward items matching the partial/full preference
-                                if send_partials != item.is_partial() {
+                                if partial_blocks != item.is_partial() {
                                     continue;
                                 }
                             }
@@ -293,7 +293,7 @@ impl WsActor {
                         "extractor" => extractor_id.name.to_string(),
                         "user_identity" => user_identity.unwrap_or("unknown".to_string()),
                         "compression" => compression.to_string(),
-                        "partial_blocks" => send_partials.to_string(),
+                        "partial_blocks" => partial_blocks.to_string(),
                     )
                     .increment(1);
 

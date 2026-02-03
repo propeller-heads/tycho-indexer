@@ -92,7 +92,7 @@ pub struct ProtocolStateSynchronizer<R: RPCClient, D: DeltasClient> {
     timeout: u64,
     include_tvl: bool,
     compression: bool,
-    send_partials: bool,
+    partial_blocks: bool,
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -253,13 +253,13 @@ where
             timeout,
             include_tvl,
             compression,
-            send_partials: false,
+            partial_blocks: false,
         }
     }
 
     /// Enables receiving partial block updates.
     pub fn with_partial_blocks(mut self, partial_blocks: bool) -> Self {
-        self.send_partials = partial_blocks;
+        self.partial_blocks = partial_blocks;
         self
     }
 
@@ -367,7 +367,7 @@ where
         let subscription_options = SubscriptionOptions::new()
             .with_state(self.include_snapshots)
             .with_compression(self.compression)
-            .with_partial_blocks(self.send_partials);
+            .with_partial_blocks(self.partial_blocks);
         let (subscription_id, mut msg_rx) = match self
             .deltas_client
             .subscribe(self.extractor_id.clone(), subscription_options)
@@ -410,7 +410,7 @@ where
                 // Determine if this message is a candidate for starting synchronization.
                 // In partial mode, we wait for a new block to start (block number increases).
                 // In non-partial mode, all messages are candidates.
-                let is_new_block_candidate = if self.send_partials {
+                let is_new_block_candidate = if self.partial_blocks {
                     match msg.partial_block_index {
                         None => {
                             // If we get a full block, it is a candidate
