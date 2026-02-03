@@ -244,8 +244,8 @@ mod tests {
             number: 1,
             hash: Bytes::from(vec![0; 32]),
             parent_hash: Bytes::from(vec![0; 32]),
-            revert: false,
             timestamp: 1,
+            ..Default::default()
         }
     }
 

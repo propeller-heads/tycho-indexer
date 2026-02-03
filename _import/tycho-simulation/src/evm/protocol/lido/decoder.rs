@@ -151,7 +151,7 @@ mod tests {
     use num_bigint::BigUint;
     use num_traits::Zero;
     use rstest::rstest;
-    use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
+    use tycho_client::feed::synchronizer::ComponentWithState;
     use tycho_common::{
         dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState},
         Bytes,
@@ -170,16 +170,6 @@ mod tests {
 
     const ST_ETH_ADDRESS_PROXY: &str = "0xae7ab96520de3a18e5e111b5eaab095312d7fe84";
     const WST_ETH_ADDRESS: &str = "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0";
-
-    fn header() -> BlockHeader {
-        BlockHeader {
-            number: 1,
-            hash: Bytes::from(vec![0; 32]),
-            parent_hash: Bytes::from(vec![0; 32]),
-            revert: false,
-            timestamp: 1,
-        }
-    }
 
     #[tokio::test]
     async fn test_lido_steth_try_from() {
@@ -232,7 +222,7 @@ mod tests {
 
         let result = LidoState::try_from_with_header(
             snapshot,
-            header(),
+            Default::default(),
             &HashMap::new(),
             &HashMap::new(),
             &decoder_context,
@@ -316,7 +306,7 @@ mod tests {
 
         let result = LidoState::try_from_with_header(
             snapshot,
-            header(),
+            Default::default(),
             &HashMap::new(),
             &HashMap::new(),
             &decoder_context,
@@ -380,7 +370,7 @@ mod tests {
 
         let result = LidoState::try_from_with_header(
             snapshot,
-            header(),
+            Default::default(),
             &HashMap::new(),
             &HashMap::new(),
             &decoder_context,
@@ -458,7 +448,7 @@ mod tests {
 
         let result = LidoState::try_from_with_header(
             snapshot,
-            header(),
+            Default::default(),
             &HashMap::new(),
             &HashMap::new(),
             &decoder_context,

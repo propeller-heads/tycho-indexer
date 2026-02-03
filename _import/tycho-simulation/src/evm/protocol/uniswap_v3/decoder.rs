@@ -175,16 +175,6 @@ mod tests {
         .collect::<HashMap<String, Bytes>>()
     }
 
-    fn header() -> BlockHeader {
-        BlockHeader {
-            number: 1,
-            hash: Bytes::from(vec![0; 32]),
-            parent_hash: Bytes::from(vec![0; 32]),
-            revert: false,
-            timestamp: 1,
-        }
-    }
-
     #[tokio::test]
     async fn test_usv3_try_from() {
         let snapshot = ComponentWithState {
@@ -200,7 +190,7 @@ mod tests {
 
         let result = UniswapV3State::try_from_with_header(
             snapshot,
-            header(),
+            Default::default(),
             &HashMap::new(),
             &HashMap::new(),
             &DecoderContext::new(),
@@ -259,7 +249,7 @@ mod tests {
 
         let result = UniswapV3State::try_from_with_header(
             snapshot,
-            header(),
+            Default::default(),
             &HashMap::new(),
             &HashMap::new(),
             &DecoderContext::new(),
@@ -294,7 +284,7 @@ mod tests {
 
         let result = UniswapV3State::try_from_with_header(
             snapshot,
-            header(),
+            Default::default(),
             &HashMap::new(),
             &HashMap::new(),
             &DecoderContext::new(),

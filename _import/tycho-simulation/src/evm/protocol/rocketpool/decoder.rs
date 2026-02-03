@@ -168,16 +168,6 @@ mod tests {
         models::{DecoderContext, TryFromWithBlock},
     };
 
-    fn header() -> BlockHeader {
-        BlockHeader {
-            number: 1,
-            hash: Bytes::from(vec![0; 32]),
-            parent_hash: Bytes::from(vec![0; 32]),
-            revert: false,
-            timestamp: 1,
-        }
-    }
-
     fn create_test_snapshot() -> ComponentWithState {
         ComponentWithState {
             state: ResponseProtocolState {
@@ -246,7 +236,7 @@ mod tests {
 
         let result = RocketpoolState::try_from_with_header(
             snapshot,
-            header(),
+            BlockHeader::default(),
             &HashMap::new(),
             &HashMap::new(),
             &DecoderContext::new(),
@@ -335,7 +325,7 @@ mod tests {
 
         let result = RocketpoolState::try_from_with_header(
             snapshot,
-            header(),
+            BlockHeader::default(),
             &HashMap::new(),
             &HashMap::new(),
             &DecoderContext::new(),
@@ -415,7 +405,7 @@ mod tests {
 
         let result = RocketpoolState::try_from_with_header(
             snapshot,
-            header(),
+            BlockHeader::default(),
             &HashMap::new(),
             &HashMap::new(),
             &DecoderContext::new(),

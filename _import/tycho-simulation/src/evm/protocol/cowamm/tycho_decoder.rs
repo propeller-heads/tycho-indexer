@@ -162,16 +162,6 @@ mod tests {
 
     use super::*;
 
-    fn header() -> BlockHeader {
-        BlockHeader {
-            number: 1,
-            hash: Bytes::from(vec![0; 32]),
-            parent_hash: Bytes::from(vec![0; 32]),
-            revert: false,
-            timestamp: 0,
-        }
-    }
-
     #[tokio::test]
     async fn test_cowamm_try_from_with_block() {
         let snapshot = ComponentWithState {
@@ -185,7 +175,7 @@ mod tests {
 
         let result = CowAMMState::try_from_with_header(
             snapshot,
-            header(),
+            Default::default(),
             &HashMap::default(),
             &HashMap::default(),
             &decoder_context,
@@ -237,7 +227,7 @@ mod tests {
 
         let result = CowAMMState::try_from_with_header(
             snapshot,
-            header(),
+            Default::default(),
             &HashMap::default(),
             &HashMap::default(),
             &decoder_context,

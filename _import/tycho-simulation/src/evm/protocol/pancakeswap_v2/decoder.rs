@@ -45,16 +45,6 @@ mod tests {
         models::{DecoderContext, TryFromWithBlock},
     };
 
-    fn header() -> BlockHeader {
-        BlockHeader {
-            number: 1,
-            hash: Bytes::from(vec![0; 32]),
-            parent_hash: Bytes::from(vec![0; 32]),
-            revert: false,
-            timestamp: 1,
-        }
-    }
-
     #[tokio::test]
     async fn test_pancakeswap_v2_try_from() {
         let snapshot = ComponentWithState {
@@ -73,7 +63,7 @@ mod tests {
 
         let result = PancakeswapV2State::try_from_with_header(
             snapshot,
-            header(),
+            BlockHeader::default(),
             &HashMap::new(),
             &HashMap::new(),
             &DecoderContext::new(),
@@ -108,7 +98,7 @@ mod tests {
 
         let result = PancakeswapV2State::try_from_with_header(
             snapshot,
-            header(),
+            BlockHeader::default(),
             &HashMap::new(),
             &HashMap::new(),
             &DecoderContext::new(),

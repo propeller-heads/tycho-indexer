@@ -34,7 +34,7 @@ mod tests {
 
     use alloy::primitives::U256;
     use rstest::rstest;
-    use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
+    use tycho_client::feed::synchronizer::ComponentWithState;
     use tycho_common::{dto::ResponseProtocolState, Bytes};
 
     use super::super::state::UniswapV2State;
@@ -42,16 +42,6 @@ mod tests {
         errors::InvalidSnapshotError,
         models::{DecoderContext, TryFromWithBlock},
     };
-
-    fn header() -> BlockHeader {
-        BlockHeader {
-            number: 1,
-            hash: Bytes::from(vec![0; 32]),
-            parent_hash: Bytes::from(vec![0; 32]),
-            revert: false,
-            timestamp: 1,
-        }
-    }
 
     #[tokio::test]
     async fn test_usv2_try_from() {
@@ -72,7 +62,7 @@ mod tests {
         let decoder_context = DecoderContext::new();
         let result = UniswapV2State::try_from_with_header(
             snapshot,
-            header(),
+            Default::default(),
             &HashMap::new(),
             &HashMap::new(),
             &decoder_context,
@@ -108,7 +98,7 @@ mod tests {
         let decoder_context = DecoderContext::new();
         let result = UniswapV2State::try_from_with_header(
             snapshot,
-            header(),
+            Default::default(),
             &HashMap::new(),
             &HashMap::new(),
             &decoder_context,
