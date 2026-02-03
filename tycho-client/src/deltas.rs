@@ -117,11 +117,12 @@ pub enum DeltasError {
 pub struct SubscriptionOptions {
     include_state: bool,
     compression: bool,
+    partial_blocks: bool,
 }
 
 impl Default for SubscriptionOptions {
     fn default() -> Self {
-        Self { include_state: true, compression: true }
+        Self { include_state: true, compression: true, partial_blocks: false }
     }
 }
 
@@ -135,6 +136,10 @@ impl SubscriptionOptions {
     }
     pub fn with_compression(mut self, val: bool) -> Self {
         self.compression = val;
+        self
+    }
+    pub fn with_partial_blocks(mut self, val: bool) -> Self {
+        self.partial_blocks = val;
         self
     }
 }
@@ -758,7 +763,7 @@ impl DeltasClient for WsDeltasClient {
                 extractor_id,
                 include_state: options.include_state,
                 compression: options.compression,
-                partial_blocks: false, // TODO: expose this as option
+                partial_blocks: options.partial_blocks,
             };
             inner
                 .ws_send(tungstenite::protocol::Message::Text(

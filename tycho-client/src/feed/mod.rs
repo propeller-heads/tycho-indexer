@@ -23,7 +23,7 @@ use tokio::{
 use tracing::{debug, error, info, trace, warn};
 use tycho_common::{
     display::opt,
-    dto::{Block, ExtractorIdentity},
+    dto::{BlockChanges, ExtractorIdentity},
     Bytes,
 };
 
@@ -52,6 +52,15 @@ pub struct BlockHeader {
     pub parent_hash: Bytes,
     pub revert: bool,
     pub timestamp: u64,
+    /// Index of a partial block update within a block. None for full blocks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub partial_block_index: Option<u32>,
+}
+
+impl BlockHeader {
+    fn is_partial(&self) -> bool {
+        self.partial_block_index.is_some()
+    }
 }
 
 impl Display for BlockHeader {
@@ -63,18 +72,23 @@ impl Display for BlockHeader {
             hex::encode(&self.hash)
         };
 
-        write!(f, "Block #{} [0x{}..]", self.number, short_hash)
+        match self.partial_block_index {
+            Some(idx) => write!(f, "Block #{} [0x{}..] (partial {})", self.number, short_hash, idx),
+            None => write!(f, "Block #{} [0x{}..]", self.number, short_hash),
+        }
     }
 }
 
-impl BlockHeader {
-    fn from_block(block: &Block, revert: bool) -> Self {
+impl From<&BlockChanges> for BlockHeader {
+    fn from(block_changes: &BlockChanges) -> Self {
+        let block = &block_changes.block;
         Self {
             hash: block.hash.clone(),
             number: block.number,
             parent_hash: block.parent_hash.clone(),
-            revert,
+            revert: block_changes.revert,
             timestamp: block.ts.and_utc().timestamp() as u64,
+            partial_block_index: block_changes.partial_block_index,
         }
     }
 }
@@ -358,7 +372,8 @@ impl SynchronizerStream {
                     debug!(%extractor_id, block=%msg.header, "Received new message during catch-up");
                     let block_pos = block_history.determine_block_position(&msg.header)?;
                     results.push(msg);
-                    if matches!(block_pos, BlockPosition::NextExpected) {
+                    if matches!(block_pos, BlockPosition::NextExpected | BlockPosition::NextPartial)
+                    {
                         break;
                     }
                 }
@@ -450,7 +465,7 @@ impl SynchronizerStream {
         let block = &latest_retrieved;
 
         match block_history.determine_block_position(&latest_retrieved)? {
-            BlockPosition::NextExpected => {
+            BlockPosition::NextExpected | BlockPosition::NextPartial => {
                 self.state = SynchronizerState::Ready(latest_retrieved.clone());
                 trace!(
                     next = %latest_retrieved,
@@ -1128,6 +1143,41 @@ mod tests {
                 parent_hash: Bytes::from(vec![block - 1]),
                 revert: false,
                 timestamp: 1000,
+                partial_block_index: None,
+            },
+            ..Default::default()
+        }
+    }
+
+    /// Creates a partial block header message with an ephemeral hash encoding block number and
+    /// partial index.
+    fn partial_header_message(block: u8, partial_idx: u32) -> StateSyncMessage<BlockHeader> {
+        // Ephemeral hash encodes block number and partial index for uniqueness
+        let hash_bytes =
+            [(block as u64).to_be_bytes().as_slice(), partial_idx.to_be_bytes().as_slice()]
+                .concat();
+        StateSyncMessage {
+            header: BlockHeader {
+                number: block as u64,
+                hash: Bytes::from(hash_bytes),
+                parent_hash: Bytes::from(vec![block - 1]),
+                revert: false,
+                timestamp: 1000,
+                partial_block_index: Some(partial_idx),
+            },
+            ..Default::default()
+        }
+    }
+
+    fn revert_header_message(block: u8) -> StateSyncMessage<BlockHeader> {
+        StateSyncMessage {
+            header: BlockHeader {
+                number: block as u64,
+                hash: Bytes::from(vec![block]),
+                parent_hash: Bytes::from(vec![block - 1]),
+                revert: true,
+                timestamp: 1000,
+                partial_block_index: None,
             },
             ..Default::default()
         }
@@ -1221,6 +1271,32 @@ mod tests {
             .await
             .expect("Nanny failed to exit within time")
             .expect("Nanny panicked");
+    }
+
+    /// Send message to sync and assert it transitions to Ready at expected block/partial
+    async fn send_and_assert_ready(
+        sync: &MockStateSync,
+        sync_name: &str,
+        rx: &mut Receiver<BlockSyncResult<FeedMessage>>,
+        msg: StateSyncMessage<BlockHeader>,
+        expected_block: u64,
+        expected_partial: Option<u32>,
+    ) {
+        sync.send_header(msg)
+            .await
+            .expect("send failed");
+        let feed_msg = receive_message(rx).await;
+        let state = feed_msg
+            .sync_states
+            .get(sync_name)
+            .unwrap();
+        match state {
+            SynchronizerState::Ready(h) => {
+                assert_eq!(h.number, expected_block, "wrong block number");
+                assert_eq!(h.partial_block_index, expected_partial, "wrong partial index");
+            }
+            other => panic!("expected Ready, got {:?}", other),
+        }
     }
 
     #[test(tokio::test)]
@@ -1777,6 +1853,167 @@ mod tests {
                 .unwrap(),
             SynchronizerState::Delayed(_)
         );
+
+        shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
+    }
+
+    #[test(tokio::test)]
+    async fn test_partial_blocks_normal_operation() {
+        // Normal operation: partials with arbitrary index increments, then advance to next block
+        // Scenario: block 1 → partials 0,3,7 for block 2 → partials 0,2 for block 3
+        let (v2_sync, v3_sync, nanny_handle, mut rx) = setup_block_sync().await;
+
+        // Partials for block 2 with arbitrary increments (only v2, v3 ignored)
+        send_and_assert_ready(
+            &v2_sync,
+            "uniswap-v2",
+            &mut rx,
+            partial_header_message(2, 0),
+            2,
+            Some(0),
+        )
+        .await;
+        send_and_assert_ready(
+            &v2_sync,
+            "uniswap-v2",
+            &mut rx,
+            partial_header_message(2, 3),
+            2,
+            Some(3),
+        )
+        .await;
+        send_and_assert_ready(
+            &v2_sync,
+            "uniswap-v2",
+            &mut rx,
+            partial_header_message(2, 7),
+            2,
+            Some(7),
+        )
+        .await;
+
+        // Advance to block 3 with partials
+        send_and_assert_ready(
+            &v2_sync,
+            "uniswap-v2",
+            &mut rx,
+            partial_header_message(3, 0),
+            3,
+            Some(0),
+        )
+        .await;
+        send_and_assert_ready(
+            &v2_sync,
+            "uniswap-v2",
+            &mut rx,
+            partial_header_message(3, 2),
+            3,
+            Some(2),
+        )
+        .await;
+
+        shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
+    }
+
+    #[test(tokio::test)]
+    async fn test_partial_blocks_handles_reverts() {
+        // Revert resets state and allows continuation on new fork with full blocks
+        // Scenario: block 1 → block 2 → partials for block 3 → revert to 2 → full block 3
+        let (v2_sync, v3_sync, nanny_handle, mut rx) = setup_block_sync().await;
+
+        // Advance to full block 2 (only v2, v3 ignored)
+        send_and_assert_ready(&v2_sync, "uniswap-v2", &mut rx, header_message(2), 2, None).await;
+
+        // Partials for block 3
+        send_and_assert_ready(
+            &v2_sync,
+            "uniswap-v2",
+            &mut rx,
+            partial_header_message(3, 0),
+            3,
+            Some(0),
+        )
+        .await;
+        send_and_assert_ready(
+            &v2_sync,
+            "uniswap-v2",
+            &mut rx,
+            partial_header_message(3, 2),
+            3,
+            Some(2),
+        )
+        .await;
+
+        // Revert to block 2
+        send_and_assert_ready(&v2_sync, "uniswap-v2", &mut rx, revert_header_message(2), 2, None)
+            .await;
+
+        // New fork: full block 3
+        send_and_assert_ready(&v2_sync, "uniswap-v2", &mut rx, header_message(3), 3, None).await;
+
+        shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
+    }
+
+    #[test(tokio::test)]
+    async fn test_partial_blocks_delayed_synchronizer_catches_up() {
+        // Delayed synchronizer catches up when receiving partial blocks
+        // Scenario: v2 receives partials while v3 is delayed, then v3 catches up
+        let (v2_sync, v3_sync, nanny_handle, mut rx) = setup_block_sync().await;
+
+        // v2 receives partial 0 for block 2; v3 times out and becomes Delayed
+        let partial_0 = partial_header_message(2, 0);
+        v2_sync
+            .send_header(partial_0.clone())
+            .await
+            .expect("send partial 0 failed");
+
+        let msg = receive_message(&mut rx).await;
+        // v2 is Ready with partial 0, v3 is Delayed
+        assert!(msg
+            .state_msgs
+            .contains_key("uniswap-v2"));
+        assert!(!msg
+            .state_msgs
+            .contains_key("uniswap-v3"));
+        assert!(matches!(
+            msg.sync_states.get("uniswap-v2").unwrap(),
+            SynchronizerState::Ready(h) if h.partial_block_index == Some(0)
+        ));
+        assert!(matches!(
+            msg.sync_states
+                .get("uniswap-v3")
+                .unwrap(),
+            SynchronizerState::Delayed(_)
+        ));
+
+        // v2 advances to partial 2; v3 catches up by sending partial 0 then partial 2
+        let partial_2 = partial_header_message(2, 2);
+        v2_sync
+            .send_header(partial_2.clone())
+            .await
+            .expect("send partial 2 failed");
+        v3_sync
+            .send_header(partial_0.clone())
+            .await
+            .expect("v3 catch up partial 0 failed");
+        v3_sync
+            .send_header(partial_2.clone())
+            .await
+            .expect("v3 catch up partial 2 failed");
+
+        // v3 catches up within a few message cycles
+        let mut v3_ready = false;
+        for _ in 0..3 {
+            let msg = receive_message(&mut rx).await;
+            if matches!(
+                msg.sync_states.get("uniswap-v3").unwrap(),
+                SynchronizerState::Ready(h) if h.partial_block_index == Some(2)
+            ) {
+                v3_ready = true;
+                break;
+            }
+        }
+        assert!(v3_ready, "v3 caught up to partial 2");
 
         shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
     }

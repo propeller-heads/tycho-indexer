@@ -19,6 +19,10 @@ pub enum BlockHistoryError {
     RevertPositionNotFound,
     #[error("Pushing a detached block is unsafe")]
     DetachedBlock,
+    #[error("Expected latest block to be a partial block for NextPartial position")]
+    ExpectedPartialBlock,
+    #[error("Partial block reverts are not supported - received revert for partial block")]
+    PartialBlockRevert,
 }
 
 pub struct BlockHistory {
@@ -31,6 +35,8 @@ pub struct BlockHistory {
 pub enum BlockPosition {
     /// The next expected block
     NextExpected,
+    /// The next partial block
+    NextPartial,
     /// The latest processed block
     Latest,
     /// A previously seen block
@@ -92,6 +98,11 @@ impl BlockHistory {
     /// May error if the block does not fit the tip of the chain, or if history is empty and the
     /// block is a revert.
     pub fn push(&mut self, block: BlockHeader) -> Result<(), BlockHistoryError> {
+        // Partial block reverts are not supported.
+        if block.revert && block.is_partial() {
+            return Err(BlockHistoryError::PartialBlockRevert);
+        }
+
         let pos = self.determine_block_position(&block)?;
         match pos {
             BlockPosition::NextExpected => {
@@ -137,6 +148,34 @@ impl BlockHistory {
                 }
                 Ok(())
             }
+            BlockPosition::NextPartial => {
+                // Pop the latest partial block and add the new one instead.
+                // This is because they are not connected to each other using parent hashes, so
+                // managing them would add unnecessary complexity.
+                let latest = self
+                    .history
+                    .back()
+                    .ok_or(BlockHistoryError::EmptyHistory)?;
+
+                // Safety check: the latest block must be a partial block. If it's not, something
+                // went wrong in determine_block_position or there's an unexpected state.
+                if !latest.is_partial() {
+                    error!(
+                        latest_block = ?latest,
+                        incoming_block = ?block,
+                        "NextPartial returned but latest block is not a partial"
+                    );
+                    return Err(BlockHistoryError::ExpectedPartialBlock);
+                }
+
+                debug!(
+                    tip = ?block.parent_hash,
+                    "BlockHistoryPartialUpdate"
+                );
+                self.history.pop_back();
+                self.history.push_back(block);
+                Ok(())
+            }
             _ => Ok(()),
         }
     }
@@ -157,6 +196,20 @@ impl BlockHistory {
         Ok(if block.parent_hash == latest.hash {
             // if the block is the next expected block.
             BlockPosition::NextExpected
+        } else if block.number == latest.number && block.is_partial() {
+            // For a partial block at the same height, determine its position relative to latest.
+            // If the latest is also a partial block, we can compare their partial indices.
+            // If the latest is a full block, any partial block at the same height is considered
+            // delayed.
+            match (latest.partial_block_index, block.partial_block_index) {
+                (Some(latest_idx), Some(incoming_idx)) if incoming_idx > latest_idx => {
+                    BlockPosition::NextPartial
+                }
+                (Some(latest_idx), Some(incoming_idx)) if incoming_idx == latest_idx => {
+                    BlockPosition::Latest
+                }
+                _ => BlockPosition::Delayed,
+            }
         } else if (block.hash == latest.hash) & !block.revert {
             // if the block is the latest block and it is not a revert.
             BlockPosition::Latest
@@ -255,7 +308,6 @@ mod test {
             number: 1,
             hash: random_hash(),
             parent_hash: int_hash(0),
-            revert: false,
             ..Default::default()
         };
         let mut history =
@@ -265,11 +317,11 @@ mod test {
             .push(new_block.clone())
             .expect("push failed");
 
-        let hist = history
+        let hist: Vec<_> = history
             .history
             .iter()
             .cloned()
-            .collect::<Vec<_>>();
+            .collect();
         assert_eq!(hist, vec![start_blocks[0].clone(), new_block]);
     }
 
@@ -301,7 +353,6 @@ mod test {
             number: 3,
             hash: random_hash(),
             parent_hash: int_hash(2),
-            revert: false,
             ..Default::default()
         };
         let mut exp_history: Vec<_> = blocks[0..3]
@@ -315,7 +366,7 @@ mod test {
             .push(revert_block.clone())
             .expect("push failed");
         history
-            .push(new_block.clone())
+            .push(new_block)
             .expect("push failed");
 
         assert_eq!(history.history, exp_history);
@@ -327,7 +378,7 @@ mod test {
     fn test_push_detached_block() {
         let blocks = generate_blocks(3, 0, None);
         let mut history = BlockHistory::new(blocks.clone(), 5).expect("failed to create history");
-        let new_block = BlockHeader {
+        let detached = BlockHeader {
             number: 2,
             hash: int_hash(2),
             parent_hash: random_hash(),
@@ -335,29 +386,25 @@ mod test {
             ..Default::default()
         };
 
-        let res = history.push(new_block.clone());
-
-        assert!(res.is_err());
+        assert!(history.push(detached).is_err());
     }
 
     #[test]
-    fn test_new_block_history() {
+    fn test_new_block_history_filters_disconnected() {
         // Create a valid chain of 5 blocks starting from block 5
         let mut blocks = generate_blocks(5, 5, None);
 
         // Add some disconnected blocks
         blocks.push(BlockHeader {
-            number: 2, // Gap in block numbers
+            number: 2,
             hash: random_hash(),
             parent_hash: random_hash(),
-            revert: false,
             ..Default::default()
         });
         blocks.push(BlockHeader {
             number: 4,
             hash: random_hash(),
-            parent_hash: random_hash(), // Disconnected
-            revert: false,
+            parent_hash: random_hash(),
             ..Default::default()
         });
 
@@ -365,38 +412,51 @@ mod test {
 
         // Should only contain the original 5 connected blocks
         assert_eq!(history.history.len(), 5);
-
-        // Verify the blocks are in order
+        // Verify chain connectivity
         let blocks: Vec<_> = history.history.iter().collect();
-        for i in 0..blocks.len() - 1 {
-            assert_eq!(blocks[i].number + 1, blocks[i + 1].number);
-            assert_eq!(blocks[i].hash, blocks[i + 1].parent_hash);
+        for pair in blocks.windows(2) {
+            assert_eq!(pair[0].number + 1, pair[1].number);
+            assert_eq!(pair[0].hash, pair[1].parent_hash);
         }
     }
 
     #[rstest]
-    #[case(BlockHeader { number: 15, hash: int_hash(15), parent_hash: int_hash(14), revert: false,..Default::default() }, BlockPosition::NextExpected)]
-    #[case(BlockHeader { number: 14, hash: int_hash(14), parent_hash: int_hash(13), revert: false,..Default::default() }, BlockPosition::Latest)]
-    #[case(BlockHeader { number: 16, hash: int_hash(16), parent_hash: int_hash(15), revert: false ,..Default::default()}, BlockPosition::Advanced)]
-    #[case(BlockHeader { number: 12, hash: int_hash(12), parent_hash: int_hash(11), revert: false ,..Default::default()}, BlockPosition::Delayed)]
-    #[case(BlockHeader { number: 14, hash: int_hash(14), parent_hash: int_hash(13), revert: true ,..Default::default()}, BlockPosition::NextExpected)]
-    #[case(BlockHeader { number: 1, hash: int_hash(1), parent_hash: int_hash(0), revert: false ,..Default::default()}, BlockPosition::Delayed)]
-    fn test_determine_position(#[case] add_block: BlockHeader, #[case] exp_pos: BlockPosition) {
+    #[case::next_expected(15, 14, false, BlockPosition::NextExpected)]
+    #[case::latest(14, 13, false, BlockPosition::Latest)]
+    #[case::advanced(16, 15, false, BlockPosition::Advanced)]
+    #[case::delayed_in_history(12, 11, false, BlockPosition::Delayed)]
+    #[case::revert_is_next_expected(14, 13, true, BlockPosition::NextExpected)]
+    #[case::delayed_before_history(1, 0, false, BlockPosition::Delayed)]
+    fn test_determine_position(
+        #[case] number: u64,
+        #[case] parent_number: u64,
+        #[case] revert: bool,
+        #[case] expected: BlockPosition,
+    ) {
+        // History contains blocks 5-14
         let start_blocks = generate_blocks(10, 5, None);
         let history = BlockHistory::new(start_blocks, 20).expect("failed to create history");
 
-        let res = history
-            .determine_block_position(&add_block)
+        let block = BlockHeader {
+            number,
+            hash: int_hash(number),
+            parent_hash: int_hash(parent_number),
+            revert,
+            ..Default::default()
+        };
+
+        let result = history
+            .determine_block_position(&block)
             .expect("failed to determine position");
 
-        assert_eq!(res, exp_pos);
+        assert_eq!(result, expected);
     }
 
     #[test]
     fn test_determine_position_reverted_branch() {
         let start_blocks = generate_blocks(10, 0, None);
         let mut history = BlockHistory::new(start_blocks, 15).expect("failed to create history");
-        // revert by 2 blocks, add a new one
+        // Revert blocks 8-9, add new block 8
         history
             .push(BlockHeader {
                 number: 7,
@@ -411,22 +471,221 @@ mod test {
                 number: 8,
                 hash: random_hash(),
                 parent_hash: int_hash(7),
-                revert: false,
                 ..Default::default()
             })
             .unwrap();
-        let add_block = BlockHeader {
+
+        // Block from old branch should be delayed
+        let old_branch_block = BlockHeader {
             number: 9,
             hash: int_hash(9),
             parent_hash: int_hash(8),
-            revert: false,
             ..Default::default()
         };
 
-        let res = history
-            .determine_block_position(&add_block)
+        let result = history
+            .determine_block_position(&old_branch_block)
             .expect("failed to determine position");
 
-        assert_eq!(res, BlockPosition::Delayed);
+        assert_eq!(result, BlockPosition::Delayed);
+    }
+
+    // ==================== Partial Block Tests ====================
+
+    /// Creates a partial block with an ephemeral hash encoding (block_number, partial_idx).
+    fn partial_block(number: u64, partial_idx: u32, parent_hash: Bytes) -> BlockHeader {
+        let hash = Bytes::from(
+            [number.to_be_bytes().as_slice(), partial_idx.to_be_bytes().as_slice()].concat(),
+        );
+        BlockHeader {
+            number,
+            hash,
+            parent_hash,
+            partial_block_index: Some(partial_idx),
+            ..Default::default()
+        }
+    }
+
+    /// Creates history with full blocks 0..(block_num-1) and partials 0..=partial_idx for
+    /// block_num.
+    fn history_with_partial(block_num: u64, partial_idx: u32) -> (BlockHistory, Bytes) {
+        let full_blocks = generate_blocks(block_num as usize, 0, None);
+        let parent_hash = full_blocks
+            .last()
+            .map(|b| b.hash.clone())
+            .unwrap_or_else(random_hash);
+        let mut history = BlockHistory::new(full_blocks, 20).unwrap();
+
+        for idx in 0..=partial_idx {
+            history
+                .push(partial_block(block_num, idx, parent_hash.clone()))
+                .unwrap();
+        }
+        (history, parent_hash)
+    }
+
+    #[rstest]
+    #[case::next_partial_after_partial_0(0, 1, BlockPosition::NextPartial)]
+    #[case::next_partial_with_skip(2, 5, BlockPosition::NextPartial)]
+    #[case::duplicate_partial_is_latest(3, 3, BlockPosition::Latest)]
+    #[case::earlier_partial_delayed(3, 1, BlockPosition::Delayed)]
+    #[case::first_partial_delayed(3, 0, BlockPosition::Delayed)]
+    fn test_determine_position_partial_ordering(
+        #[case] history_partial_idx: u32,
+        #[case] incoming_partial_idx: u32,
+        #[case] expected: BlockPosition,
+    ) {
+        let block_num = 10u64;
+        let (history, parent_hash) = history_with_partial(block_num, history_partial_idx);
+
+        let incoming = partial_block(block_num, incoming_partial_idx, parent_hash);
+
+        assert_eq!(
+            history
+                .determine_block_position(&incoming)
+                .unwrap(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::first_partial_for_new_block_is_next_expected(10, 10, 0, BlockPosition::NextExpected)]
+    #[case::partial_after_full_block_same_number_is_delayed(11, 10, 0, BlockPosition::Delayed)]
+    fn test_determine_position_partial_edge_cases(
+        #[case] history_len: usize,
+        #[case] incoming_block_num: u64,
+        #[case] incoming_partial_idx: u32,
+        #[case] expected: BlockPosition,
+    ) {
+        let blocks = generate_blocks(history_len, 0, None);
+        let history = BlockHistory::new(blocks.clone(), 20).unwrap();
+        let parent_hash = blocks
+            .get(incoming_block_num.saturating_sub(1) as usize)
+            .map(|b| b.hash.clone())
+            .unwrap_or_else(random_hash);
+
+        let incoming = partial_block(incoming_block_num, incoming_partial_idx, parent_hash);
+
+        assert_eq!(
+            history
+                .determine_block_position(&incoming)
+                .unwrap(),
+            expected
+        );
+    }
+
+    #[test]
+    fn test_partial_block_lifecycle() {
+        let blocks = generate_blocks(10, 0, None);
+        let parent_hash = blocks.last().unwrap().hash.clone();
+        let mut history = BlockHistory::new(blocks, 20).unwrap();
+
+        // Phase 1: Sequential partials replace the previous
+        history
+            .push(partial_block(10, 0, parent_hash.clone()))
+            .unwrap();
+        assert_eq!(
+            history
+                .latest()
+                .unwrap()
+                .partial_block_index,
+            Some(0)
+        );
+        assert_eq!(history.history.len(), 11);
+
+        history
+            .push(partial_block(10, 1, parent_hash.clone()))
+            .unwrap();
+        assert_eq!(
+            history
+                .latest()
+                .unwrap()
+                .partial_block_index,
+            Some(1)
+        );
+        assert_eq!(history.history.len(), 11); // Replaced, not added
+
+        let p3 = partial_block(10, 3, parent_hash.clone());
+        history.push(p3.clone()).unwrap();
+        assert_eq!(
+            history
+                .latest()
+                .unwrap()
+                .partial_block_index,
+            Some(3)
+        );
+        assert_eq!(history.latest().unwrap().hash, p3.hash);
+
+        // Phase 2: Out-of-order partial is no-op
+        history
+            .push(partial_block(10, 1, parent_hash.clone()))
+            .unwrap();
+        assert_eq!(
+            history
+                .latest()
+                .unwrap()
+                .partial_block_index,
+            Some(3)
+        );
+
+        // Phase 3: Revert invalidates partials
+        let revert = BlockHeader {
+            number: 9,
+            hash: int_hash(9),
+            parent_hash: int_hash(8),
+            revert: true,
+            ..Default::default()
+        };
+        history.push(revert).unwrap();
+        assert_eq!(history.latest().unwrap().number, 9);
+        assert!(history
+            .latest()
+            .unwrap()
+            .partial_block_index
+            .is_none());
+
+        let reverted_hash =
+            Bytes::from([10u64.to_be_bytes().as_slice(), 3u32.to_be_bytes().as_slice()].concat());
+        assert!(history.reverts.contains(&reverted_hash));
+
+        // Phase 4: Continue with new partials on new fork
+        let new_p0 = partial_block(10, 0, int_hash(9));
+        history.push(new_p0.clone()).unwrap();
+        assert_eq!(history.latest().unwrap().number, 10);
+        assert_eq!(
+            history
+                .latest()
+                .unwrap()
+                .partial_block_index,
+            Some(0)
+        );
+        assert_eq!(history.latest().unwrap().hash, new_p0.hash);
+    }
+
+    #[test]
+    fn test_partial_block_revert_is_rejected() {
+        // Partial block reverts are not supported and should error
+        let blocks = generate_blocks(10, 0, None);
+        let parent_hash = blocks.last().unwrap().hash.clone();
+        let mut history = BlockHistory::new(blocks, 20).unwrap();
+
+        // Add a partial block first
+        history
+            .push(partial_block(10, 0, parent_hash.clone()))
+            .unwrap();
+
+        // Try to push a partial block with revert=true - should error
+        let partial_revert = BlockHeader {
+            number: 9,
+            hash: int_hash(9),
+            parent_hash: int_hash(8),
+            revert: true,
+            partial_block_index: Some(0), // This makes it a partial revert
+            ..Default::default()
+        };
+
+        let result = history.push(partial_revert);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), BlockHistoryError::PartialBlockRevert));
     }
 }
