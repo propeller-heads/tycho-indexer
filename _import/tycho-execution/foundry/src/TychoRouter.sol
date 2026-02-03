@@ -1061,7 +1061,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         onlyRole(EXECUTOR_SETTER_ROLE)
     {
         for (uint256 i = 0; i < targets.length; i++) {
-            _setExecutor(targets[i], _blocksToDelayForNewExecutor());
+            _setExecutor(targets[i]);
         }
     }
 
@@ -1264,14 +1264,5 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         }
         // Fees exist, must route through this contract
         return address(this);
-    }
-
-    function _blocksToDelayForNewExecutor()
-        internal
-        view
-        virtual
-        returns (uint64)
-    {
-        return 50400; // ~1 week
     }
 }

@@ -66,15 +66,6 @@ contract TychoRouterExposed is TychoRouter {
     function exposedDeltaAccounting(address token, uint256 amount) external {
         _updateDeltaAccounting(token, int256(amount));
     }
-
-    function _blocksToDelayForNewExecutor()
-        internal
-        view
-        override
-        returns (uint64)
-    {
-        return 0;
-    }
 }
 
 contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {

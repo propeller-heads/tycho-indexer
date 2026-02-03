@@ -21,11 +21,7 @@ contract DispatcherExposed is Dispatcher {
     }
 
     function exposedSetExecutor(address target) external {
-        _setExecutor(target, 50400);
-    }
-
-    function exposedSetExecutorImmediately(address target) external {
-        _setExecutor(target, 0);
+        _setExecutor(target);
     }
 
     function exposedRemoveExecutor(address target) external {
@@ -117,12 +113,12 @@ contract DispatcherTest is Constants {
         vm.expectRevert(
             abi.encodeWithSelector(Dispatcher__NonContractExecutor.selector)
         );
-        dispatcherExposed.exposedSetExecutorImmediately(BOB);
+        dispatcherExposed.exposedSetExecutor(BOB);
     }
 
     function testCallExecutorCallFailed() public {
         // Bad data is provided to an approved executor - causing the call to fail
-        dispatcherExposed.exposedSetExecutorImmediately(
+        dispatcherExposed.exposedSetExecutor(
             address(0xe592557AB9F4A75D992283fD6066312FF013ba3d)
         );
         bytes memory data =
