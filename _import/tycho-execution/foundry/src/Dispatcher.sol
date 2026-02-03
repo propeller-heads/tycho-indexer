@@ -85,6 +85,7 @@ contract Dispatcher is RestrictTransferFrom {
     ) internal returns (uint256 calculatedAmount) {
         uint64 activationBlock = executorActivationBlock[executor];
 
+        // slither-disable-next-line incorrect-equality
         if (activationBlock == 0) {
             revert Dispatcher__UnapprovedExecutor(executor);
         }
@@ -181,6 +182,7 @@ contract Dispatcher is RestrictTransferFrom {
 
         uint64 activationBlock = executorActivationBlock[executor];
 
+        // slither-disable-next-line incorrect-equality
         if (activationBlock == 0) {
             revert Dispatcher__UnapprovedExecutor(executor);
         }
@@ -259,6 +261,7 @@ contract Dispatcher is RestrictTransferFrom {
     ) internal view returns (bool isOptimizable, address receiver) {
         uint64 activationBlock = executorActivationBlock[executor];
 
+        // slither-disable-next-line incorrect-equality
         if (activationBlock == 0) {
             revert Dispatcher__UnapprovedExecutor(executor);
         }
