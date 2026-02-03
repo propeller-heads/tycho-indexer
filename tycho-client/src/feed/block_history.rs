@@ -310,9 +310,12 @@ mod test {
             parent_hash: int_hash(0),
             ..Default::default()
         };
-        let mut history = BlockHistory::new(start_blocks.clone(), 2).unwrap();
+        let mut history =
+            BlockHistory::new(start_blocks.clone(), 2).expect("block history creation failed");
 
-        history.push(new_block.clone()).unwrap();
+        history
+            .push(new_block.clone())
+            .expect("push failed");
 
         let hist: Vec<_> = history
             .history
@@ -325,9 +328,12 @@ mod test {
     #[test]
     fn test_size_limit() {
         let blocks = generate_blocks(3, 0, None);
-        let mut history = BlockHistory::new(blocks[0..2].to_vec(), 2).unwrap();
+        let mut history =
+            BlockHistory::new(blocks[0..2].to_vec(), 2).expect("failed to create history");
 
-        history.push(blocks[2].clone()).unwrap();
+        history
+            .push(blocks[2].clone())
+            .expect("push failed");
 
         assert_eq!(history.history.len(), 2);
     }
@@ -335,7 +341,7 @@ mod test {
     #[test]
     fn test_push_revert_push() {
         let blocks = generate_blocks(5, 0, None);
-        let mut history = BlockHistory::new(blocks.clone(), 5).unwrap();
+        let mut history = BlockHistory::new(blocks.clone(), 5).expect("failed to create history");
         let revert_block = BlockHeader {
             number: 2,
             hash: int_hash(2),
@@ -349,16 +355,20 @@ mod test {
             parent_hash: int_hash(2),
             ..Default::default()
         };
-
-        history.push(revert_block).unwrap();
-        history.push(new_block.clone()).unwrap();
-
         let mut exp_history: Vec<_> = blocks[0..3]
             .iter()
             .cloned()
-            .chain([new_block])
+            .chain([new_block.clone()])
             .collect();
         exp_history[2].revert = true;
+
+        history
+            .push(revert_block.clone())
+            .expect("push failed");
+        history
+            .push(new_block)
+            .expect("push failed");
+
         assert_eq!(history.history, exp_history);
         assert!(history.reverts.contains(&int_hash(3)));
         assert!(history.reverts.contains(&int_hash(4)));
@@ -367,7 +377,7 @@ mod test {
     #[test]
     fn test_push_detached_block() {
         let blocks = generate_blocks(3, 0, None);
-        let mut history = BlockHistory::new(blocks, 5).unwrap();
+        let mut history = BlockHistory::new(blocks.clone(), 5).expect("failed to create history");
         let detached = BlockHeader {
             number: 2,
             hash: int_hash(2),
@@ -381,8 +391,10 @@ mod test {
 
     #[test]
     fn test_new_block_history_filters_disconnected() {
-        let mut blocks = generate_blocks(5, 5, None); // Connected chain: blocks 5-9
-                                                      // Add disconnected blocks that should be filtered out
+        // Create a valid chain of 5 blocks starting from block 5
+        let mut blocks = generate_blocks(5, 5, None);
+
+        // Add some disconnected blocks
         blocks.push(BlockHeader {
             number: 2,
             hash: random_hash(),
@@ -396,8 +408,9 @@ mod test {
             ..Default::default()
         });
 
-        let history = BlockHistory::new(blocks, 10).unwrap();
+        let history = BlockHistory::new(blocks, 10).expect("failed to create history");
 
+        // Should only contain the original 5 connected blocks
         assert_eq!(history.history.len(), 5);
         // Verify chain connectivity
         let blocks: Vec<_> = history.history.iter().collect();
@@ -421,7 +434,9 @@ mod test {
         #[case] expected: BlockPosition,
     ) {
         // History contains blocks 5-14
-        let history = BlockHistory::new(generate_blocks(10, 5, None), 20).unwrap();
+        let start_blocks = generate_blocks(10, 5, None);
+        let history = BlockHistory::new(start_blocks, 20).expect("failed to create history");
+
         let block = BlockHeader {
             number,
             hash: int_hash(number),
@@ -432,14 +447,15 @@ mod test {
 
         let result = history
             .determine_block_position(&block)
-            .unwrap();
+            .expect("failed to determine position");
 
         assert_eq!(result, expected);
     }
 
     #[test]
     fn test_determine_position_reverted_branch() {
-        let mut history = BlockHistory::new(generate_blocks(10, 0, None), 15).unwrap();
+        let start_blocks = generate_blocks(10, 0, None);
+        let mut history = BlockHistory::new(start_blocks, 15).expect("failed to create history");
         // Revert blocks 8-9, add new block 8
         history
             .push(BlockHeader {
@@ -467,12 +483,11 @@ mod test {
             ..Default::default()
         };
 
-        assert_eq!(
-            history
-                .determine_block_position(&old_branch_block)
-                .unwrap(),
-            BlockPosition::Delayed
-        );
+        let result = history
+            .determine_block_position(&old_branch_block)
+            .expect("failed to determine position");
+
+        assert_eq!(result, BlockPosition::Delayed);
     }
 
     // ==================== Partial Block Tests ====================
