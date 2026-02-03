@@ -172,17 +172,9 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let decoder_context = DecoderContext::new();
-
-        let result = CowAMMState::try_from_with_header(
-            snapshot,
-            Default::default(),
-            &HashMap::default(),
-            &HashMap::default(),
-            &decoder_context,
-        )
-        .await
-        .unwrap();
+        let result = try_decode_snapshot_with_defaults::<CowAMMState>(snapshot)
+            .await
+            .expect("reconstructing state");
 
         assert_eq!(state(), result);
     }

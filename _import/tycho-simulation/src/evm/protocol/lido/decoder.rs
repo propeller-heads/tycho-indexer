@@ -158,14 +158,14 @@ mod tests {
     };
 
     use crate::{
-        evm::protocol::lido::{
-            decoder::ETH_ADDRESS,
-            state::{LidoPoolType, LidoState, StakeLimitState},
+        evm::protocol::{
+            lido::{
+                decoder::ETH_ADDRESS,
+                state::{LidoPoolType, LidoState, StakeLimitState},
+            },
+            test_utils::try_decode_snapshot_with_defaults,
         },
-        protocol::{
-            errors::InvalidSnapshotError,
-            models::{DecoderContext, TryFromWithBlock},
-        },
+        protocol::errors::InvalidSnapshotError,
     };
 
     const ST_ETH_ADDRESS_PROXY: &str = "0xae7ab96520de3a18e5e111b5eaab095312d7fe84";
@@ -218,16 +218,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let decoder_context = DecoderContext::new();
-
-        let result = LidoState::try_from_with_header(
-            snapshot,
-            Default::default(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &decoder_context,
-        )
-        .await;
+        let result = try_decode_snapshot_with_defaults::<LidoState>(snapshot).await;
 
         assert!(result.is_ok());
         assert_eq!(
@@ -302,16 +293,7 @@ mod tests {
             .attributes
             .remove(missing_attribute);
 
-        let decoder_context = DecoderContext::new();
-
-        let result = LidoState::try_from_with_header(
-            snapshot,
-            Default::default(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &decoder_context,
-        )
-        .await;
+        let result = try_decode_snapshot_with_defaults::<LidoState>(snapshot).await;
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), InvalidSnapshotError::MissingAttribute(_)));
@@ -366,16 +348,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let decoder_context = DecoderContext::new();
-
-        let result = LidoState::try_from_with_header(
-            snapshot,
-            Default::default(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &decoder_context,
-        )
-        .await;
+        let result = try_decode_snapshot_with_defaults::<LidoState>(snapshot).await;
 
         assert!(result.is_ok());
         assert_eq!(
@@ -444,16 +417,7 @@ mod tests {
             .attributes
             .remove(missing_attribute);
 
-        let decoder_context = DecoderContext::new();
-
-        let result = LidoState::try_from_with_header(
-            snapshot,
-            Default::default(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &decoder_context,
-        )
-        .await;
+        let result = try_decode_snapshot_with_defaults::<LidoState>(snapshot).await;
 
         assert!(result.is_err());
     }
