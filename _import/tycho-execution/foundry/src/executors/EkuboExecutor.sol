@@ -289,7 +289,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType baseTransferType,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -301,7 +301,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType baseTransferType,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn,
             uint256 amount
@@ -312,7 +312,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         if (selector == PAY_CALLBACK_SELECTOR) {
             tokenIn = address(bytes20(payData[12:32]));
             amount = uint256(uint128(bytes16(payData[32:48])));
-            baseTransferType = RestrictTransferFrom.TransferType.Transfer;
+            transferType = RestrictTransferFrom.TransferType.Transfer;
             receiver = address(core);
         } else {
             // LOCKED_SELECTOR
@@ -321,11 +321,11 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
                 // ETH transfers are handled in the Executor, so we need to set the transferType to
                 // TransferNativeInExecutor to update the delta accounting accordingly.
                 tokenIn = address(0);
-                baseTransferType =
+                transferType =
                 RestrictTransferFrom.TransferType.TransferNativeInExecutor;
                 amount = uint256(uint128(bytes16(payData[0:16])));
             } else {
-                baseTransferType = RestrictTransferFrom.TransferType.None;
+                transferType = RestrictTransferFrom.TransferType.None;
                 receiver = address(0);
                 tokenIn = address(0);
                 amount = 0;

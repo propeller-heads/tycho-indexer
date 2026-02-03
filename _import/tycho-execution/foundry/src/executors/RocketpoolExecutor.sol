@@ -84,7 +84,7 @@ contract RocketpoolExecutor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType baseTransferType,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -97,12 +97,11 @@ contract RocketpoolExecutor is IExecutor {
         if (isDeposit) {
             // ETH transfers are handled in the Executor
             tokenIn = address(0);
-            baseTransferType =
+            transferType =
             RestrictTransferFrom.TransferType.TransferNativeInExecutor;
         } else {
             tokenIn = address(RETH);
-            baseTransferType =
-            RestrictTransferFrom.TransferType.ProtocolWillDebit;
+            transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
         }
         // Since burning withdraws the funds from the msg.sender, the user's funds need to sent to the
         // TychoRouter initially (address(this)). This does not require an actual

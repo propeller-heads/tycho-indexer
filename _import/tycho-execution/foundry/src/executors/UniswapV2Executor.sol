@@ -137,7 +137,7 @@ contract UniswapV2Executor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType baseTransferType,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -149,6 +149,6 @@ contract UniswapV2Executor is IExecutor {
         tokenIn = address(bytes20(data[20:40]));
 
         receiver = target;
-        baseTransferType = RestrictTransferFrom.TransferType.Transfer;
+        transferType = RestrictTransferFrom.TransferType.Transfer;
     }
 }

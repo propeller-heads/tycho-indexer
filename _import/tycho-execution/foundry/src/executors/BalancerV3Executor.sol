@@ -130,7 +130,7 @@ contract BalancerV3Executor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType baseTransferType,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -142,7 +142,7 @@ contract BalancerV3Executor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType baseTransferType,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn,
             uint256 amount
@@ -151,6 +151,6 @@ contract BalancerV3Executor is IExecutor, ICallback {
         receiver = address(VAULT);
         amount = uint256(bytes32(data[0:32]));
         tokenIn = address(bytes20(data[32:52]));
-        baseTransferType = RestrictTransferFrom.TransferType.Transfer;
+        transferType = RestrictTransferFrom.TransferType.Transfer;
     }
 }

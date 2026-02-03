@@ -145,7 +145,7 @@ contract LidoExecutor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType baseTransferType,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -163,7 +163,7 @@ contract LidoExecutor is IExecutor {
             // ETH transfers are handled in the Executor, so we need to set the transferType to TransferNativeInExecutor
             // to update the delta accounting accordingly.
             tokenIn = address(0);
-            baseTransferType =
+            transferType =
             RestrictTransferFrom.TransferType.TransferNativeInExecutor;
             // The token in is ETH in this case so we don't really need a receiver
         } else if (
@@ -171,8 +171,7 @@ contract LidoExecutor is IExecutor {
         ) {
             // WST_ETH wrapping: ST_ETH -> WST_ETH
             tokenIn = stEthAddress;
-            baseTransferType =
-            RestrictTransferFrom.TransferType.ProtocolWillDebit;
+            transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
             // The receiver of the funds will be the wstEth contract.
             receiver = wstEth;
         } else if (
@@ -180,8 +179,7 @@ contract LidoExecutor is IExecutor {
         ) {
             // WST_ETH unwrapping: WST_ETH -> ST_ETH
             tokenIn = wstEth;
-            baseTransferType =
-            RestrictTransferFrom.TransferType.ProtocolWillDebit;
+            transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
             // The receiver needs to be TychoRouter because the wstETH contract will burn it from the msg.sender
             receiver = address(this);
         } else {
