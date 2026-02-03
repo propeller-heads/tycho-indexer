@@ -93,7 +93,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     address routerFeeReceiver;
     address solverFeeReceiver;
 
-    uint256 private constant _SETUP_BLOCK_OFFSET = 50400; // ~7 days
+    uint256 internal constant _SETUP_BLOCK_OFFSET = 50400; // ~7 days
 
     function getChain() public view virtual returns (string memory) {
         return "mainnet";
