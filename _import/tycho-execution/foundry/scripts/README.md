@@ -69,25 +69,6 @@ For each of the following, you must select one of `tenderly_ethereum`, `tenderly
        safe wallet.
     2. If it's not set, it will submit the transaction directly to the chain.
 
-## Deploy Uniswap X filler
-
-The current script deploys an Uniswap X filler and verifies it in the corresponding blockchain explorer.
-
-Make sure to run `unset HISTFILE` in your terminal before setting the private key. This will prevent the private key
-from being stored in the shell history.
-
-1. Set the following environment variables:
-
-```
-export RPC_URL=<chain-rpc-url>
-export PRIVATE_KEY=<deploy-wallet-private-key>
-export BLOCKCHAIN_EXPLORER_API_KEY=<blockchain-explorer-api-key>
-```
-
-2. Confirm that the variables `tychoRouter`, `uniswapXReactor` and `nativeToken` are correctly set in the script. Make
-   sure that the Uniswap X Reactor address matches the reactor you are targeting.
-3. Run `npx hardhat run scripts/deploy-uniswap-x-filler.js --network NETWORK`.
-
 ## Export Runtime Bytecode
 
 The `export-runtime-bytecode.js` script allows you to export the runtime bytecode of any executor contract for use in
