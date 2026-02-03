@@ -1,3 +1,11 @@
+## [0.24.0](https://github.com/propeller-heads/tycho-contracts/compare/0.23.1...0.24.0) (2026-02-03)
+
+
+### Features
+
+* Check for fees before calling calculator ([402567c](https://github.com/propeller-heads/tycho-contracts/commit/402567cec0ce3de0955b8c38f17bc974c2671ee1))
+* Optimize USV2 gas by passing tokens ([78d8ca5](https://github.com/propeller-heads/tycho-contracts/commit/78d8ca5289b0e959b07b97a6484eab84f4159f36))
+
 ## [0.23.1](https://github.com/propeller-heads/tycho-contracts/compare/0.23.0...0.23.1) (2026-02-02)
 
 
