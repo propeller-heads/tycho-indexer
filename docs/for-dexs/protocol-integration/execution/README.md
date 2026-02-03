@@ -7,7 +7,7 @@ To integrate a new protocol into Tycho, you need to implement two key components
 
 See more about our code architecture [here](code-architecture.md).
 
-## Main Encoder Interface
+## Encoder Interface
 
 Each new protocol requires a dedicated `SwapEncoder` that implements the `SwapEncoder` trait. This trait defines how swaps for the protocol are encoded into calldata.
 
@@ -19,7 +19,7 @@ fn encode_swap(
 ) -> Result<Vec<u8>, EncodingError>;
 ```
 
-This function encodes a swap and its relevant context information into calldata that is compatible with the `Executor` contract. The output of the `SwapEncoder` is the input of the `Executor` (see next section). See current implementations [here](https://github.com/propeller-heads/tycho-execution/tree/main/src/encoding/evm/swap_encoder).
+This function encodes a swap and its relevant context information into calldata that is compatible with the `Executor` contract. The output of the `SwapEncoder` is the input of the `Executor` (see next section). We recommend using packed encoding to save gas. See current implementations [here](https://github.com/propeller-heads/tycho-execution/tree/main/src/encoding/evm/swap_encoder).
 
 If your protocol needs some specific constant addresses please add them in [config/protocol\_specific\_addresses.json](https://github.com/propeller-heads/tycho-execution/blob/main/config/protocol_specific_addresses.json).
 
@@ -42,9 +42,9 @@ Depending on the index of the swap in the swap group, the encoder may be respons
 
 </details>
 
-## Main Swap Interface
+## Swap Interface
 
-Every integrated protocol requires its own swap executor contract. This contract must conform to the `IExecutor` interface, allowing it to interact with the protocol and perform swaps be leveraging the `RestrictTransferFrom` contract. See currently implemented executors [here](https://github.com/propeller-heads/tycho-execution/tree/main/foundry/src/executors).
+Every integrated protocol requires its own swap executor contract. This contract must conform to the `IExecutor` interface, allowing it to interact with the protocol and perform swaps by leveraging the `RestrictTransferFrom` contract. See currently implemented executors [here](https://github.com/propeller-heads/tycho-execution/tree/main/foundry/src/executors).
 
 The `IExecutor` interface has the main method:
 
@@ -66,6 +66,8 @@ Ensure that the implementation supports transferring received tokens to a design
 
 If the protocol requires token approvals (allowances) before swaps can occur, manage these approvals within the implementation to ensure smooth execution of the swap.
 
+Please look through our [Contributing Guidelines for Solidity](../contributing-guidelines.md#changing-solidity-code).
+
 ### Callbacks
 
 Some protocols require a callback during swap execution. In these cases, the executor contract must inherit from [`ICallback`](https://github.com/propeller-heads/tycho-execution/blob/main/foundry/interfaces/ICallback.sol) and implement the necessary callback functions.
@@ -83,6 +85,18 @@ function verifyCallback(bytes calldata data) external view;
 * `handleCallback`: The main entry point for handling callbacks.
 * `verifyCallback`: Should be called within `handleCallback` to ensure that the `msg.sender` is a valid pool from the expected protocol.
 
+**Callback Flow**
+
+When a protocol initiates a callback during swap execution, it flows through the `TychoRouter`'s `fallback()` method first, which acts as the entry point for all callback requests. The router's fallback function then delegates the call to the dispatcher, which is responsible for routing the callback to the appropriate executor's `handleCallback` method.
+
+This architecture ensures that:
+
+* All callbacks pass through a single controlled entry point in the `TychoRouter`
+* The dispatcher can validate and route callbacks to the correct executor implementation
+* Each executor maintains its own callback logic while adhering to the standardized interface
+
+The callback data passed through this flow should include the function selector and all necessary information for the executor to complete the swap operation, such as token addresses, amounts, and any protocol-specific parameters required by the pool contract.
+
 ## Token Transfers
 
 The **Executor** contracts manage token transfers between the user, protocols, and the Tycho Router. The only exception is when unwrapping WETH to ETH after a swap—in this case, the router performs the final transfer to the receiver.
@@ -91,7 +105,7 @@ The `TychoRouter` architecture optimizes token transfers and reduces gas costs d
 
 * The executor transfers input tokens directly from the user to the target protocol.
 * The executor instructs the protocol to send output tokens directly to the next protocol in the swap sequence.
-* For the final swap in a sequence, the protocol sends output tokens directly to the user.
+* For the final hop in a sequence, the protocol sends output tokens directly to the user.
 
 Each executor must inherit from the `RestrictTransferFrom` contract, which enables flexible and safe transfer logic. During encoding, the executor receives instructions specifying one of the following transfer types:
 
@@ -101,7 +115,7 @@ Each executor must inherit from the `RestrictTransferFrom` contract, which enabl
 | `TRANSFER`      | Assumes funds are already in the `TychoRouter` and transfers tokens into the pool                                              |
 | `NONE`          | Assumes tokens are already in place for the swap; no transfer action is taken.                                                 |
 
-Two key constants are used in encoding to configure protocol-specific behavior:
+Two key [constants](https://github.com/propeller-heads/tycho-execution/blob/main/src/encoding/evm/constants.rs) are used in encoding to configure protocol-specific behavior:
 
 | Constant                         | Description                                                                                                                                                                                                                       |
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -109,6 +123,22 @@ Two key constants are used in encoding to configure protocol-specific behavior:
 | `CALLBACK_CONSTRAINED_PROTOCOLS` | Protocols that require owed tokens to be transferred during a callback. In these cases, tokens cannot be transferred directly from the previous pool before the current swap begins.                                              |
 
 Include your protocol in these constants if necessary.
+
+### Native Token Address Handling
+
+When encoding swaps, you may need to handle address conversions for native tokens.
+
+#### Converting Zero Address to Protocol-Specific Address
+
+Tycho uses the zero address (`0x0000000000000000000000000000000000000000`) to represent native tokens across all chains during indexing and simulation. However, if your protocol's contracts expect a different address convention—such as `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE`—you must convert the address when encoding.
+
+**In your `SwapEncoder` implementation:**
+
+1. Check if the input or output token is the zero address
+2. If your protocol requires a different sentinel address for native tokens, convert it in the encoding step
+3. Ensure the conversion happens only in the calldata generation, not in the protocol state
+
+This ensures compatibility with your protocol's on-chain contracts while maintaining Tycho's standardized native token representation throughout indexing and simulation.
 
 ## Testing
 
@@ -154,7 +184,7 @@ These tests ensure your integration works end-to-end within Tycho’s architectu
 
 Once your implementation is approved:
 
-1. **Deploy the executor contract** on the appropriate network.
+1. **Deploy the executor contract** on the appropriate network (more [here](https://github.com/propeller-heads/tycho-execution/blob/main/foundry/scripts/README.md)).
 2. **Contact us** to whitelist the new executor address on our main router contract.
 3. **Update the configuration** by adding the new executor address to `executor_addresses.json` and register the `SwapEncoder` within the `SwapEncoderBuilder` .
 
