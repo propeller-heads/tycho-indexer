@@ -19,11 +19,7 @@ pub struct UniswapV2SwapEncoder {
     executor_address: Bytes,
 }
 
-impl UniswapV2SwapEncoder {
-    fn get_zero_to_one(sell_token_address: Address, buy_token_address: Address) -> bool {
-        sell_token_address < buy_token_address
-    }
-}
+impl UniswapV2SwapEncoder {}
 
 impl SwapEncoder for UniswapV2SwapEncoder {
     fn new(
@@ -41,12 +37,10 @@ impl SwapEncoder for UniswapV2SwapEncoder {
     ) -> Result<Vec<u8>, EncodingError> {
         let token_in_address = bytes_to_address(swap.token_in())?;
         let token_out_address = bytes_to_address(swap.token_out())?;
-
-        let zero_to_one = Self::get_zero_to_one(token_in_address, token_out_address);
         let component_id = Address::from_str(&swap.component().id)
             .map_err(|_| EncodingError::FatalError("Invalid USV2 component id".to_string()))?;
 
-        let args = (component_id, zero_to_one);
+        let args = (component_id, token_in_address, token_out_address);
 
         Ok(args.abi_encode_packed())
     }
@@ -101,8 +95,10 @@ mod tests {
             String::from(concat!(
                 // component id (pool address)
                 "a478c2975ab1ea89e8196811f51a7b7ade33eb11",
-                // zero for one
-                "00",
+                // tokenIn
+                "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                // tokenOut
+                "6b175474e89094c44da98b954eedeac495271d0f",
             ))
         );
         write_calldata_to_file("test_encode_uniswap_v2", hex_swap.as_str());

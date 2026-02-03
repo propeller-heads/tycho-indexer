@@ -57,22 +57,20 @@ contract UniswapV2Executor is IExecutor {
         returns (uint256 calculatedAmount, address tokenOut)
     {
         address target;
-        bool zeroForOne;
+        address tokenIn;
 
-        (target, zeroForOne) = _decodeData(data);
+        (target, tokenIn, tokenOut) = _decodeData(data);
 
-        // Get token0 and token1 once to avoid redundant external calls
-        IUniswapV2Pair pool = IUniswapV2Pair(target);
-        address token0 = pool.token0();
-        address token1 = pool.token1();
+        // Determine zeroForOne and token ordering (UniswapV2 uses token0 < token1)
+        bool zeroForOne = (tokenIn < tokenOut);
+        address token0 = zeroForOne ? tokenIn : tokenOut;
+        address token1 = zeroForOne ? tokenOut : tokenIn;
 
         _verifyPairAddress(target, token0, token1);
 
         calculatedAmount = _getAmountOut(target, amountIn, zeroForOne);
 
-        // Infer tokenOut from zeroForOne
-        tokenOut = zeroForOne ? token1 : token0;
-
+        IUniswapV2Pair pool = IUniswapV2Pair(target);
         if (zeroForOne) {
             pool.swap(0, calculatedAmount, receiver, "");
         } else {
@@ -83,13 +81,14 @@ contract UniswapV2Executor is IExecutor {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (address target, bool zeroForOne)
+        returns (address target, address tokenIn, address tokenOut)
     {
-        if (data.length != 21) {
+        if (data.length != 60) {
             revert UniswapV2Executor__InvalidDataLength();
         }
         target = address(bytes20(data[0:20]));
-        zeroForOne = data[20] != 0;
+        tokenIn = address(bytes20(data[20:40]));
+        tokenOut = address(bytes20(data[40:60]));
     }
 
     function _getAmountOut(address target, uint256 amountIn, bool zeroForOne)
@@ -143,16 +142,11 @@ contract UniswapV2Executor is IExecutor {
             address tokenIn
         )
     {
-        if (data.length != 21) {
+        if (data.length != 60) {
             revert UniswapV2Executor__InvalidDataLength();
         }
         address target = address(bytes20(data[0:20]));
-        bool zeroForOne = data[20] != 0;
-
-        IUniswapV2Pair pool = IUniswapV2Pair(target);
-        address token0 = pool.token0();
-        address token1 = pool.token1();
-        tokenIn = zeroForOne ? token0 : token1;
+        tokenIn = address(bytes20(data[20:40]));
 
         receiver = target;
         baseTransferType = RestrictTransferFrom.TransferType.Transfer;

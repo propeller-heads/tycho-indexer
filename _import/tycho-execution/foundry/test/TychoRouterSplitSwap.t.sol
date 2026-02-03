@@ -24,7 +24,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             uint8(1),
             (0xffffff * 60) / 100, // 60%
             address(usv2Executor),
-            encodeUniswapV2Swap(WETH_WBTC_POOL, false)
+            encodeUniswapV2Swap(WETH_WBTC_POOL, WETH_ADDR, WBTC_ADDR)
         );
         // WBTC -> USDC
         swaps[1] = encodeSplitSwap(
@@ -32,7 +32,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             uint8(3),
             uint24(0),
             address(usv2Executor),
-            encodeUniswapV2Swap(USDC_WBTC_POOL, true)
+            encodeUniswapV2Swap(USDC_WBTC_POOL, WBTC_ADDR, USDC_ADDR)
         );
         // WETH -> DAI
         swaps[2] = encodeSplitSwap(
@@ -40,7 +40,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             uint8(2),
             uint24(0),
             address(usv2Executor),
-            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, false)
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR)
         );
 
         // DAI -> USDC
@@ -49,7 +49,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             uint8(3),
             uint24(0),
             address(usv2Executor),
-            encodeUniswapV2Swap(DAI_USDC_POOL, true)
+            encodeUniswapV2Swap(DAI_USDC_POOL, DAI_ADDR, USDC_ADDR)
         );
 
         return swaps;
@@ -230,7 +230,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             uint8(1),
             uint24((0xffffff * 60) / 100), // 60%
             address(usv2Executor),
-            encodeUniswapV2Swap(WETH_WBTC_POOL, false)
+            encodeUniswapV2Swap(WETH_WBTC_POOL, WETH_ADDR, WBTC_ADDR)
         );
         // WETH -> WBTC (60%)
         swaps[1] = encodeSplitSwap(
@@ -238,7 +238,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             uint8(1),
             uint24((0xffffff * 60) / 100), // 60%
             address(usv2Executor),
-            encodeUniswapV2Swap(WETH_WBTC_POOL, false)
+            encodeUniswapV2Swap(WETH_WBTC_POOL, WETH_ADDR, WBTC_ADDR)
         );
 
         uint256 amountIn = 100 ether;
@@ -337,7 +337,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             encodeUniswapV3Swap(USDC_ADDR, WETH_ADDR, USDC_WETH_USV3_2, true);
 
         bytes memory wethUsdcV2OneZeroData =
-            encodeUniswapV2Swap(USDC_WETH_USV2, false);
+            encodeUniswapV2Swap(USDC_WETH_USV2, WETH_ADDR, USDC_ADDR);
 
         bytes[] memory swaps = new bytes[](3);
         // USDC -> WETH (60% split)
@@ -465,7 +465,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             uint8(1),
             (0xffffff * 60) / 100, // 60%
             address(usv2Executor),
-            encodeUniswapV2Swap(WETH_WBTC_POOL, false)
+            encodeUniswapV2Swap(WETH_WBTC_POOL, WETH_ADDR, WBTC_ADDR)
         );
 
         // WETH -> WBTC (60% again - illegal, total 120%)
@@ -474,7 +474,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             uint8(1),
             (0xffffff * 60) / 100, // 60%
             address(usv2Executor),
-            encodeUniswapV2Swap(WETH_WBTC_POOL, false)
+            encodeUniswapV2Swap(WETH_WBTC_POOL, WETH_ADDR, WBTC_ADDR)
         );
 
         uint256 amountIn = 1 ether;
@@ -519,7 +519,8 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         IERC20(USDC_ADDR).approve(tychoRouterAddr, amountIn);
 
-        bytes memory usdcWethV2Data = encodeUniswapV2Swap(USDC_WETH_USV2, true);
+        bytes memory usdcWethV2Data =
+            encodeUniswapV2Swap(USDC_WETH_USV2, USDC_ADDR, WETH_ADDR);
 
         bytes memory usdcWethV3Pool1OneZeroData =
             encodeUniswapV3Swap(WETH_ADDR, USDC_ADDR, USDC_WETH_USV3, false);
@@ -568,7 +569,8 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         uint256 amountIn = 10 * 10 ** 6;
         deal(BASE_USDC, tychoRouterAddr, amountIn);
 
-        bytes memory protocolData = encodeUniswapV2Swap(USDC_MAG7_POOL, true);
+        bytes memory protocolData =
+            encodeUniswapV2Swap(USDC_MAG7_POOL, BASE_USDC, BASE_MAG7);
 
         bytes memory swap = encodeSplitSwap(
             uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData

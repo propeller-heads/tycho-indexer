@@ -27,7 +27,7 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
 
         // When fees are present, encode receiver as TychoRouter (not ALICE)
         bytes memory protocolData =
-            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, false);
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR);
 
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);

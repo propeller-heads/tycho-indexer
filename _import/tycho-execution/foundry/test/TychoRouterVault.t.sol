@@ -130,7 +130,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             uint8(1),
             (0xffffff * 60) / 100, // 60%
             address(usv2Executor),
-            encodeUniswapV2Swap(WETH_WBTC_POOL, false)
+            encodeUniswapV2Swap(WETH_WBTC_POOL, WETH_ADDR, WBTC_ADDR)
         );
 
         // WETH -> WBTC (40%)
@@ -139,7 +139,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             uint8(1),
             0, // 40%
             address(usv2Executor),
-            encodeUniswapV2Swap(WETH_WBTC_POOL, false)
+            encodeUniswapV2Swap(WETH_WBTC_POOL, WETH_ADDR, WBTC_ADDR)
         );
 
         uint256 amountIn = 1 ether;

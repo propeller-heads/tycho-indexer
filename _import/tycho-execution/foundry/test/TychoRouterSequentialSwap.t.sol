@@ -15,12 +15,13 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         // WETH -> DAI
         swaps[0] = encodeSequentialSwap(
             address(usv2Executor),
-            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, false)
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR)
         );
 
         // DAI -> USDC
         swaps[1] = encodeSequentialSwap(
-            address(usv2Executor), encodeUniswapV2Swap(DAI_USDC_POOL, true)
+            address(usv2Executor),
+            encodeUniswapV2Swap(DAI_USDC_POOL, DAI_ADDR, USDC_ADDR)
         );
         return swaps;
     }
