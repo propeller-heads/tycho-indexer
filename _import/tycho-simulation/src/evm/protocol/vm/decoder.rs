@@ -321,7 +321,7 @@ mod tests {
                 )
                 .expect("Failed to init account");
         }
-        db.update(accounts, Some(block))
+        db.update(accounts, Some(block.clone()))
             .unwrap();
         let account_balances = HashMap::from([(
             Bytes::from("0xBA12222222228d8Ba445958a75a0704d566BF2C8"),

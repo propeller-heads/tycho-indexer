@@ -161,6 +161,7 @@ mod tests {
     use tycho_common::dto::ResponseProtocolState;
 
     use super::*;
+    use crate::evm::protocol::test_utils::try_decode_snapshot_with_defaults;
 
     #[tokio::test]
     async fn test_cowamm_try_from_with_block() {
@@ -223,16 +224,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let decoder_context = DecoderContext::new();
-
-        let result = CowAMMState::try_from_with_header(
-            snapshot,
-            Default::default(),
-            &HashMap::default(),
-            &HashMap::default(),
-            &decoder_context,
-        )
-        .await;
+        let result = try_decode_snapshot_with_defaults::<CowAMMState>(snapshot).await;
 
         assert!(result.is_err());
         assert!(matches!(

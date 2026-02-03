@@ -38,9 +38,9 @@ mod tests {
     use tycho_common::{dto::ResponseProtocolState, Bytes};
 
     use super::super::state::UniswapV2State;
-    use crate::protocol::{
-        errors::InvalidSnapshotError,
-        models::{DecoderContext, TryFromWithBlock},
+    use crate::{
+        evm::protocol::test_utils::try_decode_snapshot_with_defaults,
+        protocol::errors::InvalidSnapshotError,
     };
 
     #[tokio::test]
@@ -59,15 +59,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let decoder_context = DecoderContext::new();
-        let result = UniswapV2State::try_from_with_header(
-            snapshot,
-            Default::default(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &decoder_context,
-        )
-        .await;
+        let result = try_decode_snapshot_with_defaults::<UniswapV2State>(snapshot).await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), UniswapV2State::new(U256::from(0u64), U256::from(0u64)));
@@ -95,15 +87,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let decoder_context = DecoderContext::new();
-        let result = UniswapV2State::try_from_with_header(
-            snapshot,
-            Default::default(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &decoder_context,
-        )
-        .await;
+        let result = try_decode_snapshot_with_defaults::<UniswapV2State>(snapshot).await;
 
         assert!(result.is_err());
         assert!(matches!(

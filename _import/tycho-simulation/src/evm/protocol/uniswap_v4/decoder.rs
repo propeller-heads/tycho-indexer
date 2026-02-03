@@ -209,6 +209,7 @@ mod tests {
     use tycho_common::dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState};
 
     use super::*;
+    use crate::evm::protocol::test_utils::try_decode_snapshot_with_defaults;
 
     fn usv4_component() -> ProtocolComponent {
         let creation_time = DateTime::from_timestamp(1622526000, 0)
@@ -265,15 +266,9 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = UniswapV4State::try_from_with_header(
-            snapshot,
-            Default::default(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &DecoderContext::new(),
-        )
-        .await
-        .unwrap();
+        let result = try_decode_snapshot_with_defaults::<UniswapV4State>(snapshot)
+            .await
+            .unwrap();
 
         let fees = UniswapV4Fees::new(0, 0, 500);
         let expected = UniswapV4State::new(
@@ -328,14 +323,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = UniswapV4State::try_from_with_header(
-            snapshot,
-            Default::default(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &DecoderContext::new(),
-        )
-        .await;
+        let result = try_decode_snapshot_with_defaults::<UniswapV4State>(snapshot).await;
 
         assert!(result.is_err());
         assert!(matches!(
