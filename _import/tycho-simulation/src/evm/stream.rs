@@ -354,6 +354,17 @@ impl ProtocolStreamBuilder {
         self
     }
 
+    /// Enables partial block updates (flashblocks).
+    ///
+    /// When enabled, the client will receive incremental updates within a block, resulting in
+    /// lower latency.
+    pub fn partial_blocks(mut self, enable: bool) -> Self {
+        self.stream_builder = self
+            .stream_builder
+            .with_partial_blocks(enable);
+        self
+    }
+
     /// Sets the stream end policy.
     ///
     /// Controls when the stream should stop based on synchronizer states.
