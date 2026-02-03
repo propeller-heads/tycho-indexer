@@ -1006,10 +1006,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
                 (nextSwap,) = remainingSwaps.next();
                 (address nextExecutor, bytes calldata nextProtocolData) =
                     nextSwap.decodeSequentialSwap();
-                bool isOptimizable;
-                (isOptimizable, receiver) = _callCanReceiveFromPreviousSwap(
-                    nextExecutor, nextProtocolData
-                );
+                receiver =
+                    _callFundsExpectedAddress(nextExecutor, nextProtocolData);
             }
 
             calculatedAmount = _callSwapOnExecutor(

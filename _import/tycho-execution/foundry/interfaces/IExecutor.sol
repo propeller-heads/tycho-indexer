@@ -47,16 +47,18 @@ interface IExecutor {
         returns (RestrictTransferFrom.TransferType transferType, address receiver, address tokenIn);
 
     /**
-     * @dev Defines if the current protocol can be used in an optimization from the previous swap (this is only used for the sequential swap case).
+     * @dev Returns where funds from the previous swap should be sent in a sequential swap case.
      * For example we might have a swap WETH --(1)--> USDC --(2)--> DAI.
-     * Before we perform swap 1 we need to know the receiver of the token out. If the protocol of swap 2 can support
-     * optimization then the receiver should be pool 2.
+     * Before we perform swap 1 we need to know the receiver of the token out. If the protocol of swap 2 can
+     * receive funds directly (e.g., to the pool), this function returns that address. Otherwise, it returns
+     * the router address (msg.sender) indicating funds should be sent to the router
+     * before this swap.
      * @param data The encoded swap data.
-     * @return isOptimizable Bool where true means that the transfer is optimizable
-     * @return receiver Address where to send the funds to. If the bool is false, it should be set to address(0)
+     * @return receiver Address where to send the funds to. Returns msg.sender if funds should stay in router,
+     * or the target address (e.g., pool) if direct transfer is supported.
      */
-    function canReceiveFromPreviousSwap(bytes calldata data)
-    external returns (bool isOptimizable, address receiver);
+    function fundsExpectedAddress(bytes calldata data)
+    external returns (address receiver);
 
 }
 

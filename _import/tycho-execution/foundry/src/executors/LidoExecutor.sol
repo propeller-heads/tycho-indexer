@@ -53,14 +53,14 @@ contract LidoExecutor is IExecutor {
         wstEth = _wstEthAddress;
     }
 
-    function canReceiveFromPreviousSwap(
+    function fundsExpectedAddress(
         bytes calldata /* data */
     )
         external
         view
-        returns (bool isOptimizable, address receiver)
+        returns (address receiver)
     {
-        return (false, msg.sender);
+        return msg.sender;
     }
 
     // slither-disable-next-line locked-ether

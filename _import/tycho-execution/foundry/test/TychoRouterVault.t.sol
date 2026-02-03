@@ -35,14 +35,14 @@ contract WrapUnwrapExecutor is IExecutor {
         weth = IWETH(_weth);
     }
 
-    function canReceiveFromPreviousSwap(
+    function fundsExpectedAddress(
         bytes calldata /* data */
     )
         external
         pure
-        returns (bool isOptimizable, address receiver)
+        returns (address receiver)
     {
-        return (false, address(0));
+        return address(0);
     }
 
     // slither-disable-next-line locked-ether
