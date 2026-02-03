@@ -114,6 +114,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         if (_permit2 == address(0)) {
             revert TychoRouter__AddressZero();
         }
+        if (feeCalculator == address(0)) {
+            revert TychoRouter__AddressZero();
+        }
         permit2 = IAllowanceTransfer(_permit2);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _feeCalculator = feeCalculator;
