@@ -22,10 +22,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         vm.startPrank(EXECUTOR_SETTER);
         tychoRouter.setExecutors(executors);
         vm.stopPrank();
-        (uint64 activationBlock, bool approved) =
-            tychoRouter.executorData(DUMMY);
-        assertEq(approved, true);
-        assertGt(activationBlock, 0);
+        assertGt(tychoRouter.executorActivationBlock(DUMMY), 0);
 
         // Set multiple executors
         address[] memory executors2 = new address[](2);
@@ -34,15 +31,8 @@ contract TychoRouterTest is TychoRouterTestSetup {
         vm.startPrank(EXECUTOR_SETTER);
         tychoRouter.setExecutors(executors2);
         vm.stopPrank();
-        (uint64 activationBlock2, bool approved2) =
-            tychoRouter.executorData(DUMMY2);
-        assertEq(approved2, true);
-        assertGt(activationBlock2, 0);
-
-        (uint64 activationBlock3, bool approved3) =
-            tychoRouter.executorData(DUMMY3);
-        assertEq(approved3, true);
-        assertGt(activationBlock3, 0);
+        assertGt(tychoRouter.executorActivationBlock(DUMMY2), 0);
+        assertGt(tychoRouter.executorActivationBlock(DUMMY3), 0);
     }
 
     function testRemoveExecutorValidRole() public {
@@ -52,10 +42,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         tychoRouter.setExecutors(executors);
         tychoRouter.removeExecutor(DUMMY);
         vm.stopPrank();
-        (uint64 activationBlock, bool approved) =
-            tychoRouter.executorData(DUMMY);
-        assertEq(approved, false);
-        assertEq(activationBlock, 0);
+        assertEq(tychoRouter.executorActivationBlock(DUMMY), 0);
     }
 
     function testRemoveExecutorMissingSetterRole() public {

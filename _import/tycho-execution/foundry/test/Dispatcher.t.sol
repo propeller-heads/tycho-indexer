@@ -48,11 +48,8 @@ contract DispatcherTest is Constants {
         // Define the event we expect to be emitted at the next step
         emit ExecutorSet(DUMMY);
         dispatcherExposed.exposedSetExecutor(DUMMY);
-        (uint64 activationBlock, bool approved) =
-            dispatcherExposed.executorData(DUMMY);
 
-        assert(approved == true);
-        assert(activationBlock > 0);
+        assert(dispatcherExposed.executorActivationBlock(DUMMY) > 0);
     }
 
     function testRemoveExecutor() public {
@@ -61,19 +58,12 @@ contract DispatcherTest is Constants {
         // Define the event we expect to be emitted at the next step
         emit ExecutorRemoved(DUMMY);
         dispatcherExposed.exposedRemoveExecutor(DUMMY);
-        (uint64 activationBlock, bool approved) =
-            dispatcherExposed.executorData(DUMMY);
-
-        assertEq(approved, false);
-        assertEq(activationBlock, 0);
+        assert(dispatcherExposed.executorActivationBlock(DUMMY) == 0);
     }
 
     function testRemoveUnSetExecutor() public {
         dispatcherExposed.exposedRemoveExecutor(BOB);
-        (uint64 activationBlock, bool approved) =
-            dispatcherExposed.executorData(BOB);
-        assertEq(approved, false);
-        assertEq(activationBlock, 0);
+        assert(dispatcherExposed.executorActivationBlock(BOB) == 0);
     }
 
     function testCallTimelockedExecutor() public {
