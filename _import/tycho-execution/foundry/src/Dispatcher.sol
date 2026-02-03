@@ -6,6 +6,7 @@ import {ICallback} from "@interfaces/ICallback.sol";
 import {RestrictTransferFrom} from "./RestrictTransferFrom.sol";
 
 error Dispatcher__UnapprovedExecutor(address executor);
+error Dispatcher__ExecutorIsTimelocked(address executor);
 error Dispatcher__NonContractExecutor();
 error Dispatcher__InvalidDataLength();
 error Dispatcher__AddressZero();
@@ -22,7 +23,12 @@ error Dispatcher__AddressZero();
  *  an alternate selector is specified.
  */
 contract Dispatcher is RestrictTransferFrom {
-    mapping(address => bool) public executors;
+    struct ExecutorData {
+        uint64 activationBlock;
+        bool approved;
+    }
+
+    mapping(address => ExecutorData) public executorData;
 
     // keccak256("Dispatcher#CURRENTLY_SWAPPING_EXECUTOR_SLOT")
     uint256 private constant _CURRENTLY_SWAPPING_EXECUTOR_SLOT =
@@ -48,11 +54,17 @@ contract Dispatcher is RestrictTransferFrom {
      *  contract.
      * @param target address of the executor contract
      */
-    function _setExecutor(address target) internal {
+    function _setExecutor(address target, uint64 block_to_delay_activation)
+        internal
+    {
         if (target.code.length == 0) {
             revert Dispatcher__NonContractExecutor();
         }
-        executors[target] = true;
+
+        executorData[target] = ExecutorData({
+            activationBlock: uint64(block.number + block_to_delay_activation),
+            approved: true
+        });
         emit ExecutorSet(target);
     }
 
@@ -61,7 +73,7 @@ contract Dispatcher is RestrictTransferFrom {
      * @param target address of the executor contract
      */
     function _removeExecutor(address target) internal {
-        delete executors[target];
+        delete executorData[target];
         emit ExecutorRemoved(target);
     }
 
@@ -78,8 +90,14 @@ contract Dispatcher is RestrictTransferFrom {
         bool isSplitSwap,
         address receiver
     ) internal returns (uint256 calculatedAmount) {
-        if (!executors[executor]) {
+        ExecutorData memory executorInfo = executorData[executor];
+
+        if (!executorInfo.approved) {
             revert Dispatcher__UnapprovedExecutor(executor);
+        }
+
+        if (block.number < executorInfo.activationBlock) {
+            revert Dispatcher__ExecutorIsTimelocked(executor);
         }
 
         assembly {
@@ -169,7 +187,9 @@ contract Dispatcher is RestrictTransferFrom {
             isSplitSwap := tload(_IS_SPLIT_SWAP_SLOT)
         }
 
-        if (!executors[executor]) {
+        ExecutorData memory executorInfo = executorData[executor];
+
+        if (!executorInfo.approved) {
             revert Dispatcher__UnapprovedExecutor(executor);
         }
 
@@ -242,9 +262,12 @@ contract Dispatcher is RestrictTransferFrom {
         address executor,
         bytes calldata data
     ) internal view returns (bool isOptimizable, address receiver) {
-        if (!executors[executor]) {
+        ExecutorData memory executorInfo = executorData[executor];
+
+        if (!executorInfo.approved) {
             revert Dispatcher__UnapprovedExecutor(executor);
         }
+
         // slither-disable-next-line calls-loop,low-level-calls
         (bool success, bytes memory optimizableData) = executor.staticcall(
             abi.encodeWithSelector(
