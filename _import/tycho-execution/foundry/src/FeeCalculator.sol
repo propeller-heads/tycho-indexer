@@ -9,6 +9,17 @@ error FeeCalculator__FeeTooHigh();
 error FeeCalculator__AddressZero();
 
 /**
+ * @notice Storage-optimized struct for per-user custom fee configuration
+ * @dev All fields pack into a single storage slot (6 bytes total)
+ */
+struct CustomFees {
+    bool hasCustomFeeOnOutput; // 1 byte
+    uint16 feeBpsOnOutput; // 2 bytes
+    bool hasCustomFeeOnSolverFee; // 1 byte
+    uint16 feeBpsOnSolverFee; // 2 bytes
+}
+
+/**
  * @title FeeCalculator
  * @notice Contract responsible for calculating fees on swap outputs and managing fee configuration
  * @dev This contract is called via staticCall from TychoRouter.
@@ -22,15 +33,10 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
     uint16 private _routerFeeOnSolverFeeBps; // Router fee on solver fee in basis points
     address private _routerFeeReceiver; // Address whose vault balance receives router fees
 
-    // Per-user custom router fees on output amount
-    // If set, this will override the default router fee on output for the user
-    mapping(address => bool) private _hasCustomRouterFeeOnOutput;
-    mapping(address => uint16) private _customRouterFeeOnOutput;
-
-    // Per-user custom router fees on solver fee
-    // If set, this will override the default router fee on the solver fee for the user
-    mapping(address => bool) private _hasCustomRouterFeeOnSolverFee;
-    mapping(address => uint16) private _customRouterFeeOnSolverFee;
+    // Per-user custom router fees (both output and solver fees)
+    // If set, custom values will override the default router fees for the user
+    // Storage-optimized: all custom fee data for a user fits in a single slot
+    mapping(address => CustomFees) private _customRouterFees;
 
     //keccak256("ROUTER_FEE_SETTER_ROLE")
     bytes32 public constant ROUTER_FEE_SETTER_ROLE =
@@ -144,12 +150,14 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
         view
         returns (uint16 routerFeeOnOutputBps, uint16 routerFeeOnSolverFeeBps)
     {
-        routerFeeOnOutputBps = _hasCustomRouterFeeOnOutput[user]
-            ? _customRouterFeeOnOutput[user]
+        CustomFees memory customFees = _customRouterFees[user];
+
+        routerFeeOnOutputBps = customFees.hasCustomFeeOnOutput
+            ? customFees.feeBpsOnOutput
             : _routerFeeOnOutputBps;
 
-        routerFeeOnSolverFeeBps = _hasCustomRouterFeeOnSolverFee[user]
-            ? _customRouterFeeOnSolverFee[user]
+        routerFeeOnSolverFeeBps = customFees.hasCustomFeeOnSolverFee
+            ? customFees.feeBpsOnSolverFee
             : _routerFeeOnSolverFeeBps;
     }
 
@@ -183,11 +191,15 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
         external
         onlyRole(ROUTER_FEE_SETTER_ROLE)
     {
-        uint16 oldFeeBps = _hasCustomRouterFeeOnOutput[user]
-            ? _customRouterFeeOnOutput[user]
+        CustomFees memory customFees = _customRouterFees[user];
+        uint16 oldFeeBps = customFees.hasCustomFeeOnOutput
+            ? customFees.feeBpsOnOutput
             : _routerFeeOnOutputBps;
-        _customRouterFeeOnOutput[user] = feeBps;
-        _hasCustomRouterFeeOnOutput[user] = true;
+
+        customFees.feeBpsOnOutput = feeBps;
+        customFees.hasCustomFeeOnOutput = true;
+        _customRouterFees[user] = customFees;
+
         emit CustomRouterFeeOnOutputUpdated(user, oldFeeBps, feeBps);
     }
 
@@ -199,8 +211,11 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
         external
         onlyRole(ROUTER_FEE_SETTER_ROLE)
     {
-        _hasCustomRouterFeeOnOutput[user] = false;
-        delete _customRouterFeeOnOutput[user];
+        CustomFees memory customFees = _customRouterFees[user];
+        customFees.hasCustomFeeOnOutput = false;
+        customFees.feeBpsOnOutput = 0;
+        _customRouterFees[user] = customFees;
+
         emit CustomRouterFeeOnOutputRemoved(user);
     }
 
@@ -214,8 +229,9 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
         view
         returns (uint16)
     {
-        return _hasCustomRouterFeeOnOutput[user]
-            ? _customRouterFeeOnOutput[user]
+        CustomFees memory customFees = _customRouterFees[user];
+        return customFees.hasCustomFeeOnOutput
+            ? customFees.feeBpsOnOutput
             : _routerFeeOnOutputBps;
     }
 
@@ -249,11 +265,15 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
         external
         onlyRole(ROUTER_FEE_SETTER_ROLE)
     {
-        uint16 oldFeeBps = _hasCustomRouterFeeOnSolverFee[user]
-            ? _customRouterFeeOnSolverFee[user]
+        CustomFees memory customFees = _customRouterFees[user];
+        uint16 oldFeeBps = customFees.hasCustomFeeOnSolverFee
+            ? customFees.feeBpsOnSolverFee
             : _routerFeeOnSolverFeeBps;
-        _customRouterFeeOnSolverFee[user] = feeBps;
-        _hasCustomRouterFeeOnSolverFee[user] = true;
+
+        customFees.feeBpsOnSolverFee = feeBps;
+        customFees.hasCustomFeeOnSolverFee = true;
+        _customRouterFees[user] = customFees;
+
         emit CustomRouterFeeOnSolverFeeUpdated(user, oldFeeBps, feeBps);
     }
 
@@ -265,8 +285,11 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
         external
         onlyRole(ROUTER_FEE_SETTER_ROLE)
     {
-        _hasCustomRouterFeeOnSolverFee[user] = false;
-        delete _customRouterFeeOnSolverFee[user];
+        CustomFees memory customFees = _customRouterFees[user];
+        customFees.hasCustomFeeOnSolverFee = false;
+        customFees.feeBpsOnSolverFee = 0;
+        _customRouterFees[user] = customFees;
+
         emit CustomRouterFeeOnSolverFeeRemoved(user);
     }
 
@@ -280,8 +303,9 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
         view
         returns (uint16)
     {
-        return _hasCustomRouterFeeOnSolverFee[user]
-            ? _customRouterFeeOnSolverFee[user]
+        CustomFees memory customFees = _customRouterFees[user];
+        return customFees.hasCustomFeeOnSolverFee
+            ? customFees.feeBpsOnSolverFee
             : _routerFeeOnSolverFeeBps;
     }
 
