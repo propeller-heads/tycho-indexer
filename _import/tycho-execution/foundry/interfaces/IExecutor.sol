@@ -6,15 +6,6 @@ import "../src/RestrictTransferFrom.sol";
 
 pragma abicoder v2;
 
-enum ProtocolType {
-    /// @dev Requires external token transfer to pool. Transfer can be from router, user or previous pool.
-    InTransferRequired,
-    /// @dev Expects funds in router at swap time. Protocol transfers from `msg.sender` internally.
-    FundsInRouter,
-    /// @dev Requires transfer inside callback logic. Tokens go to router first, then pool during callback.
-    CallbackConstrained
-}
-
 
 interface IExecutor {
     /**
@@ -65,7 +56,7 @@ interface IExecutor {
      * @return receiver Address where to send the funds to. If the bool is false, it should be set to address(0)
      */
     function canReceiveFromPreviousSwap(bytes calldata data)
-    external pure returns (bool isOptimizable, address receiver);
+    external returns (bool isOptimizable, address receiver);
 
 }
 

@@ -161,4 +161,70 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             tychoRouter.balanceOf(BOB, uint256(uint160(DAI_ADDR)));
         assertEq(solverFeeReceiverBalance, expectedFeeAmount);
     }
+
+    function testSequentialSwapWithSolverFees() public {
+        // Performs a sequential swap from WETH to USDC through WBTC using USV2 pools
+        //
+        //   WETH ───(USV2)──> WBTC ───(USV2)──> USDC
+        //   1 WETH -> 1951856272 USDC
+        // Solver takes 1% (19518562 USDC)
+
+        deal(WETH_ADDR, ALICE, 1 ether);
+        uint256 balanceBefore = IERC20(USDC_ADDR).balanceOf(ALICE);
+
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
+
+        bytes memory callData =
+            loadCallDataFromFile("test_sequential_swap_strategy_with_fees");
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        vm.stopPrank();
+
+        uint256 balanceAfter = IERC20(USDC_ADDR).balanceOf(ALICE);
+        assertTrue(success, "Call Failed");
+        uint256 expectedAmountOut = 1932337710;
+        assertEq(balanceAfter - balanceBefore, expectedAmountOut);
+
+        uint256 expectedFeeAmount = 19518562;
+
+        // Check solver fee receiver vault balance (BOB)
+        uint256 solverFeeReceiverBalance =
+            tychoRouter.balanceOf(BOB, uint256(uint160(USDC_ADDR)));
+        assertEq(solverFeeReceiverBalance, expectedFeeAmount);
+    }
+
+    function testSplitSwapWithSolverFees() public {
+        // Performs a split swap from WETH to USDC though WBTC and DAI using USV2 pools
+        //
+        //         ┌──(USV2)──> WBTC ───(USV2)──> USDC
+        //   WETH ─┤
+        //         └──(USV2)──> DAI  ───(USV2)──> USDC
+        //  1 WETH -> 991384372 + 1004476082 = 1995860454 USDC
+        // Solver takes 1% (19958604)
+
+        deal(WETH_ADDR, ALICE, 1 ether);
+        uint256 balanceBefore = IERC20(USDC_ADDR).balanceOf(ALICE);
+
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
+
+        bytes memory callData =
+            loadCallDataFromFile("test_split_swap_strategy_with_fees");
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        vm.stopPrank();
+
+        uint256 balanceAfter = IERC20(USDC_ADDR).balanceOf(ALICE);
+        assertTrue(success, "Call Failed");
+        uint256 expectedAmountOut = 1975901850;
+        assertEq(balanceAfter - balanceBefore, expectedAmountOut);
+
+        uint256 expectedFeeAmount = 19958604;
+
+        // Check solver fee receiver vault balance (BOB)
+        uint256 solverFeeReceiverBalance =
+            tychoRouter.balanceOf(BOB, uint256(uint160(USDC_ADDR)));
+        assertEq(solverFeeReceiverBalance, expectedFeeAmount);
+    }
 }

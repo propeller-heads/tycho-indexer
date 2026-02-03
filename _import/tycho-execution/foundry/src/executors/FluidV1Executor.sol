@@ -46,10 +46,10 @@ contract FluidV1Executor is IExecutor, ICallback {
         bytes calldata /* data */
     )
         external
-        pure
+        view
         returns (bool isOptimizable, address receiver)
     {
-        return (false, address(0));
+        return (false, msg.sender);
     }
 
     function swap(uint256 amountIn, bytes calldata data, address receiver)

@@ -24,7 +24,6 @@ import {LibSwap} from "../lib/LibSwap.sol";
 import {RestrictTransferFrom} from "./RestrictTransferFrom.sol";
 import {IFeeCalculator} from "@interfaces/IFeeCalculator.sol";
 import {FeeRecipient} from "../lib/FeeStructs.sol";
-import {ProtocolType} from "../interfaces/IExecutor.sol";
 
 //                                         ✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷
 //                                   ✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷
@@ -678,8 +677,11 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint16 routerFeeOnOutputBps =
             _feeCalculator.getEffectiveRouterFeeOnOutput(msg.sender);
 
+        address finalReceiver = determineFinalReceiver(
+            receiver, solverFeeBps, routerFeeOnOutputBps
+        );
         uint256 amountOutBeforeFees =
-            _splitSwap(amountIn, nTokens, swaps, receiver, isCyclical);
+            _splitSwap(amountIn, nTokens, swaps, finalReceiver, isCyclical);
 
         // Skip _takeFees call if no fees exist
         if (solverFeeBps == 0 && routerFeeOnOutputBps == 0) {
@@ -1004,10 +1006,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
                 (isOptimizable, receiver) = _callCanReceiveFromPreviousSwap(
                     nextExecutor, nextProtocolData
                 );
-
-                if (!isOptimizable) {
-                    receiver = address(this);
-                }
             }
 
             calculatedAmount = _callSwapOnExecutor(

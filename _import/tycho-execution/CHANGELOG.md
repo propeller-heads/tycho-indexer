@@ -1,3 +1,28 @@
+## [0.23.1](https://github.com/propeller-heads/tycho-contracts/compare/0.23.0...0.23.1) (2026-02-02)
+
+
+### Bug Fixes
+
+* Compute final receiver for split swap too (BUG) ([9c7ba34](https://github.com/propeller-heads/tycho-contracts/commit/9c7ba34ef19fa8195287d6aaa5573ac244206f92))
+
+## [0.23.0](https://github.com/propeller-heads/tycho-contracts/compare/0.22.0...0.23.0) (2026-02-02)
+
+
+### Features
+
+* Force FeeCalculator to be passed in TychoRouter constructor ([e02cdf8](https://github.com/propeller-heads/tycho-contracts/commit/e02cdf8922b038d8c40943f8e5c4b4c64925220a))
+* Get rid of ProtocolType and do canReceiveFromPreviousSwap instead ([c5c0e46](https://github.com/propeller-heads/tycho-contracts/commit/c5c0e46b387bd4de2f24a57fb1fc9cc0675ecc03))
+* Handle receiver in RFQs ([9176a1c](https://github.com/propeller-heads/tycho-contracts/commit/9176a1c922f23970fe6dbb71cfb3107ac49a4980))
+* No longer encoding swap receiver ([ec1dd19](https://github.com/propeller-heads/tycho-contracts/commit/ec1dd19cf3cb969ba1ecf6d278ddca3a45522175))
+* Optimize receiver of last swap in split swaps ([b0a9099](https://github.com/propeller-heads/tycho-contracts/commit/b0a9099f9f47a275fe1311e6b582c8a75d9def52))
+* Remove receiver logic from encoding ([8033027](https://github.com/propeller-heads/tycho-contracts/commit/80330274f5de191ba942e7351a2a94c86e1039c6))
+
+
+### Bug Fixes
+
+* Improve _sequentialSwap method ([ca04c46](https://github.com/propeller-heads/tycho-contracts/commit/ca04c4617f326b679c285b8cebf8bfb8937ac183))
+* Return msg.sender in canReceiveFromPreviousSwap instead of address(0) ([763c75d](https://github.com/propeller-heads/tycho-contracts/commit/763c75df83394f6189cc261e883eb9cf80f84732))
+
 ## [0.22.0](https://github.com/propeller-heads/tycho-contracts/compare/0.21.1...0.22.0) (2026-01-29)
 
 
