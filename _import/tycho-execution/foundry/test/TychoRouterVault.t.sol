@@ -444,12 +444,15 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
     function setUp() public override {
         super.setUp();
         wrapUnwrapExecutor = new WrapUnwrapExecutor(WETH_ADDR);
+        uint256 forkBlock = getForkBlock();
 
         // Add wrapUnwrapExecutor to allowed executors
         address[] memory executors = new address[](1);
         executors[0] = address(wrapUnwrapExecutor);
         vm.startPrank(EXECUTOR_SETTER);
+        vm.roll(forkBlock - _SETUP_BLOCK_OFFSET);
         tychoRouter.setExecutors(executors);
+        vm.roll(forkBlock);
         vm.stopPrank();
     }
 

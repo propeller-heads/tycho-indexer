@@ -93,6 +93,8 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     address routerFeeReceiver;
     address solverFeeReceiver;
 
+    uint256 private constant _SETUP_BLOCK_OFFSET = 50400; // ~7 days
+
     function getChain() public view virtual returns (string memory) {
         return "mainnet";
     }
@@ -113,7 +115,9 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
 
         address[] memory executors = deployExecutors();
         vm.startPrank(EXECUTOR_SETTER);
+        vm.roll(forkBlock - _SETUP_BLOCK_OFFSET);
         tychoRouter.setExecutors(executors);
+        vm.roll(forkBlock);
         vm.stopPrank();
 
         // The fee calculator is only deployed here because if we do it before the router and executors ALL the addresses will change and this will break a lot of tests
