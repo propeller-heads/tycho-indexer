@@ -22,7 +22,6 @@ import {ERC6909} from "@openzeppelin/contracts/token/ERC6909/ERC6909.sol";
 import {Dispatcher} from "./Dispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
 import {RestrictTransferFrom} from "./RestrictTransferFrom.sol";
-import {IFeeCalculator} from "@interfaces/IFeeCalculator.sol";
 import {FeeRecipient} from "../lib/FeeStructs.sol";
 
 //                                         ✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷
@@ -80,7 +79,7 @@ error TychoRouter__InvalidDataLength();
 error TychoRouter__UndefinedMinAmountOut();
 
 contract TychoRouter is AccessControl, Dispatcher, Pausable {
-    IFeeCalculator private _feeCalculator; // Fee calculator contract
+    address private _feeCalculator; // Fee calculator contract
 
     // Max amount of dust that can stay behind in the TychoRouter when swapping.
     // This is relevant for rebasing tokens like stETH where sometimes 1 WEI is lost per transfer.
@@ -117,7 +116,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         }
         permit2 = IAllowanceTransfer(_permit2);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _feeCalculator = IFeeCalculator(feeCalculator);
+        _feeCalculator = feeCalculator;
     }
 
     /**
@@ -679,7 +678,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
 
         // Get router fee once and pass it down to avoid duplicate external calls
         uint16 routerFeeOnOutputBps =
-            _feeCalculator.getEffectiveRouterFeeOnOutput(msg.sender);
+            _callGetEffectiveRouterFeeOnOutput(_feeCalculator);
 
         address finalReceiver = determineFinalReceiver(
             receiver, solverFeeBps, routerFeeOnOutputBps
@@ -692,11 +691,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             amountOut = amountOutBeforeFees;
         } else {
             amountOut = _takeFees(
-                tokenOut,
-                amountOutBeforeFees,
-                msg.sender,
-                solverFeeBps,
-                solverFeeReceiver
+                tokenOut, amountOutBeforeFees, solverFeeBps, solverFeeReceiver
             );
         }
 
@@ -757,7 +752,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
 
         // Get router fee once and pass it down to avoid duplicate external calls
         uint16 routerFeeOnOutputBps =
-            _feeCalculator.getEffectiveRouterFeeOnOutput(msg.sender);
+            _callGetEffectiveRouterFeeOnOutput(_feeCalculator);
 
         address finalReceiver = determineFinalReceiver(
             receiver, solverFeeBps, routerFeeOnOutputBps
@@ -771,11 +766,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             amountOut = amountOutBeforeFees;
         } else {
             amountOut = _takeFees(
-                tokenOut,
-                amountOutBeforeFees,
-                msg.sender,
-                solverFeeBps,
-                solverFeeReceiver
+                tokenOut, amountOutBeforeFees, solverFeeBps, solverFeeReceiver
             );
         }
 
@@ -832,7 +823,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
 
         // Get router fee once and pass it down to avoid duplicate external calls
         uint16 routerFeeOnOutputBps =
-            _feeCalculator.getEffectiveRouterFeeOnOutput(msg.sender);
+            _callGetEffectiveRouterFeeOnOutput(_feeCalculator);
 
         address finalReceiver = determineFinalReceiver(
             receiver, solverFeeBps, routerFeeOnOutputBps
@@ -845,11 +836,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             amountOut = amountOutBeforeFees;
         } else {
             amountOut = _takeFees(
-                tokenOut,
-                amountOutBeforeFees,
-                msg.sender,
-                solverFeeBps,
-                solverFeeReceiver
+                tokenOut, amountOutBeforeFees, solverFeeBps, solverFeeReceiver
             );
         }
 
@@ -1089,8 +1076,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         if (feeCalculator == address(0)) {
             revert TychoRouter__AddressZero();
         }
-        address oldCalculator = address(_feeCalculator);
-        _feeCalculator = IFeeCalculator(feeCalculator);
+        address oldCalculator = _feeCalculator;
+        _feeCalculator = feeCalculator;
         emit FeeCalculatorUpdated(oldCalculator, feeCalculator);
     }
 
@@ -1098,14 +1085,13 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @dev Returns the current fee calculator address
      */
     function getFeeCalculator() external view returns (address) {
-        return address(_feeCalculator);
+        return _feeCalculator;
     }
 
     /**
      * @notice Calculates and takes fees using the FeeCalculator contract
      * @param token The token address for which fees are being taken
      * @param amountIn The amount before fee deduction
-     * @param user The user address to look up custom router fees for
      * @param solverFeeBps Solver fee in basis points
      * @param solverFeeReceiver Address to receive solver fees
      * @return amountOut The amount remaining after all fee deductions
@@ -1113,13 +1099,12 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     function _takeFees(
         address token,
         uint256 amountIn,
-        address user,
         uint16 solverFeeBps,
         address solverFeeReceiver
     ) internal returns (uint256 amountOut) {
         FeeRecipient[] memory fees;
-        (amountOut, fees) = _feeCalculator.calculateFee(
-            amountIn, user, solverFeeBps, solverFeeReceiver
+        (amountOut, fees) = _callCalculateFee(
+            _feeCalculator, amountIn, solverFeeBps, solverFeeReceiver
         );
 
         for (uint256 i = 0; i < fees.length; i++) {
