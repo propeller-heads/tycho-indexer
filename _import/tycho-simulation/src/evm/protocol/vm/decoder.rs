@@ -239,16 +239,6 @@ mod tests {
         }
     }
 
-    fn header() -> BlockHeader {
-        BlockHeader {
-            number: 1,
-            hash: Bytes::from(vec![0; 32]),
-            parent_hash: Bytes::from(vec![0; 32]),
-            timestamp: 1,
-            ..Default::default()
-        }
-    }
-
     fn load_balancer_account_data() -> Vec<AccountUpdate> {
         let project_root = env!("CARGO_MANIFEST_DIR");
         let asset_path =
@@ -308,7 +298,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
         // Initialize engine with balancer storage
-        let block = header();
+        let block = BlockHeader::default();
         let accounts = load_balancer_account_data();
         let db = SHARED_TYCHO_DB.clone();
         let engine = create_engine(db.clone(), false).unwrap();
@@ -350,7 +340,7 @@ mod tests {
         let decoder_context = DecoderContext::new();
         let res = EVMPoolState::try_from_with_header(
             snapshot,
-            header(),
+            block,
             &account_balances,
             &tokens,
             &decoder_context,
