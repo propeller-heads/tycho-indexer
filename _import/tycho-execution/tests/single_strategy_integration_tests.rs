@@ -68,10 +68,10 @@ fn test_single_swap_strategy_encoder() {
         "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f", // token out
         &expected_min_amount_encoded, // min amount out
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-        "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps = 0
-        "0000000000000000000000000000000000000000000000000000000000000000", /* solverFeeReceiver
+        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeBps = 0
+        "0000000000000000000000000000000000000000000000000000000000000000", /* clientFeeReceiver
                      * = address(0) */
-        "0000000000000000000000000000000000000000000000000000000000000000", // solverMaxContribution
+        "0000000000000000000000000000000000000000000000000000000000000000", // clientMaxContribution
     ]
     .join("");
 
@@ -147,9 +147,9 @@ fn test_single_swap_strategy_encoder_transfer_from() {
         "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f", // token out
         &expected_min_amount_encoded, // min amount out
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-        "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps
-        "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeReceiver
-        "0000000000000000000000000000000000000000000000000000000000000000", // solverMaxContribution
+        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeBps
+        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeReceiver
+        "0000000000000000000000000000000000000000000000000000000000000000", // clientMaxContribution
         "0000000000000000000000000000000000000000000000000000000000000120", // offset of swap bytes
         "0000000000000000000000000000000000000000000000000000000000000050", // len swap (80 bytes hex = 60 bytes actual)
         // Swap data
@@ -171,10 +171,10 @@ fn test_single_swap_strategy_encoder_transfer_from() {
 }
 
 #[test]
-fn test_single_swap_with_solver_fees() {
+fn test_single_swap_with_client_fees() {
     // Performs a single swap from WETH to DAI on a USV2 pool, with fees
     // Swap is 1 WETH for 2018.8 DAI
-    // Solver takes 1% -> 20.18 DAI (20188174386087344397)
+    // Client takes 1% -> 20.18 DAI (20188174386087344397)
     let checked_amount = BigUint::from_str("1995_000000000000000000").unwrap();
     let weth = weth();
     let dai = dai();
@@ -199,9 +199,9 @@ fn test_single_swap_with_solver_fees() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
-        solver_fee_bps: 100, // 1% fee
-        solver_fee_receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
-        max_solver_contribution: BigUint::ZERO,
+        client_fee_bps: 100, // 1% fee
+        client_fee_receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
+        max_client_contribution: BigUint::ZERO,
     };
 
     let encoded_solutions = encoder
@@ -220,16 +220,16 @@ fn test_single_swap_with_solver_fees() {
 
     let hex_calldata = encode(&calldata);
 
-    write_calldata_to_file("test_single_swap_with_solver_fees", &hex_calldata.to_string());
+    write_calldata_to_file("test_single_swap_with_client_fees", &hex_calldata.to_string());
 }
 
 #[test]
-fn test_single_swap_with_fees_and_solver_contribution() {
+fn test_single_swap_with_fees_and_client_contribution() {
     // Performs a single swap from WETH to DAI on a USV2 pool, with fees
     // Swap is 1 WETH for 2018.8 DAI
     // Tycho Router takes 1% -> 20.18 DAI (20188174386087344397)
-    // Solver takes 1% -> 20.18 DAI (20188174386087344397)
-    // But (for some reason) the solver contributes with at most 22 DAI
+    // Client takes 1% -> 20.18 DAI (20188174386087344397)
+    // But (for some reason) the client contributes with at most 22 DAI
     let checked_amount = BigUint::from_str("2000_000000000000000000").unwrap();
     let weth = weth();
     let dai = dai();
@@ -255,9 +255,9 @@ fn test_single_swap_with_fees_and_solver_contribution() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
-        solver_fee_bps: 100, // 1% fee
-        solver_fee_receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
-        max_solver_contribution: BigUint::from_str("22_000000000000000000").unwrap(),
+        client_fee_bps: 100, // 1% fee
+        client_fee_receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
+        max_client_contribution: BigUint::from_str("22_000000000000000000").unwrap(),
     };
 
     let encoded_solutions = encoder
@@ -277,7 +277,7 @@ fn test_single_swap_with_fees_and_solver_contribution() {
     let hex_calldata = encode(&calldata);
 
     write_calldata_to_file(
-        "test_single_swap_with_fees_and_solver_contribution",
+        "test_single_swap_with_fees_and_client_contribution",
         &hex_calldata.to_string(),
     );
     std::env::remove_var("TYCHO_FEES_ENABLED");

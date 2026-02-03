@@ -55,17 +55,17 @@ pub struct Solution {
     pub min_amount_out: BigUint,
     /// List of swaps to fulfill the solution.
     pub swaps: Vec<Swap>,
-    /// Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%).
+    /// Fee in basis points to be paid to the client (0-10000, where 10000 = 100%).
     #[serde(default)]
-    pub solver_fee_bps: u16,
-    /// Address to receive the solver fee.
+    pub client_fee_bps: u16,
+    /// Address to receive the client fee.
     #[serde(default)]
-    pub solver_fee_receiver: Bytes,
-    /// Maximum amount the solver is willing to pay out of pocket to subsidize this trade.
-    /// This represents the maximum slippage the solver will cover.
-    /// If (min_amount_out - actual_swap_output) > max_solver_contribution, the tx reverts.
+    pub client_fee_receiver: Bytes,
+    /// Maximum amount the client is willing to pay out of pocket to subsidize this trade.
+    /// This represents the maximum slippage the client will cover.
+    /// If (min_amount_out - actual_swap_output) > max_client_contribution, the tx reverts.
     #[serde(with = "biguint_string")]
-    pub max_solver_contribution: BigUint,
+    pub max_client_contribution: BigUint,
 }
 
 /// Represents a swap operation to be performed on a pool.

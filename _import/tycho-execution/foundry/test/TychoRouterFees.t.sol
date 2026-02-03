@@ -11,11 +11,11 @@ import {TychoRouter__AmountOutNotFullyReceived} from "@src/TychoRouter.sol";
 
 contract TychoRouterFeesTest is TychoRouterTestSetup {
     function testSingleSwapWithAllFeeTypes() public {
-        // Set up fees: 1% router fee on output, 2% solver fee, 10% router fee on solver fee
+        // Set up fees: 1% router fee on output, 2% client fee, 10% router fee on client fee
         vm.startPrank(FEE_SETTER);
         feeCalculator.setRouterFeeReceiver(routerFeeReceiver);
         feeCalculator.setRouterFeeOnOutput(100); // 1%
-        feeCalculator.setRouterFeeOnSolverFee(1000); // 10%
+        feeCalculator.setRouterFeeOnClientFee(1000); // 10%
         vm.stopPrank();
 
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2
@@ -40,8 +40,8 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
-            200, // 2% solverFeeBps
-            solverFeeReceiver,
+            200, // 2% clientFeeBps
+            clientFeeReceiver,
             0,
             swap
         );
@@ -55,14 +55,14 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         // 5. Fee recipients have fees in their vaults
 
         // Expected fees with all three fee types:
-        // 1. solverFee = 2018817438608734439722 * 200 / 10000 = 40376348772174688794
-        //    routerFeeOnSolverFee = 40376348772174688794 * 1000 / 10000 = 4037634877217468879
-        //    solverPortion = 40376348772174688794 - 4037634877217468879 = 36338713894957219915
+        // 1. clientFee = 2018817438608734439722 * 200 / 10000 = 40376348772174688794
+        //    routerFeeOnClientFee = 40376348772174688794 * 1000 / 10000 = 4037634877217468879
+        //    clientPortion = 40376348772174688794 - 4037634877217468879 = 36338713894957219915
         // 2. routerFeeOnOutput = 2018817438608734439722 * 100 / 10000 = 20188174386087344397 (calculated on original amount)
         //    totalRouterFee = 4037634877217468879 + 20188174386087344397 = 24225809263304813276
         // 3. amountOut = 2018817438608734439722 - 36338713894957219915 - 24225809263304813276 = 1958252915450472406531
         uint256 expectedRouterFee = 24225809263304813276;
-        uint256 expectedSolverFee = 36338713894957219915;
+        uint256 expectedClientFee = 36338713894957219915;
         uint256 expectedAmountOut = 1958252915450472406531;
 
         assertEq(swapOutput, expectedAmountOut);
@@ -73,21 +73,21 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         );
         assertEq(routerFeeReceiverBalance, expectedRouterFee);
 
-        // Check solver fee receiver vault balance
-        uint256 solverFeeReceiverBalance = tychoRouter.balanceOf(
-            solverFeeReceiver, uint256(uint160(DAI_ADDR))
+        // Check client fee receiver vault balance
+        uint256 clientFeeReceiverBalance = tychoRouter.balanceOf(
+            clientFeeReceiver, uint256(uint160(DAI_ADDR))
         );
-        assertEq(solverFeeReceiverBalance, expectedSolverFee);
+        assertEq(clientFeeReceiverBalance, expectedClientFee);
 
         // Check ALICE received correct amount in her address (not vault)
         uint256 userBalance = IERC20(DAI_ADDR).balanceOf(ALICE);
         assertEq(userBalance, expectedAmountOut);
     }
 
-    function testSingleSwapWithSolverFees() public {
-        // Tests swapping WETH -> DAI on a USV2 pool with fees and solver contribution
+    function testSingleSwapWithClientFees() public {
+        // Tests swapping WETH -> DAI on a USV2 pool with fees and client contribution
         // Swap is 1 WETH for 2018.8 DAI (2018817438608734439722)
-        // Solver takes 1% ->  20.18 DAI (20188174386087344397)
+        // Client takes 1% ->  20.18 DAI (20188174386087344397)
 
         deal(WETH_ADDR, ALICE, 1 ether);
         uint256 balanceBefore = IERC20(DAI_ADDR).balanceOf(ALICE);
@@ -96,7 +96,7 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
 
         bytes memory callData =
-            loadCallDataFromFile("test_single_swap_with_solver_fees");
+            loadCallDataFromFile("test_single_swap_with_client_fees");
         (bool success,) = tychoRouterAddr.call(callData);
 
         vm.stopPrank();
@@ -108,17 +108,17 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
 
         uint256 expectedFeeAmount = 20188174386087344397;
 
-        // Check solver fee receiver vault balance (BOB)
-        uint256 solverFeeReceiverBalance =
+        // Check client fee receiver vault balance (BOB)
+        uint256 clientFeeReceiverBalance =
             tychoRouter.balanceOf(BOB, uint256(uint160(DAI_ADDR)));
-        assertEq(solverFeeReceiverBalance, expectedFeeAmount);
+        assertEq(clientFeeReceiverBalance, expectedFeeAmount);
     }
 
     function testSingleSwapWithFeesAndContribution() public {
-        // Tests swapping WETH -> DAI on a USV2 pool with fees and solver contribution
+        // Tests swapping WETH -> DAI on a USV2 pool with fees and client contribution
         // Swap is 1 WETH for      2018.8 DAI (2018817438608734439722)
         // Tycho Router takes 1% -> 20.18 DAI (20188174386087344397)
-        // Solver takes 1% ->       20.18 DAI (20188174386087344397)
+        // Client takes 1% ->       20.18 DAI (20188174386087344397)
         // But (for some reason) the client contributes with at most 22 DAI
 
         vm.startPrank(FEE_SETTER);
@@ -138,7 +138,7 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         IERC20(DAI_ADDR).approve(tychoRouterAddr, contribution);
         tychoRouter.deposit(DAI_ADDR, contribution);
         bytes memory callData = loadCallDataFromFile(
-            "test_single_swap_with_fees_and_solver_contribution"
+            "test_single_swap_with_fees_and_client_contribution"
         );
         (bool success,) = tychoRouterAddr.call(callData);
 
@@ -156,18 +156,18 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         );
         assertEq(routerFeeReceiverBalance, expectedFeeAmount);
 
-        // Check solver fee receiver vault balance (BOB)
-        uint256 solverFeeReceiverBalance =
+        // Check client fee receiver vault balance (BOB)
+        uint256 clientFeeReceiverBalance =
             tychoRouter.balanceOf(BOB, uint256(uint160(DAI_ADDR)));
-        assertEq(solverFeeReceiverBalance, expectedFeeAmount);
+        assertEq(clientFeeReceiverBalance, expectedFeeAmount);
     }
 
-    function testSequentialSwapWithSolverFees() public {
+    function testSequentialSwapWithClientFees() public {
         // Performs a sequential swap from WETH to USDC through WBTC using USV2 pools
         //
         //   WETH ───(USV2)──> WBTC ───(USV2)──> USDC
         //   1 WETH -> 1951856272 USDC
-        // Solver takes 1% (19518562 USDC)
+        // Client takes 1% (19518562 USDC)
 
         deal(WETH_ADDR, ALICE, 1 ether);
         uint256 balanceBefore = IERC20(USDC_ADDR).balanceOf(ALICE);
@@ -188,20 +188,20 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
 
         uint256 expectedFeeAmount = 19518562;
 
-        // Check solver fee receiver vault balance (BOB)
-        uint256 solverFeeReceiverBalance =
+        // Check client fee receiver vault balance (BOB)
+        uint256 clientFeeReceiverBalance =
             tychoRouter.balanceOf(BOB, uint256(uint160(USDC_ADDR)));
-        assertEq(solverFeeReceiverBalance, expectedFeeAmount);
+        assertEq(clientFeeReceiverBalance, expectedFeeAmount);
     }
 
-    function testSplitSwapWithSolverFees() public {
+    function testSplitSwapWithClientFees() public {
         // Performs a split swap from WETH to USDC though WBTC and DAI using USV2 pools
         //
         //         ┌──(USV2)──> WBTC ───(USV2)──> USDC
         //   WETH ─┤
         //         └──(USV2)──> DAI  ───(USV2)──> USDC
         //  1 WETH -> 991384372 + 1004476082 = 1995860454 USDC
-        // Solver takes 1% (19958604)
+        // Client takes 1% (19958604)
 
         deal(WETH_ADDR, ALICE, 1 ether);
         uint256 balanceBefore = IERC20(USDC_ADDR).balanceOf(ALICE);
@@ -222,9 +222,9 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
 
         uint256 expectedFeeAmount = 19958604;
 
-        // Check solver fee receiver vault balance (BOB)
-        uint256 solverFeeReceiverBalance =
+        // Check client fee receiver vault balance (BOB)
+        uint256 clientFeeReceiverBalance =
             tychoRouter.balanceOf(BOB, uint256(uint160(USDC_ADDR)));
-        assertEq(solverFeeReceiverBalance, expectedFeeAmount);
+        assertEq(clientFeeReceiverBalance, expectedFeeAmount);
     }
 }
