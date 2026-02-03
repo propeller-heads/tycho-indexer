@@ -1,3 +1,18 @@
+## [0.136.0](https://github.com/propeller-heads/tycho-indexer/compare/0.135.0...0.136.0) (2026-02-03)
+
+
+### Features
+
+* **block_history:** add error handling for partial block reverts and ensure latest block is a partial block ([e8e61fd](https://github.com/propeller-heads/tycho-indexer/commit/e8e61fd77adedd5d69815275818ded93507cb83c))
+* **block_history:** add support for partial block handling and position determination and improve test coverage ([d8eacab](https://github.com/propeller-heads/tycho-indexer/commit/d8eacab821a54a9bcee964fb8bbfb8846a4740c7))
+* **cli:** add partial_blocks flag to enable receiving incremental block updates ([cb27e64](https://github.com/propeller-heads/tycho-indexer/commit/cb27e64d3fc29af2280e5024a6dbb65a55b0dfad))
+* client supports partial blocks ([#838](https://github.com/propeller-heads/tycho-indexer/issues/838)) ([7ec8b14](https://github.com/propeller-heads/tycho-indexer/commit/7ec8b145aa4a8e82aed52c4983d6841108a78fa5))
+* **merge:** enhance merge logic to handle partial block validation and error reporting ([d77e22a](https://github.com/propeller-heads/tycho-indexer/commit/d77e22a9e78f21652dedb5731863790cdf48205c))
+* **stream:** add send_partials flag to `TychoStreamBuilder` to enable receiving incremental block updates ([6c6a69a](https://github.com/propeller-heads/tycho-indexer/commit/6c6a69a83b94982d9ed39cc16b73d91685060798))
+* **synchronizer:** add send_partials flag to `ProtocolStateSynchronizer` to enable incremental block updates ([1ed9e27](https://github.com/propeller-heads/tycho-indexer/commit/1ed9e2730ae4f4facae3ab8f514044a286a9e330))
+* **synchronizer:** implement partial block handling and synchronization logic ([e7318e2](https://github.com/propeller-heads/tycho-indexer/commit/e7318e256162aa0ac770be0dc6bbb10e9cd82706))
+* **synchronizer:** improve partial block handling by accepting full blocks as first messages and detecting block number increases instead of partial index decrease ([6661e76](https://github.com/propeller-heads/tycho-indexer/commit/6661e769996846b9dc9ec19858326152a369a129))
+
 ## [0.135.0](https://github.com/propeller-heads/tycho-indexer/compare/0.134.0...0.135.0) (2026-02-02)
 
 
