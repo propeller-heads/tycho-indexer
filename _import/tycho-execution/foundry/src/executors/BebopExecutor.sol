@@ -33,14 +33,14 @@ contract BebopExecutor is IExecutor {
         bebopSettlement = _bebopSettlement;
     }
 
-    function canReceiveFromPreviousSwap(
+    function fundsExpectedAddress(
         bytes calldata /* data */
     )
         external
         view
-        returns (bool isOptimizable, address receiver)
+        returns (address receiver)
     {
-        return (false, msg.sender);
+        return msg.sender;
     }
 
     /// @notice Executes a swap through Bebop's PMM RFQ system

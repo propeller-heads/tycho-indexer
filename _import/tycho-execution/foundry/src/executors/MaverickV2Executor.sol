@@ -28,13 +28,13 @@ contract MaverickV2Executor is IExecutor {
         factory = _factory;
     }
 
-    function canReceiveFromPreviousSwap(bytes calldata data)
+    function fundsExpectedAddress(bytes calldata data)
         external
         pure
-        returns (bool isOptimizable, address receiver)
+        returns (address receiver)
     {
         address target = address(bytes20(data[0:20]));
-        return (true, target);
+        return target;
     }
 
     // slither-disable-next-line locked-ether

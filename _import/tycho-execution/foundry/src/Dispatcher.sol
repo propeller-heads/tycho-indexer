@@ -258,10 +258,11 @@ contract Dispatcher is RestrictTransferFrom {
         return decodedResult;
     }
 
-    function _callCanReceiveFromPreviousSwap(
-        address executor,
-        bytes calldata data
-    ) internal view returns (bool isOptimizable, address receiver) {
+    function _callFundsExpectedAddress(address executor, bytes calldata data)
+        internal
+        view
+        returns (address receiver)
+    {
         uint64 activationBlock = executorsActivationBlock[executor];
 
         // slither-disable-next-line incorrect-equality
@@ -273,24 +274,24 @@ contract Dispatcher is RestrictTransferFrom {
         }
 
         // slither-disable-next-line calls-loop,low-level-calls
-        (bool success, bytes memory optimizableData) = executor.staticcall(
+        (bool success, bytes memory receiverData) = executor.staticcall(
             abi.encodeWithSelector(
-                IExecutor.canReceiveFromPreviousSwap.selector, data
+                IExecutor.fundsExpectedAddress.selector, data
             )
         );
 
         if (!success) {
             revert(
                 string(
-                    optimizableData.length > 0
-                        ? optimizableData
+                    receiverData.length > 0
+                        ? receiverData
                         : abi.encodePacked(
-                            "Getting protocol optimizable data failed"
+                            "Getting protocol expected address failed"
                         )
                 )
             );
         }
 
-        (isOptimizable, receiver) = abi.decode(optimizableData, (bool, address));
+        receiver = abi.decode(receiverData, (address));
     }
 }

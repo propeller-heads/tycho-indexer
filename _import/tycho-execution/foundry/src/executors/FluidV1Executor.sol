@@ -42,14 +42,14 @@ contract FluidV1Executor is IExecutor, ICallback {
         liquidity = _liquidity;
     }
 
-    function canReceiveFromPreviousSwap(
+    function fundsExpectedAddress(
         bytes calldata /* data */
     )
         external
         view
-        returns (bool isOptimizable, address receiver)
+        returns (address receiver)
     {
-        return (false, msg.sender);
+        return msg.sender;
     }
 
     function swap(uint256 amountIn, bytes calldata data, address receiver)
