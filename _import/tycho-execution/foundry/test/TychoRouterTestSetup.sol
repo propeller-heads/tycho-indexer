@@ -32,11 +32,11 @@ import "@src/TychoRouter.sol";
 import "@src/FeeCalculator.sol";
 
 contract TychoRouterExposed is TychoRouter {
-    constructor(address _permit2, address feeCalculator)
-        TychoRouter(
-            _permit2, feeCalculator, BLOCK_DELAY_EXECUTOR_ACTIVATION_ETHEREUM
-        )
-    {}
+    constructor(
+        address _permit2,
+        address feeCalculator,
+        uint256 _blocksToDelayExecutorActivation
+    ) TychoRouter(_permit2, feeCalculator, _blocksToDelayExecutorActivation) {}
 
     function tstoreExposed(
         address tokenIn,
@@ -129,7 +129,11 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     }
 
     function deployRouter() public returns (TychoRouterExposed) {
-        tychoRouter = new TychoRouterExposed(PERMIT2_ADDRESS, address(123)); // address(123) is just a placeholder until we set the real FeeCalculator
+        tychoRouter = new TychoRouterExposed(
+            PERMIT2_ADDRESS,
+            address(123),
+            BLOCK_DELAY_EXECUTOR_ACTIVATION_ETHEREUM
+        ); // address(123) is just a placeholder until we set the real FeeCalculator
         tychoRouterAddr = address(tychoRouter);
         tychoRouter.grantRole(keccak256("PAUSER_ROLE"), PAUSER);
         tychoRouter.grantRole(keccak256("UNPAUSER_ROLE"), UNPAUSER);
