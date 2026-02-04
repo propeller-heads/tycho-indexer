@@ -730,6 +730,7 @@ where
                     &self.protocol_types,
                     inp.final_block_height,
                     inp.partial_index,
+                    inp.is_last_partial,
                 ))
             }
             url if url.ends_with("BlockContractChanges") => {
