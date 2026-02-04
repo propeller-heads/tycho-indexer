@@ -74,6 +74,7 @@ struct GatewayInner<G> {
 /// Separate from the reorg buffer: reorg buffer handles finalized complete blocks,
 /// while this buffer holds partial blocks used to build full blocks.
 #[derive(Default)]
+#[allow(dead_code)]
 struct PartialBlockBuffer {
     /// The current block number being accumulated
     current_block_number: Option<u64>,
@@ -81,6 +82,7 @@ struct PartialBlockBuffer {
     partials: Vec<BlockChanges>,
 }
 
+#[allow(dead_code)]
 impl PartialBlockBuffer {
     fn new() -> Self {
         Self { current_block_number: None, partials: Vec::new() }
@@ -185,6 +187,14 @@ impl PartialBlockBuffer {
     fn clear(&mut self) {
         self.partials.clear();
         self.current_block_number = None;
+    }
+
+    fn len(&self) -> usize {
+        self.partials.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.partials.is_empty()
     }
 }
 
@@ -3896,5 +3906,173 @@ mod test_serial_db {
             ),
         ]
         .into_iter()
+    }
+
+    // ---- PartialBlockBuffer tests -- //
+
+    fn create_partial_block(block_num: u64, partial_index: u32) -> BlockChanges {
+        let mut block = create_full_block(block_num);
+        block.set_partial_block_index(Some(partial_index));
+        block
+    }
+
+    fn create_full_block(block_num: u64) -> BlockChanges {
+        let mut block_changes = BlockChanges::default();
+        block_changes.block.number = block_num;
+        block_changes
+    }
+
+    #[test]
+    fn test_insert_non_partial_block_errors() {
+        let mut buffer = PartialBlockBuffer::new();
+        let full_block = create_full_block(100);
+
+        let result = buffer.insert_partial(full_block);
+
+        assert!(matches!(result, Err(ExtractionError::PartialBlockBufferError(_))));
+    }
+
+    #[test]
+    fn test_insert_mismatched_block_number_errors() {
+        let mut buffer = PartialBlockBuffer::new();
+
+        buffer
+            .insert_partial(create_partial_block(100, 0))
+            .unwrap();
+
+        let result = buffer.insert_partial(create_partial_block(101, 0));
+
+        assert!(matches!(result, Err(ExtractionError::PartialBlockBufferError(_))));
+    }
+
+    #[test]
+    fn test_merge_mismatched_block_number_errors() {
+        let mut buffer = PartialBlockBuffer::new();
+
+        buffer
+            .insert_partial(create_partial_block(100, 0))
+            .unwrap();
+
+        let mut full_block = create_full_block(101);
+        let result = buffer.drain_and_merge_into(&mut full_block);
+
+        assert!(matches!(result, Err(ExtractionError::PartialBlockBufferError(_))));
+    }
+
+    #[test]
+    fn test_insert_single_partial_and_merge() {
+        let mut buffer = PartialBlockBuffer::new();
+
+        buffer
+            .insert_partial(create_partial_block(100, 0))
+            .unwrap();
+
+        let mut full_block = create_full_block(100);
+        buffer
+            .drain_and_merge_into(&mut full_block)
+            .unwrap();
+
+        assert!(buffer.is_empty());
+        assert_eq!(buffer.current_block_number, None);
+    }
+
+    #[test]
+    fn test_insert_multiple_partials_same_block() {
+        let mut buffer = PartialBlockBuffer::new();
+
+        buffer
+            .insert_partial(create_partial_block(100, 0))
+            .unwrap();
+        buffer
+            .insert_partial(create_partial_block(100, 1))
+            .unwrap();
+        buffer
+            .insert_partial(create_partial_block(100, 2))
+            .unwrap();
+
+        assert_eq!(buffer.len(), 3);
+        assert_eq!(buffer.current_block_number, Some(100));
+    }
+
+    #[test]
+    fn test_merge_with_empty_buffer_is_noop() {
+        let mut buffer = PartialBlockBuffer::new();
+        let full_block_orig = create_full_block(100);
+        let mut full_block_merged = full_block_orig.clone();
+
+        buffer
+            .drain_and_merge_into(&mut full_block_merged)
+            .unwrap();
+
+        assert!(buffer.is_empty());
+        assert_eq!(full_block_merged, full_block_orig);
+    }
+
+    #[test]
+    fn test_clear_buffer() {
+        let mut buffer = PartialBlockBuffer::new();
+
+        buffer
+            .insert_partial(create_partial_block(100, 0))
+            .unwrap();
+        buffer
+            .insert_partial(create_partial_block(100, 1))
+            .unwrap();
+
+        assert_eq!(buffer.len(), 2);
+
+        buffer.clear();
+
+        assert!(buffer.is_empty());
+        assert_eq!(buffer.current_block_number, None);
+    }
+
+    #[test]
+    fn test_merge_sorts_transactions_by_index() {
+        use tycho_common::models::blockchain::{Transaction, TxWithChanges};
+
+        let mut buffer = PartialBlockBuffer::new();
+
+        // Create partial with tx index 5
+        let mut partial1 = create_partial_block(100, 0);
+        partial1
+            .txs_with_update
+            .push(TxWithChanges {
+                tx: Transaction::new(Bytes::zero(32), Bytes::zero(32), Bytes::zero(20), None, 5),
+                ..Default::default()
+            });
+
+        // Create partial with tx index 2
+        let mut partial2 = create_partial_block(100, 1);
+        partial2
+            .txs_with_update
+            .push(TxWithChanges {
+                tx: Transaction::new(Bytes::zero(32), Bytes::zero(32), Bytes::zero(20), None, 2),
+                ..Default::default()
+            });
+
+        buffer.insert_partial(partial1).unwrap();
+        buffer.insert_partial(partial2).unwrap();
+
+        // Full block with tx index 0
+        let mut full_block = create_full_block(100);
+        full_block
+            .txs_with_update
+            .push(TxWithChanges {
+                tx: Transaction::new(Bytes::zero(32), Bytes::zero(32), Bytes::zero(20), None, 0),
+                ..Default::default()
+            });
+
+        buffer
+            .drain_and_merge_into(&mut full_block)
+            .unwrap();
+
+        // Check transactions are sorted by index
+        let indices: Vec<u64> = full_block
+            .txs_with_update
+            .iter()
+            .map(|tx| tx.tx.index)
+            .collect();
+        assert_eq!(indices, vec![0, 2, 5]);
     }
 }
