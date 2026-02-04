@@ -6,6 +6,7 @@ import {ICallback} from "@interfaces/ICallback.sol";
 import {RestrictTransferFrom} from "./RestrictTransferFrom.sol";
 
 error Dispatcher__UnapprovedExecutor(address executor);
+error Dispatcher__ExecutorIsTimelocked(address executor);
 error Dispatcher__NonContractExecutor();
 error Dispatcher__InvalidDataLength();
 error Dispatcher__AddressZero();
@@ -22,7 +23,7 @@ error Dispatcher__AddressZero();
  *  an alternate selector is specified.
  */
 contract Dispatcher is RestrictTransferFrom {
-    mapping(address => bool) public executors;
+    mapping(address => uint64) public executorsActivationBlock;
 
     // keccak256("Dispatcher#CURRENTLY_SWAPPING_EXECUTOR_SLOT")
     uint256 private constant _CURRENTLY_SWAPPING_EXECUTOR_SLOT =
@@ -34,13 +35,18 @@ contract Dispatcher is RestrictTransferFrom {
     uint256 private constant _IS_FIRST_SWAP_SLOT =
         0x8c47a7e3f4c2e1b5a6d9f0e8c7b3a2d1e4f5c6b7a8d9e0f1c2b3a4d5e6f7c8d9;
 
+    uint256 private immutable blocksToDelayExecutorActivation;
+
     event ExecutorSet(address indexed executor);
     event ExecutorRemoved(address indexed executor);
 
-    constructor(address _permit2) RestrictTransferFrom(_permit2) {
+    constructor(address _permit2, uint256 _blocksToDelayExecutorActivation)
+        RestrictTransferFrom(_permit2)
+    {
         if (_permit2 == address(0)) {
             revert Dispatcher__AddressZero();
         }
+        blocksToDelayExecutorActivation = _blocksToDelayExecutorActivation;
     }
 
     /**
@@ -52,7 +58,9 @@ contract Dispatcher is RestrictTransferFrom {
         if (target.code.length == 0) {
             revert Dispatcher__NonContractExecutor();
         }
-        executors[target] = true;
+
+        executorsActivationBlock[target] =
+            uint64(block.number + blocksToDelayExecutorActivation);
         emit ExecutorSet(target);
     }
 
@@ -61,7 +69,7 @@ contract Dispatcher is RestrictTransferFrom {
      * @param target address of the executor contract
      */
     function _removeExecutor(address target) internal {
-        delete executors[target];
+        delete executorsActivationBlock[target];
         emit ExecutorRemoved(target);
     }
 
@@ -78,8 +86,14 @@ contract Dispatcher is RestrictTransferFrom {
         bool isSplitSwap,
         address receiver
     ) internal returns (uint256 calculatedAmount) {
-        if (!executors[executor]) {
+        uint64 activationBlock = executorsActivationBlock[executor];
+
+        // slither-disable-next-line incorrect-equality
+        if (activationBlock == 0) {
             revert Dispatcher__UnapprovedExecutor(executor);
+        }
+        if (block.number < activationBlock) {
+            revert Dispatcher__ExecutorIsTimelocked(executor);
         }
 
         assembly {
@@ -169,8 +183,14 @@ contract Dispatcher is RestrictTransferFrom {
             isSplitSwap := tload(_IS_SPLIT_SWAP_SLOT)
         }
 
-        if (!executors[executor]) {
+        uint64 activationBlock = executorsActivationBlock[executor];
+
+        // slither-disable-next-line incorrect-equality
+        if (activationBlock == 0) {
             revert Dispatcher__UnapprovedExecutor(executor);
+        }
+        if (block.number < activationBlock) {
+            revert Dispatcher__ExecutorIsTimelocked(executor);
         }
 
         (bool transferDataSuccess, bytes memory transferData) = executor.delegatecall(
@@ -242,9 +262,16 @@ contract Dispatcher is RestrictTransferFrom {
         address executor,
         bytes calldata data
     ) internal view returns (bool isOptimizable, address receiver) {
-        if (!executors[executor]) {
+        uint64 activationBlock = executorsActivationBlock[executor];
+
+        // slither-disable-next-line incorrect-equality
+        if (activationBlock == 0) {
             revert Dispatcher__UnapprovedExecutor(executor);
         }
+        if (block.number < activationBlock) {
+            revert Dispatcher__ExecutorIsTimelocked(executor);
+        }
+
         // slither-disable-next-line calls-loop,low-level-calls
         (bool success, bytes memory optimizableData) = executor.staticcall(
             abi.encodeWithSelector(

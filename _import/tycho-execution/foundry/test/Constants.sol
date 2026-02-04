@@ -193,4 +193,10 @@ contract Constants is Test, BaseConstants {
         vm.etch(DUMMY2, minimalBytecode);
         vm.etch(DUMMY3, minimalBytecode);
     }
+
+    // Block offset for setup to ensure that the executors timelock has passed in the setup
+    uint256 internal constant _SETUP_BLOCK_OFFSET_ETHEREUM = 50400; // ~7 days
+
+    // Block delay for the new executors activation
+    uint256 internal constant BLOCK_DELAY_EXECUTOR_ACTIVATION_ETHEREUM = 21600; // ~3 days
 }

@@ -261,7 +261,8 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         vm.expectRevert(
             abi.encodeWithSelector(Vault__UnexpectedNonZeroCount.selector, 1)
         );
-        tychoRouter.singleSwap( // No msg.value sent!
+        tychoRouter.singleSwap(
+            // No msg.value sent!
             amountIn,
             address(0), // ETH
             RETH_ADDR,
@@ -443,14 +444,18 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
 
     function setUp() public override {
         super.setUp();
+        uint256 forkBlock = getForkBlock();
+        vm.roll(forkBlock - _SETUP_BLOCK_OFFSET_ETHEREUM);
         wrapUnwrapExecutor = new WrapUnwrapExecutor(WETH_ADDR);
 
         // Add wrapUnwrapExecutor to allowed executors
         address[] memory executors = new address[](1);
         executors[0] = address(wrapUnwrapExecutor);
         vm.startPrank(EXECUTOR_SETTER);
+
         tychoRouter.setExecutors(executors);
         vm.stopPrank();
+        vm.roll(forkBlock);
     }
 
     function testSequentialCyclicSwapAndVaultIntegration() public {
