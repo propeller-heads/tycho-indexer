@@ -23,7 +23,7 @@ error Dispatcher__AddressZero();
  *  an alternate selector is specified.
  */
 contract Dispatcher is RestrictTransferFrom {
-    mapping(address => uint64) public executorActivationBlock;
+    mapping(address => uint64) public executorsActivationBlock;
 
     // keccak256("Dispatcher#CURRENTLY_SWAPPING_EXECUTOR_SLOT")
     uint256 private constant _CURRENTLY_SWAPPING_EXECUTOR_SLOT =
@@ -59,7 +59,7 @@ contract Dispatcher is RestrictTransferFrom {
             revert Dispatcher__NonContractExecutor();
         }
 
-        executorActivationBlock[target] =
+        executorsActivationBlock[target] =
             uint64(block.number + blocksToDelayExecutorActivation);
         emit ExecutorSet(target);
     }
@@ -69,7 +69,7 @@ contract Dispatcher is RestrictTransferFrom {
      * @param target address of the executor contract
      */
     function _removeExecutor(address target) internal {
-        delete executorActivationBlock[target];
+        delete executorsActivationBlock[target];
         emit ExecutorRemoved(target);
     }
 
@@ -86,7 +86,7 @@ contract Dispatcher is RestrictTransferFrom {
         bool isSplitSwap,
         address receiver
     ) internal returns (uint256 calculatedAmount) {
-        uint64 activationBlock = executorActivationBlock[executor];
+        uint64 activationBlock = executorsActivationBlock[executor];
 
         // slither-disable-next-line incorrect-equality
         if (activationBlock == 0) {
@@ -183,7 +183,7 @@ contract Dispatcher is RestrictTransferFrom {
             isSplitSwap := tload(_IS_SPLIT_SWAP_SLOT)
         }
 
-        uint64 activationBlock = executorActivationBlock[executor];
+        uint64 activationBlock = executorsActivationBlock[executor];
 
         // slither-disable-next-line incorrect-equality
         if (activationBlock == 0) {
@@ -262,7 +262,7 @@ contract Dispatcher is RestrictTransferFrom {
         address executor,
         bytes calldata data
     ) internal view returns (bool isOptimizable, address receiver) {
-        uint64 activationBlock = executorActivationBlock[executor];
+        uint64 activationBlock = executorsActivationBlock[executor];
 
         // slither-disable-next-line incorrect-equality
         if (activationBlock == 0) {

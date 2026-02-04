@@ -199,6 +199,4 @@ contract Constants is Test, BaseConstants {
 
     // Block offset for setup to ensure that the executors timelock has passed in the setup
     uint256 internal constant BLOCK_DELAY_EXECUTOR_ACTIVATION_ETHEREUM = 21600; // ~3 days
-    uint256 internal constant BLOCK_DELAY_EXECUTOR_ACTIVATION_BASE = 129600; // ~3 days
-    uint256 internal constant BLOCK_DELAY_EXECUTOR_ACTIVATION_UNICHAIN = 259200; // ~3 days
 }
