@@ -105,6 +105,8 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         string memory chain = getChain();
         uint256 forkBlock = getForkBlock();
         vm.createSelectFork(vm.rpcUrl(chain), forkBlock);
+        uint256 setupBlock = forkBlock - _SETUP_BLOCK_OFFSET;
+        vm.roll(setupBlock);
 
         vm.startPrank(ADMIN);
         tychoRouter = deployRouter();
@@ -113,9 +115,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
 
         address[] memory executors = deployExecutors();
         vm.startPrank(EXECUTOR_SETTER);
-        vm.roll(forkBlock - _SETUP_BLOCK_OFFSET);
         tychoRouter.setExecutors(executors);
-        vm.roll(forkBlock);
         vm.stopPrank();
 
         // The fee calculator is only deployed here because if we do it before the router and executors ALL the addresses will change and this will break a lot of tests
@@ -123,6 +123,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         vm.prank(FEE_SETTER);
         tychoRouter.setFeeCalculator(address(feeCalculator));
         vm.stopPrank();
+        vm.roll(forkBlock);
     }
 
     function deployRouter() public returns (TychoRouterExposed) {
