@@ -177,7 +177,7 @@ contract CurveExecutor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType baseTransferType,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -187,11 +187,10 @@ contract CurveExecutor is IExecutor {
             // ETH transfers are handled in the Executor, so we need to set the transferType to TransferNativeInExecutor
             // to update the delta accounting accordingly.
             tokenIn = address(0);
-            baseTransferType =
+            transferType =
             RestrictTransferFrom.TransferType.TransferNativeInExecutor;
         } else {
-            baseTransferType =
-            RestrictTransferFrom.TransferType.ProtocolWillDebit;
+            transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
         }
         // The receiver of the funds will be the pool contract. This is only relevant
         // for performing an approval in the case of ProtocolWillDebit.

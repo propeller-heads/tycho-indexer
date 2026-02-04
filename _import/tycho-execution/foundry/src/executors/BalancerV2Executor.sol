@@ -82,7 +82,7 @@ contract BalancerV2Executor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType baseTransferType,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -93,6 +93,6 @@ contract BalancerV2Executor is IExecutor {
 
         tokenIn = address(bytes20(data[0:20]));
         receiver = VAULT;
-        baseTransferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
+        transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
     }
 }

@@ -521,7 +521,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType baseTransferType,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -533,7 +533,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType baseTransferType,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn,
             uint256 amount
@@ -563,10 +563,10 @@ contract UniswapV4Executor is IExecutor, ICallback {
             if (tokenIn == address(0)) {
                 // ETH transfers are handled in the Executor, so we need to set the transferType to
                 // TransferNativeInExecutor to update the delta accounting accordingly.
-                baseTransferType =
+                transferType =
                 RestrictTransferFrom.TransferType.TransferNativeInExecutor;
             } else {
-                baseTransferType = RestrictTransferFrom.TransferType.Transfer;
+                transferType = RestrictTransferFrom.TransferType.Transfer;
             }
         } else if (selector == SWAP_EXACT_INPUT_SELECTOR) {
             // swapExactInput(Currency currencyIn, uint128 amountIn, address receiver, PathKey[] calldata path)
@@ -577,10 +577,10 @@ contract UniswapV4Executor is IExecutor, ICallback {
             if (tokenIn == address(0)) {
                 // ETH transfers are handled in the Executor, so we need to set the transferType to
                 // TransferNativeInExecutor to update the delta accounting accordingly.
-                baseTransferType =
+                transferType =
                 RestrictTransferFrom.TransferType.TransferNativeInExecutor;
             } else {
-                baseTransferType = RestrictTransferFrom.TransferType.Transfer;
+                transferType = RestrictTransferFrom.TransferType.Transfer;
             }
         } else {
             revert UniswapV4Executor__UnknownCallback(selector);

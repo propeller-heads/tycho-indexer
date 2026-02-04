@@ -138,7 +138,7 @@ contract FluidV1Executor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType baseTransferType,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -150,7 +150,7 @@ contract FluidV1Executor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType baseTransferType,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn,
             uint256 amount
@@ -160,10 +160,10 @@ contract FluidV1Executor is IExecutor, ICallback {
         if (tokenIn == address(0)) {
             // ETH transfers are handled in the Executor, so we need to set the transferType to TransferNativeInExecutor
             // to update the delta accounting accordingly.
-            baseTransferType =
+            transferType =
             RestrictTransferFrom.TransferType.TransferNativeInExecutor;
         } else {
-            baseTransferType = RestrictTransferFrom.TransferType.Transfer;
+            transferType = RestrictTransferFrom.TransferType.Transfer;
         }
         receiver = liquidity;
     }

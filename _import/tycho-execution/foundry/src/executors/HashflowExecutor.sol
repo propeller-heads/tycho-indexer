@@ -133,7 +133,7 @@ contract HashflowExecutor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType baseTransferType,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -142,7 +142,7 @@ contract HashflowExecutor is IExecutor {
             revert HashflowExecutor__InvalidDataLength();
         }
 
-        baseTransferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
+        transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
         tokenIn = address(bytes20(data[60:80]));
         // The receiver of the funds will be the Hashflow Router.
         receiver = hashflowRouter;

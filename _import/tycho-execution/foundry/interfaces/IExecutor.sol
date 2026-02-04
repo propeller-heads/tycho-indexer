@@ -37,14 +37,14 @@ interface IExecutor {
      * to be transferred upfront, while others handle transfers in callbacks.
      *
      * @param data The encoded swap data.
-     * @return baseTransferType The base transfer type for this executor (None, ProtocolWillDebit, Transfer or TransferNativeInExecutor).
+     * @return transferType The transfer type for this executor (None, ProtocolWillDebit, Transfer or TransferNativeInExecutor).
      * @return receiver The address that should receive the pre swap tokens (usually a pool or the TychoRouter - depending on the protocol).
      * @return tokenIn The address of the input token to transfer.
      */
     function getTransferData(bytes calldata data)
         external
         payable
-        returns (RestrictTransferFrom.TransferType baseTransferType, address receiver, address tokenIn);
+        returns (RestrictTransferFrom.TransferType transferType, address receiver, address tokenIn);
 
     /**
      * @dev Defines if the current protocol can be used in an optimization from the previous swap (this is only used for the sequential swap case).

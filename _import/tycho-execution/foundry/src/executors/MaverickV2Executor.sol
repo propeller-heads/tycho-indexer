@@ -88,7 +88,7 @@ contract MaverickV2Executor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType baseTransferType,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -98,7 +98,7 @@ contract MaverickV2Executor is IExecutor {
         }
         receiver = address(bytes20(data[0:20]));
         tokenIn = address(bytes20(data[20:40]));
-        baseTransferType = RestrictTransferFrom.TransferType.Transfer;
+        transferType = RestrictTransferFrom.TransferType.Transfer;
     }
 }
 

@@ -194,7 +194,7 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType baseTransferType,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -206,7 +206,7 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType baseTransferType,
+            RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn,
             uint256 amount
@@ -217,7 +217,7 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         amount =
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
         tokenIn = address(bytes20(data[132:152]));
-        baseTransferType = RestrictTransferFrom.TransferType.Transfer;
+        transferType = RestrictTransferFrom.TransferType.Transfer;
         receiver = msg.sender;
     }
 }
