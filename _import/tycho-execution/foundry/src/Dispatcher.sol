@@ -258,10 +258,11 @@ contract Dispatcher is RestrictTransferFrom {
         return decodedResult;
     }
 
-    function _callFundsExpectedAddress(
-        address executor,
-        bytes calldata data
-    ) internal view returns (bool isOptimizable, address receiver) {
+    function _callFundsExpectedAddress(address executor, bytes calldata data)
+        internal
+        view
+        returns (address receiver)
+    {
         uint64 activationBlock = executorsActivationBlock[executor];
 
         // slither-disable-next-line incorrect-equality
