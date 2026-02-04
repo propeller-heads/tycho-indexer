@@ -101,7 +101,7 @@ contract DispatcherTest is Constants {
         // Bad data is provided to an approved executor - causing the call to fail
         // Make sure the executor is not timelocked
         uint256 forkBlock = 20673900;
-        vm.roll(forkBlock - 504000);
+        vm.roll(forkBlock - _SETUP_BLOCK_OFFSET);
         dispatcherExposed.exposedSetExecutor(
             address(0xe592557AB9F4A75D992283fD6066312FF013ba3d)
         );

@@ -193,4 +193,7 @@ contract Constants is Test, BaseConstants {
         vm.etch(DUMMY2, minimalBytecode);
         vm.etch(DUMMY3, minimalBytecode);
     }
+
+    // Block offset for setup to ensure that the executors timelock has passed in the setup
+    uint256 internal constant _SETUP_BLOCK_OFFSET = 50400; // ~7 days
 }
