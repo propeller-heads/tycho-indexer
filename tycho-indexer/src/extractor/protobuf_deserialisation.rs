@@ -22,7 +22,10 @@ use tycho_common::{
 use tycho_substreams::pb::tycho::evm::v1 as substreams;
 
 use crate::extractor::{
-    models::{BlockChanges, BlockContractChanges, BlockEntityChanges, TxWithContractChanges},
+    models::{
+        BlockChanges, BlockContractChanges, BlockEntityChanges, PartialBlockInfo,
+        TxWithContractChanges,
+    },
     u256_num::bytes_to_f64,
     ExtractionError,
 };
@@ -672,6 +675,7 @@ impl TryFromMessage for BlockChanges {
         &'a HashMap<String, ProtocolType>,
         u64,
         Option<u32>,
+        Option<bool>,
     );
 
     fn try_from_message(args: Self::Args<'_>) -> Result<Self, ExtractionError> {
@@ -683,6 +687,7 @@ impl TryFromMessage for BlockChanges {
             protocol_types,
             finalized_block_height,
             partial_block_index,
+            is_last_partial,
         ) = args;
 
         if let Some(block) = msg.block {
@@ -726,7 +731,10 @@ impl TryFromMessage for BlockChanges {
                 txs_with_update,
                 block_storage_changes,
             );
-            block_changes.set_partial_block_index(partial_block_index);
+            block_changes.set_partial_block(
+                partial_block_index
+                    .map(|index| PartialBlockInfo::new(index, is_last_partial.unwrap_or(false))),
+            );
 
             Ok(block_changes)
         } else {

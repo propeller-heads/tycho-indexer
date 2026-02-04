@@ -725,8 +725,8 @@ where
                 .insert_block(BlockUpdateWithCursor::new(msg.clone(), cursor.clone()))
                 .map_err(ExtractionError::Storage)?;
 
-            if reorg_buffer.count_blocks_before(final_block_height) >=
-                self.gateway.commit_batch_size
+            if reorg_buffer.count_blocks_before(final_block_height)
+                >= self.gateway.commit_batch_size
             {
                 reorg_buffer
                     .drain_blocks_until(final_block_height)
@@ -914,6 +914,7 @@ where
                         &self.protocol_types,
                         inp.final_block_height,
                         inp.partial_index,
+                        inp.is_last_partial,
                     ))
                 }
                 url if url.ends_with("BlockContractChanges") => {
@@ -968,8 +969,8 @@ where
             };
 
             if let Some(last_processed_block) = self.get_last_processed_block().await {
-                if msg.block.ts.and_utc().timestamp() ==
-                    last_processed_block
+                if msg.block.ts.and_utc().timestamp()
+                    == last_processed_block
                         .ts
                         .and_utc()
                         .timestamp()
@@ -1099,8 +1100,8 @@ where
             .lock()
             .await
             .as_ref()
-            .and_then(|b| b.partial_block_index)
-            .map_or("None".to_string(), |i| i.to_string());
+            .and_then(|b| b.partial_block.as_ref())
+            .map_or("None".to_string(), |i| i.index.to_string());
 
         tracing::Span::current().record("current_block", &last_processed_block_number);
         tracing::Span::current()
@@ -1156,7 +1157,10 @@ where
             // If we have not reverted any full blocks and the partial block buffer is not empty,
             // mark it as a partial revert to avoid sending to full block subscribers.
             if reverted_state.is_empty() {
-                revert_partial_block_index = partial.partial_block_index
+                revert_partial_block_index = partial
+                    .partial_block
+                    .as_ref()
+                    .map(|p| p.index);
             }
 
             // The partial block's cursor should be the current cursor
@@ -1183,8 +1187,8 @@ where
                                     range of blocks, we only want to remove it (so undo its creation).
                                     As here we go through the reverted state from the oldest to the newest, we just insert the first time we meet a component and ignore it if we meet it again after.
                                     */
-                                    if !reverted_deletions.contains_key(id) &&
-                                        !reverted_creations.contains_key(id)
+                                    if !reverted_deletions.contains_key(id)
+                                        && !reverted_creations.contains_key(id)
                                     {
                                         match new_component.change {
                                             ChangeType::Update => {}
