@@ -177,10 +177,10 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         );
     }
 
-    function testSingleSwapSolverContribution() public {
+    function testSingleSwapClientContribution() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2
         // The minAmountOut is higher than the output amount from the pool
-        // The solver contribution is sent with the final amount out to the receiver (not optimized last transfer)
+        // The client contribution is sent with the final amount out to the receiver (not optimized last transfer)
         uint256 amountIn = 1 ether;
 
         deal(WETH_ADDR, ALICE, amountIn);
@@ -227,7 +227,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
-    function testSingleSwapSolverContributionNotEnough() public {
+    function testSingleSwapClientContributionNotEnough() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2
         // The minAmountOut is higher than the output amount from the pool
         // and there won't be enough client contribution to cover the difference.
@@ -268,7 +268,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
-    function testSingleSwapSolverContributionNotEnoughFunds() public {
+    function testSingleSwapClientContributionNotEnoughFunds() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2
         // The minAmountOut is higher than the output amount from the pool
         // the client contribution is high enough but there won't be enough funds in the vault
@@ -312,10 +312,10 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
-    function testSingleSwapSolverContributionDirectlyToReceiver() public {
+    function testSingleSwapClientContributionDirectlyToReceiver() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2
         // The minAmountOut is higher than the output amount from the pool
-        // The solver contribution is sent separately to the user (the last transfer is optimized)
+        // The client contribution is sent separately to the user (the last transfer is optimized)
         uint256 amountIn = 1 ether;
 
         deal(WETH_ADDR, ALICE, amountIn);

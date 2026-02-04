@@ -326,8 +326,8 @@ contract Dispatcher is RestrictTransferFrom {
     function _callCalculateFee(
         address feeCalculator,
         uint256 amountIn,
-        uint16 solverFeeBps,
-        address solverFeeReceiver
+        uint16 clientFeeBps,
+        address clientFeeReceiver
     )
         internal
         view
@@ -339,8 +339,8 @@ contract Dispatcher is RestrictTransferFrom {
                 IFeeCalculator.calculateFee.selector,
                 amountIn,
                 msg.sender,
-                solverFeeBps,
-                solverFeeReceiver
+                clientFeeBps,
+                clientFeeReceiver
             )
         );
 

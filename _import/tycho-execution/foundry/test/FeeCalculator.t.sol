@@ -32,31 +32,31 @@ contract FeeCalculatorTest is Constants {
         // Router fee
         assertEq(feeRecipients[0].recipient, ALICE);
         assertEq(feeRecipients[0].feeAmount, 0.01 ether);
-        // Solver fee
+        // Client fee
         assertEq(feeRecipients[1].recipient, DUMMY);
         assertEq(feeRecipients[1].feeAmount, 0);
     }
 
-    function testCalculateOnlyRouterFeeOnSolverFee() public {
-        // Test with only router fee on solver fee set (requires solver fee to be set too)
+    function testCalculateOnlyRouterFeeOnClientFee() public {
+        // Test with only router fee on client fee set (requires client fee to be set too)
         vm.prank(FEE_SETTER);
-        feeCalculator.setRouterFeeOnSolverFee(1000); // 10% of solver fee
+        feeCalculator.setRouterFeeOnClientFee(1000); // 10% of client fee
 
         uint256 amountIn = 1 ether;
-        uint16 solverFeeBps = 200; // 2%
+        uint16 clientFeeBps = 200; // 2%
 
         (uint256 amountOut, FeeRecipient[] memory feeRecipients) =
-            feeCalculator.calculateFee(amountIn, BOB, solverFeeBps, DUMMY);
+            feeCalculator.calculateFee(amountIn, BOB, clientFeeBps, DUMMY);
 
-        // solverFee = 1 ether * 200 / 10000 = 0.02 ether
-        // routerFeeOnSolverFee = 0.02 ether * 1000 / 10000 = 0.002 ether
-        // solverPortion = 0.02 - 0.002 = 0.018 ether
+        // clientFee = 1 ether * 200 / 10000 = 0.02 ether
+        // routerFeeOnClientFee = 0.02 ether * 1000 / 10000 = 0.002 ether
+        // clientPortion = 0.02 - 0.002 = 0.018 ether
         // amountOut = 1 ether - 0.02 ether = 0.98 ether
         assertEq(amountOut, 0.98 ether);
         // Router fee
         assertEq(feeRecipients[0].recipient, address(this));
         assertEq(feeRecipients[0].feeAmount, 0.002 ether);
-        // Solver fee
+        // Client fee
         assertEq(feeRecipients[1].recipient, DUMMY);
         assertEq(feeRecipients[1].feeAmount, 0.018 ether);
     }
@@ -98,28 +98,28 @@ contract FeeCalculatorTest is Constants {
         // Router fee
         assertEq(feeRecipients[0].recipient, address(this));
         assertEq(feeRecipients[0].feeAmount, 0);
-        // Solver fee
+        // Client fee
         assertEq(feeRecipients[1].recipient, DUMMY);
         assertEq(feeRecipients[1].feeAmount, 0);
     }
 
-    function testCalculateOnlySolverFee() public view {
-        // Test with only solver fee set, no router fees
+    function testCalculateOnlyClientFee() public view {
+        // Test with only client fee set, no router fees
         uint256 amountIn = 1 ether;
-        uint16 solverFeeBps = 150; // 1.5%
+        uint16 clientFeeBps = 150; // 1.5%
 
         // BOB is the user - but this is irrelevant since
         // there are no router fees to overwrite with custom user fees
         (uint256 amountOut, FeeRecipient[] memory feeRecipients) =
-            feeCalculator.calculateFee(amountIn, BOB, solverFeeBps, DUMMY);
+            feeCalculator.calculateFee(amountIn, BOB, clientFeeBps, DUMMY);
 
-        // solverFee = 1 ether * 150 / 10000 = 0.015 ether
+        // clientFee = 1 ether * 150 / 10000 = 0.015 ether
         // amountOut = 1 ether - 0.015 ether = 0.985 ether
         assertEq(amountOut, 0.985 ether);
         // Router fee
         assertEq(feeRecipients[0].recipient, address(this));
         assertEq(feeRecipients[0].feeAmount, 0);
-        // Solver fee
+        // Client fee
         assertEq(feeRecipients[1].recipient, DUMMY);
         assertEq(feeRecipients[1].feeAmount, 0.015 ether);
     }
@@ -127,18 +127,18 @@ contract FeeCalculatorTest is Constants {
     function testCalculateAllFeesSet() public {
         vm.startPrank(FEE_SETTER);
         feeCalculator.setRouterFeeOnOutput(50); // 0.5%
-        feeCalculator.setRouterFeeOnSolverFee(500); // 5% of solver fee
+        feeCalculator.setRouterFeeOnClientFee(500); // 5% of client fee
         vm.stopPrank();
 
         uint256 amountIn = 1 ether;
-        uint16 solverFeeBps = 200; // 2%
+        uint16 clientFeeBps = 200; // 2%
 
         (uint256 amountOut, FeeRecipient[] memory feeRecipients) =
-            feeCalculator.calculateFee(amountIn, BOB, solverFeeBps, DUMMY);
+            feeCalculator.calculateFee(amountIn, BOB, clientFeeBps, DUMMY);
 
-        // 1. solverFee = 1 ether * 200 / 10000 = 0.02 ether
-        //    routerFeeOnSolverFee = 0.02 ether * 500 / 10000 = 0.001 ether
-        //    solverPortion = 0.02 - 0.001 = 0.019 ether
+        // 1. clientFee = 1 ether * 200 / 10000 = 0.02 ether
+        //    routerFeeOnClientFee = 0.02 ether * 500 / 10000 = 0.001 ether
+        //    clientPortion = 0.02 - 0.001 = 0.019 ether
         // 2. routerFeeOnOutput = 1 ether * 50 / 10000 = 0.005 ether (calculated on original amount)
         //    totalRouterFee = 0.001 + 0.005 = 0.006 ether
         //    amountOut = 1 ether - 0.019 ether - 0.006 ether = 0.975 ether
@@ -146,29 +146,29 @@ contract FeeCalculatorTest is Constants {
         // Router fee
         assertEq(feeRecipients[0].recipient, address(this));
         assertEq(feeRecipients[0].feeAmount, 0.006 ether);
-        // Solver fee
+        // Client fee
         assertEq(feeRecipients[1].recipient, DUMMY);
         assertEq(feeRecipients[1].feeAmount, 0.019 ether);
     }
 
     function testCalculateCombinedFeeTooHigh() public {
-        // Test with solver fee + router fee on output > 100%
+        // Test with client fee + router fee on output > 100%
         vm.prank(FEE_SETTER);
         feeCalculator.setRouterFeeOnOutput(5000); // 50%
 
         uint256 amountIn = 1 ether;
-        uint16 solverFeeBps = 5001; // 50.01% - combined makes 100.01%
+        uint16 clientFeeBps = 5001; // 50.01% - combined makes 100.01%
 
         vm.expectRevert(
             abi.encodeWithSelector(FeeCalculator__FeeTooHigh.selector)
         );
-        feeCalculator.calculateFee(amountIn, BOB, solverFeeBps, DUMMY);
+        feeCalculator.calculateFee(amountIn, BOB, clientFeeBps, DUMMY);
     }
 
-    function testCalculateRouterFeeOnSolverFeeTooHigh() public {
-        // Set router fee on solver fee > 100%
+    function testCalculateRouterFeeOnClientFeeTooHigh() public {
+        // Set router fee on client fee > 100%
         vm.prank(FEE_SETTER);
-        feeCalculator.setRouterFeeOnSolverFee(10001); // 100.01%
+        feeCalculator.setRouterFeeOnClientFee(10001); // 100.01%
 
         uint256 amountIn = 1 ether;
 
@@ -194,40 +194,40 @@ contract FeeCalculatorTest is Constants {
         assertEq(feeRecipients[0].recipient, BOB);
     }
 
-    function testCalculateCustomRouterFeeOnSolverFee() public {
-        // Test that custom router fee on solver fee overrides default
+    function testCalculateCustomRouterFeeOnClientFee() public {
+        // Test that custom router fee on client fee overrides default
         vm.startPrank(FEE_SETTER);
         feeCalculator.setRouterFeeReceiver(ALICE);
-        feeCalculator.setRouterFeeOnSolverFee(1000); // 10% default
-        feeCalculator.setCustomRouterFeeOnSolverFee(ALICE, 500); // 5% custom for ALICE
+        feeCalculator.setRouterFeeOnClientFee(1000); // 10% default
+        feeCalculator.setCustomRouterFeeOnClientFee(ALICE, 500); // 5% custom for ALICE
         vm.stopPrank();
 
         uint256 amountIn = 1 ether;
-        uint16 solverFeeBps = 200; // 2%
+        uint16 clientFeeBps = 200; // 2%
 
-        // ALICE should get custom router fee on solver fee (5%)
+        // ALICE should get custom router fee on client fee (5%)
         (uint256 amountOutAlice, FeeRecipient[] memory feeRecipientsAlice) =
-            feeCalculator.calculateFee(amountIn, ALICE, solverFeeBps, DUMMY);
+            feeCalculator.calculateFee(amountIn, ALICE, clientFeeBps, DUMMY);
 
-        // routerFeeOnSolverFee = 0.02 * 500 / 10000 = 0.001 ether
-        assertEq(amountOutAlice, 0.98 ether); // 1 - 0.02 solver fee
+        // routerFeeOnClientFee = 0.02 * 500 / 10000 = 0.001 ether
+        assertEq(amountOutAlice, 0.98 ether); // 1 - 0.02 client fee
         // Router fee
         assertEq(feeRecipientsAlice[0].recipient, ALICE);
         assertEq(feeRecipientsAlice[0].feeAmount, 0.001 ether);
-        // Solver fee
+        // Client fee
         assertEq(feeRecipientsAlice[1].recipient, DUMMY);
         assertEq(feeRecipientsAlice[1].feeAmount, 0.019 ether); // 0.02 - 0.001 router cut
 
-        // BOB should get default router fee on solver fee (10%)
+        // BOB should get default router fee on client fee (10%)
         (uint256 amountOutBob, FeeRecipient[] memory feeRecipientsBob) =
-            feeCalculator.calculateFee(amountIn, BOB, solverFeeBps, DUMMY);
+            feeCalculator.calculateFee(amountIn, BOB, clientFeeBps, DUMMY);
 
-        // routerFeeOnSolverFee = 0.02 * 1000 / 10000 = 0.002 ether
-        assertEq(amountOutBob, 0.98 ether); // 1 - 0.02 solver fee
+        // routerFeeOnClientFee = 0.02 * 1000 / 10000 = 0.002 ether
+        assertEq(amountOutBob, 0.98 ether); // 1 - 0.02 client fee
         // Router fee
         assertEq(feeRecipientsBob[0].recipient, ALICE);
         assertEq(feeRecipientsBob[0].feeAmount, 0.002 ether);
-        // Solver fee
+        // Client fee
         assertEq(feeRecipientsBob[1].recipient, DUMMY);
         assertEq(feeRecipientsBob[1].feeAmount, 0.018 ether); // 0.02 - 0.002 router cut
     }
@@ -236,20 +236,20 @@ contract FeeCalculatorTest is Constants {
         // Test that both custom fees work together
         vm.startPrank(FEE_SETTER);
         feeCalculator.setRouterFeeOnOutput(100); // 1% default
-        feeCalculator.setRouterFeeOnSolverFee(1000); // 10% default
+        feeCalculator.setRouterFeeOnClientFee(1000); // 10% default
         feeCalculator.setCustomRouterFeeOnOutput(ALICE, 50); // 0.5% custom
-        feeCalculator.setCustomRouterFeeOnSolverFee(ALICE, 500); // 5% custom
+        feeCalculator.setCustomRouterFeeOnClientFee(ALICE, 500); // 5% custom
         vm.stopPrank();
 
         uint256 amountIn = 1 ether;
-        uint16 solverFeeBps = 200; // 2%
+        uint16 clientFeeBps = 200; // 2%
 
         (uint256 amountOut, FeeRecipient[] memory feeRecipients) =
-            feeCalculator.calculateFee(amountIn, ALICE, solverFeeBps, DUMMY);
+            feeCalculator.calculateFee(amountIn, ALICE, clientFeeBps, DUMMY);
 
-        // 1. solverFee = 1 ether * 200 / 10000 = 0.02 ether
-        //    routerFeeOnSolverFee = 0.02 * 500 / 10000 = 0.001 ether (custom 5%)
-        //    solverPortion = 0.02 - 0.001 = 0.019 ether
+        // 1. clientFee = 1 ether * 200 / 10000 = 0.02 ether
+        //    routerFeeOnClientFee = 0.02 * 500 / 10000 = 0.001 ether (custom 5%)
+        //    clientPortion = 0.02 - 0.001 = 0.019 ether
         // 2. routerFeeOnOutput = 1 * 50 / 10000 = 0.005 ether (custom 0.5%, calculated on original amount)
         //    totalRouterFee = 0.001 + 0.005 = 0.006 ether
         //    amountOut = 1 - 0.019 - 0.006 = 0.975 ether
@@ -257,7 +257,7 @@ contract FeeCalculatorTest is Constants {
         // Router fee
         assertEq(feeRecipients[0].recipient, address(this));
         assertEq(feeRecipients[0].feeAmount, 0.006 ether);
-        // Solver fee
+        // Client fee
         assertEq(feeRecipients[1].recipient, DUMMY);
         assertEq(feeRecipients[1].feeAmount, 0.019 ether); // 0.02 - 0.001 router cut
     }
@@ -349,91 +349,91 @@ contract FeeCalculatorConfigTest is Constants {
         feeCalculator.removeCustomRouterFeeOnOutput(ALICE);
     }
 
-    // ROUTER FEE ON SOLVER FEE TESTS
-    function testSetRouterFeeOnSolverFeeUnauthorized() public {
+    // ROUTER FEE ON CLIENT FEE TESTS
+    function testSetRouterFeeOnClientFeeUnauthorized() public {
         vm.prank(BOB);
         vm.expectRevert();
-        feeCalculator.setRouterFeeOnSolverFee(1000);
+        feeCalculator.setRouterFeeOnClientFee(1000);
     }
 
-    function testSetRouterFeeOnSolverFee() public {
+    function testSetRouterFeeOnClientFee() public {
         uint16 defaultFee = 500;
         uint16 updatedFee = 1000;
 
         vm.prank(FEE_SETTER);
-        feeCalculator.setRouterFeeOnSolverFee(defaultFee);
-        assertEq(feeCalculator.getRouterFeeOnSolverFee(), defaultFee);
+        feeCalculator.setRouterFeeOnClientFee(defaultFee);
+        assertEq(feeCalculator.getRouterFeeOnClientFee(), defaultFee);
 
         // Update fee
         vm.prank(FEE_SETTER);
-        feeCalculator.setRouterFeeOnSolverFee(updatedFee);
-        assertEq(feeCalculator.getRouterFeeOnSolverFee(), updatedFee);
+        feeCalculator.setRouterFeeOnClientFee(updatedFee);
+        assertEq(feeCalculator.getRouterFeeOnClientFee(), updatedFee);
     }
 
-    function testSetCustomRouterFeeOnSolverFee() public {
+    function testSetCustomRouterFeeOnClientFee() public {
         // Set default fee
         vm.prank(FEE_SETTER);
         uint16 defaultFee = 1000;
-        feeCalculator.setRouterFeeOnSolverFee(defaultFee);
+        feeCalculator.setRouterFeeOnClientFee(defaultFee);
 
         // Set custom fee for user
         uint16 customFee = 500;
 
         vm.prank(FEE_SETTER);
-        feeCalculator.setCustomRouterFeeOnSolverFee(BOB, customFee);
+        feeCalculator.setCustomRouterFeeOnClientFee(BOB, customFee);
 
         // Check user gets custom fee
-        assertEq(feeCalculator.getEffectiveRouterFeeOnSolverFee(BOB), customFee);
+        assertEq(feeCalculator.getEffectiveRouterFeeOnClientFee(BOB), customFee);
 
         // Check other users still get default fee
         assertEq(
-            feeCalculator.getEffectiveRouterFeeOnSolverFee(ALICE), defaultFee
+            feeCalculator.getEffectiveRouterFeeOnClientFee(ALICE), defaultFee
         );
     }
 
-    function testSetCustomRouterFeeOnSolverFeeUnauthorized() public {
+    function testSetCustomRouterFeeOnClientFeeUnauthorized() public {
         vm.prank(BOB);
         vm.expectRevert();
-        feeCalculator.setCustomRouterFeeOnSolverFee(ALICE, 500);
+        feeCalculator.setCustomRouterFeeOnClientFee(ALICE, 500);
     }
 
-    function testSetCustomRouterFeeOnSolverFeeWithoutDefault() public {
+    function testSetCustomRouterFeeOnClientFeeWithoutDefault() public {
         // Set custom fee for user without setting default first
         uint16 userFee = 750;
 
         vm.prank(FEE_SETTER);
-        feeCalculator.setCustomRouterFeeOnSolverFee(ALICE, userFee);
+        feeCalculator.setCustomRouterFeeOnClientFee(ALICE, userFee);
 
-        assertEq(feeCalculator.getEffectiveRouterFeeOnSolverFee(ALICE), userFee);
+        assertEq(feeCalculator.getEffectiveRouterFeeOnClientFee(ALICE), userFee);
     }
 
-    function testRemoveCustomRouterFeeOnSolverFee() public {
+    function testRemoveCustomRouterFeeOnClientFee() public {
         // Set default and custom fee
         vm.startPrank(FEE_SETTER);
         uint16 defaultFee = 1000;
         uint16 customFee = 500;
-        feeCalculator.setRouterFeeOnSolverFee(defaultFee);
-        feeCalculator.setCustomRouterFeeOnSolverFee(ALICE, customFee);
+        feeCalculator.setRouterFeeOnClientFee(defaultFee);
+        feeCalculator.setCustomRouterFeeOnClientFee(ALICE, customFee);
         vm.stopPrank();
 
         assertEq(
-            feeCalculator.getEffectiveRouterFeeOnSolverFee(ALICE), customFee
+            feeCalculator.getEffectiveRouterFeeOnClientFee(ALICE), customFee
         );
 
         // Remove custom fee
         vm.prank(FEE_SETTER);
-        feeCalculator.removeCustomRouterFeeOnSolverFee(ALICE);
+        feeCalculator.removeCustomRouterFeeOnClientFee(ALICE);
 
         // Should now return default fee
         assertEq(
-            feeCalculator.getEffectiveRouterFeeOnSolverFee(ALICE), defaultFee
+            feeCalculator.getEffectiveRouterFeeOnClientFee(ALICE), defaultFee
         );
     }
 
-    function testRemoveCustomRouterFeeOnSolverFeeUnauthorized() public {
+    function testRemoveCustomRouterFeeOnClientFeeUnauthorized() public {
         vm.prank(BOB);
         vm.expectRevert();
-        feeCalculator.removeCustomRouterFeeOnSolverFee(ALICE);
+        feeCalculator.removeCustomRouterFeeOnClientFee(ALICE);
     }
 
     // FEE RECEIVER TESTS
@@ -475,25 +475,25 @@ contract FeeCalculatorConfigTest is Constants {
         address user3 = DUMMY3;
 
         uint16 defaultRouterFeeOnOutput = 100;
-        uint16 defaultRouterFeeOnSolverFee = 1000;
+        uint16 defaultRouterFeeOnClientFee = 1000;
 
         uint16 user1FeeOnOutput = 50;
-        uint16 user1FeeOnSolverFee = 500;
+        uint16 user1FeeOnClientFee = 500;
 
         uint16 user2FeeOnOutput = 150;
-        uint16 user2FeeOnSolverFee = 1500;
+        uint16 user2FeeOnClientFee = 1500;
 
         // Set default fees
         vm.startPrank(FEE_SETTER);
         feeCalculator.setRouterFeeOnOutput(defaultRouterFeeOnOutput);
-        feeCalculator.setRouterFeeOnSolverFee(defaultRouterFeeOnSolverFee);
+        feeCalculator.setRouterFeeOnClientFee(defaultRouterFeeOnClientFee);
 
         // Set custom fees for different users
         feeCalculator.setCustomRouterFeeOnOutput(user1, user1FeeOnOutput);
-        feeCalculator.setCustomRouterFeeOnSolverFee(user1, user1FeeOnSolverFee);
+        feeCalculator.setCustomRouterFeeOnClientFee(user1, user1FeeOnClientFee);
 
         feeCalculator.setCustomRouterFeeOnOutput(user2, user2FeeOnOutput);
-        feeCalculator.setCustomRouterFeeOnSolverFee(user2, user2FeeOnSolverFee);
+        feeCalculator.setCustomRouterFeeOnClientFee(user2, user2FeeOnClientFee);
         vm.stopPrank();
 
         // Verify each user has correct fees
@@ -501,16 +501,16 @@ contract FeeCalculatorConfigTest is Constants {
             feeCalculator.getEffectiveRouterFeeOnOutput(user1), user1FeeOnOutput
         );
         assertEq(
-            feeCalculator.getEffectiveRouterFeeOnSolverFee(user1),
-            user1FeeOnSolverFee
+            feeCalculator.getEffectiveRouterFeeOnClientFee(user1),
+            user1FeeOnClientFee
         );
 
         assertEq(
             feeCalculator.getEffectiveRouterFeeOnOutput(user2), user2FeeOnOutput
         );
         assertEq(
-            feeCalculator.getEffectiveRouterFeeOnSolverFee(user2),
-            user2FeeOnSolverFee
+            feeCalculator.getEffectiveRouterFeeOnClientFee(user2),
+            user2FeeOnClientFee
         );
 
         // User3 should get default fees
@@ -519,8 +519,8 @@ contract FeeCalculatorConfigTest is Constants {
             defaultRouterFeeOnOutput
         );
         assertEq(
-            feeCalculator.getEffectiveRouterFeeOnSolverFee(user3),
-            defaultRouterFeeOnSolverFee
+            feeCalculator.getEffectiveRouterFeeOnClientFee(user3),
+            defaultRouterFeeOnClientFee
         );
     }
 
@@ -553,9 +553,9 @@ contract FeeCalculatorConfigTest is Constants {
     function testDefaultValues() public view {
         // Default fees should be zero
         assertEq(feeCalculator.getRouterFeeOnOutput(), 0);
-        assertEq(feeCalculator.getRouterFeeOnSolverFee(), 0);
+        assertEq(feeCalculator.getRouterFeeOnClientFee(), 0);
         assertEq(feeCalculator.getEffectiveRouterFeeOnOutput(ALICE), 0);
-        assertEq(feeCalculator.getEffectiveRouterFeeOnSolverFee(ALICE), 0);
+        assertEq(feeCalculator.getEffectiveRouterFeeOnClientFee(ALICE), 0);
         // Default fee receiver should be the contract deployer
         assertEq(feeCalculator.getRouterFeeReceiver(), address(this));
     }
@@ -565,10 +565,10 @@ contract FeeCalculatorConfigTest is Constants {
 
         vm.startPrank(FEE_SETTER);
         feeCalculator.setRouterFeeOnOutput(maxFee);
-        feeCalculator.setRouterFeeOnSolverFee(maxFee);
+        feeCalculator.setRouterFeeOnClientFee(maxFee);
         vm.stopPrank();
 
         assertEq(feeCalculator.getRouterFeeOnOutput(), maxFee);
-        assertEq(feeCalculator.getRouterFeeOnSolverFee(), maxFee);
+        assertEq(feeCalculator.getRouterFeeOnClientFee(), maxFee);
     }
 }

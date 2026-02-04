@@ -151,9 +151,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
-     * @param solverFeeBps Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%)
-     * @param solverFeeReceiver Address to receive the solver fee.
-     * @param maxSolverContribution Maximum amount the solver will pay out of pocket to make the trade succeed.
+     * @param clientFeeBps Fee in basis points to be paid to the client (0-10000, where 10000 = 100%)
+     * @param clientFeeReceiver Address to receive the client fee.
+     * @param maxClientContribution Maximum amount the client will pay out of pocket to make the trade succeed.
      * @param swaps Encoded swap graph data containing details of each swap.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -165,9 +165,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 minAmountOut,
         uint256 nTokens,
         address receiver,
-        uint16 solverFeeBps,
-        address solverFeeReceiver,
-        uint256 maxSolverContribution,
+        uint16 clientFeeBps,
+        address clientFeeReceiver,
+        uint256 maxClientContribution,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         _updateNativeDeltaAccounting(amountIn);
@@ -184,9 +184,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             initialBalanceTokenOut,
             nTokens,
             receiver,
-            solverFeeBps,
-            solverFeeReceiver,
-            maxSolverContribution,
+            clientFeeBps,
+            clientFeeReceiver,
+            maxClientContribution,
             swaps
         );
     }
@@ -206,9 +206,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
-     * @param solverFeeBps Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%)
-     * @param solverFeeReceiver Address to receive the solver fee.
-     * @param maxSolverContribution Maximum amount the solver will pay out of pocket to make the trade succeed.
+     * @param clientFeeBps Fee in basis points to be paid to the client (0-10000, where 10000 = 100%)
+     * @param clientFeeReceiver Address to receive the client fee.
+     * @param maxClientContribution Maximum amount the client will pay out of pocket to make the trade succeed.
      * @param swaps Encoded swap graph data containing details of each swap.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -220,9 +220,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 minAmountOut,
         uint256 nTokens,
         address receiver,
-        uint16 solverFeeBps,
-        address solverFeeReceiver,
-        uint256 maxSolverContribution,
+        uint16 clientFeeBps,
+        address clientFeeReceiver,
+        uint256 maxClientContribution,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         if (msg.value > 0) {
@@ -241,9 +241,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             initialBalanceTokenOut,
             nTokens,
             receiver,
-            solverFeeBps,
-            solverFeeReceiver,
-            maxSolverContribution,
+            clientFeeBps,
+            clientFeeReceiver,
+            maxClientContribution,
             swaps
         );
     }
@@ -263,9 +263,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
-     * @param solverFeeBps Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%)
-     * @param solverFeeReceiver Address to receive the solver fee.
-     * @param maxSolverContribution Maximum amount the solver will pay out of pocket to make the trade succeed.
+     * @param clientFeeBps Fee in basis points to be paid to the client (0-10000, where 10000 = 100%)
+     * @param clientFeeReceiver Address to receive the client fee.
+     * @param maxClientContribution Maximum amount the client will pay out of pocket to make the trade succeed.
      * @param permitSingle A Permit2 structure containing token approval details for the input token.
      * @param signature A valid signature authorizing the Permit2 approval.
      * @param swaps Encoded swap graph data containing details of each swap.
@@ -279,9 +279,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 minAmountOut,
         uint256 nTokens,
         address receiver,
-        uint16 solverFeeBps,
-        address solverFeeReceiver,
-        uint256 maxSolverContribution,
+        uint16 clientFeeBps,
+        address clientFeeReceiver,
+        uint256 maxClientContribution,
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
         bytes calldata swaps
@@ -306,9 +306,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             initialBalanceTokenOut,
             nTokens,
             receiver,
-            solverFeeBps,
-            solverFeeReceiver,
-            maxSolverContribution,
+            clientFeeBps,
+            clientFeeReceiver,
+            maxClientContribution,
             swaps
         );
     }
@@ -327,9 +327,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
-     * @param solverFeeBps Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%)
-     * @param solverFeeReceiver Address to receive the solver fee.
-     * @param maxSolverContribution Maximum amount the solver will pay out of pocket to make the trade succeed.
+     * @param clientFeeBps Fee in basis points to be paid to the client (0-10000, where 10000 = 100%)
+     * @param clientFeeReceiver Address to receive the client fee.
+     * @param maxClientContribution Maximum amount the client will pay out of pocket to make the trade succeed.
      * @param swaps Encoded swap graph data containing details of each swap.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -340,9 +340,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address tokenOut,
         uint256 minAmountOut,
         address receiver,
-        uint16 solverFeeBps,
-        address solverFeeReceiver,
-        uint256 maxSolverContribution,
+        uint16 clientFeeBps,
+        address clientFeeReceiver,
+        uint256 maxClientContribution,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         _updateNativeDeltaAccounting(amountIn);
@@ -358,9 +358,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             minAmountOut,
             initialBalanceTokenOut,
             receiver,
-            solverFeeBps,
-            solverFeeReceiver,
-            maxSolverContribution,
+            clientFeeBps,
+            clientFeeReceiver,
+            maxClientContribution,
             swaps
         );
     }
@@ -379,9 +379,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
-     * @param solverFeeBps Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%)
-     * @param solverFeeReceiver Address to receive the solver fee.
-     * @param maxSolverContribution Maximum amount the solver will pay out of pocket to make the trade succeed.
+     * @param clientFeeBps Fee in basis points to be paid to the client (0-10000, where 10000 = 100%)
+     * @param clientFeeReceiver Address to receive the client fee.
+     * @param maxClientContribution Maximum amount the client will pay out of pocket to make the trade succeed.
      * @param swaps Encoded swap graph data containing details of each swap.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -392,9 +392,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address tokenOut,
         uint256 minAmountOut,
         address receiver,
-        uint16 solverFeeBps,
-        address solverFeeReceiver,
-        uint256 maxSolverContribution,
+        uint16 clientFeeBps,
+        address clientFeeReceiver,
+        uint256 maxClientContribution,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         if (msg.value > 0) {
@@ -412,9 +412,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             minAmountOut,
             initialBalanceTokenOut,
             receiver,
-            solverFeeBps,
-            solverFeeReceiver,
-            maxSolverContribution,
+            clientFeeBps,
+            clientFeeReceiver,
+            maxClientContribution,
             swaps
         );
     }
@@ -432,9 +432,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
-     * @param solverFeeBps Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%)
-     * @param solverFeeReceiver Address to receive the solver fee.
-     * @param maxSolverContribution Maximum amount the solver will pay out of pocket to make the trade succeed.
+     * @param clientFeeBps Fee in basis points to be paid to the client (0-10000, where 10000 = 100%)
+     * @param clientFeeReceiver Address to receive the client fee.
+     * @param maxClientContribution Maximum amount the client will pay out of pocket to make the trade succeed.
      * @param permitSingle A Permit2 structure containing token approval details for the input token.
      * @param signature A valid signature authorizing the Permit2 approval.
      * @param swaps Encoded swap graph data containing details of each swap.
@@ -447,9 +447,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address tokenOut,
         uint256 minAmountOut,
         address receiver,
-        uint16 solverFeeBps,
-        address solverFeeReceiver,
-        uint256 maxSolverContribution,
+        uint16 clientFeeBps,
+        address clientFeeReceiver,
+        uint256 maxClientContribution,
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
         bytes calldata swaps
@@ -474,9 +474,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             minAmountOut,
             initialBalanceTokenOut,
             receiver,
-            solverFeeBps,
-            solverFeeReceiver,
-            maxSolverContribution,
+            clientFeeBps,
+            clientFeeReceiver,
+            maxClientContribution,
             swaps
         );
     }
@@ -494,9 +494,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
-     * @param solverFeeBps Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%)
-     * @param solverFeeReceiver Address to receive the solver fee.
-     * @param maxSolverContribution Maximum amount the solver will pay out of pocket to make the trade succeed.
+     * @param clientFeeBps Fee in basis points to be paid to the client (0-10000, where 10000 = 100%)
+     * @param clientFeeReceiver Address to receive the client fee.
+     * @param maxClientContribution Maximum amount the client will pay out of pocket to make the trade succeed.
      * @param swapData Encoded swap details.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -507,9 +507,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address tokenOut,
         uint256 minAmountOut,
         address receiver,
-        uint16 solverFeeBps,
-        address solverFeeReceiver,
-        uint256 maxSolverContribution,
+        uint16 clientFeeBps,
+        address clientFeeReceiver,
+        uint256 maxClientContribution,
         bytes calldata swapData
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         _updateNativeDeltaAccounting(amountIn);
@@ -525,9 +525,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             minAmountOut,
             initialBalanceTokenOut,
             receiver,
-            solverFeeBps,
-            solverFeeReceiver,
-            maxSolverContribution,
+            clientFeeBps,
+            clientFeeReceiver,
+            maxClientContribution,
             swapData
         );
     }
@@ -545,9 +545,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
-     * @param solverFeeBps Fee in basis points to be paid to the solver (0-10000, where 10000 = 100%)
-     * @param solverFeeReceiver Address to receive the solver fee.
-     * @param maxSolverContribution Maximum amount the solver will pay out of pocket to make the trade succeed.
+     * @param clientFeeBps Fee in basis points to be paid to the client (0-10000, where 10000 = 100%)
+     * @param clientFeeReceiver Address to receive the client fee.
+     * @param maxClientContribution Maximum amount the client will pay out of pocket to make the trade succeed.
      * @param swapData Encoded swap details.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -558,9 +558,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address tokenOut,
         uint256 minAmountOut,
         address receiver,
-        uint16 solverFeeBps,
-        address solverFeeReceiver,
-        uint256 maxSolverContribution,
+        uint16 clientFeeBps,
+        address clientFeeReceiver,
+        uint256 maxClientContribution,
         bytes calldata swapData
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         if (msg.value > 0) {
@@ -578,9 +578,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             minAmountOut,
             initialBalanceTokenOut,
             receiver,
-            solverFeeBps,
-            solverFeeReceiver,
-            maxSolverContribution,
+            clientFeeBps,
+            clientFeeReceiver,
+            maxClientContribution,
             swapData
         );
     }
@@ -598,8 +598,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @param tokenOut The address of the output token. Use `address(0)` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
-     * @param solverFeeReceiver Address to receive the solver fee.
-     * @param maxSolverContribution Maximum amount the solver will pay out of pocket to make the trade succeed.
+     * @param clientFeeReceiver Address to receive the client fee.
+     * @param maxClientContribution Maximum amount the client will pay out of pocket to make the trade succeed.
      * @param permitSingle A Permit2 structure containing token approval details for the input token.
      * @param signature A valid signature authorizing the Permit2 approval.
      * @param swapData Encoded swap details.
@@ -612,9 +612,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address tokenOut,
         uint256 minAmountOut,
         address receiver,
-        uint16 solverFeeBps,
-        address solverFeeReceiver,
-        uint256 maxSolverContribution,
+        uint16 clientFeeBps,
+        address clientFeeReceiver,
+        uint256 maxClientContribution,
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
         bytes calldata swapData
@@ -638,9 +638,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             minAmountOut,
             initialBalanceTokenOut,
             receiver,
-            solverFeeBps,
-            solverFeeReceiver,
-            maxSolverContribution,
+            clientFeeBps,
+            clientFeeReceiver,
+            maxClientContribution,
             swapData
         );
     }
@@ -663,9 +663,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 initialBalanceTokenOut,
         uint256 nTokens,
         address receiver,
-        uint16 solverFeeBps,
-        address solverFeeReceiver,
-        uint256 maxSolverContribution,
+        uint16 clientFeeBps,
+        address clientFeeReceiver,
+        uint256 maxClientContribution,
         bytes calldata swaps
     ) internal returns (uint256 amountOut) {
         if (receiver == address(0)) {
@@ -684,22 +684,22 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             _callGetEffectiveRouterFeeOnOutput(_feeCalculator);
 
         address finalReceiver = determineFinalReceiver(
-            receiver, solverFeeBps, routerFeeOnOutputBps
+            receiver, clientFeeBps, routerFeeOnOutputBps
         );
         uint256 amountOutBeforeFees =
             _splitSwap(amountIn, nTokens, swaps, finalReceiver, isCyclical);
 
         // Skip _takeFees call if no fees exist
-        if (solverFeeBps == 0 && routerFeeOnOutputBps == 0) {
+        if (clientFeeBps == 0 && routerFeeOnOutputBps == 0) {
             amountOut = amountOutBeforeFees;
         } else {
             amountOut = _takeFees(
-                tokenOut, amountOutBeforeFees, solverFeeBps, solverFeeReceiver
+                tokenOut, amountOutBeforeFees, clientFeeBps, clientFeeReceiver
             );
         }
 
-        amountOut = _maybeAddSolverContribution(
-            amountOut, minAmountOut, maxSolverContribution, tokenOut, receiver
+        amountOut = _maybeAddClientContribution(
+            amountOut, minAmountOut, maxClientContribution, tokenOut, receiver
         );
 
         int256 outputDelta = _getDelta(tokenOut);
@@ -738,9 +738,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 minAmountOut,
         uint256 initialBalanceTokenOut,
         address receiver,
-        uint16 solverFeeBps,
-        address solverFeeReceiver,
-        uint256 maxSolverContribution,
+        uint16 clientFeeBps,
+        address clientFeeReceiver,
+        uint256 maxClientContribution,
         bytes calldata swap_
     ) internal returns (uint256 amountOut) {
         if (receiver == address(0)) {
@@ -758,23 +758,23 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             _callGetEffectiveRouterFeeOnOutput(_feeCalculator);
 
         address finalReceiver = determineFinalReceiver(
-            receiver, solverFeeBps, routerFeeOnOutputBps
+            receiver, clientFeeBps, routerFeeOnOutputBps
         );
         uint256 amountOutBeforeFees = _callSwapOnExecutor(
             executor, amountIn, protocolData, true, false, finalReceiver
         );
 
         // Skip _takeFees call if no fees exist
-        if (solverFeeBps == 0 && routerFeeOnOutputBps == 0) {
+        if (clientFeeBps == 0 && routerFeeOnOutputBps == 0) {
             amountOut = amountOutBeforeFees;
         } else {
             amountOut = _takeFees(
-                tokenOut, amountOutBeforeFees, solverFeeBps, solverFeeReceiver
+                tokenOut, amountOutBeforeFees, clientFeeBps, clientFeeReceiver
             );
         }
 
-        amountOut = _maybeAddSolverContribution(
-            amountOut, minAmountOut, maxSolverContribution, tokenOut, receiver
+        amountOut = _maybeAddClientContribution(
+            amountOut, minAmountOut, maxClientContribution, tokenOut, receiver
         );
 
         int256 outputDelta = _getDelta(tokenOut);
@@ -812,9 +812,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         uint256 minAmountOut,
         uint256 initialBalanceTokenOut,
         address receiver,
-        uint16 solverFeeBps,
-        address solverFeeReceiver,
-        uint256 maxSolverContribution,
+        uint16 clientFeeBps,
+        address clientFeeReceiver,
+        uint256 maxClientContribution,
         bytes calldata swaps
     ) internal returns (uint256 amountOut) {
         if (receiver == address(0)) {
@@ -829,22 +829,22 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
             _callGetEffectiveRouterFeeOnOutput(_feeCalculator);
 
         address finalReceiver = determineFinalReceiver(
-            receiver, solverFeeBps, routerFeeOnOutputBps
+            receiver, clientFeeBps, routerFeeOnOutputBps
         );
         uint256 amountOutBeforeFees =
             _sequentialSwap(amountIn, swaps, finalReceiver);
 
         // Skip _takeFees call if no fees exist
-        if (solverFeeBps == 0 && routerFeeOnOutputBps == 0) {
+        if (clientFeeBps == 0 && routerFeeOnOutputBps == 0) {
             amountOut = amountOutBeforeFees;
         } else {
             amountOut = _takeFees(
-                tokenOut, amountOutBeforeFees, solverFeeBps, solverFeeReceiver
+                tokenOut, amountOutBeforeFees, clientFeeBps, clientFeeReceiver
             );
         }
 
-        amountOut = _maybeAddSolverContribution(
-            amountOut, minAmountOut, maxSolverContribution, tokenOut, receiver
+        amountOut = _maybeAddClientContribution(
+            amountOut, minAmountOut, maxClientContribution, tokenOut, receiver
         );
 
         int256 outputDelta = _getDelta(tokenOut);
@@ -1095,19 +1095,19 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
      * @notice Calculates and takes fees using the FeeCalculator contract
      * @param token The token address for which fees are being taken
      * @param amountIn The amount before fee deduction
-     * @param solverFeeBps Solver fee in basis points
-     * @param solverFeeReceiver Address to receive solver fees
+     * @param clientFeeBps Client fee in basis points
+     * @param clientFeeReceiver Address to receive client fees
      * @return amountOut The amount remaining after all fee deductions
      */
     function _takeFees(
         address token,
         uint256 amountIn,
-        uint16 solverFeeBps,
-        address solverFeeReceiver
+        uint16 clientFeeBps,
+        address clientFeeReceiver
     ) internal returns (uint256 amountOut) {
         FeeRecipient[] memory fees;
         (amountOut, fees) = _callCalculateFee(
-            _feeCalculator, amountIn, solverFeeBps, solverFeeReceiver
+            _feeCalculator, amountIn, clientFeeBps, clientFeeReceiver
         );
 
         for (uint256 i = 0; i < fees.length; i++) {
@@ -1196,26 +1196,26 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     }
 
     /**
-     * @dev If the amountOut is below the minAmountOut, it tries to add a solver contribution (if within limits).
+     * @dev If the amountOut is below the minAmountOut, it tries to add a client contribution (if within limits).
      * If it can't, it raises NegativeSlippage.
      *   - If the out tokens are still in the Tycho Router, it adds the contribution to the amount out
      *     (the transfer will be done later)
      *   - If the out tokens are already in the receiver, it transfers the contribution separately
      */
-    function _maybeAddSolverContribution(
+    function _maybeAddClientContribution(
         uint256 amountOut,
         uint256 minAmountOut,
-        uint256 maxSolverContribution,
+        uint256 maxClientContribution,
         address tokenOut,
         address receiver
     ) internal returns (uint256 amount) {
         if (amountOut < minAmountOut) {
             uint256 requiredContribution =
                 minAmountOut - amountOut;
-            if (requiredContribution > maxSolverContribution) {
+            if (requiredContribution > maxClientContribution) {
                 revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
             }
-            // Debit the solver's vault balance
+            // Debit the client's vault balance
             _debitVault(msg.sender, tokenOut, requiredContribution);
             int256 outputDelta = _getDelta(tokenOut);
             if (outputDelta > 0) {
@@ -1239,17 +1239,17 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     /**
      * @dev Determines the final receiver address for the last swap output tokens
      * @param receiver The receiver address
-     * @param solverFeeBps Solver fee in basis points
+     * @param clientFeeBps Client fee in basis points
      * @param routerFeeOnOutputBps Router fee on output in basis points
      * @return The final receiver address - either the router (for fee processing) or the intended receiver
      */
     function determineFinalReceiver(
         address receiver,
-        uint16 solverFeeBps,
+        uint16 clientFeeBps,
         uint16 routerFeeOnOutputBps
     ) internal view returns (address) {
         // Fast path: if no fees at all, send directly to receiver
-        if (solverFeeBps == 0 && routerFeeOnOutputBps == 0) {
+        if (clientFeeBps == 0 && routerFeeOnOutputBps == 0) {
             return receiver;
         }
         // Fees exist, must route through this contract

@@ -93,7 +93,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
 
     FeeCalculator feeCalculator;
     address routerFeeReceiver;
-    address solverFeeReceiver;
+    address clientFeeReceiver;
 
     function getChain() public view virtual returns (string memory) {
         return "mainnet";
@@ -203,7 +203,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         feeCalculator.grantRole(ROUTER_FEE_SETTER_ROLE, FEE_SETTER);
 
         routerFeeReceiver = makeAddr("routerFeeReceiver");
-        solverFeeReceiver = makeAddr("solverFeeReceiver");
+        clientFeeReceiver = makeAddr("clientFeeReceiver");
     }
 
     function pleEncode(bytes[] memory data)

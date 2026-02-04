@@ -215,10 +215,10 @@ fn test_split_input_cyclic_swap() {
         "0000000000000000000000000000000000000000000000000000000005ef619b", // min amount out
         "0000000000000000000000000000000000000000000000000000000000000002", // tokens length
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-        "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps = 0
-        "0000000000000000000000000000000000000000000000000000000000000000", /* solverFeeReceiver
+        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeBps = 0
+        "0000000000000000000000000000000000000000000000000000000000000000", /* clientFeeReceiver
                      * = address(0) */
-        "0000000000000000000000000000000000000000000000000000000000000000", // solverMaxContribution
+        "0000000000000000000000000000000000000000000000000000000000000000", // clientMaxContribution
     ]
     .join("");
 
@@ -372,10 +372,10 @@ fn test_split_output_cyclic_swap() {
         "0000000000000000000000000000000000000000000000000000000005e703f4", // min amount out
         "0000000000000000000000000000000000000000000000000000000000000002", // tokens length
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-        "0000000000000000000000000000000000000000000000000000000000000000", // solverFeeBps = 0
-        "0000000000000000000000000000000000000000000000000000000000000000", /* solverFeeReceiver
+        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeBps = 0
+        "0000000000000000000000000000000000000000000000000000000000000000", /* clientFeeReceiver
                      * = address(0) */
-        "0000000000000000000000000000000000000000000000000000000000000000", // solverMaxContribution
+        "0000000000000000000000000000000000000000000000000000000000000000", // clientMaxContribution
     ]
     .join("");
 
@@ -432,7 +432,7 @@ fn test_split_swap_strategy_with_fees() {
     //   WETH ─┤
     //         └──(USV2)──> DAI  ───(USV2)──> USDC
     //
-    // Solver takes 1%
+    // Client takes 1%
 
     let weth = weth();
     let dai = dai();
@@ -487,8 +487,8 @@ fn test_split_swap_strategy_with_fees() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_dai, swap_weth_wbtc, swap_dai_usdc, swap_wbtc_usdc],
-        solver_fee_bps: 100, // 1% fee
-        solver_fee_receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
+        client_fee_bps: 100, // 1% fee
+        client_fee_receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
         ..Default::default()
     };
 

@@ -265,7 +265,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             ALICE,
             0,
             address(0),
-            0, // max solver contribution
+            0, // max client contribution
             pleEncode(swaps)
         );
     }
@@ -428,9 +428,9 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             1, // min amount out
             2, // number of tokens
             ALICE, // receiver
-            0, // solver fee bps
-            address(0), // solver fee receiver
-            0, // max solver contribution
+            0, // client fee bps
+            address(0), // client fee receiver
+            0, // max client contribution
             pleEncode(swaps)
         );
         assertEq(IERC20(BAL_ADDR).balanceOf(ALICE), 1328_449676114497362517);

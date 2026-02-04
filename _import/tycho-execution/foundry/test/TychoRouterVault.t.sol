@@ -195,9 +195,9 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             DAI_ADDR,
             1, // min amount
             ALICE, // receiver
-            0, // solverFeeBps
-            address(0), // solverFeeReceiver
-            0, // maxSolverContribution
+            0, // clientFeeBps
+            address(0), // clientFeeReceiver
+            0, // maxClientContribution
             swap
         );
         vm.stopPrank();
@@ -385,9 +385,9 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             RETH_ADDR,
             1, // min amount
             ALICE, // receiver
-            0, // solver fee bps
-            address(0), // solver fee receiver
-            0, // max solver contribution
+            0, // client fee bps
+            address(0), // client fee receiver
+            0, // max client contribution
             pleEncode(swaps)
         );
         vm.stopPrank();
