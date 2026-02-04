@@ -264,7 +264,6 @@ contract Dispatcher is RestrictTransferFrom {
         internal
         view
         returns (address receiver)
-
     {
         uint64 activationBlock = executorsActivationBlock[executor];
 
