@@ -278,7 +278,7 @@ pub fn stableswap() -> TestCase {
             fee: 0,
             pool_type_config: StableswapPoolTypeConfig {
                 amplification_factor: 5,
-                center_tick: -10,
+                center_tick: -16,
             },
             extension: Address::ZERO,
         },
@@ -346,7 +346,7 @@ pub fn stableswap() -> TestCase {
         ]
         .into(),
         swap_token0: (100_u8.into(), 99_u8.into()),
-        expected_limit_token0: 300001579_u128.into(),
+        expected_limit_token0: 300002779_u128.into(),
     }
 }
 
