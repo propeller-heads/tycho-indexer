@@ -202,10 +202,9 @@ impl TychoStreamBuilder {
         self
     }
 
-    /// Configures the client to receive partial block updates (flashblocks).
-    /// When enabled, the client will receive incremental updates within a block.
-    pub fn with_partial_blocks(mut self, val: bool) -> Self {
-        self.partial_blocks = val;
+    /// Enables the client to receive partial block updates (flashblocks).
+    pub fn enable_partial_blocks(mut self) -> Self {
+        self.partial_blocks = true;
         self
     }
 
