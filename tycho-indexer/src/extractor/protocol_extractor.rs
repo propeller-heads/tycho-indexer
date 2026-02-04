@@ -74,7 +74,6 @@ struct GatewayInner<G> {
 /// Separate from the reorg buffer: reorg buffer handles finalized complete blocks,
 /// while this buffer holds partial blocks used to build full blocks.
 #[derive(Default)]
-#[allow(dead_code)]
 struct PartialBlockBuffer {
     /// The current block number being accumulated
     current_block_number: Option<u64>,
@@ -211,6 +210,7 @@ pub struct ProtocolExtractor<G, T, E> {
     /// Allows to attach some custom logic, e.g. to fix encoding bugs without resync.
     post_processor: Option<fn(BlockChanges) -> BlockChanges>,
     reorg_buffer: Mutex<ReorgBuffer<BlockUpdateWithCursor<BlockChanges>>>,
+    partial_block_buffer: Mutex<PartialBlockBuffer>,
     dci_plugin: Option<Arc<Mutex<E>>>,
 }
 
@@ -263,6 +263,7 @@ where
                     protocol_types,
                     post_processor,
                     reorg_buffer: Mutex::new(ReorgBuffer::new()),
+                    partial_block_buffer: Mutex::new(PartialBlockBuffer::new()),
                     dci_plugin,
                 }
             }
@@ -307,6 +308,7 @@ where
                     protocol_types,
                     post_processor,
                     reorg_buffer: Mutex::new(ReorgBuffer::new()),
+                    partial_block_buffer: Mutex::new(PartialBlockBuffer::new()),
                     dci_plugin,
                 }
             }
