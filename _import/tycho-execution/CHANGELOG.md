@@ -1,3 +1,5 @@
+## [0.25.3](https://github.com/propeller-heads/tycho-contracts/compare/0.25.2...0.25.3) (2026-02-04)
+
 ## [0.25.2](https://github.com/propeller-heads/tycho-contracts/compare/0.25.1...0.25.2) (2026-02-04)
 
 ## [0.25.1](https://github.com/propeller-heads/tycho-contracts/compare/0.25.0...0.25.1) (2026-02-04)
