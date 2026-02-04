@@ -166,8 +166,7 @@ impl PartialBlockBuffer {
             for (addr, token) in partial.new_tokens {
                 full_block
                     .new_tokens
-                    .entry(addr)
-                    .or_insert(token);
+                    .insert(addr, token);
             }
         }
 
