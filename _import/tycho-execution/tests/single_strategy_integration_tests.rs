@@ -100,8 +100,6 @@ fn test_single_swap_strategy_encoder() {
 fn test_single_swap_strategy_encoder_transfer_from() {
     // Performs a single swap from WETH to DAI on a USV2 pool, using transfer from and no
     // grouping optimizations.
-    std::env::set_var("TYCHO_FEES_ENABLED", "true");
-
     let weth = weth();
     let dai = dai();
 
@@ -243,7 +241,6 @@ fn test_single_swap_with_fees_and_client_contribution() {
         weth.clone(),
         dai.clone(),
     );
-    std::env::set_var("TYCHO_FEES_ENABLED", "true");
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
     let solution = Solution {
@@ -280,5 +277,4 @@ fn test_single_swap_with_fees_and_client_contribution() {
         "test_single_swap_with_fees_and_client_contribution",
         &hex_calldata.to_string(),
     );
-    std::env::remove_var("TYCHO_FEES_ENABLED");
 }
