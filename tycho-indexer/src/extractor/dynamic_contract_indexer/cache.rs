@@ -7,9 +7,11 @@ use deepsize::DeepSizeOf;
 use thiserror::Error;
 use tracing::{debug, trace, warn};
 use tycho_common::models::{
-    blockchain::{Block, EntryPoint, EntryPointWithTracingParams, TracingParams, TracingResult},
+    blockchain::{
+        Block, EntryPoint, EntryPointWithTracingParams, TracingParams, TracingResult, Transaction,
+    },
     protocol::ProtocolComponent,
-    Address, BlockHash, ComponentId, EntryPointId, StoreKey,
+    Address, BlockHash, ComponentId, EntryPointId, StoreKey, TxHash,
 };
 
 use super::hooks::hook_dci::ComponentProcessingState;
@@ -61,6 +63,9 @@ pub(super) struct DCICache {
     /// Tracks the number of retry attempts for each failed tracing params.
     /// Used to cap retries at a maximum number of attempts (e.g., 5).
     pub(super) tracing_retry_counts: VersionedCache<(EntryPointId, TracingParams), u32>,
+    /// Deferred tracing work accumulated across partials for the current block. Partials are
+    /// assumed in order; on the final partial we run all deferred entrypoints and clear this.
+    pub(super) deferred_tracing: Vec<(EntryPointWithTracingParams, Transaction)>,
 }
 
 impl DCICache {
@@ -75,6 +80,7 @@ impl DCICache {
             ep_id_to_component_id: VersionedCache::new(),
             component_id_to_entrypoint_params: VersionedCache::new(),
             tracing_retry_counts: VersionedCache::new(),
+            deferred_tracing: Vec::new(),
         }
     }
 
@@ -107,6 +113,7 @@ impl DCICache {
             .revert_to(block)?;
         self.tracing_retry_counts
             .revert_to(block)?;
+        self.clear_deferred_tracing();
 
         Ok(())
     }
@@ -218,7 +225,32 @@ impl DCICache {
 
         Ok(())
     }
+
+    /// Appends entrypoints to the defer buffer. Partials are assumed in order for the current
+    /// block.
+    pub(super) fn defer_tracing(
+        &mut self,
+        entrypoints: impl IntoIterator<Item = (EntryPointWithTracingParams, Transaction)>,
+    ) {
+        self.deferred_tracing
+            .extend(entrypoints);
+    }
+
+    /// Takes and clears the defer buffer. Call when processing the final partial for the block.
+    pub(super) fn take_deferred_tracing(
+        &mut self,
+    ) -> Vec<(EntryPointWithTracingParams, Transaction)> {
+        std::mem::take(&mut self.deferred_tracing)
+    }
+
+    /// Clears the defer buffer. Used on revert.
+    pub(super) fn clear_deferred_tracing(&mut self) {
+        self.deferred_tracing.clear();
+    }
 }
+
+/// Hook component with the tx hash that last affected it. Used for deferred metadata/orchestrator.
+pub(super) type HookComponentWithTxHash = (TxHash, ProtocolComponent);
 
 /// Central data cache used by the Hooks Dynamic Contract Indexer (HooksDCI).
 #[derive(Debug, DeepSizeOf)]
@@ -227,11 +259,18 @@ pub(super) struct HooksDCICache {
     pub(super) component_states: VersionedCache<ComponentId, ComponentProcessingState>,
     /// Stores ProtocolComponent data for both newly created and mutated components.
     pub(super) protocol_components: VersionedCache<ComponentId, ProtocolComponent>,
+    /// Deferred hook components accumulated across partials. On final partial we run metadata +
+    /// orchestrator for this set merged with the current message's components.
+    pub(super) deferred_hook_components: HashMap<ComponentId, HookComponentWithTxHash>,
 }
 
 impl HooksDCICache {
     pub(super) fn new() -> Self {
-        Self { component_states: VersionedCache::new(), protocol_components: VersionedCache::new() }
+        Self {
+            component_states: VersionedCache::new(),
+            protocol_components: VersionedCache::new(),
+            deferred_hook_components: HashMap::new(),
+        }
     }
 
     /// Reverts the cache to the state at a specific block hash.
@@ -250,7 +289,25 @@ impl HooksDCICache {
         self.component_states.revert_to(block)?;
         self.protocol_components
             .revert_to(block)?;
+        self.deferred_hook_components.clear();
         Ok(())
+    }
+
+    /// Appends hook components to the defer buffer. Partials are assumed in order for the current
+    /// block.
+    pub(super) fn defer_hook_components(
+        &mut self,
+        components: impl IntoIterator<Item = (ComponentId, HookComponentWithTxHash)>,
+    ) {
+        self.deferred_hook_components
+            .extend(components);
+    }
+
+    /// Takes and clears the defer buffer. Call when processing the final partial for the block.
+    pub(super) fn take_deferred_hook_components(
+        &mut self,
+    ) -> HashMap<ComponentId, HookComponentWithTxHash> {
+        std::mem::take(&mut self.deferred_hook_components)
     }
 
     /// Move new finalized blocks state to the permanent layer.
@@ -660,9 +717,10 @@ mod tests {
         models::{
             blockchain::{
                 AddressStorageLocation, Block, EntryPoint, EntryPointWithTracingParams,
-                RPCTracerParams, TracingParams, TracingResult,
+                RPCTracerParams, TracingParams, TracingResult, Transaction,
             },
-            Address, BlockHash, Chain, StoreKey,
+            protocol::ProtocolComponent,
+            Address, BlockHash, Chain, ComponentId, StoreKey,
         },
         Bytes,
     };
@@ -1259,5 +1317,89 @@ mod tests {
 
         // address2 should have key1 from block1
         assert_eq!(permanent_state.get(&address2), Some(&Some(HashSet::from([key1.clone()]))));
+    }
+
+    #[test]
+    fn test_dci_defer_tracing() {
+        let mut cache = DCICache::new();
+        let ep = get_entrypoint_with_tracing_params(1);
+        let tx = Transaction::new(
+            Bytes::from(1_u8).lpad(32, 0),
+            Bytes::from(1_u8).lpad(32, 0),
+            Bytes::from(1_u8).lpad(20, 0),
+            None,
+            0,
+        );
+
+        assert!(cache.take_deferred_tracing().is_empty());
+        cache.defer_tracing([(ep.clone(), tx.clone())]);
+        let taken = cache.take_deferred_tracing();
+        assert_eq!(taken.len(), 1);
+        assert_eq!(taken[0].0.entry_point.external_id, ep.entry_point.external_id);
+        assert!(cache.take_deferred_tracing().is_empty());
+
+        cache.defer_tracing(vec![(ep.clone(), tx)]);
+        cache.clear_deferred_tracing();
+        assert!(cache.take_deferred_tracing().is_empty());
+    }
+
+    #[test]
+    fn test_hooks_defer_hook_components() {
+        let mut cache = HooksDCICache::new();
+        let comp_id: ComponentId = "comp_1".to_string();
+        let tx_hash = Bytes::from(1_u8).lpad(32, 0);
+        let component = ProtocolComponent::new(
+            "comp_1",
+            "test",
+            "TestType",
+            Chain::Ethereum,
+            vec![],
+            vec![],
+            HashMap::new(),
+            tycho_common::models::ChangeType::Creation,
+            tx_hash.clone(),
+            chrono::DateTime::from_timestamp(0, 0)
+                .unwrap()
+                .naive_utc(),
+        );
+
+        assert!(cache
+            .take_deferred_hook_components()
+            .is_empty());
+        cache.defer_hook_components([(comp_id.clone(), (tx_hash.clone(), component.clone()))]);
+        let taken = cache.take_deferred_hook_components();
+        assert_eq!(taken.len(), 1);
+        assert_eq!(taken.get(&comp_id).unwrap().1.id, component.id);
+        assert!(cache
+            .take_deferred_hook_components()
+            .is_empty());
+
+        // Extend overwrites same key
+        cache.defer_hook_components([(comp_id.clone(), (tx_hash.clone(), component.clone()))]);
+        let comp2 = ProtocolComponent::new(
+            "comp_1",
+            "test",
+            "TestType2",
+            Chain::Ethereum,
+            vec![],
+            vec![],
+            HashMap::new(),
+            tycho_common::models::ChangeType::Update,
+            Bytes::from(2_u8).lpad(32, 0),
+            chrono::DateTime::from_timestamp(1, 0)
+                .unwrap()
+                .naive_utc(),
+        );
+        cache.defer_hook_components([(comp_id.clone(), (Bytes::from(2_u8).lpad(32, 0), comp2))]);
+        let taken2 = cache.take_deferred_hook_components();
+        assert_eq!(taken2.len(), 1);
+        assert_eq!(
+            taken2
+                .get(&comp_id)
+                .unwrap()
+                .1
+                .protocol_type_name,
+            "TestType2"
+        );
     }
 }
