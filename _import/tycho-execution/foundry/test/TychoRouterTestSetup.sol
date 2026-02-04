@@ -33,7 +33,9 @@ import "@src/FeeCalculator.sol";
 
 contract TychoRouterExposed is TychoRouter {
     constructor(address _permit2, address feeCalculator)
-        TychoRouter(_permit2, feeCalculator)
+        TychoRouter(
+            _permit2, feeCalculator, BLOCK_DELAY_EXECUTOR_ACTIVATION_ETHEREUM
+        )
     {}
 
     function tstoreExposed(
@@ -105,7 +107,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         string memory chain = getChain();
         uint256 forkBlock = getForkBlock();
         vm.createSelectFork(vm.rpcUrl(chain), forkBlock);
-        uint256 setupBlock = forkBlock - _SETUP_BLOCK_OFFSET;
+        uint256 setupBlock = forkBlock - _SETUP_BLOCK_OFFSET_ETHEREUM;
         vm.roll(setupBlock);
 
         vm.startPrank(ADMIN);

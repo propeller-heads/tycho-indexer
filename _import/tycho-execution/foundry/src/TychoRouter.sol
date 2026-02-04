@@ -107,7 +107,11 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address indexed oldCalculator, address indexed newCalculator
     );
 
-    constructor(address _permit2, address feeCalculator) Dispatcher(_permit2) {
+    constructor(
+        address _permit2,
+        address feeCalculator,
+        uint256 _blocksToDelayExecutorActivation
+    ) Dispatcher(_permit2, _blocksToDelayExecutorActivation) {
         if (_permit2 == address(0)) {
             revert TychoRouter__AddressZero();
         }

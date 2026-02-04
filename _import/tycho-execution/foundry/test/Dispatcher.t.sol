@@ -5,7 +5,9 @@ import "@src/Dispatcher.sol";
 import "./TychoRouterTestSetup.sol";
 
 contract DispatcherExposed is Dispatcher {
-    constructor(address _permit2) Dispatcher(_permit2) {}
+    constructor(address _permit2, uint256 blocksToDelayExecutorActivation)
+        Dispatcher(_permit2, blocksToDelayExecutorActivation)
+    {}
 
     function exposedCallExecutor(
         address executor,
@@ -38,7 +40,9 @@ contract DispatcherTest is Constants {
     function setUp() public {
         uint256 forkBlock = 20673900;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        dispatcherExposed = new DispatcherExposed(PERMIT2_ADDRESS);
+        dispatcherExposed = new DispatcherExposed(
+            PERMIT2_ADDRESS, BLOCK_DELAY_EXECUTOR_ACTIVATION_ETHEREUM
+        );
         deal(WETH_ADDR, address(dispatcherExposed), 15 ether);
         deployDummyContract();
     }
@@ -99,7 +103,7 @@ contract DispatcherTest is Constants {
         // Bad data is provided to an approved executor - causing the call to fail
         // Make sure the executor is not timelocked
         uint256 forkBlock = 20673900;
-        vm.roll(forkBlock - _SETUP_BLOCK_OFFSET);
+        vm.roll(forkBlock - _SETUP_BLOCK_OFFSET_ETHEREUM);
         dispatcherExposed.exposedSetExecutor(
             address(0xe592557AB9F4A75D992283fD6066312FF013ba3d)
         );
