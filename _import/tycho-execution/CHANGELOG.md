@@ -1,3 +1,12 @@
+## [0.25.0](https://github.com/propeller-heads/tycho-contracts/compare/0.24.2...0.25.0) (2026-02-04)
+
+
+### Features
+
+* add missing values for router deployment in the script ([1d41b69](https://github.com/propeller-heads/tycho-contracts/commit/1d41b6955be370af00062e644e16255693c62c62))
+* add timelock for new executors ([eb3c613](https://github.com/propeller-heads/tycho-contracts/commit/eb3c61369750d359a59fdfc94a17e00d56bb1a34))
+* set delay for the executor activation in the constructor ([40ffb3b](https://github.com/propeller-heads/tycho-contracts/commit/40ffb3bbfaf7b745fadbb74ad05fe3ce3eaae6cc))
+
 ## [0.24.2](https://github.com/propeller-heads/tycho-contracts/compare/0.24.1...0.24.2) (2026-02-04)
 
 ## [0.24.1](https://github.com/propeller-heads/tycho-contracts/compare/0.24.0...0.24.1) (2026-02-03)
