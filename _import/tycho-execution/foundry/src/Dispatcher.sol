@@ -3,6 +3,8 @@ pragma solidity ^0.8.26;
 
 import {IExecutor} from "@interfaces/IExecutor.sol";
 import {ICallback} from "@interfaces/ICallback.sol";
+import {IFeeCalculator} from "@interfaces/IFeeCalculator.sol";
+import {FeeRecipient} from "../lib/FeeStructs.sol";
 import {RestrictTransferFrom} from "./RestrictTransferFrom.sol";
 
 error Dispatcher__UnapprovedExecutor(address executor);
@@ -293,5 +295,66 @@ contract Dispatcher is RestrictTransferFrom {
         }
 
         receiver = abi.decode(receiverData, (address));
+    }
+
+    function _callGetEffectiveRouterFeeOnOutput(address feeCalculator)
+        internal
+        view
+        returns (uint16 routerFeeOnOutputBps)
+    {
+        // slither-disable-next-line calls-loop,low-level-calls
+        (bool success, bytes memory feeData) = feeCalculator.staticcall(
+            abi.encodeWithSelector(
+                IFeeCalculator.getEffectiveRouterFeeOnOutput.selector,
+                msg.sender
+            )
+        );
+
+        if (!success) {
+            revert(
+                string(
+                    feeData.length > 0
+                        ? feeData
+                        : abi.encodePacked("Getting router fee failed")
+                )
+            );
+        }
+
+        routerFeeOnOutputBps = abi.decode(feeData, (uint16));
+    }
+
+    function _callCalculateFee(
+        address feeCalculator,
+        uint256 amountIn,
+        uint16 solverFeeBps,
+        address solverFeeReceiver
+    )
+        internal
+        view
+        returns (uint256 amountOut, FeeRecipient[] memory feeRecipients)
+    {
+        // slither-disable-next-line calls-loop,low-level-calls
+        (bool success, bytes memory feeData) = feeCalculator.staticcall(
+            abi.encodeWithSelector(
+                IFeeCalculator.calculateFee.selector,
+                amountIn,
+                msg.sender,
+                solverFeeBps,
+                solverFeeReceiver
+            )
+        );
+
+        if (!success) {
+            revert(
+                string(
+                    feeData.length > 0
+                        ? feeData
+                        : abi.encodePacked("Calculating fee failed")
+                )
+            );
+        }
+
+        (amountOut, feeRecipients) =
+            abi.decode(feeData, (uint256, FeeRecipient[]));
     }
 }
