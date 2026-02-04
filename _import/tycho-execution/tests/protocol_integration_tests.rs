@@ -950,7 +950,6 @@ fn test_single_encoding_strategy_bebop_aggregate() {
         .estimated_amount_in(BigUint::from_str("20000000000").unwrap())
         .protocol_state(Arc::new(bebop_state));
 
-    std::env::set_var("TYCHO_FEES_ENABLED", "true");
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
     let solution = Solution {
@@ -977,7 +976,6 @@ fn test_single_encoding_strategy_bebop_aggregate() {
     let hex_calldata = hex::encode(&calldata);
 
     write_calldata_to_file("test_single_encoding_strategy_bebop_aggregate", hex_calldata.as_str());
-    std::env::remove_var("TYCHO_FEES_ENABLED");
 }
 
 #[test]
@@ -1048,7 +1046,6 @@ fn test_single_encoding_strategy_hashflow() {
     let swap_usdc_wbtc = Swap::new(hashflow_component, usdc.clone(), wbtc.clone())
         .estimated_amount_in(BigUint::from_str("4308094737").unwrap())
         .protocol_state(Arc::new(hashflow_state));
-    std::env::set_var("TYCHO_FEES_ENABLED", "true");
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
     let solution = Solution {
@@ -1075,7 +1072,6 @@ fn test_single_encoding_strategy_hashflow() {
 
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_hashflow", hex_calldata.as_str());
-    std::env::remove_var("TYCHO_FEES_ENABLED");
 }
 
 #[test]
