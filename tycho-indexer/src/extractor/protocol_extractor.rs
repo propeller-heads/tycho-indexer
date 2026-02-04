@@ -73,7 +73,7 @@ struct GatewayInner<G> {
 ///
 /// Separate from the reorg buffer: reorg buffer handles finalized complete blocks,
 /// while this buffer holds partial blocks used to build full blocks.
-#[derive(Default)]
+#[derive(Default, DeepSizeOf)]
 struct PartialBlockBuffer {
     /// The current block number being accumulated
     current_block_number: Option<u64>,
@@ -422,6 +422,17 @@ where
             )
             .set(
                 self.reorg_buffer
+                    .lock()
+                    .await
+                    .deep_size_of() as f64,
+            );
+            gauge!(
+                "extractor_partial_block_buffer_size",
+                "chain" => self.chain.to_string(),
+                "extractor" => self.name.clone(),
+            )
+            .set(
+                self.partial_block_buffer
                     .lock()
                     .await
                     .deep_size_of() as f64,
