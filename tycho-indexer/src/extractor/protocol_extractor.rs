@@ -3973,23 +3973,6 @@ mod test_serial_db {
     }
 
     #[test]
-    fn test_insert_single_partial_and_merge() {
-        let mut buffer = PartialBlockBuffer::new();
-
-        buffer
-            .insert_partial(create_partial_block(100, 0))
-            .unwrap();
-
-        let mut full_block = create_full_block(100);
-        buffer
-            .drain_and_merge_into(&mut full_block)
-            .unwrap();
-
-        assert!(buffer.is_empty());
-        assert_eq!(buffer.current_block_number, None);
-    }
-
-    #[test]
     fn test_insert_multiple_partials_same_block() {
         let mut buffer = PartialBlockBuffer::new();
 
@@ -4041,51 +4024,149 @@ mod test_serial_db {
     }
 
     #[test]
-    fn test_merge_sorts_transactions_by_index() {
-        use tycho_common::models::blockchain::{Transaction, TxWithChanges};
+    fn test_drain_and_merge_combines_all_fields() {
+        use std::collections::HashMap;
+
+        use tycho_common::models::{
+            blockchain::TxWithChanges,
+            contract::AccountBalance,
+            protocol::{ComponentBalance, ProtocolComponent, ProtocolComponentStateDelta},
+            token::Token,
+            Address, Chain,
+        };
 
         let mut buffer = PartialBlockBuffer::new();
 
-        // Create partial with tx index 5
+        // Create partial 1 with tx index 5 and various fields
         let mut partial1 = create_partial_block(100, 0);
+
+        let component_id_1 = "protocol_1".to_string();
+        let component_id_2 = "protocol_2".to_string();
+        let addr1 = Address::from_str("0x1111111111111111111111111111111111111111").unwrap();
+        let addr2 = Address::from_str("0x2222222222222222222222222222222222222222").unwrap();
+        let token_addr = Address::from_str("0x3333333333333333333333333333333333333333").unwrap();
+
+        // Add transaction with protocol components and balance changes
+        let mut tx1 = TxWithChanges::default();
+        tx1.tx.index = 5;
+        tx1.protocol_components
+            .insert(component_id_1.clone(), ProtocolComponent::default());
+        tx1.balance_changes.insert(
+            component_id_1.clone(),
+            HashMap::from([(
+                addr1.clone(),
+                ComponentBalance::new(
+                    addr1.clone(),
+                    Bytes::from(1000u64.to_be_bytes().to_vec()),
+                    1000.0,
+                    Bytes::zero(32),
+                    &component_id_1,
+                ),
+            )]),
+        );
+        tx1.state_updates.insert(
+            component_id_1.clone(),
+            ProtocolComponentStateDelta::new(&component_id_1, HashMap::new(), Default::default()),
+        );
+        partial1.txs_with_update.push(tx1);
+
+        // Add new token to partial1
+        let token1 = Token::new(&token_addr, "TOKEN1", 18, 0, &[], Chain::Ethereum, 0);
         partial1
-            .txs_with_update
-            .push(TxWithChanges {
-                tx: Transaction::new(Bytes::zero(32), Bytes::zero(32), Bytes::zero(20), None, 5),
-                ..Default::default()
-            });
+            .new_tokens
+            .insert(token_addr.clone(), token1);
 
-        // Create partial with tx index 2
+        // Create partial 2 with tx index 2 and different data
         let mut partial2 = create_partial_block(100, 1);
-        partial2
-            .txs_with_update
-            .push(TxWithChanges {
-                tx: Transaction::new(Bytes::zero(32), Bytes::zero(32), Bytes::zero(20), None, 2),
-                ..Default::default()
-            });
 
+        let mut tx2 = TxWithChanges::default();
+        tx2.tx.index = 2;
+        tx2.protocol_components
+            .insert(component_id_2.clone(), ProtocolComponent::default());
+        tx2.account_balance_changes.insert(
+            addr2.clone(),
+            HashMap::from([(
+                addr1.clone(),
+                AccountBalance::new(
+                    addr2.clone(),
+                    addr1.clone(),
+                    Bytes::from(500u64.to_be_bytes().to_vec()),
+                    Bytes::zero(32),
+                ),
+            )]),
+        );
+        partial2.txs_with_update.push(tx2);
+
+        // Add different token to partial2
+        let token_addr2 = Address::from_str("0x4444444444444444444444444444444444444444").unwrap();
+        let token2 = Token::new(&token_addr2, "TOKEN2", 6, 0, &[], Chain::Ethereum, 0);
+        partial2
+            .new_tokens
+            .insert(token_addr2.clone(), token2);
+
+        // Insert both partials
         buffer.insert_partial(partial1).unwrap();
         buffer.insert_partial(partial2).unwrap();
 
-        // Full block with tx index 0
+        // Create full block with tx index 0
         let mut full_block = create_full_block(100);
-        full_block
-            .txs_with_update
-            .push(TxWithChanges {
-                tx: Transaction::new(Bytes::zero(32), Bytes::zero(32), Bytes::zero(20), None, 0),
-                ..Default::default()
-            });
+        let tx0 = TxWithChanges::default();
+        full_block.txs_with_update.push(tx0);
 
+        // Merge partials into a full block
         buffer
             .drain_and_merge_into(&mut full_block)
             .unwrap();
 
-        // Check transactions are sorted by index
+        // Verify buffer is drained
+        assert!(buffer.is_empty());
+        assert_eq!(buffer.current_block_number, None);
+
+        // Verify transactions are sorted by index
+        assert_eq!(full_block.txs_with_update.len(), 3);
         let indices: Vec<u64> = full_block
             .txs_with_update
             .iter()
             .map(|tx| tx.tx.index)
             .collect();
         assert_eq!(indices, vec![0, 2, 5]);
+
+        // Verify protocol components from partial 1
+        assert!(full_block.txs_with_update[2]
+            .protocol_components
+            .contains_key(&component_id_1));
+
+        // Verify balance changes from partial 1
+        assert!(full_block.txs_with_update[2]
+            .balance_changes
+            .get(&component_id_1)
+            .unwrap()
+            .contains_key(&addr1));
+
+        // Verify state updates from partial 1
+        assert!(full_block.txs_with_update[2]
+            .state_updates
+            .contains_key(&component_id_1));
+
+        // Verify protocol components from partial 2
+        assert!(full_block.txs_with_update[1]
+            .protocol_components
+            .contains_key(&component_id_2));
+
+        // Verify account balance changes from partial 2
+        assert!(full_block.txs_with_update[1]
+            .account_balance_changes
+            .get(&addr2)
+            .unwrap()
+            .contains_key(&addr1));
+
+        // Verify new_tokens contains both tokens
+        assert_eq!(full_block.new_tokens.len(), 2);
+        assert!(full_block
+            .new_tokens
+            .contains_key(&token_addr));
+        assert!(full_block
+            .new_tokens
+            .contains_key(&token_addr2));
     }
 }
