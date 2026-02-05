@@ -193,7 +193,10 @@ impl BlockHistory {
             .latest()
             .ok_or(BlockHistoryError::EmptyHistory)?;
 
-        Ok(if block.parent_hash == latest.hash {
+        Ok(if self.reverts.contains(&block.hash) {
+            // Any block whose hash we've already reverted is from a delayed extractor
+            BlockPosition::Delayed
+        } else if block.parent_hash == latest.hash {
             // if the block is the next expected block.
             BlockPosition::NextExpected
         } else if block.number == latest.number && block.is_partial() {
@@ -213,9 +216,6 @@ impl BlockHistory {
         } else if (block.hash == latest.hash) & !block.revert {
             // if the block is the latest block and it is not a revert.
             BlockPosition::Latest
-        } else if self.reverts.contains(&block.hash) {
-            // if the block is still on an already reverted branch.
-            BlockPosition::Delayed
         } else if block.number <= latest.number {
             // block is potentially delayed or reverted.
 
