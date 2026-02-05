@@ -69,132 +69,7 @@ struct GatewayInner<G> {
     commit_batch_size: usize,
 }
 
-/// Buffer for accumulating partial block data within a single block.
-///
-/// Separate from the reorg buffer: reorg buffer handles finalized complete blocks,
-/// while this buffer holds partial blocks used to build full blocks.
-#[derive(Default, DeepSizeOf)]
-struct PartialBlockBuffer {
-    /// The current block number being accumulated
-    current_block_number: Option<u64>,
-    /// Accumulated partial blocks for the current block
-    partials: Vec<BlockChanges>,
-}
-
-#[allow(dead_code)]
-impl PartialBlockBuffer {
-    fn new() -> Self {
-        Self { current_block_number: None, partials: Vec::new() }
-    }
-
-    /// Inserts a partial block into the buffer.
-    ///
-    /// # Errors
-    /// - Non-partial block provided
-    /// - Block number mismatch (indicates missing reorg signal)
-    fn insert_partial(&mut self, block: BlockChanges) -> Result<(), ExtractionError> {
-        if !block.is_partial_block() {
-            return Err(ExtractionError::PartialBlockBufferError(
-                "Attempted to insert non-partial block into partial buffer".to_string(),
-            ));
-        }
-
-        let block_num = block.block.number;
-
-        match self.current_block_number {
-            None => {
-                // First partial for this block
-                self.current_block_number = Some(block_num);
-                self.partials.push(block);
-            }
-            Some(cached_num) if cached_num == block_num => {
-                // Same block, add to buffer
-                self.partials.push(block);
-            }
-            Some(cached_num) => {
-                // Different block number - this indicates a missing reorg signal
-                return Err(ExtractionError::PartialBlockBufferError(format!(
-                    "Block number mismatch: buffered {}, got {}. \
-                     This indicates a missing reorg signal.",
-                    cached_num, block_num
-                )));
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Drains buffered partials and merges them into the full block.
-    ///
-    /// Extends the full block with transactions, tokens, and trace results from
-    /// all buffered partials. Transactions are sorted by index to maintain correct
-    /// execution order. No-op if buffer is empty.
-    ///
-    /// # Errors
-    /// - Block number mismatch between buffer and full block
-    fn drain_and_merge_into(
-        &mut self,
-        full_block: &mut BlockChanges,
-    ) -> Result<(), ExtractionError> {
-        if self.partials.is_empty() {
-            return Ok(());
-        }
-
-        // Validate block numbers match
-        if let Some(cached_num) = self.current_block_number {
-            if cached_num != full_block.block.number {
-                return Err(ExtractionError::PartialBlockBufferError(format!(
-                    "Block number mismatch during merge: buffered {}, full block {}",
-                    cached_num, full_block.block.number
-                )));
-            }
-        }
-
-        // Merge all partial data into the full block
-        for partial in self.partials.drain(..) {
-            full_block
-                .txs_with_update
-                .extend(partial.txs_with_update);
-            full_block
-                .block_contract_changes
-                .extend(partial.block_contract_changes);
-            full_block
-                .trace_results
-                .extend(partial.trace_results);
-
-            // Merge tokens (avoid duplicates)
-            for (addr, token) in partial.new_tokens {
-                full_block
-                    .new_tokens
-                    .insert(addr, token);
-            }
-        }
-
-        // Sort transactions by index to maintain correct execution order
-        full_block
-            .txs_with_update
-            .sort_by_key(|tx| tx.tx.index);
-
-        // Clear the buffer
-        self.clear();
-
-        Ok(())
-    }
-
-    /// Clears the buffer and sets the current block number to None.
-    fn clear(&mut self) {
-        self.partials.clear();
-        self.current_block_number = None;
-    }
-
-    fn len(&self) -> usize {
-        self.partials.len()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.partials.is_empty()
-    }
-}
+type PartialBlockBuffer = Option<BlockChanges>;
 
 pub struct ProtocolExtractor<G, T, E> {
     gateway: GatewayInner<G>,
@@ -972,6 +847,62 @@ where
                 )));
         }
 
+        // For partial blocks, we do not need to insert them into the reorg buffer, commit to the
+        // database, or update tracked block number or cursor, as this is done when we process the
+        // full block message.
+        msg = if inp.partial_index.is_some() {
+            let committed_block_height = *self
+                .gateway
+                .committed_block_height
+                .lock()
+                .await;
+            let mut changes = msg.into_aggregated(committed_block_height)?;
+            self.handle_tvl_changes(&mut changes)
+                .await?;
+
+            debug!(
+                new_components = changes.new_protocol_components.len(),
+                new_tokens = changes.new_tokens.len(),
+                account_update = changes.account_deltas.len(),
+                state_update = changes.state_deltas.len(),
+                tvl_changes = changes.component_tvl.len(),
+                "ProcessedPartialMessage"
+            );
+
+            return Ok(Some(Arc::new(changes)));
+        } else if inp.output.is_none() {
+            // This is expected to indicate that we have received the final partial block and should
+            // now emit the full block built from the collected partial blocks in the buffer. We
+            // should also then insert this full block into the reorg buffer and possibly trigger a
+            // database commit if we have collected enough blocks in the buffer.
+            debug!("Received full block with no output. Interpreting this as the signal to emit the full block after collecting all partial blocks in the buffer.");
+            let mut msg_replacement = self
+                .partial_block_buffer
+                .lock()
+                .await
+                .take();
+            msg_replacement.ok_or_else(|| {
+                    ExtractionError::PartialBlockBufferError(format!(
+                        "Failed to retrieve full block for block number {} from the partial block buffer: empty buffer",
+                        msg.block.number
+                    ))
+                })?
+        } else {
+            if self
+                .partial_block_buffer
+                .lock()
+                .await
+                .is_some()
+            {
+                Err(ExtractionError::PartialBlockBufferError(format!(
+                    "Received full block for block number {} but the partial block buffer is not empty. This indicates an unexpected state, as we should have already emitted a full block and cleared the buffer when we received the previous full block with no output.",
+                    msg.block.number,
+                )))?;
+            }
+
+            msg
+        };
+
         // Create a scope to lock the reorg buffer, insert the new block and possibly commit to the
         // database if we have enough blocks in the buffer.
         // Return the block height up to which we have committed to the database.
@@ -1102,7 +1033,7 @@ where
                 "ProcessedMessage"
             );
         }
-        return Ok(Some(Arc::new(changes)));
+        Ok(Some(Arc::new(changes)))
     }
 
     #[instrument(skip_all, fields(target_hash, target_number))]
