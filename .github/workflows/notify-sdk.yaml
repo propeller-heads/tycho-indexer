@@ -1,0 +1,22 @@
+name: Notify SDK of new release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  notify-sdk:
+    name: Trigger SDK update workflow
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger tycho-protocol-sdk update workflow
+        run: |
+          curl -X POST \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: token ${{ secrets.SDK_REPO_DISPATCH_TOKEN }}" \
+            https://api.github.com/repos/propeller-heads/tycho-protocol-sdk/dispatches \
+            -d '{"event_type":"tycho-indexer-release","client_payload":{"version":"${{ github.event.release.tag_name }}"}}'
+
+      - name: Log notification
+        run: |
+          echo "Notified tycho-protocol-sdk of release ${{ github.event.release.tag_name }}"
