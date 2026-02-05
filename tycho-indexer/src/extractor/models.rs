@@ -1578,29 +1578,34 @@ mod test {
         /// - Index 0: tx_index=5, protocol_1, component_balance, TOKEN1 (18 decimals)
         /// - Index 1: tx_index=2, protocol_2, account_balance, TOKEN2 (6 decimals)
         fn create_partial_block(index: u8) -> BlockChanges {
-            let mut block = BlockChanges::default();
-            block.extractor = "test_extractor".to_string();
-            block.chain = Chain::Ethereum;
-            block.block = Block::new(
-                100,
-                Chain::Ethereum,
-                Bytes::zero(32),
-                Bytes::zero(32),
-                NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
-            );
+            let mut block = BlockChanges {
+                extractor: "test_extractor".to_string(),
+                chain: Chain::Ethereum,
+                block: Block::new(
+                    100,
+                    Chain::Ethereum,
+                    Bytes::zero(32),
+                    Bytes::zero(32),
+                    NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
+                ),
+                ..Default::default()
+            };
 
             match index {
                 0 => {
                     block.partial_block_index = Some(0);
 
                     let component_id = "protocol_1".to_string();
-                    let addr1 = Address::from_str("0x1111111111111111111111111111111111111111").unwrap();
-                    let token_addr = Address::from_str("0x3333333333333333333333333333333333333333").unwrap();
+                    let addr1 =
+                        Address::from_str("0x1111111111111111111111111111111111111111").unwrap();
+                    let token_addr =
+                        Address::from_str("0x3333333333333333333333333333333333333333").unwrap();
 
                     // Transaction with index 5
                     let mut tx = TxWithChanges::default();
                     tx.tx.index = 5;
-                    tx.protocol_components.insert(component_id.clone(), ProtocolComponent::default());
+                    tx.protocol_components
+                        .insert(component_id.clone(), ProtocolComponent::default());
                     tx.balance_changes.insert(
                         component_id.clone(),
                         HashMap::from([(
@@ -1616,7 +1621,11 @@ mod test {
                     );
                     tx.state_updates.insert(
                         component_id,
-                        ProtocolComponentStateDelta::new("protocol_1", HashMap::new(), Default::default()),
+                        ProtocolComponentStateDelta::new(
+                            "protocol_1",
+                            HashMap::new(),
+                            Default::default(),
+                        ),
                     );
                     block.txs_with_update.push(tx);
 
@@ -1626,25 +1635,36 @@ mod test {
                         Token::new(&token_addr, "TOKEN1", 18, 0, &[], Chain::Ethereum, 0),
                     );
 
-                    block.block_contract_changes.push(TxWithContractChanges::default());
+                    block
+                        .block_contract_changes
+                        .push(TxWithContractChanges::default());
                 }
                 1 => {
                     block.partial_block_index = Some(1);
 
                     let component_id = "protocol_2".to_string();
-                    let addr1 = Address::from_str("0x1111111111111111111111111111111111111111").unwrap();
-                    let addr2 = Address::from_str("0x2222222222222222222222222222222222222222").unwrap();
-                    let token_addr = Address::from_str("0x4444444444444444444444444444444444444444").unwrap();
+                    let addr1 =
+                        Address::from_str("0x1111111111111111111111111111111111111111").unwrap();
+                    let addr2 =
+                        Address::from_str("0x2222222222222222222222222222222222222222").unwrap();
+                    let token_addr =
+                        Address::from_str("0x4444444444444444444444444444444444444444").unwrap();
 
                     // Transaction with index 2
                     let mut tx = TxWithChanges::default();
                     tx.tx.index = 2;
-                    tx.protocol_components.insert(component_id, ProtocolComponent::default());
+                    tx.protocol_components
+                        .insert(component_id, ProtocolComponent::default());
                     tx.account_balance_changes.insert(
                         addr2.clone(),
                         HashMap::from([(
                             addr1.clone(),
-                            AccountBalance::new(addr2, addr1, Bytes::from(500u64.to_be_bytes().to_vec()), Bytes::zero(32)),
+                            AccountBalance::new(
+                                addr2,
+                                addr1,
+                                Bytes::from(500u64.to_be_bytes().to_vec()),
+                                Bytes::zero(32),
+                            ),
                         )]),
                     );
                     block.txs_with_update.push(tx);
@@ -1655,7 +1675,9 @@ mod test {
                         Token::new(&token_addr, "TOKEN2", 6, 0, &[], Chain::Ethereum, 0),
                     );
 
-                    block.block_contract_changes.push(TxWithContractChanges::default());
+                    block
+                        .block_contract_changes
+                        .push(TxWithContractChanges::default());
                 }
                 _ => panic!("Invalid partial block index: {} (must be 0 or 1)", index),
             }
@@ -1668,10 +1690,7 @@ mod test {
         #[rstest]
         #[case(0, 1)] // block0.merge(block1)
         #[case(1, 0)] // block1.merge(block0) - should produce identical result
-        fn test_merge_partial_combines_all_fields(
-            #[case] first_idx: u8,
-            #[case] second_idx: u8,
-        ) {
+        fn test_merge_partial_combines_all_fields(#[case] first_idx: u8, #[case] second_idx: u8) {
             let mut first = create_partial_block(first_idx);
             let second = create_partial_block(second_idx);
 
@@ -1681,19 +1700,33 @@ mod test {
             assert_eq!(first.txs_with_update.len(), 2);
 
             // Transactions sorted by index (2, 5)
-            let indices: Vec<u64> = first.txs_with_update.iter().map(|tx| tx.tx.index).collect();
+            let indices: Vec<u64> = first
+                .txs_with_update
+                .iter()
+                .map(|tx| tx.tx.index)
+                .collect();
             assert_eq!(indices, vec![2, 5]);
 
             // Both tokens present
             assert_eq!(first.new_tokens.len(), 2);
-            let token_addr1 = Address::from_str("0x3333333333333333333333333333333333333333").unwrap();
-            let token_addr2 = Address::from_str("0x4444444444444444444444444444444444444444").unwrap();
-            assert!(first.new_tokens.contains_key(&token_addr1));
-            assert!(first.new_tokens.contains_key(&token_addr2));
+            let token_addr1 =
+                Address::from_str("0x3333333333333333333333333333333333333333").unwrap();
+            let token_addr2 =
+                Address::from_str("0x4444444444444444444444444444444444444444").unwrap();
+            assert!(first
+                .new_tokens
+                .contains_key(&token_addr1));
+            assert!(first
+                .new_tokens
+                .contains_key(&token_addr2));
 
             // Protocol components from both blocks
-            assert!(first.txs_with_update[0].protocol_components.contains_key("protocol_2"));
-            assert!(first.txs_with_update[1].protocol_components.contains_key("protocol_1"));
+            assert!(first.txs_with_update[0]
+                .protocol_components
+                .contains_key("protocol_2"));
+            assert!(first.txs_with_update[1]
+                .protocol_components
+                .contains_key("protocol_1"));
 
             // Component balances from block 0
             let addr1 = Address::from_str("0x1111111111111111111111111111111111111111").unwrap();
@@ -1795,10 +1828,16 @@ mod test {
             tx2.tx.index = 1; // Will be added to partial2's tx (index 2)
             partial2.txs_with_update.push(tx2);
 
-            partial1.merge_partial(partial2).unwrap();
+            partial1
+                .merge_partial(partial2)
+                .unwrap();
 
             // Should be sorted: 1, 2, 5, 7
-            let indices: Vec<u64> = partial1.txs_with_update.iter().map(|tx| tx.tx.index).collect();
+            let indices: Vec<u64> = partial1
+                .txs_with_update
+                .iter()
+                .map(|tx| tx.tx.index)
+                .collect();
             assert_eq!(indices, vec![1, 2, 5, 7]);
         }
 
@@ -1813,22 +1852,35 @@ mod test {
             let mut second = create_partial_block(second_idx);
 
             // Both blocks use the same token address with different data
-            let shared_token_addr = Address::from_str("0x5555555555555555555555555555555555555555").unwrap();
+            let shared_token_addr =
+                Address::from_str("0x5555555555555555555555555555555555555555").unwrap();
 
             // Replace tokens with shared address but different symbols
             first.new_tokens.clear();
             second.new_tokens.clear();
 
             if first_idx == 0 {
-                first.new_tokens.insert(shared_token_addr.clone(), Token::new(&shared_token_addr, "EARLY", 6, 0, &[], Chain::Ethereum, 0));
+                first.new_tokens.insert(
+                    shared_token_addr.clone(),
+                    Token::new(&shared_token_addr, "EARLY", 6, 0, &[], Chain::Ethereum, 0),
+                );
             } else {
-                first.new_tokens.insert(shared_token_addr.clone(), Token::new(&shared_token_addr, "LATE", 18, 0, &[], Chain::Ethereum, 0));
+                first.new_tokens.insert(
+                    shared_token_addr.clone(),
+                    Token::new(&shared_token_addr, "LATE", 18, 0, &[], Chain::Ethereum, 0),
+                );
             }
 
             if second_idx == 0 {
-                second.new_tokens.insert(shared_token_addr.clone(), Token::new(&shared_token_addr, "EARLY", 6, 0, &[], Chain::Ethereum, 0));
+                second.new_tokens.insert(
+                    shared_token_addr.clone(),
+                    Token::new(&shared_token_addr, "EARLY", 6, 0, &[], Chain::Ethereum, 0),
+                );
             } else {
-                second.new_tokens.insert(shared_token_addr.clone(), Token::new(&shared_token_addr, "LATE", 18, 0, &[], Chain::Ethereum, 0));
+                second.new_tokens.insert(
+                    shared_token_addr.clone(),
+                    Token::new(&shared_token_addr, "LATE", 18, 0, &[], Chain::Ethereum, 0),
+                );
             }
 
             first.merge_partial(second).unwrap();
