@@ -1,4 +1,7 @@
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet},
+    sync::Arc,
+};
 
 use chrono::NaiveDateTime;
 use deepsize::{Context, DeepSizeOf};
@@ -8,8 +11,8 @@ use tracing::warn;
 
 use crate::{
     models::{
-        blockchain::Transaction, Address, AttrStoreKey, Balance, Chain, ChangeType, ComponentId,
-        MergeError, StoreVal, TxHash,
+        blockchain::Transaction, token::Token, Address, AttrStoreKey, Balance, Chain, ChangeType,
+        ComponentId, MergeError, StoreVal, TxHash,
     },
     Bytes,
 };
@@ -25,13 +28,13 @@ use crate::{
 ///
 /// Every values of a `ProtocolComponent` must be static, they can't ever be changed after creation.
 /// The dynamic values associated to a component must be given using `ProtocolComponentState`.
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ProtocolComponent {
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProtocolComponent<Token: Into<Address> + Clone = Address> {
     pub id: ComponentId,
     pub protocol_system: String,
     pub protocol_type_name: String,
     pub chain: Chain,
-    pub tokens: Vec<Address>,
+    pub tokens: Vec<Token>,
     pub contract_addresses: Vec<Address>,
     pub static_attributes: HashMap<AttrStoreKey, StoreVal>,
     pub change: ChangeType,
@@ -39,14 +42,17 @@ pub struct ProtocolComponent {
     pub created_at: NaiveDateTime,
 }
 
-impl ProtocolComponent {
+impl<T> ProtocolComponent<T>
+where
+    T: Into<Address> + Clone,
+{
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: &str,
         protocol_system: &str,
         protocol_type_name: &str,
         chain: Chain,
-        tokens: Vec<Address>,
+        tokens: Vec<T>,
         contract_addresses: Vec<Address>,
         static_attributes: HashMap<AttrStoreKey, StoreVal>,
         change: ChangeType,
@@ -65,6 +71,15 @@ impl ProtocolComponent {
             creation_tx,
             created_at,
         }
+    }
+}
+
+impl ProtocolComponent<Arc<Token>> {
+    pub fn get_token(&self, address: &Address) -> Option<Arc<Token>> {
+        self.tokens
+            .iter()
+            .find(|t| &t.address == address)
+            .map(Arc::clone)
     }
 }
 
