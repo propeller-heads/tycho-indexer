@@ -2706,6 +2706,245 @@ mod test {
         assert_eq!(msg.component_tvl.len(), 1);
         assert_float_eq!(*res, exp_tvl, rmax <= 0.000_001);
     }
+
+    // ── Partial block handling tests ──────────────────────────────────────
+
+    /// Helper: build a partial `BlockScopedData` populated with contract & component changes
+    /// from `pb_vm_block_changes(partial_index)`.
+    ///
+    /// Different `partial_index` values select different fixture data (different contract
+    /// addresses & tx hashes), so callers can verify that both partials contribute to the
+    /// merged result.
+    ///
+    /// Patches applied:
+    /// - `protocol_type` → `"pt_1"` to match the test extractor's map
+    /// - balance data stripped to avoid triggering the TVL code path
+    fn make_partial_block_with_data(block_num: u64, partial_index: u32) -> BlockScopedData {
+        let mut msg = pb_fixtures::pb_vm_block_changes(partial_index as u8);
+        msg.block = Some(pb_fixtures::pb_blocks(block_num));
+        for tx in &mut msg.changes {
+            for comp in &mut tx.component_changes {
+                if let Some(pt) = comp.protocol_type.as_mut() {
+                    pt.name = "pt_1".to_string();
+                }
+            }
+            tx.balance_changes.clear();
+            for cc in &mut tx.contract_changes {
+                cc.token_balances.clear();
+            }
+        }
+        let mut bsd = pb_fixtures::pb_block_scoped_data(
+            msg,
+            Some(&format!("cursor@{block_num}_p{partial_index}")),
+            Some(block_num),
+        );
+        bsd.partial_index = Some(partial_index);
+        bsd.is_partial = true;
+        bsd
+    }
+
+    /// Helper: build an empty-output `BlockScopedData` that signals "drain the partial buffer".
+    fn make_drain_block(block_num: u64) -> BlockScopedData {
+        let mut bsd = pb_fixtures::pb_block_scoped_data(
+            tycho_substreams::BlockChanges {
+                block: Some(pb_fixtures::pb_blocks(block_num)),
+                ..Default::default()
+            },
+            Some(&format!("cursor@{block_num}")),
+            Some(block_num),
+        );
+        bsd.output = None; // No output = signal to drain buffer
+        bsd
+    }
+
+    #[tokio::test]
+    async fn test_partial_blocks_buffered_merged_and_drained() {
+        // Lifecycle: partial_0 (data v0) → partial_1 (data v1) → drain
+        //
+        // Both partials carry non-empty but distinct contract data (different fixture
+        // versions produce different contract addresses). The test proves merge by
+        // checking that the drained result contains account_delta keys from both.
+        let mut gw = MockExtractorGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
+        // No DB flush: with batch_size=1, a single block at final_block_height == block.number
+        // doesn't satisfy count_blocks_before(final_block_height) >= 1.
+        gw.expect_advance()
+            .times(0)
+            .returning(|_, _, _| Ok(()));
+
+        let extractor = create_extractor(gw).await;
+
+        // ── Partial 1 ──
+        let result_1 = extractor
+            .handle_tick_scoped_data(make_partial_block_with_data(1, 0))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // After partial 0: buffer populated, reorg buffer untouched.
+        assert!(extractor
+            .partial_block_buffer
+            .lock()
+            .await
+            .is_some());
+        assert_eq!(
+            extractor
+                .reorg_buffer
+                .lock()
+                .await
+                .count_blocks_before(u64::MAX),
+            0
+        );
+
+        // ── Partial 2 ──
+        let result_2 = extractor
+            .handle_tick_scoped_data(make_partial_block_with_data(1, 1))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // After partial 1: still buffered, reorg buffer still empty.
+        assert!(extractor
+            .partial_block_buffer
+            .lock()
+            .await
+            .is_some());
+        assert_eq!(
+            extractor
+                .reorg_buffer
+                .lock()
+                .await
+                .count_blocks_before(u64::MAX),
+            0
+        );
+
+        // ── Drain: empty-output signal ──
+        let full_result = extractor
+            .handle_tick_scoped_data(make_drain_block(1))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // After drain: buffer is empty, block entered the reorg buffer.
+        assert!(
+            extractor
+                .partial_block_buffer
+                .lock()
+                .await
+                .is_none(),
+            "Buffer should be empty after drain"
+        );
+        assert_eq!(
+            extractor
+                .reorg_buffer
+                .lock()
+                .await
+                .count_blocks_before(u64::MAX),
+            1,
+            "Drained block should be in the reorg buffer (full-block processing path)"
+        );
+
+        // Drained block has the correct block number.
+        assert_eq!(full_result.block.number, 1);
+
+        // Drained block contains account deltas from BOTH partials, proving merge occurred.
+        // If either partial were silently dropped, its addresses would be missing.
+        assert!(!full_result.account_deltas.is_empty());
+        for addr in result_1.account_deltas.keys() {
+            assert!(
+                full_result
+                    .account_deltas
+                    .contains_key(addr),
+                "Drained block missing account delta at {addr:x} from partial_1"
+            );
+        }
+        for addr in result_2.account_deltas.keys() {
+            assert!(
+                full_result
+                    .account_deltas
+                    .contains_key(addr),
+                "Drained block missing account delta at {addr:x} from partial_2"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_empty_output_with_empty_buffer_errors() {
+        // An empty-output signal with no buffered partials is an error.
+        let mut gw = MockExtractorGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
+        gw.expect_advance()
+            .times(0)
+            .returning(|_, _, _| Ok(()));
+
+        let extractor = create_extractor(gw).await;
+
+        let result = extractor
+            .handle_tick_scoped_data(make_drain_block(1))
+            .await;
+
+        assert!(matches!(result, Err(ExtractionError::PartialBlockBufferError(_))));
+    }
+
+    #[tokio::test]
+    async fn test_normal_full_block_does_not_interact_with_buffer() {
+        // A normal full block (output present, no partial_index) should process normally
+        // and leave the buffer untouched (None). Two blocks are sent so that the second
+        // triggers the reorg buffer commit (batch_size=1).
+        let mut gw = MockExtractorGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
+        gw.expect_advance()
+            .times(0)
+            .returning(|_, _, _| Ok(()));
+
+        let extractor = create_extractor(gw).await;
+
+        // Block 1
+        extractor
+            .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
+                tycho_substreams::BlockChanges {
+                    block: Some(pb_fixtures::pb_blocks(1)),
+                    ..Default::default()
+                },
+                Some("cursor@1"),
+                Some(1),
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Partial Block Buffer remains unchanged
+        assert!(extractor
+            .partial_block_buffer
+            .lock()
+            .await
+            .is_none());
+        assert_eq!(extractor.get_cursor().await, "cursor@1");
+    }
 }
 
 /// It is notoriously hard to mock postgres here, we would need to have traits and abstractions
