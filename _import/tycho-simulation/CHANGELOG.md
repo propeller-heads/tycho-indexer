@@ -1,3 +1,10 @@
+## [0.238.0](https://github.com/propeller-heads/tycho-simulation/compare/0.237.2...0.238.0) (2026-02-05)
+
+
+### Features
+
+* Notify SDK repo on new releases ([8b29bdc](https://github.com/propeller-heads/tycho-simulation/commit/8b29bdc46c63e25c987b770fe3c06c57e3667846))
+
 ## [0.237.2](https://github.com/propeller-heads/tycho-simulation/compare/0.237.1...0.237.2) (2026-02-02)
 
 
