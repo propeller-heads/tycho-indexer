@@ -627,8 +627,38 @@ where
         // 1. Filter-out components with no swap hooks (keep beforeSwap or afterSwap only)
         let swap_hook_components = self.extract_components_with_swap_hooks(block_changes)?;
 
-        // Early stop if no hook-components are affected
-        if swap_hook_components.is_empty() {
+        let is_non_final_partial =
+            block_changes.is_partial_block() && !block_changes.is_final_partial_block();
+
+        // On non-final partials: defer these components and skip metadata/orchestrator (same block,
+        // assumed in order). Inner DCI will defer tracing; we only run it on final partial.
+        if is_non_final_partial {
+            if !swap_hook_components.is_empty() {
+                self.cache
+                    .defer_hook_components(swap_hook_components);
+            }
+            self.inner_dci
+                .process_block_update(block_changes)
+                .await?;
+            self.cache
+                .handle_finality(block_changes.finalized_block_height)
+                .map_err(|e| {
+                    error!("Failed to handle finality for cache: {e:?}");
+                    ExtractionError::Unknown(format!("Failed to handle finality for cache: {e:?}"))
+                })?;
+            info!("Block processing completed successfully (non-final partial, deferred)");
+            return Ok(());
+        }
+
+        // Final partial or full block: merge deferred components (from earlier partials) with
+        // current
+        let mut hook_components_to_process = self
+            .cache
+            .take_deferred_hook_components();
+        hook_components_to_process.extend(swap_hook_components);
+
+        // Early stop if no hook-components to process (current + deferred)
+        if hook_components_to_process.is_empty() {
             debug!("No swap hook components found, delegating to inner DCI");
             self.inner_dci
                 .process_block_update(block_changes)
@@ -648,8 +678,8 @@ where
         }
 
         info!(
-            swap_hook_components = swap_hook_components.len(),
-            "Found swap hook components to process"
+            hook_components_to_process = hook_components_to_process.len(),
+            "Found hook components to process"
         );
 
         // 2. Categorize components based on processing state.
@@ -659,11 +689,11 @@ where
             let _span = span!(
                 Level::INFO,
                 "categorize_components",
-                total_components = swap_hook_components.len()
+                total_components = hook_components_to_process.len()
             )
             .entered();
 
-            self.categorize_components(&swap_hook_components)?
+            self.categorize_components(&hook_components_to_process)?
         };
 
         info!(
@@ -701,11 +731,11 @@ where
             .map(|tx_with_changes| (tx_with_changes.tx.hash.clone(), tx_with_changes.tx.clone()))
             .collect::<HashMap<_, _>>();
 
-        // Build component_id to Transaction map directly from swap_hook_components
+        // Build component_id to Transaction map directly from hook_components_to_process
         // This ensures we have transaction info for ALL hook components, not just those with
         // external metadata
         let component_id_to_tx_map: HashMap<ComponentId, Option<Transaction>> =
-            swap_hook_components
+            hook_components_to_process
                 .iter()
                 .map(|(component_id, (tx_hash, _component))| {
                     (component_id.clone(), tx_map.get(tx_hash).cloned())
@@ -735,7 +765,9 @@ where
                 .collect();
 
         // 5. Process all hook components through their orchestrators
-        let hook_components: Vec<_> = swap_hook_components.iter().collect();
+        let hook_components: Vec<_> = hook_components_to_process
+            .iter()
+            .collect();
 
         info!(hook_components = hook_components.len(), "Processing hook components");
 
@@ -901,13 +933,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     use tycho_common::{
         models::{
             blockchain::{
-                Block, EntryPoint, EntryPointWithTracingParams, RPCTracerParams, TracingParams,
-                Transaction, TxWithChanges,
+                Block, EntryPoint, EntryPointWithTracingParams, RPCTracerParams, TracedEntryPoint,
+                TracingParams, TracingResult, Transaction, TxWithChanges,
             },
             protocol::{ProtocolComponent, ProtocolComponentState, ProtocolComponentStateDelta},
             Address, Chain, ChangeType, TxHash,
@@ -917,13 +949,16 @@ mod tests {
         Bytes,
     };
 
-    use super::{super::component_metadata::MetadataError, *};
+    use super::{
+        super::{component_metadata::MetadataError, hook_orchestrator::MockHookOrchestrator},
+        *,
+    };
     use crate::{
         extractor::{
             dynamic_contract_indexer::hooks::component_metadata::{
                 MetadataGeneratorRegistry, MetadataResponseParserRegistry, ProviderRegistry,
             },
-            models::BlockChanges,
+            models::{BlockChanges, PartialBlockInfo},
         },
         testing::{self, MockGateway},
     };
@@ -1107,6 +1142,236 @@ mod tests {
             .process_block_update(&mut block_changes)
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_process_partial_block_update() {
+        let gateway = get_mock_gateway();
+        let account_extractor = MockAccountExtractor::new();
+        let entrypoint_tracer = MockEntryPointTracer::new();
+
+        let inner_dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        let metadata_orchestrator = BlockMetadataOrchestrator::new(
+            MetadataGeneratorRegistry::new(),
+            MetadataResponseParserRegistry::new(),
+            ProviderRegistry::new(),
+        );
+
+        let hook_orchestrator_registry = HookOrchestratorRegistry::new();
+
+        let mut gateway2 = MockGateway::new();
+        gateway2
+            .expect_get_protocol_components()
+            .return_once(move |_, _, _, _, _| {
+                Box::pin(async move { Ok(WithTotal { entity: vec![], total: Some(0) }) })
+            });
+
+        let mut hook_dci = UniswapV4HookDCI::new(
+            inner_dci,
+            metadata_orchestrator,
+            hook_orchestrator_registry,
+            gateway2,
+            Chain::Ethereum,
+            2,
+            3,
+        );
+
+        hook_dci.initialize().await.unwrap();
+
+        let hook_with_swap = create_hook_address_with_swap_permissions();
+        let component = create_hook_component("comp1", hook_with_swap);
+
+        let mut block_changes = BlockChanges::new(
+            "test".to_string(),
+            Chain::Ethereum,
+            get_test_block(1),
+            1,
+            false,
+            vec![TxWithChanges {
+                tx: get_test_transaction(1),
+                protocol_components: HashMap::from([("comp1".to_string(), component)]),
+                ..Default::default()
+            }],
+            Vec::new(),
+        );
+        block_changes.set_partial_block(Some(PartialBlockInfo { index: 0, is_last: false }));
+
+        // Non-final partial: should defer hook components and not run metadata/orchestrator
+        hook_dci
+            .process_block_update(&mut block_changes)
+            .await
+            .unwrap();
+
+        // Assert that the hook component was deferred
+        assert_eq!(
+            hook_dci
+                .cache
+                .deferred_hook_components
+                .len(),
+            1,
+            "expected one deferred hook component (comp1)"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_process_final_partial_block_update() {
+        let gateway = get_mock_gateway();
+        let mut account_extractor = MockAccountExtractor::new();
+        account_extractor
+            .expect_get_accounts_at_block()
+            .returning(|_, _| Ok(HashMap::new()));
+
+        let block1 = get_test_block(1);
+        let hook_addr = create_hook_address_with_swap_permissions();
+        let entry_point = EntryPoint::new(
+            "comp1:execute(bytes)".to_string(),
+            hook_addr.clone(),
+            "execute(bytes)".to_string(),
+        );
+        let tracing_params =
+            TracingParams::RPCTracer(RPCTracerParams::new(None, Bytes::from(vec![])));
+        let ep_with_params =
+            EntryPointWithTracingParams::new(entry_point.clone(), tracing_params.clone());
+        let tracing_result = TracingResult::new(std::collections::HashSet::new(), HashMap::new());
+        let traced_entry_point =
+            TracedEntryPoint::new(ep_with_params.clone(), block1.hash.clone(), tracing_result);
+
+        let mut entrypoint_tracer = MockEntryPointTracer::new();
+        entrypoint_tracer
+            .expect_trace()
+            .return_once(move |_block_hash, _entrypoints| vec![Ok(traced_entry_point)]);
+
+        let inner_dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        let metadata_orchestrator = BlockMetadataOrchestrator::new(
+            MetadataGeneratorRegistry::new(),
+            MetadataResponseParserRegistry::new(),
+            ProviderRegistry::new(),
+        );
+
+        let mut hook_orchestrator_registry = HookOrchestratorRegistry::new();
+        let mut mock_orchestrator = MockHookOrchestrator::new();
+        let hook_addr_reg = hook_addr.clone();
+        mock_orchestrator
+            .expect_update_components()
+            .returning(move |block_changes: &mut BlockChanges, _components, _metadata, _gen| {
+                if let Some(tx) = block_changes
+                    .txs_with_update
+                    .first_mut()
+                {
+                    let ep = EntryPoint::new(
+                        "comp1:execute(bytes)".to_string(),
+                        hook_addr_reg.clone(),
+                        "execute(bytes)".to_string(),
+                    );
+                    let params =
+                        TracingParams::RPCTracer(RPCTracerParams::new(None, Bytes::from(vec![])));
+                    tx.entrypoints
+                        .insert("comp1".to_string(), HashSet::from([ep.clone()]));
+                    tx.entrypoint_params
+                        .insert(ep.external_id, HashSet::from([(params, "comp1".to_string())]));
+                }
+                Ok(())
+            });
+        hook_orchestrator_registry
+            .register_hook_orchestrator(hook_addr, Box::new(mock_orchestrator));
+
+        let mut gateway2 = MockGateway::new();
+        gateway2
+            .expect_get_protocol_components()
+            .return_once(move |_, _, _, _, _| {
+                Box::pin(async move { Ok(WithTotal { entity: vec![], total: Some(0) }) })
+            });
+
+        let mut hook_dci = UniswapV4HookDCI::new(
+            inner_dci,
+            metadata_orchestrator,
+            hook_orchestrator_registry,
+            gateway2,
+            Chain::Ethereum,
+            2,
+            3,
+        );
+
+        hook_dci.initialize().await.unwrap();
+
+        let hook_with_swap = create_hook_address_with_swap_permissions();
+        let component1 = create_hook_component("comp1", hook_with_swap);
+
+        let tx1 = get_test_transaction(1);
+
+        // First: non-final partial with one hook component (deferred)
+        let mut non_final = BlockChanges::new(
+            "test".to_string(),
+            Chain::Ethereum,
+            block1.clone(),
+            1,
+            false,
+            vec![TxWithChanges {
+                tx: tx1.clone(),
+                protocol_components: HashMap::from([("comp1".to_string(), component1)]),
+                ..Default::default()
+            }],
+            Vec::new(),
+        );
+        non_final.set_partial_block(Some(PartialBlockInfo { index: 0, is_last: false }));
+        hook_dci
+            .process_block_update(&mut non_final)
+            .await
+            .unwrap();
+        assert_eq!(
+            non_final.trace_results.len(),
+            0,
+            "expected no trace results in non-final partial (deferred component should not have been traced)"
+        );
+
+        // Second: final partial, same block, no new hook components.
+        let mut final_partial = BlockChanges::new(
+            "test".to_string(),
+            Chain::Ethereum,
+            block1,
+            1,
+            false,
+            vec![TxWithChanges { tx: tx1, ..Default::default() }],
+            Vec::new(),
+        );
+        final_partial.set_partial_block(Some(PartialBlockInfo { index: 1, is_last: true }));
+        hook_dci
+            .process_block_update(&mut final_partial)
+            .await
+            .unwrap();
+
+        // Assert that the deferred component was flushed
+        assert_eq!(
+            hook_dci.cache.deferred_hook_components.len(),
+            0,
+            "expected deferred buffer to be empty after final partial (deferred comp1 should have been processed)"
+        );
+
+        // Assert that the trace from the mock tracer is in the final partial result
+        assert_eq!(
+            final_partial.trace_results.len(),
+            1,
+            "expected one trace result in final partial (deferred component should have been traced)"
+        );
+        assert_eq!(
+            final_partial.trace_results[0].entry_point_id(),
+            "comp1:execute(bytes)",
+            "trace result should be for the injected entrypoint"
+        );
     }
 
     #[tokio::test]
