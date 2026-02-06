@@ -43,7 +43,7 @@ use crate::{
         protocol_extractor::{ExtractorPgGateway, ProtocolExtractor},
         ExtractionError, Extractor, ExtractorExtension, ExtractorMsg,
     },
-    pb::sf::substreams::v1::Package,
+    pb::sf::substreams::{rpc::v2::BlockScopedData, v1::Package},
     substreams::{
         stream::{BlockResponse, SubstreamsStream},
         SubstreamsEndpoint,
@@ -172,6 +172,7 @@ pub struct ExtractorRunner {
     /// Handle of the tokio runtime on which the extraction tasks will be run.
     /// If 'None' the default runtime will be used.
     runtime_handle: Option<Handle>,
+    partial_blocks: bool,
 }
 
 impl ExtractorRunner {
@@ -181,6 +182,7 @@ impl ExtractorRunner {
         subscriptions: Arc<Mutex<SubscriptionsMap>>,
         control_rx: Receiver<ControlMessage>,
         runtime_handle: Option<Handle>,
+        partial_blocks: bool,
     ) -> Self {
         ExtractorRunner {
             extractor,
@@ -189,6 +191,7 @@ impl ExtractorRunner {
             next_subscriber_id: 0,
             control_rx,
             runtime_handle,
+            partial_blocks,
         }
     }
 
@@ -245,27 +248,52 @@ impl ExtractorRunner {
                                     // Start measuring block processing time
                                     let start_time = std::time::Instant::now();
 
-                                    // TODO: change interface to take a reference to avoid this clone
-                                    match self.extractor.handle_tick_scoped_data(data.clone()).await {
-                                        Ok(Some(msg)) => {
-                                            trace!("Propagating new block data message.");
-                                            Self::propagate_msg(&self.subscriptions, msg).await
+                                    let messages_to_send: Vec<BlockScopedData> = if self.partial_blocks {
+                                        let is_final_partial = data.is_last_partial == Some(true);
+                                        let is_full_block = !data.is_partial;
+                                        if is_final_partial {
+                                            // Forward as-is, then forward an empty message to trigger full block build for full-block subscribers.
+                                            vec![data.clone(), Self::empty_block_scoped_data(&data)]
+                                        } else if is_full_block {
+                                            // Forward as final partial (for partial subscribers), then empty (for full-block subscribers).
+                                            vec![
+                                                Self::as_final_partial_block_scoped_data(&data),
+                                                Self::empty_block_scoped_data(&data),
+                                            ]
+                                        } else {
+                                            // Forward non-final partial as-is - no duplication needed as no message will be sent for full-block subscribers.
+                                            vec![data.clone()]
                                         }
-                                        Ok(None) => {
-                                            trace!("No message to propagate.");
-                                        }
-                                        Err(err) => {
-                                            error!(error = %err, "Error while processing tick!");
-                                            tracing::Span::current().record("otel.status_code", "error");
-                                            return Err(err);
+                                    } else {
+                                        // Not running on partial blocks: forward the message once as usual.
+                                        vec![data.clone()]
+                                    };
+
+                                    for data_to_send in messages_to_send {
+                                        // TODO: change interface to take a reference to avoid cloning the message
+                                        match self.extractor.handle_tick_scoped_data(data_to_send).await {
+                                            Ok(Some(msg)) => {
+                                                trace!("Propagating new block data message.");
+                                                Self::propagate_msg(&self.subscriptions, msg).await
+                                            }
+                                            Ok(None) => {
+                                                trace!("No message to propagate.");
+                                            }
+                                            Err(err) => {
+                                                error!(error = %err, "Error while processing tick!");
+                                                tracing::Span::current().record("otel.status_code", "error");
+                                                return Err(err);
+                                            }
                                         }
                                     }
 
                                     let duration = start_time.elapsed();
+                                    let block_index = data.partial_index.unwrap_or(0);
                                     gauge!(
                                         "block_processing_time_ms",
                                         "chain" => id.chain.to_string(),
-                                        "extractor" => id.name.to_string()
+                                        "extractor" => id.name.to_string(),
+                                        "block_index" => block_index.to_string()
                                     ).set(duration.as_millis() as f64);
                                 }
                                 Some(Ok(BlockResponse::Undo(undo_signal))) => {
@@ -321,6 +349,28 @@ impl ExtractorRunner {
             .lock()
             .await
             .insert(subscriber_id, sender);
+    }
+
+    /// Builds an empty BlockScopedData (output=None, no partial fields) to signal the extractor
+    /// to flush pending partials and produce a full block message for full-block subscribers.
+    fn empty_block_scoped_data(data: &BlockScopedData) -> BlockScopedData {
+        let mut empty = data.clone();
+        empty.output = None;
+        empty.is_partial = false;
+        empty.partial_index = None;
+        empty.is_last_partial = None;
+        empty
+    }
+
+    /// Builds a BlockScopedData that looks like the final partial (partial_index=0,
+    /// is_last_partial=true) so the extractor can emit a partial message; used when the
+    /// incoming message is a full block (e.g. after reorg).
+    fn as_final_partial_block_scoped_data(data: &BlockScopedData) -> BlockScopedData {
+        let mut partial = data.clone();
+        partial.is_partial = true;
+        partial.partial_index = Some(0);
+        partial.is_last_partial = Some(true);
+        partial
     }
 
     // TODO: add message tracing_id to the log
@@ -777,6 +827,7 @@ impl ExtractorBuilder {
             Arc::new(Mutex::new(HashMap::new())),
             ctrl_rx,
             self.runtime_handle,
+            self.partial_blocks,
         );
 
         Ok((runner, ExtractorHandle::new(extractor_id, ctrl_tx)))
