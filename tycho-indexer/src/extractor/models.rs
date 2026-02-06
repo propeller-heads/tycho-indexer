@@ -363,7 +363,7 @@ impl BlockChanges {
                 .or_insert(token);
         }
 
-        // Extend and sort txs_with_update by transaction index (no conflicts possible)
+        // Extend and sort txs_with_update by transaction index
         current
             .txs_with_update
             .extend(previous.txs_with_update);
@@ -371,12 +371,12 @@ impl BlockChanges {
             .txs_with_update
             .sort_by_key(|tx| tx.tx.index);
 
-        // Extend block_contract_changes (no conflicts)
+        // Extend block_contract_changes
         current
             .block_contract_changes
             .extend(previous.block_contract_changes);
 
-        // Extend trace_results (no conflicts)
+        // Extend trace_results
         current
             .trace_results
             .extend(previous.trace_results);
