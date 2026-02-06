@@ -873,10 +873,12 @@ where
         // and cursor updates — those happen when the full block signal arrives.
         if inp.partial_index.is_some() {
             let mut buffer_guard = self.partial_block_buffer.lock().await;
-            match buffer_guard.as_mut() {
-                Some(existing) => existing.merge_partial(msg.clone())?,
-                None => *buffer_guard = Some(msg.clone()),
-            }
+            let updated_partial_buffer = if let Some(existing) = buffer_guard.take() {
+                existing.merge_partial(msg.clone())?
+            } else {
+                msg.clone()
+            };
+            buffer_guard.replace(updated_partial_buffer);
 
             self.update_cursor(inp.cursor).await;
 

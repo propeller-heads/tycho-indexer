@@ -301,19 +301,19 @@ impl BlockChanges {
     /// - Chain mismatch: Blocks from different chains
     /// - Block mismatch: Different block numbers or hashes
     /// - Revert mismatch: Different revert status
-    pub fn merge_partial(&mut self, other: BlockChanges) -> Result<(), ExtractionError> {
+    pub fn merge_partial(self, other: Self) -> Result<Self, ExtractionError> {
         // Validate both blocks are partial
-        if !self.is_partial_block() {
+        let Some(self_index) = self.partial_block_index else {
             return Err(ExtractionError::PartialBlockBufferError(
                 "Cannot merge: self is not a partial block".to_string(),
             ));
-        }
+        };
 
-        if !other.is_partial_block() {
+        let Some(other_index) = other.partial_block_index else {
             return Err(ExtractionError::PartialBlockBufferError(
                 "Cannot merge: other is not a partial block".to_string(),
             ));
-        }
+        };
 
         // Validate that critical fields match
         if self.extractor != other.extractor {
@@ -344,50 +344,44 @@ impl BlockChanges {
             )));
         }
 
-        // Determine which block is "current" (later, higher index) and which is "previous"
-        // (earlier)
-        let self_index = self.partial_block_index.unwrap();
-        let other_index = other.partial_block_index.unwrap();
+        // Determine which block is "current" (higher index) and which is "previous"
+        let (mut current, previous) = if self_index > other_index {
+            (self, other)
+        } else if self_index < other_index {
+            (other, self)
+        } else {
+            return Err(ExtractionError::PartialBlockBufferError(format!(
+                "Cannot merge blocks with the same partial block index: {self_index}"
+            )));
+        };
 
         // Merge tokens: later block's tokens take precedence
-        if self_index >= other_index {
-            // self is current (later), other is previous (earlier)
-            // Insert previous tokens that don't exist in current
-            for (addr, token) in other.new_tokens {
-                self.new_tokens
-                    .entry(addr)
-                    .or_insert(token);
-            }
-        } else {
-            // other is current (later), self is previous (earlier)
-            // Keep other's tokens, add self's tokens that don't exist in other
-            let mut merged_tokens = other.new_tokens;
-            for (addr, token) in self.new_tokens.drain() {
-                merged_tokens
-                    .entry(addr)
-                    .or_insert(token);
-            }
-            self.new_tokens = merged_tokens;
+        for (addr, token) in previous.new_tokens {
+            current
+                .new_tokens
+                .entry(addr)
+                .or_insert(token);
         }
 
         // Extend and sort txs_with_update by transaction index (no conflicts possible)
-        self.txs_with_update
-            .extend(other.txs_with_update);
-        self.txs_with_update
+        current
+            .txs_with_update
+            .extend(previous.txs_with_update);
+        current
+            .txs_with_update
             .sort_by_key(|tx| tx.tx.index);
 
         // Extend block_contract_changes (no conflicts)
-        self.block_contract_changes
-            .extend(other.block_contract_changes);
+        current
+            .block_contract_changes
+            .extend(previous.block_contract_changes);
 
         // Extend trace_results (no conflicts)
-        self.trace_results
-            .extend(other.trace_results);
+        current
+            .trace_results
+            .extend(previous.trace_results);
 
-        // Set to the maximum partial_block_index
-        self.partial_block_index = Some(self_index.max(other_index));
-
-        Ok(())
+        Ok(current)
     }
 }
 
@@ -1691,16 +1685,16 @@ mod test {
         #[case(0, 1)] // block0.merge(block1)
         #[case(1, 0)] // block1.merge(block0) - should produce identical result
         fn test_merge_partial_combines_all_fields(#[case] first_idx: u8, #[case] second_idx: u8) {
-            let mut first = create_partial_block(first_idx);
+            let first = create_partial_block(first_idx);
             let second = create_partial_block(second_idx);
 
-            first.merge_partial(second).unwrap();
+            let result = first.merge_partial(second).unwrap();
 
             // Verify all fields combined correctly
-            assert_eq!(first.txs_with_update.len(), 2);
+            assert_eq!(result.txs_with_update.len(), 2);
 
             // Transactions sorted by index (2, 5)
-            let indices: Vec<u64> = first
+            let indices: Vec<u64> = result
                 .txs_with_update
                 .iter()
                 .map(|tx| tx.tx.index)
@@ -1708,29 +1702,29 @@ mod test {
             assert_eq!(indices, vec![2, 5]);
 
             // Both tokens present
-            assert_eq!(first.new_tokens.len(), 2);
+            assert_eq!(result.new_tokens.len(), 2);
             let token_addr1 =
                 Address::from_str("0x3333333333333333333333333333333333333333").unwrap();
             let token_addr2 =
                 Address::from_str("0x4444444444444444444444444444444444444444").unwrap();
-            assert!(first
+            assert!(result
                 .new_tokens
                 .contains_key(&token_addr1));
-            assert!(first
+            assert!(result
                 .new_tokens
                 .contains_key(&token_addr2));
 
             // Protocol components from both blocks
-            assert!(first.txs_with_update[0]
+            assert!(result.txs_with_update[0]
                 .protocol_components
                 .contains_key("protocol_2"));
-            assert!(first.txs_with_update[1]
+            assert!(result.txs_with_update[1]
                 .protocol_components
                 .contains_key("protocol_1"));
 
             // Component balances from block 0
             let addr1 = Address::from_str("0x1111111111111111111111111111111111111111").unwrap();
-            assert!(first.txs_with_update[1]
+            assert!(result.txs_with_update[1]
                 .balance_changes
                 .get("protocol_1")
                 .unwrap()
@@ -1738,17 +1732,17 @@ mod test {
 
             // Account balances from block 1
             let addr2 = Address::from_str("0x2222222222222222222222222222222222222222").unwrap();
-            assert!(first.txs_with_update[0]
+            assert!(result.txs_with_update[0]
                 .account_balance_changes
                 .get(&addr2)
                 .unwrap()
                 .contains_key(&addr1));
 
             // Block contract changes from both
-            assert_eq!(first.block_contract_changes.len(), 2);
+            assert_eq!(result.block_contract_changes.len(), 2);
 
             // Partial index is the max (1)
-            assert_eq!(first.partial_block_index, Some(1));
+            assert_eq!(result.partial_block_index, Some(1));
         }
 
         /// Parameterized test for merge_partial validation failures.
@@ -1771,11 +1765,11 @@ mod test {
 
             // Create another block and set overrides
             let mut other_block = original_partial_block.clone();
+            other_block.partial_block_index = Some(1); // Must differ to avoid index validation error
 
             other_block.extractor =
                 extractor_override.unwrap_or(original_partial_block.extractor.clone());
             other_block.chain = chain_override.unwrap_or(original_partial_block.chain);
-            other_block.block = original_partial_block.block.clone();
             other_block.block.number =
                 block_num_override.unwrap_or(original_partial_block.block.number);
             other_block.revert = revert_override.unwrap_or(original_partial_block.revert);
@@ -1815,6 +1809,15 @@ mod test {
         }
 
         #[test]
+        fn test_merge_partial_same_index_fails() {
+            let partial = create_partial_block(0);
+            let duplicate = create_partial_block(0);
+
+            let result = partial.clone().merge_partial(duplicate);
+            assert!(matches!(result, Err(ExtractionError::PartialBlockBufferError(_))));
+        }
+
+        #[test]
         fn test_merge_partial_transaction_sorting() {
             let mut partial1 = create_partial_block(0);
             let mut partial2 = create_partial_block(1);
@@ -1828,12 +1831,12 @@ mod test {
             tx2.tx.index = 1; // Will be added to partial2's tx (index 2)
             partial2.txs_with_update.push(tx2);
 
-            partial1
+            let result = partial1
                 .merge_partial(partial2)
                 .unwrap();
 
             // Should be sorted: 1, 2, 5, 7
-            let indices: Vec<u64> = partial1
+            let indices: Vec<u64> = result
                 .txs_with_update
                 .iter()
                 .map(|tx| tx.tx.index)
@@ -1883,11 +1886,11 @@ mod test {
                 );
             }
 
-            first.merge_partial(second).unwrap();
+            let result = first.merge_partial(second).unwrap();
 
             // Later block (index 1) should always win
-            assert_eq!(first.new_tokens[&shared_token_addr].symbol, "LATE");
-            assert_eq!(first.new_tokens[&shared_token_addr].decimals, 18);
+            assert_eq!(result.new_tokens[&shared_token_addr].symbol, "LATE");
+            assert_eq!(result.new_tokens[&shared_token_addr].decimals, 18);
         }
     }
 }
