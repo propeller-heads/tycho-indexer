@@ -1,3 +1,11 @@
+## [0.137.0](https://github.com/propeller-heads/tycho-indexer/compare/0.136.1...0.137.0) (2026-02-06)
+
+
+### Features
+
+* Notify Tycho SDK of new releases ([d86899f](https://github.com/propeller-heads/tycho-indexer/commit/d86899f5e25f72ddc9297631c33838ec6267ac59))
+* Notify Tycho SDK of new releases ([#842](https://github.com/propeller-heads/tycho-indexer/issues/842)) ([e020d97](https://github.com/propeller-heads/tycho-indexer/commit/e020d970abaecd32ee0c9977837030bc9e8b9d6f))
+
 ## [0.136.1](https://github.com/propeller-heads/tycho-indexer/compare/0.136.0...0.136.1) (2026-02-05)
 
 ## [0.136.0](https://github.com/propeller-heads/tycho-indexer/compare/0.135.0...0.136.0) (2026-02-03)
