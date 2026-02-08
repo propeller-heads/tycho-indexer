@@ -874,7 +874,9 @@ where
         if inp.partial_index.is_some() {
             let mut buffer_guard = self.partial_block_buffer.lock().await;
             let updated_partial_buffer = if let Some(existing) = buffer_guard.take() {
-                existing.merge_partial(msg.clone())?
+                existing
+                    .merge_partial(msg.clone())
+                    .map_err(|e| ExtractionError::PartialBlockBufferError(e.to_string()))?
             } else {
                 msg.clone()
             };

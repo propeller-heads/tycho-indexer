@@ -343,4 +343,6 @@ pub enum MergeError {
     SameTransaction(String, Bytes),
     #[error("Can't merge {0} with lower transaction index: {1} > {2}")]
     TransactionOrderError(String, u64, u64),
+    #[error("Cannot merge: {0}")]
+    InvalidState(String),
 }

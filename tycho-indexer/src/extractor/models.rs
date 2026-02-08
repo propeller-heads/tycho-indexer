@@ -301,45 +301,47 @@ impl BlockChanges {
     /// - Chain mismatch: Blocks from different chains
     /// - Block mismatch: Different block numbers or hashes
     /// - Revert mismatch: Different revert status
-    pub fn merge_partial(self, other: Self) -> Result<Self, ExtractionError> {
+    pub fn merge_partial(self, other: Self) -> Result<Self, MergeError> {
         // Validate both blocks are partial
         let Some(self_index) = self.partial_block_index else {
-            return Err(ExtractionError::PartialBlockBufferError(
-                "Cannot merge: self is not a partial block".to_string(),
+            return Err(MergeError::InvalidState(
+                "self is not a partial block".to_string(),
             ));
         };
 
         let Some(other_index) = other.partial_block_index else {
-            return Err(ExtractionError::PartialBlockBufferError(
-                "Cannot merge: other is not a partial block".to_string(),
+            return Err(MergeError::InvalidState(
+                "other is not a partial block".to_string(),
             ));
         };
 
         // Validate that critical fields match
         if self.extractor != other.extractor {
-            return Err(ExtractionError::PartialBlockBufferError(format!(
-                "Cannot merge blocks from different extractors: '{}' vs '{}'",
-                self.extractor, other.extractor
-            )));
+            return Err(MergeError::IdMismatch(
+                "partial blocks".to_string(),
+                self.extractor.clone(),
+                other.extractor.clone(),
+            ));
         }
 
         if self.chain != other.chain {
-            return Err(ExtractionError::PartialBlockBufferError(format!(
-                "Cannot merge blocks from different chains: {:?} vs {:?}",
-                self.chain, other.chain
-            )));
+            return Err(MergeError::IdMismatch(
+                "partial blocks (chain)".to_string(),
+                format!("{:?}", self.chain),
+                format!("{:?}", other.chain),
+            ));
         }
 
         if self.block != other.block {
-            return Err(ExtractionError::PartialBlockBufferError(format!(
-                "Cannot merge blocks with different block data: block {} vs block {}",
+            return Err(MergeError::InvalidState(format!(
+                "different block data: block {} vs block {}",
                 self.block.number, other.block.number
             )));
         }
 
         if self.revert != other.revert {
-            return Err(ExtractionError::PartialBlockBufferError(format!(
-                "Cannot merge blocks with different revert status: {} vs {}",
+            return Err(MergeError::InvalidState(format!(
+                "different revert status: {} vs {}",
                 self.revert, other.revert
             )));
         }
@@ -350,8 +352,8 @@ impl BlockChanges {
         } else if self_index < other_index {
             (other, self)
         } else {
-            return Err(ExtractionError::PartialBlockBufferError(format!(
-                "Cannot merge blocks with the same partial block index: {self_index}"
+            return Err(MergeError::InvalidState(format!(
+                "same partial block index: {self_index}"
             )));
         };
 
@@ -1781,14 +1783,8 @@ mod test {
             let result2 = other_block.merge_partial(original_partial_block);
 
             // Both directions should fail
-            assert!(
-                matches!(result1, Err(ExtractionError::PartialBlockBufferError(_))),
-                "Expected PartialBlockBufferError for original.merge(other)"
-            );
-            assert!(
-                matches!(result2, Err(ExtractionError::PartialBlockBufferError(_))),
-                "Expected PartialBlockBufferError for other.merge(original)"
-            );
+            assert!(result1.is_err(), "Expected MergeError for original.merge(other)");
+            assert!(result2.is_err(), "Expected MergeError for other.merge(original)");
 
             // Verify error messages contain expected text
             let error_msg1 = result1.unwrap_err().to_string();
@@ -1814,7 +1810,7 @@ mod test {
             let duplicate = create_partial_block(0);
 
             let result = partial.clone().merge_partial(duplicate);
-            assert!(matches!(result, Err(ExtractionError::PartialBlockBufferError(_))));
+            assert!(matches!(result, Err(MergeError::InvalidState(_))));
         }
 
         #[test]
