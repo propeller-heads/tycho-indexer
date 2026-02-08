@@ -318,7 +318,7 @@ impl BlockChanges {
         // Validate that critical fields match
         if self.extractor != other.extractor {
             return Err(MergeError::IdMismatch(
-                "partial blocks".to_string(),
+                "partial blocks (extractor)".to_string(),
                 self.extractor.clone(),
                 other.extractor.clone(),
             ));
@@ -1720,8 +1720,8 @@ mod test {
     }
 
     #[rstest]
-    #[case(Some(String::from("different")), None, None, None, "different extractors")]
-    #[case(None, Some(Chain::Arbitrum), None, None, "different chains")]
+    #[case(Some(String::from("different")), None, None, None, "extractor")]
+    #[case(None, Some(Chain::Arbitrum), None, None, "chain")]
     #[case(None, None, Some(101), None, "different block")]
     #[case(None, None, None, Some(true), "different revert")]
     fn test_merge_partial_validation_fails(
