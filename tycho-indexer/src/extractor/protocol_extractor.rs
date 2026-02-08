@@ -204,6 +204,23 @@ where
         state.first_message_processed = true;
     }
 
+    /// Merges a partial block into the buffer, or initializes the buffer if empty.
+    async fn buffer_partial_block(
+        &self,
+        msg: &BlockChanges,
+    ) -> Result<(), ExtractionError> {
+        let mut buffer_guard = self.partial_block_buffer.lock().await;
+        let updated = if let Some(existing) = buffer_guard.take() {
+            existing
+                .merge_partial(msg.clone())
+                .map_err(|e| ExtractionError::PartialBlockBufferError(e.to_string()))?
+        } else {
+            msg.clone()
+        };
+        buffer_guard.replace(updated);
+        Ok(())
+    }
+
     async fn is_first_message(&self) -> bool {
         !self
             .inner
@@ -861,26 +878,22 @@ where
                 .await
                 .take()
                 .ok_or_else(|| {
+                    let block_num = inp
+                        .clock
+                        .as_ref()
+                        .map(|c| c.number)
+                        .unwrap_or_default();
                     ExtractionError::PartialBlockBufferError(format!(
-                        "Partial block buffer is empty when full block signal received \
-                         (final_block_height={})",
-                        inp.final_block_height
+                        "Could not fetch full block data: partial block buffer is empty \
+                         at block {block_num}"
                     ))
                 })?
         };
 
-        // Partial blocks are buffered and emitted immediately but skip reorg buffer, DB commit,
-        // and cursor updates — those happen when the full block signal arrives.
+        // Partial blocks are buffered and emitted immediately but skip reorg buffer and DB commit
+        // — those happen when the full block signal arrives.
         if inp.partial_index.is_some() {
-            let mut buffer_guard = self.partial_block_buffer.lock().await;
-            let updated_partial_buffer = if let Some(existing) = buffer_guard.take() {
-                existing
-                    .merge_partial(msg.clone())
-                    .map_err(|e| ExtractionError::PartialBlockBufferError(e.to_string()))?
-            } else {
-                msg.clone()
-            };
-            buffer_guard.replace(updated_partial_buffer);
+            self.buffer_partial_block(&msg).await?;
 
             self.update_cursor(inp.cursor).await;
 
@@ -907,8 +920,7 @@ where
 
         // We work under the invariant that final_block_height is always <= block.number.
         // They are equal only when we are syncing. Depending on how Substreams handle them,
-        // this invariant could be problematic for single block finality
-        // blockchains.
+        // this invariant could be problematic for single block finality blockchains.
         let is_syncing = inp.final_block_height == msg.block.number;
         if inp.final_block_height > msg.block.number {
             return Err(ExtractionError::ReorgBufferError(format!(
