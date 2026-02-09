@@ -1113,21 +1113,21 @@ where
 
         let mut reorg_buffer = self.reorg_buffer.lock().await;
 
-        // Purge the buffer
+        // Purge the reorg buffer
         let mut reverted_state = reorg_buffer
             .purge(block_hash)
             .map_err(|e| ExtractionError::ReorgBufferError(e.to_string()))?;
 
-        // Purge partial block buffer — any buffered partials were already emitted
-        // to WS subscribers and must be included in the reverted state.
+        // Purge partial block buffer
         let partial_block = self
             .partial_block_buffer
             .lock()
             .await
             .take();
         if let Some(partial) = partial_block {
-            debug!("PurgePartialBlockBuffer");
-            reverted_state.push(BlockUpdateWithCursor::new(partial, String::new()));
+            // The partial block's cursor should be the current cursor
+            let cursor = self.get_cursor().await;
+            reverted_state.push(BlockUpdateWithCursor::new(partial, cursor));
         }
 
         // Handle created and deleted components
@@ -1888,6 +1888,7 @@ mod test {
     use super::*;
     use crate::{
         extractor::MockExtractorExtension,
+        pb::sf::substreams::v1::BlockRef,
         testing::{fixtures as pb_fixtures, MockGateway},
     };
 
@@ -2973,8 +2974,6 @@ mod test {
 
     #[tokio::test]
     async fn test_revert_purges_partial_block_buffer() {
-        use crate::pb::sf::substreams::v1::BlockRef;
-
         // Gateway needs to handle: initial setup + revert lookups.
         // With batch_size=1 and final_block_height=1, block 1 stays in the reorg buffer
         // (count_blocks_before(1) = 0 < 1) — no advance/commit occurs.
@@ -3028,7 +3027,7 @@ mod test {
         );
 
         // ── Block 2: partial (not yet finalized) ──
-        extractor
+        let result = extractor
             .handle_tick_scoped_data(make_partial_block_with_data(2, 0))
             .await
             .unwrap()
@@ -3067,13 +3066,15 @@ mod test {
         // Revert message should be marked as a revert.
         assert!(revert_msg.revert, "Revert message should have revert=true");
 
-        // The revert message should include state from the partial block's account deltas.
-        // The partial block (block 2) had contract changes with slots, which means the
-        // revert needs to restore prior state for those accounts.
-        assert!(
-            !revert_msg.account_deltas.is_empty(),
-            "Revert message should include account deltas from the purged partial block"
-        );
+        // The revert message should include account deltas from the partial block.
+        for addr in result.account_deltas.keys() {
+            assert!(
+                revert_msg
+                    .account_deltas
+                    .contains_key(addr),
+                "Drained block missing account delta at {addr:x} from partial_1"
+            );
+        }
     }
 }
 
