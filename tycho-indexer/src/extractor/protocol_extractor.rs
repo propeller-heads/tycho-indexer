@@ -1113,10 +1113,29 @@ where
 
         let mut reorg_buffer = self.reorg_buffer.lock().await;
 
-        // Purge the buffer
-        let reverted_state = reorg_buffer
+        // Purge the reorg buffer
+        let mut reverted_state = reorg_buffer
             .purge(block_hash)
             .map_err(|e| ExtractionError::ReorgBufferError(e.to_string()))?;
+
+        // Purge partial block buffer
+        let partial_block = self
+            .partial_block_buffer
+            .lock()
+            .await
+            .take();
+        let mut revert_partial_block_index = None;
+        if let Some(partial) = partial_block {
+            // If we have not reverted any full blocks and the partial block buffer is not empty,
+            // mark it as a partial revert to avoid sending to full block subscribers.
+            if reverted_state.is_empty() {
+                revert_partial_block_index = partial.partial_block_index
+            }
+
+            // The partial block's cursor should be the current cursor
+            let cursor = self.get_cursor().await;
+            reverted_state.push(BlockUpdateWithCursor::new(partial, cursor));
+        }
 
         // Handle created and deleted components
         let (reverted_components_creations, reverted_components_deletions) =
@@ -1483,7 +1502,7 @@ where
             account_balances: combined_account_balances,
             component_tvl: HashMap::new(),
             dci_update: DCIUpdate::default(), // TODO: get reverted entrypoint info?
-            partial_block_index: None,
+            partial_block_index: revert_partial_block_index,
         };
 
         debug!("Successfully retrieved all previous states during revert!");
@@ -1876,6 +1895,7 @@ mod test {
     use super::*;
     use crate::{
         extractor::MockExtractorExtension,
+        pb::sf::substreams::v1::BlockRef,
         testing::{fixtures as pb_fixtures, MockGateway},
     };
 
@@ -2722,26 +2742,22 @@ mod test {
 
     // ── Partial block handling tests ──────────────────────────────────────
 
-    /// Helper: build a partial `BlockScopedData` populated with contract & component changes
-    /// from `pb_vm_block_changes(partial_index)`.
-    ///
-    /// Different `partial_index` values select different fixture data (different contract
-    /// addresses & tx hashes), so callers can verify that both partials contribute to the
-    /// merged result.
-    ///
-    /// Patches applied:
-    /// - `protocol_type` → `"pt_1"` to match the test extractor's map
-    /// - balance data stripped to avoid triggering the TVL code path
+    /// Helper: build a partial `BlockScopedData` populated with changes from the
+    /// `pb_vm_block_changes(block_num)`. This method strips balance changes and token balances
+    /// to avoid triggering TVL code paths, which would require the CachedGateway to be setup.
     fn make_partial_block_with_data(block_num: u64, partial_index: u32) -> BlockScopedData {
-        let mut msg = pb_fixtures::pb_vm_block_changes(partial_index as u8);
+        let mut msg = pb_fixtures::pb_vm_block_changes(block_num as u8 + partial_index as u8);
         msg.block = Some(pb_fixtures::pb_blocks(block_num));
         for tx in &mut msg.changes {
+            // Rename a protocol type to be consistent with extractor fixtures.
             for comp in &mut tx.component_changes {
                 if let Some(pt) = comp.protocol_type.as_mut() {
                     pt.name = "pt_1".to_string();
                 }
             }
+            // Strip balance changes to avoid triggering TVL code path.
             tx.balance_changes.clear();
+            // Strip token balances to avoid triggering TVL code path.
             for cc in &mut tx.contract_changes {
                 cc.token_balances.clear();
             }
@@ -2754,6 +2770,33 @@ mod test {
         bsd.partial_index = Some(partial_index);
         bsd.is_partial = true;
         bsd
+    }
+
+    /// Helper: build a full `BlockScopedData` with complete block data from
+    /// `pb_vm_block_changes(block_num)`. This method strips balance changes and token balances to
+    /// avoid triggering TVL code paths, which would require the CachedGateway to be setup.
+    fn make_full_block_with_data(block_num: u64, final_block_height: u64) -> BlockScopedData {
+        let mut msg = pb_fixtures::pb_vm_block_changes(block_num as u8);
+        msg.block = Some(pb_fixtures::pb_blocks(block_num));
+        for tx in &mut msg.changes {
+            // Rename a protocol type to be consistent with extractor fixtures.
+            for comp in &mut tx.component_changes {
+                if let Some(pt) = comp.protocol_type.as_mut() {
+                    pt.name = "pt_1".to_string();
+                }
+            }
+            // Strip balance changes to avoid triggering TVL code path.
+            tx.balance_changes.clear();
+            // Strip token balances to avoid triggering TVL code path.
+            for cc in &mut tx.contract_changes {
+                cc.token_balances.clear();
+            }
+        }
+        pb_fixtures::pb_block_scoped_data(
+            msg,
+            Some(&format!("cursor@{block_num}")),
+            Some(final_block_height),
+        )
     }
 
     /// Helper: build an empty-output `BlockScopedData` that signals "drain the partial buffer".
@@ -2957,6 +3000,237 @@ mod test {
             .await
             .is_none());
         assert_eq!(extractor.get_cursor().await, "cursor@1");
+    }
+
+    #[tokio::test]
+    async fn test_revert_of_partial_blocks_only() {
+        // Gateway needs to handle: initial setup + revert lookups.
+        // With batch_size=1 and final_block_height=1, block 1 stays in the reorg buffer
+        // (count_blocks_before(1) = 0 < 1) — no advance/commit occurs.
+        let mut gw = MockExtractorGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
+        gw.expect_advance()
+            .times(0)
+            .returning(|_, _, _| Ok(()));
+        // Revert lookups: contracts, protocol states, component balances, account balances.
+        gw.expect_get_contracts()
+            .returning(|_| Ok(Vec::new()));
+        gw.expect_get_protocol_states()
+            .returning(|_| Ok(Vec::new()));
+        gw.expect_get_components_balances()
+            .returning(|_| Ok(HashMap::new()));
+        gw.expect_get_account_balances()
+            .returning(|_| Ok(HashMap::new()));
+
+        let extractor = create_extractor(gw).await;
+
+        // ── Block 1: empty anchor ──
+        extractor
+            .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
+                tycho_substreams::BlockChanges {
+                    block: Some(pb_fixtures::pb_blocks(1)),
+                    ..Default::default()
+                },
+                Some("cursor@1"),
+                Some(1),
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            extractor
+                .reorg_buffer
+                .lock()
+                .await
+                .count_blocks_before(u64::MAX),
+            1,
+            "Block 1 should be in the reorg buffer"
+        );
+
+        // ── Block 2: partial (not yet finalized) ──
+        let result = extractor
+            .handle_tick_scoped_data(make_partial_block_with_data(2, 0))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Verify partial block buffer is populated.
+        assert!(
+            extractor
+                .partial_block_buffer
+                .lock()
+                .await
+                .is_some(),
+            "Partial block buffer should be populated after partial block 2"
+        );
+
+        // ── Revert to block 1 ──
+        let revert_msg = extractor
+            .handle_revert(BlockUndoSignal {
+                last_valid_block: Some(BlockRef { id: format!("0x{:0>64x}", 1_u64), number: 1 }),
+                last_valid_cursor: "cursor@1".into(),
+            })
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Partial block buffer must be purged.
+        assert!(
+            extractor
+                .partial_block_buffer
+                .lock()
+                .await
+                .is_none(),
+            "Partial block buffer should be purged after revert"
+        );
+
+        // Revert message should be marked as a revert.
+        assert!(revert_msg.revert, "Revert message should have revert=true");
+
+        // Revert message should be marked as a partial block revert (no full blocks were reverted)
+        assert_eq!(
+            revert_msg.partial_block_index, result.partial_block_index,
+            "Revert message should indicate the index of the reverted partial block"
+        );
+
+        // The revert message should include account deltas from the partial block.
+        for addr in result.account_deltas.keys() {
+            assert!(
+                revert_msg
+                    .account_deltas
+                    .contains_key(addr),
+                "Drained block missing account delta at {addr:x} from partial_1"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_revert_of_full_and_partial_blocks() {
+        // Revert spanning a full block in the reorg buffer (block 2) *and* a partial
+        // block in the partial buffer (block 3). Verifies that state from both sources
+        // is included in the revert message.
+        let mut gw = MockExtractorGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
+        gw.expect_advance()
+            .times(0)
+            .returning(|_, _, _| Ok(()));
+        gw.expect_get_contracts()
+            .returning(|_| Ok(Vec::new()));
+        gw.expect_get_protocol_states()
+            .returning(|_| Ok(Vec::new()));
+        gw.expect_get_components_balances()
+            .returning(|_| Ok(HashMap::new()));
+        gw.expect_get_account_balances()
+            .returning(|_| Ok(HashMap::new()));
+
+        let extractor = create_extractor_with_batch_size(gw, 1).await;
+
+        // ── Block 1: empty anchor ──
+        extractor
+            .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
+                tycho_substreams::BlockChanges {
+                    block: Some(pb_fixtures::pb_blocks(1)),
+                    ..Default::default()
+                },
+                Some("cursor@1"),
+                Some(1),
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // ── Block 2: full block, not yet finalized ──
+        let result_full = extractor
+            .handle_tick_scoped_data(make_full_block_with_data(2, 1))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // ── Block 3: partial ──
+        let result_partial = extractor
+            .handle_tick_scoped_data(make_partial_block_with_data(3, 0))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Pre-revert state
+        assert_eq!(
+            extractor
+                .reorg_buffer
+                .lock()
+                .await
+                .count_blocks_before(u64::MAX),
+            2,
+            "Blocks 1 and 2 should be in the reorg buffer"
+        );
+        assert!(
+            extractor
+                .partial_block_buffer
+                .lock()
+                .await
+                .is_some(),
+            "Partial block 3 should be buffered"
+        );
+
+        // ── Revert to block 1 ──
+        let revert_msg = extractor
+            .handle_revert(BlockUndoSignal {
+                last_valid_block: Some(BlockRef { id: format!("0x{:0>64x}", 1_u64), number: 1 }),
+                last_valid_cursor: "cursor@1".into(),
+            })
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Partial buffer must be purged.
+        assert!(extractor
+            .partial_block_buffer
+            .lock()
+            .await
+            .is_none());
+
+        assert!(revert_msg.revert);
+        assert_eq!(revert_msg.block.number, 1);
+        // Full blocks were also reverted, so partial_block_index should be None.
+        assert_eq!(
+            revert_msg.partial_block_index, None,
+            "Mixed full+partial revert should not be marked as partial"
+        );
+
+        // Account deltas from both blocks should be present.
+        for addr in result_full.account_deltas.keys() {
+            assert!(
+                revert_msg
+                    .account_deltas
+                    .contains_key(addr),
+                "Revert message missing account delta at {addr:x} from full block 2"
+            );
+        }
+        for addr in result_partial.account_deltas.keys() {
+            assert!(
+                revert_msg
+                    .account_deltas
+                    .contains_key(addr),
+                "Revert message missing account delta at {addr:x} from partial block 3"
+            );
+        }
     }
 }
 
