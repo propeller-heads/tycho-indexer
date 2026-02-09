@@ -109,3 +109,8 @@ Tycho is a multi-crate Rust workspace designed for indexing and processing DEX/D
 - Database tests (`serial_db`) run sequentially to avoid interference
 - Integration tests can use tycho-client to generate test fixtures
 - Mock data available in various test directories
+
+### Testing Conventions
+- For `rstest` parameterized tests, **name each case** with `#[case::descriptive_name(...)]` instead of relying on inline comments — test names should be self-documenting so failures are immediately identifiable
+- Keep test function names concise; avoid redundant suffixes that restate what parameters already express
+- Don't nest `mod` wrappers inside `#[cfg(test)] mod test` unless there's a concrete isolation benefit

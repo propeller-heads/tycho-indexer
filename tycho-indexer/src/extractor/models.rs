@@ -284,6 +284,102 @@ impl BlockChanges {
     pub fn set_partial_block_index(&mut self, index: Option<u32>) {
         self.partial_block_index = index;
     }
+
+    /// Merges another partial block into this one, preserving later changes.
+    ///
+    /// The partial block with the higher index represents later changes and takes precedence.
+    /// Merges `new_tokens`, `txs_with_update` (sorted by index), `block_contract_changes`,
+    /// and `trace_results`. When both blocks have the same token address, the token from the
+    /// block with the higher partial index is kept.
+    ///
+    /// Works regardless of merge order: `partial_0.merge_partial(partial_1)` and
+    /// `partial_1.merge_partial(partial_0)` produce equivalent results.
+    ///
+    /// # Errors
+    /// - Non-partial block: Either block is not marked as partial
+    /// - Extractor mismatch: Blocks from different extractors
+    /// - Chain mismatch: Blocks from different chains
+    /// - Block mismatch: Different block numbers or hashes
+    /// - Revert mismatch: Different revert status
+    pub fn merge_partial(self, other: Self) -> Result<Self, MergeError> {
+        // Validate both blocks are partial
+        let Some(self_index) = self.partial_block_index else {
+            return Err(MergeError::InvalidState("self is not a partial block".to_string()));
+        };
+
+        let Some(other_index) = other.partial_block_index else {
+            return Err(MergeError::InvalidState("other is not a partial block".to_string()));
+        };
+
+        // Validate that critical fields match
+        if self.extractor != other.extractor {
+            return Err(MergeError::IdMismatch(
+                "partial blocks (extractor)".to_string(),
+                self.extractor.clone(),
+                other.extractor.clone(),
+            ));
+        }
+
+        if self.chain != other.chain {
+            return Err(MergeError::IdMismatch(
+                "partial blocks (chain)".to_string(),
+                format!("{:?}", self.chain),
+                format!("{:?}", other.chain),
+            ));
+        }
+
+        if self.block != other.block {
+            return Err(MergeError::BlockMismatch(
+                "partial blocks".to_string(),
+                self.block.hash.clone(),
+                other.block.hash.clone(),
+            ));
+        }
+
+        if self.revert != other.revert {
+            return Err(MergeError::InvalidState(format!(
+                "different revert status: {} vs {}",
+                self.revert, other.revert
+            )));
+        }
+
+        // Determine which block is "current" (higher index) and which is "previous"
+        let (mut current, previous) = if self_index > other_index {
+            (self, other)
+        } else if self_index < other_index {
+            (other, self)
+        } else {
+            return Err(MergeError::InvalidState(format!("same partial block index: {self_index}")));
+        };
+
+        // Merge tokens: later block's tokens take precedence
+        for (addr, token) in previous.new_tokens {
+            current
+                .new_tokens
+                .entry(addr)
+                .or_insert(token);
+        }
+
+        // Extend and sort txs_with_update by transaction index
+        current
+            .txs_with_update
+            .extend(previous.txs_with_update);
+        current
+            .txs_with_update
+            .sort_by_key(|tx| tx.tx.index);
+
+        // Extend block_contract_changes
+        current
+            .block_contract_changes
+            .extend(previous.block_contract_changes);
+
+        // Extend trace_results
+        current
+            .trace_results
+            .extend(previous.trace_results);
+
+        Ok(current)
+    }
 }
 
 /// Inserts or updates a state attribute for a protocol component within a specific transaction.
@@ -936,9 +1032,11 @@ pub mod fixtures {
 mod test {
     use std::str::FromStr;
 
+    use chrono::NaiveDateTime;
     use fixtures::create_transaction;
     use prost::Message;
     use rstest::rstest;
+    use tycho_common::models::token::Token;
 
     use super::*;
 
@@ -1451,5 +1549,287 @@ mod test {
         assert!(state_delta
             .deleted_attributes
             .contains("existing_deleted_attr"));
+    }
+
+    /// Creates pre-configured partial blocks for testing.
+    ///
+    /// - Index 0: tx_index=5, protocol_1, component_balance, TOKEN1 (18 decimals)
+    /// - Index 1: tx_index=2, protocol_2, account_balance, TOKEN2 (6 decimals)
+    fn create_partial_block(index: u8) -> BlockChanges {
+        let mut block = BlockChanges {
+            extractor: "test_extractor".to_string(),
+            chain: Chain::Ethereum,
+            block: Block::new(
+                100,
+                Chain::Ethereum,
+                Bytes::zero(32),
+                Bytes::zero(32),
+                NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
+            ),
+            ..Default::default()
+        };
+
+        match index {
+            0 => {
+                block.partial_block_index = Some(0);
+
+                let component_id = "protocol_1".to_string();
+                let addr1 =
+                    Address::from_str("0x1111111111111111111111111111111111111111").unwrap();
+                let token_addr =
+                    Address::from_str("0x3333333333333333333333333333333333333333").unwrap();
+
+                let mut tx = TxWithChanges::default();
+                tx.tx.index = 5;
+                tx.protocol_components
+                    .insert(component_id.clone(), ProtocolComponent::default());
+                tx.balance_changes.insert(
+                    component_id.clone(),
+                    HashMap::from([(
+                        addr1.clone(),
+                        ComponentBalance::new(
+                            addr1,
+                            Bytes::from(1000u64.to_be_bytes().to_vec()),
+                            1000.0,
+                            Bytes::zero(32),
+                            &component_id,
+                        ),
+                    )]),
+                );
+                tx.state_updates.insert(
+                    component_id,
+                    ProtocolComponentStateDelta::new(
+                        "protocol_1",
+                        HashMap::new(),
+                        Default::default(),
+                    ),
+                );
+                block.txs_with_update.push(tx);
+
+                block.new_tokens.insert(
+                    token_addr.clone(),
+                    Token::new(&token_addr, "TOKEN1", 18, 0, &[], Chain::Ethereum, 0),
+                );
+
+                block
+                    .block_contract_changes
+                    .push(TxWithContractChanges::default());
+            }
+            1 => {
+                block.partial_block_index = Some(1);
+
+                let component_id = "protocol_2".to_string();
+                let addr1 =
+                    Address::from_str("0x1111111111111111111111111111111111111111").unwrap();
+                let addr2 =
+                    Address::from_str("0x2222222222222222222222222222222222222222").unwrap();
+                let token_addr =
+                    Address::from_str("0x4444444444444444444444444444444444444444").unwrap();
+
+                let mut tx = TxWithChanges::default();
+                tx.tx.index = 2;
+                tx.protocol_components
+                    .insert(component_id, ProtocolComponent::default());
+                tx.account_balance_changes.insert(
+                    addr2.clone(),
+                    HashMap::from([(
+                        addr1.clone(),
+                        AccountBalance::new(
+                            addr2,
+                            addr1,
+                            Bytes::from(500u64.to_be_bytes().to_vec()),
+                            Bytes::zero(32),
+                        ),
+                    )]),
+                );
+                block.txs_with_update.push(tx);
+
+                block.new_tokens.insert(
+                    token_addr.clone(),
+                    Token::new(&token_addr, "TOKEN2", 6, 0, &[], Chain::Ethereum, 0),
+                );
+
+                block
+                    .block_contract_changes
+                    .push(TxWithContractChanges::default());
+            }
+            _ => panic!("Invalid partial block index: {} (must be 0 or 1)", index),
+        }
+
+        block
+    }
+
+    #[rstest]
+    #[case::merge_newer(0, 1)] // block0.merge(block1)
+    #[case::merge_older(1, 0)] // block1.merge(block0) - should produce identical result
+    fn test_merge_partial_combines_all_fields(#[case] first_idx: u8, #[case] second_idx: u8) {
+        let first = create_partial_block(first_idx);
+        let second = create_partial_block(second_idx);
+
+        let result = first.merge_partial(second).unwrap();
+
+        assert_eq!(result.txs_with_update.len(), 2);
+
+        let indices: Vec<u64> = result
+            .txs_with_update
+            .iter()
+            .map(|tx| tx.tx.index)
+            .collect();
+        assert_eq!(indices, vec![2, 5]);
+
+        assert_eq!(result.new_tokens.len(), 2);
+        let token_addr1 = Address::from_str("0x3333333333333333333333333333333333333333").unwrap();
+        let token_addr2 = Address::from_str("0x4444444444444444444444444444444444444444").unwrap();
+        assert!(result
+            .new_tokens
+            .contains_key(&token_addr1));
+        assert!(result
+            .new_tokens
+            .contains_key(&token_addr2));
+
+        assert!(result.txs_with_update[0]
+            .protocol_components
+            .contains_key("protocol_2"));
+        assert!(result.txs_with_update[1]
+            .protocol_components
+            .contains_key("protocol_1"));
+
+        let addr1 = Address::from_str("0x1111111111111111111111111111111111111111").unwrap();
+        assert!(result.txs_with_update[1]
+            .balance_changes
+            .get("protocol_1")
+            .unwrap()
+            .contains_key(&addr1));
+
+        let addr2 = Address::from_str("0x2222222222222222222222222222222222222222").unwrap();
+        assert!(result.txs_with_update[0]
+            .account_balance_changes
+            .get(&addr2)
+            .unwrap()
+            .contains_key(&addr1));
+
+        assert_eq!(result.block_contract_changes.len(), 2);
+        assert_eq!(result.partial_block_index, Some(1));
+    }
+
+    #[rstest]
+    #[case(Some(String::from("different")), None, None, None, "extractor")]
+    #[case(None, Some(Chain::Arbitrum), None, None, "chain")]
+    #[case(None, None, Some(101), None, "different blocks")]
+    #[case(None, None, None, Some(true), "different revert")]
+    fn test_merge_partial_validation_fails(
+        #[case] extractor_override: Option<String>,
+        #[case] chain_override: Option<Chain>,
+        #[case] block_num_override: Option<u64>,
+        #[case] revert_override: Option<bool>,
+        #[case] expected_error_msg: &str,
+    ) {
+        let original_partial_block = create_partial_block(0);
+
+        let mut other_block = original_partial_block.clone();
+        other_block.partial_block_index = Some(1);
+
+        other_block.extractor =
+            extractor_override.unwrap_or(original_partial_block.extractor.clone());
+        other_block.chain = chain_override.unwrap_or(original_partial_block.chain);
+        other_block.block.number =
+            block_num_override.unwrap_or(original_partial_block.block.number);
+        other_block.revert = revert_override.unwrap_or(original_partial_block.revert);
+
+        let result1 = original_partial_block
+            .clone()
+            .merge_partial(other_block.clone());
+        let result2 = other_block.merge_partial(original_partial_block);
+
+        assert!(result1.is_err(), "Expected MergeError for original.merge(other)");
+        assert!(result2.is_err(), "Expected MergeError for other.merge(original)");
+
+        let error_msg1 = result1.unwrap_err().to_string();
+        assert!(
+            error_msg1.contains(expected_error_msg),
+            "Expected error to contain '{}', got: {}",
+            expected_error_msg,
+            error_msg1
+        );
+
+        let error_msg2 = result2.unwrap_err().to_string();
+        assert!(
+            error_msg2.contains(expected_error_msg),
+            "Expected symmetric error to contain '{}', got: {}",
+            expected_error_msg,
+            error_msg2
+        );
+    }
+
+    #[test]
+    fn test_merge_partial_same_index_fails() {
+        let partial = create_partial_block(0);
+        let duplicate = create_partial_block(0);
+
+        let result = partial.clone().merge_partial(duplicate);
+        assert!(matches!(result, Err(MergeError::InvalidState(_))));
+    }
+
+    #[test]
+    fn test_merge_partial_transaction_sorting() {
+        let mut partial1 = create_partial_block(0);
+        let mut partial2 = create_partial_block(1);
+
+        let mut tx1 = TxWithChanges::default();
+        tx1.tx.index = 7;
+        partial1.txs_with_update.push(tx1);
+
+        let mut tx2 = TxWithChanges::default();
+        tx2.tx.index = 1;
+        partial2.txs_with_update.push(tx2);
+
+        let result = partial1
+            .merge_partial(partial2)
+            .unwrap();
+
+        let indices: Vec<u64> = result
+            .txs_with_update
+            .iter()
+            .map(|tx| tx.tx.index)
+            .collect();
+        assert_eq!(indices, vec![1, 2, 5, 7]);
+    }
+
+    #[rstest]
+    #[case::merge_newer(0, 1)] // block0.merge(block1)
+    #[case::merge_older(1, 0)] // block1.merge(block0)
+    fn test_merge_partial_token_precedence(#[case] first_idx: u8, #[case] second_idx: u8) {
+        let mut first = create_partial_block(first_idx);
+        let mut second = create_partial_block(second_idx);
+
+        let shared_token_addr =
+            Address::from_str("0x5555555555555555555555555555555555555555").unwrap();
+
+        first.new_tokens.clear();
+        second.new_tokens.clear();
+
+        let early_token = Token::new(&shared_token_addr, "EARLY", 6, 0, &[], Chain::Ethereum, 0);
+        let late_token = Token::new(&shared_token_addr, "LATE", 18, 0, &[], Chain::Ethereum, 0);
+
+        if first_idx == 0 {
+            first
+                .new_tokens
+                .insert(shared_token_addr.clone(), early_token.clone());
+            second
+                .new_tokens
+                .insert(shared_token_addr.clone(), late_token.clone());
+        } else {
+            first
+                .new_tokens
+                .insert(shared_token_addr.clone(), late_token.clone());
+            second
+                .new_tokens
+                .insert(shared_token_addr.clone(), early_token.clone());
+        }
+
+        let result = first.merge_partial(second).unwrap();
+
+        assert_eq!(result.new_tokens[&shared_token_addr].symbol, "LATE");
+        assert_eq!(result.new_tokens[&shared_token_addr].decimals, 18);
     }
 }
