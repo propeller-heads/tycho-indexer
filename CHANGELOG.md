@@ -1,3 +1,23 @@
+## [0.138.0](https://github.com/propeller-heads/tycho-indexer/compare/0.137.0...0.138.0) (2026-02-09)
+
+
+### Features
+
+* add partial block buffer in the extractor ([#841](https://github.com/propeller-heads/tycho-indexer/issues/841)) ([ee6b5be](https://github.com/propeller-heads/tycho-indexer/commit/ee6b5be6b0cee9da5026c60b14b9fd4f3146d5d3))
+* **extractor:** add memory tracking for PartialBlockBuffer ([7166b6b](https://github.com/propeller-heads/tycho-indexer/commit/7166b6b2616b4ef8910fe3c7634221213cb27dd4))
+* **extractor:** add partial_block_buffer to manage accumulating partial blocks ([09ebc87](https://github.com/propeller-heads/tycho-indexer/commit/09ebc87edc8e60788495e530eddb66f408dceef6))
+* **extractor:** add PartialBlockBuffer for accumulating partial blocks ([6483359](https://github.com/propeller-heads/tycho-indexer/commit/6483359040af2a189ced8614c73fa00cf332e752))
+* **extractor:** improve handling of partial and full blocks in ProtocolExtractor ([384421a](https://github.com/propeller-heads/tycho-indexer/commit/384421a56d5d4d02d170a1d6cfcf4add7b01e0e0))
+* **extractor:** refactor merge_partial to return updated BlockChanges and improve validation ([78dd3d1](https://github.com/propeller-heads/tycho-indexer/commit/78dd3d140e1fb07bcf501ea242c343d596eac08a))
+* **extractor:** simplify PartialBlockBuffer by replacing it with an Option<BlockChanges> and integrate it into protocol extractor ([ad21437](https://github.com/propeller-heads/tycho-indexer/commit/ad214375dfe0b4b7c77cc53ac5176c50095b5d65))
+
+
+### Bug Fixes
+
+* **extractor:** simplify token insertion in PartialBlockBuffer ([507df3f](https://github.com/propeller-heads/tycho-indexer/commit/507df3f9935745c593397a8e1fe6cfc152e02c81))
+* improve error message, comments, and extract helper in protocol_extractor ([301c9f6](https://github.com/propeller-heads/tycho-indexer/commit/301c9f6193e418b0140a8b88efff537870fd5a3d))
+* update test expectations and entity names for MergeError::IdMismatch ([e22aa85](https://github.com/propeller-heads/tycho-indexer/commit/e22aa85ac53a7c014ca5cc2a1a567af5b1b0325a))
+
 ## [0.137.0](https://github.com/propeller-heads/tycho-indexer/compare/0.136.1...0.137.0) (2026-02-06)
 
 
