@@ -248,26 +248,8 @@ impl ExtractorRunner {
                                     // Start measuring block processing time
                                     let start_time = std::time::Instant::now();
 
-                                    let messages_to_send: Vec<BlockScopedData> = if self.partial_blocks {
-                                        let is_final_partial = data.is_last_partial == Some(true);
-                                        let is_full_block = !data.is_partial;
-                                        if is_final_partial {
-                                            // Forward as-is, then forward an empty message to trigger full block build for full-block subscribers.
-                                            vec![data.clone(), Self::empty_block_scoped_data(&data)]
-                                        } else if is_full_block {
-                                            // Forward as final partial (for partial subscribers), then empty (for full-block subscribers).
-                                            vec![
-                                                Self::as_final_partial_block_scoped_data(&data),
-                                                Self::empty_block_scoped_data(&data),
-                                            ]
-                                        } else {
-                                            // Forward non-final partial as-is - no duplication needed as no message will be sent for full-block subscribers.
-                                            vec![data.clone()]
-                                        }
-                                    } else {
-                                        // Not running on partial blocks: forward the message once as usual.
-                                        vec![data.clone()]
-                                    };
+                                    let messages_to_send =
+                                        Self::messages_to_send_for_block(&data, self.partial_blocks);
 
                                     for data_to_send in messages_to_send {
                                         // TODO: change interface to take a reference to avoid cloning the message
@@ -371,6 +353,36 @@ impl ExtractorRunner {
         partial.partial_index = Some(0);
         partial.is_last_partial = Some(true);
         partial
+
+    /// Returns the list of BlockScopedData messages to send to the extractor for this block.
+    ///
+    /// When `partial_blocks` is false, always one message (the data as-is).
+    ///
+    /// When `partial_blocks` is true:
+    /// - **Non-final partial** → [data] only.
+    /// - **Final partial** → [data as-is, empty]. The empty message (output=None) signals the
+    ///   extractor to use its accumulated partial data and emit one full-block message.
+    /// - **Full block** → [as final partial, empty]. One message for partial subscribers, then the
+    ///   empty message so the extractor emits the full block.
+    pub(crate) fn messages_to_send_for_block(
+        data: &BlockScopedData,
+        partial_blocks: bool,
+    ) -> Vec<BlockScopedData> {
+        if !partial_blocks {
+            return vec![data.clone()];
+        }
+        let is_final_partial = data.is_last_partial == Some(true);
+        let is_full_block = !data.is_partial;
+        if is_final_partial {
+            vec![data.clone(), Self::empty_block_scoped_data(data)]
+        } else if is_full_block {
+            vec![
+                Self::as_final_partial_block_scoped_data(data),
+                Self::empty_block_scoped_data(data),
+            ]
+        } else {
+            vec![data.clone()]
+        }
     }
 
     // TODO: add message tracing_id to the log
@@ -875,6 +887,26 @@ mod test {
     use super::*;
     use crate::extractor::MockExtractor;
 
+    /// Builds minimal BlockScopedData for runner message-selection tests.
+    fn make_block_scoped_data(
+        is_partial: bool,
+        partial_index: Option<u32>,
+        is_last_partial: Option<bool>,
+    ) -> BlockScopedData {
+        BlockScopedData {
+            output: None,
+            clock: None,
+            cursor: String::new(),
+            final_block_height: 0,
+            debug_map_outputs: vec![],
+            debug_store_outputs: vec![],
+            attestation: String::new(),
+            is_partial,
+            partial_index,
+            is_last_partial,
+        }
+    }
+
     #[test]
     fn test_extractor_config_without_dci_plugin() {
         let yaml = r#"
@@ -975,6 +1007,64 @@ dci_plugin:
                 panic!("Expected UniswapV4Hooks DCI plugin but got RPC");
             }
         }
+    }
+
+    #[test]
+    fn test_messages_to_send_partial_blocks_disabled() {
+        // When partial_blocks is false, always exactly one message (data as-is)
+        let full = make_block_scoped_data(false, None, None);
+        let out_full = ExtractorRunner::messages_to_send_for_block(&full, false);
+        assert_eq!(out_full.len(), 1);
+        assert!(!out_full[0].is_partial, "message must be a full block");
+    }
+
+    #[test]
+    fn test_messages_to_send_final_partial() {
+        // When partial_blocks is true and is_last_partial == true: [data as-is, empty].
+        let data = make_block_scoped_data(true, Some(2), Some(true));
+        let out = ExtractorRunner::messages_to_send_for_block(&data, true);
+
+        // two messages are sent: the final partial and the empty message
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].is_partial, true);
+        assert_eq!(out[0].partial_index, Some(2));
+        assert_eq!(out[0].is_last_partial, Some(true));
+        assert_eq!(out[0].output.is_some(), data.output.is_some());
+
+        assert!(out[1].output.is_none(), "second message must be empty (no output)");
+        assert!(!out[1].is_partial);
+        assert!(out[1].partial_index.is_none());
+        assert!(out[1].is_last_partial.is_none());
+    }
+
+    #[test]
+    fn test_messages_to_send_full_block() {
+        // When partial_blocks is true and message is full block: [as final partial, empty].
+        let data = make_block_scoped_data(false, None, None);
+        let out = ExtractorRunner::messages_to_send_for_block(&data, true);
+
+        // two messages are sent: the final partial and the empty message
+        assert_eq!(out.len(), 2);
+        assert!(out[0].is_partial, "first message must be marked as final partial");
+        assert_eq!(out[0].partial_index, Some(0));
+        assert_eq!(out[0].is_last_partial, Some(true));
+
+        assert!(out[1].output.is_none());
+        assert!(!out[1].is_partial);
+        assert!(out[1].partial_index.is_none());
+        assert!(out[1].is_last_partial.is_none());
+    }
+
+    #[test]
+    fn test_messages_to_send_middle_partial() {
+        // When partial_blocks is true and message is a non-final partial: single message.
+        let data = make_block_scoped_data(true, Some(1), Some(false));
+        let out = ExtractorRunner::messages_to_send_for_block(&data, true);
+        // only the partial message is sent
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].is_partial, true);
+        assert_eq!(out[0].partial_index, Some(1));
+        assert_eq!(out[0].is_last_partial, Some(false));
     }
 
     #[tokio::test]
