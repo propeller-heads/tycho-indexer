@@ -333,26 +333,40 @@ impl ExtractorRunner {
             .insert(subscriber_id, sender);
     }
 
-    /// Builds an empty BlockScopedData (output=None, no partial fields) to signal the extractor
-    /// to flush pending partials and produce a full block message for full-block subscribers.
+    /// Builds an empty BlockScopedData (output=None, no partial fields) sent after a final partial
+    /// or full block to trigger the extractor to flush and emit a full-block message.
+    ///
+    /// **Why `output = None` is significant:** This message carries no new block payload. It acts
+    /// as a signal to the extractor to use its cached/accumulated data: the extractor has already
+    /// received and buffered one or more partial (or full) messages for this block.
     fn empty_block_scoped_data(data: &BlockScopedData) -> BlockScopedData {
-        let mut empty = data.clone();
-        empty.output = None;
-        empty.is_partial = false;
-        empty.partial_index = None;
-        empty.is_last_partial = None;
-        empty
+        BlockScopedData {
+            output: None,
+            clock: data.clock.clone(),
+            cursor: data.cursor.clone(),
+            final_block_height: data.final_block_height,
+            ..Default::default()
+        }
     }
 
     /// Builds a BlockScopedData that looks like the final partial (partial_index=0,
     /// is_last_partial=true) so the extractor can emit a partial message; used when the
     /// incoming message is a full block (e.g. after reorg).
+    /// Only clones the fields that must be preserved; avoids cloning debug_map_outputs and
+    /// debug_store_outputs which are not needed for the final-partial signal.
     fn as_final_partial_block_scoped_data(data: &BlockScopedData) -> BlockScopedData {
-        let mut partial = data.clone();
-        partial.is_partial = true;
-        partial.partial_index = Some(0);
-        partial.is_last_partial = Some(true);
-        partial
+        BlockScopedData {
+            output: data.output.clone(),
+            clock: data.clock.clone(),
+            cursor: data.cursor.clone(),
+            final_block_height: data.final_block_height,
+            attestation: data.attestation.clone(),
+            is_partial: true,
+            partial_index: Some(0),
+            is_last_partial: Some(true),
+            ..Default::default()
+        }
+    }
 
     /// Returns the list of BlockScopedData messages to send to the extractor for this block.
     ///

@@ -824,8 +824,8 @@ where
             };
 
             if let Some(last_processed_block) = self.get_last_processed_block().await {
-                if msg.block.ts.and_utc().timestamp() ==
-                    last_processed_block
+                if msg.block.ts.and_utc().timestamp()
+                    == last_processed_block
                         .ts
                         .and_utc()
                         .timestamp()
@@ -936,8 +936,8 @@ where
                 .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
                 .map_err(ExtractionError::Storage)?;
 
-            if reorg_buffer.count_blocks_before(inp.final_block_height) >=
-                self.gateway.commit_batch_size
+            if reorg_buffer.count_blocks_before(inp.final_block_height)
+                >= self.gateway.commit_batch_size
             {
                 reorg_buffer
                     .drain_blocks_until(inp.final_block_height)
@@ -1156,8 +1156,8 @@ where
                                     range of blocks, we only want to remove it (so undo its creation).
                                     As here we go through the reverted state from the oldest to the newest, we just insert the first time we meet a component and ignore it if we meet it again after.
                                     */
-                                    if !reverted_deletions.contains_key(id) &&
-                                        !reverted_creations.contains_key(id)
+                                    if !reverted_deletions.contains_key(id)
+                                        && !reverted_creations.contains_key(id)
                                     {
                                         match new_component.change {
                                             ChangeType::Update => {}
