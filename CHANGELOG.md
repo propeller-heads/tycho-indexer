@@ -1,3 +1,12 @@
+## [0.139.0](https://github.com/propeller-heads/tycho-indexer/compare/0.138.0...0.139.0) (2026-02-09)
+
+
+### Features
+
+* **extractor:** mark revert blocks as partial when no full blocks are rolled back. ([131ad3d](https://github.com/propeller-heads/tycho-indexer/commit/131ad3d045decdc6f313a2cc3b7fa0d0b6b49149))
+* **extractor:** purge partial block buffer on revert ([7eb11fb](https://github.com/propeller-heads/tycho-indexer/commit/7eb11fba467329179ea50682a2c0a2bc7f22c86c))
+* revert handling for partial blocks ([#845](https://github.com/propeller-heads/tycho-indexer/issues/845)) ([74914fd](https://github.com/propeller-heads/tycho-indexer/commit/74914fd42d80f679fe476191dc8f7041221afaff))
+
 ## [0.138.0](https://github.com/propeller-heads/tycho-indexer/compare/0.137.0...0.138.0) (2026-02-09)
 
 
