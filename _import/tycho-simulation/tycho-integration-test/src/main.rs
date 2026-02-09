@@ -1114,7 +1114,7 @@ fn process_execution_result(
             );
 
             let overwrites_string = if let Some(overwrites) = state_overwrites.as_ref() {
-                tenderly::get_overwrites_string(overwrites, &overwrite_metadata)
+                tenderly::get_overwrites_string(overwrites, overwrite_metadata)
             } else {
                 String::new()
             };
@@ -1186,7 +1186,7 @@ fn process_execution_result(
             );
 
             let overwrites_string = if let Some(overwrites) = state_overwrites.as_ref() {
-                tenderly::get_overwrites_string(overwrites, &overwrite_metadata)
+                tenderly::get_overwrites_string(overwrites, overwrite_metadata)
             } else {
                 String::new()
             };
