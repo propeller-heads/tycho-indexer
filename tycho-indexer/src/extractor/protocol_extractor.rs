@@ -2742,7 +2742,7 @@ mod test {
 
     // ── Partial block handling tests ──────────────────────────────────────
 
-    /// Helper: build a partial `BlockScopedData` populated with changes  from the
+    /// Helper: build a partial `BlockScopedData` populated with changes from the
     /// `pb_vm_block_changes(block_num)`. This method strips balance changes and token balances
     /// to avoid triggering TVL code paths, which would require the CachedGateway to be setup.
     fn make_partial_block_with_data(block_num: u64, partial_index: u32) -> BlockScopedData {
@@ -3003,7 +3003,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_revert_purges_partial_block_buffer() {
+    async fn test_revert_of_partial_blocks_only() {
         // Gateway needs to handle: initial setup + revert lookups.
         // With batch_size=1 and final_block_height=1, block 1 stays in the reorg buffer
         // (count_blocks_before(1) = 0 < 1) — no advance/commit occurs.
