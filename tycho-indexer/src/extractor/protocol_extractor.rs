@@ -205,10 +205,7 @@ where
     }
 
     /// Merges a partial block into the buffer, or initializes the buffer if empty.
-    async fn buffer_partial_block(
-        &self,
-        msg: &BlockChanges,
-    ) -> Result<(), ExtractionError> {
+    async fn buffer_partial_block(&self, msg: &BlockChanges) -> Result<(), ExtractionError> {
         let mut buffer_guard = self.partial_block_buffer.lock().await;
         let updated = if let Some(existing) = buffer_guard.take() {
             existing
@@ -890,8 +887,8 @@ where
                 })?
         };
 
-        // Partial blocks are buffered and emitted immediately but skip reorg buffer and DB commit
-        // — those happen when the full block signal arrives.
+        // Partial blocks are buffered and emitted immediately but skip reorg buffer and DB commit.
+        // Those happen when the full block signal arrives.
         if inp.partial_index.is_some() {
             self.buffer_partial_block(&msg).await?;
 
