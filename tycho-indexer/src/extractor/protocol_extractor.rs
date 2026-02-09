@@ -1114,9 +1114,21 @@ where
         let mut reorg_buffer = self.reorg_buffer.lock().await;
 
         // Purge the buffer
-        let reverted_state = reorg_buffer
+        let mut reverted_state = reorg_buffer
             .purge(block_hash)
             .map_err(|e| ExtractionError::ReorgBufferError(e.to_string()))?;
+
+        // Purge partial block buffer — any buffered partials were already emitted
+        // to WS subscribers and must be included in the reverted state.
+        let partial_block = self
+            .partial_block_buffer
+            .lock()
+            .await
+            .take();
+        if let Some(partial) = partial_block {
+            debug!("PurgePartialBlockBuffer");
+            reverted_state.push(BlockUpdateWithCursor::new(partial, String::new()));
+        }
 
         // Handle created and deleted components
         let (reverted_components_creations, reverted_components_deletions) =
@@ -2957,6 +2969,111 @@ mod test {
             .await
             .is_none());
         assert_eq!(extractor.get_cursor().await, "cursor@1");
+    }
+
+    #[tokio::test]
+    async fn test_revert_purges_partial_block_buffer() {
+        use crate::pb::sf::substreams::v1::BlockRef;
+
+        // Gateway needs to handle: initial setup + revert lookups.
+        // With batch_size=1 and final_block_height=1, block 1 stays in the reorg buffer
+        // (count_blocks_before(1) = 0 < 1) — no advance/commit occurs.
+        let mut gw = MockExtractorGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
+        gw.expect_advance()
+            .times(0)
+            .returning(|_, _, _| Ok(()));
+        // Revert lookups: contracts, protocol states, component balances, account balances.
+        gw.expect_get_contracts()
+            .returning(|_| Ok(Vec::new()));
+        gw.expect_get_protocol_states()
+            .returning(|_| Ok(Vec::new()));
+        gw.expect_get_components_balances()
+            .returning(|_| Ok(HashMap::new()));
+        gw.expect_get_account_balances()
+            .returning(|_| Ok(HashMap::new()));
+
+        let extractor = create_extractor(gw).await;
+
+        // ── Block 1: full block to populate the reorg buffer ──
+        extractor
+            .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
+                tycho_substreams::BlockChanges {
+                    block: Some(pb_fixtures::pb_blocks(1)),
+                    ..Default::default()
+                },
+                Some("cursor@1"),
+                Some(1),
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            extractor
+                .reorg_buffer
+                .lock()
+                .await
+                .count_blocks_before(u64::MAX),
+            1,
+            "Block 1 should be in the reorg buffer"
+        );
+
+        // ── Block 2: partial (not yet finalized) ──
+        extractor
+            .handle_tick_scoped_data(make_partial_block_with_data(2, 0))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Verify partial block buffer is populated.
+        assert!(
+            extractor
+                .partial_block_buffer
+                .lock()
+                .await
+                .is_some(),
+            "Partial block buffer should be populated after partial block 2"
+        );
+
+        // ── Revert to block 1 ──
+        let revert_msg = extractor
+            .handle_revert(BlockUndoSignal {
+                last_valid_block: Some(BlockRef { id: format!("0x{:0>64x}", 1_u64), number: 1 }),
+                last_valid_cursor: "cursor@1".into(),
+            })
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Partial block buffer must be purged.
+        assert!(
+            extractor
+                .partial_block_buffer
+                .lock()
+                .await
+                .is_none(),
+            "Partial block buffer should be purged after revert"
+        );
+
+        // Revert message should be marked as a revert.
+        assert!(revert_msg.revert, "Revert message should have revert=true");
+
+        // The revert message should include state from the partial block's account deltas.
+        // The partial block (block 2) had contract changes with slots, which means the
+        // revert needs to restore prior state for those accounts.
+        assert!(
+            !revert_msg.account_deltas.is_empty(),
+            "Revert message should include account deltas from the purged partial block"
+        );
     }
 }
 
