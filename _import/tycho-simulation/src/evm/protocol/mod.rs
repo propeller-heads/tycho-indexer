@@ -18,3 +18,27 @@ pub mod uniswap_v4;
 pub mod utils;
 pub mod velodrome_slipstreams;
 pub mod vm;
+
+#[cfg(test)]
+mod test_utils {
+    use std::collections::HashMap;
+
+    use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
+
+    use crate::protocol::models::TryFromWithBlock;
+
+    pub(super) async fn try_decode_snapshot_with_defaults<
+        T: TryFromWithBlock<ComponentWithState, BlockHeader>,
+    >(
+        snapshot: ComponentWithState,
+    ) -> Result<T, T::Error> {
+        T::try_from_with_header(
+            snapshot,
+            Default::default(),
+            &HashMap::default(),
+            &HashMap::default(),
+            &Default::default(),
+        )
+        .await
+    }
+}

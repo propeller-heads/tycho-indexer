@@ -36,24 +36,14 @@ mod tests {
 
     use alloy::primitives::U256;
     use rstest::rstest;
-    use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
+    use tycho_client::feed::synchronizer::ComponentWithState;
     use tycho_common::{dto::ResponseProtocolState, Bytes};
 
     use super::super::state::PancakeswapV2State;
-    use crate::protocol::{
-        errors::InvalidSnapshotError,
-        models::{DecoderContext, TryFromWithBlock},
+    use crate::{
+        evm::protocol::test_utils::try_decode_snapshot_with_defaults,
+        protocol::errors::InvalidSnapshotError,
     };
-
-    fn header() -> BlockHeader {
-        BlockHeader {
-            number: 1,
-            hash: Bytes::from(vec![0; 32]),
-            parent_hash: Bytes::from(vec![0; 32]),
-            revert: false,
-            timestamp: 1,
-        }
-    }
 
     #[tokio::test]
     async fn test_pancakeswap_v2_try_from() {
@@ -71,14 +61,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = PancakeswapV2State::try_from_with_header(
-            snapshot,
-            header(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &DecoderContext::new(),
-        )
-        .await;
+        let result = try_decode_snapshot_with_defaults::<PancakeswapV2State>(snapshot).await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), PancakeswapV2State::new(U256::from(0u64), U256::from(0u64)));
@@ -106,14 +89,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = PancakeswapV2State::try_from_with_header(
-            snapshot,
-            header(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &DecoderContext::new(),
-        )
-        .await;
+        let result = try_decode_snapshot_with_defaults::<PancakeswapV2State>(snapshot).await;
 
         assert!(result.is_err());
         assert!(matches!(

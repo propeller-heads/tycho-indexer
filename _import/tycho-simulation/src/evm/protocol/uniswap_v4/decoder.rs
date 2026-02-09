@@ -209,6 +209,7 @@ mod tests {
     use tycho_common::dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState};
 
     use super::*;
+    use crate::evm::protocol::test_utils::try_decode_snapshot_with_defaults;
 
     fn usv4_component() -> ProtocolComponent {
         let creation_time = DateTime::from_timestamp(1622526000, 0)
@@ -251,15 +252,6 @@ mod tests {
             ("ticks/60/net_liquidity".to_string(), Bytes::from(400_i128.to_be_bytes().to_vec())),
         ])
     }
-    fn header() -> BlockHeader {
-        BlockHeader {
-            number: 1,
-            hash: Bytes::from(vec![0; 32]),
-            parent_hash: Bytes::from(vec![0; 32]),
-            revert: false,
-            timestamp: 1,
-        }
-    }
 
     #[tokio::test]
     async fn test_usv4_try_from() {
@@ -274,15 +266,9 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = UniswapV4State::try_from_with_header(
-            snapshot,
-            header(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &DecoderContext::new(),
-        )
-        .await
-        .unwrap();
+        let result = try_decode_snapshot_with_defaults::<UniswapV4State>(snapshot)
+            .await
+            .unwrap();
 
         let fees = UniswapV4Fees::new(0, 0, 500);
         let expected = UniswapV4State::new(
@@ -337,14 +323,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = UniswapV4State::try_from_with_header(
-            snapshot,
-            header(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &DecoderContext::new(),
-        )
-        .await;
+        let result = try_decode_snapshot_with_defaults::<UniswapV4State>(snapshot).await;
 
         assert!(result.is_err());
         assert!(matches!(

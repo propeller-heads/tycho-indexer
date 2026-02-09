@@ -403,8 +403,7 @@ impl From<BlockHeader> for TychoHeader {
             number: py_header.number,
             hash: Bytes::from_str(&py_header.hash).unwrap(),
             timestamp: py_header.timestamp,
-            parent_hash: Default::default(),
-            revert: false,
+            ..Default::default()
         }
     }
 }

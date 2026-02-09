@@ -42,9 +42,9 @@ hex = "0.4.3"
 async-trait = "0.1.88"
 
 # Tycho dependencies
-tycho-client = ">=0.133.0"
-tycho-common = ">=0.133.0"
-tycho-ethereum = ">=0.133.0"
+tycho-client = ">=0.136.1"
+tycho-common = ">=0.136.1"
+tycho-ethereum = ">=0.136.1"
 tycho-execution = ">=0.155.0"
 
 # EVM dependencies
@@ -103,7 +103,7 @@ tokio-stream = "0.1.16"
 dialoguer = "0.10.4"
 
 # Ekubo
-evm_ekubo_sdk = {version = "0.6.5", features = ["serde"]}
+evm_ekubo_sdk = { version = "0.6.5", features = ["serde"] }
 ekubo_sdk = { version = "=1.0.2", features = ["evm", "serde"] }
 
 # rfq
