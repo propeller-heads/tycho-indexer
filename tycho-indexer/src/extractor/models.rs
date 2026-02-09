@@ -333,10 +333,11 @@ impl BlockChanges {
         }
 
         if self.block != other.block {
-            return Err(MergeError::InvalidState(format!(
-                "different block data: block {} vs block {}",
-                self.block.number, other.block.number
-            )));
+            return Err(MergeError::BlockMismatch(
+                "partial blocks".to_string(),
+                self.block.hash.clone(),
+                other.block.hash.clone(),
+            ));
         }
 
         if self.revert != other.revert {
@@ -1722,7 +1723,7 @@ mod test {
     #[rstest]
     #[case(Some(String::from("different")), None, None, None, "extractor")]
     #[case(None, Some(Chain::Arbitrum), None, None, "chain")]
-    #[case(None, None, Some(101), None, "different block")]
+    #[case(None, None, Some(101), None, "different blocks")]
     #[case(None, None, None, Some(true), "different revert")]
     fn test_merge_partial_validation_fails(
         #[case] extractor_override: Option<String>,
