@@ -304,15 +304,11 @@ impl BlockChanges {
     pub fn merge_partial(self, other: Self) -> Result<Self, MergeError> {
         // Validate both blocks are partial
         let Some(self_index) = self.partial_block_index else {
-            return Err(MergeError::InvalidState(
-                "self is not a partial block".to_string(),
-            ));
+            return Err(MergeError::InvalidState("self is not a partial block".to_string()));
         };
 
         let Some(other_index) = other.partial_block_index else {
-            return Err(MergeError::InvalidState(
-                "other is not a partial block".to_string(),
-            ));
+            return Err(MergeError::InvalidState("other is not a partial block".to_string()));
         };
 
         // Validate that critical fields match
@@ -353,9 +349,7 @@ impl BlockChanges {
         } else if self_index < other_index {
             (other, self)
         } else {
-            return Err(MergeError::InvalidState(format!(
-                "same partial block index: {self_index}"
-            )));
+            return Err(MergeError::InvalidState(format!("same partial block index: {self_index}")));
         };
 
         // Merge tokens: later block's tokens take precedence
@@ -1684,10 +1678,8 @@ mod test {
         assert_eq!(indices, vec![2, 5]);
 
         assert_eq!(result.new_tokens.len(), 2);
-        let token_addr1 =
-            Address::from_str("0x3333333333333333333333333333333333333333").unwrap();
-        let token_addr2 =
-            Address::from_str("0x4444444444444444444444444444444444444444").unwrap();
+        let token_addr1 = Address::from_str("0x3333333333333333333333333333333333333333").unwrap();
+        let token_addr2 = Address::from_str("0x4444444444444444444444444444444444444444").unwrap();
         assert!(result
             .new_tokens
             .contains_key(&token_addr1));
@@ -1806,10 +1798,7 @@ mod test {
     #[rstest]
     #[case::merge_newer(0, 1)] // block0.merge(block1)
     #[case::merge_older(1, 0)] // block1.merge(block0)
-    fn test_merge_partial_token_precedence(
-        #[case] first_idx: u8,
-        #[case] second_idx: u8,
-    ) {
+    fn test_merge_partial_token_precedence(#[case] first_idx: u8, #[case] second_idx: u8) {
         let mut first = create_partial_block(first_idx);
         let mut second = create_partial_block(second_idx);
 
@@ -1819,10 +1808,8 @@ mod test {
         first.new_tokens.clear();
         second.new_tokens.clear();
 
-        let early_token =
-            Token::new(&shared_token_addr, "EARLY", 6, 0, &[], Chain::Ethereum, 0);
-        let late_token =
-            Token::new(&shared_token_addr, "LATE", 18, 0, &[], Chain::Ethereum, 0);
+        let early_token = Token::new(&shared_token_addr, "EARLY", 6, 0, &[], Chain::Ethereum, 0);
+        let late_token = Token::new(&shared_token_addr, "LATE", 18, 0, &[], Chain::Ethereum, 0);
 
         if first_idx == 0 {
             first
