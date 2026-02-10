@@ -91,6 +91,11 @@ pub struct BlockAggregatedChanges {
     pub finalized_block_height: u64,
     pub db_committed_block_height: Option<u64>,
     pub revert: bool,
+    /// When revert is true, the hash of the block being reverted. Clients use this to ignore
+    /// stale/delayed reverts (e.g. from a slow DCI extractor) when the tip is already the new
+    /// block.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reverted_block_hash: Option<BlockHash>,
     pub state_deltas: HashMap<String, ProtocolComponentStateDelta>,
     pub account_deltas: HashMap<Bytes, AccountDelta>,
     pub new_tokens: HashMap<Address, Token>,
@@ -131,6 +136,7 @@ impl BlockAggregatedChanges {
             db_committed_block_height,
             finalized_block_height,
             revert,
+            reverted_block_hash: None,
             state_deltas,
             account_deltas,
             new_tokens,
@@ -152,6 +158,7 @@ impl BlockAggregatedChanges {
             db_committed_block_height: self.db_committed_block_height,
             finalized_block_height: self.finalized_block_height,
             revert: self.revert,
+            reverted_block_hash: self.reverted_block_hash.clone(),
             account_deltas: HashMap::new(),
             state_deltas: HashMap::new(),
             new_tokens: self.new_tokens.clone(),

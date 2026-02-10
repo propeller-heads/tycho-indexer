@@ -262,6 +262,13 @@ impl BlockHistory {
     pub fn oldest(&self) -> Option<&BlockHeader> {
         self.history.front()
     }
+
+    /// Returns true if this hash was reverted and should not be pushed as the next block.
+    /// Used when multiple streams send the same block number (e.g. new block 3 and delayed old
+    /// block 3) so we prefer the one that is not reverted.
+    pub fn is_reverted(&self, hash: &Bytes) -> bool {
+        self.reverts.contains(hash)
+    }
 }
 
 #[cfg(test)]
