@@ -1,3 +1,10 @@
+## [0.240.0](https://github.com/propeller-heads/tycho-simulation/compare/0.239.0...0.240.0) (2026-02-10)
+
+
+### Features
+
+* **integration test:** Include tenderly url for high slippage ([f5ca0f4](https://github.com/propeller-heads/tycho-simulation/commit/f5ca0f489143f0c713f6cd79bc31ce9b741026c8))
+
 ## [0.239.0](https://github.com/propeller-heads/tycho-simulation/compare/0.238.0...0.239.0) (2026-02-09)
 
 
