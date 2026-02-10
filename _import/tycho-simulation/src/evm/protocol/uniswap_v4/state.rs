@@ -80,7 +80,6 @@ impl fmt::Debug for UniswapV4State {
             .field("sqrt_price", &self.sqrt_price)
             .field("fees", &self.fees)
             .field("tick", &self.tick)
-            .field("ticks", &self.ticks)
             .field("tick_spacing", &self.tick_spacing)
             .finish_non_exhaustive()
     }
