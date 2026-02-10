@@ -1,3 +1,10 @@
+## [0.240.1](https://github.com/propeller-heads/tycho-simulation/compare/0.240.0...0.240.1) (2026-02-10)
+
+
+### Bug Fixes
+
+* increase per-tick gas cost to match Uniswap V3 pool cross() ([9656171](https://github.com/propeller-heads/tycho-simulation/commit/965617154fd9171909c76d3a7d5aecba127e7359))
+
 ## [0.240.0](https://github.com/propeller-heads/tycho-simulation/compare/0.239.0...0.240.0) (2026-02-10)
 
 
