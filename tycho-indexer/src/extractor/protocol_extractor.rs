@@ -48,6 +48,7 @@ use crate::{
         BlockUpdateWithCursor, ExtractionError, Extractor, ExtractorExtension, ExtractorMsg,
     },
     pb::sf::substreams::rpc::v2::{BlockScopedData, BlockUndoSignal, ModulesProgress},
+    pb::sf::substreams::v1::Clock,
 };
 
 pub struct Inner {
@@ -698,6 +699,145 @@ where
             .collect();
         Ok(new_tokens)
     }
+
+    /// Process a full block (reorg buffer, commit, aggregated changes). Used by
+    /// `handle_tick_scoped_data` for non-partial messages and by `collect_full_block` after drain.
+    async fn process_full_block_message(
+        &self,
+        msg: BlockChanges,
+        cursor: String,
+        final_block_height: u64,
+    ) -> Result<Option<ExtractorMsg>, ExtractionError> {
+        let is_syncing = final_block_height == msg.block.number;
+        if final_block_height > msg.block.number {
+            return Err(ExtractionError::ReorgBufferError(format!(
+                "Final block height ({}) greater than block number ({}) are unsupported by the reorg buffer",
+                final_block_height, msg.block.number
+            )));
+        }
+
+        let blocks_to_commit = {
+            let mut reorg_buffer = self.reorg_buffer.lock().await;
+
+            reorg_buffer
+                .insert_block(BlockUpdateWithCursor::new(msg.clone(), cursor.clone()))
+                .map_err(ExtractionError::Storage)?;
+
+            if reorg_buffer.count_blocks_before(final_block_height) >=
+                self.gateway.commit_batch_size
+            {
+                reorg_buffer
+                    .drain_blocks_until(final_block_height)
+                    .map_err(ExtractionError::Storage)?
+            } else {
+                Vec::new()
+            }
+        };
+
+        if let Some(last_block) = blocks_to_commit.last() {
+            let mut commit_handle_guard = self.gateway.commit_handle.lock().await;
+            let gateway = self.gateway.inner.clone();
+            let committed_block_height = self
+                .gateway
+                .committed_block_height
+                .clone();
+            let last_block_height = last_block.block_update.block.number;
+            let batch_size = blocks_to_commit.len();
+            let (extractor_name, chain) = (self.name.clone(), self.chain);
+
+            if let Some(db_commit_handle_to_join) = commit_handle_guard.take() {
+                let awaited_commit = !db_commit_handle_to_join
+                    .inner()
+                    .is_finished();
+                let now = chrono::Utc::now().naive_utc();
+
+                match db_commit_handle_to_join.await {
+                    Ok(Ok(())) => {}
+                    Ok(Err(storage_err)) => {
+                        return Err(storage_err);
+                    }
+                    Err(join_err) => {
+                        return Err(ExtractionError::Storage(StorageError::Unexpected(format!(
+                            "Failed to join database commit task: {join_err}"
+                        ))));
+                    }
+                }
+
+                if awaited_commit {
+                    let wait_time = chrono::Utc::now()
+                        .naive_utc()
+                        .signed_duration_since(now);
+                    trace!(batch_size, block_height = last_block_height, extractor_id = self.name.clone(), chain = %self.chain, wait_time = %wait_time, "CommitTaskAwaited");
+                }
+            }
+
+            let new_handle = tokio::spawn(async move {
+                let now = std::time::Instant::now();
+
+                let mut it = blocks_to_commit.iter().peekable();
+                while let Some(block) = it.next() {
+                    let force_db_commit = if is_syncing { false } else { it.peek().is_none() };
+
+                    gateway
+                        .advance(block.block_update(), block.cursor(), force_db_commit)
+                        .await
+                        .map_err(ExtractionError::Storage)?;
+                }
+
+                let mut committed_hieght_guard = committed_block_height.lock().await;
+                *committed_hieght_guard = Some(last_block_height);
+
+                trace!(batch_size, block_height = last_block_height, extractor_id = extractor_name, chain = %chain, "CommitTaskCompleted");
+
+                histogram!(
+                    "database_commit_duration_ms", "chain" => chain.to_string(), "extractor" => extractor_name
+                )
+                .record(now.elapsed().as_millis() as f64);
+
+                Ok(())
+            }).instrument(info_span!(
+                parent: None,
+                "commit_blocks_task",
+                batch_size,
+                block_height = last_block_height,
+                extractor_id = self.name.clone(),
+                chain = %self.chain,
+            ));
+
+            *commit_handle_guard = Some(new_handle);
+
+            trace!(batch_size, block_height = last_block_height, extractor_id = self.name.clone(), chain = %self.chain, "CommitTaskQueued");
+        };
+
+        self.update_last_processed_block(msg.block.clone())
+            .await;
+
+        self.periodically_report_metrics(&msg, is_syncing)
+            .await;
+
+        self.update_cursor(cursor).await;
+
+        let committed_block_height = *self
+            .gateway
+            .committed_block_height
+            .lock()
+            .await;
+        let mut changes = msg.into_aggregated(committed_block_height)?;
+        self.handle_tvl_changes(&mut changes)
+            .await?;
+
+        if !is_syncing {
+            debug!(
+                new_components = changes.new_protocol_components.len(),
+                new_tokens = changes.new_tokens.len(),
+                account_update = changes.account_deltas.len(),
+                state_update = changes.state_deltas.len(),
+                tvl_changes = changes.component_tvl.len(),
+                "ProcessedMessage"
+            );
+        }
+        Ok(Some(Arc::new(changes)))
+    }
 }
 
 #[async_trait]
@@ -742,18 +882,16 @@ where
         &self,
         inp: BlockScopedData,
     ) -> Result<Option<ExtractorMsg>, ExtractionError> {
-        // If output is present, construct the message from the output. Otherwise, use the partial
-        // block buffer to construct the message.
-        let msg = if let Some(output) = inp.output.as_ref() {
-            let data = output
-                .map_output
-                .as_ref()
-                .ok_or_else(|| {
-                    ExtractionError::DecodeError(
-                        "Missing map_output in block scoped data output".into(),
-                    )
-                })?;
-
+        let data = inp
+            .output
+            .as_ref()
+            .unwrap()
+            .map_output
+            .as_ref()
+            .ok_or_else(|| {
+                ExtractionError::DecodeError("Missing output in block scoped data".into())
+            })?;
+        let msg = {
             // Backwards Compatibility:
             // Check if message_type ends with BlockAccountChanges or BlockEntityChanges. If it
             // does, then we need to decode as the corresponding message type, then convert it to
@@ -824,8 +962,8 @@ where
             };
 
             if let Some(last_processed_block) = self.get_last_processed_block().await {
-                if msg.block.ts.and_utc().timestamp()
-                    == last_processed_block
+                if msg.block.ts.and_utc().timestamp() ==
+                    last_processed_block
                         .ts
                         .and_utc()
                         .timestamp()
@@ -866,25 +1004,6 @@ where
             trace!(?msg, "Processing message");
 
             msg
-        } else {
-            // Empty output signals that all partials have been sent — drain the buffer and
-            // process the accumulated block as a full block.
-            debug!("DrainPartialBlockBuffer");
-            self.partial_block_buffer
-                .lock()
-                .await
-                .take()
-                .ok_or_else(|| {
-                    let block_num = inp
-                        .clock
-                        .as_ref()
-                        .map(|c| c.number)
-                        .unwrap_or_default();
-                    ExtractionError::PartialBlockBufferError(format!(
-                        "Could not fetch full block data: partial block buffer is empty \
-                         at block {block_num}"
-                    ))
-                })?
         };
 
         // Partial blocks are buffered and emitted immediately but skip reorg buffer and DB commit.
@@ -915,148 +1034,30 @@ where
             return Ok(Some(Arc::new(changes)));
         };
 
-        // We work under the invariant that final_block_height is always <= block.number.
-        // They are equal only when we are syncing. Depending on how Substreams handle them,
-        // this invariant could be problematic for single block finality blockchains.
-        let is_syncing = inp.final_block_height == msg.block.number;
-        if inp.final_block_height > msg.block.number {
-            return Err(ExtractionError::ReorgBufferError(format!(
-                    "Final block height ({}) greater than block number ({}) are unsupported by the reorg buffer",
-                    inp.final_block_height, msg.block.number
-                )));
-        }
-
-        // Create a scope to lock the reorg buffer, insert the new block and possibly commit to the
-        // database if we have enough blocks in the buffer.
-        // Return the block height up to which we have committed to the database.
-        let blocks_to_commit = {
-            let mut reorg_buffer = self.reorg_buffer.lock().await;
-
-            reorg_buffer
-                .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
-                .map_err(ExtractionError::Storage)?;
-
-            if reorg_buffer.count_blocks_before(inp.final_block_height)
-                >= self.gateway.commit_batch_size
-            {
-                reorg_buffer
-                    .drain_blocks_until(inp.final_block_height)
-                    .map_err(ExtractionError::Storage)?
-            } else {
-                Vec::new()
-            }
-        };
-
-        // If we have blocks to commit, wait for the previous async commit task to finish and then
-        // spawn a new task that will commit the new blocks and update the committed block height.
-        if let Some(last_block) = blocks_to_commit.last() {
-            let mut commit_handle_guard = self.gateway.commit_handle.lock().await;
-            let gateway = self.gateway.inner.clone();
-            let committed_block_height = self
-                .gateway
-                .committed_block_height
-                .clone();
-            let last_block_height = last_block.block_update.block.number;
-            let batch_size = blocks_to_commit.len();
-            let (extractor_name, chain) = (self.name.clone(), self.chain);
-
-            // Consume the previous commit handle, leaving None in its place
-            if let Some(db_commit_handle_to_join) = commit_handle_guard.take() {
-                let awaited_commit = !db_commit_handle_to_join
-                    .inner()
-                    .is_finished();
-                let now = chrono::Utc::now().naive_utc();
-
-                match db_commit_handle_to_join.await {
-                    Ok(Ok(())) => {}
-                    Ok(Err(storage_err)) => {
-                        return Err(storage_err);
-                    }
-                    Err(join_err) => {
-                        return Err(ExtractionError::Storage(StorageError::Unexpected(format!(
-                            "Failed to join database commit task: {join_err}"
-                        ))));
-                    }
-                }
-
-                if awaited_commit {
-                    let wait_time = chrono::Utc::now()
-                        .naive_utc()
-                        .signed_duration_since(now);
-                    trace!(batch_size, block_height = last_block_height, extractor_id = self.name.clone(), chain = %self.chain, wait_time = %wait_time, "CommitTaskAwaited");
-                }
-            }
-
-            // Spawn a new task to commit the new blocks and update the committed block height
-            let new_handle = tokio::spawn(async move {
-                let now = std::time::Instant::now();
-
-                let mut it = blocks_to_commit.iter().peekable();
-                while let Some(block) = it.next() {
-                    // Force a database commit if we're not syncing and this is the last block
-                    // to be sent. Otherwise, wait to accumulate a full
-                    // batch before committing.
-                    let force_db_commit = if is_syncing { false } else { it.peek().is_none() };
-
-                    gateway
-                        .advance(block.block_update(), block.cursor(), force_db_commit)
-                        .await
-                        .map_err(ExtractionError::Storage)?;
-                }
-
-                let mut committed_hieght_guard = committed_block_height.lock().await;
-                *committed_hieght_guard = Some(last_block_height);
-
-                trace!(batch_size, block_height = last_block_height, extractor_id = extractor_name, chain = %chain, "CommitTaskCompleted");
-
-                histogram!(
-                    "database_commit_duration_ms", "chain" => chain.to_string(), "extractor" => extractor_name
-                )
-                .record(now.elapsed().as_millis() as f64);
-
-                Ok(())
-            }).instrument(info_span!(
-                parent: None,  // This task can outlive the current span, so we don't want to attach it to it
-                "commit_blocks_task",
-                batch_size,
-                block_height = last_block_height,
-                extractor_id = self.name.clone(),
-                chain = %chain,
-            ));
-
-            *commit_handle_guard = Some(new_handle);
-
-            trace!(batch_size, block_height = last_block_height, extractor_id = self.name.clone(), chain = %self.chain, "CommitTaskQueued");
-        };
-
-        self.update_last_processed_block(msg.block.clone())
+        return self
+            .process_full_block_message(msg, inp.cursor, inp.final_block_height)
             .await;
+    }
 
-        self.periodically_report_metrics(&msg, is_syncing)
-            .await;
-
-        self.update_cursor(inp.cursor).await;
-
-        let committed_block_height = *self
-            .gateway
-            .committed_block_height
+    async fn collect_full_block(
+        &self,
+        cursor: String,
+        final_block_height: u64,
+        clock: Option<Clock>,
+    ) -> Result<Option<ExtractorMsg>, ExtractionError> {
+        let msg = self
+            .partial_block_buffer
             .lock()
-            .await;
-        let mut changes = msg.into_aggregated(committed_block_height)?;
-        self.handle_tvl_changes(&mut changes)
-            .await?;
-
-        if !is_syncing {
-            debug!(
-                new_components = changes.new_protocol_components.len(),
-                new_tokens = changes.new_tokens.len(),
-                account_update = changes.account_deltas.len(),
-                state_update = changes.state_deltas.len(),
-                tvl_changes = changes.component_tvl.len(),
-                "ProcessedMessage"
-            );
-        }
-        Ok(Some(Arc::new(changes)))
+            .await
+            .take()
+            .ok_or_else(|| {
+                let block_num = clock.as_ref().map(|c| c.number).unwrap_or_default();
+                ExtractionError::PartialBlockBufferError(format!(
+                    "Could not fetch full block data: partial block buffer is empty at block {block_num}"
+                ))
+            })?;
+        self.process_full_block_message(msg, cursor, final_block_height)
+            .await
     }
 
     #[instrument(skip_all, fields(target_hash, target_number))]
@@ -1156,8 +1157,8 @@ where
                                     range of blocks, we only want to remove it (so undo its creation).
                                     As here we go through the reverted state from the oldest to the newest, we just insert the first time we meet a component and ignore it if we meet it again after.
                                     */
-                                    if !reverted_deletions.contains_key(id)
-                                        && !reverted_creations.contains_key(id)
+                                    if !reverted_deletions.contains_key(id) &&
+                                        !reverted_creations.contains_key(id)
                                     {
                                         match new_component.change {
                                             ChangeType::Update => {}
@@ -2799,20 +2800,6 @@ mod test {
         )
     }
 
-    /// Helper: build an empty-output `BlockScopedData` that signals "drain the partial buffer".
-    fn make_drain_block(block_num: u64) -> BlockScopedData {
-        let mut bsd = pb_fixtures::pb_block_scoped_data(
-            tycho_substreams::BlockChanges {
-                block: Some(pb_fixtures::pb_blocks(block_num)),
-                ..Default::default()
-            },
-            Some(&format!("cursor@{block_num}")),
-            Some(block_num),
-        );
-        bsd.output = None; // No output = signal to drain buffer
-        bsd
-    }
-
     #[tokio::test]
     async fn test_partial_blocks_buffered_merged_and_drained() {
         // Lifecycle: partial_0 (data v0) → partial_1 (data v1) → drain
@@ -2882,9 +2869,9 @@ mod test {
             0
         );
 
-        // ── Drain: empty-output signal ──
+        // ── Drain: runner calls collect_full_block after last partial ──
         let full_result = extractor
-            .handle_tick_scoped_data(make_drain_block(1))
+            .collect_full_block("cursor@1".to_string(), 1, None)
             .await
             .unwrap()
             .unwrap();
@@ -2933,8 +2920,9 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_empty_output_with_empty_buffer_errors() {
-        // An empty-output signal with no buffered partials is an error.
+    async fn test_collect_full_block_with_empty_buffer_errors() {
+        // collect_full_block with no buffered partials (runner called it without sending partials
+        // first) is an error.
         let mut gw = MockExtractorGateway::new();
         gw.expect_ensure_protocol_types()
             .times(1)
@@ -2952,7 +2940,7 @@ mod test {
         let extractor = create_extractor(gw).await;
 
         let result = extractor
-            .handle_tick_scoped_data(make_drain_block(1))
+            .collect_full_block("cursor@1".to_string(), 1, None)
             .await;
 
         assert!(matches!(result, Err(ExtractionError::PartialBlockBufferError(_))));
