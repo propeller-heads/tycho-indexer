@@ -824,8 +824,8 @@ where
             };
 
             if let Some(last_processed_block) = self.get_last_processed_block().await {
-                if msg.block.ts.and_utc().timestamp() ==
-                    last_processed_block
+                if msg.block.ts.and_utc().timestamp()
+                    == last_processed_block
                         .ts
                         .and_utc()
                         .timestamp()
@@ -936,8 +936,8 @@ where
                 .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
                 .map_err(ExtractionError::Storage)?;
 
-            if reorg_buffer.count_blocks_before(inp.final_block_height) >=
-                self.gateway.commit_batch_size
+            if reorg_buffer.count_blocks_before(inp.final_block_height)
+                >= self.gateway.commit_batch_size
             {
                 reorg_buffer
                     .drain_blocks_until(inp.final_block_height)
@@ -1115,7 +1115,7 @@ where
 
         // Purge the reorg buffer
         let mut reverted_state = reorg_buffer
-            .purge(block_hash)
+            .purge(block_hash.clone())
             .map_err(|e| ExtractionError::ReorgBufferError(e.to_string()))?;
 
         // Purge partial block buffer
@@ -1156,8 +1156,8 @@ where
                                     range of blocks, we only want to remove it (so undo its creation).
                                     As here we go through the reverted state from the oldest to the newest, we just insert the first time we meet a component and ignore it if we meet it again after.
                                     */
-                                    if !reverted_deletions.contains_key(id) &&
-                                        !reverted_creations.contains_key(id)
+                                    if !reverted_deletions.contains_key(id)
+                                        && !reverted_creations.contains_key(id)
                                     {
                                         match new_component.change {
                                             ChangeType::Update => {}
@@ -1493,6 +1493,7 @@ where
             db_committed_block_height: None,
             finalized_block_height,
             revert: true,
+            reverted_block_hash: Some(block_hash),
             state_deltas,
             account_deltas,
             new_tokens: HashMap::new(),
@@ -3871,6 +3872,7 @@ mod test_serial_db {
                 db_committed_block_height: None,
                 finalized_block_height: 3,
                 revert: true,
+                reverted_block_hash: None,
                 state_deltas: HashMap::from([
                     ("pc_1".to_string(), ProtocolComponentStateDelta {
                         component_id: "pc_1".to_string(),
@@ -4058,6 +4060,7 @@ mod test_serial_db {
                 db_committed_block_height: None,
                 finalized_block_height: 3,
                 revert: true,
+                reverted_block_hash: None,
                 account_deltas: HashMap::from([
                     (account1.clone(), AccountDelta::new(
                         Chain::Ethereum,

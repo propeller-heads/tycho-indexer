@@ -309,6 +309,10 @@ pub struct BlockChanges {
     pub block: Block,
     pub finalized_block_height: u64,
     pub revert: bool,
+    /// When revert is true, the hash of the block being reverted. Clients use this to ignore
+    /// stale/delayed reverts when the tip is already the new block.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reverted_block_hash: Option<Bytes>,
     #[serde(with = "hex_hashmap_key", default)]
     pub new_tokens: HashMap<Bytes, ResponseToken>,
     #[serde(alias = "account_deltas", with = "hex_hashmap_key")]
@@ -348,6 +352,7 @@ impl BlockChanges {
             block,
             finalized_block_height,
             revert,
+            reverted_block_hash: None,
             new_tokens: HashMap::new(),
             account_updates,
             state_updates,
@@ -456,6 +461,7 @@ impl BlockChanges {
             block: self.block.clone(),
             finalized_block_height: self.finalized_block_height,
             revert: self.revert,
+            reverted_block_hash: self.reverted_block_hash.clone(),
             new_tokens: self.new_tokens.clone(),
             account_updates: HashMap::new(),
             state_updates: HashMap::new(),
@@ -517,6 +523,7 @@ impl From<BlockAggregatedChanges> for BlockChanges {
             block: value.block.into(),
             finalized_block_height: value.finalized_block_height,
             revert: value.revert,
+            reverted_block_hash: value.reverted_block_hash,
             account_updates: value
                 .account_deltas
                 .into_iter()
@@ -2558,6 +2565,7 @@ mod test {
             db_committed_block_height: Some(1),
             finalized_block_height: 1,
             revert: true,
+            reverted_block_hash: None,
             state_deltas: HashMap::from([
                 ("pc_1".to_string(), models::protocol::ProtocolComponentStateDelta {
                     component_id: "pc_1".to_string(),

@@ -2114,9 +2114,9 @@ mod test {
             hash: Bytes::from("0x0badc0ffee"),
             number: 42,
             parent_hash: Bytes::from("0xbadbeef0"),
-            revert: false,
             timestamp: 123456789,
             partial_block_index: None,
+            ..Default::default()
         });
 
         // Create a channel for state_sync to send messages to
@@ -2435,9 +2435,8 @@ mod test {
             parent_hash: Bytes::from(
                 "0x0000000000000000000000000000000000000000000000000000000000000000",
             ),
-            revert: false,
             timestamp: 123456789,
-            partial_block_index: None,
+            ..Default::default()
         };
         assert!(
             !state_sync.is_next_expected(&incoming_header),
@@ -2451,9 +2450,8 @@ mod test {
             parent_hash: Bytes::from(
                 "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
             ),
-            revert: false,
             timestamp: 123456788,
-            partial_block_index: None,
+            ..Default::default()
         };
         state_sync.last_synced_block = Some(previous_header.clone());
 
@@ -2469,9 +2467,8 @@ mod test {
             parent_hash: Bytes::from(
                 "0x1111111111111111111111111111111111111111111111111111111111111111",
             ), // Wrong parent hash
-            revert: false,
             timestamp: 123456789,
-            partial_block_index: None,
+            ..Default::default()
         };
         assert!(
             !state_sync.is_next_expected(&non_matching_header),
@@ -2563,9 +2560,8 @@ mod test {
             parent_hash: Bytes::from(
                 "0x0000000000000000000000000000000000000000000000000000000000000000",
             ),
-            revert: false,
             timestamp: 123456789,
-            partial_block_index: None,
+            ..Default::default()
         });
 
         let (mut block_tx, mut block_rx) = channel(10);
@@ -2771,9 +2767,8 @@ mod test {
             parent_hash: Bytes::from(
                 "0x0000000000000000000000000000000000000000000000000000000000000004",
             ),
-            revert: false,
             timestamp: 1234567892,
-            partial_block_index: None,
+            ..Default::default()
         });
 
         let (mut block_tx, mut block_rx) = channel(10);
@@ -2949,9 +2944,7 @@ mod test {
             number: 5,
             hash: Bytes::from("0x05"),
             parent_hash: Bytes::from("0x04"),
-            revert: false,
-            timestamp: 0,
-            partial_block_index: None,
+            ..Default::default()
         });
 
         let (handle, mut block_rx) = state_sync.start().await;

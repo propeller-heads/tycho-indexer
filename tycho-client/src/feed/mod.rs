@@ -55,6 +55,9 @@ pub struct BlockHeader {
     /// Index of a partial block update within a block. None for full blocks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub partial_block_index: Option<u32>,
+    /// When revert is true, hash of the block being reverted. Used to skip stale/delayed reverts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reverted_block_hash: Option<Bytes>,
 }
 
 impl BlockHeader {
@@ -89,6 +92,9 @@ impl From<&BlockChanges> for BlockHeader {
             revert: block_changes.revert,
             timestamp: block.ts.and_utc().timestamp() as u64,
             partial_block_index: block_changes.partial_block_index,
+            reverted_block_hash: block_changes
+                .reverted_block_hash
+                .clone(),
         }
     }
 }
@@ -482,7 +488,7 @@ impl SynchronizerStream {
                         %extractor_id,
                         ?last_message_at,
                         %block,
-                        "SynchronizerStream transition transition to delayed."
+                        "SynchronizerStream transition to delayed."
                     );
                     self.state = SynchronizerState::Delayed(latest_retrieved.clone());
                 }
@@ -894,16 +900,47 @@ where
         {
             *block_history = Self::reinit_block_history(sync_streams, block_history)?;
         } else {
-            let header = sync_streams
+            let headers: Vec<_> = sync_streams
                 .iter()
                 .filter_map(SynchronizerStream::get_current_header)
-                .max_by_key(|b| b.number)
-                // Safe, as we have checked this invariant with `check_streams`
-                .ok_or(BlockSynchronizerError::NoReadySynchronizers(
-                    "Expected to have at least one synchronizer that is not stale or ended"
-                        .to_string(),
-                ))?;
-            block_history.push(header.clone())?;
+                .cloned()
+                .collect();
+            let (reverts, non_reverts): (Vec<_>, Vec<_>) = headers
+                .into_iter()
+                .partition(|h| h.revert);
+
+            // Apply at most one revert header to block history. Skip the revert if it is not in
+            // reference to the current tip
+            if let Some(revert_header) = reverts
+                .into_iter()
+                .max_by_key(|h| h.number)
+            {
+                // Apply the revert only when it targets the current tip (or when no
+                // reverted_block_hash is set).
+                let revert_targets_current_tip = match revert_header
+                    .reverted_block_hash
+                    .as_ref()
+                {
+                    None => true,
+                    Some(expected) => block_history
+                        .latest()
+                        .is_some_and(|tip| &tip.hash == expected),
+                };
+                if revert_targets_current_tip {
+                    block_history.push(revert_header)?;
+                }
+            }
+
+            // Apply at most one new block. When multiple streams send the same block number (e.g.
+            // new block 3 and delayed old block 3), prefer the one that is not reverted
+            // so we advance the tip instead of no-op pushing a reverted hash.
+            if let Some(new_header) = non_reverts
+                .into_iter()
+                .filter(|h| !block_history.is_reverted(&h.hash))
+                .max_by_key(|h| h.number)
+            {
+                block_history.push(new_header)?;
+            }
         }
         Ok(())
     }
@@ -1144,6 +1181,7 @@ mod tests {
                 revert: false,
                 timestamp: 1000,
                 partial_block_index: None,
+                reverted_block_hash: None,
             },
             ..Default::default()
         }
@@ -1164,6 +1202,7 @@ mod tests {
                 revert: false,
                 timestamp: 1000,
                 partial_block_index: Some(partial_idx),
+                reverted_block_hash: None,
             },
             ..Default::default()
         }
@@ -1178,6 +1217,60 @@ mod tests {
                 revert: true,
                 timestamp: 1000,
                 partial_block_index: None,
+                reverted_block_hash: None,
+            },
+            ..Default::default()
+        }
+    }
+
+    /// Revert to `new_tip_block` with `reverted_block_hash` set (so client can skip if already
+    /// applied).
+    fn revert_header_message_with_reverted_hash(
+        new_tip_block: u8,
+        reverted_block_hash: Bytes,
+    ) -> StateSyncMessage<BlockHeader> {
+        StateSyncMessage {
+            header: BlockHeader {
+                number: new_tip_block as u64,
+                hash: Bytes::from(vec![new_tip_block]),
+                parent_hash: Bytes::from(vec![new_tip_block - 1]),
+                revert: true,
+                timestamp: 1000,
+                partial_block_index: None,
+                reverted_block_hash: Some(reverted_block_hash),
+            },
+            ..Default::default()
+        }
+    }
+
+    /// Header with a custom hash (e.g. "new" block after reorg, distinct from "old" hash).
+    fn header_message_with_hash(block: u8, hash: Bytes) -> StateSyncMessage<BlockHeader> {
+        StateSyncMessage {
+            header: BlockHeader {
+                number: block as u64,
+                hash,
+                parent_hash: Bytes::from(vec![block - 1]),
+                revert: false,
+                timestamp: 1000,
+                partial_block_index: None,
+                reverted_block_hash: None,
+            },
+            ..Default::default()
+        }
+    }
+
+    /// Header with a custom parent_hash so the block chains after a specific tip (e.g. new block
+    /// 3).
+    fn header_message_with_parent(block: u8, parent_hash: Bytes) -> StateSyncMessage<BlockHeader> {
+        StateSyncMessage {
+            header: BlockHeader {
+                number: block as u64,
+                hash: Bytes::from(vec![block]),
+                parent_hash,
+                revert: false,
+                timestamp: 1000,
+                partial_block_index: None,
+                reverted_block_hash: None,
             },
             ..Default::default()
         }
@@ -1194,23 +1287,28 @@ mod tests {
     async fn setup_block_sync(
     ) -> (MockStateSync, MockStateSync, JoinHandle<()>, Receiver<BlockSyncResult<FeedMessage>>)
     {
-        setup_block_sync_with_behaviour(MockBehavior::Normal, MockBehavior::Normal).await
+        setup_block_sync_with_behaviour(MockBehavior::Normal, MockBehavior::Normal, None).await
     }
 
     // Starts up a synchronizer and consumes the first message on block 1.
+    //
+    // `block_time_override`: if `Some(d)`, use d as block_time (stale threshold = d *
+    // max_missed_blocks). Default when `None` is 20ms (stale threshold = 20ms * 3 = 60ms).
     async fn setup_block_sync_with_behaviour(
         v2_behavior: MockBehavior,
         v3_behavior: MockBehavior,
+        block_time_override: Option<Duration>,
     ) -> (MockStateSync, MockStateSync, JoinHandle<()>, Receiver<BlockSyncResult<FeedMessage>>)
     {
         let v2_sync = MockStateSync::with_behavior(v2_behavior);
         let v3_sync = MockStateSync::with_behavior(v3_behavior);
 
+        let block_time = block_time_override.unwrap_or(Duration::from_millis(20));
         // Use reasonable timeouts to observe proper state transitions
         let mut block_sync = BlockSynchronizer::new(
-            Duration::from_millis(20), // block_time
-            Duration::from_millis(10), // max_wait
-            3,                         // max_missed_blocks (stale threshold = 20ms * 3 = 60ms)
+            block_time,
+            Duration::from_millis(10), // latency_buffer
+            3,                         // max_missed_blocks (stale threshold = block_time * 3)
         );
         block_sync.max_messages(10); // Allow enough messages to see the progression
 
@@ -1267,7 +1365,8 @@ mod tests {
         v3_sync.trigger_close().await;
         v2_sync.trigger_close().await;
 
-        timeout(Duration::from_millis(100), nanny_handle)
+        // Use a generous timeout to allow the main loop to exit.
+        timeout(Duration::from_millis(500), nanny_handle)
             .await
             .expect("Nanny failed to exit within time")
             .expect("Nanny panicked");
@@ -1490,9 +1589,12 @@ mod tests {
 
     #[test(tokio::test)]
     async fn test_synchronizer_fails_other_goes_stale() {
-        let (_v2_sync, v3_sync, nanny_handle, mut sync_rx) =
-            setup_block_sync_with_behaviour(MockBehavior::ExitImmediately, MockBehavior::Normal)
-                .await;
+        let (_v2_sync, v3_sync, nanny_handle, mut sync_rx) = setup_block_sync_with_behaviour(
+            MockBehavior::ExitImmediately,
+            MockBehavior::Normal,
+            None,
+        )
+        .await;
 
         let mut error_reported = false;
         for _ in 0..3 {
@@ -1536,6 +1638,7 @@ mod tests {
         let (_v2_sync, _v3_sync, nanny_handle, _rx) = setup_block_sync_with_behaviour(
             MockBehavior::ExitImmediately,
             MockBehavior::IgnoreClose,
+            None,
         )
         .await;
 
@@ -1950,6 +2053,104 @@ mod tests {
 
         // New fork: full block 3
         send_and_assert_ready(&v2_sync, "uniswap-v2", &mut rx, header_message(3), 3, None).await;
+
+        shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
+    }
+
+    #[test(tokio::test)]
+    async fn test_delayed_revert_skipped() {
+        // Realistic scenario: both streams in sync at block 2. Stream 1 gets block 3 and we process
+        // it. Stream 1 (v2) gets a revert (back to 2) and we process it. Stream 2 gets old block 3
+        // and we mark it as delayed. Stream 1 then gets new block 3 and we process it. Then stream
+        // 2 (v3) sends the same revert (delayed). We must skip it.
+        let (v2_sync, v3_sync, nanny_handle, mut rx) = setup_block_sync_with_behaviour(
+            MockBehavior::Normal,
+            MockBehavior::Normal,
+            Some(Duration::from_millis(45)),
+        )
+        .await;
+
+        // Both in sync at block 2
+        let block_2 = header_message(2);
+        v2_sync
+            .send_header(block_2.clone())
+            .await
+            .expect("v2 send failed");
+        v3_sync
+            .send_header(block_2)
+            .await
+            .expect("v3 send failed");
+        let feed_msg = receive_message(&mut rx).await;
+        assert!(
+            matches!(feed_msg.sync_states.get("uniswap-v2").unwrap(), SynchronizerState::Ready(h) if h.number == 2)
+        );
+        assert!(
+            matches!(feed_msg.sync_states.get("uniswap-v3").unwrap(), SynchronizerState::Ready(h) if h.number == 2)
+        );
+
+        let old_block_3_hash = Bytes::from(vec![3]);
+
+        // Stream 1 (v2) gets block 3 (old); we process it.
+        let old_block_3 = header_message_with_hash(3, old_block_3_hash.clone());
+        v2_sync
+            .send_header(old_block_3)
+            .await
+            .expect("v2 send failed");
+        let _ = receive_message(&mut rx).await;
+
+        // Stream 1 (v2) gets revert back to block 2; we process it.
+        let revert_to_2 = revert_header_message_with_reverted_hash(2, old_block_3_hash.clone());
+        v2_sync
+            .send_header(revert_to_2)
+            .await
+            .expect("v2 send failed");
+        let revert_feed_msg = receive_message(&mut rx).await;
+        assert!(
+            matches!(revert_feed_msg.sync_states.get("uniswap-v2").unwrap(), SynchronizerState::Ready(h) if h.number == 2),
+            "v2 should be ready at block 2 (after revert)"
+        );
+
+        // Stream 2 (v3) gets old block 3; we mark it as delayed (we reverted past it).
+        v3_sync
+            .send_header(header_message_with_hash(3, old_block_3_hash.clone()))
+            .await
+            .expect("v3 send failed");
+        let feed_msg = receive_message(&mut rx).await;
+        assert!(
+            matches!(feed_msg.sync_states.get("uniswap-v3").unwrap(), SynchronizerState::Delayed(h) if h.number == 3),
+            "v3 receiving old block 3 should be marked Delayed"
+        );
+
+        // Stream 1 (v2) gets new block 3; we process it.
+        let new_block_3 = header_message_with_hash(3, Bytes::from(vec![3, 1]));
+        v2_sync
+            .send_header(new_block_3)
+            .await
+            .expect("v2 send failed");
+        let _ = receive_message(&mut rx).await;
+
+        // Stream 2 (v3) sends the delayed revert (back to 2). We must skip it; tip is already new
+        // block 3. In the same round, v2 sends block 4 (chaining from new block 3).
+        let new_block_3_hash = Bytes::from(vec![3, 1]);
+        let delayed_revert = revert_header_message_with_reverted_hash(2, old_block_3_hash);
+        v3_sync
+            .send_header(delayed_revert)
+            .await
+            .expect("v3 send failed");
+        v2_sync
+            .send_header(header_message_with_parent(4, new_block_3_hash))
+            .await
+            .expect("v2 send failed");
+
+        let feed_msg = receive_message(&mut rx).await;
+        assert!(
+            matches!(feed_msg.sync_states.get("uniswap-v2").unwrap(), SynchronizerState::Ready(h) if h.number == 4),
+            "v2 should be ready at block 4"
+        );
+        assert!(
+            matches!(feed_msg.sync_states.get("uniswap-v3").unwrap(), SynchronizerState::Delayed(h) if h.number == 2),
+            "v3 should be delayed (tip 2)"
+        );
 
         shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
     }
