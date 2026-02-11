@@ -4,6 +4,7 @@ use alloy::primitives::U256;
 use hex_literal::hex;
 use num_bigint::{BigInt, BigUint};
 use num_traits::ToPrimitive;
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -25,7 +26,7 @@ pub const ETH_ADDRESS: [u8; 20] = hex!("EeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE
 pub const BASIS_POINT_SCALE: u64 = 10000;
 pub const BUCKET_UNIT_SCALE: u64 = 1_000_000_000_000;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EtherfiState {
     block_timestamp: u64,
     total_value_out_of_lp: U256,
@@ -36,7 +37,7 @@ pub struct EtherfiState {
     eth_redemption_info: Option<RedemptionInfo>,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct RedemptionInfo {
     limit: BucketLimit,
     exit_fee_split_to_treasury_in_bps: u16,
@@ -44,7 +45,7 @@ pub struct RedemptionInfo {
     low_watermark_in_bps_of_tvl: u16,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct BucketLimit {
     // The maximum capacity of the bucket, in consumable units (eg. tokens)
     capacity: u64,
@@ -187,6 +188,7 @@ impl RedemptionInfo {
     }
 }
 
+#[typetag::serde]
 impl ProtocolSim for EtherfiState {
     fn fee(&self) -> f64 {
         0 as f64
