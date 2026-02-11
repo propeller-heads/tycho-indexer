@@ -299,7 +299,7 @@ impl BlockChanges {
     /// - Non-partial block: Either block is not marked as partial
     /// - Extractor mismatch: Blocks from different extractors
     /// - Chain mismatch: Blocks from different chains
-    /// - Block mismatch: Different block numbers or hashes
+    /// - Block mismatch: Different block numbers (hash may differ for temp vs final partial)
     /// - Revert mismatch: Different revert status
     pub fn merge_partial(self, other: Self) -> Result<Self, MergeError> {
         // Validate both blocks are partial
@@ -328,7 +328,9 @@ impl BlockChanges {
             ));
         }
 
-        if self.block != other.block {
+        // Same logical block: require block number (and chain, already checked). Do not require
+        // hash/parent_hash to match, since partials may use a temp hash until the final block.
+        if self.block.number != other.block.number {
             return Err(MergeError::BlockMismatch(
                 "partial blocks".to_string(),
                 self.block.hash.clone(),

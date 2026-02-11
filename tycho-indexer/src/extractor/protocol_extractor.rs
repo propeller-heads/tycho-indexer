@@ -835,7 +835,7 @@ where
                 account_update = changes.account_deltas.len(),
                 state_update = changes.state_deltas.len(),
                 tvl_changes = changes.component_tvl.len(),
-                "ProcessedMessage"
+                "ProcessedFullMessage"
             );
         }
         Ok(Some(Arc::new(changes)))
