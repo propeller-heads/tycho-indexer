@@ -268,12 +268,12 @@ impl ExtractorRunner {
                                     }
 
                                     let duration = start_time.elapsed();
-                                    let block_index = data.partial_index.unwrap_or(0);
+                                    let partial_block_index = data.partial_index.unwrap_or(0);
                                     gauge!(
                                         "block_processing_time_ms",
                                         "chain" => id.chain.to_string(),
                                         "extractor" => id.name.to_string(),
-                                        "block_index" => block_index.to_string()
+                                        "partial_block_index" => partial_block_index.to_string()
                                     ).set(duration.as_millis() as f64);
                                 }
                                 Some(Ok(BlockResponse::Undo(undo_signal))) => {
