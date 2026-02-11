@@ -334,9 +334,12 @@ impl ExtractorRunner {
     async fn process_block_data(
         extractor: &dyn Extractor,
         data: &BlockScopedData,
-        partial_blocks: bool,
+        partial_blocks_enabled: bool,
     ) -> Result<Vec<ExtractorMsg>, ExtractionError> {
-        let to_send = if partial_blocks && !data.is_partial {
+        let is_full_block = !data.is_partial;
+        let is_end_of_block = data.is_last_partial == Some(true) || is_full_block;
+
+        let to_send = if partial_blocks_enabled && is_full_block {
             // Partial blocks enabled and message is a full block: send as final partial
             Self::as_final_partial_block_scoped_data(data)
         } else {
@@ -356,10 +359,11 @@ impl ExtractorRunner {
             Err(e) => return Err(e),
         }
 
-        if partial_blocks && (data.is_last_partial == Some(true) || !data.is_partial) {
+        if partial_blocks_enabled && is_end_of_block {
             // Is last partial or full block on a partial enabled extractor: collect the full block
+            // from cached partials and process it
             match extractor
-                .collect_full_block(
+                .collect_and_process_full_block(
                     data.cursor.clone(),
                     data.final_block_height,
                     data.clock.clone(),
@@ -1027,7 +1031,7 @@ dci_plugin:
     #[tokio::test]
     async fn test_process_block_data_partial_blocks_disabled() {
         // When partial_blocks is false: handle_tick_scoped_data is called with data as-is;
-        // collect_full_block is not called. One message from handle_tick_scoped_data.
+        // collect_and_process_full_block is not called. One message from handle_tick_scoped_data.
         let data = make_block_scoped_data(false, None, None);
         let mut mock = MockExtractor::new();
         mock.expect_handle_tick_scoped_data()
@@ -1047,7 +1051,7 @@ dci_plugin:
     #[tokio::test]
     async fn test_process_block_data_final_partial() {
         // When partial_blocks is true and is_last_partial == true: handle_tick_scoped_data with
-        // data, then collect_full_block. Two messages (one from each).
+        // data, then collect_and_process_full_block. Two messages (one from each).
         let data = make_block_scoped_data(true, Some(2), Some(true));
         let mut mock = MockExtractor::new();
         mock.expect_handle_tick_scoped_data()
@@ -1057,7 +1061,7 @@ dci_plugin:
                 assert_eq!(inp.is_last_partial, Some(true));
                 Ok(Some(one_msg()))
             });
-        mock.expect_collect_full_block()
+        mock.expect_collect_and_process_full_block()
             .once()
             .returning(|_cursor: String, _final_block_height: u64, _clock: Option<Clock>| {
                 Ok(Some(one_msg()))
@@ -1073,7 +1077,7 @@ dci_plugin:
     #[tokio::test]
     async fn test_process_block_data_full_block() {
         // When partial_blocks is true and message is full block: handle_tick_scoped_data with
-        // as_final_partial(data), then collect_full_block. Two messages.
+        // as_final_partial(data), then collect_and_process_full_block. Two messages.
         let data = make_block_scoped_data(false, None, None);
         let mut mock = MockExtractor::new();
         mock.expect_handle_tick_scoped_data()
@@ -1084,7 +1088,7 @@ dci_plugin:
                 assert_eq!(inp.is_last_partial, Some(true));
                 Ok(Some(one_msg()))
             });
-        mock.expect_collect_full_block()
+        mock.expect_collect_and_process_full_block()
             .once()
             .returning(|_cursor: String, _final_block_height: u64, _clock: Option<Clock>| {
                 Ok(Some(one_msg()))
@@ -1100,7 +1104,7 @@ dci_plugin:
     #[tokio::test]
     async fn test_process_block_data_middle_partial() {
         // When partial_blocks is true and message is a non-final partial: only
-        // handle_tick_scoped_data; collect_full_block is not called. One message.
+        // handle_tick_scoped_data; collect_and_process_full_block is not called. One message.
         let data = make_block_scoped_data(true, Some(1), Some(false));
         let mut mock = MockExtractor::new();
         mock.expect_handle_tick_scoped_data()

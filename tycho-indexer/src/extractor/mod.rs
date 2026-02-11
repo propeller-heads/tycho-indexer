@@ -103,7 +103,7 @@ pub trait Extractor: Send + Sync {
 
     /// Drains the partial block buffer and processes the accumulated block as a full block.
     /// The runner calls this when it has sent the last partial for a block.
-    async fn collect_full_block(
+    async fn collect_and_process_full_block(
         &self,
         cursor: String,
         final_block_height: u64,

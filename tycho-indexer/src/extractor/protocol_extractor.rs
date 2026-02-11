@@ -700,8 +700,10 @@ where
         Ok(new_tokens)
     }
 
-    /// Process a full block (reorg buffer, commit, aggregated changes). Used by
-    /// `handle_tick_scoped_data` for non-partial messages and by `collect_full_block` after drain.
+    /// Process a full block
+    ///
+    /// This includes updating the reorg buffer, committing to the database, emitting sync updates
+    /// and metrics and aggregating the changes).
     async fn process_full_block_message(
         &self,
         msg: BlockChanges,
@@ -885,11 +887,15 @@ where
         let data = inp
             .output
             .as_ref()
-            .unwrap()
+            .ok_or_else(|| {
+                ExtractionError::DecodeError("Missing output in block scoped data".into())
+            })?
             .map_output
             .as_ref()
             .ok_or_else(|| {
-                ExtractionError::DecodeError("Missing output in block scoped data".into())
+                ExtractionError::DecodeError(
+                    "Missing map_output in block scoped data's output".into(),
+                )
             })?;
         let msg = {
             // Backwards Compatibility:
@@ -1039,7 +1045,7 @@ where
             .await;
     }
 
-    async fn collect_full_block(
+    async fn collect_and_process_full_block(
         &self,
         cursor: String,
         final_block_height: u64,
@@ -2869,9 +2875,9 @@ mod test {
             0
         );
 
-        // ── Drain: runner calls collect_full_block after last partial ──
+        // ── Drain: runner calls collect_and_process_full_block after last partial ──
         let full_result = extractor
-            .collect_full_block("cursor@1".to_string(), 1, None)
+            .collect_and_process_full_block("cursor@1".to_string(), 1, None)
             .await
             .unwrap()
             .unwrap();
@@ -2920,9 +2926,9 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_collect_full_block_with_empty_buffer_errors() {
-        // collect_full_block with no buffered partials (runner called it without sending partials
-        // first) is an error.
+    async fn test_collect_and_process_full_block_with_empty_buffer_errors() {
+        // collect_and_process_full_block with no buffered partials (runner called it without
+        // sending partials first) is an error.
         let mut gw = MockExtractorGateway::new();
         gw.expect_ensure_protocol_types()
             .times(1)
@@ -2940,7 +2946,7 @@ mod test {
         let extractor = create_extractor(gw).await;
 
         let result = extractor
-            .collect_full_block("cursor@1".to_string(), 1, None)
+            .collect_and_process_full_block("cursor@1".to_string(), 1, None)
             .await;
 
         assert!(matches!(result, Err(ExtractionError::PartialBlockBufferError(_))));
