@@ -3,7 +3,7 @@ use opentelemetry::global;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{propagation::TraceContextPropagator, runtime, trace, Resource};
 use serde::Deserialize;
-use tracing::{error, Subscriber};
+use tracing::{debug, error, Subscriber};
 use tracing_subscriber::{
     layer::SubscriberExt, registry::LookupSpan, util::SubscriberInitExt, EnvFilter, Layer,
 };
@@ -19,8 +19,16 @@ pub struct TracingConfig {
 pub fn init_tracing(config: TracingConfig) -> Result<()> {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
-    global::set_error_handler(|error| error!(error = format!("{error:#}"), "otel error"))
-        .context("set error handler")?;
+    global::set_error_handler(|err| {
+        let msg = format!("{err:#}");
+        // Downgrade noisy shutdown/transport errors so they don't flood ERROR logs
+        if msg.contains("channel is closed") || msg.contains("batch processor") {
+            debug!(error = %msg, "otel error");
+        } else {
+            error!(error = %msg, "otel error");
+        }
+    })
+    .context("set error handler")?;
 
     let format = tracing_subscriber::fmt::format()
         .with_level(true)
