@@ -1,3 +1,12 @@
+## [0.241.0](https://github.com/propeller-heads/tycho-simulation/compare/0.240.1...0.241.0) (2026-02-11)
+
+
+### Features
+
+* Add EtherFi protocol simulation ([5943d86](https://github.com/propeller-heads/tycho-simulation/commit/5943d8616e0566cb66d721cbb79da8e33a94cabf))
+* add serde support for etherfi ([0aa13be](https://github.com/propeller-heads/tycho-simulation/commit/0aa13be31510cd54f82804db379bc401930b1a8b))
+* Implement Etherfi state decoder and protocol simulation ([14bf0f9](https://github.com/propeller-heads/tycho-simulation/commit/14bf0f9d5dd0c32fd8ffa31c64922eac171c06b1))
+
 ## [0.240.1](https://github.com/propeller-heads/tycho-simulation/compare/0.240.0...0.240.1) (2026-02-10)
 
 
