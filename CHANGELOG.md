@@ -1,3 +1,12 @@
+## [0.140.0](https://github.com/propeller-heads/tycho-indexer/compare/0.139.0...0.140.0) (2026-02-11)
+
+
+### Features
+
+* handle partial block messages in ExtractorRunner ([a63151c](https://github.com/propeller-heads/tycho-indexer/commit/a63151c1178fddb7079942df047175718efeced7))
+* handle partial block messages in ExtractorRunner ([#844](https://github.com/propeller-heads/tycho-indexer/issues/844)) ([77e7a23](https://github.com/propeller-heads/tycho-indexer/commit/77e7a23d7e09247f1277bb2c4072c6175394647e))
+* implement collect_full_block to drain partial buffer ([e9982aa](https://github.com/propeller-heads/tycho-indexer/commit/e9982aa8eadafa023c27d124162c642b681ae5e3))
+
 ## [0.139.0](https://github.com/propeller-heads/tycho-indexer/compare/0.138.0...0.139.0) (2026-02-09)
 
 
