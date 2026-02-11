@@ -278,7 +278,10 @@ impl PendingDeltas {
         // Ideally the Runner should never restart.
         all_messages
             .for_each(|message| async {
-                self.insert(message).unwrap();
+                // Skip partial messages - only full-block updates go to the reorg buffer.
+                if message.partial_block_index.is_none() {
+                    self.insert(message).unwrap();
+                }
             })
             .await;
 
