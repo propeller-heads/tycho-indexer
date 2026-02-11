@@ -18,7 +18,10 @@ use tokio::{
 use tokio_stream::StreamExt;
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 use tycho_common::{
-    models::{Address, Chain, ExtractorIdentity, FinancialType, ImplementationType, ProtocolType},
+    models::{
+        blockchain::BlockAggregatedChanges, Address, Chain, ExtractorIdentity, FinancialType,
+        ImplementationType, ProtocolType,
+    },
     traits::AccountExtractor,
     Bytes,
 };
@@ -328,40 +331,36 @@ impl ExtractorRunner {
             .insert(subscriber_id, sender);
     }
 
-    /// Processes block-scoped data from the stream: sends the appropriate input to the
-    /// extractor (and optionally collects the full block when using partials), then returns
-    /// all messages to propagate to subscribers.
+    /// Processes block-scoped data from the stream: always sends the input to the extractor,
+    /// then optionally adds a partial copy of the message (for full blocks with partials enabled)
+    /// and/or the result of collect_and_process_full_block (for final partials).
     async fn process_block_data(
         extractor: &dyn Extractor,
         data: &BlockScopedData,
         partial_blocks_enabled: bool,
     ) -> Result<Vec<ExtractorMsg>, ExtractionError> {
-        let is_full_block = !data.is_partial;
-        let is_end_of_block = data.is_last_partial == Some(true) || is_full_block;
-
-        let to_send = if partial_blocks_enabled && is_full_block {
-            // Partial blocks enabled and message is a full block: send as final partial
-            Self::as_final_partial_block_scoped_data(data)
-        } else {
-            // Else send the message as is
-            data.clone()
-        };
-
         let mut msgs = Vec::new();
+
         match extractor
-            .handle_tick_scoped_data(to_send)
+            .handle_tick_scoped_data(data.clone())
             .await
         {
-            Ok(Some(msg)) => msgs.push(msg),
+            Ok(Some(msg)) => {
+                if partial_blocks_enabled && !data.is_partial {
+                    // Full block and partial blocks enabled: add a partial copy of the message
+                    msgs.push(Self::as_partial_message(&msg));
+                }
+                msgs.push(msg);
+            }
             Ok(None) => {
                 trace!("No message to propagate.");
             }
             Err(e) => return Err(e),
         }
 
-        if partial_blocks_enabled && is_end_of_block {
-            // Is last partial or full block on a partial enabled extractor: collect the full block
-            // from cached partials and process it
+        let is_final_partial = data.is_partial && data.is_last_partial == Some(true);
+        if partial_blocks_enabled && is_final_partial {
+            // Final partial: Create full block message from cached partials
             match extractor
                 .collect_and_process_full_block(
                     data.cursor.clone(),
@@ -381,21 +380,11 @@ impl ExtractorRunner {
         Ok(msgs)
     }
 
-    /// Builds a BlockScopedData that looks like the final partial (partial_index=0,
-    /// is_last_partial=true) so the extractor can emit a partial message; used when the
-    /// incoming message is a full block (e.g. after reorg).
-    fn as_final_partial_block_scoped_data(data: &BlockScopedData) -> BlockScopedData {
-        BlockScopedData {
-            output: data.output.clone(),
-            clock: data.clock.clone(),
-            cursor: data.cursor.clone(),
-            final_block_height: data.final_block_height,
-            attestation: data.attestation.clone(),
-            is_partial: true,
-            partial_index: Some(0),
-            is_last_partial: Some(true),
-            ..Default::default()
-        }
+    /// Returns a copy of the message with partial_block_index set to Some(0).
+    fn as_partial_message(msg: &ExtractorMsg) -> ExtractorMsg {
+        let mut copy: BlockAggregatedChanges = (**msg).clone();
+        copy.partial_block_index = Some(0);
+        Arc::new(copy)
     }
 
     // TODO: add message tracing_id to the log
@@ -1076,21 +1065,14 @@ dci_plugin:
 
     #[tokio::test]
     async fn test_process_block_data_full_block() {
-        // When partial_blocks is true and message is full block: handle_tick_scoped_data with
-        // as_final_partial(data), then collect_and_process_full_block. Two messages.
+        // When partial_blocks is true and message is full block: handle_tick_scoped_data
+        // receives data as-is; runner adds a partial copy of the returned message.
         let data = make_block_scoped_data(false, None, None);
         let mut mock = MockExtractor::new();
         mock.expect_handle_tick_scoped_data()
             .once()
             .returning(|inp: BlockScopedData| {
-                assert!(inp.is_partial, "runner sends as final partial");
-                assert_eq!(inp.partial_index, Some(0));
-                assert_eq!(inp.is_last_partial, Some(true));
-                Ok(Some(one_msg()))
-            });
-        mock.expect_collect_and_process_full_block()
-            .once()
-            .returning(|_cursor: String, _final_block_height: u64, _clock: Option<Clock>| {
+                assert!(!inp.is_partial, "data is sent as full block");
                 Ok(Some(one_msg()))
             });
         let extractor: Arc<dyn Extractor> = Arc::new(mock);
@@ -1099,6 +1081,8 @@ dci_plugin:
             .await
             .unwrap();
         assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0].partial_block_index, Some(0));
+        assert!(msgs[1].partial_block_index.is_none());
     }
 
     #[tokio::test]
