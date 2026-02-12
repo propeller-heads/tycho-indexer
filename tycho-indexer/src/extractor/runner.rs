@@ -289,13 +289,12 @@ impl ExtractorRunner {
                                     }
 
                                     let duration_ms = start_time.elapsed().as_millis() as f64;
-                                    let block_type = if !data.is_partial {
-                                        "full"
-                                    } else if data.is_last_partial == Some(true) {
-                                        "final_partial"
-                                    } else {
-                                        "partial"
+                                    let block_type = match (data.is_partial, data.is_last_partial) {
+                                        (false, _) => "full",
+                                        (true, Some(true)) => "final_partial",
+                                        (true, _) => "partial",
                                     };
+
                                     gauge!(
                                         "block_processing_time_ms",
                                         "chain" => id.chain.to_string(),
@@ -337,8 +336,8 @@ impl ExtractorRunner {
                     tracing::Span::current().record("otel.status_code", "ok");
                     Ok(true) // Continue the loop
                 }
-                .instrument(loop_span)
-                .await?;
+                    .instrument(loop_span)
+                    .await?;
 
                 if !should_continue {
                     break Ok(());
