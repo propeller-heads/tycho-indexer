@@ -12,6 +12,7 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Vault} from "./Vault.sol";
 
 error RestrictTransferFrom__AddressZero();
+error RestrictTransferFrom__NotAContract(address addr);
 error RestrictTransferFrom__ExceededTransferFromAllowance(
     uint256 allowedAmount, uint256 amountAttempted
 );
@@ -46,8 +47,8 @@ contract RestrictTransferFrom is Vault {
         0x6249046ac25ba4612871a1715b1abd1de7cf9c973c5045a9b08ce3f441ce6e3a;
 
     constructor(address _permit2) {
-        if (_permit2 == address(0)) {
-            revert RestrictTransferFrom__AddressZero();
+        if (_permit2.code.length == 0) {
+            revert RestrictTransferFrom__NotAContract(_permit2);
         }
         permit2 = IAllowanceTransfer(_permit2);
     }

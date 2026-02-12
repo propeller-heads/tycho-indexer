@@ -65,6 +65,7 @@ import {FeeRecipient} from "../lib/FeeStructs.sol";
 //           ✷✷✷✷✷✷               ✷✷✷✷✷              ✷✷✷✷✷✷✷✷        ✷✷✷✷✷✷      ✷✷✷✷✷✷         ✷✷✷✷✷✷✷✷
 
 error TychoRouter__AddressZero();
+error TychoRouter__NotAContract(address addr);
 error TychoRouter__EmptySwaps();
 error TychoRouter__MsgValueDoesNotMatchAmountIn(
     uint256 msgValue, uint256 amountIn
@@ -111,13 +112,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         address feeCalculator,
         uint256 _blocksToDelayExecutorActivation
     ) Dispatcher(_permit2, _blocksToDelayExecutorActivation) {
-        if (_permit2 == address(0)) {
-            revert TychoRouter__AddressZero();
+        if (feeCalculator.code.length == 0) {
+            revert TychoRouter__NotAContract(feeCalculator);
         }
-        if (feeCalculator == address(0)) {
-            revert TychoRouter__AddressZero();
-        }
-        permit2 = IAllowanceTransfer(_permit2);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _feeCalculator = feeCalculator;
     }
@@ -1076,8 +1073,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
         external
         onlyRole(ROUTER_FEE_SETTER_ROLE)
     {
-        if (feeCalculator == address(0)) {
-            revert TychoRouter__AddressZero();
+        if (feeCalculator.code.length == 0) {
+            revert TychoRouter__NotAContract(feeCalculator);
         }
         address oldCalculator = _feeCalculator;
         _feeCalculator = feeCalculator;
