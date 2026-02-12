@@ -4,7 +4,7 @@ use anyhow::{format_err, Context, Result};
 use async_trait::async_trait;
 use aws_config::meta::region::RegionProviderChain;
 use aws_sdk_s3::Client;
-use metrics::{counter, gauge};
+use metrics::gauge;
 use prost::Message;
 use serde::Deserialize;
 use tokio::{
@@ -288,12 +288,12 @@ impl ExtractorRunner {
                                         Self::propagate_msg(&self.subscriptions, msg).await
                                     }
 
-                                    let duration = start_time.elapsed();
+                                    let duration_ms = start_time.elapsed().as_millis() as f64;
                                     gauge!(
                                         "block_processing_time_ms",
                                         "chain" => id.chain.to_string(),
                                         "extractor" => id.name.to_string(),
-                                    ).set(duration.as_millis() as f64);
+                                    ).set(duration_ms);
                                 }
                                 Some(Ok(BlockResponse::Undo(undo_signal))) => {
                                     partials_in_block = 0;
