@@ -1,3 +1,11 @@
+## [0.140.1](https://github.com/propeller-heads/tycho-indexer/compare/0.140.0...0.140.1) (2026-02-12)
+
+
+### Bug Fixes
+
+* stop requesting all snapshots everytime there is an update ([9409de5](https://github.com/propeller-heads/tycho-indexer/commit/9409de5938838ebbb41696d9c1f1aa9869bcdee9))
+* stop requesting all snapshots everytime there is an update ([#848](https://github.com/propeller-heads/tycho-indexer/issues/848)) ([10cd5f4](https://github.com/propeller-heads/tycho-indexer/commit/10cd5f418f4bdcbab4fecca3deb094b9a9b9d546))
+
 ## [0.140.0](https://github.com/propeller-heads/tycho-indexer/compare/0.139.0...0.140.0) (2026-02-11)
 
 
