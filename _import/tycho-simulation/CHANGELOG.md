@@ -1,3 +1,10 @@
+## [0.241.1](https://github.com/propeller-heads/tycho-simulation/compare/0.241.0...0.241.1) (2026-02-12)
+
+
+### Bug Fixes
+
+* update tycho client version ([1a16b77](https://github.com/propeller-heads/tycho-simulation/commit/1a16b77aa825c5aa1c03adce710911a55d7cbb49))
+
 ## [0.241.0](https://github.com/propeller-heads/tycho-simulation/compare/0.240.1...0.241.0) (2026-02-11)
 
 
