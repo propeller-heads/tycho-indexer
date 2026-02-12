@@ -375,6 +375,19 @@ impl BlockChanges {
             .block_contract_changes
             .extend(previous.block_contract_changes);
 
+        // Normalize block identity so all txs refer to the merged block. Use the later partial's
+        // block hash (current); partials may have had different temp/final hashes.
+        let merged_block_hash = current.block.hash.clone();
+        for tx_with_changes in current.txs_with_update.iter_mut() {
+            tx_with_changes.tx.block_hash = merged_block_hash.clone();
+        }
+        for tx_with_contract in current
+            .block_contract_changes
+            .iter_mut()
+        {
+            tx_with_contract.tx.block_hash = merged_block_hash.clone();
+        }
+
         // Extend trace_results
         current
             .trace_results
