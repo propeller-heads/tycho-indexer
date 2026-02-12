@@ -319,10 +319,19 @@ where
             .into_iter()
             .collect();
 
+        // Filter components to only include the requested ones
+        let filtered_components: HashMap<_, _> = self
+            .component_tracker
+            .components
+            .iter()
+            .filter(|(id, _)| component_ids.contains(id))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+
         let request = SnapshotParameters::new(
             self.extractor_id.chain,
             &self.extractor_id.name,
-            &self.component_tracker.components,
+            &filtered_components,
             &contract_ids,
             header.number,
         )
@@ -1291,6 +1300,103 @@ mod test {
             .expect("Retrieving snapshot failed");
 
         assert_eq!(snap, exp);
+    }
+
+    /// Test that get_snapshots only fetches snapshots for requested components,
+    /// not all tracked components. This prevents returning full snapshots repeatedly
+    /// when only a subset of components need updates.
+    #[test_log::test(tokio::test)]
+    async fn test_get_snapshots_filters_to_requested_components_only() {
+        let header = BlockHeader::default();
+        let mut rpc = make_mock_client();
+
+        // Create three components
+        let component1 = ProtocolComponent { id: "Component1".to_string(), ..Default::default() };
+        let component2 = ProtocolComponent { id: "Component2".to_string(), ..Default::default() };
+        let component3 = ProtocolComponent { id: "Component3".to_string(), ..Default::default() };
+
+        let component2_clone = component2.clone();
+
+        // Mock the RPC call and verify it only receives Component2
+        rpc.expect_get_snapshots()
+            .withf(
+                |request: &SnapshotParameters,
+                 _chunk_size: &Option<usize>,
+                 _concurrency: &usize| {
+                    // Verify that the request contains ONLY Component2, not all tracked components
+                    request.components.len() == 1 &&
+                        request
+                            .components
+                            .contains_key("Component2")
+                },
+            )
+            .times(1)
+            .returning(move |_request, _chunk_size, _concurrency| {
+                Ok(Snapshot {
+                    states: [(
+                        "Component2".to_string(),
+                        ComponentWithState {
+                            state: ResponseProtocolState {
+                                component_id: "Component2".to_string(),
+                                ..Default::default()
+                            },
+                            component: component2_clone.clone(),
+                            entrypoints: vec![],
+                            component_tvl: None,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    vm_storage: HashMap::new(),
+                })
+            });
+
+        rpc.expect_get_traced_entry_points()
+            .returning(|_| {
+                Ok(TracedEntryPointRequestResponse {
+                    traced_entry_points: HashMap::new(),
+                    pagination: PaginationResponse::new(0, 20, 0),
+                })
+            });
+
+        let mut state_sync = with_mocked_clients(true, false, Some(rpc), None);
+
+        // Track all three components
+        state_sync
+            .component_tracker
+            .components
+            .insert("Component1".to_string(), component1.clone());
+        state_sync
+            .component_tracker
+            .components
+            .insert("Component2".to_string(), component2.clone());
+        state_sync
+            .component_tracker
+            .components
+            .insert("Component3".to_string(), component3.clone());
+
+        // Request snapshot for ONLY Component2
+        let components_arg = ["Component2".to_string()];
+
+        let snap = state_sync
+            .get_snapshots(header.clone(), Some(&components_arg))
+            .await
+            .expect("Retrieving snapshot failed");
+
+        // Verify we only got Component2 back
+        assert_eq!(snap.snapshots.states.len(), 1);
+        assert!(snap
+            .snapshots
+            .states
+            .contains_key("Component2"));
+        assert!(!snap
+            .snapshots
+            .states
+            .contains_key("Component1"));
+        assert!(!snap
+            .snapshots
+            .states
+            .contains_key("Component3"));
     }
 
     fn mock_clients_for_state_sync() -> (MockRPCClient, MockDeltasClient, Sender<BlockChanges>) {
