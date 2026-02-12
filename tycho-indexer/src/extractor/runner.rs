@@ -289,10 +289,18 @@ impl ExtractorRunner {
                                     }
 
                                     let duration_ms = start_time.elapsed().as_millis() as f64;
+                                    let block_type = if !data.is_partial {
+                                        "full"
+                                    } else if data.is_last_partial == Some(true) {
+                                        "final_partial"
+                                    } else {
+                                        "partial"
+                                    };
                                     gauge!(
                                         "block_processing_time_ms",
                                         "chain" => id.chain.to_string(),
                                         "extractor" => id.name.to_string(),
+                                        "block_type" => block_type
                                     ).set(duration_ms);
                                 }
                                 Some(Ok(BlockResponse::Undo(undo_signal))) => {
