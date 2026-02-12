@@ -1066,7 +1066,7 @@ where
             .await
     }
 
-    #[instrument(skip_all, fields(target_hash, target_number))]
+    #[instrument(skip_all, fields(current_block, target_hash, target_number))]
     #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
     async fn handle_revert(
         &self,
@@ -1083,21 +1083,23 @@ where
             ))
         })?;
 
-        tracing::Span::current().record("target_hash", format!("{block_hash:x}"));
-        tracing::Span::current().record("target_number", block_ref.number);
-
         let last_processed_block_number = self
             .get_last_processed_block()
             .await
-            .map_or(String::new(), |block| block.number.to_string());
+            .map_or("None".to_string(), |b| b.number.to_string());
 
-        counter!(
-            "extractor_revert",
-            "extractor" => self.name.clone(),
-            "current_block" => last_processed_block_number,
-            "target_block" => block_ref.number.to_string()
-        )
-        .increment(1);
+        tracing::Span::current().record("current_block", &last_processed_block_number);
+        tracing::Span::current().record("target_hash", format!("{block_hash:x}"));
+        tracing::Span::current().record("target_number", block_ref.number);
+
+        debug!(
+            extractor = self.name,
+            chain = %self.chain,
+            current_block = %last_processed_block_number,
+            target_block = block_ref.number,
+            target_hash = %format!("{block_hash:x}"),
+            "ChainReorg"
+        );
 
         // It can happen that the first received message is an undo signal. In that case we expect
         // to not have the target block in our buffer, therefore we early return and ignore this
