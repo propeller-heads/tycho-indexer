@@ -1064,6 +1064,14 @@ where
             })?;
         self.process_full_block_message(msg, cursor, final_block_height)
             .await
+            .map(|opt| {
+                // Set partial_block_index to None to indicate that the block is a full block
+                opt.map(|arc_msg| {
+                    let mut inner = (*arc_msg).clone();
+                    inner.partial_block_index = None;
+                    Arc::new(inner)
+                })
+            })
     }
 
     #[instrument(skip_all, fields(target_hash, target_number))]
