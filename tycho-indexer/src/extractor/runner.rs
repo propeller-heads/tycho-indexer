@@ -208,6 +208,7 @@ impl ExtractorRunner {
 
         runtime.spawn(async move {
             let id = self.extractor.get_id();
+            // Track the number of partials received for the current block != partial_index.
             let mut partials_in_block: u32 = 0;
             loop {
                 // this is the main info span of an extractor
