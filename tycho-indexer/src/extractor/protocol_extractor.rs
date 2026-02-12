@@ -8,7 +8,7 @@ use std::{
 use async_trait::async_trait;
 use chrono::{Duration, NaiveDateTime};
 use deepsize::DeepSizeOf;
-use metrics::{counter, gauge, histogram};
+use metrics::{gauge, histogram};
 use mockall::automock;
 use prost::Message;
 use tokio::{sync::Mutex, task::JoinHandle};
