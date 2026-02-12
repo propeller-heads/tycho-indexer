@@ -169,11 +169,15 @@ impl ProtocolSim for EkuboState {
 
 #[cfg(test)]
 mod tests {
+    use evm_ekubo_sdk::{
+        math::{tick::MIN_SQRT_RATIO, uint::U256},
+        quoting::types::{Config, NodeKey, Tick},
+    };
     use rstest::*;
     use rstest_reuse::apply;
 
     use super::*;
-    use crate::evm::protocol::ekubo::test_cases::*;
+    use crate::evm::protocol::ekubo::{pool::base::BasePool, test_cases::*};
 
     #[apply(all_cases)]
     fn test_delta_transition(case: TestCase) {
@@ -223,5 +227,48 @@ mod tests {
         state
             .get_amount_out(max_amount_in, &token0, &token1)
             .expect("quoting with limit");
+    }
+
+    #[test]
+    fn test_get_limits_negative_consumed_amount() {
+        // Reproduces an issue where get_limit was returning a negative value which then failed
+        // when converting to BigUint in get_limits. This happened for pools with depleted liquidity
+        // for the current price.
+        let eth_address = U256::zero();
+        let usdt_address_bytes =
+            hex::decode("dac17f958d2ee523a2206206994597c13d831ec7").expect("valid hex");
+        let usdt_address = U256::from_big_endian(&usdt_address_bytes);
+
+        let pool_key = NodeKey {
+            token0: eth_address,
+            token1: usdt_address,
+            config: Config { fee: 0, tick_spacing: 1000, extension: U256::zero() },
+        };
+
+        // Create a pool with single tick of minimal liquidity
+        // positioned such that one direction has effectively no liquidity
+        let state = EkuboState::Base(
+            BasePool::new(
+                pool_key,
+                vec![
+                    Tick { index: 1000, liquidity_delta: 1 },
+                    Tick { index: 2000, liquidity_delta: -1 },
+                ],
+                MIN_SQRT_RATIO, // Minimum valid price (all liquidity is above current price)
+                0,              // No liquidity at current price.
+                -887272,        // MIN_TICK (corresponding to MIN_SQRT_RATIO)
+            )
+            .unwrap(),
+        );
+
+        let (limit, _) = state
+            .get_limits(
+                pool_key.token0.to_big_endian().into(),
+                pool_key.token1.to_big_endian().into(),
+            )
+            .unwrap();
+
+        // Limit should be 0 for pool with no liquidity at current price
+        assert_eq!(limit, BigUint::ZERO);
     }
 }
