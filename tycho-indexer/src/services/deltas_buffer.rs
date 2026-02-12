@@ -114,12 +114,15 @@ impl PendingDeltas {
                     PendingDeltasError::LockError(message.extractor.to_string(), e.to_string())
                 })?;
                 if message.revert {
-                    trace!(
-                        block_number = message.block.number,
-                        extractor = message.extractor,
-                        "DeltaBufferPurge"
-                    );
-                    guard.purge(message.block.hash.clone())?;
+                    // Skip partial reverts: PendingDeltas only holds full-block messages
+                    if message.partial_block_index.is_none() {
+                        trace!(
+                            block_number = message.block.number,
+                            extractor = message.extractor,
+                            "DeltaBufferPurge"
+                        );
+                        guard.purge(message.block.hash.clone())?;
+                    }
                 } else {
                     trace!(
                         block_number = message.block.number,
