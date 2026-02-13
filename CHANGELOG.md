@@ -1,3 +1,15 @@
+## [0.141.1](https://github.com/propeller-heads/tycho-indexer/compare/0.141.0...0.141.1) (2026-02-13)
+
+
+### Bug Fixes
+
+* allow merging partials with blocks of different hashes ([8177364](https://github.com/propeller-heads/tycho-indexer/commit/8177364c57d9392d4eb4b66454e883f83e5de54f))
+* normalise block hash during partial merge ([25861aa](https://github.com/propeller-heads/tycho-indexer/commit/25861aab5ea57b2035c40b448ca6f2b3e5b0e977))
+* Partial blocks support ([#847](https://github.com/propeller-heads/tycho-indexer/issues/847)) ([66c2e41](https://github.com/propeller-heads/tycho-indexer/commit/66c2e41eff3cf6c601b8f50236a258a9c4228f66))
+* remove partial value from collect_and_process_full_block response ([1cb4c92](https://github.com/propeller-heads/tycho-indexer/commit/1cb4c9296eca987cf7fed7c97e5c026c3b0cb164))
+* skip applying partial reverts to pending deltas buffer ([0130219](https://github.com/propeller-heads/tycho-indexer/commit/013021981deadc9a2b9234b3e9d46a8cc29a2993))
+* skip inserting partial blocks on pending deltas buffer ([cc873f7](https://github.com/propeller-heads/tycho-indexer/commit/cc873f716fc244a157d66dd462fccaf6de59e234))
+
 ## [0.141.0](https://github.com/propeller-heads/tycho-indexer/compare/0.140.1...0.141.0) (2026-02-13)
 
 
