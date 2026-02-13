@@ -49,10 +49,12 @@ jobs:
             Review this PR. Be concise and actionable.
 
             Rules:
-            - Only add inline comments when you have a concrete fix or real concern (bug, security, correctness, performance). Do not comment to praise or summarize; skip those.
-            - Before commenting, check existing PR/review comments (gh pr view, conversation). Do not repeat or rephrase feedback that humans have already left.
-            - Keep each comment short: state the issue and the suggested change. No long explanations unless necessary.
-            - Ignore style/nits unless they cause real bugs or maintainability problems.
+            - Do NOT post a PR-level summary comment or long-form feedback on the PR. The main comment should only briefly summarize the severity of the issues found.
+            - Only add inline comments on lines that need a concrete fix or real concern. No praise, no "strengths", no recap of what the PR does.
+            - Each inline comment: keep each comment short - state the issue and the suggested change. No long explanations unless necessary.
+            - Check existing PR comments (gh pr view) and do not repeat or rephrase existing feedback/comments. Add comments in response to replies to previous comments if more context is needed.
+            - If you find nothing substantive to fix, leave a very short comment noting that.
+            - Ignore style/nits unless they cause real bugs, maintainability problems or impact readability.
 
             Focus on:
             - Code quality and best practices
