@@ -59,6 +59,7 @@ contract Dispatcher is RestrictTransferFrom {
             revert Dispatcher__NonContractExecutor();
         }
 
+        // slither-disable-next-line timestamp
         if (executorsActivationTimestamp[target] != 0) {
             revert Dispatcher__ExecutorAlreadyExists(target);
         }
@@ -96,6 +97,7 @@ contract Dispatcher is RestrictTransferFrom {
         if (activationTimestamp == 0) {
             revert Dispatcher__UnapprovedExecutor(executor);
         }
+        // slither-disable-next-line timestamp
         if (block.timestamp < activationTimestamp) {
             revert Dispatcher__ExecutorIsTimelocked(executor);
         }
@@ -197,6 +199,7 @@ contract Dispatcher is RestrictTransferFrom {
         if (activationTimestamp == 0) {
             revert Dispatcher__UnapprovedExecutor(executor);
         }
+        // slither-disable-next-line timestamp
         if (block.timestamp < activationTimestamp) {
             revert Dispatcher__ExecutorIsTimelocked(executor);
         }
@@ -278,7 +281,8 @@ contract Dispatcher is RestrictTransferFrom {
         if (activationTimestamp == 0) {
             revert Dispatcher__UnapprovedExecutor(executor);
         }
-        if (block.number < activationTimestamp) {
+        // slither-disable-next-line timestamp
+        if (block.timestamp < activationTimestamp) {
             revert Dispatcher__ExecutorIsTimelocked(executor);
         }
 
