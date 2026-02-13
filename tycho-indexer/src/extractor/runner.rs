@@ -250,14 +250,8 @@ impl ExtractorRunner {
                                         "extractor" => id.name.to_string()
                                     ).set(block_number as f64);
 
-                                    if let Some(idx) = data.partial_index {
+                                    if data.is_partial {
                                         partials_in_block += 1;
-                                        gauge!(
-                                            "extractor_current_partial_index",
-                                            "chain" => id.chain.to_string(),
-                                            "extractor" => id.name.to_string()
-                                        )
-                                        .set(idx as f64);
                                     }
 
                                     if data.is_last_partial == Some(true) || data.partial_index.is_none() {
