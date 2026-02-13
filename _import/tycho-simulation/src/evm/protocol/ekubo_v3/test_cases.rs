@@ -15,9 +15,9 @@ use ekubo_sdk::{
     quoting::{
         pools::{
             base::TickSpacing, full_range::FullRangePoolTypeConfig,
-            stableswap::StableswapPoolTypeConfig, twamm::TwammSaleRateDelta,
+            stableswap::StableswapPoolTypeConfig,
         },
-        types::Tick,
+        types::{Tick, TimeRateDelta},
     },
     U256,
 };
@@ -278,7 +278,7 @@ pub fn stableswap() -> TestCase {
             fee: 0,
             pool_type_config: StableswapPoolTypeConfig {
                 amplification_factor: 5,
-                center_tick: -10,
+                center_tick: -16,
             },
             extension: Address::ZERO,
         },
@@ -346,7 +346,7 @@ pub fn stableswap() -> TestCase {
         ]
         .into(),
         swap_token0: (100_u8.into(), 99_u8.into()),
-        expected_limit_token0: 300001579_u128.into(),
+        expected_limit_token0: 300002779_u128.into(),
     }
 }
 
@@ -499,15 +499,15 @@ pub fn twamm() -> TestCase {
                     last_execution_time: 0,
                 },
                 vec![
-                    TwammSaleRateDelta {
+                    TimeRateDelta {
                         time: FIRST_ORDER_START_TIME,
-                        sale_rate_delta0: TOKEN0_SALE_RATE as i128,
-                        sale_rate_delta1: TOKEN1_SALE_RATE as i128,
+                        rate_delta0: TOKEN0_SALE_RATE as i128,
+                        rate_delta1: TOKEN1_SALE_RATE as i128,
                     },
-                    TwammSaleRateDelta {
+                    TimeRateDelta {
                         time: FIRST_ORDER_END_TIME,
-                        sale_rate_delta0: (TOKEN0_SALE_RATE as i128).neg(),
-                        sale_rate_delta1: (TOKEN1_SALE_RATE as i128).neg(),
+                        rate_delta0: (TOKEN0_SALE_RATE as i128).neg(),
+                        rate_delta1: (TOKEN1_SALE_RATE as i128).neg(),
                     },
                 ],
             )
@@ -526,20 +526,20 @@ pub fn twamm() -> TestCase {
                     last_execution_time: LAST_EXECUTION_TIME,
                 },
                 vec![
-                    TwammSaleRateDelta {
+                    TimeRateDelta {
                         time: FIRST_ORDER_END_TIME,
-                        sale_rate_delta0: (TOKEN0_SALE_RATE as i128).neg(),
-                        sale_rate_delta1: (TOKEN1_SALE_RATE as i128).neg(),
+                        rate_delta0: (TOKEN0_SALE_RATE as i128).neg(),
+                        rate_delta1: (TOKEN1_SALE_RATE as i128).neg(),
                     },
-                    TwammSaleRateDelta {
+                    TimeRateDelta {
                         time: SECOND_ORDER_START_TIME,
-                        sale_rate_delta0: TOKEN0_SALE_RATE as i128,
-                        sale_rate_delta1: TOKEN1_SALE_RATE as i128,
+                        rate_delta0: TOKEN0_SALE_RATE as i128,
+                        rate_delta1: TOKEN1_SALE_RATE as i128,
                     },
-                    TwammSaleRateDelta {
+                    TimeRateDelta {
                         time: SECOND_ORDER_END_TIME,
-                        sale_rate_delta0: (TOKEN0_SALE_RATE as i128).neg(),
-                        sale_rate_delta1: (TOKEN1_SALE_RATE as i128).neg(),
+                        rate_delta0: (TOKEN0_SALE_RATE as i128).neg(),
+                        rate_delta1: (TOKEN1_SALE_RATE as i128).neg(),
                     },
                 ],
             )

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use ekubo_sdk::quoting::{pools::twamm::TwammSaleRateDelta, types::Tick};
+use ekubo_sdk::quoting::types::{Tick, TimeRateDelta};
 use itertools::Itertools;
 use tycho_common::Bytes;
 
@@ -27,13 +27,12 @@ pub fn ticks_from_attributes<T: IntoIterator<Item = (String, Bytes)>>(
 pub fn sale_rate_deltas_from_attributes<T: IntoIterator<Item = (String, Bytes)>>(
     attributes: T,
     last_execution_time: u64,
-) -> Result<impl Iterator<Item = TwammSaleRateDelta>, String> {
+) -> Result<impl Iterator<Item = TimeRateDelta>, String> {
     let iter = attributes.into_iter();
     let size_hint = iter.size_hint().0;
 
-    let update_delta = |delta: &mut TwammSaleRateDelta, is_token1, value| {
-        *(if is_token1 { &mut delta.sale_rate_delta1 } else { &mut delta.sale_rate_delta0 }) =
-            value;
+    let update_delta = |delta: &mut TimeRateDelta, is_token1, value| {
+        *(if is_token1 { &mut delta.rate_delta1 } else { &mut delta.rate_delta0 }) = value;
     };
 
     Ok(iter
@@ -78,8 +77,7 @@ pub fn sale_rate_deltas_from_attributes<T: IntoIterator<Item = (String, Bytes)>>
             map.entry(time)
                 .and_modify(|delta| update_delta(delta, is_token1, value))
                 .or_insert_with(|| {
-                    let mut delta =
-                        TwammSaleRateDelta { time, sale_rate_delta0: 0, sale_rate_delta1: 0 };
+                    let mut delta = TimeRateDelta { time, rate_delta0: 0, rate_delta1: 0 };
 
                     update_delta(&mut delta, is_token1, value);
 

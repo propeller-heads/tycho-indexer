@@ -8,10 +8,7 @@ use ekubo_sdk::{
         EvmPoolKey, EvmTokenAmount, EvmTwammPool, EvmTwammPoolConstructionError, EvmTwammPoolKey,
         EvmTwammPoolState,
     },
-    quoting::{
-        pools::twamm::TwammSaleRateDelta,
-        types::{Pool, QuoteParams, TokenAmount},
-    },
+    quoting::types::{Pool, QuoteParams, TimeRateDelta, TokenAmount},
     U256,
 };
 use itertools::Itertools;
@@ -48,7 +45,7 @@ impl PartialEq for TwammPool {
 fn impl_from_state(
     key: EvmTwammPoolKey,
     state: EvmTwammPoolState,
-    virtual_order_deltas: Vec<TwammSaleRateDelta>,
+    virtual_order_deltas: Vec<TimeRateDelta>,
 ) -> Result<EvmTwammPool, EvmTwammPoolConstructionError> {
     EvmTwammPool::new(
         key.token0,
@@ -73,7 +70,7 @@ impl TwammPool {
     pub fn new(
         key: EvmTwammPoolKey,
         state: EvmTwammPoolState,
-        virtual_order_deltas: Vec<TwammSaleRateDelta>,
+        virtual_order_deltas: Vec<TimeRateDelta>,
     ) -> Result<Self, InvalidSnapshotError> {
         Ok(Self {
             imp: impl_from_state(key, state, virtual_order_deltas).map_err(|err| {
@@ -135,11 +132,13 @@ impl EkuboPool for TwammPool {
                 u64::from(
                     quote
                         .execution_resources
+                        .twamm
                         .virtual_orders_executed,
                 ) * Self::BASE_GAS_COST_OF_EXECUTING_VIRTUAL_ORDERS +
                 u64::from(
                     quote
                         .execution_resources
+                        .twamm
                         .virtual_order_delta_times_crossed,
                 ) * Self::GAS_COST_OF_ONE_VIRTUAL_ORDER_DELTA,
             new_state: Self {
@@ -254,10 +253,10 @@ impl EkuboPool for TwammPool {
                 match res {
                     Ok(idx) => {
                         if virtual_order_delta
-                            .sale_rate_delta0
+                            .rate_delta0
                             .is_zero() &&
                             virtual_order_delta
-                                .sale_rate_delta1
+                                .rate_delta1
                                 .is_zero()
                         {
                             virtual_order_deltas.remove(idx);
