@@ -13,7 +13,6 @@ import {
 import {
     ReentrancyGuard
 } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {
     IAllowanceTransfer
@@ -79,7 +78,7 @@ error TychoRouter__AmountOutNotFullyReceived(
 error TychoRouter__InvalidDataLength();
 error TychoRouter__UndefinedMinAmountOut();
 
-contract TychoRouter is AccessControl, Dispatcher, Pausable {
+contract TychoRouter is AccessControl, Dispatcher {
     address private _feeCalculator; // Fee calculator contract
 
     // Max amount of dust that can stay behind in the TychoRouter when swapping.
@@ -1011,7 +1010,11 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     /**
      * @dev We use the fallback function to allow flexibility on callback.
      */
-    fallback(bytes calldata data) external returns (bytes memory) {
+    fallback(bytes calldata data)
+        external
+        whenNotPaused
+        returns (bytes memory)
+    {
         return _callHandleCallbackOnExecutor(data);
     }
 
@@ -1048,6 +1051,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     function setExecutors(address[] memory targets)
         external
         onlyRole(EXECUTOR_SETTER_ROLE)
+        whenNotPaused
     {
         for (uint256 i = 0; i < targets.length; i++) {
             _setExecutor(targets[i]);
@@ -1072,6 +1076,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     function setFeeCalculator(address feeCalculator)
         external
         onlyRole(ROUTER_FEE_SETTER_ROLE)
+        whenNotPaused
     {
         if (feeCalculator.code.length == 0) {
             revert TychoRouter__NotAContract(feeCalculator);
@@ -1123,7 +1128,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable {
     /**
      * @dev Allows this contract to receive native token with empty msg.data from contracts
      */
-    receive() external payable {
+    receive() external payable whenNotPaused {
         require(msg.sender.code.length != 0);
     }
 

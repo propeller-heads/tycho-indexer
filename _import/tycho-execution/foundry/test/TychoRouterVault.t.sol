@@ -115,6 +115,21 @@ contract WrapUnwrapExecutor is IExecutor {
  * @notice Test cases for different swap scenarios relating to the Vault
  */
 contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
+    function testCannotDepositWhenPaused() public {
+        uint256 depositAmount = 1 ether;
+        deal(WETH_ADDR, ALICE, depositAmount * 2);
+        vm.prank(PAUSER);
+        tychoRouter.pause();
+
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, depositAmount);
+        vm.expectRevert();
+        tychoRouter.deposit(WETH_ADDR, depositAmount);
+        vm.stopPrank();
+
+        assertEq(tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR))), 0);
+    }
+
     // ==================== Transfer tests ====================
     function testSplitSwapUsesVaultBalance() public {
         // A correctly encoded split swap uses vault's funds
