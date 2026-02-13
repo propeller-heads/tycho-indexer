@@ -460,7 +460,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
     function setUp() public override {
         super.setUp();
         uint256 forkBlock = getForkBlock();
-        vm.roll(forkBlock - _SETUP_BLOCK_OFFSET_ETHEREUM);
+        vm.roll(forkBlock - _SETUP_TIME_OFFSET_ETHEREUM);
         wrapUnwrapExecutor = new WrapUnwrapExecutor(WETH_ADDR);
 
         // Add wrapUnwrapExecutor to allowed executors

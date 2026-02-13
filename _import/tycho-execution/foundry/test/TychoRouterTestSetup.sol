@@ -106,7 +106,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         string memory chain = getChain();
         uint256 forkBlock = getForkBlock();
         vm.createSelectFork(vm.rpcUrl(chain), forkBlock);
-        uint256 setupBlock = forkBlock - _SETUP_BLOCK_OFFSET_ETHEREUM;
+        uint256 setupBlock = forkBlock - _SETUP_TIME_OFFSET_ETHEREUM;
         vm.roll(setupBlock);
 
         vm.startPrank(ADMIN);

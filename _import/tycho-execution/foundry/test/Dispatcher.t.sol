@@ -49,7 +49,7 @@ contract DispatcherTest is Constants {
         emit ExecutorSet(DUMMY);
         dispatcherExposed.exposedSetExecutor(DUMMY);
 
-        assert(dispatcherExposed.executorsActivationBlock(DUMMY) > 0);
+        assert(dispatcherExposed.executorsActivationTimestamp(DUMMY) > 0);
     }
 
     function testRemoveExecutor() public {
@@ -58,12 +58,12 @@ contract DispatcherTest is Constants {
         // Define the event we expect to be emitted at the next step
         emit ExecutorRemoved(DUMMY);
         dispatcherExposed.exposedRemoveExecutor(DUMMY);
-        assert(dispatcherExposed.executorsActivationBlock(DUMMY) == 0);
+        assert(dispatcherExposed.executorsActivationTimestamp(DUMMY) == 0);
     }
 
     function testRemoveUnSetExecutor() public {
         dispatcherExposed.exposedRemoveExecutor(BOB);
-        assert(dispatcherExposed.executorsActivationBlock(BOB) == 0);
+        assert(dispatcherExposed.executorsActivationTimestamp(BOB) == 0);
     }
 
     function testCallTimelockedExecutor() public {
@@ -95,7 +95,7 @@ contract DispatcherTest is Constants {
         // Make sure the executor is not timelocked
         uint256 forkBlock = 20673900;
         address executor = 0xe592557AB9F4A75D992283fD6066312FF013ba3d;
-        vm.roll(forkBlock - _SETUP_BLOCK_OFFSET_ETHEREUM);
+        vm.roll(forkBlock - _SETUP_TIME_OFFSET_ETHEREUM);
         dispatcherExposed.exposedSetExecutor(executor);
         vm.roll(forkBlock);
         bytes memory data =
