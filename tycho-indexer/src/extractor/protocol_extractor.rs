@@ -835,7 +835,7 @@ where
                 account_update = changes.account_deltas.len(),
                 state_update = changes.state_deltas.len(),
                 tvl_changes = changes.component_tvl.len(),
-                "ProcessedMessage"
+                "ProcessedFullMessage"
             );
         }
         Ok(Some(Arc::new(changes)))
@@ -1064,6 +1064,13 @@ where
             })?;
         self.process_full_block_message(msg, cursor, final_block_height)
             .await
+            .map(|opt| {
+                // Set partial_block_index to None to indicate that the block is a full block
+                opt.map(|mut arc_msg| {
+                    Arc::make_mut(&mut arc_msg).partial_block_index = None;
+                    arc_msg
+                })
+            })
     }
 
     #[instrument(skip_all, fields(target_hash, target_number))]

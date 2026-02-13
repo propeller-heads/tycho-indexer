@@ -285,6 +285,19 @@ impl BlockChanges {
         self.partial_block_index = index;
     }
 
+    /// Sets every transaction's `block_hash` in `txs_with_update` and `block_contract_changes`
+    /// to this block's hash. Used after merging partials so all txs refer to the same block
+    /// (e.g. the final block hash).
+    pub fn normalize_block_hash(&mut self) {
+        let h = self.block.hash.clone();
+        for tx_with_changes in self.txs_with_update.iter_mut() {
+            tx_with_changes.tx.block_hash = h.clone();
+        }
+        for tx_with_contract in self.block_contract_changes.iter_mut() {
+            tx_with_contract.tx.block_hash = h.clone();
+        }
+    }
+
     /// Merges another partial block into this one, preserving later changes.
     ///
     /// The partial block with the higher index represents later changes and takes precedence.
@@ -299,7 +312,7 @@ impl BlockChanges {
     /// - Non-partial block: Either block is not marked as partial
     /// - Extractor mismatch: Blocks from different extractors
     /// - Chain mismatch: Blocks from different chains
-    /// - Block mismatch: Different block numbers or hashes
+    /// - Block mismatch: Different block numbers (hash may differ for temp vs final partial)
     /// - Revert mismatch: Different revert status
     pub fn merge_partial(self, other: Self) -> Result<Self, MergeError> {
         // Validate both blocks are partial
@@ -328,7 +341,9 @@ impl BlockChanges {
             ));
         }
 
-        if self.block != other.block {
+        // Same logical block: require block number (and chain, already checked). Do not require
+        // hash/parent_hash to match, since partials may use a temp hash until the final block.
+        if self.block.number != other.block.number {
             return Err(MergeError::BlockMismatch(
                 "partial blocks".to_string(),
                 self.block.hash.clone(),
@@ -372,6 +387,9 @@ impl BlockChanges {
         current
             .block_contract_changes
             .extend(previous.block_contract_changes);
+
+        // Normalize block identity so all txs refer to the merged block (latest partial's hash).
+        current.normalize_block_hash();
 
         // Extend trace_results
         current
@@ -1793,6 +1811,61 @@ mod test {
             .map(|tx| tx.tx.index)
             .collect();
         assert_eq!(indices, vec![1, 2, 5, 7]);
+    }
+
+    #[test]
+    fn test_normalize_block_hash_empty() {
+        let mut block_changes = create_partial_block(0);
+        block_changes.txs_with_update.clear();
+        block_changes
+            .block_contract_changes
+            .clear();
+        let expected_hash = block_changes.block.hash.clone();
+        block_changes.normalize_block_hash();
+        assert_eq!(block_changes.block.hash, expected_hash);
+    }
+
+    #[test]
+    fn test_normalize_block_hash() {
+        use tycho_common::models::blockchain::Block;
+
+        let block_hash =
+            Bytes::from_str("0xabababababababababababababababababababababababababababababababab")
+                .unwrap();
+        let wrong_hash = Bytes::zero(32);
+
+        let mut block_changes = BlockChanges {
+            block: Block::new(
+                42,
+                Chain::Ethereum,
+                block_hash.clone(),
+                Bytes::zero(32),
+                NaiveDateTime::from_timestamp_opt(2000, 0).unwrap(),
+            ),
+            ..Default::default()
+        };
+        for i in 0..3 {
+            let mut tx = TxWithChanges::default();
+            tx.tx.index = i;
+            tx.tx.block_hash = wrong_hash.clone();
+            block_changes.txs_with_update.push(tx);
+        }
+        for _ in 0..2 {
+            let mut cc = TxWithContractChanges::default();
+            cc.tx.block_hash = wrong_hash.clone();
+            block_changes
+                .block_contract_changes
+                .push(cc);
+        }
+
+        block_changes.normalize_block_hash();
+
+        for tx_with_changes in &block_changes.txs_with_update {
+            assert_eq!(tx_with_changes.tx.block_hash, block_hash);
+        }
+        for tx_with_contract in &block_changes.block_contract_changes {
+            assert_eq!(tx_with_contract.tx.block_hash, block_hash);
+        }
     }
 
     #[rstest]
