@@ -1,3 +1,11 @@
+## [0.141.0](https://github.com/propeller-heads/tycho-indexer/compare/0.140.1...0.141.0) (2026-02-13)
+
+
+### Features
+
+* add configuration options for partial blocks, TVL inclusion, and compression ([d58c0ea](https://github.com/propeller-heads/tycho-indexer/commit/d58c0ea30183f7be8e08478f23993413dc7deb02))
+* add python package configuration options for partial blocks, TVL inclusion, and compression ([#849](https://github.com/propeller-heads/tycho-indexer/issues/849)) ([4a40650](https://github.com/propeller-heads/tycho-indexer/commit/4a4065021bd82e08dcc4ed63a6df7c40783c99a7))
+
 ## [0.140.1](https://github.com/propeller-heads/tycho-indexer/compare/0.140.0...0.140.1) (2026-02-12)
 
 
