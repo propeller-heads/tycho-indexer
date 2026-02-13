@@ -958,6 +958,9 @@ where
                     // Only advance cursor for full blocks; keep partial cursors out of our state.
                     if inp.partial_index.is_none() {
                         self.update_cursor(inp.cursor).await;
+                    } else {
+                        let mut state = self.inner.lock().await;
+                        state.first_message_processed = true;
                     }
                     return Ok(None);
                 }
@@ -1020,6 +1023,8 @@ where
         // We do not update the cursor for partials; only full-block cursors are used.
         if inp.partial_index.is_some() {
             self.buffer_partial_block(&msg).await?;
+            let mut state = self.inner.lock().await;
+            state.first_message_processed = true;
 
             let committed_block_height = *self
                 .gateway
