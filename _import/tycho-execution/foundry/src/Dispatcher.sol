@@ -45,9 +45,6 @@ contract Dispatcher is RestrictTransferFrom {
     constructor(address _permit2, uint256 _blocksToDelayExecutorActivation)
         RestrictTransferFrom(_permit2)
     {
-        if (_permit2 == address(0)) {
-            revert Dispatcher__AddressZero();
-        }
         blocksToDelayExecutorActivation = _blocksToDelayExecutorActivation;
     }
 

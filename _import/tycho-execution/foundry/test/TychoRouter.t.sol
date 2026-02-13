@@ -2,6 +2,8 @@
 pragma solidity ^0.8.26;
 
 import {TychoRouter} from "@src/TychoRouter.sol";
+import {FeeCalculator} from "@src/FeeCalculator.sol";
+import "@src/RestrictTransferFrom.sol";
 import "./TychoRouterTestSetup.sol";
 
 contract TychoRouterTest is TychoRouterTestSetup {
@@ -92,31 +94,59 @@ contract TychoRouterTest is TychoRouterTestSetup {
     // FEE CALCULATOR TESTS
     function testSetFeeCalculator() public {
         vm.prank(FEE_SETTER);
-        tychoRouter.setFeeCalculator(FEE_CALCULATOR);
-        assertEq(tychoRouter.getFeeCalculator(), FEE_CALCULATOR);
+        tychoRouter.setFeeCalculator(address(feeCalculator));
+        assertEq(tychoRouter.getFeeCalculator(), address(feeCalculator));
     }
 
-    function testSetFeeCalculatorZeroAddress() public {
+    function testSetFeeCalculatorNonContract() public {
         vm.prank(FEE_SETTER);
-        vm.expectRevert(TychoRouter__AddressZero.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TychoRouter__NotAContract.selector, address(0)
+            )
+        );
         tychoRouter.setFeeCalculator(address(0));
     }
 
     function testSetFeeCalculatorUnauthorized() public {
         vm.prank(ALICE);
         vm.expectRevert();
-        tychoRouter.setFeeCalculator(FEE_CALCULATOR);
+        tychoRouter.setFeeCalculator(address(feeCalculator));
     }
 
     function testSetFeeCalculatorUpdatesCorrectly() public {
-        address newFeeCalculator = address(0x999);
-        vm.startPrank(FEE_SETTER);
-        tychoRouter.setFeeCalculator(FEE_CALCULATOR);
-        assertEq(tychoRouter.getFeeCalculator(), FEE_CALCULATOR);
+        // Deploy a new FeeCalculator contract
+        FeeCalculator newFeeCalculator = new FeeCalculator();
 
-        tychoRouter.setFeeCalculator(newFeeCalculator);
+        vm.startPrank(FEE_SETTER);
+        tychoRouter.setFeeCalculator(address(feeCalculator));
+        assertEq(tychoRouter.getFeeCalculator(), address(feeCalculator));
+
+        tychoRouter.setFeeCalculator(address(newFeeCalculator));
         vm.stopPrank();
 
-        assertEq(tychoRouter.getFeeCalculator(), newFeeCalculator);
+        assertEq(tychoRouter.getFeeCalculator(), address(newFeeCalculator));
+    }
+
+    function testConstructorNonContractFeeCalculator() public {
+        address nonContract = address(0x999);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TychoRouter__NotAContract.selector, nonContract
+            )
+        );
+        new TychoRouterExposed(PERMIT2_ADDRESS, nonContract, 0);
+    }
+
+    function testConstructorNonContractPermit2() public {
+        // Deploy a new FeeCalculator contract
+        FeeCalculator newFeeCalculator = new FeeCalculator();
+        address nonContract = address(0x999);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                RestrictTransferFrom__NotAContract.selector, nonContract
+            )
+        );
+        new TychoRouterExposed(nonContract, address(newFeeCalculator), 0);
     }
 }

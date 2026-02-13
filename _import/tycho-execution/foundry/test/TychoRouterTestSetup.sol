@@ -129,11 +129,17 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     }
 
     function deployRouter() public returns (TychoRouterExposed) {
+        // Use vm.etch to place dummy bytecode at address(123) so it passes the
+        // .code.length check in the constructor without deploying a contract
+        // (which would shift all subsequent addresses and break pre-generated permit2 signatures)
+        address placeholderFeeCalculator = address(123);
+        vm.etch(placeholderFeeCalculator, hex"00");
+
         tychoRouter = new TychoRouterExposed(
             PERMIT2_ADDRESS,
-            address(123),
+            placeholderFeeCalculator,
             BLOCK_DELAY_EXECUTOR_ACTIVATION_ETHEREUM
-        ); // address(123) is just a placeholder until we set the real FeeCalculator
+        );
         tychoRouterAddr = address(tychoRouter);
         tychoRouter.grantRole(keccak256("PAUSER_ROLE"), PAUSER);
         tychoRouter.grantRole(keccak256("UNPAUSER_ROLE"), UNPAUSER);
