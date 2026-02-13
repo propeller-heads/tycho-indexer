@@ -5,22 +5,18 @@ const hre = require("hardhat");
 async function main() {
     const network = hre.network.name;
     let permit2;
-    let blocksToDelayExecutorActivation;
     let feeCalculator;
     if (network === "ethereum" || network === "tenderly_ethereum") {
         permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
         feeCalculator = "";
-        blocksToDelayExecutorActivation = "21600";
     } else if (network === "base" || network === "tenderly_base") {
         // permit2 address is the same as on ethereum
         permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
         feeCalculator = "";
-        blocksToDelayExecutorActivation = "129600";
     } else if (network === "unichain") {
         // permit2 address is the same as on ethereum
         permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
         feeCalculator = "";
-        blocksToDelayExecutorActivation = "259200";
     } else {
         throw new Error(`Unsupported network: ${network}`);
     }
@@ -28,7 +24,6 @@ async function main() {
     console.log(`Deploying TychoRouter to ${network} with:`);
     console.log(`- permit2: ${permit2}`);
     console.log(`- feeCalculator: ${feeCalculator}`);
-    console.log(`- blocks to delay executor activation: ${blocksToDelayExecutorActivation}`);
 
     const [deployer] = await ethers.getSigners();
     console.log(`Deploying with account: ${deployer.address}`);
@@ -41,7 +36,7 @@ async function main() {
 
     // Get TychoRouter bytecode with constructor arguments
     const TychoRouter = await ethers.getContractFactory("TychoRouter");
-    const deployTx = TychoRouter.getDeployTransaction(permit2, feeCalculator, blocksToDelayExecutorActivation);
+    const deployTx = TychoRouter.getDeployTransaction(permit2, feeCalculator);
     const bytecode = deployTx.data;
 
     // Use a salt based on network and contract name for deterministic addresses
@@ -80,7 +75,7 @@ async function main() {
     try {
         await hre.run("verify:verify", {
             address: computedAddress,
-            constructorArguments: [permit2, feeCalculator, blocksToDelayExecutorActivation],
+            constructorArguments: [permit2, feeCalculator],
         });
         console.log(`TychoRouter verified successfully on blockchain explorer!`);
     } catch (error) {

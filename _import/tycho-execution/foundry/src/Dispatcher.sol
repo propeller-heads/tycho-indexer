@@ -25,7 +25,7 @@ error Dispatcher__AddressZero();
  *  an alternate selector is specified.
  */
 contract Dispatcher is RestrictTransferFrom {
-    mapping(address => uint64) public executorsActivationBlock;
+    mapping(address => uint256) public executorsActivationTimestamp;
 
     // keccak256("Dispatcher#CURRENTLY_SWAPPING_EXECUTOR_SLOT")
     uint256 private constant _CURRENTLY_SWAPPING_EXECUTOR_SLOT =
@@ -37,15 +37,15 @@ contract Dispatcher is RestrictTransferFrom {
     uint256 private constant _IS_FIRST_SWAP_SLOT =
         0x8c47a7e3f4c2e1b5a6d9f0e8c7b3a2d1e4f5c6b7a8d9e0f1c2b3a4d5e6f7c8d9;
 
-    uint256 private immutable blocksToDelayExecutorActivation;
+    uint256 private constant DELAY_EXECUTOR_ACTIVATION = 3 days;
 
     event ExecutorSet(address indexed executor);
     event ExecutorRemoved(address indexed executor);
 
-    constructor(address _permit2, uint256 _blocksToDelayExecutorActivation)
-        RestrictTransferFrom(_permit2)
-    {
-        blocksToDelayExecutorActivation = _blocksToDelayExecutorActivation;
+    constructor(address _permit2) RestrictTransferFrom(_permit2) {
+        if (_permit2 == address(0)) {
+            revert Dispatcher__AddressZero();
+        }
     }
 
     /**
@@ -58,8 +58,9 @@ contract Dispatcher is RestrictTransferFrom {
             revert Dispatcher__NonContractExecutor();
         }
 
-        executorsActivationBlock[target] =
-            uint64(block.number + blocksToDelayExecutorActivation);
+        executorsActivationTimestamp[target] = uint64(
+            block.timestamp + DELAY_EXECUTOR_ACTIVATION
+        );
         emit ExecutorSet(target);
     }
 
@@ -68,7 +69,7 @@ contract Dispatcher is RestrictTransferFrom {
      * @param target address of the executor contract
      */
     function _removeExecutor(address target) internal {
-        delete executorsActivationBlock[target];
+        delete executorsActivationTimestamp[target];
         emit ExecutorRemoved(target);
     }
 
@@ -85,13 +86,13 @@ contract Dispatcher is RestrictTransferFrom {
         bool isSplitSwap,
         address receiver
     ) internal returns (uint256 calculatedAmount) {
-        uint64 activationBlock = executorsActivationBlock[executor];
+        uint256 activationTimestamp = executorsActivationTimestamp[executor];
 
         // slither-disable-next-line incorrect-equality
-        if (activationBlock == 0) {
+        if (activationTimestamp == 0) {
             revert Dispatcher__UnapprovedExecutor(executor);
         }
-        if (block.number < activationBlock) {
+        if (block.timestamp < activationTimestamp) {
             revert Dispatcher__ExecutorIsTimelocked(executor);
         }
 
@@ -102,9 +103,10 @@ contract Dispatcher is RestrictTransferFrom {
         }
 
         // slither-disable-next-line calls-loop
-        (bool transferDataSuccess, bytes memory transferData) = executor.staticcall(
-            abi.encodeWithSelector(IExecutor.getTransferData.selector, data)
-        );
+        (bool transferDataSuccess, bytes memory transferData) = executor
+            .staticcall(
+                abi.encodeWithSelector(IExecutor.getTransferData.selector, data)
+            );
 
         if (!transferDataSuccess) {
             revert(
@@ -121,8 +123,9 @@ contract Dispatcher is RestrictTransferFrom {
             address transferReceiver,
             address tokenIn
         ) = abi.decode(
-            transferData, (RestrictTransferFrom.TransferType, address, address)
-        );
+                transferData,
+                (RestrictTransferFrom.TransferType, address, address)
+            );
 
         _transfer(
             transferReceiver,
@@ -137,7 +140,10 @@ contract Dispatcher is RestrictTransferFrom {
         // slither-disable-next-line controlled-delegatecall,low-level-calls,calls-loop
         (bool success, bytes memory result) = executor.delegatecall(
             abi.encodeWithSelector(
-                IExecutor.swap.selector, amount, data, receiver
+                IExecutor.swap.selector,
+                amount,
+                data,
+                receiver
             )
         );
 
@@ -169,10 +175,9 @@ contract Dispatcher is RestrictTransferFrom {
     }
 
     // slither-disable-next-line assembly
-    function _callHandleCallbackOnExecutor(bytes calldata data)
-        internal
-        returns (bytes memory)
-    {
+    function _callHandleCallbackOnExecutor(
+        bytes calldata data
+    ) internal returns (bytes memory) {
         address executor;
         bool isFirstSwap;
         bool isSplitSwap;
@@ -182,21 +187,23 @@ contract Dispatcher is RestrictTransferFrom {
             isSplitSwap := tload(_IS_SPLIT_SWAP_SLOT)
         }
 
-        uint64 activationBlock = executorsActivationBlock[executor];
+        uint256 activationTimestamp = executorsActivationTimestamp[executor];
 
         // slither-disable-next-line incorrect-equality
-        if (activationBlock == 0) {
+        if (activationTimestamp == 0) {
             revert Dispatcher__UnapprovedExecutor(executor);
         }
-        if (block.number < activationBlock) {
+        if (block.timestamp < activationTimestamp) {
             revert Dispatcher__ExecutorIsTimelocked(executor);
         }
 
-        (bool transferDataSuccess, bytes memory transferData) = executor.delegatecall(
-            abi.encodeWithSelector(
-                ICallback.getCallbackTransferData.selector, data
-            )
-        );
+        (bool transferDataSuccess, bytes memory transferData) = executor
+            .delegatecall(
+                abi.encodeWithSelector(
+                    ICallback.getCallbackTransferData.selector,
+                    data
+                )
+            );
 
         if (!transferDataSuccess) {
             revert(
@@ -214,9 +221,9 @@ contract Dispatcher is RestrictTransferFrom {
             address tokenIn,
             uint256 amount
         ) = abi.decode(
-            transferData,
-            (RestrictTransferFrom.TransferType, address, address, uint256)
-        );
+                transferData,
+                (RestrictTransferFrom.TransferType, address, address, uint256)
+            );
 
         _transfer(
             receiver,
@@ -257,25 +264,25 @@ contract Dispatcher is RestrictTransferFrom {
         return decodedResult;
     }
 
-    function _callFundsExpectedAddress(address executor, bytes calldata data)
-        internal
-        view
-        returns (address receiver)
-    {
-        uint64 activationBlock = executorsActivationBlock[executor];
+    function _callFundsExpectedAddress(
+        address executor,
+        bytes calldata data
+    ) internal view returns (address receiver) {
+        uint256 activationTimestamp = executorsActivationTimestamp[executor];
 
         // slither-disable-next-line incorrect-equality
-        if (activationBlock == 0) {
+        if (activationTimestamp == 0) {
             revert Dispatcher__UnapprovedExecutor(executor);
         }
-        if (block.number < activationBlock) {
+        if (block.number < activationTimestamp) {
             revert Dispatcher__ExecutorIsTimelocked(executor);
         }
 
         // slither-disable-next-line calls-loop,low-level-calls
         (bool success, bytes memory receiverData) = executor.staticcall(
             abi.encodeWithSelector(
-                IExecutor.fundsExpectedAddress.selector, data
+                IExecutor.fundsExpectedAddress.selector,
+                data
             )
         );
 
@@ -294,11 +301,9 @@ contract Dispatcher is RestrictTransferFrom {
         receiver = abi.decode(receiverData, (address));
     }
 
-    function _callGetEffectiveRouterFeeOnOutput(address feeCalculator)
-        internal
-        view
-        returns (uint16 routerFeeOnOutputBps)
-    {
+    function _callGetEffectiveRouterFeeOnOutput(
+        address feeCalculator
+    ) internal view returns (uint16 routerFeeOnOutputBps) {
         // slither-disable-next-line calls-loop,low-level-calls
         (bool success, bytes memory feeData) = feeCalculator.staticcall(
             abi.encodeWithSelector(
@@ -351,7 +356,9 @@ contract Dispatcher is RestrictTransferFrom {
             );
         }
 
-        (amountOut, feeRecipients) =
-            abi.decode(feeData, (uint256, FeeRecipient[]));
+        (amountOut, feeRecipients) = abi.decode(
+            feeData,
+            (uint256, FeeRecipient[])
+        );
     }
 }
