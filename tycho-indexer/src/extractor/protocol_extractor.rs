@@ -955,7 +955,10 @@ where
                     changes
                 }
                 Err(ExtractionError::Empty) => {
-                    self.update_cursor(inp.cursor).await;
+                    // Only advance cursor for full blocks; keep partial cursors out of our state.
+                    if inp.partial_index.is_none() {
+                        self.update_cursor(inp.cursor).await;
+                    }
                     return Ok(None);
                 }
                 Err(e) => return Err(e),
@@ -1014,10 +1017,9 @@ where
 
         // Partial blocks are buffered and emitted immediately but skip reorg buffer and DB commit.
         // Those happen when the full block signal arrives.
+        // We do not update the cursor for partials; only full-block cursors are used.
         if inp.partial_index.is_some() {
             self.buffer_partial_block(&msg).await?;
-
-            self.update_cursor(inp.cursor).await;
 
             let committed_block_height = *self
                 .gateway
