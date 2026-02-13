@@ -37,9 +37,9 @@ contract Dispatcher is RestrictTransferFrom {
     uint256 private constant _IS_FIRST_SWAP_SLOT =
         0x8c47a7e3f4c2e1b5a6d9f0e8c7b3a2d1e4f5c6b7a8d9e0f1c2b3a4d5e6f7c8d9;
 
-    uint256 private constant DELAY_EXECUTOR_ACTIVATION = 3 days;
+    uint256 public constant DELAY_EXECUTOR_ACTIVATION = 3 days;
 
-    event ExecutorSet(address indexed executor);
+    event ExecutorSet(address indexed executor, uint256 timelockExpiresAt);
     event ExecutorRemoved(address indexed executor);
 
     constructor(address _permit2) RestrictTransferFrom(_permit2) {
@@ -58,10 +58,9 @@ contract Dispatcher is RestrictTransferFrom {
             revert Dispatcher__NonContractExecutor();
         }
 
-        executorsActivationTimestamp[target] = uint64(
-            block.timestamp + DELAY_EXECUTOR_ACTIVATION
-        );
-        emit ExecutorSet(target);
+        uint256 timelockExpiresAt = block.timestamp + DELAY_EXECUTOR_ACTIVATION;
+        executorsActivationTimestamp[target] = uint256(timelockExpiresAt);
+        emit ExecutorSet(target, timelockExpiresAt);
     }
 
     /**
