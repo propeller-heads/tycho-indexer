@@ -1087,8 +1087,17 @@ where
             .get_last_processed_block()
             .await
             .map_or("None".to_string(), |b| b.number.to_string());
+        let current_partial_block_index = self
+            .partial_block_buffer
+            .lock()
+            .await
+            .as_ref()
+            .and_then(|b| b.partial_block_index)
+            .map_or("None".to_string(), |i| i.to_string());
 
         tracing::Span::current().record("current_block", &last_processed_block_number);
+        tracing::Span::current()
+            .record("current_partial_block_index", &current_partial_block_index);
         tracing::Span::current().record("target_hash", format!("{block_hash:x}"));
         tracing::Span::current().record("target_number", block_ref.number);
 
@@ -1098,6 +1107,7 @@ where
             "extractor_revert",
             "extractor" => self.name.clone(),
             "current_block" => last_processed_block_number,
+            "current_partial_block_index" => current_partial_block_index,
             "target_block" => block_ref.number.to_string()
         )
         .increment(1);
