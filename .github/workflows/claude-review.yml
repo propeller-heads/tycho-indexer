@@ -13,13 +13,13 @@ jobs:
       pull-requests: write
     steps:
       - run: |
-          gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body "Comment **\`/review\`** on this PR to run a Claude code review."
+          gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body "To run Claude review, comment **\`/review\`** or **\`/claude-review\`** on this PR."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   review:
     runs-on: ubuntu-latest
-    if: github.event_name == 'issue_comment' && github.event.issue.pull_request != ''
+    if: github.event_name == 'issue_comment' && github.event.issue.pull_request
     permissions:
       contents: read
       pull-requests: write
