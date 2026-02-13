@@ -1066,10 +1066,9 @@ where
             .await
             .map(|opt| {
                 // Set partial_block_index to None to indicate that the block is a full block
-                opt.map(|arc_msg| {
-                    let mut inner = (*arc_msg).clone();
-                    inner.partial_block_index = None;
-                    Arc::new(inner)
+                opt.map(|mut arc_msg| {
+                    Arc::make_mut(&mut arc_msg).partial_block_index = None;
+                    arc_msg
                 })
             })
     }
