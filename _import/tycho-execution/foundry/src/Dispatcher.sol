@@ -12,6 +12,7 @@ error Dispatcher__ExecutorIsTimelocked(address executor);
 error Dispatcher__NonContractExecutor();
 error Dispatcher__InvalidDataLength();
 error Dispatcher__AddressZero();
+error Dispatcher__ExecutorAlreadyExists(address executor);
 
 /**
  * @title Dispatcher - Dispatch execution to external contracts
@@ -56,6 +57,10 @@ contract Dispatcher is RestrictTransferFrom {
     function _setExecutor(address target) internal {
         if (target.code.length == 0) {
             revert Dispatcher__NonContractExecutor();
+        }
+
+        if (executorsActivationTimestamp[target] != 0) {
+            revert Dispatcher__ExecutorAlreadyExists(target);
         }
 
         uint256 timelockExpiresAt = block.timestamp + DELAY_EXECUTOR_ACTIVATION;
