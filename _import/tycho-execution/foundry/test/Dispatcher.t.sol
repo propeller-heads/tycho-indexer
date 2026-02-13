@@ -5,9 +5,7 @@ import "@src/Dispatcher.sol";
 import "./TychoRouterTestSetup.sol";
 
 contract DispatcherExposed is Dispatcher {
-    constructor(address _permit2, uint256 blocksToDelayExecutorActivation)
-        Dispatcher(_permit2, blocksToDelayExecutorActivation)
-    {}
+    constructor(address _permit2) Dispatcher(_permit2) {}
 
     function exposedCallExecutor(
         address executor,
@@ -40,9 +38,7 @@ contract DispatcherTest is Constants {
     function setUp() public {
         uint256 forkBlock = 20673900;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        dispatcherExposed = new DispatcherExposed(
-            PERMIT2_ADDRESS, BLOCK_DELAY_EXECUTOR_ACTIVATION_ETHEREUM
-        );
+        dispatcherExposed = new DispatcherExposed(PERMIT2_ADDRESS);
         deal(WETH_ADDR, address(dispatcherExposed), 15 ether);
         deployDummyContract();
     }
