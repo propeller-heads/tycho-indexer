@@ -197,7 +197,9 @@ mod tests {
     use tycho_common::dto::ResponseProtocolState;
 
     use super::*;
-    use crate::evm::protocol::ekubo::test_cases::*;
+    use crate::evm::protocol::{
+        ekubo::test_cases::*, test_utils::try_decode_snapshot_with_defaults,
+    };
 
     #[apply(all_cases)]
     #[tokio::test]
@@ -212,15 +214,9 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = EkuboState::try_from_with_header(
-            snapshot,
-            BlockHeader::default(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &DecoderContext::new(),
-        )
-        .await
-        .expect("reconstructing state");
+        let result = try_decode_snapshot_with_defaults::<EkuboState>(snapshot)
+            .await
+            .expect("reconstructing state");
 
         assert_eq!(result, case.state_before_transition);
     }

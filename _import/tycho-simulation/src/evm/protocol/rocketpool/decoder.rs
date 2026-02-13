@@ -159,24 +159,14 @@ mod tests {
 
     use alloy::primitives::U256;
     use rstest::rstest;
-    use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
+    use tycho_client::feed::synchronizer::ComponentWithState;
     use tycho_common::{dto::ResponseProtocolState, Bytes};
 
     use super::super::state::RocketpoolState;
-    use crate::protocol::{
-        errors::InvalidSnapshotError,
-        models::{DecoderContext, TryFromWithBlock},
+    use crate::{
+        evm::protocol::{test_utils, test_utils::try_decode_snapshot_with_defaults},
+        protocol::errors::InvalidSnapshotError,
     };
-
-    fn header() -> BlockHeader {
-        BlockHeader {
-            number: 1,
-            hash: Bytes::from(vec![0; 32]),
-            parent_hash: Bytes::from(vec![0; 32]),
-            revert: false,
-            timestamp: 1,
-        }
-    }
 
     fn create_test_snapshot() -> ComponentWithState {
         ComponentWithState {
@@ -244,14 +234,8 @@ mod tests {
     async fn test_rocketpool_try_from() {
         let snapshot = create_test_snapshot();
 
-        let result = RocketpoolState::try_from_with_header(
-            snapshot,
-            header(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &DecoderContext::new(),
-        )
-        .await;
+        let result =
+            test_utils::try_decode_snapshot_with_defaults::<RocketpoolState>(snapshot).await;
 
         assert!(result.is_ok());
         let state = result.unwrap();
@@ -333,14 +317,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = RocketpoolState::try_from_with_header(
-            snapshot,
-            header(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &DecoderContext::new(),
-        )
-        .await;
+        let result = try_decode_snapshot_with_defaults::<RocketpoolState>(snapshot).await;
 
         assert!(result.is_ok());
         let state = result.unwrap();
@@ -413,14 +390,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = RocketpoolState::try_from_with_header(
-            snapshot,
-            header(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &DecoderContext::new(),
-        )
-        .await;
+        let result = try_decode_snapshot_with_defaults::<RocketpoolState>(snapshot).await;
 
         assert!(result.is_err());
         assert!(matches!(

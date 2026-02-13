@@ -1072,7 +1072,12 @@ fn process_execution_result(
     statistics: Option<Arc<RwLock<TestStatistics>>>,
 ) {
     match result {
-        TychoExecutionResult::Success { gas_used, amount_out } => {
+        TychoExecutionResult::Success {
+            gas_used,
+            amount_out,
+            state_overwrites,
+            overwrite_metadata,
+        } => {
             debug!(
                 event_type = "simulation_execution_success",
                 amount_out = amount_out.to_string(),
@@ -1098,6 +1103,22 @@ fn process_execution_result(
                     100.0
             };
 
+            // Generate Tenderly URL for debugging with state overrides
+            let overrides =
+                tenderly::TenderlySimParams { network: Some(chain_id), ..Default::default() };
+            let tenderly_url = tenderly::build_tenderly_url(
+                &overrides,
+                Some(&execution_info.transaction),
+                Some(&block),
+                Address::from_slice(&execution_info.solution.sender[..20]),
+            );
+
+            let overwrites_string = if let Some(overwrites) = state_overwrites.as_ref() {
+                tenderly::get_overwrites_string(overwrites, overwrite_metadata)
+            } else {
+                String::new()
+            };
+
             if !(-0.2..=0.2).contains(&slippage) {
                 error!(
                     event_type = "execution_slippage",
@@ -1107,7 +1128,8 @@ fn process_execution_result(
                     simulated_amount  = %amount_out,
                     executed_amount = %execution_info.expected_amount_out,
                     slippage_ratio = slippage,
-                    state = ?state_str,
+                    tenderly = tenderly_url,
+                    overwrites = %overwrites_string,
                     "Execution slippage: {:.2}%",
                     slippage
                 );
@@ -1120,6 +1142,8 @@ fn process_execution_result(
                     simulated_amount  = %amount_out,
                     executed_amount = %execution_info.expected_amount_out,
                     slippage_ratio = slippage,
+                    tenderly = tenderly_url,
+                    overwrites = %overwrites_string,
                     "Execution slippage: {:.2}%",
                     slippage
                 );

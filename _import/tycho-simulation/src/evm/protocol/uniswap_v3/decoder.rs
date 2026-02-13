@@ -140,6 +140,7 @@ mod tests {
     use tycho_common::dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState};
 
     use super::*;
+    use crate::evm::protocol::test_utils::try_decode_snapshot_with_defaults;
 
     fn usv3_component() -> ProtocolComponent {
         let creation_time = DateTime::from_timestamp(1622526000, 0)
@@ -175,16 +176,6 @@ mod tests {
         .collect::<HashMap<String, Bytes>>()
     }
 
-    fn header() -> BlockHeader {
-        BlockHeader {
-            number: 1,
-            hash: Bytes::from(vec![0; 32]),
-            parent_hash: Bytes::from(vec![0; 32]),
-            revert: false,
-            timestamp: 1,
-        }
-    }
-
     #[tokio::test]
     async fn test_usv3_try_from() {
         let snapshot = ComponentWithState {
@@ -198,14 +189,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = UniswapV3State::try_from_with_header(
-            snapshot,
-            header(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &DecoderContext::new(),
-        )
-        .await;
+        let result = try_decode_snapshot_with_defaults::<UniswapV3State>(snapshot).await;
 
         assert!(result.is_ok());
         let expected = UniswapV3State::new(
@@ -257,14 +241,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = UniswapV3State::try_from_with_header(
-            snapshot,
-            header(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &DecoderContext::new(),
-        )
-        .await;
+        let result = try_decode_snapshot_with_defaults::<UniswapV3State>(snapshot).await;
 
         assert!(result.is_err());
         assert!(matches!(
@@ -292,14 +269,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = UniswapV3State::try_from_with_header(
-            snapshot,
-            header(),
-            &HashMap::new(),
-            &HashMap::new(),
-            &DecoderContext::new(),
-        )
-        .await;
+        let result = try_decode_snapshot_with_defaults::<UniswapV3State>(snapshot).await;
 
         assert!(result.is_err());
         assert!(matches!(

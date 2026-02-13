@@ -251,10 +251,13 @@ where
 
     let resources = resources_fn(quote.execution_resources);
 
-    Ok(quote.consumed_amount.saturating_sub(
-        WEI_UNDERESTIMATION_FACTOR *
-            (i128::from(resources.initialized_ticks_crossed) +
-                i128::from(resources.tick_spacings_crossed) / 256 +
-                1),
-    ))
+    Ok(quote
+        .consumed_amount
+        .saturating_sub(
+            WEI_UNDERESTIMATION_FACTOR *
+                (i128::from(resources.initialized_ticks_crossed) +
+                    i128::from(resources.tick_spacings_crossed) / 256 +
+                    1),
+        )
+        .max(0))
 }

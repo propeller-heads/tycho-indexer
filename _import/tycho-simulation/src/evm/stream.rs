@@ -354,6 +354,14 @@ impl ProtocolStreamBuilder {
         self
     }
 
+    /// Enables partial block updates (flashblocks).
+    pub fn enable_partial_blocks(mut self) -> Self {
+        self.stream_builder = self
+            .stream_builder
+            .enable_partial_blocks();
+        self
+    }
+
     /// Sets the stream end policy.
     ///
     /// Controls when the stream should stop based on synchronizer states.

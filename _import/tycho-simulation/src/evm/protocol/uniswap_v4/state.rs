@@ -54,8 +54,8 @@ use crate::{
 // Gas limit constants for capping get_limits calculations
 // These prevent simulations from exceeding Ethereum's block gas limit
 const SWAP_BASE_GAS: u64 = 130_000;
-// This gas is estimated from _nextInitializedTickWithinOneWord calls on Tenderly
-const GAS_PER_TICK: u64 = 2_500;
+// This gas is estimated from UniswapV3Pool cross() calls on Tenderly
+const GAS_PER_TICK: u64 = 17_540;
 // Conservative max gas budget for a single swap (Ethereum transaction gas limit)
 const MAX_SWAP_GAS: u64 = 16_700_000;
 const MAX_TICKS_CROSSED: u64 = (MAX_SWAP_GAS - SWAP_BASE_GAS) / GAS_PER_TICK;
@@ -80,7 +80,6 @@ impl fmt::Debug for UniswapV4State {
             .field("sqrt_price", &self.sqrt_price)
             .field("fees", &self.fees)
             .field("tick", &self.tick)
-            .field("ticks", &self.ticks)
             .field("tick_spacing", &self.tick_spacing)
             .finish_non_exhaustive()
     }
@@ -1133,8 +1132,7 @@ mod tests {
             )
             .expect("Invalid block hash"),
             parent_hash: Bytes::from(vec![0; 32]),
-            revert: false,
-            timestamp: 0,
+            ..Default::default()
         };
 
         let t0 = Token::new(
@@ -1211,8 +1209,7 @@ mod tests {
             )
             .expect("Invalid block hash"),
             parent_hash: Bytes::from(vec![0; 32]),
-            revert: false,
-            timestamp: 0,
+            ..Default::default()
         };
 
         let project_root = env!("CARGO_MANIFEST_DIR");
@@ -1548,13 +1545,12 @@ mod tests {
 
         let block = BlockHeader {
             number: 22689128,
-            parent_hash: Default::default(),
             hash: Bytes::from_str(
                 "0xfbfa716523d25d6d5248c18d001ca02b1caf10cabd1ab7321465e2262c41157b",
             )
             .expect("Invalid block hash"),
             timestamp: 1749739055,
-            revert: false,
+            ..Default::default()
         };
 
         // Pool ID: 0xdd8dd509e58ec98631b800dd6ba86ee569c517ffbd615853ed5ab815bbc48ccb
@@ -1702,13 +1698,12 @@ mod tests {
 
         let block = BlockHeader {
             number: 22689128,
-            parent_hash: Default::default(),
             hash: Bytes::from_str(
                 "0xfbfa716523d25d6d5248c18d001ca02b1caf10cabd1ab7321465e2262c41157b",
             )
             .expect("Invalid block hash"),
             timestamp: 1749739055,
-            revert: false,
+            ..Default::default()
         };
 
         let hook_address: Address = Address::from_str("0x69058613588536167ba0aa94f0cc1fe420ef28a8")

@@ -42,8 +42,8 @@ use crate::evm::protocol::{
 // Gas limit constants for capping get_limits calculations
 // These prevent simulations from exceeding Ethereum's block gas limit
 const SWAP_BASE_GAS: u64 = 130_000;
-// This gas is estimated from _nextInitializedTickWithinOneWord calls on Tenderly
-const GAS_PER_TICK: u64 = 2_500;
+// This gas is estimated from UniswapV3Pool cross() calls on Tenderly
+const GAS_PER_TICK: u64 = 17_540;
 // Conservative max gas budget for a single swap (Ethereum transaction gas limit)
 const MAX_SWAP_GAS: u64 = 16_700_000;
 const MAX_TICKS_CROSSED: u64 = (MAX_SWAP_GAS - SWAP_BASE_GAS) / GAS_PER_TICK;
@@ -896,7 +896,7 @@ mod tests {
             .get_limits(t0.address.clone(), t1.address.clone())
             .unwrap();
 
-        assert_eq!(&res.0, &BigUint::from_u128(20358481906554983980330155).unwrap()); // Crazy amount because of this tick: "ticks/-887272/net-liquidity": "0x10d73d"
+        assert_eq!(&res.0, &BigUint::from_u128(155144999154).unwrap()); // Crazy amount because of this tick: "ticks/-887272/net-liquidity": "0x10d73d"
 
         let out = usv3_state
             .get_amount_out(res.0, &t0, &t1)

@@ -26,7 +26,12 @@ pub struct TychoExecutionInput {
 #[derive(Clone)]
 pub enum TychoExecutionResult {
     /// Successful execution with output amount and gas consumption
-    Success { amount_out: BigUint, gas_used: u64 },
+    Success {
+        amount_out: BigUint,
+        gas_used: u64,
+        state_overwrites: Option<AddressHashMap<AccountOverride>>,
+        overwrite_metadata: Option<OverwriteMetadata>,
+    },
     /// Simulation reverted with reason and optional state overrides for debugging
     Revert {
         reason: String,
