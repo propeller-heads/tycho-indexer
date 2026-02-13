@@ -109,10 +109,9 @@ contract Dispatcher is RestrictTransferFrom {
         }
 
         // slither-disable-next-line calls-loop
-        (bool transferDataSuccess, bytes memory transferData) = executor
-            .staticcall(
-                abi.encodeWithSelector(IExecutor.getTransferData.selector, data)
-            );
+        (bool transferDataSuccess, bytes memory transferData) = executor.staticcall(
+            abi.encodeWithSelector(IExecutor.getTransferData.selector, data)
+        );
 
         if (!transferDataSuccess) {
             revert(
@@ -129,9 +128,8 @@ contract Dispatcher is RestrictTransferFrom {
             address transferReceiver,
             address tokenIn
         ) = abi.decode(
-                transferData,
-                (RestrictTransferFrom.TransferType, address, address)
-            );
+            transferData, (RestrictTransferFrom.TransferType, address, address)
+        );
 
         _transfer(
             transferReceiver,
@@ -146,10 +144,7 @@ contract Dispatcher is RestrictTransferFrom {
         // slither-disable-next-line controlled-delegatecall,low-level-calls,calls-loop
         (bool success, bytes memory result) = executor.delegatecall(
             abi.encodeWithSelector(
-                IExecutor.swap.selector,
-                amount,
-                data,
-                receiver
+                IExecutor.swap.selector, amount, data, receiver
             )
         );
 
@@ -181,9 +176,10 @@ contract Dispatcher is RestrictTransferFrom {
     }
 
     // slither-disable-next-line assembly
-    function _callHandleCallbackOnExecutor(
-        bytes calldata data
-    ) internal returns (bytes memory) {
+    function _callHandleCallbackOnExecutor(bytes calldata data)
+        internal
+        returns (bytes memory)
+    {
         address executor;
         bool isFirstSwap;
         bool isSplitSwap;
@@ -204,13 +200,11 @@ contract Dispatcher is RestrictTransferFrom {
             revert Dispatcher__ExecutorIsTimelocked(executor);
         }
 
-        (bool transferDataSuccess, bytes memory transferData) = executor
-            .delegatecall(
-                abi.encodeWithSelector(
-                    ICallback.getCallbackTransferData.selector,
-                    data
-                )
-            );
+        (bool transferDataSuccess, bytes memory transferData) = executor.delegatecall(
+            abi.encodeWithSelector(
+                ICallback.getCallbackTransferData.selector, data
+            )
+        );
 
         if (!transferDataSuccess) {
             revert(
@@ -228,9 +222,9 @@ contract Dispatcher is RestrictTransferFrom {
             address tokenIn,
             uint256 amount
         ) = abi.decode(
-                transferData,
-                (RestrictTransferFrom.TransferType, address, address, uint256)
-            );
+            transferData,
+            (RestrictTransferFrom.TransferType, address, address, uint256)
+        );
 
         _transfer(
             receiver,
@@ -271,10 +265,11 @@ contract Dispatcher is RestrictTransferFrom {
         return decodedResult;
     }
 
-    function _callFundsExpectedAddress(
-        address executor,
-        bytes calldata data
-    ) internal view returns (address receiver) {
+    function _callFundsExpectedAddress(address executor, bytes calldata data)
+        internal
+        view
+        returns (address receiver)
+    {
         uint256 activationTimestamp = executorsActivationTimestamp[executor];
 
         // slither-disable-next-line incorrect-equality
@@ -289,8 +284,7 @@ contract Dispatcher is RestrictTransferFrom {
         // slither-disable-next-line calls-loop,low-level-calls
         (bool success, bytes memory receiverData) = executor.staticcall(
             abi.encodeWithSelector(
-                IExecutor.fundsExpectedAddress.selector,
-                data
+                IExecutor.fundsExpectedAddress.selector, data
             )
         );
 
@@ -309,9 +303,11 @@ contract Dispatcher is RestrictTransferFrom {
         receiver = abi.decode(receiverData, (address));
     }
 
-    function _callGetEffectiveRouterFeeOnOutput(
-        address feeCalculator
-    ) internal view returns (uint16 routerFeeOnOutputBps) {
+    function _callGetEffectiveRouterFeeOnOutput(address feeCalculator)
+        internal
+        view
+        returns (uint16 routerFeeOnOutputBps)
+    {
         // slither-disable-next-line calls-loop,low-level-calls
         (bool success, bytes memory feeData) = feeCalculator.staticcall(
             abi.encodeWithSelector(
@@ -364,9 +360,7 @@ contract Dispatcher is RestrictTransferFrom {
             );
         }
 
-        (amountOut, feeRecipients) = abi.decode(
-            feeData,
-            (uint256, FeeRecipient[])
-        );
+        (amountOut, feeRecipients) =
+            abi.decode(feeData, (uint256, FeeRecipient[]));
     }
 }

@@ -32,10 +32,9 @@ import "@src/TychoRouter.sol";
 import "@src/FeeCalculator.sol";
 
 contract TychoRouterExposed is TychoRouter {
-    constructor(
-        address _permit2,
-        address feeCalculator
-    ) TychoRouter(_permit2, feeCalculator) {}
+    constructor(address _permit2, address feeCalculator)
+        TychoRouter(_permit2, feeCalculator)
+    {}
 
     function tstoreExposed(
         address tokenIn,
@@ -134,17 +133,14 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         address placeholderFeeCalculator = address(123);
         vm.etch(placeholderFeeCalculator, hex"00");
 
-        tychoRouter = new TychoRouterExposed(
-            PERMIT2_ADDRESS,
-            placeholderFeeCalculator
-        );
+        tychoRouter =
+            new TychoRouterExposed(PERMIT2_ADDRESS, placeholderFeeCalculator);
         tychoRouterAddr = address(tychoRouter);
         tychoRouter.grantRole(keccak256("PAUSER_ROLE"), PAUSER);
         tychoRouter.grantRole(keccak256("UNPAUSER_ROLE"), UNPAUSER);
         tychoRouter.grantRole(keccak256("ROUTER_FEE_SETTER_ROLE"), FEE_SETTER);
         tychoRouter.grantRole(
-            keccak256("EXECUTOR_SETTER_ROLE"),
-            EXECUTOR_SETTER
+            keccak256("EXECUTOR_SETTER_ROLE"), EXECUTOR_SETTER
         );
         return tychoRouter;
     }
@@ -164,10 +160,8 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         usv2Executor = new UniswapV2Executor(factoryV2, initCodeV2, 30);
         usv3Executor = new UniswapV3Executor(factoryV3, initCodeV3);
         usv4Executor = new UniswapV4Executor(poolManager, ANGSTROM_HOOK);
-        pancakev3Executor = new UniswapV3Executor(
-            factoryPancakeV3,
-            initCodePancakeV3
-        );
+        pancakev3Executor =
+            new UniswapV3Executor(factoryPancakeV3, initCodePancakeV3);
         balancerv2Executor = new BalancerV2Executor();
         ekuboExecutor = new EkuboExecutor(ekuboCore, ekuboMevResist);
         curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE, STETH_ADDR);
@@ -177,8 +171,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         hashflowExecutor = new HashflowExecutor(HASHFLOW_ROUTER);
         fluidV1Executor = new FluidV1Executor(FLUIDV1_LIQUIDITY);
         slipstreamsExecutor = new SlipstreamsExecutor(
-            SLIPSTREAMS_FACTORY_BASE,
-            SLIPSTREAMS_NEW_FACTORY_BASE
+            SLIPSTREAMS_FACTORY_BASE, SLIPSTREAMS_NEW_FACTORY_BASE
         );
         rocketpoolExecutor = new RocketpoolExecutor();
         erc4626Executor = new ERC4626Executor();
@@ -214,9 +207,11 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         clientFeeReceiver = makeAddr("clientFeeReceiver");
     }
 
-    function pleEncode(
-        bytes[] memory data
-    ) public pure returns (bytes memory encoded) {
+    function pleEncode(bytes[] memory data)
+        public
+        pure
+        returns (bytes memory encoded)
+    {
         for (uint256 i = 0; i < data.length; i++) {
             encoded = bytes.concat(
                 encoded,
@@ -225,17 +220,19 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         }
     }
 
-    function encodeSingleSwap(
-        address executor,
-        bytes memory protocolData
-    ) internal pure returns (bytes memory) {
+    function encodeSingleSwap(address executor, bytes memory protocolData)
+        internal
+        pure
+        returns (bytes memory)
+    {
         return abi.encodePacked(executor, protocolData);
     }
 
-    function encodeSequentialSwap(
-        address executor,
-        bytes memory protocolData
-    ) internal pure returns (bytes memory) {
+    function encodeSequentialSwap(address executor, bytes memory protocolData)
+        internal
+        pure
+        returns (bytes memory)
+    {
         return abi.encodePacked(executor, protocolData);
     }
 
@@ -246,14 +243,9 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         address executor,
         bytes memory protocolData
     ) internal pure returns (bytes memory) {
-        return
-            abi.encodePacked(
-                tokenInIndex,
-                tokenOutIndex,
-                split,
-                executor,
-                protocolData
-            );
+        return abi.encodePacked(
+            tokenInIndex, tokenOutIndex, split, executor, protocolData
+        );
     }
 
     function encodeUniswapV2Swap(
@@ -271,7 +263,6 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         bool zero2one
     ) internal view returns (bytes memory) {
         IUniswapV3Pool pool = IUniswapV3Pool(target);
-        return
-            abi.encodePacked(tokenIn, tokenOut, pool.fee(), target, zero2one);
+        return abi.encodePacked(tokenIn, tokenOut, pool.fee(), target, zero2one);
     }
 }
