@@ -4963,7 +4963,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-contracts"
-version = "0.25.3"
+version = "0.25.4"
 dependencies = [
  "alloy",
  "async-trait",

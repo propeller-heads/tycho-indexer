@@ -1,3 +1,10 @@
+## [0.25.4](https://github.com/propeller-heads/tycho-contracts/compare/0.25.3...0.25.4) (2026-02-13)
+
+
+### Bug Fixes
+
+* Ensure feeCalculator and permit2 are contracts ([a6c11dc](https://github.com/propeller-heads/tycho-contracts/commit/a6c11dcce26d684e296e79afa31c638d8e537076))
+
 ## [0.25.3](https://github.com/propeller-heads/tycho-contracts/compare/0.25.2...0.25.3) (2026-02-04)
 
 ## [0.25.2](https://github.com/propeller-heads/tycho-contracts/compare/0.25.1...0.25.2) (2026-02-04)
