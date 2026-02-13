@@ -1,3 +1,10 @@
+## [0.241.2](https://github.com/propeller-heads/tycho-simulation/compare/0.241.1...0.241.2) (2026-02-13)
+
+
+### Bug Fixes
+
+* EkuboV2 failed to convert consumed amount to BigUint ([1a9e548](https://github.com/propeller-heads/tycho-simulation/commit/1a9e548d52db3ab4035323640fe8af7693239de7))
+
 ## [0.241.1](https://github.com/propeller-heads/tycho-simulation/compare/0.241.0...0.241.1) (2026-02-12)
 
 
