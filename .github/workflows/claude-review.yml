@@ -13,7 +13,7 @@ jobs:
       pull-requests: write
     steps:
       - run: |
-          gh pr comment ${{ github.event.pull_request.number }} --body "Comment **\`/review\`** on this PR to run a Claude code review."
+          gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body "Comment **\`/review\`** on this PR to run a Claude code review."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
