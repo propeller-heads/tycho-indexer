@@ -3,11 +3,11 @@ use substreams::store::{StoreGet, StoreGetInt64, StoreGetProto};
 use substreams_helper::hex::Hexable;
 
 use crate::{
-    modules::store_pool_details::get_pool_details,
     pb::ekubo::{
         block_transaction_events::transaction_events::{pool_log::Event, PoolLog},
         BlockTransactionEvents, ChangeType, LiquidityChange, LiquidityChanges, PoolDetails,
     },
+    store::get_pool_details,
 };
 
 #[substreams::handlers::map]

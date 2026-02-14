@@ -1,17 +1,9 @@
 use alloy_primitives::aliases::B32;
 use ekubo_sdk::chain::evm::EvmPoolTypeConfig;
-use substreams::store::{
-    StoreGet as _, StoreGetProto, StoreNew, StoreSetIfNotExists, StoreSetIfNotExistsProto,
-};
+use substreams::store::{StoreNew, StoreSetIfNotExists, StoreSetIfNotExistsProto};
 use tycho_substreams::models::BlockChanges;
 
 use crate::pb::ekubo::PoolDetails;
-
-pub fn get_pool_details(store: &StoreGetProto<PoolDetails>, component_id: &str) -> PoolDetails {
-    store
-        .get_at(0, component_id)
-        .expect("pool id should exist in store")
-}
 
 // Since only the PoolInitialized event contains the complete pool key we need to store some info
 // required when processing other events

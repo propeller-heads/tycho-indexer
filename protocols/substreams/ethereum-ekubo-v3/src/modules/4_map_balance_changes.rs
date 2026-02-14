@@ -3,11 +3,11 @@ use substreams_helper::hex::Hexable;
 use tycho_substreams::models::{BalanceDelta, BlockBalanceDeltas, Transaction};
 
 use crate::{
-    modules::store_pool_details::get_pool_details,
     pb::ekubo::{
         block_transaction_events::transaction_events::pool_log::Event, BlockTransactionEvents,
         PoolDetails,
     },
+    store::get_pool_details,
 };
 
 #[substreams::handlers::map]
