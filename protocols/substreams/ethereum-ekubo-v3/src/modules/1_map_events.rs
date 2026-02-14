@@ -9,14 +9,20 @@ use substreams_ethereum::{
 };
 
 use crate::{
-    abi::{core::events as core_events, twamm::events as twamm_events},
-    addresses::{CORE_ADDRESS, MEV_CAPTURE_ADDRESS, ORACLE_ADDRESS, TWAMM_ADDRESS},
+    abi::{
+        boosted_fees::events as boosted_fees_events, core::events as core_events,
+        twamm::events as twamm_events,
+    },
+    addresses::{
+        BOOSTED_FEES_CONCENTRATED_ADDRESS, CORE_ADDRESS, MEV_CAPTURE_ADDRESS, ORACLE_ADDRESS,
+        TWAMM_ADDRESS,
+    },
     pb::ekubo::{
         block_transaction_events::{
             transaction_events::{
                 pool_log::{
-                    order_updated::OrderKey, pool_initialized::Extension, Event, OrderUpdated,
-                    PoolInitialized, PositionUpdated, Swapped, VirtualOrdersExecuted,
+                    pool_initialized::Extension, Event, PoolInitialized, PositionUpdated,
+                    RateUpdate, Swapped, VirtualExecution,
                 },
                 PoolLog,
             },
@@ -107,16 +113,18 @@ fn maybe_pool_log(log: &Log) -> Option<PoolLog> {
                     .expect("pool config to parse successfully")
                     .extension;
 
-                if extension.is_zero() {
-                    Extension::Base
+                if has_no_swap_call_points(extension) {
+                    Extension::NoSwapCallPoints
                 } else if extension == ORACLE_ADDRESS {
                     Extension::Oracle
                 } else if extension == TWAMM_ADDRESS {
                     Extension::Twamm
                 } else if extension == MEV_CAPTURE_ADDRESS {
                     Extension::MevCapture
+                } else if extension == BOOSTED_FEES_CONCENTRATED_ADDRESS {
+                    Extension::BoostedFeesConcentrated
                 } else {
-                    Extension::Unknown
+                    return None;
                 }
             };
 
@@ -141,13 +149,13 @@ fn maybe_pool_log(log: &Log) -> Option<PoolLog> {
         if log.topics.is_empty() {
             let data = &log.data;
 
-            assert!(data.len() == 60, "virtual orders executed event data length mismatch");
+            assert!(data.len() == 60, "virtual execution event data length mismatch");
 
             (
                 data[0..32].to_vec(),
-                Event::VirtualOrdersExecuted(VirtualOrdersExecuted {
-                    token0_sale_rate: data[32..46].to_vec(),
-                    token1_sale_rate: data[46..60].to_vec(),
+                Event::VirtualExecution(VirtualExecution {
+                    token0_rate: data[32..46].to_vec(),
+                    token1_rate: data[46..60].to_vec(),
                 }),
             )
         } else if let Some(ev) = twamm_events::OrderUpdated::match_and_decode(log) {
@@ -160,17 +168,45 @@ fn maybe_pool_log(log: &Log) -> Option<PoolLog> {
                 .pool_id()
                 .to_vec();
 
+            let (token0_rate_delta, token1_rate_delta) = if order_key.config.is_token1 {
+                (vec![], ev.sale_rate_delta.to_signed_bytes_be())
+            } else {
+                (ev.sale_rate_delta.to_signed_bytes_be(), vec![])
+            };
+
             (
                 pool_id,
-                Event::OrderUpdated(OrderUpdated {
-                    order_key: Some(OrderKey {
-                        token0: ev.order_key.0,
-                        token1: ev.order_key.1,
-                        is_token1: order_key.config.is_token1,
-                        start_time: order_key.config.start_time,
-                        end_time: order_key.config.end_time,
-                    }),
-                    sale_rate_delta: ev.sale_rate_delta.to_signed_bytes_be(),
+                Event::RateUpdate(RateUpdate {
+                    start_time: order_key.config.start_time,
+                    end_time: order_key.config.end_time,
+                    token0_rate_delta,
+                    token1_rate_delta,
+                }),
+            )
+        } else {
+            return None;
+        }
+    } else if emitter == BOOSTED_FEES_CONCENTRATED_ADDRESS {
+        if log.topics.is_empty() {
+            let data = &log.data;
+
+            assert!(data.len() == 60, "fees donated event data length mismatch");
+
+            (
+                data[0..32].to_vec(),
+                Event::VirtualExecution(VirtualExecution {
+                    token0_rate: data[32..46].to_vec(),
+                    token1_rate: data[46..60].to_vec(),
+                }),
+            )
+        } else if let Some(ev) = boosted_fees_events::PoolBoosted::match_and_decode(log) {
+            (
+                ev.pool_id.to_vec(),
+                Event::RateUpdate(RateUpdate {
+                    start_time: ev.start_time.to_u64(),
+                    end_time: ev.end_time.to_u64(),
+                    token0_rate_delta: ev.rate0.to_signed_bytes_be(),
+                    token1_rate_delta: ev.rate1.to_signed_bytes_be(),
                 }),
             )
         } else {
@@ -181,4 +217,10 @@ fn maybe_pool_log(log: &Log) -> Option<PoolLog> {
     };
 
     Some(PoolLog { ordinal: log.ordinal, pool_id, event: Some(ev) })
+}
+
+fn has_no_swap_call_points(extension: Address) -> bool {
+    // Call points are encoded in the first byte of the extension address.
+    // Bit 6 == beforeSwap, bit 5 == afterSwap.
+    extension[0] & 0b0110_0000 == 0
 }

@@ -1,3 +1,5 @@
+use alloy_primitives::{aliases::B32, B256};
+use ekubo_sdk::chain::evm::EvmPoolConfig;
 use itertools::Itertools;
 use substreams::scalar::BigInt;
 use substreams_helper::hex::Hexable;
@@ -52,120 +54,127 @@ fn maybe_create_component(
     log: PoolLog,
     timestamp: u64,
 ) -> Option<(ProtocolComponent, EntityChanges, Vec<BalanceChange>)> {
-    if let Event::PoolInitialized(pi) = log.event.unwrap() {
-        let entity_attributes = (pi.extension() == Extension::Twamm)
-            .then(|| {
-                [
-                    Attribute {
-                        change: ChangeType::Creation.into(),
-                        name: "token0_sale_rate".to_string(),
-                        value: vec![],
-                    },
-                    Attribute {
-                        change: ChangeType::Creation.into(),
-                        name: "token1_sale_rate".to_string(),
-                        value: vec![],
-                    },
-                    Attribute {
-                        change: ChangeType::Creation.into(),
-                        name: "last_execution_time".to_string(),
-                        value: timestamp.to_be_bytes().to_vec(),
-                    },
-                ]
-            })
-            .into_iter()
-            .flatten()
-            .chain([
-                Attribute {
-                    change: ChangeType::Creation.into(),
-                    name: "liquidity".to_string(),
-                    value: 0_u128.to_be_bytes().to_vec(),
-                },
-                Attribute {
-                    change: ChangeType::Creation.into(),
-                    name: "tick".to_string(),
-                    value: pi.tick.to_be_bytes().to_vec(),
-                },
-                Attribute {
-                    change: ChangeType::Creation.into(),
-                    name: "sqrt_ratio".to_string(),
-                    value: pi.sqrt_ratio,
-                },
-                Attribute {
-                    change: ChangeType::Creation.into(),
-                    name: "balance_owner".to_string(), /* TODO: We should use AccountBalances
-                                                        * instead */
-                    value: CORE_ADDRESS.to_vec(),
-                },
-            ])
-            .collect();
+    let Event::PoolInitialized(pi) = log.event.unwrap() else {
+        return None;
+    };
 
-        let (extension, fee, pool_type_config) =
-            (pi.config[0..20].to_vec(), pi.config[20..28].to_vec(), pi.config[28..32].to_vec());
+    let extension_type = pi.extension();
 
-        let component_id = log.pool_id.to_hex();
+    let mut entity_attributes = vec![
+        Attribute {
+            change: ChangeType::Creation.into(),
+            name: "liquidity".to_string(),
+            value: 0_u128.to_be_bytes().to_vec(),
+        },
+        Attribute {
+            change: ChangeType::Creation.into(),
+            name: "tick".to_string(),
+            value: pi.tick.to_be_bytes().to_vec(),
+        },
+        Attribute {
+            change: ChangeType::Creation.into(),
+            name: "sqrt_ratio".to_string(),
+            value: pi.sqrt_ratio,
+        },
+        Attribute {
+            change: ChangeType::Creation.into(),
+            name: "balance_owner".to_string(), /* TODO: We should use AccountBalances
+                                                * instead */
+            value: CORE_ADDRESS.to_vec(),
+        },
+    ];
 
-        return Some((
-            ProtocolComponent {
-                id: component_id.clone(),
-                tokens: vec![pi.token0.clone(), pi.token1.clone()],
-                contracts: vec![],
-                change: ChangeType::Creation.into(),
-                protocol_type: Some(ProtocolType {
-                    name: "ekubo_v3_pool".to_string(),
-                    financial_type: FinancialType::Swap.into(),
-                    implementation_type: ImplementationType::Custom.into(),
-                    attribute_schema: vec![],
-                }),
-                // Order of attributes matters (used in store_pool_details)
-                static_att: vec![
-                    Attribute {
-                        change: ChangeType::Creation.into(),
-                        name: "token0".to_string(),
-                        value: pi.token0.clone(),
-                    },
-                    Attribute {
-                        change: ChangeType::Creation.into(),
-                        name: "token1".to_string(),
-                        value: pi.token1.clone(),
-                    },
-                    Attribute {
-                        change: ChangeType::Creation.into(),
-                        name: "fee".to_string(),
-                        value: fee,
-                    },
-                    Attribute {
-                        change: ChangeType::Creation.into(),
-                        name: "pool_type_config".to_string(),
-                        value: pool_type_config,
-                    },
-                    Attribute {
-                        change: ChangeType::Creation.into(),
-                        name: "extension".to_string(),
-                        value: extension,
-                    },
-                    Attribute {
-                        change: ChangeType::Creation.into(),
-                        name: "extension_id".to_string(),
-                        value: pi.extension.to_be_bytes().to_vec(),
-                    },
-                ],
-            },
-            EntityChanges { component_id: component_id.clone(), attributes: entity_attributes },
-            vec![
-                BalanceChange {
-                    component_id: component_id.clone().into_bytes(),
-                    token: pi.token0,
-                    balance: BigInt::zero().to_signed_bytes_be(),
+    match extension_type {
+        Extension::Twamm | Extension::BoostedFeesConcentrated => {
+            entity_attributes.extend([
+                Attribute {
+                    change: ChangeType::Creation.into(),
+                    name: "rate_token0".to_string(),
+                    value: vec![],
                 },
-                BalanceChange {
-                    component_id: component_id.into_bytes(),
-                    token: pi.token1,
-                    balance: BigInt::zero().to_signed_bytes_be(),
+                Attribute {
+                    change: ChangeType::Creation.into(),
+                    name: "rate_token1".to_string(),
+                    value: vec![],
                 },
-            ],
-        ));
+                Attribute {
+                    change: ChangeType::Creation.into(),
+                    name: "last_execution_time".to_string(),
+                    value: timestamp.to_be_bytes().to_vec(),
+                },
+            ]);
+        }
+        Extension::Unknown
+        | Extension::NoSwapCallPoints
+        | Extension::Oracle
+        | Extension::MevCapture => {}
     }
 
-    None
+    let pool_config = EvmPoolConfig::try_from(
+        B256::try_from(pi.config.as_slice()).expect("pool config to be 32 bytes long"),
+    )
+    .expect("pool config to be valid");
+
+    let component_id = log.pool_id.to_hex();
+
+    return Some((
+        ProtocolComponent {
+            id: component_id.clone(),
+            tokens: vec![pi.token0.clone(), pi.token1.clone()],
+            contracts: vec![],
+            change: ChangeType::Creation.into(),
+            protocol_type: Some(ProtocolType {
+                name: "ekubo_v3_pool".to_string(),
+                financial_type: FinancialType::Swap.into(),
+                implementation_type: ImplementationType::Custom.into(),
+                attribute_schema: vec![],
+            }),
+            // Order of attributes matters (used in store_pool_details)
+            static_att: vec![
+                Attribute {
+                    change: ChangeType::Creation.into(),
+                    name: "token0".to_string(),
+                    value: pi.token0.clone(),
+                },
+                Attribute {
+                    change: ChangeType::Creation.into(),
+                    name: "token1".to_string(),
+                    value: pi.token1.clone(),
+                },
+                Attribute {
+                    change: ChangeType::Creation.into(),
+                    name: "fee".to_string(),
+                    value: pool_config.fee.to_be_bytes().to_vec(),
+                },
+                Attribute {
+                    change: ChangeType::Creation.into(),
+                    name: "pool_type_config".to_string(),
+                    value: B32::from(pool_config.pool_type_config).to_vec(),
+                },
+                Attribute {
+                    change: ChangeType::Creation.into(),
+                    name: "extension".to_string(),
+                    value: pool_config.extension.to_vec(),
+                },
+                Attribute {
+                    change: ChangeType::Creation.into(),
+                    name: "extension_type".to_string(),
+                    value: pi.extension.to_be_bytes().to_vec(),
+                },
+            ],
+        },
+        EntityChanges { component_id: component_id.clone(), attributes: entity_attributes },
+        vec![
+            BalanceChange {
+                component_id: component_id.clone().into_bytes(),
+                token: pi.token0,
+                balance: BigInt::zero().to_signed_bytes_be(),
+            },
+            BalanceChange {
+                component_id: component_id.into_bytes(),
+                token: pi.token1,
+                balance: BigInt::zero().to_signed_bytes_be(),
+            },
+        ],
+    ));
 }

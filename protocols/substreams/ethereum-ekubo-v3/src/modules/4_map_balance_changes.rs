@@ -64,19 +64,11 @@ fn balance_deltas(ev: Event, pool_details: PoolDetails) -> Vec<ReducedBalanceDel
         Event::PositionUpdated(ev) => vec![
             ReducedBalanceDelta {
                 token: pool_details.token0,
-                delta: adjust_delta_by_fee(
-                    BigInt::from_signed_bytes_be(&ev.delta0),
-                    pool_details.fee,
-                )
-                .to_signed_bytes_be(),
+                delta: adjust_position_delta_by_fee(ev.delta0, pool_details.fee),
             },
             ReducedBalanceDelta {
                 token: pool_details.token1,
-                delta: adjust_delta_by_fee(
-                    BigInt::from_signed_bytes_be(&ev.delta1),
-                    pool_details.fee,
-                )
-                .to_signed_bytes_be(),
+                delta: adjust_position_delta_by_fee(ev.delta1, pool_details.fee),
             },
         ],
         _ => vec![],
@@ -85,15 +77,17 @@ fn balance_deltas(ev: Event, pool_details: PoolDetails) -> Vec<ReducedBalanceDel
 
 // Negative deltas don't include the fees paid by the position owner, thus we need to add it back
 // here (i.e. subtract from the component's balance)
-fn adjust_delta_by_fee(delta: BigInt, fee: u64) -> BigInt {
-    if delta < BigInt::zero() {
-        let denom = BigInt::from_signed_bytes_be(&hex!("010000000000000000"));
-        let (quotient, remainder) = (delta * denom.clone()).div_rem(&(denom - fee));
+fn adjust_position_delta_by_fee(delta_bytes: Vec<u8>, fee: u64) -> Vec<u8> {
+    let delta = BigInt::from_signed_bytes_be(&delta_bytes);
 
-        quotient - (!remainder.is_zero()) as u8
-    } else {
-        delta
+    if delta >= BigInt::zero() {
+        return delta_bytes;
     }
+
+    let denom = BigInt::from_signed_bytes_be(&hex!("010000000000000000"));
+    let (quotient, remainder) = (delta * denom.clone()).div_rem(&(denom - fee));
+
+    (quotient - (!remainder.is_zero()) as u8).to_signed_bytes_be()
 }
 
 fn get_pool_details(store: &StoreGetProto<PoolDetails>, component_id: &str) -> PoolDetails {

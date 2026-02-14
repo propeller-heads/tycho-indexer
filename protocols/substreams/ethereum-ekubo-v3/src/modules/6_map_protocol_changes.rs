@@ -14,7 +14,7 @@ use tycho_substreams::{
 
 use crate::pb::ekubo::{
     block_transaction_events::transaction_events::pool_log::Event, BlockTransactionEvents,
-    LiquidityChanges, OrderSaleRateDeltas, SaleRateChanges, TickDeltas,
+    LiquidityChanges, RateChanges, RateDeltas, TickDeltas,
 };
 
 /// Aggregates protocol components and balance changes by transaction.
@@ -30,12 +30,12 @@ fn map_protocol_changes(
     balances_store_deltas: StoreDeltas,
     ticks_map_deltas: TickDeltas,
     ticks_store_deltas: StoreDeltas,
-    order_sale_rate_map_deltas: OrderSaleRateDeltas,
-    order_sale_rate_store_deltas: StoreDeltas,
+    rate_map_deltas: RateDeltas,
+    rate_delta_store_deltas: StoreDeltas,
     liquidity_changes: LiquidityChanges,
     liquidity_store_deltas: StoreDeltas,
-    sale_rate_changes: SaleRateChanges,
-    sale_rate_store_deltas: StoreDeltas,
+    rate_changes: RateChanges,
+    active_rate_store_deltas: StoreDeltas,
 ) -> Result<BlockChanges, substreams::errors::Error> {
     let mut transaction_changes: HashMap<_, TransactionChangesBuilder> = HashMap::new();
 
@@ -114,13 +114,13 @@ fn map_protocol_changes(
             });
         });
 
-    // TWAMM order sale rate deltas
-    order_sale_rate_store_deltas
+    // Rate deltas for TWAMM and BoostedFees
+    rate_delta_store_deltas
         .deltas
         .into_iter()
-        .zip(order_sale_rate_map_deltas.deltas)
-        .for_each(|(store_delta, sale_rate_delta)| {
-            let tx = sale_rate_delta.transaction.unwrap();
+        .zip(rate_map_deltas.deltas)
+        .for_each(|(store_delta, rate_delta)| {
+            let tx = rate_delta.transaction.unwrap();
             let builder = transaction_changes
                 .entry(tx.index)
                 .or_insert_with(|| TransactionChangesBuilder::new(&tx.into()));
@@ -130,12 +130,12 @@ fn map_protocol_changes(
                 BigInt::from_store_bytes(&store_delta.new_value),
             );
 
-            let token = if sale_rate_delta.is_token1 { "token1" } else { "token0" };
+            let token = if rate_delta.is_token1 { "token1" } else { "token0" };
 
             builder.add_entity_change(&EntityChanges {
-                component_id: sale_rate_delta.pool_id.to_hex(),
+                component_id: rate_delta.pool_id.to_hex(),
                 attributes: vec![Attribute {
-                    name: format!("orders/{}/{}", token, sale_rate_delta.time),
+                    name: format!("rates/{}/{}", token, rate_delta.time),
                     value: new_value.to_signed_bytes_be(),
                     change: change_type_from_delta(&old_value, &new_value).into(),
                 }],
@@ -164,18 +164,18 @@ fn map_protocol_changes(
             });
         });
 
-    // TWAMM active sale rates
-    sale_rate_store_deltas
+    // Active rates for TWAMM and BoostedFees
+    active_rate_store_deltas
         .deltas
         .chunks(2)
-        .zip(sale_rate_changes.changes)
+        .zip(rate_changes.changes)
         .for_each(|(store_deltas, change)| {
             let tx = change.transaction.unwrap();
             let builder = transaction_changes
                 .entry(tx.index)
                 .or_insert_with(|| TransactionChangesBuilder::new(&tx.into()));
 
-            let (token0_sale_rate, token1_sale_rate) = (
+            let (rate_token0, rate_token1) = (
                 bigint_from_set_sum_store_delta_value(store_deltas[0].new_value.clone()),
                 bigint_from_set_sum_store_delta_value(store_deltas[1].new_value.clone()),
             );
@@ -184,13 +184,13 @@ fn map_protocol_changes(
                 component_id: change.pool_id.to_hex(),
                 attributes: vec![
                     Attribute {
-                        name: "token0_sale_rate".to_string(),
-                        value: token0_sale_rate.to_bytes_be().1,
+                        name: "rate_token0".to_string(),
+                        value: rate_token0.to_bytes_be().1,
                         change: ChangeType::Update.into(),
                     },
                     Attribute {
-                        name: "token1_sale_rate".to_string(),
-                        value: token1_sale_rate.to_bytes_be().1,
+                        name: "rate_token1".to_string(),
+                        value: rate_token1.to_bytes_be().1,
                         change: ChangeType::Update.into(),
                     },
                 ],
@@ -255,7 +255,7 @@ fn maybe_attribute_updates(ev: Event, timestamp: u64) -> Option<Vec<Attribute>> 
                 change: ChangeType::Update.into(),
             },
         ]),
-        Event::VirtualOrdersExecuted(_) => Some(vec![Attribute {
+        Event::VirtualExecution(_) => Some(vec![Attribute {
             name: "last_execution_time".to_string(),
             value: timestamp.to_be_bytes().to_vec(),
             change: ChangeType::Update.into(),

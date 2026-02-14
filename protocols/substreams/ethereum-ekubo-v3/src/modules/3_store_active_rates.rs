@@ -4,11 +4,11 @@ use substreams::{
 };
 use substreams_helper::hex::Hexable;
 
-use crate::{pb::ekubo::SaleRateChanges, store::store_method_from_change_type};
+use crate::{pb::ekubo::RateChanges, store::store_method_from_change_type};
 
 #[substreams::handlers::store]
-pub fn store_active_sale_rates(sale_rate_changes: SaleRateChanges, store: StoreSetSumBigInt) {
-    sale_rate_changes
+pub fn store_active_rates(rate_changes: RateChanges, store: StoreSetSumBigInt) {
+    rate_changes
         .changes
         .into_iter()
         .for_each(|changes| {

@@ -21,16 +21,16 @@ message TickDelta {
 
 message TickDeltas { repeated TickDelta deltas = 1; }
 
-message OrderSaleRateDelta {
+message RateDelta {
   bytes pool_id = 1; // bytes32
   uint64 time = 2;
-  bytes sale_rate_delta = 3; // int112
+  bytes rate_delta = 3; // int112
   bool is_token1 = 4;
   uint64 ordinal = 5;
   Transaction transaction = 6;
 }
 
-message OrderSaleRateDeltas { repeated OrderSaleRateDelta deltas = 1; }
+message RateDeltas { repeated RateDelta deltas = 1; }
 
 enum ChangeType {
   DELTA = 0;
@@ -47,7 +47,7 @@ message LiquidityChange {
 
 message LiquidityChanges { repeated LiquidityChange changes = 1; }
 
-message SaleRateChange {
+message RateChange {
   bytes pool_id = 1;      // bytes32
   bytes token0_value = 2; // uint112 or int112, depending on change_type
   bytes token1_value = 3; // uint112 or int112, depending on change_type
@@ -56,7 +56,7 @@ message SaleRateChange {
   Transaction transaction = 6;
 }
 
-message SaleRateChanges { repeated SaleRateChange changes = 1; }
+message RateChanges { repeated RateChange changes = 1; }
 
 message PoolDetails {
   bytes token0 = 1; // address
@@ -81,8 +81,8 @@ message BlockTransactionEvents {
         Swapped swapped = 3;
         PositionUpdated position_updated = 4;
         PoolInitialized pool_initialized = 5;
-        VirtualOrdersExecuted virtual_orders_executed = 6;
-        OrderUpdated order_updated = 7;
+        VirtualExecution virtual_execution = 6;
+        RateUpdate rate_update = 7;
       }
 
       message Swapped {
@@ -111,29 +111,24 @@ message BlockTransactionEvents {
 
         enum Extension {
           EXTENSION_UNKNOWN = 0;
-          EXTENSION_BASE = 1;
+          EXTENSION_NO_SWAP_CALL_POINTS = 1;
           EXTENSION_ORACLE = 2;
           EXTENSION_TWAMM = 3;
           EXTENSION_MEV_CAPTURE = 4;
+          EXTENSION_BOOSTED_FEES_CONCENTRATED = 5;
         }
       }
 
-      message VirtualOrdersExecuted {
-        bytes token0_sale_rate = 1; // int112
-        bytes token1_sale_rate = 2; // int112
+      message VirtualExecution {
+        bytes token0_rate = 1; // int112/uint112
+        bytes token1_rate = 2; // int112/uint112
       }
 
-      message OrderUpdated {
-        OrderKey order_key = 1;
-        bytes sale_rate_delta = 2; // int112
-
-        message OrderKey {
-          bytes token0 = 1; // address
-          bytes token1 = 2; // address
-          bool is_token1 = 3;
-          uint64 start_time = 4; // block timestamp
-          uint64 end_time = 5;   // block timestamp
-        }
+      message RateUpdate {
+        uint64 start_time = 1;       // block timestamp
+        uint64 end_time = 2;         // block timestamp
+        bytes token0_rate_delta = 3; // int112
+        bytes token1_rate_delta = 4; // int112
       }
     }
   }

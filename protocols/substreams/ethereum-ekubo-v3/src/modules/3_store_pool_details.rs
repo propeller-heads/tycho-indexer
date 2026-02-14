@@ -10,7 +10,7 @@ fn store_pool_details(changes: BlockChanges, store: StoreSetIfNotExistsProto<Poo
     changes
         .changes
         .into_iter()
-        .flat_map(|c| c.component_changes.into_iter())
+        .flat_map(|c| c.component_changes)
         .for_each(|component| {
             let attrs = component.static_att;
 

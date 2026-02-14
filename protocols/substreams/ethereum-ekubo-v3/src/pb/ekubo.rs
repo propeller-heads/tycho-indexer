@@ -38,7 +38,7 @@ pub struct TickDeltas {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct OrderSaleRateDelta {
+pub struct RateDelta {
     /// bytes32
     #[prost(bytes="vec", tag="1")]
     pub pool_id: ::prost::alloc::vec::Vec<u8>,
@@ -46,7 +46,7 @@ pub struct OrderSaleRateDelta {
     pub time: u64,
     /// int112
     #[prost(bytes="vec", tag="3")]
-    pub sale_rate_delta: ::prost::alloc::vec::Vec<u8>,
+    pub rate_delta: ::prost::alloc::vec::Vec<u8>,
     #[prost(bool, tag="4")]
     pub is_token1: bool,
     #[prost(uint64, tag="5")]
@@ -56,9 +56,9 @@ pub struct OrderSaleRateDelta {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct OrderSaleRateDeltas {
+pub struct RateDeltas {
     #[prost(message, repeated, tag="1")]
-    pub deltas: ::prost::alloc::vec::Vec<OrderSaleRateDelta>,
+    pub deltas: ::prost::alloc::vec::Vec<RateDelta>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -84,7 +84,7 @@ pub struct LiquidityChanges {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SaleRateChange {
+pub struct RateChange {
     /// bytes32
     #[prost(bytes="vec", tag="1")]
     pub pool_id: ::prost::alloc::vec::Vec<u8>,
@@ -103,9 +103,9 @@ pub struct SaleRateChange {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SaleRateChanges {
+pub struct RateChanges {
     #[prost(message, repeated, tag="1")]
-    pub changes: ::prost::alloc::vec::Vec<SaleRateChange>,
+    pub changes: ::prost::alloc::vec::Vec<RateChange>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -220,10 +220,11 @@ pub mod block_transaction_events {
                 #[repr(i32)]
                 pub enum Extension {
                     Unknown = 0,
-                    Base = 1,
+                    NoSwapCallPoints = 1,
                     Oracle = 2,
                     Twamm = 3,
                     MevCapture = 4,
+                    BoostedFeesConcentrated = 5,
                 }
                 impl Extension {
                     /// String value of the enum field names used in the ProtoBuf definition.
@@ -233,20 +234,22 @@ pub mod block_transaction_events {
                     pub fn as_str_name(&self) -> &'static str {
                         match self {
                             Extension::Unknown => "EXTENSION_UNKNOWN",
-                            Extension::Base => "EXTENSION_BASE",
+                            Extension::NoSwapCallPoints => "EXTENSION_NO_SWAP_CALL_POINTS",
                             Extension::Oracle => "EXTENSION_ORACLE",
                             Extension::Twamm => "EXTENSION_TWAMM",
                             Extension::MevCapture => "EXTENSION_MEV_CAPTURE",
+                            Extension::BoostedFeesConcentrated => "EXTENSION_BOOSTED_FEES_CONCENTRATED",
                         }
                     }
                     /// Creates an enum from field names used in the ProtoBuf definition.
                     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
                         match value {
                             "EXTENSION_UNKNOWN" => Some(Self::Unknown),
-                            "EXTENSION_BASE" => Some(Self::Base),
+                            "EXTENSION_NO_SWAP_CALL_POINTS" => Some(Self::NoSwapCallPoints),
                             "EXTENSION_ORACLE" => Some(Self::Oracle),
                             "EXTENSION_TWAMM" => Some(Self::Twamm),
                             "EXTENSION_MEV_CAPTURE" => Some(Self::MevCapture),
+                            "EXTENSION_BOOSTED_FEES_CONCENTRATED" => Some(Self::BoostedFeesConcentrated),
                             _ => None,
                         }
                     }
@@ -254,43 +257,29 @@ pub mod block_transaction_events {
             }
             #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-            pub struct VirtualOrdersExecuted {
-                /// int112
+            pub struct VirtualExecution {
+                /// int112/uint112
                 #[prost(bytes="vec", tag="1")]
-                pub token0_sale_rate: ::prost::alloc::vec::Vec<u8>,
-                /// int112
+                pub token0_rate: ::prost::alloc::vec::Vec<u8>,
+                /// int112/uint112
                 #[prost(bytes="vec", tag="2")]
-                pub token1_sale_rate: ::prost::alloc::vec::Vec<u8>,
+                pub token1_rate: ::prost::alloc::vec::Vec<u8>,
             }
             #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-            pub struct OrderUpdated {
-                #[prost(message, optional, tag="1")]
-                pub order_key: ::core::option::Option<order_updated::OrderKey>,
+            pub struct RateUpdate {
+                /// block timestamp
+                #[prost(uint64, tag="1")]
+                pub start_time: u64,
+                /// block timestamp
+                #[prost(uint64, tag="2")]
+                pub end_time: u64,
                 /// int112
-                #[prost(bytes="vec", tag="2")]
-                pub sale_rate_delta: ::prost::alloc::vec::Vec<u8>,
-            }
-            /// Nested message and enum types in `OrderUpdated`.
-            pub mod order_updated {
-                #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-                pub struct OrderKey {
-                    /// address
-                    #[prost(bytes="vec", tag="1")]
-                    pub token0: ::prost::alloc::vec::Vec<u8>,
-                    /// address
-                    #[prost(bytes="vec", tag="2")]
-                    pub token1: ::prost::alloc::vec::Vec<u8>,
-                    #[prost(bool, tag="3")]
-                    pub is_token1: bool,
-                    /// block timestamp
-                    #[prost(uint64, tag="4")]
-                    pub start_time: u64,
-                    /// block timestamp
-                    #[prost(uint64, tag="5")]
-                    pub end_time: u64,
-                }
+                #[prost(bytes="vec", tag="3")]
+                pub token0_rate_delta: ::prost::alloc::vec::Vec<u8>,
+                /// int112
+                #[prost(bytes="vec", tag="4")]
+                pub token1_rate_delta: ::prost::alloc::vec::Vec<u8>,
             }
             #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Oneof)]
@@ -302,9 +291,9 @@ pub mod block_transaction_events {
                 #[prost(message, tag="5")]
                 PoolInitialized(PoolInitialized),
                 #[prost(message, tag="6")]
-                VirtualOrdersExecuted(VirtualOrdersExecuted),
+                VirtualExecution(VirtualExecution),
                 #[prost(message, tag="7")]
-                OrderUpdated(OrderUpdated),
+                RateUpdate(RateUpdate),
             }
         }
     }

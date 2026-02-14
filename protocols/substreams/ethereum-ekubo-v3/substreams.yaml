@@ -43,19 +43,19 @@ modules:
     output:
       type: proto:tycho.evm.v1.BlockChanges
 
-  - name: map_order_sale_rate_deltas
+  - name: map_rate_deltas
     kind: map
     inputs:
       - map: map_events
     output:
-      type: proto:ekubo.OrderSaleRateDeltas
+      type: proto:ekubo.RateDeltas
 
-  - name: map_sale_rate_changes
+  - name: map_rate_changes
     kind: map
     inputs:
       - map: map_events
     output:
-      type: proto:ekubo.SaleRateChanges
+      type: proto:ekubo.RateChanges
 
   - name: map_tick_deltas
     kind: map
@@ -71,19 +71,19 @@ modules:
     inputs:
       - map: map_events
 
-  - name: store_active_sale_rates
+  - name: store_active_rates
     kind: store
     valueType: bigint
     updatePolicy: set_sum
     inputs:
-      - map: map_sale_rate_changes
+      - map: map_rate_changes
 
-  - name: store_order_sale_rates
+  - name: store_rates
     kind: store
     valueType: bigint
     updatePolicy: add
     inputs:
-      - map: map_order_sale_rate_deltas
+      - map: map_rate_deltas
 
   - name: store_pool_details
     kind: store
@@ -142,14 +142,14 @@ modules:
       - map: map_tick_deltas
       - store: store_tick_liquidities
         mode: deltas
-      - map: map_order_sale_rate_deltas
-      - store: store_order_sale_rates
+      - map: map_rate_deltas
+      - store: store_rates
         mode: deltas
       - map: map_liquidity_changes
       - store: store_active_liquidities
         mode: deltas
-      - map: map_sale_rate_changes
-      - store: store_active_sale_rates
+      - map: map_rate_changes
+      - store: store_active_rates
         mode: deltas
     output:
       type: proto:tycho.evm.v1.BlockChanges

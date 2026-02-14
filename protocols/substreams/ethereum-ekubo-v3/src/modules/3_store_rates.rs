@@ -4,11 +4,11 @@ use substreams::{
 };
 use substreams_helper::hex::Hexable;
 
-use crate::pb::ekubo::OrderSaleRateDeltas;
+use crate::pb::ekubo::RateDeltas;
 
 #[substreams::handlers::store]
-pub fn store_order_sale_rates(order_sale_rate_deltas: OrderSaleRateDeltas, store: StoreAddBigInt) {
-    order_sale_rate_deltas
+pub fn store_rates(rate_deltas: RateDeltas, store: StoreAddBigInt) {
+    rate_deltas
         .deltas
         .into_iter()
         .for_each(|delta| {
@@ -19,7 +19,7 @@ pub fn store_order_sale_rates(order_sale_rate_deltas: OrderSaleRateDeltas, store
             store.add(
                 delta.ordinal,
                 format!("pool:{pool_id}:{token}:time:{time}:"),
-                BigInt::from_signed_bytes_be(&delta.sale_rate_delta),
+                BigInt::from_signed_bytes_be(&delta.rate_delta),
             );
         });
 }

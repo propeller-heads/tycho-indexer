@@ -7,19 +7,19 @@ mod map_events;
 
 #[path = "2_map_components.rs"]
 mod map_components;
-#[path = "2_map_order_sale_rate_deltas.rs"]
-mod map_order_sale_rate_deltas;
-#[path = "2_map_sale_rate_changes.rs"]
-mod map_sale_rate_changes;
+#[path = "2_map_rate_deltas.rs"]
+mod map_rate_deltas;
+#[path = "2_map_rate_changes.rs"]
+mod map_rate_changes;
 #[path = "2_map_tick_deltas.rs"]
 mod map_tick_deltas;
 #[path = "2_store_active_ticks.rs"]
 mod store_active_ticks;
 
-#[path = "3_store_active_sale_rates.rs"]
-mod store_active_sale_rates;
-#[path = "3_store_order_sale_rates.rs"]
-mod store_order_sale_rates;
+#[path = "3_store_active_rates.rs"]
+mod store_active_rates;
+#[path = "3_store_rates.rs"]
+mod store_rates;
 #[path = "3_store_pool_details.rs"]
 mod store_pool_details;
 #[path = "3_store_tick_liquidities.rs"]
