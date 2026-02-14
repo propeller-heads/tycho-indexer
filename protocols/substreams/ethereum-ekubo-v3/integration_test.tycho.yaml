@@ -1,12 +1,12 @@
 substreams_yaml_path: ./substreams.yaml
 protocol_system: "ekubo_v3"
-skip_balance_check: true # Fails because the pool id is not the owner of the tokens. Needs to be addressed in the testing framework.
+skip_balance_check: true # Ekubo follows a singleton design, pool balances are held in one contract
 protocol_type_names:
   - "ekubo_v3_pool"
 tests:
   - name: test_pool_creation
     start_block: 24134506
-    stop_block: 24250907
+    stop_block: 24379172
     expected_components:
       - id: "0x4a619b24ff31bbeae86503d0321898c9cb3f07bc32097749ee0622d5e9b78d6f"
         tokens:
@@ -56,3 +56,15 @@ tests:
           pool_type_config: "0x80000064"
           extension_id: "0x00000004"
         creation_tx: "0x672de3c0f48ee967812cc85310581fbc22e3b1d54e0ba33f9fc549eb09a56c2e"
+      - id: "0x4e6f6bc2b6cac587e323dbc9160cceb796de6ad44de09dedebc715f273a1ee40"
+        tokens:
+          - "0x6440f144b7e50d6a8439336510312d2f54beb01d"
+          - "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        static_attributes:
+          token0: "0x6440f144b7e50d6a8439336510312d2f54beb01d"
+          token1: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+          extension: "0x948b9c2c99718034954110cb61a6e08e107745f9"
+          fee: "0x000d1b71758e2196"
+          pool_type_config: "0x0e5a6240"
+          extension_id: "0x00000001"
+        creation_tx: "0x25b334854a8a957468ab972f99ba3dd6777feac617150024753297b0e9967783"
