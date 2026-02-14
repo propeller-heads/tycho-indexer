@@ -2,9 +2,12 @@ use substreams::store::{StoreGet, StoreGetInt64, StoreGetProto};
 
 use substreams_helper::hex::Hexable;
 
-use crate::pb::ekubo::{
-    block_transaction_events::transaction_events::{pool_log::Event, PoolLog},
-    BlockTransactionEvents, ChangeType, LiquidityChange, LiquidityChanges, PoolDetails,
+use crate::{
+    modules::store_pool_details::get_pool_details,
+    pb::ekubo::{
+        block_transaction_events::transaction_events::{pool_log::Event, PoolLog},
+        BlockTransactionEvents, ChangeType, LiquidityChange, LiquidityChanges, PoolDetails,
+    },
 };
 
 #[substreams::handlers::map]
@@ -58,20 +61,17 @@ fn maybe_liquidity_change(
         Event::PositionUpdated(position_updated) => {
             let pool_id = log.pool_id.to_hex();
 
-            let update_active_liquidity = if pool_details_store
-                .get_at(0, &pool_id)
-                .expect("pool details should be stored")
-                .is_stableswap
-            {
-                true
-            } else {
-                let current_tick = current_tick_store
-                    .get_at(log.ordinal, format!("pool:{0}", pool_id))
-                    .expect("pool should have active tick when initialized");
+            let update_active_liquidity =
+                if get_pool_details(pool_details_store, &pool_id).is_stableswap {
+                    true
+                } else {
+                    let current_tick = current_tick_store
+                        .get_at(log.ordinal, format!("pool:{0}", pool_id))
+                        .expect("pool should have active tick when initialized");
 
-                current_tick >= position_updated.lower.into() &&
-                    current_tick < position_updated.upper.into()
-            };
+                    current_tick >= position_updated.lower.into()
+                        && current_tick < position_updated.upper.into()
+                };
 
             update_active_liquidity.then(|| PartialLiquidityChange {
                 value: position_updated.liquidity_delta.clone(),

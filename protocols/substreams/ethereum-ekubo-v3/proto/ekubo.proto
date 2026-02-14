@@ -61,8 +61,7 @@ message RateChanges { repeated RateChange changes = 1; }
 message PoolDetails {
   bytes token0 = 1; // address
   bytes token1 = 2; // address
-  fixed64 fee = 3;
-  bool is_stableswap = 4;
+  bool is_stableswap = 3;
 }
 
 message BlockTransactionEvents {
