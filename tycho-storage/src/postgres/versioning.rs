@@ -412,7 +412,11 @@ fn set_partitioned_versioning_attributes<N: PartitionedVersionedRow>(
 
                 delete_row.delete(*delete_version);
                 archived.push(delete_row);
-                deleted.insert(id.clone());
+                // If it's deleted after being created (in this batch), skip deleting from default
+                // partition.
+                if db_latest.contains_key(id) {
+                    deleted.insert(id.clone());
+                }
             }
         }
     }
