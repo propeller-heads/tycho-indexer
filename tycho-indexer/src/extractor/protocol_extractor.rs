@@ -1073,7 +1073,7 @@ where
             })
     }
 
-    #[instrument(skip_all, fields(target_hash, target_number))]
+    #[instrument(skip_all, fields(current_block, target_hash, target_number))]
     #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
     async fn handle_revert(
         &self,
@@ -1090,18 +1090,31 @@ where
             ))
         })?;
 
-        tracing::Span::current().record("target_hash", format!("{block_hash:x}"));
-        tracing::Span::current().record("target_number", block_ref.number);
-
         let last_processed_block_number = self
             .get_last_processed_block()
             .await
-            .map_or(String::new(), |block| block.number.to_string());
+            .map_or("None".to_string(), |b| b.number.to_string());
+        let current_partial_block_index = self
+            .partial_block_buffer
+            .lock()
+            .await
+            .as_ref()
+            .and_then(|b| b.partial_block_index)
+            .map_or("None".to_string(), |i| i.to_string());
 
+        tracing::Span::current().record("current_block", &last_processed_block_number);
+        tracing::Span::current()
+            .record("current_partial_block_index", &current_partial_block_index);
+        tracing::Span::current().record("target_hash", format!("{block_hash:x}"));
+        tracing::Span::current().record("target_number", block_ref.number);
+
+        // Perf: consider optimizing this to avoid having a unique counter for every revert, which
+        // can blow up metrics memory usage in case of frequent reverts.
         counter!(
             "extractor_revert",
             "extractor" => self.name.clone(),
             "current_block" => last_processed_block_number,
+            "current_partial_block_index" => current_partial_block_index,
             "target_block" => block_ref.number.to_string()
         )
         .increment(1);
