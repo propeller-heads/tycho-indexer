@@ -9,6 +9,7 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {
     ReentrancyGuard
 } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ERC6909} from "@openzeppelin/contracts/token/ERC6909/ERC6909.sol";
 
 error Vault__InsufficientBalance(
@@ -24,7 +25,7 @@ error Vault__UnexpectedInputDelta(int256 inputDelta);
  * @dev Implements ERC6909 for managing user token balances within the router.
  * Users can deposit tokens, use them for swaps, and withdraw them.
  */
-abstract contract Vault is ERC6909, ReentrancyGuard {
+abstract contract Vault is ERC6909, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
     // Vault balances - using our own mapping to avoid expensive Transfer events from ERC6909
@@ -130,6 +131,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard {
     function deposit(address token, uint256 amount)
         external
         payable
+        whenNotPaused
         nonReentrant
     {
         if (amount == 0) {
