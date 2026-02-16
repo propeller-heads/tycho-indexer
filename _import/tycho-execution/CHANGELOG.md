@@ -1,3 +1,10 @@
+## [0.26.0](https://github.com/propeller-heads/tycho-contracts/compare/0.25.4...0.26.0) (2026-02-16)
+
+
+### Features
+
+* Make additional methods pausable ([9dad21c](https://github.com/propeller-heads/tycho-contracts/commit/9dad21c7f3d3347e1004209186cd235fa730b51e))
+
 ## [0.25.4](https://github.com/propeller-heads/tycho-contracts/compare/0.25.3...0.25.4) (2026-02-13)
 
 
