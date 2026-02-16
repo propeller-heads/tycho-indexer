@@ -135,7 +135,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
                 TychoRouter__NotAContract.selector, nonContract
             )
         );
-        new TychoRouterExposed(PERMIT2_ADDRESS, nonContract, 0);
+        new TychoRouterExposed(PERMIT2_ADDRESS, nonContract);
     }
 
     function testConstructorNonContractPermit2() public {
@@ -147,6 +147,6 @@ contract TychoRouterTest is TychoRouterTestSetup {
                 RestrictTransferFrom__NotAContract.selector, nonContract
             )
         );
-        new TychoRouterExposed(nonContract, address(newFeeCalculator), 0);
+        new TychoRouterExposed(nonContract, address(newFeeCalculator));
     }
 }

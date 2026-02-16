@@ -101,12 +101,16 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         return 22082754;
     }
 
+    uint256 internal forkTimestamp;
+
     function setUp() public virtual {
         string memory chain = getChain();
         uint256 forkBlock = getForkBlock();
         vm.createSelectFork(vm.rpcUrl(chain), forkBlock);
-        uint256 setupBlock = forkBlock - _SETUP_TIME_OFFSET_ETHEREUM;
-        vm.roll(setupBlock);
+
+        forkTimestamp = block.timestamp;
+        uint256 setupTime = forkTimestamp - _SETUP_TIME_OFFSET_ETHEREUM;
+        vm.warp(setupTime);
 
         vm.startPrank(ADMIN);
         tychoRouter = deployRouter();
@@ -123,7 +127,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         vm.prank(FEE_SETTER);
         tychoRouter.setFeeCalculator(address(feeCalculator));
         vm.stopPrank();
-        vm.roll(forkBlock);
+        vm.warp(forkTimestamp);
     }
 
     function deployRouter() public returns (TychoRouterExposed) {
