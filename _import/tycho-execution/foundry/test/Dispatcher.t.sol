@@ -32,7 +32,7 @@ contract DispatcherExposed is Dispatcher {
 contract DispatcherTest is Constants {
     DispatcherExposed dispatcherExposed;
 
-    event ExecutorSet(address indexed executor);
+    event ExecutorSet(address indexed executor, uint256 timelockExpiresAt);
     event ExecutorRemoved(address indexed executor);
 
     function setUp() public {
@@ -46,7 +46,9 @@ contract DispatcherTest is Constants {
     function testSetValidExecutor() public {
         vm.expectEmit();
         // Define the event we expect to be emitted at the next step
-        emit ExecutorSet(DUMMY);
+        uint256 timelockExpiresAt =
+            block.timestamp + dispatcherExposed.DELAY_EXECUTOR_ACTIVATION();
+        emit ExecutorSet(DUMMY, timelockExpiresAt);
         dispatcherExposed.exposedSetExecutor(DUMMY);
 
         assert(dispatcherExposed.executorsActivationTimestamp(DUMMY) > 0);
