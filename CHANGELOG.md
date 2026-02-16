@@ -1,3 +1,12 @@
+## [0.142.0](https://github.com/propeller-heads/tycho-indexer/compare/0.141.1...0.142.0) (2026-02-16)
+
+
+### Features
+
+* add block_type label to block processing time metric ([12127c5](https://github.com/propeller-heads/tycho-indexer/commit/12127c5a9d0fae2d6711d58854e3856d3bdd8f29))
+* add metrics partial block metrics ([#850](https://github.com/propeller-heads/tycho-indexer/issues/850)) ([11f56d7](https://github.com/propeller-heads/tycho-indexer/commit/11f56d75c4b4f7341e1a2ab9d45aca75ac89775a))
+* **extractor:** add partial block metrics for Grafana observability ([0ee6e49](https://github.com/propeller-heads/tycho-indexer/commit/0ee6e494c0cc7dc44c7f51e238ba93d3865dc350))
+
 ## [0.141.1](https://github.com/propeller-heads/tycho-indexer/compare/0.141.0...0.141.1) (2026-02-13)
 
 
