@@ -208,6 +208,8 @@ impl ExtractorRunner {
 
         runtime.spawn(async move {
             let id = self.extractor.get_id();
+            // Track the number of partials received for the current block != partial_index.
+            let mut partials_in_block: u32 = 0;
             loop {
                 // this is the main info span of an extractor
                 let loop_span = info_span!(
@@ -248,6 +250,20 @@ impl ExtractorRunner {
                                         "extractor" => id.name.to_string()
                                     ).set(block_number as f64);
 
+                                    if data.is_partial {
+                                        partials_in_block += 1;
+                                    }
+
+                                    if data.is_last_partial == Some(true) || data.partial_index.is_none() {
+                                        gauge!(
+                                            "extractor_partials_per_block",
+                                            "chain" => id.chain.to_string(),
+                                            "extractor" => id.name.to_string()
+                                        )
+                                        .set(partials_in_block as f64);
+                                        partials_in_block = 0;
+                                    }
+
                                     // Start measuring block processing time
                                     let start_time = std::time::Instant::now();
 
@@ -267,16 +283,22 @@ impl ExtractorRunner {
                                         Self::propagate_msg(&self.subscriptions, msg).await
                                     }
 
-                                    let duration = start_time.elapsed();
-                                    let partial_block_index = data.partial_index.unwrap_or(0);
+                                    let duration_ms = start_time.elapsed().as_millis() as f64;
+                                    let block_type = match (data.is_partial, data.is_last_partial) {
+                                        (false, _) => "full",
+                                        (true, Some(true)) => "final_partial",
+                                        (true, _) => "partial",
+                                    };
+
                                     gauge!(
                                         "block_processing_time_ms",
                                         "chain" => id.chain.to_string(),
                                         "extractor" => id.name.to_string(),
-                                        "partial_block_index" => partial_block_index.to_string()
-                                    ).set(duration.as_millis() as f64);
+                                        "block_type" => block_type
+                                    ).set(duration_ms);
                                 }
                                 Some(Ok(BlockResponse::Undo(undo_signal))) => {
+                                    partials_in_block = 0;
                                     info!(block=?&undo_signal.last_valid_block,  "Revert requested!");
                                     match self.extractor.handle_revert(undo_signal.clone()).await {
                                         Ok(Some(msg)) => {
@@ -309,8 +331,8 @@ impl ExtractorRunner {
                     tracing::Span::current().record("otel.status_code", "ok");
                     Ok(true) // Continue the loop
                 }
-                .instrument(loop_span)
-                .await?;
+                    .instrument(loop_span)
+                    .await?;
 
                 if !should_continue {
                     break Ok(());
