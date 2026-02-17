@@ -78,8 +78,10 @@ impl TychoRouterEncoder {
         })
     }
 
-    fn encode_solution(&self, solution: &Solution) -> Result<EncodedSolution, EncodingError> {
+    fn encode_solution(&self, solution: &mut Solution) -> Result<EncodedSolution, EncodingError> {
         self.validate_solution(solution)?;
+        self.add_missing_eth_wrapping_unwrapping_swaps(solution);
+
         let protocols: HashSet<String> = solution
             .swaps
             .iter()
@@ -126,10 +128,10 @@ impl TychoRouterEncoder {
 impl TychoEncoder for TychoRouterEncoder {
     fn encode_solutions(
         &self,
-        solutions: Vec<Solution>,
+        mut solutions: Vec<Solution>,
     ) -> Result<Vec<EncodedSolution>, EncodingError> {
         let mut result: Vec<EncodedSolution> = Vec::new();
-        for solution in solutions.iter() {
+        for solution in solutions.iter_mut() {
             let encoded_solution = self.encode_solution(solution)?;
             result.push(encoded_solution);
         }
@@ -138,10 +140,10 @@ impl TychoEncoder for TychoRouterEncoder {
 
     fn encode_full_calldata(
         &self,
-        solutions: Vec<Solution>,
+        mut solutions: Vec<Solution>,
     ) -> Result<Vec<Transaction>, EncodingError> {
         let mut transactions: Vec<Transaction> = Vec::new();
-        for solution in solutions.iter() {
+        for solution in solutions.iter_mut() {
             let encoded_solution = self.encode_solution(solution)?;
 
             let transaction = encode_tycho_router_call(
@@ -290,12 +292,13 @@ impl TychoExecutorEncoder {
 impl TychoEncoder for TychoExecutorEncoder {
     fn encode_solutions(
         &self,
-        solutions: Vec<Solution>,
+        mut solutions: Vec<Solution>,
     ) -> Result<Vec<EncodedSolution>, EncodingError> {
-        let solution = solutions
-            .first()
+        let mut solution = solutions
+            .first_mut()
             .ok_or(EncodingError::FatalError("No solutions found".to_string()))?;
         self.validate_solution(solution)?;
+        self.add_missing_eth_wrapping_unwrapping_swaps(solution);
 
         let encoded_solution = self.encode_executor_calldata(solution)?;
 
@@ -448,7 +451,7 @@ mod tests {
             let solution = Solution {
                 exact_out: false,
                 amount_in: weth_amount_in.clone(),
-                token_in: weth(),
+                token_in: eth(),
                 token_out: dai(),
                 swaps: vec![swap],
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -542,7 +545,7 @@ mod tests {
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
             let mut swap_usdc_eth = swap_usdc_eth_univ4();
             swap_usdc_eth = swap_usdc_eth.split(0.5); // Set split to 50%
-            let solution = Solution {
+            let mut solution = Solution {
                 exact_out: false,
                 token_in: usdc(),
                 amount_in: BigUint::from_str("1000_000000").unwrap(),
@@ -553,13 +556,137 @@ mod tests {
                 ..Default::default()
             };
 
-            let encoded_solution_res = encoder.encode_solution(&solution);
+            let encoded_solution_res = encoder.encode_solution(&mut solution);
             assert!(encoded_solution_res.is_ok());
 
             let encoded_solution = encoded_solution_res.unwrap();
             assert!(encoded_solution
                 .function_signature
                 .contains("splitSwap"));
+        }
+
+        #[test]
+        fn test_add_missing_wrapped_eth_swap_in_the_middle() {
+            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+            let swap_weth_dai = Swap::new(
+                ProtocolComponent {
+                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                weth().clone(),
+                dai().clone(),
+            );
+
+            let swap_dai_usdc = Swap::new(
+                ProtocolComponent {
+                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                dai().clone(),
+                usdc().clone(),
+            );
+
+            let mut solution = Solution {
+                exact_out: false,
+                token_in: dai(),
+                amount_in: BigUint::from_str("1000_000000").unwrap(),
+                token_out: dai(),
+                min_amount_out: BigUint::from_str("105_152_000000000000000000").unwrap(),
+                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                swaps: vec![swap_dai_usdc, swap_usdc_eth_univ4(), swap_weth_dai],
+                ..Default::default()
+            };
+
+            encoder.add_missing_eth_wrapping_unwrapping_swaps(&mut solution);
+            assert_eq!(solution.swaps.len(), 4);
+            assert_eq!(solution.swaps[2].token_in(), &eth());
+            assert_eq!(solution.swaps[2].token_out(), &weth());
+        }
+
+        #[test]
+        fn test_add_missing_wrapped_eth_swap_in_the_beginning() {
+            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+            let swap_weth_dai = Swap::new(
+                ProtocolComponent {
+                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                weth().clone(),
+                dai().clone(),
+            );
+
+            let mut solution = Solution {
+                exact_out: false,
+                token_in: eth(),
+                amount_in: BigUint::from_str("1000_000000").unwrap(),
+                token_out: dai(),
+                min_amount_out: BigUint::from_str("105_152_000000000000000000").unwrap(),
+                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                swaps: vec![swap_weth_dai],
+                ..Default::default()
+            };
+
+            encoder.add_missing_eth_wrapping_unwrapping_swaps(&mut solution);
+            assert_eq!(solution.swaps.len(), 2);
+            assert_eq!(solution.swaps[0].token_in(), &eth());
+            assert_eq!(solution.swaps[0].token_out(), &weth());
+        }
+
+        #[test]
+        fn test_add_missing_wrapped_eth_swap_in_the_end() {
+            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+            let mut solution = Solution {
+                exact_out: false,
+                token_in: usdc(),
+                amount_in: BigUint::from_str("1000_000000").unwrap(),
+                token_out: weth(),
+                min_amount_out: BigUint::from_str("105_152_000000000000000000").unwrap(),
+                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                swaps: vec![swap_usdc_eth_univ4()],
+                ..Default::default()
+            };
+
+            encoder.add_missing_eth_wrapping_unwrapping_swaps(&mut solution);
+            assert_eq!(solution.swaps.len(), 2);
+            assert_eq!(
+                solution
+                    .swaps
+                    .last()
+                    .unwrap()
+                    .token_in(),
+                &eth()
+            );
+            assert_eq!(
+                solution
+                    .swaps
+                    .last()
+                    .unwrap()
+                    .token_out(),
+                &weth()
+            );
+        }
+
+        #[test]
+        fn test_do_not_add_missing_wrapped_eth_swap() {
+            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+            let mut solution = Solution {
+                exact_out: false,
+                token_in: usdc(),
+                amount_in: BigUint::from_str("1000_000000").unwrap(),
+                token_out: weth(),
+                min_amount_out: BigUint::from_str("105_152_000000000000000000").unwrap(),
+                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                swaps: vec![swap_usdc_eth_univ4()],
+                ..Default::default()
+            };
+
+            encoder.add_missing_eth_wrapping_unwrapping_swaps(&mut solution);
+            assert_eq!(solution.swaps.len(), 1);
         }
 
         #[test]
