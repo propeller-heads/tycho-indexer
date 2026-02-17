@@ -54,8 +54,8 @@ impl LiquoriceState {
         token_address_in: &Bytes,
         token_address_out: &Bytes,
     ) -> Result<(), SimulationError> {
-        if !(token_address_in == &self.base_token.address
-            && token_address_out == &self.quote_token.address)
+        if !(token_address_in == &self.base_token.address &&
+            token_address_out == &self.quote_token.address)
         {
             Err(SimulationError::InvalidInput(
                 format!("Invalid token addresses. Got in={token_address_in}, out={token_address_out}, expected in={}, out={}", self.base_token.address, self.quote_token.address),
@@ -179,9 +179,9 @@ impl ProtocolSim for LiquoriceState {
             .as_any()
             .downcast_ref::<LiquoriceState>()
         {
-            self.base_token == other_state.base_token
-                && self.quote_token == other_state.quote_token
-                && self.levels == other_state.levels
+            self.base_token == other_state.base_token &&
+                self.quote_token == other_state.quote_token &&
+                self.levels == other_state.levels
         } else {
             false
         }

@@ -87,8 +87,8 @@ impl LiquoriceClient {
         for approved_quote_token in &self.quote_tokens {
             for (_mm, mm_levels_inner) in levels_by_mm.iter() {
                 for quote_mm_level in mm_levels_inner {
-                    if quote_mm_level.base_token == quote_token
-                        && quote_mm_level.quote_token == *approved_quote_token
+                    if quote_mm_level.base_token == quote_token &&
+                        quote_mm_level.quote_token == *approved_quote_token
                     {
                         if let Some(price) = quote_mm_level.get_price(1.0) {
                             return Ok(raw_tvl * price);
@@ -279,8 +279,8 @@ impl RFQClient for LiquoriceClient {
         let expiry = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .map_err(|_| RFQError::ParsingError("SystemTime before UNIX EPOCH!".into()))?
-            .as_secs()
-            + 60; // 60 seconds from now
+            .as_secs() +
+            60; // 60 seconds from now
 
         let rfq_id = uuid::Uuid::new_v4().to_string();
 
@@ -467,14 +467,14 @@ impl RFQClient for LiquoriceClient {
                 quote_attributes.insert(
                     "min_base_token_amount".to_string(),
                     Bytes::from(
-                        biguint_to_u256(
-                            &BigUint::from_str(&pf.min_base_token_amount).map_err(|_| {
+                        biguint_to_u256(&BigUint::from_str(&pf.min_base_token_amount).map_err(
+                            |_| {
                                 RFQError::ParsingError(format!(
                                     "Failed to parse min_base_token_amount: {}",
                                     pf.min_base_token_amount
                                 ))
-                            })?,
-                        )
+                            },
+                        )?)
                         .to_be_bytes::<32>()
                         .to_vec(),
                     ),
@@ -512,7 +512,9 @@ mod tests {
     use std::{str::FromStr, time::Duration};
 
     use super::*;
-    use crate::rfq::protocols::liquorice::models::{LiquoriceMarketMakerLevels, LiquoricePriceLevel};
+    use crate::rfq::protocols::liquorice::models::{
+        LiquoriceMarketMakerLevels, LiquoricePriceLevel,
+    };
 
     #[test]
     fn test_normalize_tvl_same_quote_token() {
@@ -693,6 +695,7 @@ mod tests {
     async fn create_retry_server() -> (std::net::SocketAddr, std::sync::Arc<std::sync::Mutex<u32>>)
     {
         use std::sync::{Arc, Mutex};
+
         use tokio::{io::AsyncWriteExt, net::TcpListener};
 
         let request_count = Arc::new(Mutex::new(0u32));

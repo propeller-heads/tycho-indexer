@@ -82,17 +82,12 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for LiquoriceState {
         };
 
         let auth = get_liquorice_auth().map_err(|e| {
-            InvalidSnapshotError::ValueError(format!(
-                "Failed to get Liquorice authentication: {e}"
-            ))
+            InvalidSnapshotError::ValueError(format!("Failed to get Liquorice authentication: {e}"))
         })?;
 
         let client =
             LiquoriceClientBuilder::new(snapshot.component.chain.into(), auth.solver, auth.key)
-                .tokens(HashSet::from([
-                    base_token_address.clone(),
-                    quote_token_address.clone(),
-                ]))
+                .tokens(HashSet::from([base_token_address.clone(), quote_token_address.clone()]))
                 .build()
                 .map_err(|e| {
                     InvalidSnapshotError::MissingAttribute(format!(
@@ -176,7 +171,10 @@ mod tests {
 
         state_attributes.insert(
             "mm".to_string(),
-            "test_market_maker".as_bytes().to_vec().into(),
+            "test_market_maker"
+                .as_bytes()
+                .to_vec()
+                .into(),
         );
 
         let snapshot = ComponentWithState {
@@ -239,7 +237,10 @@ mod tests {
         env::set_var("LIQUORICE_KEY", "test_key");
 
         let (mut snapshot, tokens) = create_test_snapshot();
-        snapshot.state.attributes.remove("levels");
+        snapshot
+            .state
+            .attributes
+            .remove("levels");
 
         let result = LiquoriceState::try_from_with_header(
             snapshot,
@@ -297,7 +298,10 @@ mod tests {
         );
 
         tokens.insert(dai_token.address.clone(), dai_token.clone());
-        snapshot.component.tokens.push(dai_token.address);
+        snapshot
+            .component
+            .tokens
+            .push(dai_token.address);
 
         let result = LiquoriceState::try_from_with_header(
             snapshot,
@@ -321,7 +325,10 @@ mod tests {
 
         snapshot.state.attributes.insert(
             "levels".to_string(),
-            "invalid json".as_bytes().to_vec().into(),
+            "invalid json"
+                .as_bytes()
+                .to_vec()
+                .into(),
         );
 
         let result = LiquoriceState::try_from_with_header(
@@ -355,9 +362,6 @@ mod tests {
         .await;
 
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            InvalidSnapshotError::MissingAttribute(_)
-        ));
+        assert!(matches!(result.unwrap_err(), InvalidSnapshotError::MissingAttribute(_)));
     }
 }

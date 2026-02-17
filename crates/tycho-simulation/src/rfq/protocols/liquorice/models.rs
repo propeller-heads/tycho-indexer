@@ -2,10 +2,7 @@ use std::{collections::HashMap, str::FromStr};
 
 use alloy::primitives::Address;
 use serde::{Deserialize, Serialize};
-use tycho_common::{
-    models::protocol::GetAmountOutParams,
-    Bytes,
-};
+use tycho_common::{models::protocol::GetAmountOutParams, Bytes};
 
 use crate::rfq::errors::RFQError;
 
@@ -22,7 +19,8 @@ pub struct LiquoriceMarketMakerLevels {
     pub base_token: Bytes,
     #[serde(rename = "quoteToken", deserialize_with = "deserialize_string_to_checksummed_bytes")]
     pub quote_token: Bytes,
-    /// Levels as [price, quantity] string pairs from the API, deserialized into LiquoricePriceLevel
+    /// Levels as [price, quantity] string pairs from the API, deserialized into
+    /// LiquoricePriceLevel
     #[serde(deserialize_with = "deserialize_string_pair_to_price_levels")]
     pub levels: Vec<LiquoricePriceLevel>,
     #[serde(rename = "updatedAt")]
@@ -83,7 +81,8 @@ where
     D: serde::Deserializer<'de>,
 {
     let s = String::deserialize(deserializer)?;
-    s.parse().map_err(serde::de::Error::custom)
+    s.parse()
+        .map_err(serde::de::Error::custom)
 }
 
 fn serialize_f64_to_string<S>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
