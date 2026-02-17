@@ -4,7 +4,7 @@ use std::{
     time::SystemTime,
 };
 
-use alloy::primitives::{utils::keccak256, U256};
+use alloy::primitives::utils::keccak256;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use num_bigint::BigUint;
@@ -24,8 +24,8 @@ use crate::{
         errors::RFQError,
         models::TimestampHeader,
         protocols::liquorice::models::{
-            LiquoriceConnectedMakersResponse, LiquoriceMarketMakerLevels,
-            LiquoricePriceLevelsResponse, LiquoriceQuoteRequest, LiquoriceQuoteResponse,
+            LiquoriceMarketMakerLevels, LiquoricePriceLevelsResponse, LiquoriceQuoteRequest,
+            LiquoriceQuoteResponse,
         },
     },
     tycho_client::feed::synchronizer::{ComponentWithState, Snapshot, StateSyncMessage},
@@ -36,7 +36,6 @@ use crate::{
 pub struct LiquoriceClient {
     chain: Chain,
     price_levels_endpoint: String,
-    connected_makers_endpoint: String,
     quote_endpoint: String,
     tokens: HashSet<Bytes>,
     tvl: f64,
@@ -64,8 +63,6 @@ impl LiquoriceClient {
         Ok(Self {
             chain,
             price_levels_endpoint: "https://api.liquorice.tech/v1/solver/price-levels".to_string(),
-            connected_makers_endpoint: "https://api.liquorice.tech/v1/solver/connected-makers"
-                .to_string(),
             quote_endpoint: "https://api.liquorice.tech/v1/solver/rfq".to_string(),
             tokens,
             tvl,
@@ -142,38 +139,6 @@ impl LiquoriceClient {
         }
     }
 
-    async fn fetch_connected_makers(&self) -> Result<Vec<String>, RFQError> {
-        let http_client = Client::new();
-        let request = http_client
-            .get(&self.connected_makers_endpoint)
-            .header("accept", "application/json")
-            .header("solver", &self.auth_solver)
-            .header("authorization", &self.auth_key);
-
-        let response = request.send().await.map_err(|e| {
-            RFQError::ConnectionError(format!("Failed to fetch connected makers: {e}"))
-        })?;
-
-        if !response.status().is_success() {
-            return Err(RFQError::ConnectionError(format!(
-                "HTTP error {}: {}",
-                response.status(),
-                response
-                    .text()
-                    .await
-                    .unwrap_or_default()
-            )));
-        }
-
-        let makers: LiquoriceConnectedMakersResponse = response.json().await.map_err(|e| {
-            RFQError::ParsingError(format!("Failed to parse connected makers response: {e}"))
-        })?;
-
-        info!("Fetched {} connected makers: {:?}", makers.len(), makers);
-
-        Ok(makers)
-    }
-
     async fn fetch_price_levels(
         &self,
     ) -> Result<HashMap<String, Vec<LiquoriceMarketMakerLevels>>, RFQError> {
@@ -228,17 +193,6 @@ impl RFQClient for LiquoriceClient {
             loop {
                 ticker.tick().await;
 
-                // Fetch connected makers (for logging/verification)
-                match client.fetch_connected_makers().await {
-                    Ok(makers) => {
-                        info!("Successfully fetched {} connected makers", makers.len());
-                    }
-                    Err(e) => {
-                        info!("Failed to fetch connected makers: {}", e);
-                        continue;
-                    }
-                }
-
                 match client.fetch_price_levels().await {
                     Ok(levels_by_mm) => {
                         let mut new_components = HashMap::new();
@@ -259,6 +213,8 @@ impl RFQClient for LiquoriceClient {
                                         &levels_by_mm,
                                     )?;
 
+                                    // TODO: component_id doesn't include market maker name. Two MMs
+                                    // quoting the same pair will collide. Implement aggregation or pickings of the best quote instead.
                                     let pair_str = format!("liquorice_{}/{}", hex::encode(base_token), hex::encode(quote_token));
                                     let component_id = format!("{}", keccak256(pair_str.as_bytes()));
 
@@ -335,7 +291,7 @@ impl RFQClient for LiquoriceClient {
             base_token: params.token_in.to_string(),
             quote_token: params.token_out.to_string(),
             trader: params.receiver.to_string(),
-            effective_trader: None,
+            effective_trader: Some(params.sender.to_string()),
             base_token_amount: Some(params.amount_in.to_string()),
             quote_token_amount: None,
             excluded_makers: None,
@@ -469,15 +425,7 @@ impl RFQClient for LiquoriceClient {
 
             let mut quote_attributes: HashMap<String, Bytes> = HashMap::new();
 
-            // target contract (settlement contract)
-            quote_attributes.insert(
-                "target_contract".to_string(),
-                Bytes::from_str(&quote_level.tx.to).map_err(|e| {
-                    RFQError::ParsingError(format!("Failed to parse target contract address: {e}"))
-                })?,
-            );
-
-            // calldata
+            // calldata (pre-encoded by Liquorice API)
             quote_attributes.insert(
                 "calldata".to_string(),
                 Bytes::from(
@@ -493,21 +441,7 @@ impl RFQClient for LiquoriceClient {
                 ),
             );
 
-            // base and quote tokens
-            quote_attributes.insert(
-                "base_token".to_string(),
-                Bytes::from_str(&quote_level.base_token).map_err(|e| {
-                    RFQError::ParsingError(format!("Failed to parse base token: {e}"))
-                })?,
-            );
-            quote_attributes.insert(
-                "quote_token".to_string(),
-                Bytes::from_str(&quote_level.quote_token).map_err(|e| {
-                    RFQError::ParsingError(format!("Failed to parse quote token: {e}"))
-                })?,
-            );
-
-            // amounts as U256
+            // base_token_amount as U256 (32 bytes big-endian)
             quote_attributes.insert(
                 "base_token_amount".to_string(),
                 Bytes::from(
@@ -523,70 +457,29 @@ impl RFQClient for LiquoriceClient {
                     .to_vec(),
                 ),
             );
-            quote_attributes.insert(
-                "quote_token_amount".to_string(),
-                Bytes::from(
-                    biguint_to_u256(&BigUint::from_str(&quote_level.quote_token_amount).map_err(
-                        |_| {
-                            RFQError::ParsingError(format!(
-                                "Failed to parse quote token amount: {}",
-                                quote_level.quote_token_amount
-                            ))
-                        },
-                    )?)
-                    .to_be_bytes::<32>()
-                    .to_vec(),
-                ),
-            );
 
-            // expiry
-            quote_attributes.insert(
-                "quote_expiry".to_string(),
-                Bytes::from(
-                    U256::from(quote_level.expiry)
+            // partial fill info (if present)
+            if let Some(pf) = &quote_level.partial_fill {
+                quote_attributes.insert(
+                    "partial_fill_offset".to_string(),
+                    Bytes::from(pf.offset.to_be_bytes().to_vec()),
+                );
+                quote_attributes.insert(
+                    "min_base_token_amount".to_string(),
+                    Bytes::from(
+                        biguint_to_u256(
+                            &BigUint::from_str(&pf.min_base_token_amount).map_err(|_| {
+                                RFQError::ParsingError(format!(
+                                    "Failed to parse min_base_token_amount: {}",
+                                    pf.min_base_token_amount
+                                ))
+                            })?,
+                        )
                         .to_be_bytes::<32>()
                         .to_vec(),
-                ),
-            );
-
-            // nonce (hex string)
-            quote_attributes.insert(
-                "nonce".to_string(),
-                Bytes::from(
-                    hex::decode(
-                        quote_level
-                            .nonce
-                            .trim_start_matches("0x"),
-                    )
-                    .map_err(|e| RFQError::ParsingError(format!("Failed to parse nonce: {e}")))?,
-                ),
-            );
-
-            // maker
-            quote_attributes
-                .insert("maker".to_string(), Bytes::from(quote_level.maker.as_bytes().to_vec()));
-
-            // rfq_id
-            quote_attributes.insert(
-                "rfq_id".to_string(),
-                Bytes::from(
-                    quote_response
-                        .rfq_id
-                        .as_bytes()
-                        .to_vec(),
-                ),
-            );
-
-            // maker_rfq_id
-            quote_attributes.insert(
-                "maker_rfq_id".to_string(),
-                Bytes::from(
-                    quote_level
-                        .maker_rfq_id
-                        .as_bytes()
-                        .to_vec(),
-                ),
-            );
+                    ),
+                );
+            }
 
             let signed_quote = SignedQuote {
                 base_token: params.token_in.clone(),
@@ -731,7 +624,6 @@ mod tests {
         LiquoriceClient {
             chain: Chain::Ethereum,
             price_levels_endpoint: "http://unused/price-levels".to_string(),
-            connected_makers_endpoint: "http://unused/connected-makers".to_string(),
             quote_endpoint,
             tokens: HashSet::from([token_in, token_out]),
             tvl: 10.0,

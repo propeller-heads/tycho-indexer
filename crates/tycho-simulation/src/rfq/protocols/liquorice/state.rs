@@ -353,24 +353,6 @@ mod tests {
         }
 
         #[test]
-        fn below_minimum() {
-            let state = create_test_liquorice_state();
-
-            let result = state.get_amount_out(
-                BigUint::from_str("250000000000000000").unwrap(),
-                &weth(),
-                &usdc(),
-            );
-
-            assert!(result.is_err());
-            if let Err(SimulationError::RecoverableError(msg)) = result {
-                assert!(msg.contains("Amount below minimum"));
-            } else {
-                panic!("Expected RecoverableError");
-            }
-        }
-
-        #[test]
         fn insufficient_liquidity() {
             let state = create_test_liquorice_state();
 

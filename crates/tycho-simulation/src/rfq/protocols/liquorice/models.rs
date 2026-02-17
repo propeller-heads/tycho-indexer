@@ -130,9 +130,6 @@ impl LiquoriceMarketMakerLevels {
     }
 }
 
-/// Response from GET /connected-makers
-pub type LiquoriceConnectedMakersResponse = Vec<String>;
-
 /// RFQ request body for POST /rfq
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LiquoriceQuoteRequest {
@@ -196,7 +193,7 @@ pub struct LiquoriceTx {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LiquoricePartialFill {
-    pub offset: u64,
+    pub offset: u32,
     #[serde(rename = "minBaseTokenAmount")]
     pub min_base_token_amount: String,
 }

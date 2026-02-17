@@ -206,7 +206,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_try_from_with_header() {
-        env::set_var("LIQUORICE_SOLVER", "test_solver");
+        env::set_var("LIQUORICE_USER", "test_solver");
         env::set_var("LIQUORICE_KEY", "test_key");
 
         let (snapshot, tokens) = create_test_snapshot();
@@ -235,7 +235,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_try_from_missing_levels() {
-        env::set_var("LIQUORICE_SOLVER", "test_solver");
+        env::set_var("LIQUORICE_USER", "test_solver");
         env::set_var("LIQUORICE_KEY", "test_key");
 
         let (mut snapshot, tokens) = create_test_snapshot();
@@ -258,7 +258,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_try_from_missing_token() {
-        env::set_var("LIQUORICE_SOLVER", "test_solver");
+        env::set_var("LIQUORICE_USER", "test_solver");
         env::set_var("LIQUORICE_KEY", "test_key");
 
         let (mut snapshot, tokens) = create_test_snapshot();
@@ -279,7 +279,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_try_from_too_many_tokens() {
-        env::set_var("LIQUORICE_SOLVER", "test_solver");
+        env::set_var("LIQUORICE_USER", "test_solver");
         env::set_var("LIQUORICE_KEY", "test_key");
 
         let (mut snapshot, mut tokens) = create_test_snapshot();
@@ -314,7 +314,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_try_from_invalid_levels_json() {
-        env::set_var("LIQUORICE_SOLVER", "test_solver");
+        env::set_var("LIQUORICE_USER", "test_solver");
         env::set_var("LIQUORICE_KEY", "test_key");
 
         let (mut snapshot, tokens) = create_test_snapshot();
@@ -339,7 +339,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_try_from_missing_mm() {
-        env::set_var("LIQUORICE_SOLVER", "test_solver");
+        env::set_var("LIQUORICE_USER", "test_solver");
         env::set_var("LIQUORICE_KEY", "test_key");
 
         let (mut snapshot, tokens) = create_test_snapshot();
