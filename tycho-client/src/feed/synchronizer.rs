@@ -480,12 +480,19 @@ where
             // If possible skip retrieving snapshots
             let msg = if !self.is_next_expected(&header) {
                 info!("Retrieving snapshot");
-                 let snapshot_header = BlockHeader { revert: false, ..header.clone() };
+                // With partial blocks, the server only has full blocks in its buffer; pass the
+                // previous block's header so we request state at N-1, then merge with deltas.
+                let snapshot_header = if self.partial_blocks && header.number > 0 {
+                    BlockHeader {
+                        number: header.number - 1,
+                        hash: header.parent_hash.clone(),
+                        ..Default::default()
+                    }
+                } else {
+                    BlockHeader { revert: false, ..header.clone() }
+                };
                 let snapshot = self
-                    .get_snapshots::<Vec<&String>>(
-                        snapshot_header,
-                        None,
-                    )
+                    .get_snapshots::<Vec<&String>>(snapshot_header, None)
                     .await?
                     .merge(deltas_msg);
                 let n_components = self.component_tracker.components.len();
