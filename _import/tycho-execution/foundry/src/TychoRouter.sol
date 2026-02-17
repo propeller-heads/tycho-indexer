@@ -69,8 +69,6 @@ error TychoRouter__EmptySwaps();
 error TychoRouter__MsgValueDoesNotMatchAmountIn(
     uint256 msgValue, uint256 amountIn
 );
-error TychoRouter__MsgValueNotAllowedWithVaultMethod(uint256 msgValue);
-error TychoRouter__MsgValueNotAllowedWithPermit2Method(uint256 msgValue);
 error TychoRouter__NegativeSlippage(uint256 amount, uint256 minAmount);
 error TychoRouter__AmountOutNotFullyReceived(
     uint256 amountIn, uint256 amountConsumed
@@ -216,10 +214,7 @@ contract TychoRouter is AccessControl, Dispatcher {
         address clientFeeReceiver,
         uint256 maxClientContribution,
         bytes calldata swaps
-    ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        if (msg.value > 0) {
-            revert TychoRouter__MsgValueNotAllowedWithVaultMethod(msg.value);
-        }
+    ) public whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
             tokenIn, amountIn, tokenOut, receiver, false
         );
@@ -277,10 +272,7 @@ contract TychoRouter is AccessControl, Dispatcher {
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
         bytes calldata swaps
-    ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        if (msg.value > 0) {
-            revert TychoRouter__MsgValueNotAllowedWithPermit2Method(msg.value);
-        }
+    ) external whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
             tokenIn, amountIn, tokenOut, receiver, true
         );
@@ -388,10 +380,7 @@ contract TychoRouter is AccessControl, Dispatcher {
         address clientFeeReceiver,
         uint256 maxClientContribution,
         bytes calldata swaps
-    ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        if (msg.value > 0) {
-            revert TychoRouter__MsgValueNotAllowedWithVaultMethod(msg.value);
-        }
+    ) public whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
             tokenIn, amountIn, tokenOut, receiver, false
         );
@@ -445,10 +434,7 @@ contract TychoRouter is AccessControl, Dispatcher {
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
         bytes calldata swaps
-    ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        if (msg.value > 0) {
-            revert TychoRouter__MsgValueNotAllowedWithPermit2Method(msg.value);
-        }
+    ) external whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
             tokenIn, amountIn, tokenOut, receiver, true
         );
@@ -554,10 +540,7 @@ contract TychoRouter is AccessControl, Dispatcher {
         address clientFeeReceiver,
         uint256 maxClientContribution,
         bytes calldata swapData
-    ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        if (msg.value > 0) {
-            revert TychoRouter__MsgValueNotAllowedWithVaultMethod(msg.value);
-        }
+    ) public whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
             tokenIn, amountIn, tokenOut, receiver, false
         );
@@ -610,10 +593,7 @@ contract TychoRouter is AccessControl, Dispatcher {
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
         bytes calldata swapData
-    ) external payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        if (msg.value > 0) {
-            revert TychoRouter__MsgValueNotAllowedWithPermit2Method(msg.value);
-        }
+    ) external whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
             tokenIn, amountIn, tokenOut, receiver, true
         );
