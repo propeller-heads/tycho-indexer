@@ -56,9 +56,12 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
         address indexed oldReceiver, address indexed newReceiver
     );
 
-    constructor() {
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    constructor(address routerFeeSetter) {
         _routerFeeReceiver = msg.sender;
+
+        // Make the role its own admin so role holders can manage their own role
+        _setRoleAdmin(ROUTER_FEE_SETTER_ROLE, ROUTER_FEE_SETTER_ROLE);
+        _grantRole(ROUTER_FEE_SETTER_ROLE, routerFeeSetter);
     }
 
     /**

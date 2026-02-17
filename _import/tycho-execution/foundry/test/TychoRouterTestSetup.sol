@@ -32,8 +32,22 @@ import "@src/TychoRouter.sol";
 import "@src/FeeCalculator.sol";
 
 contract TychoRouterExposed is TychoRouter {
-    constructor(address _permit2, address feeCalculator)
-        TychoRouter(_permit2, feeCalculator)
+    constructor(
+        address _permit2,
+        address feeCalculator,
+        address pauser,
+        address unpauser,
+        address executorSetter,
+        address routerFeeSetter
+    )
+        TychoRouter(
+            _permit2,
+            feeCalculator,
+            pauser,
+            unpauser,
+            executorSetter,
+            routerFeeSetter
+        )
     {}
 
     function tstoreExposed(
@@ -137,15 +151,15 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         address placeholderFeeCalculator = address(123);
         vm.etch(placeholderFeeCalculator, hex"00");
 
-        tychoRouter =
-            new TychoRouterExposed(PERMIT2_ADDRESS, placeholderFeeCalculator);
-        tychoRouterAddr = address(tychoRouter);
-        tychoRouter.grantRole(keccak256("PAUSER_ROLE"), PAUSER);
-        tychoRouter.grantRole(keccak256("UNPAUSER_ROLE"), UNPAUSER);
-        tychoRouter.grantRole(keccak256("ROUTER_FEE_SETTER_ROLE"), FEE_SETTER);
-        tychoRouter.grantRole(
-            keccak256("EXECUTOR_SETTER_ROLE"), EXECUTOR_SETTER
+        tychoRouter = new TychoRouterExposed(
+            PERMIT2_ADDRESS,
+            placeholderFeeCalculator,
+            PAUSER,
+            UNPAUSER,
+            EXECUTOR_SETTER,
+            FEE_SETTER
         );
+        tychoRouterAddr = address(tychoRouter);
         return tychoRouter;
     }
 
@@ -204,11 +218,9 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
 
     function deployFeeCalculator() public {
         // Deploy and configure FeeCalculator
-        feeCalculator = new FeeCalculator();
-        feeCalculator.grantRole(ROUTER_FEE_SETTER_ROLE, FEE_SETTER);
-
         routerFeeReceiver = makeAddr("routerFeeReceiver");
         clientFeeReceiver = makeAddr("clientFeeReceiver");
+        feeCalculator = new FeeCalculator(FEE_SETTER);
     }
 
     function pleEncode(bytes[] memory data)

@@ -3,6 +3,9 @@ pragma solidity ^0.8.26;
 
 import {TychoRouter} from "@src/TychoRouter.sol";
 import {FeeCalculator} from "@src/FeeCalculator.sol";
+import {
+    IAccessControl
+} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import "@src/RestrictTransferFrom.sol";
 import "./TychoRouterTestSetup.sol";
 
@@ -116,7 +119,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
 
     function testSetFeeCalculatorUpdatesCorrectly() public {
         // Deploy a new FeeCalculator contract
-        FeeCalculator newFeeCalculator = new FeeCalculator();
+        FeeCalculator newFeeCalculator = new FeeCalculator(FEE_SETTER);
 
         vm.startPrank(FEE_SETTER);
         tychoRouter.setFeeCalculator(address(feeCalculator));
@@ -135,18 +138,77 @@ contract TychoRouterTest is TychoRouterTestSetup {
                 TychoRouter__NotAContract.selector, nonContract
             )
         );
-        new TychoRouterExposed(PERMIT2_ADDRESS, nonContract);
+        new TychoRouterExposed(
+            PERMIT2_ADDRESS,
+            nonContract,
+            PAUSER,
+            UNPAUSER,
+            EXECUTOR_SETTER,
+            FEE_SETTER
+        );
     }
 
     function testConstructorNonContractPermit2() public {
         // Deploy a new FeeCalculator contract
-        FeeCalculator newFeeCalculator = new FeeCalculator();
+        FeeCalculator newFeeCalculator = new FeeCalculator(FEE_SETTER);
         address nonContract = address(0x999);
         vm.expectRevert(
             abi.encodeWithSelector(
                 RestrictTransferFrom__NotAContract.selector, nonContract
             )
         );
-        new TychoRouterExposed(nonContract, address(newFeeCalculator));
+        new TychoRouterExposed(
+            nonContract,
+            address(newFeeCalculator),
+            PAUSER,
+            UNPAUSER,
+            EXECUTOR_SETTER,
+            FEE_SETTER
+        );
+    }
+
+    function testRoleHolderCanTransferOwnRole() public {
+        address newPauser = makeAddr("newPauser");
+
+        vm.startPrank(PAUSER);
+        tychoRouter.grantRole(PAUSER_ROLE, newPauser);
+        tychoRouter.revokeRole(PAUSER_ROLE, PAUSER);
+        vm.stopPrank();
+
+        // Old pauser can no longer pause
+        vm.prank(PAUSER);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                PAUSER,
+                PAUSER_ROLE
+            )
+        );
+        tychoRouter.pause();
+
+        // New pauser can
+        vm.prank(newPauser);
+        tychoRouter.pause();
+        assertTrue(tychoRouter.paused());
+    }
+
+    function testDefaultAdminRoleDoesNotExist() public view {
+        bytes32 DEFAULT_ADMIN_ROLE = 0x00;
+
+        assertFalse(tychoRouter.hasRole(DEFAULT_ADMIN_ROLE, ADMIN));
+        assertFalse(tychoRouter.hasRole(DEFAULT_ADMIN_ROLE, address(this)));
+
+        assertNotEq(tychoRouter.getRoleAdmin(PAUSER_ROLE), DEFAULT_ADMIN_ROLE);
+        assertNotEq(
+            tychoRouter.getRoleAdmin(keccak256("UNPAUSER_ROLE")),
+            DEFAULT_ADMIN_ROLE
+        );
+        assertNotEq(
+            tychoRouter.getRoleAdmin(EXECUTOR_SETTER_ROLE), DEFAULT_ADMIN_ROLE
+        );
+        assertNotEq(
+            tychoRouter.getRoleAdmin(keccak256("ROUTER_FEE_SETTER_ROLE")),
+            DEFAULT_ADMIN_ROLE
+        );
     }
 }
