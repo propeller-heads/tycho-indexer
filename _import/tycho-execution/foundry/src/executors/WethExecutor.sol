@@ -28,16 +28,20 @@ contract WrapUnwrapExecutor is IExecutor {
 
     function fundsExpectedAddress(
         bytes calldata /* data */
-    ) external view returns (address receiver) {
+    )
+        external
+        view
+        returns (address receiver)
+    {
         return msg.sender;
     }
 
     // slither-disable-next-line locked-ether
-    function swap(
-        uint256 amountIn,
-        bytes calldata data,
-        address receiver
-    ) external payable returns (uint256 amountOut, address tokenOut) {
+    function swap(uint256 amountIn, bytes calldata data, address receiver)
+        external
+        payable
+        returns (uint256 amountOut, address tokenOut)
+    {
         bool isWrapping;
         isWrapping = _decodeData(data);
 
@@ -62,9 +66,11 @@ contract WrapUnwrapExecutor is IExecutor {
         }
     }
 
-    function _decodeData(
-        bytes calldata data
-    ) internal pure returns (bool isWrapping) {
+    function _decodeData(bytes calldata data)
+        internal
+        pure
+        returns (bool isWrapping)
+    {
         if (data.length != 1) {
             revert WrapUnwrapExecutor__InvalidDataLength();
         }
@@ -76,9 +82,7 @@ contract WrapUnwrapExecutor is IExecutor {
     /// @dev Required to receive ETH
     receive() external payable {}
 
-    function getTransferData(
-        bytes calldata data
-    )
+    function getTransferData(bytes calldata data)
         external
         payable
         returns (
@@ -96,9 +100,8 @@ contract WrapUnwrapExecutor is IExecutor {
         if (isWrapping) {
             // ETH -> WETH: Wrap
             tokenIn = address(0);
-            transferType = RestrictTransferFrom
-                .TransferType
-                .TransferNativeInExecutor;
+            transferType =
+            RestrictTransferFrom.TransferType.TransferNativeInExecutor;
         } else {
             // WETH -> ETH: Unwrap
             tokenIn = address(WETH);
