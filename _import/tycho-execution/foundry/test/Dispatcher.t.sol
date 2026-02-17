@@ -96,9 +96,7 @@ contract DispatcherTest is Constants {
         uint256 forkBlock = 20673900;
         address executor = 0xe592557AB9F4A75D992283fD6066312FF013ba3d;
         uint256 forkBlockTime = vm.getBlockTimestamp();
-        vm.warp(forkBlockTime - _SETUP_TIME_OFFSET_ETHEREUM);
         dispatcherExposed.exposedSetExecutor(executor);
-        vm.warp(forkBlockTime);
 
         vm.expectRevert(
             abi.encodeWithSelector(
