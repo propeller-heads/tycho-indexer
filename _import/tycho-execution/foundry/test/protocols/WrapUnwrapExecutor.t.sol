@@ -1,0 +1,174 @@
+// SPDX-License-Identifier: BUSL-1.1
+pragma solidity ^0.8.26;
+
+import "../TychoRouterTestSetup.sol";
+import {CommonBase} from "../../lib/forge-std/src/Base.sol";
+import {Constants} from "../Constants.sol";
+import {RestrictTransferFrom} from "../../src/RestrictTransferFrom.sol";
+import {
+    WrapUnwrapExecutor,
+    WrapUnwrapExecutor__InvalidDataLength,
+    IWETH
+} from "../../src/executors/WethExecutor.sol";
+import {StdAssertions} from "../../lib/forge-std/src/StdAssertions.sol";
+import {StdChains} from "../../lib/forge-std/src/StdChains.sol";
+import {StdCheats, StdCheatsSafe} from "../../lib/forge-std/src/StdCheats.sol";
+import {StdUtils} from "../../lib/forge-std/src/StdUtils.sol";
+import {TestUtils} from "../TestUtils.sol";
+
+contract WrapUnwrapExecutorExposed is WrapUnwrapExecutor {
+    constructor() WrapUnwrapExecutor() {}
+
+    function decodeParams(
+        bytes calldata data
+    ) external pure returns (bool isWrapping) {
+        return _decodeData(data);
+    }
+}
+
+contract WrapUnwrapExecutorTest is TestUtils, Constants {
+    WrapUnwrapExecutorExposed wrapUnwrapExecutor;
+
+    modifier setUpFork(uint256 blockNumber) {
+        vm.createSelectFork(vm.rpcUrl("mainnet"), blockNumber);
+        wrapUnwrapExecutor = new WrapUnwrapExecutorExposed();
+        _;
+    }
+
+    function setUp() public setUpFork(23899254) {}
+
+    function testDecodeParams() public view {
+        bytes memory params = abi.encodePacked(
+            uint8(1) // isWrapping = true
+        );
+
+        bool isWrapping = wrapUnwrapExecutor.decodeParams(params);
+
+        assertTrue(isWrapping);
+    }
+
+    function testDecodeParamsBurn() public view {
+        bytes memory params = abi.encodePacked(
+            uint8(0) // isWrapping = false
+        );
+
+        bool isWrapping = wrapUnwrapExecutor.decodeParams(params);
+
+        assertFalse(isWrapping);
+    }
+
+    function testDecodeParamsInvalidDataLength() public {
+        bytes memory invalidParams = abi.encodePacked(BOB);
+
+        vm.expectRevert(WrapUnwrapExecutor__InvalidDataLength.selector);
+        wrapUnwrapExecutor.decodeParams(invalidParams);
+    }
+
+    function testGetTransferDataWrap() public {
+        bytes memory params = abi.encodePacked(
+            uint8(1) // isWrapping = true
+        );
+
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        ) = wrapUnwrapExecutor.getTransferData(params);
+
+        assertEq(receiver, address(wrapUnwrapExecutor));
+        assertEq(
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.TransferNativeInExecutor)
+        );
+        assertEq(tokenIn, address(0));
+    }
+
+    function testGetTransferDataUnwrap() public {
+        bytes memory params = abi.encodePacked(
+            uint8(0) // isWrapping = false
+        );
+
+        (
+            RestrictTransferFrom.TransferType transferType,
+            address receiver,
+            address tokenIn
+        ) = wrapUnwrapExecutor.getTransferData(params);
+
+        assertEq(receiver, address(wrapUnwrapExecutor));
+        assertEq(
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.Transfer)
+        );
+        assertEq(tokenIn, WETH_ADDR);
+    }
+
+    function testSwapWrap() public setUpFork(23899254) {
+        // ETH -> wETH
+        IWETH WETH = IWETH(WETH_ADDR);
+        uint256 amountIn = 1 ether;
+        bytes memory protocolData = abi.encodePacked(
+            uint8(1) // isWrapping = true
+        );
+
+        // Fund the executor with ETH
+        vm.deal(address(wrapUnwrapExecutor), amountIn);
+        uint256 wethBalanceBefore = WETH.balanceOf(BOB);
+        (uint256 amountOut, address tokenOut) = wrapUnwrapExecutor.swap(
+            amountIn,
+            protocolData,
+            BOB
+        );
+        uint256 wethBalanceAfter = WETH.balanceOf(BOB);
+
+        // Check balances
+        assertEq(wethBalanceAfter - wethBalanceBefore, 1 ether);
+        assertEq(amountOut, 1 ether);
+        assertEq(tokenOut, WETH_ADDR);
+    }
+
+    function testSwapUnwrap() public setUpFork(23939127) {
+        // wETH -> ETH
+        uint256 amountIn = 1 ether;
+        bytes memory protocolData = abi.encodePacked(
+            uint8(0) // isWrapping = false
+        );
+
+        // Fund the executor with wETH
+        deal(WETH_ADDR, address(wrapUnwrapExecutor), amountIn);
+
+        uint256 ethBalanceBefore = BOB.balance;
+        (uint256 amountOut, address tokenOut) = wrapUnwrapExecutor.swap(
+            amountIn,
+            protocolData,
+            BOB
+        );
+        uint256 ethBalanceAfter = BOB.balance;
+
+        // Check balances
+        assertEq(ethBalanceAfter - ethBalanceBefore, 1 ether);
+        assertEq(amountOut, 1 ether);
+        assertEq(tokenOut, address(0));
+    }
+
+    function testDecodeDepositIntegration() public view {
+        // Generated by the SwapEncoder - test_encode_weth_wrapping
+        bytes memory protocolData = loadCallDataFromFile(
+            "test_encode_weth_wrapping"
+        );
+
+        bool isWrapping = wrapUnwrapExecutor.decodeParams(protocolData);
+
+        assertTrue(isWrapping);
+    }
+
+    function testDecodeBurnIntegration() public view {
+        // Generated by the SwapEncoder - test_encode_weth_unwrapping
+        bytes memory protocolData = loadCallDataFromFile(
+            "test_encode_weth_unwrapping"
+        );
+
+        bool isWrapping = wrapUnwrapExecutor.decodeParams(protocolData);
+
+        assertFalse(isWrapping);
+    }
+}
