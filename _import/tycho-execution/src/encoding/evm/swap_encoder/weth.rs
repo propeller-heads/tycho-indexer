@@ -60,11 +60,8 @@ mod tests {
     #[test]
     fn test_encode_weth_wrapping() {
         // ETH -> (weth) -> wETH
-        let pool = ProtocolComponent {
-            id: String::from(""),
-            protocol_system: String::from(""),
-            ..Default::default()
-        };
+        let pool =
+            ProtocolComponent { protocol_system: String::from("weth"), ..Default::default() };
         let token_in = Bytes::from("0x0000000000000000000000000000000000000000");
         let token_out = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
         let swap = Swap::new(pool, token_in.clone(), token_out.clone());

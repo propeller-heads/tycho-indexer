@@ -86,21 +86,13 @@ pub trait TychoEncoder: Send + Sync {
         let eth_address = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
 
         let wrapping_swap = Swap::new(
-            ProtocolComponent {
-                id: "".to_string(),
-                protocol_system: "".to_string(),
-                ..Default::default()
-            },
+            ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
             eth_address.clone(),
             weth_address.clone(),
         );
 
         let unwrapping_swap = Swap::new(
-            ProtocolComponent {
-                id: "".to_string(),
-                protocol_system: "".to_string(),
-                ..Default::default()
-            },
+            ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
             weth_address.clone(),
             eth_address.clone(),
         );
