@@ -3187,7 +3187,7 @@ mod test {
             .with(mockall::predicate::function(|req: &ProtocolComponentsRequestBody| {
                 req.component_ids
                     .as_ref()
-                    .map_or(false, |ids| ids.contains(&"BrandNew".to_string()))
+                    .is_some_and(|ids| ids.contains(&"BrandNew".to_string()))
             }))
             .returning(|_| {
                 Ok(ProtocolComponentRequestResponse {
