@@ -195,5 +195,5 @@ contract Constants is Test, BaseConstants {
     }
 
     // Block offset for setup to ensure that the executors timelock has passed in the setup
-    uint256 internal constant _SETUP_TIME_OFFSET_ETHEREUM = 7 days; // ~7 days
+    uint256 internal constant _SETUP_TIME_OFFSET_NEW_EXECUTOR = 7 days; // ~7 days
 }

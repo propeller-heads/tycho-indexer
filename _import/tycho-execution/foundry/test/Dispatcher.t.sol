@@ -110,7 +110,7 @@ contract DispatcherTest is Constants {
         // Make sure the executor is not timelocked
         address executor = 0xe592557AB9F4A75D992283fD6066312FF013ba3d;
         uint256 forkBlockTime = vm.getBlockTimestamp();
-        vm.warp(forkBlockTime - _SETUP_TIME_OFFSET_ETHEREUM);
+        vm.warp(forkBlockTime - _SETUP_TIME_OFFSET_NEW_EXECUTOR);
         dispatcherExposed.exposedSetExecutor(executor);
         vm.warp(forkBlockTime);
         bytes memory data =
