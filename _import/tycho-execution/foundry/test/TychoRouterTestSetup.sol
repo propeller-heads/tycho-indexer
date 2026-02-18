@@ -20,6 +20,7 @@ import {SlipstreamsExecutor} from "../src/executors/SlipstreamsExecutor.sol";
 import {RocketpoolExecutor} from "../src/executors/RocketpoolExecutor.sol";
 import {ERC4626Executor} from "../src/executors/ERC4626Executor.sol";
 import {LidoExecutor} from "../src/executors/LidoExecutor.sol";
+import {WethExecutor} from "../src/executors/WethExecutor.sol";
 
 // Test utilities and mocks
 import "./Constants.sol";
@@ -102,6 +103,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
 
     ERC4626Executor public erc4626Executor;
     LidoExecutor public lidoExecutor;
+    WethExecutor public wethExecutor;
 
     FeeCalculator feeCalculator;
     address routerFeeReceiver;
@@ -194,8 +196,9 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         rocketpoolExecutor = new RocketpoolExecutor();
         erc4626Executor = new ERC4626Executor();
         lidoExecutor = new LidoExecutor(STETH_ADDR, WSTETH_ADDR);
+        wethExecutor = new WethExecutor();
 
-        address[] memory executors = new address[](16);
+        address[] memory executors = new address[](17);
         executors[0] = address(usv2Executor);
         executors[1] = address(usv3Executor);
         executors[2] = address(pancakev3Executor);
@@ -212,6 +215,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         executors[13] = address(rocketpoolExecutor);
         executors[14] = address(erc4626Executor);
         executors[15] = address(lidoExecutor);
+        executors[16] = address(wethExecutor);
 
         return executors;
     }
