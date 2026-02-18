@@ -93,9 +93,7 @@ contract DispatcherTest is Constants {
     }
 
     function testSetExistingExecutor() public {
-        uint256 forkBlock = 20673900;
         address executor = 0xe592557AB9F4A75D992283fD6066312FF013ba3d;
-        uint256 forkBlockTime = vm.getBlockTimestamp();
         dispatcherExposed.exposedSetExecutor(executor);
 
         vm.expectRevert(
@@ -110,7 +108,6 @@ contract DispatcherTest is Constants {
     function testCallExecutorCallFailed() public {
         // Bad data is provided to an approved executor - causing the call to fail
         // Make sure the executor is not timelocked
-        uint256 forkBlock = 20673900;
         address executor = 0xe592557AB9F4A75D992283fD6066312FF013ba3d;
         uint256 forkBlockTime = vm.getBlockTimestamp();
         vm.warp(forkBlockTime - _SETUP_TIME_OFFSET_ETHEREUM);
