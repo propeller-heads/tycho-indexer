@@ -166,3 +166,35 @@ contract WethExecutorTest is TestUtils, Constants {
         assertFalse(isWrapping);
     }
 }
+
+contract wethWrapTest is TychoRouterTestSetup {
+    function getForkBlock() public pure override returns (uint256) {
+        return 23899254;
+    }
+
+    function testSingleSwap() public {
+        // ETH -> wETH
+        IWETH WETH = IWETH(WETH_ADDR);
+        uint256 amountIn = 1 ether;
+
+        bytes memory callData =
+            loadCallDataFromFile("test_single_encoding_strategy_weth_wrapping");
+
+        // Fund ALICE with ETH to send with the call
+        vm.deal(ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+
+        uint256 wethBalanceBefore = WETH.balanceOf(ALICE);
+        (bool success,) = tychoRouterAddr.call{value: amountIn}(callData);
+        uint256 wethBalanceAfter = WETH.balanceOf(ALICE);
+
+        // Check balances
+        assertTrue(success, "Call Failed");
+        assertEq(
+            wethBalanceAfter - wethBalanceBefore, 1_000_000_000_000_000_000
+        );
+        assertEq(WETH.balanceOf(tychoRouterAddr), 0);
+        assertEq(tychoRouterAddr.balance, 0);
+    }
+}

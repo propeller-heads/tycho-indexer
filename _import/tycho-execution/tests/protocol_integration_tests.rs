@@ -1775,9 +1775,9 @@ fn test_single_encoding_strategy_weth_wrap() {
     let solution = Solution {
         exact_out: false,
         token_in,
-        amount_in: BigUint::from(100_000_000_000_000_000_u128),
+        amount_in: BigUint::from(1_000_000_000_000_000_000_u128),
         token_out,
-        min_amount_out: BigUint::from(100_000_000_000_000_000_u128),
+        min_amount_out: BigUint::from(1_000_000_000_000_000_000_u128),
         // Alice
         sender: alice_address(),
         receiver: alice_address(),
