@@ -13,11 +13,11 @@ interface IWETH is IERC20 {
     function withdraw(uint256) external;
 }
 
-error WrapUnwrapExecutor__InvalidDataLength();
-error WrapUnwrapExecutor__SenderIsNotVault(address sender);
+error WethExecutor__InvalidDataLength();
+error WethExecutor__SenderIsNotVault(address sender);
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
-contract WrapUnwrapExecutor is IExecutor {
+contract WethExecutor is IExecutor {
     using SafeERC20 for IWETH;
     using SafeERC20 for IERC20;
 
@@ -72,7 +72,7 @@ contract WrapUnwrapExecutor is IExecutor {
         returns (bool isWrapping)
     {
         if (data.length != 1) {
-            revert WrapUnwrapExecutor__InvalidDataLength();
+            revert WethExecutor__InvalidDataLength();
         }
 
         isWrapping = uint8(data[0]) == 1;
@@ -92,7 +92,7 @@ contract WrapUnwrapExecutor is IExecutor {
         )
     {
         if (data.length != 1) {
-            revert WrapUnwrapExecutor__InvalidDataLength();
+            revert WethExecutor__InvalidDataLength();
         }
 
         bool isWrapping = uint8(data[0]) == 1;

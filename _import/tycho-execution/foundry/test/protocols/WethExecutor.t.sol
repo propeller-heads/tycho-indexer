@@ -6,8 +6,8 @@ import {CommonBase} from "../../lib/forge-std/src/Base.sol";
 import {Constants} from "../Constants.sol";
 import {RestrictTransferFrom} from "../../src/RestrictTransferFrom.sol";
 import {
-    WrapUnwrapExecutor,
-    WrapUnwrapExecutor__InvalidDataLength,
+    WethExecutor,
+    WethExecutor__InvalidDataLength,
     IWETH
 } from "../../src/executors/WethExecutor.sol";
 import {StdAssertions} from "../../lib/forge-std/src/StdAssertions.sol";
@@ -16,8 +16,8 @@ import {StdCheats, StdCheatsSafe} from "../../lib/forge-std/src/StdCheats.sol";
 import {StdUtils} from "../../lib/forge-std/src/StdUtils.sol";
 import {TestUtils} from "../TestUtils.sol";
 
-contract WrapUnwrapExecutorExposed is WrapUnwrapExecutor {
-    constructor() WrapUnwrapExecutor() {}
+contract WethExecutorExposed is WethExecutor {
+    constructor() WethExecutor() {}
 
     function decodeParams(bytes calldata data)
         external
@@ -28,12 +28,12 @@ contract WrapUnwrapExecutorExposed is WrapUnwrapExecutor {
     }
 }
 
-contract WrapUnwrapExecutorTest is TestUtils, Constants {
-    WrapUnwrapExecutorExposed wrapUnwrapExecutor;
+contract WethExecutorTest is TestUtils, Constants {
+    WethExecutorExposed WethExecutor;
 
     modifier setUpFork(uint256 blockNumber) {
         vm.createSelectFork(vm.rpcUrl("mainnet"), blockNumber);
-        wrapUnwrapExecutor = new WrapUnwrapExecutorExposed();
+        WethExecutor = new WethExecutorExposed();
         _;
     }
 
@@ -44,7 +44,7 @@ contract WrapUnwrapExecutorTest is TestUtils, Constants {
             uint8(1) // isWrapping = true
         );
 
-        bool isWrapping = wrapUnwrapExecutor.decodeParams(params);
+        bool isWrapping = WethExecutor.decodeParams(params);
 
         assertTrue(isWrapping);
     }
@@ -54,7 +54,7 @@ contract WrapUnwrapExecutorTest is TestUtils, Constants {
             uint8(0) // isWrapping = false
         );
 
-        bool isWrapping = wrapUnwrapExecutor.decodeParams(params);
+        bool isWrapping = WethExecutor.decodeParams(params);
 
         assertFalse(isWrapping);
     }
@@ -62,8 +62,8 @@ contract WrapUnwrapExecutorTest is TestUtils, Constants {
     function testDecodeParamsInvalidDataLength() public {
         bytes memory invalidParams = abi.encodePacked(BOB);
 
-        vm.expectRevert(WrapUnwrapExecutor__InvalidDataLength.selector);
-        wrapUnwrapExecutor.decodeParams(invalidParams);
+        vm.expectRevert(WethExecutor__InvalidDataLength.selector);
+        WethExecutor.decodeParams(invalidParams);
     }
 
     function testGetTransferDataWrap() public {
@@ -75,9 +75,9 @@ contract WrapUnwrapExecutorTest is TestUtils, Constants {
             RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn
-        ) = wrapUnwrapExecutor.getTransferData(params);
+        ) = WethExecutor.getTransferData(params);
 
-        assertEq(receiver, address(wrapUnwrapExecutor));
+        assertEq(receiver, address(WethExecutor));
         assertEq(
             uint8(transferType),
             uint8(RestrictTransferFrom.TransferType.TransferNativeInExecutor)
@@ -94,9 +94,9 @@ contract WrapUnwrapExecutorTest is TestUtils, Constants {
             RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn
-        ) = wrapUnwrapExecutor.getTransferData(params);
+        ) = WethExecutor.getTransferData(params);
 
-        assertEq(receiver, address(wrapUnwrapExecutor));
+        assertEq(receiver, address(WethExecutor));
         assertEq(
             uint8(transferType),
             uint8(RestrictTransferFrom.TransferType.Transfer)
@@ -113,10 +113,10 @@ contract WrapUnwrapExecutorTest is TestUtils, Constants {
         );
 
         // Fund the executor with ETH
-        vm.deal(address(wrapUnwrapExecutor), amountIn);
+        vm.deal(address(WethExecutor), amountIn);
         uint256 wethBalanceBefore = WETH.balanceOf(BOB);
         (uint256 amountOut, address tokenOut) =
-            wrapUnwrapExecutor.swap(amountIn, protocolData, BOB);
+            WethExecutor.swap(amountIn, protocolData, BOB);
         uint256 wethBalanceAfter = WETH.balanceOf(BOB);
 
         // Check balances
@@ -133,11 +133,11 @@ contract WrapUnwrapExecutorTest is TestUtils, Constants {
         );
 
         // Fund the executor with wETH
-        deal(WETH_ADDR, address(wrapUnwrapExecutor), amountIn);
+        deal(WETH_ADDR, address(WethExecutor), amountIn);
 
         uint256 ethBalanceBefore = BOB.balance;
         (uint256 amountOut, address tokenOut) =
-            wrapUnwrapExecutor.swap(amountIn, protocolData, BOB);
+            WethExecutor.swap(amountIn, protocolData, BOB);
         uint256 ethBalanceAfter = BOB.balance;
 
         // Check balances
@@ -151,7 +151,7 @@ contract WrapUnwrapExecutorTest is TestUtils, Constants {
         bytes memory protocolData =
             loadCallDataFromFile("test_encode_weth_wrapping");
 
-        bool isWrapping = wrapUnwrapExecutor.decodeParams(protocolData);
+        bool isWrapping = WethExecutor.decodeParams(protocolData);
 
         assertTrue(isWrapping);
     }
@@ -161,7 +161,7 @@ contract WrapUnwrapExecutorTest is TestUtils, Constants {
         bytes memory protocolData =
             loadCallDataFromFile("test_encode_weth_unwrapping");
 
-        bool isWrapping = wrapUnwrapExecutor.decodeParams(protocolData);
+        bool isWrapping = WethExecutor.decodeParams(protocolData);
 
         assertFalse(isWrapping);
     }
