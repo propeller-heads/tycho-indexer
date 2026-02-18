@@ -451,7 +451,7 @@ mod tests {
             let solution = Solution {
                 exact_out: false,
                 amount_in: weth_amount_in.clone(),
-                token_in: eth(),
+                token_in: weth(),
                 token_out: dai(),
                 swaps: vec![swap],
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
