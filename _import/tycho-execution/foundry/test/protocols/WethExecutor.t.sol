@@ -172,7 +172,7 @@ contract wethWrapTest is TychoRouterTestSetup {
         return 23899254;
     }
 
-    function testSingleSwap() public {
+    function testSingleSwapWrap() public {
         // ETH -> wETH
         IWETH WETH = IWETH(WETH_ADDR);
         uint256 amountIn = 1 ether;
@@ -196,5 +196,36 @@ contract wethWrapTest is TychoRouterTestSetup {
         );
         assertEq(WETH.balanceOf(tychoRouterAddr), 0);
         assertEq(tychoRouterAddr.balance, 0);
+    }
+
+    function testSingleSwapUnwrap() public {
+        // wETH -> ETH
+        IWETH WETH = IWETH(WETH_ADDR);
+        uint256 amountIn = 1 ether;
+
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_weth_unwrapping"
+        );
+
+        // Fund ALICE with wETH to send with the call
+        deal(WETH_ADDR, ALICE, amountIn);
+        // vm.deal(ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+        // WETH.deposit{value: amountIn}();
+        WETH.approve(tychoRouterAddr, amountIn);
+
+        uint256 wethBalanceBefore = WETH.balanceOf(ALICE);
+        console.log("wethBalanceBefore:", wethBalanceBefore);
+        (bool success,) = tychoRouterAddr.call(callData);
+        uint256 wethBalanceAfter = WETH.balanceOf(ALICE);
+
+        // Check balances
+        assertTrue(success, "Call Failed");
+        assertEq(
+            wethBalanceBefore - wethBalanceAfter, 1_000_000_000_000_000_000
+        );
+        assertEq(WETH.balanceOf(tychoRouterAddr), 1_000_000_000_000_000_000);
+        assertEq(tychoRouterAddr.balance, 1_000_000_000_000_000_000);
     }
 }

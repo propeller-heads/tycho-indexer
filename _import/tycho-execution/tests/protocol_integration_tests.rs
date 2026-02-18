@@ -1797,3 +1797,39 @@ fn test_single_encoding_strategy_weth_wrap() {
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_weth_wrapping", hex_calldata.as_str());
 }
+
+#[test]
+fn test_single_encoding_strategy_weth_unwrap() {
+    let weth_executor =
+        ProtocolComponent { protocol_system: String::from("weth"), ..Default::default() };
+    let token_in = weth();
+    let token_out = eth();
+    let swap = Swap::new(weth_executor, token_in.clone(), token_out.clone());
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        token_in,
+        amount_in: BigUint::from(1_000_000_000_000_000_000_u128),
+        token_out,
+        min_amount_out: BigUint::from(1_000_000_000_000_000_000_u128),
+        // Alice
+        sender: alice_address(),
+        receiver: alice_address(),
+        swaps: vec![swap],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata =
+        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
+            .unwrap()
+            .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_single_encoding_strategy_weth_unwrapping", hex_calldata.as_str());
+}
