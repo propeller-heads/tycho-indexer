@@ -19,7 +19,7 @@ use crate::rfq::{
     client::RFQClient,
     protocols::liquorice::{
         client::LiquoriceClient,
-        models::{LiquoriceMarketMakerLevels, LiquoricePriceLevel},
+        models::LiquoriceMarketMakerLevels,
     },
 };
 
@@ -50,22 +50,6 @@ impl LiquoriceState {
         client: LiquoriceClient,
     ) -> Self {
         Self { base_token, quote_token, levels_by_mm, client }
-    }
-
-    fn merged_levels(&self) -> LiquoriceMarketMakerLevels {
-        let mut all_levels: Vec<LiquoricePriceLevel> = self
-            .levels_by_mm
-            .values()
-            .flat_map(|mml| mml.levels.iter().cloned())
-            .collect();
-        all_levels
-            .sort_by(|a, b| b.price.partial_cmp(&a.price).unwrap_or(std::cmp::Ordering::Equal));
-        LiquoriceMarketMakerLevels {
-            base_token: self.base_token.address.clone(),
-            quote_token: self.quote_token.address.clone(),
-            levels: all_levels,
-            updated_at: None,
-        }
     }
 
     fn valid_direction_guard(
@@ -103,15 +87,20 @@ impl ProtocolSim for LiquoriceState {
         todo!()
     }
 
+    /// Returns the best available price across all market makers, calculated as a weighted average price of the best price levels from each market maker. 
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
         self.valid_direction_guard(&base.address, &quote.address)?;
 
-        let merged = self.merged_levels();
-        merged
-            .levels
-            .first()
+        self.levels_by_mm
+            .values()
+            .filter(|mml| !mml.levels.is_empty())
+            .map(|mml| {
+                let total_quantity: f64 = mml.levels.iter().map(|l| l.quantity).sum();
+                let total_value: f64 = mml.levels.iter().map(|l| l.quantity * l.price).sum();
+                total_value / total_quantity
+            })
+            .reduce(f64::max)
             .ok_or(SimulationError::RecoverableError("No liquidity".into()))
-            .map(|level| level.price)
     }
 
     fn get_amount_out(
@@ -127,8 +116,14 @@ impl ProtocolSim for LiquoriceState {
             SimulationError::RecoverableError("Can't convert amount in to f64".into())
         })? / 10f64.powi(token_in.decimals as i32);
 
-        let merged = self.merged_levels();
-        let (amount_out, remaining_amount_in) = merged.get_amount_out_from_levels(amount_in);
+        // Find out largest amount_out across all market makers for the given amount_in
+        let (amount_out, remaining_amount_in) = self
+            .levels_by_mm
+            .values()
+            .filter(|mml| !mml.levels.is_empty())
+            .map(|mml| mml.get_amount_out_from_levels(amount_in))
+            .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
+            .ok_or(SimulationError::RecoverableError("No liquidity".into()))?;
 
         let res = GetAmountOutResult {
             amount: BigUint::from_f64(amount_out * 10f64.powi(token_out.decimals as i32))
@@ -158,14 +153,17 @@ impl ProtocolSim for LiquoriceState {
 
         let sell_decimals = self.base_token.decimals;
         let buy_decimals = self.quote_token.decimals;
-        let merged = self.merged_levels();
-        let (total_sell_amount, total_buy_amount) =
-            merged
-                .levels
-                .iter()
-                .fold((0.0, 0.0), |(sell_sum, buy_sum), level| {
+        let (total_sell_amount, total_buy_amount) = self
+            .levels_by_mm
+            .values()
+            .filter(|mml| !mml.levels.is_empty())
+            .map(|mml| {
+                mml.levels.iter().fold((0.0, 0.0), |(sell_sum, buy_sum), level| {
                     (sell_sum + level.quantity, buy_sum + level.quantity * level.price)
-                });
+                })
+            })
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .ok_or(SimulationError::RecoverableError("No liquidity".into()))?;
 
         let sell_limit =
             BigUint::from((total_sell_amount * 10_f64.pow(sell_decimals as f64)) as u128);
@@ -309,6 +307,15 @@ mod tests {
                 updated_at: None,
             },
         );
+        levels_by_mm.insert(
+            "test_mm_2".to_string(),
+            LiquoriceMarketMakerLevels {
+                base_token: base_addr.clone(),
+                quote_token: quote_addr.clone(),
+                levels: vec![LiquoricePriceLevel { quantity: 1.0, price: 2998.0 }],
+                updated_at: None,
+            },
+        );
         LiquoriceState {
             base_token: weth(),
             quote_token: usdc(),
@@ -326,7 +333,9 @@ mod tests {
             let price = state
                 .spot_price(&state.base_token, &state.quote_token)
                 .unwrap();
-            assert_eq!(price, 3000.0);
+            // Best maker (test_mm) weighted avg: (0.5*3000 + 1.5*3000 + 5.0*2999) / 7.0
+            // = 20995/7 ≈ 2999.2857, which beats test_mm_2's 2998.0
+            assert!((price - 20995.0 / 7.0).abs() < 1e-10);
         }
 
         #[test]
@@ -389,6 +398,7 @@ mod tests {
         fn insufficient_liquidity() {
             let state = create_test_liquorice_state();
 
+            // Best single maker (test_mm) has 7.0 capacity, so 8 WETH exceeds it
             let result = state.get_amount_out(
                 BigUint::from_str("8000000000000000000").unwrap(),
                 &weth(),
@@ -448,6 +458,7 @@ mod tests {
                 .get_limits(state.base_token.address.clone(), state.quote_token.address.clone())
                 .unwrap();
 
+            // Best maker (test_mm): sell=0.5+1.5+5.0=7.0, buy=0.5*3000+1.5*3000+5.0*2999=20995.0
             assert_eq!(sell_limit, BigUint::from((7.0 * 10f64.powi(18)) as u128));
             assert_eq!(buy_limit, BigUint::from((20995.0 * 10f64.powi(6)) as u128));
         }
