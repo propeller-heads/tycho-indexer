@@ -1761,3 +1761,39 @@ fn test_single_swap_with_univ4_angstrom() {
     // following assert would fail
     assert_eq!(hex_calldata[904..].len(), 1152);
 }
+
+#[test]
+fn test_single_encoding_strategy_weth_wrap() {
+    let weth_executor =
+        ProtocolComponent { protocol_system: String::from("weth"), ..Default::default() };
+    let token_in = eth();
+    let token_out = weth();
+    let swap = Swap::new(weth_executor, token_in.clone(), token_out.clone());
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        token_in,
+        amount_in: BigUint::from(100_000_000_000_000_000_u128),
+        token_out,
+        min_amount_out: BigUint::from(100_000_000_000_000_000_u128),
+        // Alice
+        sender: alice_address(),
+        receiver: alice_address(),
+        swaps: vec![swap],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata =
+        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
+            .unwrap()
+            .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_single_encoding_strategy_weth_wrapping", hex_calldata.as_str());
+}
