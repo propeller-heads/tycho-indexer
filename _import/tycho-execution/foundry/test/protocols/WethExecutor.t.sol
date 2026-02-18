@@ -39,7 +39,7 @@ contract WethExecutorTest is TestUtils, Constants {
 
     function setUp() public setUpFork(23899254) {}
 
-    function testDecodeParams() public view {
+    function testDecodeParamsWrap() public view {
         bytes memory params = abi.encodePacked(
             uint8(1) // isWrapping = true
         );
@@ -49,7 +49,7 @@ contract WethExecutorTest is TestUtils, Constants {
         assertTrue(isWrapping);
     }
 
-    function testDecodeParamsBurn() public view {
+    function testDecodeParamsUnwrap() public view {
         bytes memory params = abi.encodePacked(
             uint8(0) // isWrapping = false
         );
