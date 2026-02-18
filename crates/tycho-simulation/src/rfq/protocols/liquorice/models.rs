@@ -21,7 +21,10 @@ pub struct LiquoriceMarketMakerLevels {
     pub quote_token: Bytes,
     /// Levels as [price, quantity] string pairs from the API, deserialized into
     /// LiquoricePriceLevel
-    #[serde(deserialize_with = "deserialize_string_pair_to_price_levels")]
+    #[serde(
+        deserialize_with = "deserialize_string_pair_to_price_levels",
+        serialize_with = "serialize_price_levels_to_string_pairs"
+    )]
     pub levels: Vec<LiquoricePriceLevel>,
     #[serde(rename = "updatedAt")]
     pub updated_at: Option<u64>,
@@ -57,6 +60,21 @@ where
             }
         })
         .collect()
+}
+
+fn serialize_price_levels_to_string_pairs<S>(
+    levels: &[LiquoricePriceLevel],
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    use serde::ser::SerializeSeq;
+    let mut seq = serializer.serialize_seq(Some(levels.len()))?;
+    for level in levels {
+        seq.serialize_element(&[level.price.to_string(), level.quantity.to_string()])?;
+    }
+    seq.end()
 }
 
 /// Price level with price and quantity
