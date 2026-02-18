@@ -81,7 +81,7 @@ contract TychoRouter is AccessControl, Dispatcher {
 
     // Max amount of dust that can stay behind in the TychoRouter when swapping.
     // This is relevant for rebasing tokens like stETH where sometimes 1 WEI is lost per transfer.
-    uint256 private constant ALLOWED_DUST = 2;
+    uint256 private constant _ALLOWED_DUST = 2;
 
     using SafeERC20 for IERC20;
     using LibPrefixLengthEncodedByteArray for bytes;
@@ -105,13 +105,13 @@ contract TychoRouter is AccessControl, Dispatcher {
     );
 
     constructor(
-        address _permit2,
+        address permit2_,
         address feeCalculator,
         address pauser,
         address unpauser,
         address executorSetter,
         address routerFeeSetter
-    ) Dispatcher(_permit2) {
+    ) Dispatcher(permit2_) {
         if (feeCalculator.code.length == 0) {
             revert TychoRouter__NotAContract(feeCalculator);
         }
@@ -1174,7 +1174,7 @@ contract TychoRouter is AccessControl, Dispatcher {
         uint256 currentBalanceTokenOut = _balanceOf(tokenOut, receiver);
 
         uint256 userAmount = currentBalanceTokenOut - initialBalanceTokenOut;
-        if (userAmount < amountOut - ALLOWED_DUST) {
+        if (userAmount < amountOut - _ALLOWED_DUST) {
             revert TychoRouter__AmountOutNotFullyReceived(userAmount, amountOut);
         }
     }

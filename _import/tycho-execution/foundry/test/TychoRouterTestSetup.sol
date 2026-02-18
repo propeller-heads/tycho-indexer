@@ -33,7 +33,7 @@ import "@src/FeeCalculator.sol";
 
 contract TychoRouterExposed is TychoRouter {
     constructor(
-        address _permit2,
+        address permit2_,
         address feeCalculator,
         address pauser,
         address unpauser,
@@ -41,7 +41,7 @@ contract TychoRouterExposed is TychoRouter {
         address routerFeeSetter
     )
         TychoRouter(
-            _permit2,
+            permit2_,
             feeCalculator,
             pauser,
             unpauser,

@@ -21,11 +21,11 @@ contract MaverickV2Executor is IExecutor {
 
     address public immutable factory;
 
-    constructor(address _factory) {
-        if (_factory == address(0)) {
+    constructor(address factory_) {
+        if (factory_ == address(0)) {
             revert MaverickV2Executor__InvalidFactory();
         }
-        factory = _factory;
+        factory = factory_;
     }
 
     function fundsExpectedAddress(bytes calldata data)

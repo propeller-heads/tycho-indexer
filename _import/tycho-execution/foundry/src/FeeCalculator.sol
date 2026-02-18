@@ -27,7 +27,7 @@ struct CustomFees {
  *      It also stores all fee-related configuration.
  */
 contract FeeCalculator is AccessControl, IFeeCalculator {
-    uint16 private constant MAX_FEE_BPS = 10000; // 100% max
+    uint16 private constant _MAX_FEE_BPS = 10000; // 100% max
 
     uint16 private _routerFeeOnOutputBps; // Router fee on output amount in basis points
     uint16 private _routerFeeOnClientFeeBps; // Router fee on client fee in basis points
@@ -90,8 +90,8 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
             _getFeeInfo(user);
 
         if (
-            (clientFeeBps + routerFeeOnOutputBps > MAX_FEE_BPS)
-                || routerFeeOnClientFeeBps > MAX_FEE_BPS
+            (clientFeeBps + routerFeeOnOutputBps > _MAX_FEE_BPS)
+                || routerFeeOnClientFeeBps > _MAX_FEE_BPS
         ) {
             revert FeeCalculator__FeeTooHigh();
         }

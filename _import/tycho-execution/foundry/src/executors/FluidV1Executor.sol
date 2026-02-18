@@ -31,15 +31,15 @@ contract FluidV1Executor is IExecutor, ICallback {
     bytes32 private constant _CURRENT_DEX_SLOT =
         0x823205ddf0d345ca541c0f695a3f87b5dce7be9df5ecffce73a87e1ad796ad20;
     // dexCallback(address,amount)
-    bytes4 private constant CALLBACK_SELECTOR = 0x9410ae88;
+    bytes4 private constant _CALLBACK_SELECTOR = 0x9410ae88;
 
     address public immutable liquidity;
 
-    constructor(address _liquidity) {
-        if (_liquidity == address(0)) {
+    constructor(address liquidity_) {
+        if (liquidity_ == address(0)) {
             revert FluidV1Executor__ZeroLiquidityAddress();
         }
-        liquidity = _liquidity;
+        liquidity = liquidity_;
     }
 
     function fundsExpectedAddress(
@@ -127,7 +127,7 @@ contract FluidV1Executor is IExecutor, ICallback {
     function verifyCallback(bytes calldata data) public view {
         address dex = _getCurrentDex();
         bytes4 selector = bytes4(data[:4]);
-        if (msg.sender != dex || selector != CALLBACK_SELECTOR) {
+        if (msg.sender != dex || selector != _CALLBACK_SELECTOR) {
             revert FluidV1Executor__InvalidCallback();
         }
     }
