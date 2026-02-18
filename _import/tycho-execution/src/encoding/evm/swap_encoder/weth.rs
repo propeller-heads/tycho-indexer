@@ -9,11 +9,12 @@ use crate::encoding::{
     swap_encoder::SwapEncoder,
 };
 
-/// Encodes a swap on a Rocketpool pool through the given executor address.
+/// Encodes a ETH <-> WETH swap
 ///
 /// # Fields
 /// * `executor_address` - The address of the executor contract that will perform the swap.
-/// * `native_token_address` - The address of the native token (only ETH).
+/// * `native_token_address` - The address of the native token.
+/// * `wrapped_native_token_address` - The address of the wrapped native token.
 #[derive(Clone)]
 pub struct WethSwapEncoder {
     executor_address: Bytes,
