@@ -72,7 +72,12 @@ mod tests {
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
         };
-        let encoder = WethSwapEncoder::new(Bytes::from(""), Chain::Ethereum, None).unwrap();
+        let encoder = WethSwapEncoder::new(
+            Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"), //TODO: is this correct?
+            Chain::Ethereum,
+            None,
+        )
+        .unwrap();
 
         let encoded_swap = encoder
             .encode_swap(&swap, &encoding_context)
@@ -101,7 +106,12 @@ mod tests {
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
         };
-        let encoder = WethSwapEncoder::new(Bytes::from(""), Chain::Ethereum, None).unwrap();
+        let encoder = WethSwapEncoder::new(
+            Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"), //TODO: is this correct?
+            Chain::Ethereum,
+            None,
+        )
+        .unwrap();
 
         let encoded_swap = encoder
             .encode_swap(&swap, &encoding_context)
