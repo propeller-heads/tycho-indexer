@@ -274,12 +274,9 @@ async fn main() {
                     .is_subset(&HashSet::from_iter(tokens.iter()))
                 {
                     // Try to calculate amount out using the state
-                    match state.get_amount_out(amount_in.clone(), &sell_token, &buy_token) {
-                    Err(ref e) => {
-                        eprintln!("[DEBUG] get_amount_out failed for comp_id={comp_id}: {e:?}");
-                        continue;
-                    }
-                    Ok(amount_out_result) => {
+                    if let Ok(amount_out_result) =
+                        state.get_amount_out(amount_in.clone(), &sell_token, &buy_token)
+                    {
                         let amount_out = amount_out_result.amount;
 
                         println!(
@@ -706,13 +703,10 @@ async fn main() {
                                 continue;
                             }
                         }
-                    } // Ok arm
-                    } // match
-                } else {
-                    eprintln!("[DEBUG] Pair not matching for comp_id={comp_id}, tokens: {tokens:?}");
+                    }
                 }
             } else {
-                eprintln!("[DEBUG] comp_id={comp_id} not found in new_pairs (state-only update)");
+                println!("No matching pair found in update.");
             }
         }
 
