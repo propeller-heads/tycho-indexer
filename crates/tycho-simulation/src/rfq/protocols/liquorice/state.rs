@@ -17,10 +17,7 @@ use tycho_common::{
 
 use crate::rfq::{
     client::RFQClient,
-    protocols::liquorice::{
-        client::LiquoriceClient,
-        models::LiquoriceMarketMakerLevels,
-    },
+    protocols::liquorice::{client::LiquoriceClient, models::LiquoriceMarketMakerLevels},
 };
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -87,7 +84,8 @@ impl ProtocolSim for LiquoriceState {
         todo!()
     }
 
-    /// Returns the best available price across all market makers, calculated as a weighted average price of the best price levels from each market maker. 
+    /// Returns the best available price across all market makers, calculated as a weighted average
+    /// price of the best price levels from each market maker.
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
         self.valid_direction_guard(&base.address, &quote.address)?;
 
@@ -95,8 +93,16 @@ impl ProtocolSim for LiquoriceState {
             .values()
             .filter(|mml| !mml.levels.is_empty())
             .map(|mml| {
-                let total_quantity: f64 = mml.levels.iter().map(|l| l.quantity).sum();
-                let total_value: f64 = mml.levels.iter().map(|l| l.quantity * l.price).sum();
+                let total_quantity: f64 = mml
+                    .levels
+                    .iter()
+                    .map(|l| l.quantity)
+                    .sum();
+                let total_value: f64 = mml
+                    .levels
+                    .iter()
+                    .map(|l| l.quantity * l.price)
+                    .sum();
                 total_value / total_quantity
             })
             .reduce(f64::max)
@@ -122,7 +128,10 @@ impl ProtocolSim for LiquoriceState {
             .values()
             .filter(|mml| !mml.levels.is_empty())
             .map(|mml| mml.get_amount_out_from_levels(amount_in))
-            .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
+            .max_by(|a, b| {
+                a.0.partial_cmp(&b.0)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .ok_or(SimulationError::RecoverableError("No liquidity".into()))?;
 
         let res = GetAmountOutResult {
@@ -158,11 +167,16 @@ impl ProtocolSim for LiquoriceState {
             .values()
             .filter(|mml| !mml.levels.is_empty())
             .map(|mml| {
-                mml.levels.iter().fold((0.0, 0.0), |(sell_sum, buy_sum), level| {
-                    (sell_sum + level.quantity, buy_sum + level.quantity * level.price)
-                })
+                mml.levels
+                    .iter()
+                    .fold((0.0, 0.0), |(sell_sum, buy_sum), level| {
+                        (sell_sum + level.quantity, buy_sum + level.quantity * level.price)
+                    })
             })
-            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .max_by(|a, b| {
+                a.1.partial_cmp(&b.1)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .ok_or(SimulationError::RecoverableError("No liquidity".into()))?;
 
         let sell_limit =
@@ -289,10 +303,8 @@ mod tests {
     }
 
     fn create_test_liquorice_state() -> LiquoriceState {
-        let base_addr =
-            Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let quote_addr =
-            Bytes::from_str("0xa0b86991c6218a76c1d19d4a2e9eb0ce3606eb48").unwrap();
+        let base_addr = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let quote_addr = Bytes::from_str("0xa0b86991c6218a76c1d19d4a2e9eb0ce3606eb48").unwrap();
         let mut levels_by_mm = HashMap::new();
         levels_by_mm.insert(
             "test_mm".to_string(),
@@ -353,7 +365,10 @@ mod tests {
         #[test]
         fn returns_no_liquidity_error() {
             let mut state = create_test_liquorice_state();
-            state.levels_by_mm.values_mut().for_each(|mml| mml.levels.clear());
+            state
+                .levels_by_mm
+                .values_mut()
+                .for_each(|mml| mml.levels.clear());
             let result = state.spot_price(&state.base_token, &state.quote_token);
             assert!(result.is_err());
             if let Err(SimulationError::RecoverableError(msg)) = result {
@@ -431,7 +446,10 @@ mod tests {
         #[test]
         fn no_liquidity() {
             let mut state = create_test_liquorice_state();
-            state.levels_by_mm.values_mut().for_each(|mml| mml.levels.clear());
+            state
+                .levels_by_mm
+                .values_mut()
+                .for_each(|mml| mml.levels.clear());
 
             let result = state.get_amount_out(
                 BigUint::from_str("1000000000000000000").unwrap(),
@@ -479,7 +497,10 @@ mod tests {
         #[test]
         fn no_liquidity() {
             let mut state = create_test_liquorice_state();
-            state.levels_by_mm.values_mut().for_each(|mml| mml.levels.clear());
+            state
+                .levels_by_mm
+                .values_mut()
+                .for_each(|mml| mml.levels.clear());
             let result = state
                 .get_limits(state.base_token.address.clone(), state.quote_token.address.clone());
             assert!(result.is_err());

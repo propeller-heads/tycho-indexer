@@ -4,8 +4,7 @@ use tycho_client::feed::synchronizer::ComponentWithState;
 use tycho_common::{models::token::Token, Bytes};
 
 use super::{
-    client_builder::LiquoriceClientBuilder,
-    models::LiquoriceMarketMakerLevels,
+    client_builder::LiquoriceClientBuilder, models::LiquoriceMarketMakerLevels,
     state::LiquoriceState,
 };
 use crate::{
@@ -195,7 +194,9 @@ mod tests {
 
         assert_eq!(result.base_token.symbol, "WBTC");
         assert_eq!(result.quote_token.symbol, "USDC");
-        assert!(result.levels_by_mm.contains_key("test_market_maker"));
+        assert!(result
+            .levels_by_mm
+            .contains_key("test_market_maker"));
         let mm_levels = &result.levels_by_mm["test_market_maker"];
         assert_eq!(mm_levels.levels.len(), 3);
         assert_eq!(mm_levels.levels[0].quantity, 1.5);
@@ -318,5 +319,4 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), InvalidSnapshotError::ValueError(_)));
     }
-
 }

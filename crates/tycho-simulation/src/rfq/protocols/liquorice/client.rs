@@ -120,10 +120,8 @@ impl LiquoriceClient {
 
         let mut attributes = HashMap::new();
 
-        
         let levels_json = serde_json::to_string(&mm_levels).unwrap_or_default();
         attributes.insert("levels".to_string(), levels_json.as_bytes().to_vec().into());
-        
 
         ComponentWithState {
             state: ResponseProtocolState {
@@ -236,7 +234,7 @@ impl RFQClient for LiquoriceClient {
 
                             let tokens = vec![base_token.clone(), quote_token.clone()];
 
-                            // Choose market maker with highest TVL for the component's TVL, because we are not going to aggregate firm quotes from multiple MMs in the current implementation                        
+                            // Choose market maker with highest TVL for the component's TVL, because we are not going to aggregate firm quotes from multiple MMs in the current implementation
                             let component_tvl = mm_entries
                                 .values()
                                 .map(|(_, tvl)| *tvl)
