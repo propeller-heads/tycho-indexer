@@ -3,6 +3,7 @@ use std::{any::Any, collections::HashMap, fmt};
 use async_trait::async_trait;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Pow, ToPrimitive};
+use serde::{Deserialize, Serialize};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::{protocol::GetAmountOutParams, token::Token},
@@ -19,7 +20,7 @@ use crate::rfq::{
     protocols::liquorice::{client::LiquoriceClient, models::LiquoriceMarketMakerLevels},
 };
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct LiquoriceState {
     pub base_token: Token,
     pub quote_token: Token,
@@ -74,6 +75,7 @@ impl LiquoriceState {
     }
 }
 
+#[typetag::serde]
 impl ProtocolSim for LiquoriceState {
     fn fee(&self) -> f64 {
         todo!()

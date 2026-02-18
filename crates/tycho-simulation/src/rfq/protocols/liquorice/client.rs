@@ -32,7 +32,7 @@ use crate::{
     tycho_common::dto::{ProtocolComponent, ResponseProtocolState},
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct LiquoriceClient {
     chain: Chain,
     price_levels_endpoint: String,
