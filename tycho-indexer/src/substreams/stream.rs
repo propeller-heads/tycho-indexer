@@ -17,8 +17,11 @@ use tracing::{error, info, trace, warn};
 
 use crate::{
     pb::sf::substreams::{
-        rpc::v2::{response::Message, BlockScopedData, BlockUndoSignal, Request, Response},
-        v1::Modules,
+        rpc::{
+            v2::{response::Message, BlockScopedData, BlockUndoSignal, Response},
+            v3::Request,
+        },
+        v1::Package,
     },
     substreams::SubstreamsEndpoint,
 };
@@ -39,23 +42,25 @@ impl SubstreamsStream {
     pub fn new(
         endpoint: Arc<SubstreamsEndpoint>,
         cursor: Option<String>,
-        modules: Option<Modules>,
+        package: Option<Package>,
         output_module_name: String,
         start_block: i64,
         end_block: u64,
         final_blocks_only: bool,
         extractor_id: String,
+        partial_blocks: bool,
     ) -> Self {
         SubstreamsStream {
             stream: Box::pin(stream_blocks(
                 endpoint,
                 cursor,
-                modules,
+                package,
                 output_module_name,
                 start_block,
                 end_block,
                 final_blocks_only,
                 extractor_id,
+                partial_blocks,
             )),
         }
     }
@@ -85,12 +90,13 @@ async fn wait_for_next_retry(
 fn stream_blocks(
     endpoint: Arc<SubstreamsEndpoint>,
     cursor: Option<String>,
-    modules: Option<Modules>,
+    package: Option<Package>,
     output_module_name: String,
     start_block_num: i64,
     stop_block_num: u64,
     final_blocks_only: bool,
     extractor_id: String,
+    partial_blocks: bool,
 ) -> impl Stream<Item = Result<BlockResponse, Error>> {
     let mut latest_cursor = cursor.unwrap_or_default();
     let mut latest_block = start_block_num as u64;
@@ -108,7 +114,9 @@ fn stream_blocks(
                 start_cursor: latest_cursor.clone(),
                 stop_block_num,
                 final_blocks_only,
-                modules: modules.clone(),
+                package: package.clone(),
+                params: Default::default(),
+                network: String::new(), // TODO: check if we need to set the network?
                 output_module: output_module_name.clone(),
                 // There is usually no good reason for you to consume the stream development mode (so switching `true`
                 // to `false`). If you do switch it, be aware that more than one output module will be send back to you,
@@ -116,6 +124,10 @@ fn stream_blocks(
                 // module.
                 production_mode: true,
                 debug_initial_store_snapshot_for_modules: vec![],
+                dev_output_modules: vec![],
+                limit_processed_blocks: u64::MAX,
+                progress_messages_interval_ms: 30 * 1000,
+                partial_blocks,
                 noop_mode: false,
             }).await;
 
@@ -125,10 +137,16 @@ fn stream_blocks(
                         match process_substreams_response(response).await {
                             BlockProcessedResult::BlockScopedData(block_scoped_data) => {
                                 if let Some(block) = block_scoped_data.clock.clone() {
-                                    if let Some(block_ts) = block.timestamp {
-                                        let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards!?").as_millis();
-                                        let lag = now.saturating_sub((block_ts.seconds * 1000) as u128);
-                                        gauge!("substreams_lag_millis", "extractor" => extractor_id.clone()).set(lag as f64);
+                                    // Only measure lag if the msg is a full block or the last partial
+                                    // TODO: substreams is looking to update the partial block service to be faster than the final block confirmation.
+                                    // This means .is_last_partial will be unset for the last partial. We'd need to update this logic when that happens
+                                    // to monitor for the first partial of the next block as the indicator that the previous block is complete.
+                                    if !block_scoped_data.is_partial || block_scoped_data.is_last_partial.is_some_and(|last_partial| last_partial) {
+                                        if let Some(block_ts) = block.timestamp {
+                                            let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards!?").as_millis();
+                                            let lag = now.saturating_sub((block_ts.seconds * 1000) as u128);
+                                            gauge!("substreams_lag_millis", "extractor" => extractor_id.clone()).set(lag as f64);
+                                        }
                                     }
                                     latest_block = block.number;
                                 };

@@ -175,6 +175,7 @@ impl WsActor {
         extractor_id: &ExtractorIdentity,
         include_state: bool,
         compression: bool,
+        partial_blocks: bool,
     ) {
         let extractor_id = extractor_id.clone();
         // Step 1: Direct HashMap access (no mutex needed since map is read-only after
@@ -236,11 +237,26 @@ impl WsActor {
 
                     let stream = async_stream::stream! {
                         while let Some(item) = rx.recv().await {
+                            if item.revert {
+                                // For reverts
+                                // Exclude partials if the client requested full blocks
+                                if !partial_blocks && item.is_partial() {
+                                    continue;
+                                }
+                            } else {
+                                // For new blocks
+                                // Only forward items matching the partial/full preference
+                                if partial_blocks != item.is_partial() {
+                                    continue;
+                                }
+                            }
+
                             let result = if include_state {
                                 (*item).clone().into()
                             } else {
                                 item.drop_state().into()
                             };
+
                             yield Ok((subscription_id, result));
                         }
                     };
@@ -277,6 +293,7 @@ impl WsActor {
                         "extractor" => extractor_id.name.to_string(),
                         "user_identity" => user_identity.unwrap_or("unknown".to_string()),
                         "compression" => compression.to_string(),
+                        "partial_blocks" => partial_blocks.to_string(),
                     )
                     .increment(1);
 
@@ -442,13 +459,19 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsActor {
                         debug!(actor_id = %self.id, "Parsed command successfully");
                         // Handle the message based on its variant
                         match message {
-                            Command::Subscribe { extractor_id, include_state, compression } => {
+                            Command::Subscribe {
+                                extractor_id,
+                                include_state,
+                                compression,
+                                partial_blocks,
+                            } => {
                                 debug!(actor_id = %self.id, %extractor_id, "Message handler: Processing subscribe request");
                                 self.subscribe(
                                     ctx,
                                     &extractor_id.clone().into(),
                                     include_state,
                                     compression,
+                                    partial_blocks,
                                 );
                                 debug!(actor_id = %self.id, %extractor_id, "Message handler: Subscribe method completed");
                             }
@@ -499,6 +522,7 @@ mod tests {
     use async_trait::async_trait;
     use chrono::DateTime;
     use futures03::SinkExt;
+    use rstest::rstest;
     use serde::Deserialize;
     use tokio::{
         net::TcpStream,
@@ -527,11 +551,39 @@ mod tests {
 
     pub struct MyMessageSender {
         extractor_id: ExtractorIdentity,
+        block_template: BlockAggregatedChanges,
     }
 
     impl MyMessageSender {
         pub fn new(extractor_id: ExtractorIdentity) -> Self {
-            Self { extractor_id }
+            let block_template = Self::default_block(&extractor_id.name);
+            Self { extractor_id, block_template }
+        }
+
+        /// Creates a default `BlockAggregatedChanges` for testing purposes.
+        pub fn default_block(extractor_name: &str) -> BlockAggregatedChanges {
+            BlockAggregatedChanges {
+                extractor: extractor_name.to_string(),
+                block: Block::new(
+                    1,
+                    Chain::Ethereum,
+                    Bytes::zero(32),
+                    Bytes::zero(32),
+                    DateTime::from_timestamp(0, 0)
+                        .unwrap()
+                        .naive_utc(),
+                ),
+                db_committed_block_height: None,
+                finalized_block_height: 1,
+                revert: false,
+                ..Default::default()
+            }
+        }
+
+        /// Set a custom block template to send instead of the default.
+        pub fn with_block(mut self, block: BlockAggregatedChanges) -> Self {
+            self.block_template = block;
+            self
         }
     }
 
@@ -540,8 +592,9 @@ mod tests {
         async fn subscribe(&self) -> Result<Receiver<ExtractorMsg>, SendError<ControlMessage>> {
             let (tx, rx) = mpsc::channel::<ExtractorMsg>(1);
             let extractor_id = self.extractor_id.clone();
+            let block_template = self.block_template.clone();
 
-            // Spawn a task that sends a DummyMessage every 100ms
+            // Spawn a task that sends messages every 100ms
             tokio::spawn(async move {
                 // clippy thinks applying `instrument` to a loop block is a mistake
                 #[allow(clippy::unit_arg)]
@@ -549,22 +602,7 @@ mod tests {
                     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                     debug!("Sending DummyMessage");
                     if tx
-                        .send(Arc::new(BlockAggregatedChanges {
-                            extractor: extractor_id.name.clone(),
-                            block: Block::new(
-                                1,
-                                Chain::Ethereum,
-                                Bytes::zero(32),
-                                Bytes::zero(32),
-                                DateTime::from_timestamp(0, 0)
-                                    .unwrap()
-                                    .naive_utc(),
-                            ),
-                            db_committed_block_height: None,
-                            finalized_block_height: 1,
-                            revert: false,
-                            ..Default::default()
-                        }))
+                        .send(Arc::new(block_template.clone()))
                         .await
                         .is_err()
                     {
@@ -783,6 +821,7 @@ mod tests {
             extractor_id: extractor_id.clone().into(),
             include_state: true,
             compression: false,
+            partial_blocks: false,
         };
         connection
             .send(Message::Text(serde_json::to_string(&action).unwrap()))
@@ -816,6 +855,7 @@ mod tests {
             extractor_id: extractor_id2.clone().into(),
             include_state: true,
             compression: false,
+            partial_blocks: false,
         };
         connection
             .send(Message::Text(serde_json::to_string(&action).unwrap()))
@@ -929,6 +969,7 @@ mod tests {
             extractor_id: extractor_id.clone().into(),
             include_state: true,
             compression: true,
+            partial_blocks: false,
         };
         connection
             .send(Message::Text(serde_json::to_string(&action).unwrap()))
@@ -991,6 +1032,7 @@ mod tests {
             extractor_id: extractor_id.into(),
             include_state: true,
             compression: false,
+            partial_blocks: false,
         };
         let res = serde_json::to_string(&action).unwrap();
         println!("{res}");
@@ -1099,6 +1141,7 @@ mod tests {
             extractor_id: extractor_id.clone().into(),
             include_state: true,
             compression: false,
+            partial_blocks: false,
         };
         let msg_text = serde_json::to_string(&subscribe_msg).unwrap();
 
@@ -1186,6 +1229,7 @@ mod tests {
             extractor_id: extractor_id.clone().into(),
             include_state: true,
             compression: false,
+            partial_blocks: false,
         };
         connection
             .send(Message::Text(serde_json::to_string(&action).unwrap()))
@@ -1358,6 +1402,117 @@ mod tests {
         }
     }
 
+    /// Test for partial_blocks subscription filter.
+    ///
+    /// Filter logic:
+    /// - Non-reverts: only delivered when `sub_partial_blocks == is_partial`
+    /// - Reverts:
+    ///   - Partial subscribers (`send_partials: true`): receive ALL reverts
+    ///   - Full block subscribers (`send_partials: false`): only receive full block reverts
+    #[rstest]
+    // Non-revert blocks: only received when subscription partial_blocks matches is_partial
+    #[case::full_block_want_full(false, false, false, true)]
+    #[case::full_block_want_partial(false, false, true, false)]
+    #[case::partial_block_want_full(true, false, false, false)]
+    #[case::partial_block_want_partial(true, false, true, true)]
+    // Revert blocks: partial subscribers get all reverts, full subscribers only get full reverts
+    #[case::revert_full_want_full(false, true, false, true)]
+    #[case::revert_full_want_partial(false, true, true, true)]
+    #[case::revert_partial_want_full(true, true, false, false)]
+    #[case::revert_partial_want_partial(true, true, true, true)]
+    #[actix_rt::test]
+    async fn test_partial_blocks_filter(
+        #[case] block_is_partial: bool,
+        #[case] block_revert: bool,
+        #[case] sub_partial_blocks: bool,
+        #[case] should_receive: bool,
+    ) {
+        // Create extractor with unique name based on test parameters
+        let extractor_name =
+            format!("test_p{}_r{}_s{}", block_is_partial, block_revert, sub_partial_blocks);
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, &extractor_name);
+
+        let mut block = MyMessageSender::default_block(&extractor_name);
+        block.partial_block_index = if block_is_partial { Some(0) } else { None };
+        block.revert = block_revert;
+
+        let message_sender = Arc::new(MyMessageSender::new(extractor_id.clone()).with_block(block));
+
+        let mut subscribers_map = HashMap::new();
+        subscribers_map
+            .insert(extractor_id.clone(), message_sender as Arc<dyn MessageSender + Send + Sync>);
+
+        let app_state = web::Data::new(WsData::new(subscribers_map));
+
+        let server = start_with(
+            TestServerConfig::default().client_request_timeout(Duration::from_secs(5)),
+            move || {
+                App::new()
+                    .wrap(RequestTracing::new())
+                    .app_data(app_state.clone())
+                    .service(web::resource("/ws/").route(web::get().to(WsActor::ws_index)))
+            },
+        );
+
+        let url = server
+            .url("/ws/")
+            .to_string()
+            .replacen("http://", "ws://", 1);
+
+        let (mut connection, _) = tokio_tungstenite::connect_async(&url)
+            .await
+            .expect("Failed to connect");
+
+        // Subscribe with the test's partial_blocks setting
+        let action = Command::Subscribe {
+            extractor_id: extractor_id.clone().into(),
+            include_state: true,
+            compression: false,
+            partial_blocks: sub_partial_blocks,
+        };
+        connection
+            .send(Message::Text(serde_json::to_string(&action).unwrap()))
+            .await
+            .expect("Failed to send subscribe message");
+
+        // Wait for subscription confirmation
+        wait_for_new_subscription(&mut connection)
+            .await
+            .expect("Failed to get subscription confirmation");
+
+        // Check if message is received
+        let mut received = false;
+        loop {
+            match timeout(Duration::from_millis(500), connection.next()).await {
+                Ok(Some(Ok(Message::Text(text)))) => {
+                    // Check if it's a block changes message (not a response)
+                    if serde_json::from_str::<DummyDelta>(&text).is_ok() {
+                        received = true;
+                        break;
+                    } else {
+                        panic!("Unexpected text message: {text}");
+                    }
+                }
+                Ok(Some(Ok(_))) => continue, // Ping/pong, continue
+                Ok(Some(Err(e))) => panic!("Connection error: {e}"),
+                Ok(None) => panic!("Connection closed"),
+                Err(_) => break, // Timeout - no message received
+            }
+        }
+
+        assert_eq!(
+            received, should_receive,
+            "expected should_receive={}, got={}",
+            should_receive, received
+        );
+
+        // Clean up
+        connection
+            .send(Message::Close(Some(CloseFrame { code: CloseCode::Normal, reason: "".into() })))
+            .await
+            .ok();
+    }
+
     #[test_log::test(actix_rt::test)]
     async fn test_subscribe_error_response() {
         // Tests a special path where the extractor fails the subscription
@@ -1390,6 +1545,7 @@ mod tests {
             extractor_id: extractor_id.clone().into(),
             include_state: true,
             compression: false,
+            partial_blocks: false,
         };
         connection
             .send(Message::Text(serde_json::to_string(&action).unwrap()))

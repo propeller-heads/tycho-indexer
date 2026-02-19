@@ -8,7 +8,7 @@ How to swap on-chain with Tycho. This quickstart will help you:
 * Simulate or execute the best trade using Tycho Execution.
 
 {% hint style="success" %}
-Want to chat with our docs? Download an LLM-friendly [text file of the full Tycho docs](https://files.gitbook.com/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FjrIe0oInIEt65tHqWn2w%2Fuploads%2FMYcEejawelGMbi4DTLSR%2Ftycho_docs_monofile.txt?alt=media\&token=64b8f6ee-0f2e-4684-a5d2-7f3b859196e4).
+Want to chat with our docs? Download an LLM-friendly [text file of the full Tycho docs](https://docs.propellerheads.xyz/tycho/llms-full.txt).
 {% endhint %}
 
 ## Run the Quickstart
@@ -185,7 +185,7 @@ After this, you can create the Swap and Solution objects. For more info about th
 
 ```rust
 let simple_swap =
-    SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone()).build();
+    Swap::new(component, sell_token.address.clone(), buy_token.address.clone());
 
 // Then we create a solution object with the previous swap
 let solution = Solution {
@@ -204,9 +204,14 @@ let solution = Solution {
 #### b. Encode solution
 
 ```rust
+let swap_encoder_registry = SwapEncoderRegistry::new(Chain::Ethereum)
+    .add_default_encoders(None)
+    .expect("Failed to get default SwapEncoderRegistry");
+    
 let encoder = TychoRouterEncoderBuilder::new()
     .chain(chain)
     .user_transfer_type(UserTransferType::TransferFromPermit2)
+    .swap_encoder_registry(swap_encoder_registry)
     .build()
     .expect("Failed to build encoder");
 

@@ -43,6 +43,7 @@
       * [Normalizing relative ERC20 Balances](for-dexs/protocol-integration/indexing/common-problems-and-patterns/normalizing-relative-erc20-balances.md)
       * [Tracking Contract Balances](for-dexs/protocol-integration/indexing/common-problems-and-patterns/tracking-contract-balances.md)
       * [Custom protobuf models](for-dexs/protocol-integration/indexing/common-problems-and-patterns/custom-protobuf-models.md)
+      * [Native Token Handling](for-dexs/protocol-integration/indexing/common-problems-and-patterns/native-token-handling.md)
     * [Best Practices](for-dexs/protocol-integration/indexing/best-practices.md)
     * [Reserved Attributes](for-dexs/protocol-integration/indexing/reserved-attributes.md)
   * [Simulation](for-dexs/protocol-integration/simulation/README.md)

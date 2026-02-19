@@ -126,10 +126,9 @@ For maximum security, you should determine the minimum amount from a **third-par
 Build the Swap and Solution:
 
 <pre class="language-rust"><code class="lang-rust">let swap =
-    SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone())
+    Swap::new(component, sell_token.address.clone(), buy_token.address.clone())
         .protocol_state(state)
-        .estimated_amount_in(sell_amount.clone())
-        .build();
+        .estimated_amount_in(sell_amount.clone());
 
 <strong>let solution = Solution {
 </strong>    sender: user_address.clone(),
@@ -162,9 +161,14 @@ After encoding, quotes are valid for only 1–3 seconds. Execution must follow i
 #### Encode solution
 
 ```rust
+let swap_encoder_registry = SwapEncoderRegistry::new(Chain::Ethereum)
+    .add_default_encoders(None)
+    .expect("Failed to get default SwapEncoderRegistry");
+    
 let encoder = TychoRouterEncoderBuilder::new()
     .chain(chain)
     .user_transfer_type(UserTransferType::TransferFromPermit2)
+    .swap_encoder_registry(swap_encoder_registry)
     .build()
     .expect("Failed to build encoder");
 

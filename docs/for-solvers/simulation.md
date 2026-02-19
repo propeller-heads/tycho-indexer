@@ -10,6 +10,12 @@ Tycho Simulation is a Rust crate that provides powerful tools for **interacting 
 
 The repository is available [here](https://github.com/propeller-heads/tycho-simulation).
 
+{% hint style="info" %}
+**✨ New: Sub-Second Latency with Partial Blocks**
+
+Tycho now provides early support for partial blocks on Base, enabling sub-second latency by streaming pre-confirmation updates. Enable this feature with `.enable_partial_blocks()` on your `ProtocolStreamBuilder`.
+{% endhint %}
+
 ## Installation
 
 The `tycho-simulation` package is available on [Github](https://github.com/propeller-heads/tycho-simulation).
@@ -209,6 +215,10 @@ The first message received will contain states for all protocol components regis
 > Note: For efficiency, `ProtocolSim` states contain simulation-critical data only. Reference data such as protocol names and token information is provided in the `ProtocolComponent` objects within the `new_pairs` field. Consider maintaining a store of these components if you need this metadata.
 
 For a full list of supported protocols and the simulation state implementations they use, see [Supported Protocols](supported-protocols.md).
+
+{% hint style="info" %}
+`ProtocolStreamBuilder` supports the same [streaming options](https://docs.propellerheads.xyz/tycho/for-solvers/indexer/tycho-client#streaming-options) as the Tycho Client, with one difference: TVL estimates are **always included** in the simulation package and cannot be disabled.
+{% endhint %}
 
 <details>
 

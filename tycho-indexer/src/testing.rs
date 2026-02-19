@@ -1694,6 +1694,9 @@ pub mod fixtures {
             debug_map_outputs: vec![],
             debug_store_outputs: vec![],
             attestation: "test_attestation".to_owned(),
+            is_partial: false,
+            partial_index: None,
+            is_last_partial: None,
         }
     }
 

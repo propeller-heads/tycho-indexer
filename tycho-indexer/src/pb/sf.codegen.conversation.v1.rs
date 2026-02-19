@@ -13,7 +13,7 @@ pub struct UserInput {
     pub from_msg_id: u32,
     #[prost(string, tag="3")]
     pub from_action_id: ::prost::alloc::string::String,
-    #[prost(oneof="user_input::Entry", tags="11, 15, 17, 18, 16, 20")]
+    #[prost(oneof="user_input::Entry", tags="11, 15, 17, 18, 16, 20, 21")]
     pub entry: ::core::option::Option<user_input::Entry>,
 }
 /// Nested message and enum types in `UserInput`.
@@ -23,6 +23,20 @@ pub mod user_input {
     pub struct TextInput {
         #[prost(string, tag="1")]
         pub value: ::prost::alloc::string::String,
+    }
+    #[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct LocalFile {
+        #[prost(bytes="vec", tag="1")]
+        pub value: ::prost::alloc::vec::Vec<u8>,
+        /// Error can be set by the client to indicate an issue when trying to read the file,
+        /// the error comes from the client side. The server can inspect that to decide what
+        /// to do next if there is an error.
+        ///
+        /// If an error is set, the \[value\] field will be empty and not populated, so implementor
+        /// should check for that first.
+        #[prost(string, optional, tag="2")]
+        pub error: ::core::option::Option<::prost::alloc::string::String>,
     }
     #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -103,6 +117,8 @@ pub mod user_input {
         /// Deprecated: we don't use this.
         #[prost(message, tag="20")]
         DownloadedFiles(DownloadedFiles),
+        #[prost(message, tag="21")]
+        LocalFile(LocalFile),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -122,7 +138,7 @@ pub struct SystemOutput {
     /// Optional, or future ?
     #[prost(bytes="vec", tag="5")]
     pub state_signature: ::prost::alloc::vec::Vec<u8>,
-    #[prost(oneof="system_output::Entry", tags="15, 16, 17, 18, 21, 19, 20")]
+    #[prost(oneof="system_output::Entry", tags="15, 16, 17, 18, 21, 19, 20, 22")]
     pub entry: ::core::option::Option<system_output::Entry>,
 }
 /// Nested message and enum types in `SystemOutput`.
@@ -226,6 +242,25 @@ pub mod system_output {
     }
     #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct LocalFile {
+        #[prost(string, tag="8")]
+        pub prompt: ::prost::alloc::string::String,
+        /// Markdown
+        #[prost(string, tag="1")]
+        pub description: ::prost::alloc::string::String,
+        #[prost(string, tag="2")]
+        pub placeholder: ::prost::alloc::string::String,
+        /// Pre-filled the textbox
+        #[prost(string, tag="9")]
+        pub default_value: ::prost::alloc::string::String,
+        #[prost(string, tag="6")]
+        pub submit_button_label: ::prost::alloc::string::String,
+        /// icon name or image_url
+        #[prost(string, tag="7")]
+        pub submit_button_icon: ::prost::alloc::string::String,
+    }
+    #[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Loading {
         #[prost(bool, tag="1")]
         pub loading: bool,
@@ -315,6 +350,8 @@ pub mod system_output {
         Loading(Loading),
         #[prost(message, tag="20")]
         DownloadFiles(DownloadFiles),
+        #[prost(message, tag="22")]
+        LocalFile(LocalFile),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -322,6 +359,10 @@ pub mod system_output {
 pub struct DiscoveryRequest {
     #[prost(string, tag="1")]
     pub search_terms: ::prost::alloc::string::String,
+    /// Version sent to the codegen service, which is incremental (0,1,2...).
+    /// It is used to force users to upgrade after breaking changes between the CLI and the codegen server.
+    #[prost(uint64, tag="2")]
+    pub client_version: u64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

@@ -65,6 +65,7 @@ pub struct TychoStreamBuilder {
     no_tls: bool,
     include_tvl: bool,
     compression: bool,
+    partial_blocks: bool,
 }
 
 impl TychoStreamBuilder {
@@ -93,6 +94,7 @@ impl TychoStreamBuilder {
             no_tls: true,
             include_tvl: false,
             compression: true,
+            partial_blocks: false,
         }
     }
 
@@ -200,6 +202,12 @@ impl TychoStreamBuilder {
         self
     }
 
+    /// Enables the client to receive partial block updates (flashblocks).
+    pub fn enable_partial_blocks(mut self) -> Self {
+        self.partial_blocks = true;
+        self
+    }
+
     /// Builds and starts the Tycho client, connecting to the Tycho server and
     /// setting up the synchronization of exchange components.
     pub async fn build(
@@ -284,7 +292,8 @@ impl TychoStreamBuilder {
                     rpc_client.clone(),
                     ws_client.clone(),
                     self.block_time + self.timeout,
-                ),
+                )
+                .with_partial_blocks(self.partial_blocks),
             };
             block_sync = block_sync.register_synchronizer(id, sync);
         }
@@ -392,9 +401,10 @@ mod tests {
     }
 
     #[test]
-    fn test_default_compression() {
+    fn test_default_stream_builder() {
         let builder = TychoStreamBuilder::new("localhost:4242", Chain::Ethereum);
         assert!(builder.compression, "Compression should be enabled by default.");
+        assert!(!builder.partial_blocks, "partial_blocks should be disabled by default.");
     }
 
     #[tokio::test]

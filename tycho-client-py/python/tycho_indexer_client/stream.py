@@ -27,10 +27,13 @@ class TychoStream:
         auth_token: str = None,
         min_tvl: Decimal = None,
         min_tvl_range: tuple[Decimal, Decimal] = None,
-        include_state=True,
+        include_state: bool = True,
         logs_directory: str = None,
         tycho_client_path: str = None,
         use_tls: bool = True,
+        partial_blocks: bool = False,
+        include_tvl: bool = False,
+        disable_compression: bool = False,
     ):
         """
         Initializes the TychoStream instance.
@@ -47,6 +50,11 @@ class TychoStream:
             logs_directory: Directory to store log files. If not specified, a default directory based on the OS is used.
             tycho_client_path: Path to the Tycho client binary. If not specified, the binary is searched for in the system's PATH.
             use_tls: Whether to use TLS connections with `tycho_url` or not. Defaults to `True`.
+            partial_blocks: Whether to enable partial block updates (flash blocks) for sub-block latency. Defaults to `False`.
+            include_tvl: Whether to include TVL estimates in messages. Increases startup latency
+                due to additional network requests. Defaults to `False`.
+            disable_compression: Whether to disable zstd compression for WebSocket messages.
+                Compression is enabled by default. Defaults to `False`.
         """
         self.tycho_url = tycho_url
         self.auth_token = auth_token
@@ -59,6 +67,9 @@ class TychoStream:
         self._logs_directory = logs_directory or get_default_log_directory()
         self._tycho_client_path = tycho_client_path or find_tycho_client()
         self._use_tls = use_tls
+        self._partial_blocks = partial_blocks
+        self._include_tvl = include_tvl
+        self._disable_compression = disable_compression
 
     async def start(self):
         """Start the tycho-client Rust binary through subprocess"""
@@ -88,6 +99,15 @@ class TychoStream:
         if not self._use_tls:
             cmd.append("--no-tls")
 
+        if self._partial_blocks:
+            cmd.append("--partial-blocks")
+
+        if self._include_tvl:
+            cmd.append("--include-tvl")
+
+        if self._disable_compression:
+            cmd.append("--disable-compression")
+
         for exchange in self.exchanges:
             cmd.append("--exchange")
             cmd.append(exchange)
@@ -100,7 +120,7 @@ class TychoStream:
             *cmd,
             stdout=PIPE,
             stderr=STDOUT,
-            limit=2**64,
+            limit=2 ** 64,
             env={**os.environ, "NO_COLOR": "true"},
         )
 
@@ -176,9 +196,11 @@ def find_tycho_client():
 if __name__ == "__main__":
     stream = TychoStream("localhost:8888", ["uniswap_v2"], Decimal(100), Chain.ethereum)
 
+
     async def print_messages():
         await stream.start()
         async for msg in stream:
             print(msg)
+
 
     asyncio.run(print_messages())

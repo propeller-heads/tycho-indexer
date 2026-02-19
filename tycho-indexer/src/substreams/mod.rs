@@ -12,7 +12,10 @@ use tonic::{
     transport::{Channel, ClientTlsConfig},
 };
 
-use crate::pb::sf::substreams::rpc::v2::{stream_client::StreamClient, Request, Response};
+use crate::pb::sf::substreams::rpc::{
+    v2::Response,
+    v3::{stream_client::StreamClient, Request},
+};
 
 #[derive(Clone, Debug)]
 pub struct SubstreamsEndpoint {
@@ -65,6 +68,9 @@ impl SubstreamsEndpoint {
             .map(|token| token.as_str().try_into())
             .transpose()?;
 
+        // This is a large error defined in tonic API, so we can't avoid the lint error. Fortunately
+        // we only use it when creating the stream so it's acceptable performance wise.
+        #[allow(clippy::result_large_err)]
         let mut client = StreamClient::with_interceptor(
             self.channel.clone(),
             move |mut r: tonic::Request<()>| {

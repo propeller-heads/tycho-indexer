@@ -20,14 +20,16 @@ use alloy::{
     },
     transports::{http::reqwest, RpcError, TransportErrorKind, TransportResult},
 };
+use async_trait::async_trait;
 use backoff::backoff::Backoff;
 use futures::future::join_all;
+use num_bigint::BigUint;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tracing::{debug, info, instrument, trace, Span};
-use tycho_common::Bytes;
+use tycho_common::{traits::FeePriceGetter, Bytes};
 
-use crate::{RPCError, RequestError};
+use crate::{gas::BlockGasPrice, RPCError, RequestError};
 
 pub mod config;
 pub mod errors;
@@ -121,6 +123,85 @@ impl EthereumRpcClient {
                 "Failed to get block number: Unexpected block tag returned".to_string(),
             )))
         }
+    }
+
+    /// Gets the gas price from the node.
+    ///
+    /// Assumes EIP-1559 support first (most modern chains), falling back to legacy if needed.
+    /// Returns the gas price with block context information.
+    #[instrument(level = "debug", skip(self))]
+    pub async fn get_gas_price(&self) -> Result<BlockGasPrice, RPCError> {
+        // Assume EIP-1559 first (most modern chains)
+        // Get the latest block to check for base fee
+        let block = self
+            .eth_get_block_by_number(BlockId::Number(BlockNumberOrTag::Latest))
+            .await?;
+
+        let block_number = block.header.number;
+        let block_hash = block.header.hash;
+        let block_timestamp = block.header.timestamp;
+
+        if let Some(base_fee) = block.header.base_fee_per_gas {
+            // EIP-1559 chain - get priority fee
+            match self
+                .eth_max_priority_fee_per_gas()
+                .await
+            {
+                Ok(priority_fee) => {
+                    return Ok(BlockGasPrice {
+                        block_number,
+                        block_hash,
+                        block_timestamp,
+                        pricing: crate::gas::GasPrice::Eip1559 {
+                            base_fee_per_gas: BigUint::from(base_fee),
+                            max_priority_fee_per_gas: BigUint::from_bytes_be(
+                                &priority_fee.to_be_bytes::<32>(),
+                            ),
+                        },
+                    });
+                }
+                Err(e) => {
+                    // If eth_maxPriorityFeePerGas fails, fall back to legacy method
+                    debug!("eth_maxPriorityFeePerGas failed, falling back to eth_gasPrice: {}", e);
+                }
+            }
+        }
+
+        // Fall back to legacy eth_gasPrice for non-EIP-1559 chains or if priority fee fetch fails
+        let gas_price: U256 = self
+            .retry_policy
+            .retry_request(|| async {
+                self.inner
+                    .request_noparams("eth_gasPrice")
+                    .await
+            })
+            .await
+            .map_err(|e| RPCError::from_alloy("Failed to get gas price", e))?;
+
+        Ok(BlockGasPrice {
+            block_number,
+            block_hash,
+            block_timestamp,
+            pricing: crate::gas::GasPrice::Legacy {
+                gas_price: BigUint::from_bytes_be(&gas_price.to_be_bytes::<32>()),
+            },
+        })
+    }
+
+    /// Gets the max priority fee per gas using eth_maxPriorityFeePerGas RPC method.
+    ///
+    /// # Returns
+    /// The max priority fee per gas in wei.
+    #[instrument(level = "debug", skip(self))]
+    async fn eth_max_priority_fee_per_gas(&self) -> Result<U256, RPCError> {
+        self.retry_policy
+            .retry_request(|| async {
+                self.inner
+                    .request_noparams("eth_maxPriorityFeePerGas")
+                    .await
+            })
+            .await
+            .map_err(|e| RPCError::from_alloy("Failed to get max priority fee per gas", e))
     }
 
     #[instrument(level = "debug", skip(self))]
@@ -883,6 +964,17 @@ impl EthereumRpcClient {
         }
 
         Ok(result)
+    }
+}
+
+// Implement the FeePriceGetter trait for EthereumRpcClient
+#[async_trait]
+impl FeePriceGetter for EthereumRpcClient {
+    type Error = RPCError;
+    type FeePrice = BlockGasPrice;
+
+    async fn get_latest_fee_price(&self) -> Result<Self::FeePrice, Self::Error> {
+        self.get_gas_price().await
     }
 }
 
@@ -1765,5 +1857,138 @@ mod tests {
         }
 
         m.assert();
+    }
+
+    #[tokio::test]
+    async fn test_get_legacy_gas_price_mocked() {
+        let mut server = Server::new_async().await;
+
+        // Mock eth_getBlockByNumber to return a legacy block (without baseFeePerGas)
+        let block_mock = server
+            .mock("POST", "/")
+            .match_body(mockito::Matcher::Regex(r#".*"method":"eth_getBlockByNumber".*"#.to_string()))
+            .with_status(200)
+            .with_body(r#"{"jsonrpc":"2.0","id":0,"result":{"number":"0x1","hash":"0x0000000000000000000000000000000000000000000000000000000000000000","parentHash":"0x0000000000000000000000000000000000000000000000000000000000000000","sha3Uncles":"0x0000000000000000000000000000000000000000000000000000000000000000","miner":"0x0000000000000000000000000000000000000000","stateRoot":"0x0000000000000000000000000000000000000000000000000000000000000000","transactionsRoot":"0x0000000000000000000000000000000000000000000000000000000000000000","receiptsRoot":"0x0000000000000000000000000000000000000000000000000000000000000000","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","totalDifficulty":"0x0","timestamp":"0x0","gasLimit":"0x0","gasUsed":"0x0","extraData":"0x","mixHash":"0x0000000000000000000000000000000000000000000000000000000000000000","nonce":"0x0000000000000000","size":"0x0","transactions":[]}}"#)
+            .expect(1)
+            .create_async()
+            .await;
+
+        // Mock eth_gasPrice to return a gas price
+        let gas_price_mock = server
+            .mock("POST", "/")
+            .match_body(mockito::Matcher::Regex(r#".*"method":"eth_gasPrice".*"#.to_string()))
+            .with_status(200)
+            .with_body(r#"{"jsonrpc":"2.0","id":0,"result":"0x1234"}"#)
+            .expect(1)
+            .create_async()
+            .await;
+
+        let client =
+            EthereumRpcClient::new(&server.url()).expect("Failed to create EthereumRpcClient");
+
+        let gas_price = client
+            .get_gas_price()
+            .await
+            .expect("Failed to get gas price");
+
+        // Should return Legacy variant for chains without EIP-1559
+        assert!(
+            matches!(gas_price.pricing, crate::gas::GasPrice::Legacy { .. }),
+            "Should return Legacy gas price"
+        );
+        assert_eq!(gas_price.effective_gas_price(), num_bigint::BigUint::from(0x1234u128));
+        assert_eq!(gas_price.block_number, 1);
+        assert_eq!(gas_price.block_timestamp, 0);
+
+        block_mock.assert();
+        gas_price_mock.assert();
+    }
+
+    #[tokio::test]
+    async fn test_get_eip1559_gas_price_mocked() {
+        let mut server = Server::new_async().await;
+
+        // Mock eth_getBlockByNumber to return an EIP-1559 block (with baseFeePerGas)
+        // baseFeePerGas: 0x3b9aca00 = 1,000,000,000 wei = 1 gwei
+        let block_mock = server
+            .mock("POST", "/")
+            .match_body(mockito::Matcher::Regex(r#".*"method":"eth_getBlockByNumber".*"#.to_string()))
+            .with_status(200)
+            .with_body(r#"{"jsonrpc":"2.0","id":0,"result":{"number":"0x1","hash":"0x0000000000000000000000000000000000000000000000000000000000000000","parentHash":"0x0000000000000000000000000000000000000000000000000000000000000000","sha3Uncles":"0x0000000000000000000000000000000000000000000000000000000000000000","miner":"0x0000000000000000000000000000000000000000","stateRoot":"0x0000000000000000000000000000000000000000000000000000000000000000","transactionsRoot":"0x0000000000000000000000000000000000000000000000000000000000000000","receiptsRoot":"0x0000000000000000000000000000000000000000000000000000000000000000","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","totalDifficulty":"0x0","timestamp":"0x0","gasLimit":"0x0","gasUsed":"0x0","extraData":"0x","baseFeePerGas":"0x3b9aca00","mixHash":"0x0000000000000000000000000000000000000000000000000000000000000000","nonce":"0x0000000000000000","size":"0x0","transactions":[]}}"#)
+            .expect(1)
+            .create_async()
+            .await;
+
+        // Mock eth_maxPriorityFeePerGas to return priority fee
+        // 0x5f5e100 = 100,000,000 wei = 0.1 gwei
+        let priority_fee_mock = server
+            .mock("POST", "/")
+            .match_body(mockito::Matcher::Regex(
+                r#".*"method":"eth_maxPriorityFeePerGas".*"#.to_string(),
+            ))
+            .with_status(200)
+            .with_body(r#"{"jsonrpc":"2.0","id":1,"result":"0x5f5e100"}"#)
+            .expect(1)
+            .create_async()
+            .await;
+
+        let client =
+            EthereumRpcClient::new(&server.url()).expect("Failed to create EthereumRpcClient");
+
+        let gas_price = client
+            .get_gas_price()
+            .await
+            .expect("Failed to get gas price");
+
+        // Should return EIP-1559 variant for chains with baseFeePerGas
+        assert!(
+            matches!(gas_price.pricing, crate::gas::GasPrice::Eip1559 { .. }),
+            "Should return EIP-1559 gas price"
+        );
+
+        // Effective gas price should be base_fee + priority_fee
+        // 1 gwei + 0.1 gwei = 1.1 gwei = 1,100,000,000 wei
+        let expected = num_bigint::BigUint::from(1_100_000_000u128);
+        assert_eq!(gas_price.effective_gas_price(), expected);
+        assert_eq!(gas_price.block_number, 1);
+        assert_eq!(gas_price.block_timestamp, 0);
+
+        block_mock.assert();
+        priority_fee_mock.assert();
+    }
+
+    #[tokio::test]
+    #[ignore = "require RPC connection"]
+    async fn test_get_gas_price() -> Result<(), RPCError> {
+        use tycho_common::traits::FeePriceGetter;
+
+        let fixture = TestFixture::new();
+        let client = fixture.create_rpc_client(false);
+
+        let gas_price = client.get_gas_price().await?;
+
+        assert!(
+            gas_price.effective_gas_price() > num_bigint::BigUint::from(0u128),
+            "Gas price should be positive"
+        );
+
+        let gas_price_via_trait = client.get_latest_fee_price().await?;
+        assert!(
+            gas_price_via_trait.effective_gas_price() > num_bigint::BigUint::from(0u128),
+            "Gas price from trait should be positive"
+        );
+
+        // Verify block info is populated
+        assert!(gas_price.block_number > 0, "Block number should be positive");
+        assert!(gas_price.block_timestamp > 0, "Block timestamp should be positive");
+
+        // Log the gas price type for debugging
+        if matches!(gas_price.pricing, crate::gas::GasPrice::Eip1559 { .. }) {
+            println!("Detected EIP-1559 chain");
+        } else if matches!(gas_price.pricing, crate::gas::GasPrice::Legacy { .. }) {
+            println!("Detected legacy chain");
+        }
+
+        Ok(())
     }
 }

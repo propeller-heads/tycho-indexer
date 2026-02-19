@@ -1,3 +1,210 @@
+## [0.142.0](https://github.com/propeller-heads/tycho-indexer/compare/0.141.1...0.142.0) (2026-02-16)
+
+
+### Features
+
+* add block_type label to block processing time metric ([12127c5](https://github.com/propeller-heads/tycho-indexer/commit/12127c5a9d0fae2d6711d58854e3856d3bdd8f29))
+* add metrics partial block metrics ([#850](https://github.com/propeller-heads/tycho-indexer/issues/850)) ([11f56d7](https://github.com/propeller-heads/tycho-indexer/commit/11f56d75c4b4f7341e1a2ab9d45aca75ac89775a))
+* **extractor:** add partial block metrics for Grafana observability ([0ee6e49](https://github.com/propeller-heads/tycho-indexer/commit/0ee6e494c0cc7dc44c7f51e238ba93d3865dc350))
+
+## [0.141.1](https://github.com/propeller-heads/tycho-indexer/compare/0.141.0...0.141.1) (2026-02-13)
+
+
+### Bug Fixes
+
+* allow merging partials with blocks of different hashes ([8177364](https://github.com/propeller-heads/tycho-indexer/commit/8177364c57d9392d4eb4b66454e883f83e5de54f))
+* normalise block hash during partial merge ([25861aa](https://github.com/propeller-heads/tycho-indexer/commit/25861aab5ea57b2035c40b448ca6f2b3e5b0e977))
+* Partial blocks support ([#847](https://github.com/propeller-heads/tycho-indexer/issues/847)) ([66c2e41](https://github.com/propeller-heads/tycho-indexer/commit/66c2e41eff3cf6c601b8f50236a258a9c4228f66))
+* remove partial value from collect_and_process_full_block response ([1cb4c92](https://github.com/propeller-heads/tycho-indexer/commit/1cb4c9296eca987cf7fed7c97e5c026c3b0cb164))
+* skip applying partial reverts to pending deltas buffer ([0130219](https://github.com/propeller-heads/tycho-indexer/commit/013021981deadc9a2b9234b3e9d46a8cc29a2993))
+* skip inserting partial blocks on pending deltas buffer ([cc873f7](https://github.com/propeller-heads/tycho-indexer/commit/cc873f716fc244a157d66dd462fccaf6de59e234))
+
+## [0.141.0](https://github.com/propeller-heads/tycho-indexer/compare/0.140.1...0.141.0) (2026-02-13)
+
+
+### Features
+
+* add configuration options for partial blocks, TVL inclusion, and compression ([d58c0ea](https://github.com/propeller-heads/tycho-indexer/commit/d58c0ea30183f7be8e08478f23993413dc7deb02))
+* add python package configuration options for partial blocks, TVL inclusion, and compression ([#849](https://github.com/propeller-heads/tycho-indexer/issues/849)) ([4a40650](https://github.com/propeller-heads/tycho-indexer/commit/4a4065021bd82e08dcc4ed63a6df7c40783c99a7))
+
+## [0.140.1](https://github.com/propeller-heads/tycho-indexer/compare/0.140.0...0.140.1) (2026-02-12)
+
+
+### Bug Fixes
+
+* stop requesting all snapshots everytime there is an update ([9409de5](https://github.com/propeller-heads/tycho-indexer/commit/9409de5938838ebbb41696d9c1f1aa9869bcdee9))
+* stop requesting all snapshots everytime there is an update ([#848](https://github.com/propeller-heads/tycho-indexer/issues/848)) ([10cd5f4](https://github.com/propeller-heads/tycho-indexer/commit/10cd5f418f4bdcbab4fecca3deb094b9a9b9d546))
+
+## [0.140.0](https://github.com/propeller-heads/tycho-indexer/compare/0.139.0...0.140.0) (2026-02-11)
+
+
+### Features
+
+* handle partial block messages in ExtractorRunner ([a63151c](https://github.com/propeller-heads/tycho-indexer/commit/a63151c1178fddb7079942df047175718efeced7))
+* handle partial block messages in ExtractorRunner ([#844](https://github.com/propeller-heads/tycho-indexer/issues/844)) ([77e7a23](https://github.com/propeller-heads/tycho-indexer/commit/77e7a23d7e09247f1277bb2c4072c6175394647e))
+* implement collect_full_block to drain partial buffer ([e9982aa](https://github.com/propeller-heads/tycho-indexer/commit/e9982aa8eadafa023c27d124162c642b681ae5e3))
+
+## [0.139.0](https://github.com/propeller-heads/tycho-indexer/compare/0.138.0...0.139.0) (2026-02-09)
+
+
+### Features
+
+* **extractor:** mark revert blocks as partial when no full blocks are rolled back. ([131ad3d](https://github.com/propeller-heads/tycho-indexer/commit/131ad3d045decdc6f313a2cc3b7fa0d0b6b49149))
+* **extractor:** purge partial block buffer on revert ([7eb11fb](https://github.com/propeller-heads/tycho-indexer/commit/7eb11fba467329179ea50682a2c0a2bc7f22c86c))
+* revert handling for partial blocks ([#845](https://github.com/propeller-heads/tycho-indexer/issues/845)) ([74914fd](https://github.com/propeller-heads/tycho-indexer/commit/74914fd42d80f679fe476191dc8f7041221afaff))
+
+## [0.138.0](https://github.com/propeller-heads/tycho-indexer/compare/0.137.0...0.138.0) (2026-02-09)
+
+
+### Features
+
+* add partial block buffer in the extractor ([#841](https://github.com/propeller-heads/tycho-indexer/issues/841)) ([ee6b5be](https://github.com/propeller-heads/tycho-indexer/commit/ee6b5be6b0cee9da5026c60b14b9fd4f3146d5d3))
+* **extractor:** add memory tracking for PartialBlockBuffer ([7166b6b](https://github.com/propeller-heads/tycho-indexer/commit/7166b6b2616b4ef8910fe3c7634221213cb27dd4))
+* **extractor:** add partial_block_buffer to manage accumulating partial blocks ([09ebc87](https://github.com/propeller-heads/tycho-indexer/commit/09ebc87edc8e60788495e530eddb66f408dceef6))
+* **extractor:** add PartialBlockBuffer for accumulating partial blocks ([6483359](https://github.com/propeller-heads/tycho-indexer/commit/6483359040af2a189ced8614c73fa00cf332e752))
+* **extractor:** improve handling of partial and full blocks in ProtocolExtractor ([384421a](https://github.com/propeller-heads/tycho-indexer/commit/384421a56d5d4d02d170a1d6cfcf4add7b01e0e0))
+* **extractor:** refactor merge_partial to return updated BlockChanges and improve validation ([78dd3d1](https://github.com/propeller-heads/tycho-indexer/commit/78dd3d140e1fb07bcf501ea242c343d596eac08a))
+* **extractor:** simplify PartialBlockBuffer by replacing it with an Option<BlockChanges> and integrate it into protocol extractor ([ad21437](https://github.com/propeller-heads/tycho-indexer/commit/ad214375dfe0b4b7c77cc53ac5176c50095b5d65))
+
+
+### Bug Fixes
+
+* **extractor:** simplify token insertion in PartialBlockBuffer ([507df3f](https://github.com/propeller-heads/tycho-indexer/commit/507df3f9935745c593397a8e1fe6cfc152e02c81))
+* improve error message, comments, and extract helper in protocol_extractor ([301c9f6](https://github.com/propeller-heads/tycho-indexer/commit/301c9f6193e418b0140a8b88efff537870fd5a3d))
+* update test expectations and entity names for MergeError::IdMismatch ([e22aa85](https://github.com/propeller-heads/tycho-indexer/commit/e22aa85ac53a7c014ca5cc2a1a567af5b1b0325a))
+
+## [0.137.0](https://github.com/propeller-heads/tycho-indexer/compare/0.136.1...0.137.0) (2026-02-06)
+
+
+### Features
+
+* Notify Tycho SDK of new releases ([d86899f](https://github.com/propeller-heads/tycho-indexer/commit/d86899f5e25f72ddc9297631c33838ec6267ac59))
+* Notify Tycho SDK of new releases ([#842](https://github.com/propeller-heads/tycho-indexer/issues/842)) ([e020d97](https://github.com/propeller-heads/tycho-indexer/commit/e020d970abaecd32ee0c9977837030bc9e8b9d6f))
+
+## [0.136.1](https://github.com/propeller-heads/tycho-indexer/compare/0.136.0...0.136.1) (2026-02-05)
+
+## [0.136.0](https://github.com/propeller-heads/tycho-indexer/compare/0.135.0...0.136.0) (2026-02-03)
+
+
+### Features
+
+* **block_history:** add error handling for partial block reverts and ensure latest block is a partial block ([e8e61fd](https://github.com/propeller-heads/tycho-indexer/commit/e8e61fd77adedd5d69815275818ded93507cb83c))
+* **block_history:** add support for partial block handling and position determination and improve test coverage ([d8eacab](https://github.com/propeller-heads/tycho-indexer/commit/d8eacab821a54a9bcee964fb8bbfb8846a4740c7))
+* **cli:** add partial_blocks flag to enable receiving incremental block updates ([cb27e64](https://github.com/propeller-heads/tycho-indexer/commit/cb27e64d3fc29af2280e5024a6dbb65a55b0dfad))
+* client supports partial blocks ([#838](https://github.com/propeller-heads/tycho-indexer/issues/838)) ([7ec8b14](https://github.com/propeller-heads/tycho-indexer/commit/7ec8b145aa4a8e82aed52c4983d6841108a78fa5))
+* **merge:** enhance merge logic to handle partial block validation and error reporting ([d77e22a](https://github.com/propeller-heads/tycho-indexer/commit/d77e22a9e78f21652dedb5731863790cdf48205c))
+* **stream:** add send_partials flag to `TychoStreamBuilder` to enable receiving incremental block updates ([6c6a69a](https://github.com/propeller-heads/tycho-indexer/commit/6c6a69a83b94982d9ed39cc16b73d91685060798))
+* **synchronizer:** add send_partials flag to `ProtocolStateSynchronizer` to enable incremental block updates ([1ed9e27](https://github.com/propeller-heads/tycho-indexer/commit/1ed9e2730ae4f4facae3ab8f514044a286a9e330))
+* **synchronizer:** implement partial block handling and synchronization logic ([e7318e2](https://github.com/propeller-heads/tycho-indexer/commit/e7318e256162aa0ac770be0dc6bbb10e9cd82706))
+* **synchronizer:** improve partial block handling by accepting full blocks as first messages and detecting block number increases instead of partial index decrease ([6661e76](https://github.com/propeller-heads/tycho-indexer/commit/6661e769996846b9dc9ec19858326152a369a129))
+
+## [0.135.0](https://github.com/propeller-heads/tycho-indexer/compare/0.134.0...0.135.0) (2026-02-02)
+
+
+### Features
+
+* add partial block support to the ws ([#835](https://github.com/propeller-heads/tycho-indexer/issues/835)) ([e936191](https://github.com/propeller-heads/tycho-indexer/commit/e936191e0a3a829d40cbaf55e467614a81289cda))
+* **blockchain:** add `is_partial` field to `BlockAggregatedChanges` ([156a92c](https://github.com/propeller-heads/tycho-indexer/commit/156a92c226c7cb2ba5d345cfd6333d794d5eb1d1))
+* **common:** add is_partial method to check for partial block presence ([cea6371](https://github.com/propeller-heads/tycho-indexer/commit/cea63710ce9d44bbf5853d2df9c47a0e6ba76323))
+* **dto:** add `is_partial` field to BlockChanges for partial block handling ([74d9631](https://github.com/propeller-heads/tycho-indexer/commit/74d9631db9d1b65a63eebea9f50092e4303c1a56))
+* **dto:** add `partial_blocks` field to Subscribe command for partial block updates subscriptions ([8c67ff0](https://github.com/propeller-heads/tycho-indexer/commit/8c67ff0572838d559e4d67acae1395f4618282bb))
+* **ws:** implement partial block filtering in subscription logic ([0ea7532](https://github.com/propeller-heads/tycho-indexer/commit/0ea7532d70d9d67fded35b918b9d69855dfe9a63))
+* **ws:** rename partial_blocks parameter to send_partials and update related logic for block filtering ([66de802](https://github.com/propeller-heads/tycho-indexer/commit/66de80205047628f672ffaba6c305898742da927))
+* **ws:** update block filtering logic for partial and revert subscriptions ([d862f04](https://github.com/propeller-heads/tycho-indexer/commit/d862f04a4e65371bb4f1335086b9d8b2e7c9b03f))
+
+## [0.134.0](https://github.com/propeller-heads/tycho-indexer/compare/0.133.0...0.134.0) (2026-02-02)
+
+
+### Features
+
+* add optionnal partial block index to our block message structs ([bacca66](https://github.com/propeller-heads/tycho-indexer/commit/bacca66390cb0e29e3af5a0df0983d4e366ca6f6))
+* add optionnal partial block index to our block message structs ([#834](https://github.com/propeller-heads/tycho-indexer/issues/834)) ([25d3623](https://github.com/propeller-heads/tycho-indexer/commit/25d3623346477f3605849cf8c91c0e8948959965))
+
+## [0.133.0](https://github.com/propeller-heads/tycho-indexer/compare/0.132.2...0.133.0) (2026-01-30)
+
+
+### Features
+
+* bring back typetag derive to `ProtocolSim` trait ([#836](https://github.com/propeller-heads/tycho-indexer/issues/836)) ([aaaee59](https://github.com/propeller-heads/tycho-indexer/commit/aaaee590968aba1103d3bf1d9984bc10a7d08614))
+
+## [0.132.2](https://github.com/propeller-heads/tycho-indexer/compare/0.132.1...0.132.2) (2026-01-28)
+
+
+### Bug Fixes
+
+* handle missing protocol component gracefully in PostgresGateway ([1074b45](https://github.com/propeller-heads/tycho-indexer/commit/1074b453bd33b2d350957aa07f83dc7a24cc7249))
+* handle missing protocol component gracefully in PostgresGateway ([#833](https://github.com/propeller-heads/tycho-indexer/issues/833)) ([fbabc39](https://github.com/propeller-heads/tycho-indexer/commit/fbabc39fdbe4879a9528c8be855b07d774355112))
+
+## [0.132.1](https://github.com/propeller-heads/tycho-indexer/compare/0.132.0...0.132.1) (2026-01-28)
+
+
+### Bug Fixes
+
+* substreams_lag_millis conditional on partial blocks ([ae17442](https://github.com/propeller-heads/tycho-indexer/commit/ae174423759190389199c23152821cdd6d475fa6))
+* substreams_lag_millis conditional on partial blocks ([#832](https://github.com/propeller-heads/tycho-indexer/issues/832)) ([b3d6bf0](https://github.com/propeller-heads/tycho-indexer/commit/b3d6bf003f6aef7c74d8906b52311556901ee226))
+
+## [0.132.0](https://github.com/propeller-heads/tycho-indexer/compare/0.131.0...0.132.0) (2026-01-27)
+
+
+### Features
+
+* add enable_partial_blocks option to indexer CLI ([951cb15](https://github.com/propeller-heads/tycho-indexer/commit/951cb15f60e93a7891afef218c715327cb78b234))
+* add enable_partial_blocks option to indexer CLI ([#831](https://github.com/propeller-heads/tycho-indexer/issues/831)) ([8fdb033](https://github.com/propeller-heads/tycho-indexer/commit/8fdb033fa708fad5771619057a394f7221773c62))
+
+## [0.131.0](https://github.com/propeller-heads/tycho-indexer/compare/0.130.1...0.131.0) (2026-01-27)
+
+
+### Features
+
+* expose partial blocks flad on SubstreamsStream ([ddd0054](https://github.com/propeller-heads/tycho-indexer/commit/ddd0054cb5a427e39dda81c8fe7ae03631e07d22))
+* skip lag metrics on partial blocks ([dd2a783](https://github.com/propeller-heads/tycho-indexer/commit/dd2a783405621783662ce86944238489a37a9792))
+* update substream dependencies ([f0b04ea](https://github.com/propeller-heads/tycho-indexer/commit/f0b04ea30a2312ac285dea9de872461ef45b637d))
+* update substream stream to use v3 Request ([51dabc4](https://github.com/propeller-heads/tycho-indexer/commit/51dabc43881186ea8047bd06f0f713d9977e27bb))
+* Update substreams sink files to support partial blocks ([#830](https://github.com/propeller-heads/tycho-indexer/issues/830)) ([84fd327](https://github.com/propeller-heads/tycho-indexer/commit/84fd327f0e8fb1a5c5bfac851f8b364d7cbd983c))
+
+## [0.130.1](https://github.com/propeller-heads/tycho-indexer/compare/0.130.0...0.130.1) (2026-01-22)
+
+## [0.130.0](https://github.com/propeller-heads/tycho-indexer/compare/0.129.1...0.130.0) (2026-01-21)
+
+
+### Features
+
+* add PartialEq and Serde to tycho-ethereum GasPrice. ([e66af2d](https://github.com/propeller-heads/tycho-indexer/commit/e66af2dfdc30e4ef82283e77137b7119f4897529))
+* add PartialEq and Serde to tycho-ethereum GasPrice. ([#828](https://github.com/propeller-heads/tycho-indexer/issues/828)) ([2f2a78d](https://github.com/propeller-heads/tycho-indexer/commit/2f2a78d8512861cb4c09f97965263c4a48844363))
+
+## [0.129.1](https://github.com/propeller-heads/tycho-indexer/compare/0.129.0...0.129.1) (2026-01-20)
+
+## [0.129.0](https://github.com/propeller-heads/tycho-indexer/compare/0.128.0...0.129.0) (2026-01-13)
+
+
+### Features
+
+* add GasPriceGetter trait and implement gas price retrieval in EthereumRpcClient ([a276cc1](https://github.com/propeller-heads/tycho-indexer/commit/a276cc1f2e6187c65851753ac9259557c9393814))
+* add GasPriceGetter trait and implement gas price retrieval in EthereumRpcClient ([#823](https://github.com/propeller-heads/tycho-indexer/issues/823)) ([ca96929](https://github.com/propeller-heads/tycho-indexer/commit/ca96929a425084d1d3fb8b8f9c99d4a65f0a26f8))
+
+## [0.128.0](https://github.com/propeller-heads/tycho-indexer/compare/0.127.0...0.128.0) (2026-01-09)
+
+
+### Features
+
+* revert add typetag derive to `ProtocolSim` trait ([#822](https://github.com/propeller-heads/tycho-indexer/issues/822)) ([1641595](https://github.com/propeller-heads/tycho-indexer/commit/164159586d34fe62ca94f39dd812965533f2744b))
+
+## [0.127.0](https://github.com/propeller-heads/tycho-indexer/compare/0.126.0...0.127.0) (2026-01-08)
+
+
+### Features
+
+* add typetag derive to `ProtocolSim` trait ([425c194](https://github.com/propeller-heads/tycho-indexer/commit/425c194a731df998ff94fb6610616b27cc75d969))
+* add typetag derive to `ProtocolSim` trait ([#811](https://github.com/propeller-heads/tycho-indexer/issues/811)) ([bdbdf71](https://github.com/propeller-heads/tycho-indexer/commit/bdbdf713787dd76a1a228203c105391ae359da8d))
+
+## [0.126.0](https://github.com/propeller-heads/tycho-indexer/compare/0.125.2...0.126.0) (2026-01-08)
+
+
+### Features
+
+* **migrations:** add SQL migrations for `pg_stat_statements` extension ([#820](https://github.com/propeller-heads/tycho-indexer/issues/820)) ([06599da](https://github.com/propeller-heads/tycho-indexer/commit/06599da112f3d06aa40e779404411e7cf2a86faf))
+* **migrations:** add SQL scripts to create and drop pg_stat_statements extension ([4850934](https://github.com/propeller-heads/tycho-indexer/commit/4850934f9daa147ed31abecbbc7c94d05d798272))
+
 ## [0.125.2](https://github.com/propeller-heads/tycho-indexer/compare/0.125.1...0.125.2) (2025-12-19)
 
 

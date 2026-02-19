@@ -108,6 +108,12 @@ struct CliArgs {
     #[clap(long)]
     disable_compression: bool,
 
+    /// If set, enables receiving partial block updates (flashblocks).
+    /// This allows the client to receive incremental updates within a block, allowing for
+    /// lower latency.
+    #[clap(long)]
+    partial_blocks: bool,
+
     /// Enable verbose logging. This will show more detailed information about the
     /// synchronization process and any errors that occur.
     #[clap(long)]
@@ -287,7 +293,8 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
             rpc_client.clone(),
             ws_client.clone(),
             args.block_time + args.timeout,
-        );
+        )
+        .with_partial_blocks(args.partial_blocks);
         block_sync = block_sync.register_synchronizer(id, sync);
     }
 
@@ -380,5 +387,6 @@ mod cli_tests {
         assert_eq!(args.max_messages, Some(1));
         assert!(args.example);
         assert_eq!(args.disable_compression, false);
+        assert_eq!(args.partial_blocks, false);
     }
 }

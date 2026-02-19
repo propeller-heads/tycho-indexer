@@ -4,8 +4,14 @@ Tycho Client helps you consume data from Tycho Indexer. It's the recommended way
 
 In this guide, you'll learn more about the Tycho Client and the streamed data models.
 
-{% hint style="info" %}
+{% hint style="success" %}
 If you are developing in Rust and is using Tycho to simulate DeFi Protocol's behavior, we recommend checking out our [simulation.md](../../simulation.md "mention") package - this tool extends Tycho Client's data streaming functionality with powerful simulation capabilities.
+{% endhint %}
+
+{% hint style="info" %}
+**✨ New: Sub-Second Latency with Partial Blocks**
+
+Tycho now provides early support for partial blocks on Base, enabling sub-second latency by streaming pre-confirmation updates. Enable via `--partial-blocks` (CLI), `partial_blocks=True` (Python), or `.enable_partial_blocks()` (Rust). See [Streaming Options](./#streaming-options) below for details.
 {% endhint %}
 
 ### Key Features
@@ -71,6 +77,50 @@ tycho-client --remove-tvl-threshold 95 --add-tvl-threshold 100 --exchange uniswa
 ```
 
 This will stream state updates for all components whose TVL exceeds the `add-tvl-threshold`. It will continue to track already added components if they drop below the `add-tvl-threshold`, only emitting a message to remove them if they drop below `remove-tvl-threshold`.
+
+#### Streaming Options
+
+Tycho Client supports several options to customize the data stream. These are available as CLI flags, Rust builder methods, and Python parameters. Refer to each client's documentation for usage details.
+
+| Option                  | Description                                        | When to use                     |
+| ----------------------- | -------------------------------------------------- | ------------------------------- |
+| **Partial blocks**      | Stream pre-confirmation blocks                     | For lower stream latency        |
+| **No state**            | Stream only component metadata and tokens          | For lower stream latency        |
+| **Include TVL**         | Attach approximate TVL estimates to each component | For getting components TVL      |
+| **No TLS**              | Use unencrypted transports (http/ws)               | For local self-hosted indexers  |
+| **Disable compression** | Turn off stream message compression                | _Debugging Only_                |
+
+{% hint style="info" %}
+**Note:** `disable compression` and `no tls` are not intended to be used with the [hosted](../../hosted-endpoints.md) Tycho Indexer endpoints.
+{% endhint %}
+
+<details>
+
+<summary><strong>Details:</strong> <strong>Partial Blocks</strong></summary>
+
+Some chains, such as [Base](https://docs.base.org/building-with-base/differences/flashblocks), support _flash blocks_ - pre-confirmation updates that contain parts of a future block before its construction is finished. When `partial blocks` is enabled, Tycho streams these incremental updates as they arrive, giving you sub-block latency. On chains without flash block support, enabling this flag is unsupported.
+
+{% hint style="warning" %}
+Block hashes in partial block messages are **unstable** — they change between partial updates and will differ from the final block hash. Do not use them as persistent identifiers or cache keys. See the [Substreams documentation](https://docs.substreams.dev/reference-material/chain-support/flashblocks#developing-for-partial-blocks) for details.
+{% endhint %}
+
+</details>
+
+<details>
+
+<summary><strong>Details: No State</strong></summary>
+
+By default, the first sync message includes full component snapshots, and every subsequent block includes state deltas (reserves, balances, contract storage). If you only need to discover which components exist and which tokens they involve, such as to build a pool registry or monitor new deployments, you can disable state monitoring with `no state`. This significantly reduces message sizes, startup time, and processing overhead, as both snapshots and per-block state updates are omitted entirely.
+
+</details>
+
+<details>
+
+<summary><strong>Details: Include TVL</strong></summary>
+
+When enabled, each message includes an approximate TVL estimate for every tracked component. This is useful for building dashboards or for ranking pools by liquidity. Note that enabling this option increases startup latency: for each snapshot request, the client makes additional RPC calls to fetch token prices and compute TVL for all tracked components. This overhead scales with the number of components you're tracking.
+
+</details>
 
 ***
 

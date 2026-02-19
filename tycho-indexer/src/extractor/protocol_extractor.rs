@@ -48,6 +48,7 @@ use crate::{
         BlockUpdateWithCursor, ExtractionError, Extractor, ExtractorExtension, ExtractorMsg,
     },
     pb::sf::substreams::rpc::v2::{BlockScopedData, BlockUndoSignal, ModulesProgress},
+    pb::sf::substreams::v1::Clock,
 };
 
 pub struct Inner {
@@ -69,6 +70,13 @@ struct GatewayInner<G> {
     commit_batch_size: usize,
 }
 
+/// Accumulates partial block changes for a single block.
+///
+/// Each incoming partial is merged immediately via [`BlockChanges::merge_partial`].
+/// When a full block signal arrives (`output == None`), the accumulated block
+/// is taken from the buffer and processed as a complete block.
+type PartialBlockBuffer = Option<BlockChanges>;
+
 pub struct ProtocolExtractor<G, T, E> {
     gateway: GatewayInner<G>,
     name: String,
@@ -82,6 +90,7 @@ pub struct ProtocolExtractor<G, T, E> {
     /// Allows to attach some custom logic, e.g. to fix encoding bugs without resync.
     post_processor: Option<fn(BlockChanges) -> BlockChanges>,
     reorg_buffer: Mutex<ReorgBuffer<BlockUpdateWithCursor<BlockChanges>>>,
+    partial_block_buffer: Mutex<PartialBlockBuffer>,
     dci_plugin: Option<Arc<Mutex<E>>>,
 }
 
@@ -134,6 +143,7 @@ where
                     protocol_types,
                     post_processor,
                     reorg_buffer: Mutex::new(ReorgBuffer::new()),
+                    partial_block_buffer: Mutex::new(None),
                     dci_plugin,
                 }
             }
@@ -178,6 +188,7 @@ where
                     protocol_types,
                     post_processor,
                     reorg_buffer: Mutex::new(ReorgBuffer::new()),
+                    partial_block_buffer: Mutex::new(None),
                     dci_plugin,
                 }
             }
@@ -192,6 +203,20 @@ where
         let mut state = self.inner.lock().await;
         state.cursor = cursor.into();
         state.first_message_processed = true;
+    }
+
+    /// Merges a partial block into the buffer, or initializes the buffer if empty.
+    async fn buffer_partial_block(&self, msg: &BlockChanges) -> Result<(), ExtractionError> {
+        let mut buffer_guard = self.partial_block_buffer.lock().await;
+        let updated = if let Some(existing) = buffer_guard.take() {
+            existing
+                .merge_partial(msg.clone())
+                .map_err(|e| ExtractionError::PartialBlockBufferError(e.to_string()))?
+        } else {
+            msg.clone()
+        };
+        buffer_guard.replace(updated);
+        Ok(())
     }
 
     async fn is_first_message(&self) -> bool {
@@ -258,7 +283,7 @@ where
     }
 
     #[instrument(skip_all, fields(chain = % self.chain, name = % self.name, block_number = % msg.block.number))]
-    async fn periodically_report_metrics(&self, msg: &mut BlockChanges, is_syncing: bool) {
+    async fn periodically_report_metrics(&self, msg: &BlockChanges, is_syncing: bool) {
         let mut state = self.inner.lock().await;
         let now = chrono::Local::now().naive_utc();
 
@@ -291,6 +316,17 @@ where
             )
             .set(
                 self.reorg_buffer
+                    .lock()
+                    .await
+                    .deep_size_of() as f64,
+            );
+            gauge!(
+                "extractor_partial_block_buffer_size",
+                "chain" => self.chain.to_string(),
+                "extractor" => self.name.clone(),
+            )
+            .set(
+                self.partial_block_buffer
                     .lock()
                     .await
                     .deep_size_of() as f64,
@@ -663,6 +699,147 @@ where
             .collect();
         Ok(new_tokens)
     }
+
+    /// Process a full block
+    ///
+    /// This includes updating the reorg buffer, committing to the database, emitting sync updates
+    /// and metrics and aggregating the changes).
+    async fn process_full_block_message(
+        &self,
+        msg: BlockChanges,
+        cursor: String,
+        final_block_height: u64,
+    ) -> Result<Option<ExtractorMsg>, ExtractionError> {
+        let is_syncing = final_block_height == msg.block.number;
+        if final_block_height > msg.block.number {
+            return Err(ExtractionError::ReorgBufferError(format!(
+                "Final block height ({}) greater than block number ({}) are unsupported by the reorg buffer",
+                final_block_height, msg.block.number
+            )));
+        }
+
+        let blocks_to_commit = {
+            let mut reorg_buffer = self.reorg_buffer.lock().await;
+
+            reorg_buffer
+                .insert_block(BlockUpdateWithCursor::new(msg.clone(), cursor.clone()))
+                .map_err(ExtractionError::Storage)?;
+
+            if reorg_buffer.count_blocks_before(final_block_height) >=
+                self.gateway.commit_batch_size
+            {
+                reorg_buffer
+                    .drain_blocks_until(final_block_height)
+                    .map_err(ExtractionError::Storage)?
+            } else {
+                Vec::new()
+            }
+        };
+
+        if let Some(last_block) = blocks_to_commit.last() {
+            let mut commit_handle_guard = self.gateway.commit_handle.lock().await;
+            let gateway = self.gateway.inner.clone();
+            let committed_block_height = self
+                .gateway
+                .committed_block_height
+                .clone();
+            let last_block_height = last_block.block_update.block.number;
+            let batch_size = blocks_to_commit.len();
+            let (extractor_name, chain) = (self.name.clone(), self.chain);
+
+            if let Some(db_commit_handle_to_join) = commit_handle_guard.take() {
+                let awaited_commit = !db_commit_handle_to_join
+                    .inner()
+                    .is_finished();
+                let now = chrono::Utc::now().naive_utc();
+
+                match db_commit_handle_to_join.await {
+                    Ok(Ok(())) => {}
+                    Ok(Err(storage_err)) => {
+                        return Err(storage_err);
+                    }
+                    Err(join_err) => {
+                        return Err(ExtractionError::Storage(StorageError::Unexpected(format!(
+                            "Failed to join database commit task: {join_err}"
+                        ))));
+                    }
+                }
+
+                if awaited_commit {
+                    let wait_time = chrono::Utc::now()
+                        .naive_utc()
+                        .signed_duration_since(now);
+                    trace!(batch_size, block_height = last_block_height, extractor_id = self.name.clone(), chain = %self.chain, wait_time = %wait_time, "CommitTaskAwaited");
+                }
+            }
+
+            let new_handle = tokio::spawn(async move {
+                let now = std::time::Instant::now();
+
+                let mut it = blocks_to_commit.iter().peekable();
+                while let Some(block) = it.next() {
+                    let force_db_commit = if is_syncing { false } else { it.peek().is_none() };
+
+                    gateway
+                        .advance(block.block_update(), block.cursor(), force_db_commit)
+                        .await
+                        .map_err(ExtractionError::Storage)?;
+                }
+
+                let mut committed_hieght_guard = committed_block_height.lock().await;
+                *committed_hieght_guard = Some(last_block_height);
+
+                trace!(batch_size, block_height = last_block_height, extractor_id = extractor_name, chain = %chain, "CommitTaskCompleted");
+
+                histogram!(
+                    "database_commit_duration_ms", "chain" => chain.to_string(), "extractor" => extractor_name
+                )
+                .record(now.elapsed().as_millis() as f64);
+
+                Ok(())
+            }).instrument(info_span!(
+                parent: None,
+                "commit_blocks_task",
+                batch_size,
+                block_height = last_block_height,
+                extractor_id = self.name.clone(),
+                chain = %self.chain,
+            ));
+
+            *commit_handle_guard = Some(new_handle);
+
+            trace!(batch_size, block_height = last_block_height, extractor_id = self.name.clone(), chain = %self.chain, "CommitTaskQueued");
+        };
+
+        self.update_last_processed_block(msg.block.clone())
+            .await;
+
+        self.periodically_report_metrics(&msg, is_syncing)
+            .await;
+
+        self.update_cursor(cursor).await;
+
+        let committed_block_height = *self
+            .gateway
+            .committed_block_height
+            .lock()
+            .await;
+        let mut changes = msg.into_aggregated(committed_block_height)?;
+        self.handle_tvl_changes(&mut changes)
+            .await?;
+
+        if !is_syncing {
+            debug!(
+                new_components = changes.new_protocol_components.len(),
+                new_tokens = changes.new_tokens.len(),
+                account_update = changes.account_deltas.len(),
+                state_update = changes.state_deltas.len(),
+                tvl_changes = changes.component_tvl.len(),
+                "ProcessedFullMessage"
+            );
+        }
+        Ok(Some(Arc::new(changes)))
+    }
 }
 
 #[async_trait]
@@ -702,7 +879,7 @@ where
     }
 
     #[allow(deprecated)]
-    #[instrument(skip_all, fields(block_number, final_block_height))]
+    #[instrument(skip_all, fields(block_number, partial_block_index, final_block_height))]
     async fn handle_tick_scoped_data(
         &self,
         inp: BlockScopedData,
@@ -710,260 +887,193 @@ where
         let data = inp
             .output
             .as_ref()
-            .unwrap()
+            .ok_or_else(|| {
+                ExtractionError::DecodeError("Missing output in block scoped data".into())
+            })?
             .map_output
             .as_ref()
-            .unwrap();
+            .ok_or_else(|| {
+                ExtractionError::DecodeError(
+                    "Missing map_output in block scoped data's output".into(),
+                )
+            })?;
+        let msg = {
+            // Backwards Compatibility:
+            // Check if message_type ends with BlockAccountChanges or BlockEntityChanges. If it
+            // does, then we need to decode as the corresponding message type, then convert it to
+            // BlockChanges
+            let msg = match data.type_url.as_str() {
+                url if url.ends_with("BlockChanges") => {
+                    let raw_msg = tycho_substreams::BlockChanges::decode(data.value.as_slice())?;
+                    trace!(?raw_msg, "Received BlockChanges message");
+                    BlockChanges::try_from_message((
+                        raw_msg,
+                        &self.name,
+                        self.chain,
+                        &self.protocol_system,
+                        &self.protocol_types,
+                        inp.final_block_height,
+                        inp.partial_index,
+                    ))
+                }
+                url if url.ends_with("BlockContractChanges") => {
+                    let raw_msg =
+                        tycho_substreams::BlockContractChanges::decode(data.value.as_slice())?;
+                    trace!(?raw_msg, "Received BlockContractChanges message");
+                    BlockContractChanges::try_from_message((
+                        raw_msg,
+                        &self.name,
+                        self.chain,
+                        self.protocol_system.clone(),
+                        &self.protocol_types,
+                        inp.final_block_height,
+                    ))
+                    .map(Into::into)
+                }
+                url if url.ends_with("BlockEntityChanges") => {
+                    let raw_msg =
+                        tycho_substreams::BlockEntityChanges::decode(data.value.as_slice())?;
+                    trace!(?raw_msg, "Received BlockEntityChanges message");
+                    BlockEntityChanges::try_from_message((
+                        raw_msg,
+                        &self.name,
+                        self.chain,
+                        &self.protocol_system,
+                        &self.protocol_types,
+                        inp.final_block_height,
+                    ))
+                    .map(Into::into)
+                }
+                _ => return Err(ExtractionError::DecodeError("Unknown message type".into())),
+            };
 
-        // Backwards Compatibility:
-        // Check if message_type ends with BlockAccountChanges or BlockEntityChanges. If it does,
-        // then we need to decode as the corresponding message type, then convert it to BlockChanges
-        let msg = match data.type_url.as_str() {
-            url if url.ends_with("BlockChanges") => {
-                let raw_msg = tycho_substreams::BlockChanges::decode(data.value.as_slice())?;
-                trace!(?raw_msg, "Received BlockChanges message");
-                BlockChanges::try_from_message((
-                    raw_msg,
-                    &self.name,
-                    self.chain,
-                    &self.protocol_system,
-                    &self.protocol_types,
-                    inp.final_block_height,
-                ))
-            }
-            url if url.ends_with("BlockContractChanges") => {
-                let raw_msg =
-                    tycho_substreams::BlockContractChanges::decode(data.value.as_slice())?;
-                trace!(?raw_msg, "Received BlockContractChanges message");
-                BlockContractChanges::try_from_message((
-                    raw_msg,
-                    &self.name,
-                    self.chain,
-                    self.protocol_system.clone(),
-                    &self.protocol_types,
-                    inp.final_block_height,
-                ))
-                .map(Into::into)
-            }
-            url if url.ends_with("BlockEntityChanges") => {
-                let raw_msg = tycho_substreams::BlockEntityChanges::decode(data.value.as_slice())?;
-                trace!(?raw_msg, "Received BlockEntityChanges message");
-                BlockEntityChanges::try_from_message((
-                    raw_msg,
-                    &self.name,
-                    self.chain,
-                    &self.protocol_system,
-                    &self.protocol_types,
-                    inp.final_block_height,
-                ))
-                .map(Into::into)
-            }
-            _ => return Err(ExtractionError::DecodeError("Unknown message type".into())),
-        };
+            let msg = match msg {
+                Ok(changes) => {
+                    tracing::Span::current().record("block_number", changes.block.number);
+                    tracing::Span::current().record("partial_block_index", inp.partial_index);
+                    tracing::Span::current().record("final_block_height", inp.final_block_height);
+                    changes
+                }
+                Err(ExtractionError::Empty) => {
+                    self.update_cursor(inp.cursor).await;
+                    return Ok(None);
+                }
+                Err(e) => return Err(e),
+            };
 
-        let msg = match msg {
-            Ok(changes) => {
-                tracing::Span::current().record("block_number", changes.block.number);
-                tracing::Span::current().record("final_block_height", inp.final_block_height);
-                changes
-            }
-            Err(ExtractionError::Empty) => {
-                self.update_cursor(inp.cursor).await;
-                return Ok(None);
-            }
-            Err(e) => return Err(e),
-        };
-
-        let mut msg =
-            if let Some(post_process_f) = self.post_processor { post_process_f(msg) } else { msg };
-
-        if let Some(last_processed_block) = self.get_last_processed_block().await {
-            if msg.block.ts.and_utc().timestamp() ==
-                last_processed_block
-                    .ts
-                    .and_utc()
-                    .timestamp()
-            {
-                debug!("Block with identical timestamp detected. Prev block ts: {:?} - New block ts: {:?}", last_processed_block.ts, msg.block.ts);
-                // Blockchains with fast block times (e.g., Arbitrum) may produce blocks with
-                // identical timestamps (measured in seconds). To ensure accurate ordering, we
-                // adjust each block's timestamp by adding a microsecond offset
-                // based on the number of blocks with the same timestamp encountered
-                // so far.
-                // Blocks have a granularity of 1 second, so by adding 1 microsecond to the
-                // timestamp of each block with the same timestamp, we ensure ordering
-                // and prevent duplicate timestamps from being processed.
-                msg.block.ts = last_processed_block.ts + Duration::microseconds(1);
-                debug!("Adjusted block timestamp: {:?}", msg.block.ts);
-            }
-        }
-
-        // Send message to DCI plugin
-        if let Some(dci_plugin) = &self.dci_plugin {
-            dci_plugin
-                .lock()
-                .await
-                .process_block_update(&mut msg)
-                .await?;
-        }
-
-        msg.new_tokens = self
-            .construct_currency_tokens(&msg)
-            .await?;
-        self.protocol_cache
-            .add_tokens(msg.new_tokens.values().cloned())
-            .await?;
-        self.protocol_cache
-            .add_components(msg.protocol_components())
-            .await?;
-
-        trace!(?msg, "Processing message");
-
-        // We work under the invariant that final_block_height is always <= block.number.
-        // They are equal only when we are syncing. Depending on how Substreams handle them, this
-        // invariant could be problematic for single block finality blockchains.
-        let is_syncing = inp.final_block_height == msg.block.number;
-        if inp.final_block_height > msg.block.number {
-            return Err(ExtractionError::ReorgBufferError(format!(
-                    "Final block height ({}) greater than block number ({}) are unsupported by the reorg buffer",
-                    inp.final_block_height, msg.block.number
-                )));
-        }
-
-        // Create a scope to lock the reorg buffer, insert the new block and possibly commit to the
-        // database if we have enough blocks in the buffer.
-        // Return the block height up to which we have committed to the database.
-        let blocks_to_commit = {
-            let mut reorg_buffer = self.reorg_buffer.lock().await;
-
-            reorg_buffer
-                .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
-                .map_err(ExtractionError::Storage)?;
-
-            if reorg_buffer.count_blocks_before(inp.final_block_height) >=
-                self.gateway.commit_batch_size
-            {
-                reorg_buffer
-                    .drain_blocks_until(inp.final_block_height)
-                    .map_err(ExtractionError::Storage)?
+            let mut msg = if let Some(post_process_f) = self.post_processor {
+                post_process_f(msg)
             } else {
-                Vec::new()
+                msg
+            };
+
+            if let Some(last_processed_block) = self.get_last_processed_block().await {
+                if msg.block.ts.and_utc().timestamp() ==
+                    last_processed_block
+                        .ts
+                        .and_utc()
+                        .timestamp()
+                {
+                    debug!("Block with identical timestamp detected. Prev block ts: {:?} - New block ts: {:?}", last_processed_block.ts, msg.block.ts);
+                    // Blockchains with fast block times (e.g., Arbitrum) may produce blocks with
+                    // identical timestamps (measured in seconds). To ensure accurate ordering, we
+                    // adjust each block's timestamp by adding a microsecond offset
+                    // based on the number of blocks with the same timestamp encountered
+                    // so far.
+                    // Blocks have a granularity of 1 second, so by adding 1 microsecond to the
+                    // timestamp of each block with the same timestamp, we ensure ordering
+                    // and prevent duplicate timestamps from being processed.
+                    msg.block.ts = last_processed_block.ts + Duration::microseconds(1);
+                    debug!("Adjusted block timestamp: {:?}", msg.block.ts);
+                }
             }
+
+            // Send message to DCI plugin
+            if let Some(dci_plugin) = &self.dci_plugin {
+                dci_plugin
+                    .lock()
+                    .await
+                    .process_block_update(&mut msg)
+                    .await?;
+            }
+
+            msg.new_tokens = self
+                .construct_currency_tokens(&msg)
+                .await?;
+            self.protocol_cache
+                .add_tokens(msg.new_tokens.values().cloned())
+                .await?;
+            self.protocol_cache
+                .add_components(msg.protocol_components())
+                .await?;
+
+            trace!(?msg, "Processing message");
+
+            msg
         };
 
-        // If we have blocks to commit, wait for the previous async commit task to finish and then
-        // spawn a new task that will commit the new blocks and update the committed block height.
-        if let Some(last_block) = blocks_to_commit.last() {
-            let mut commit_handle_guard = self.gateway.commit_handle.lock().await;
-            let gateway = self.gateway.inner.clone();
-            let committed_block_height = self
+        // Partial blocks are buffered and emitted immediately but skip reorg buffer and DB commit.
+        // Those happen when the full block signal arrives.
+        if inp.partial_index.is_some() {
+            self.buffer_partial_block(&msg).await?;
+
+            self.update_cursor(inp.cursor).await;
+
+            let committed_block_height = *self
                 .gateway
                 .committed_block_height
-                .clone();
-            let last_block_height = last_block.block_update.block.number;
-            let batch_size = blocks_to_commit.len();
-            let (extractor_name, chain) = (self.name.clone(), self.chain);
+                .lock()
+                .await;
+            let mut changes = msg.into_aggregated(committed_block_height)?;
+            self.handle_tvl_changes(&mut changes)
+                .await?;
 
-            // Consume the previous commit handle, leaving None in its place
-            if let Some(db_commit_handle_to_join) = commit_handle_guard.take() {
-                let awaited_commit = !db_commit_handle_to_join
-                    .inner()
-                    .is_finished();
-                let now = chrono::Utc::now().naive_utc();
-
-                match db_commit_handle_to_join.await {
-                    Ok(Ok(())) => {}
-                    Ok(Err(storage_err)) => {
-                        return Err(storage_err);
-                    }
-                    Err(join_err) => {
-                        return Err(ExtractionError::Storage(StorageError::Unexpected(format!(
-                            "Failed to join database commit task: {join_err}"
-                        ))));
-                    }
-                }
-
-                if awaited_commit {
-                    let wait_time = chrono::Utc::now()
-                        .naive_utc()
-                        .signed_duration_since(now);
-                    trace!(batch_size, block_height = last_block_height, extractor_id = self.name.clone(), chain = %self.chain, wait_time = %wait_time, "CommitTaskAwaited");
-                }
-            }
-
-            // Spawn a new task to commit the new blocks and update the committed block height
-            let new_handle = tokio::spawn(async move {
-                let now = std::time::Instant::now();
-
-                let mut it = blocks_to_commit.iter().peekable();
-                while let Some(block) = it.next() {
-                    // Force a database commit if we're not syncing and this is the last block
-                    // to be sent. Otherwise, wait to accumulate a full
-                    // batch before committing.
-                    let force_db_commit = if is_syncing { false } else { it.peek().is_none() };
-
-                    gateway
-                        .advance(block.block_update(), block.cursor(), force_db_commit)
-                        .await
-                        .map_err(ExtractionError::Storage)?;
-                }
-
-                let mut committed_hieght_guard = committed_block_height.lock().await;
-                *committed_hieght_guard = Some(last_block_height);
-
-                trace!(batch_size, block_height = last_block_height, extractor_id = extractor_name, chain = %chain, "CommitTaskCompleted");
-
-                histogram!(
-                    "database_commit_duration_ms", "chain" => chain.to_string(), "extractor" => extractor_name
-                )
-                .record(now.elapsed().as_millis() as f64);
-
-                Ok(())
-            }).instrument(info_span!(
-                parent: None,  // This task can outlive the current span, so we don't want to attach it to it
-                "commit_blocks_task",
-                batch_size,
-                block_height = last_block_height,
-                extractor_id = self.name.clone(),
-                chain = %chain,
-            ));
-
-            *commit_handle_guard = Some(new_handle);
-
-            trace!(batch_size, block_height = last_block_height, extractor_id = self.name.clone(), chain = %self.chain, "CommitTaskQueued");
-        };
-
-        self.update_last_processed_block(msg.block.clone())
-            .await;
-
-        self.periodically_report_metrics(&mut msg, is_syncing)
-            .await;
-
-        self.update_cursor(inp.cursor).await;
-
-        let committed_block_height = *self
-            .gateway
-            .committed_block_height
-            .lock()
-            .await;
-        let mut changes = msg.into_aggregated(committed_block_height)?;
-        self.handle_tvl_changes(&mut changes)
-            .await?;
-
-        if !is_syncing {
             debug!(
                 new_components = changes.new_protocol_components.len(),
                 new_tokens = changes.new_tokens.len(),
                 account_update = changes.account_deltas.len(),
                 state_update = changes.state_deltas.len(),
                 tvl_changes = changes.component_tvl.len(),
-                "ProcessedMessage"
+                "ProcessedPartialMessage"
             );
-        }
-        return Ok(Some(Arc::new(changes)));
+
+            return Ok(Some(Arc::new(changes)));
+        };
+
+        return self
+            .process_full_block_message(msg, inp.cursor, inp.final_block_height)
+            .await;
     }
 
-    #[instrument(skip_all, fields(target_hash, target_number))]
+    async fn collect_and_process_full_block(
+        &self,
+        cursor: String,
+        final_block_height: u64,
+        clock: Option<Clock>,
+    ) -> Result<Option<ExtractorMsg>, ExtractionError> {
+        let msg = self
+            .partial_block_buffer
+            .lock()
+            .await
+            .take()
+            .ok_or_else(|| {
+                let block_num = clock.as_ref().map(|c| c.number).unwrap_or_default();
+                ExtractionError::PartialBlockBufferError(format!(
+                    "Could not fetch full block data: partial block buffer is empty at block {block_num}"
+                ))
+            })?;
+        self.process_full_block_message(msg, cursor, final_block_height)
+            .await
+            .map(|opt| {
+                // Set partial_block_index to None to indicate that the block is a full block
+                opt.map(|mut arc_msg| {
+                    Arc::make_mut(&mut arc_msg).partial_block_index = None;
+                    arc_msg
+                })
+            })
+    }
+
+    #[instrument(skip_all, fields(current_block, target_hash, target_number))]
     #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
     async fn handle_revert(
         &self,
@@ -980,18 +1090,31 @@ where
             ))
         })?;
 
-        tracing::Span::current().record("target_hash", format!("{block_hash:x}"));
-        tracing::Span::current().record("target_number", block_ref.number);
-
         let last_processed_block_number = self
             .get_last_processed_block()
             .await
-            .map_or(String::new(), |block| block.number.to_string());
+            .map_or("None".to_string(), |b| b.number.to_string());
+        let current_partial_block_index = self
+            .partial_block_buffer
+            .lock()
+            .await
+            .as_ref()
+            .and_then(|b| b.partial_block_index)
+            .map_or("None".to_string(), |i| i.to_string());
 
+        tracing::Span::current().record("current_block", &last_processed_block_number);
+        tracing::Span::current()
+            .record("current_partial_block_index", &current_partial_block_index);
+        tracing::Span::current().record("target_hash", format!("{block_hash:x}"));
+        tracing::Span::current().record("target_number", block_ref.number);
+
+        // Perf: consider optimizing this to avoid having a unique counter for every revert, which
+        // can blow up metrics memory usage in case of frequent reverts.
         counter!(
             "extractor_revert",
             "extractor" => self.name.clone(),
             "current_block" => last_processed_block_number,
+            "current_partial_block_index" => current_partial_block_index,
             "target_block" => block_ref.number.to_string()
         )
         .increment(1);
@@ -1017,10 +1140,29 @@ where
 
         let mut reorg_buffer = self.reorg_buffer.lock().await;
 
-        // Purge the buffer
-        let reverted_state = reorg_buffer
+        // Purge the reorg buffer
+        let mut reverted_state = reorg_buffer
             .purge(block_hash)
             .map_err(|e| ExtractionError::ReorgBufferError(e.to_string()))?;
+
+        // Purge partial block buffer
+        let partial_block = self
+            .partial_block_buffer
+            .lock()
+            .await
+            .take();
+        let mut revert_partial_block_index = None;
+        if let Some(partial) = partial_block {
+            // If we have not reverted any full blocks and the partial block buffer is not empty,
+            // mark it as a partial revert to avoid sending to full block subscribers.
+            if reverted_state.is_empty() {
+                revert_partial_block_index = partial.partial_block_index
+            }
+
+            // The partial block's cursor should be the current cursor
+            let cursor = self.get_cursor().await;
+            reverted_state.push(BlockUpdateWithCursor::new(partial, cursor));
+        }
 
         // Handle created and deleted components
         let (reverted_components_creations, reverted_components_deletions) =
@@ -1387,6 +1529,7 @@ where
             account_balances: combined_account_balances,
             component_tvl: HashMap::new(),
             dci_update: DCIUpdate::default(), // TODO: get reverted entrypoint info?
+            partial_block_index: revert_partial_block_index,
         };
 
         debug!("Successfully retrieved all previous states during revert!");
@@ -1779,6 +1922,7 @@ mod test {
     use super::*;
     use crate::{
         extractor::MockExtractorExtension,
+        pb::sf::substreams::v1::BlockRef,
         testing::{fixtures as pb_fixtures, MockGateway},
     };
 
@@ -2621,6 +2765,486 @@ mod test {
 
         assert_eq!(msg.component_tvl.len(), 1);
         assert_float_eq!(*res, exp_tvl, rmax <= 0.000_001);
+    }
+
+    // ── Partial block handling tests ──────────────────────────────────────
+
+    /// Helper: build a partial `BlockScopedData` populated with changes from the
+    /// `pb_vm_block_changes(block_num)`. This method strips balance changes and token balances
+    /// to avoid triggering TVL code paths, which would require the CachedGateway to be setup.
+    fn make_partial_block_with_data(block_num: u64, partial_index: u32) -> BlockScopedData {
+        let mut msg = pb_fixtures::pb_vm_block_changes(block_num as u8 + partial_index as u8);
+        msg.block = Some(pb_fixtures::pb_blocks(block_num));
+        for tx in &mut msg.changes {
+            // Rename a protocol type to be consistent with extractor fixtures.
+            for comp in &mut tx.component_changes {
+                if let Some(pt) = comp.protocol_type.as_mut() {
+                    pt.name = "pt_1".to_string();
+                }
+            }
+            // Strip balance changes to avoid triggering TVL code path.
+            tx.balance_changes.clear();
+            // Strip token balances to avoid triggering TVL code path.
+            for cc in &mut tx.contract_changes {
+                cc.token_balances.clear();
+            }
+        }
+        let mut bsd = pb_fixtures::pb_block_scoped_data(
+            msg,
+            Some(&format!("cursor@{block_num}_p{partial_index}")),
+            Some(block_num),
+        );
+        bsd.partial_index = Some(partial_index);
+        bsd.is_partial = true;
+        bsd
+    }
+
+    /// Helper: build a full `BlockScopedData` with complete block data from
+    /// `pb_vm_block_changes(block_num)`. This method strips balance changes and token balances to
+    /// avoid triggering TVL code paths, which would require the CachedGateway to be setup.
+    fn make_full_block_with_data(block_num: u64, final_block_height: u64) -> BlockScopedData {
+        let mut msg = pb_fixtures::pb_vm_block_changes(block_num as u8);
+        msg.block = Some(pb_fixtures::pb_blocks(block_num));
+        for tx in &mut msg.changes {
+            // Rename a protocol type to be consistent with extractor fixtures.
+            for comp in &mut tx.component_changes {
+                if let Some(pt) = comp.protocol_type.as_mut() {
+                    pt.name = "pt_1".to_string();
+                }
+            }
+            // Strip balance changes to avoid triggering TVL code path.
+            tx.balance_changes.clear();
+            // Strip token balances to avoid triggering TVL code path.
+            for cc in &mut tx.contract_changes {
+                cc.token_balances.clear();
+            }
+        }
+        pb_fixtures::pb_block_scoped_data(
+            msg,
+            Some(&format!("cursor@{block_num}")),
+            Some(final_block_height),
+        )
+    }
+
+    #[tokio::test]
+    async fn test_partial_blocks_buffered_merged_and_drained() {
+        // Lifecycle: partial_0 (data v0) → partial_1 (data v1) → drain
+        //
+        // Both partials carry non-empty but distinct contract data (different fixture
+        // versions produce different contract addresses). The test proves merge by
+        // checking that the drained result contains account_delta keys from both.
+        let mut gw = MockExtractorGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
+        // No DB flush: with batch_size=1, a single block at final_block_height == block.number
+        // doesn't satisfy count_blocks_before(final_block_height) >= 1.
+        gw.expect_advance()
+            .times(0)
+            .returning(|_, _, _| Ok(()));
+
+        let extractor = create_extractor(gw).await;
+
+        // ── Partial 1 ──
+        let result_1 = extractor
+            .handle_tick_scoped_data(make_partial_block_with_data(1, 0))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // After partial 0: buffer populated, reorg buffer untouched.
+        assert!(extractor
+            .partial_block_buffer
+            .lock()
+            .await
+            .is_some());
+        assert_eq!(
+            extractor
+                .reorg_buffer
+                .lock()
+                .await
+                .count_blocks_before(u64::MAX),
+            0
+        );
+
+        // ── Partial 2 ──
+        let result_2 = extractor
+            .handle_tick_scoped_data(make_partial_block_with_data(1, 1))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // After partial 1: still buffered, reorg buffer still empty.
+        assert!(extractor
+            .partial_block_buffer
+            .lock()
+            .await
+            .is_some());
+        assert_eq!(
+            extractor
+                .reorg_buffer
+                .lock()
+                .await
+                .count_blocks_before(u64::MAX),
+            0
+        );
+
+        // ── Drain: runner calls collect_and_process_full_block after last partial ──
+        let full_result = extractor
+            .collect_and_process_full_block("cursor@1".to_string(), 1, None)
+            .await
+            .unwrap()
+            .unwrap();
+
+        // After drain: buffer is empty, block entered the reorg buffer.
+        assert!(
+            extractor
+                .partial_block_buffer
+                .lock()
+                .await
+                .is_none(),
+            "Buffer should be empty after drain"
+        );
+        assert_eq!(
+            extractor
+                .reorg_buffer
+                .lock()
+                .await
+                .count_blocks_before(u64::MAX),
+            1,
+            "Drained block should be in the reorg buffer (full-block processing path)"
+        );
+
+        // Drained block has the correct block number.
+        assert_eq!(full_result.block.number, 1);
+
+        // Drained block contains account deltas from BOTH partials, proving merge occurred.
+        // If either partial were silently dropped, its addresses would be missing.
+        assert!(!full_result.account_deltas.is_empty());
+        for addr in result_1.account_deltas.keys() {
+            assert!(
+                full_result
+                    .account_deltas
+                    .contains_key(addr),
+                "Drained block missing account delta at {addr:x} from partial_1"
+            );
+        }
+        for addr in result_2.account_deltas.keys() {
+            assert!(
+                full_result
+                    .account_deltas
+                    .contains_key(addr),
+                "Drained block missing account delta at {addr:x} from partial_2"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_collect_and_process_full_block_with_empty_buffer_errors() {
+        // collect_and_process_full_block with no buffered partials (runner called it without
+        // sending partials first) is an error.
+        let mut gw = MockExtractorGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
+        gw.expect_advance()
+            .times(0)
+            .returning(|_, _, _| Ok(()));
+
+        let extractor = create_extractor(gw).await;
+
+        let result = extractor
+            .collect_and_process_full_block("cursor@1".to_string(), 1, None)
+            .await;
+
+        assert!(matches!(result, Err(ExtractionError::PartialBlockBufferError(_))));
+    }
+
+    #[tokio::test]
+    async fn test_normal_full_block_does_not_interact_with_buffer() {
+        // A normal full block (output present, no partial_index) should process normally
+        // and leave the buffer untouched (None). Two blocks are sent so that the second
+        // triggers the reorg buffer commit (batch_size=1).
+        let mut gw = MockExtractorGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
+        gw.expect_advance()
+            .times(0)
+            .returning(|_, _, _| Ok(()));
+
+        let extractor = create_extractor(gw).await;
+
+        // Block 1
+        extractor
+            .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
+                tycho_substreams::BlockChanges {
+                    block: Some(pb_fixtures::pb_blocks(1)),
+                    ..Default::default()
+                },
+                Some("cursor@1"),
+                Some(1),
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Partial Block Buffer remains unchanged
+        assert!(extractor
+            .partial_block_buffer
+            .lock()
+            .await
+            .is_none());
+        assert_eq!(extractor.get_cursor().await, "cursor@1");
+    }
+
+    #[tokio::test]
+    async fn test_revert_of_partial_blocks_only() {
+        // Gateway needs to handle: initial setup + revert lookups.
+        // With batch_size=1 and final_block_height=1, block 1 stays in the reorg buffer
+        // (count_blocks_before(1) = 0 < 1) — no advance/commit occurs.
+        let mut gw = MockExtractorGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
+        gw.expect_advance()
+            .times(0)
+            .returning(|_, _, _| Ok(()));
+        // Revert lookups: contracts, protocol states, component balances, account balances.
+        gw.expect_get_contracts()
+            .returning(|_| Ok(Vec::new()));
+        gw.expect_get_protocol_states()
+            .returning(|_| Ok(Vec::new()));
+        gw.expect_get_components_balances()
+            .returning(|_| Ok(HashMap::new()));
+        gw.expect_get_account_balances()
+            .returning(|_| Ok(HashMap::new()));
+
+        let extractor = create_extractor(gw).await;
+
+        // ── Block 1: empty anchor ──
+        extractor
+            .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
+                tycho_substreams::BlockChanges {
+                    block: Some(pb_fixtures::pb_blocks(1)),
+                    ..Default::default()
+                },
+                Some("cursor@1"),
+                Some(1),
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            extractor
+                .reorg_buffer
+                .lock()
+                .await
+                .count_blocks_before(u64::MAX),
+            1,
+            "Block 1 should be in the reorg buffer"
+        );
+
+        // ── Block 2: partial (not yet finalized) ──
+        let result = extractor
+            .handle_tick_scoped_data(make_partial_block_with_data(2, 0))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Verify partial block buffer is populated.
+        assert!(
+            extractor
+                .partial_block_buffer
+                .lock()
+                .await
+                .is_some(),
+            "Partial block buffer should be populated after partial block 2"
+        );
+
+        // ── Revert to block 1 ──
+        let revert_msg = extractor
+            .handle_revert(BlockUndoSignal {
+                last_valid_block: Some(BlockRef { id: format!("0x{:0>64x}", 1_u64), number: 1 }),
+                last_valid_cursor: "cursor@1".into(),
+            })
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Partial block buffer must be purged.
+        assert!(
+            extractor
+                .partial_block_buffer
+                .lock()
+                .await
+                .is_none(),
+            "Partial block buffer should be purged after revert"
+        );
+
+        // Revert message should be marked as a revert.
+        assert!(revert_msg.revert, "Revert message should have revert=true");
+
+        // Revert message should be marked as a partial block revert (no full blocks were reverted)
+        assert_eq!(
+            revert_msg.partial_block_index, result.partial_block_index,
+            "Revert message should indicate the index of the reverted partial block"
+        );
+
+        // The revert message should include account deltas from the partial block.
+        for addr in result.account_deltas.keys() {
+            assert!(
+                revert_msg
+                    .account_deltas
+                    .contains_key(addr),
+                "Drained block missing account delta at {addr:x} from partial_1"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_revert_of_full_and_partial_blocks() {
+        // Revert spanning a full block in the reorg buffer (block 2) *and* a partial
+        // block in the partial buffer (block 3). Verifies that state from both sources
+        // is included in the revert message.
+        let mut gw = MockExtractorGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
+        gw.expect_advance()
+            .times(0)
+            .returning(|_, _, _| Ok(()));
+        gw.expect_get_contracts()
+            .returning(|_| Ok(Vec::new()));
+        gw.expect_get_protocol_states()
+            .returning(|_| Ok(Vec::new()));
+        gw.expect_get_components_balances()
+            .returning(|_| Ok(HashMap::new()));
+        gw.expect_get_account_balances()
+            .returning(|_| Ok(HashMap::new()));
+
+        let extractor = create_extractor_with_batch_size(gw, 1).await;
+
+        // ── Block 1: empty anchor ──
+        extractor
+            .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
+                tycho_substreams::BlockChanges {
+                    block: Some(pb_fixtures::pb_blocks(1)),
+                    ..Default::default()
+                },
+                Some("cursor@1"),
+                Some(1),
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // ── Block 2: full block, not yet finalized ──
+        let result_full = extractor
+            .handle_tick_scoped_data(make_full_block_with_data(2, 1))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // ── Block 3: partial ──
+        let result_partial = extractor
+            .handle_tick_scoped_data(make_partial_block_with_data(3, 0))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Pre-revert state
+        assert_eq!(
+            extractor
+                .reorg_buffer
+                .lock()
+                .await
+                .count_blocks_before(u64::MAX),
+            2,
+            "Blocks 1 and 2 should be in the reorg buffer"
+        );
+        assert!(
+            extractor
+                .partial_block_buffer
+                .lock()
+                .await
+                .is_some(),
+            "Partial block 3 should be buffered"
+        );
+
+        // ── Revert to block 1 ──
+        let revert_msg = extractor
+            .handle_revert(BlockUndoSignal {
+                last_valid_block: Some(BlockRef { id: format!("0x{:0>64x}", 1_u64), number: 1 }),
+                last_valid_cursor: "cursor@1".into(),
+            })
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Partial buffer must be purged.
+        assert!(extractor
+            .partial_block_buffer
+            .lock()
+            .await
+            .is_none());
+
+        assert!(revert_msg.revert);
+        assert_eq!(revert_msg.block.number, 1);
+        // Full blocks were also reverted, so partial_block_index should be None.
+        assert_eq!(
+            revert_msg.partial_block_index, None,
+            "Mixed full+partial revert should not be marked as partial"
+        );
+
+        // Account deltas from both blocks should be present.
+        for addr in result_full.account_deltas.keys() {
+            assert!(
+                revert_msg
+                    .account_deltas
+                    .contains_key(addr),
+                "Revert message missing account delta at {addr:x} from full block 2"
+            );
+        }
+        for addr in result_partial.account_deltas.keys() {
+            assert!(
+                revert_msg
+                    .account_deltas
+                    .contains_key(addr),
+                "Revert message missing account delta at {addr:x} from partial block 3"
+            );
+        }
     }
 }
 

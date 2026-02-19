@@ -1,0 +1,66 @@
+name: Claude Auto Review
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  offer:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+    steps:
+      - run: |
+          gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body "To run Claude review, comment **\`/review\`** or **\`/claude-review\`** on this PR."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  review:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issue_comment' && github.event.issue.pull_request
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Require /review to run
+        run: |
+          comment="${{ github.event.comment.body }}"
+          if [[ "${comment,,}" != *"/review"* && "${comment,,}" != *"/claude-review"* ]]; then
+            echo "::notice::To run Claude review, comment '/review' or '/claude-review' on the PR."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          ref: refs/pull/${{ github.event.issue.number }}/head
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          track_progress: true # ✨ Enables tracking comments
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.issue.number }}
+
+            Review this PR. Be concise and actionable.
+
+            Rules:
+            - Do NOT post a PR-level summary comment or long-form feedback on the PR. The main comment should only briefly summarize the severity of the issues found.
+            - Only add inline comments on lines that need a concrete fix or real concern. No praise, no "strengths", no recap of what the PR does.
+            - Each inline comment: keep each comment short - state the issue and the suggested change. No long explanations unless necessary.
+            - Check existing PR comments (gh pr view) and do not repeat or rephrase existing feedback/comments. Add comments in response to replies to previous comments if more context is needed.
+            - If you find nothing substantive to fix, leave a very short comment noting that.
+            - Ignore style/nits unless they cause real bugs, maintainability problems or impact readability.
+
+            Focus on:
+            - Code quality and best practices
+            - Potential bugs or issues
+            - Security implications
+            - Performance considerations
+
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"

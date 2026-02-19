@@ -25,7 +25,10 @@ use crate::{
             ProtocolStateKeyType, ProtocolStateValueType, StateUpdateBufferEntry,
         },
     },
-    pb::sf::substreams::rpc::v2::{BlockScopedData, BlockUndoSignal, ModulesProgress},
+    pb::sf::substreams::{
+        rpc::v2::{BlockScopedData, BlockUndoSignal, ModulesProgress},
+        v1::Clock,
+    },
 };
 
 pub mod chain_state;
@@ -62,6 +65,8 @@ pub enum ExtractionError {
     MergeError(#[from] MergeError),
     #[error("Reorg buffer error: {0}")]
     ReorgBufferError(String),
+    #[error("Partial block buffer error: {0}")]
+    PartialBlockBufferError(String),
     #[error("Tracing error: {0}")]
     TracingError(String),
     #[error("Account extraction error: {0}")]
@@ -94,6 +99,15 @@ pub trait Extractor: Send + Sync {
     async fn handle_tick_scoped_data(
         &self,
         inp: BlockScopedData,
+    ) -> Result<Option<ExtractorMsg>, ExtractionError>;
+
+    /// Drains the partial block buffer and processes the accumulated block as a full block.
+    /// The runner calls this when it has sent the last partial for a block.
+    async fn collect_and_process_full_block(
+        &self,
+        cursor: String,
+        final_block_height: u64,
+        clock: Option<Clock>,
     ) -> Result<Option<ExtractorMsg>, ExtractionError>;
 
     async fn handle_revert(
