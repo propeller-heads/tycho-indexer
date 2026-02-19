@@ -77,7 +77,9 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
             address tokenIn
         ) = rocketpoolExecutor.getTransferData(params);
 
-        assertEq(receiver, address(rocketpoolExecutor));
+        // receiver is msg.sender (this test contract) since getTransferData
+        // is called via staticcall in production (msg.sender = TychoRouter)
+        assertEq(receiver, address(this));
         assertEq(
             uint8(transferType),
             uint8(RestrictTransferFrom.TransferType.TransferNativeInExecutor)
@@ -96,7 +98,9 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
             address tokenIn
         ) = rocketpoolExecutor.getTransferData(params);
 
-        assertEq(receiver, address(rocketpoolExecutor));
+        // receiver is msg.sender (this test contract) since getTransferData
+        // is called via staticcall in production (msg.sender = TychoRouter)
+        assertEq(receiver, address(this));
         assertEq(
             uint8(transferType),
             uint8(RestrictTransferFrom.TransferType.ProtocolWillDebit)
@@ -291,5 +295,43 @@ contract RocketpoolBurnTest is TychoRouterTestSetup {
         assertEq(ethBalanceAfter - ethBalanceBefore, 1_151_971_256_664_605_227);
         assertEq(RETH.balanceOf(tychoRouterAddr), 0);
         assertEq(tychoRouterAddr.balance, 0);
+    }
+
+    function testSingleSwapBurnNoApproval() public {
+        /// Verifies that burning rETH via TychoRouter does not emit any
+        /// Approval event from the RETH token, since we are interacting directly
+        /// with the token contract.
+        IRocketTokenRETH RETH = IRocketTokenRETH(RETH_ADDR);
+
+        uint256 amountIn = 1 ether;
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_rocketpool_burn"
+        );
+
+        deal(RETH_ADDR, BOB, amountIn);
+
+        vm.startPrank(BOB);
+        RETH.approve(tychoRouterAddr, type(uint256).max);
+
+        // Record all logs during the swap to check for Approval events
+        vm.recordLogs();
+        (bool success,) = tychoRouterAddr.call(callData);
+        assertTrue(success, "Call Failed");
+        vm.stopPrank();
+
+        // Search recorded logs for any Approval event emitted by the RETH token
+        // where the router is the owner (i.e. the router granting an approval).
+        bytes32 approvalTopic = keccak256("Approval(address,address,uint256)");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (
+                logs[i].emitter == RETH_ADDR && logs[i].topics.length > 1
+                    && logs[i].topics[0] == approvalTopic
+                    && logs[i].topics[1]
+                        == bytes32(uint256(uint160(tychoRouterAddr)))
+            ) {
+                revert("Router should not approve any spender for rETH burn");
+            }
+        }
     }
 }

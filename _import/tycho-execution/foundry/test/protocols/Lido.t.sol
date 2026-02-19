@@ -83,7 +83,9 @@ contract LidoExecutorTest is Constants, Permit2TestHelper, TestUtils {
         (, address receiver, address tokenIn) =
             LidoExposed.getTransferData(params);
 
-        assertEq(receiver, address(LidoExposed));
+        // receiver is msg.sender (this test contract) since getTransferData
+        // is called via staticcall in production (msg.sender = TychoRouter)
+        assertEq(receiver, address(this));
         assertEq(tokenIn, WSTETH_ADDR);
     }
 

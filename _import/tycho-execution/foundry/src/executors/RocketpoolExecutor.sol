@@ -103,10 +103,12 @@ contract RocketpoolExecutor is IExecutor {
             tokenIn = address(RETH);
             transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
         }
-        // Since burning withdraws the funds from the msg.sender, the user's funds need to sent to the
-        // TychoRouter initially (address(this)). This does not require an actual
-        // approval since our router is interacting directly with the token contract.
-        receiver = address(this);
+        // Since burning withdraws the funds from the msg.sender, the user's funds need to be sent to the
+        // TychoRouter initially. This does not require an actual approval since our
+        // router is interacting directly with the token contract.
+        // We use msg.sender (the TychoRouter) instead of address(this) because
+        // getTransferData is called via staticcall.
+        receiver = msg.sender;
     }
 }
 
