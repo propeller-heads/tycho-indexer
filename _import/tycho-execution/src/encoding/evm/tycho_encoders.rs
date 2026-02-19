@@ -294,7 +294,7 @@ impl TychoEncoder for TychoExecutorEncoder {
         &self,
         mut solutions: Vec<Solution>,
     ) -> Result<Vec<EncodedSolution>, EncodingError> {
-        let mut solution = solutions
+        let solution = solutions
             .first_mut()
             .ok_or(EncodingError::FatalError("No solutions found".to_string()))?;
         self.validate_solution(solution)?;

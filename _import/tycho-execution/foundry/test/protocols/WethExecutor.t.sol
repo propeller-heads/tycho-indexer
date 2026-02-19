@@ -29,11 +29,11 @@ contract WethExecutorExposed is WethExecutor {
 }
 
 contract WethExecutorTest is TestUtils, Constants {
-    WethExecutorExposed WethExecutor;
+    WethExecutorExposed wethExecutor;
 
     modifier setUpFork(uint256 blockNumber) {
         vm.createSelectFork(vm.rpcUrl("mainnet"), blockNumber);
-        WethExecutor = new WethExecutorExposed(WETH_ADDR);
+        wethExecutor = new WethExecutorExposed(WETH_ADDR);
         _;
     }
 
@@ -44,7 +44,7 @@ contract WethExecutorTest is TestUtils, Constants {
             uint8(1) // isWrapping = true
         );
 
-        bool isWrapping = WethExecutor.decodeParams(params);
+        bool isWrapping = wethExecutor.decodeParams(params);
 
         assertTrue(isWrapping);
     }
@@ -54,7 +54,7 @@ contract WethExecutorTest is TestUtils, Constants {
             uint8(0) // isWrapping = false
         );
 
-        bool isWrapping = WethExecutor.decodeParams(params);
+        bool isWrapping = wethExecutor.decodeParams(params);
 
         assertFalse(isWrapping);
     }
@@ -63,7 +63,7 @@ contract WethExecutorTest is TestUtils, Constants {
         bytes memory invalidParams = abi.encodePacked(BOB);
 
         vm.expectRevert(WethExecutor__InvalidDataLength.selector);
-        WethExecutor.decodeParams(invalidParams);
+        wethExecutor.decodeParams(invalidParams);
     }
 
     function testGetTransferDataWrap() public {
@@ -75,9 +75,9 @@ contract WethExecutorTest is TestUtils, Constants {
             RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn
-        ) = WethExecutor.getTransferData(params);
+        ) = wethExecutor.getTransferData(params);
 
-        assertEq(receiver, address(WethExecutor));
+        assertEq(receiver, address(wethExecutor));
         assertEq(
             uint8(transferType),
             uint8(RestrictTransferFrom.TransferType.TransferNativeInExecutor)
@@ -94,9 +94,9 @@ contract WethExecutorTest is TestUtils, Constants {
             RestrictTransferFrom.TransferType transferType,
             address receiver,
             address tokenIn
-        ) = WethExecutor.getTransferData(params);
+        ) = wethExecutor.getTransferData(params);
 
-        assertEq(receiver, address(WethExecutor));
+        assertEq(receiver, address(wethExecutor));
         assertEq(
             uint8(transferType),
             uint8(RestrictTransferFrom.TransferType.ProtocolWillDebit)
@@ -113,10 +113,10 @@ contract WethExecutorTest is TestUtils, Constants {
         );
 
         // Fund the executor with ETH
-        vm.deal(address(WethExecutor), amountIn);
+        vm.deal(address(wethExecutor), amountIn);
         uint256 wethBalanceBefore = WETH.balanceOf(BOB);
         (uint256 amountOut, address tokenOut) =
-            WethExecutor.swap(amountIn, protocolData, BOB);
+            wethExecutor.swap(amountIn, protocolData, BOB);
         uint256 wethBalanceAfter = WETH.balanceOf(BOB);
 
         // Check balances
@@ -133,11 +133,11 @@ contract WethExecutorTest is TestUtils, Constants {
         );
 
         // Fund the executor with wETH
-        deal(WETH_ADDR, address(WethExecutor), amountIn);
+        deal(WETH_ADDR, address(wethExecutor), amountIn);
 
         uint256 ethBalanceBefore = BOB.balance;
         (uint256 amountOut, address tokenOut) =
-            WethExecutor.swap(amountIn, protocolData, BOB);
+            wethExecutor.swap(amountIn, protocolData, BOB);
         uint256 ethBalanceAfter = BOB.balance;
 
         // Check balances
@@ -151,7 +151,7 @@ contract WethExecutorTest is TestUtils, Constants {
         bytes memory protocolData =
             loadCallDataFromFile("test_encode_weth_wrapping");
 
-        bool isWrapping = WethExecutor.decodeParams(protocolData);
+        bool isWrapping = wethExecutor.decodeParams(protocolData);
 
         assertTrue(isWrapping);
     }
@@ -161,7 +161,7 @@ contract WethExecutorTest is TestUtils, Constants {
         bytes memory protocolData =
             loadCallDataFromFile("test_encode_weth_unwrapping");
 
-        bool isWrapping = WethExecutor.decodeParams(protocolData);
+        bool isWrapping = wethExecutor.decodeParams(protocolData);
 
         assertFalse(isWrapping);
     }
