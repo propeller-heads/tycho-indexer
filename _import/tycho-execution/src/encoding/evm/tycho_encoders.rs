@@ -80,7 +80,7 @@ impl TychoRouterEncoder {
 
     fn encode_solution(&self, solution: &mut Solution) -> Result<EncodedSolution, EncodingError> {
         self.validate_solution(solution)?;
-        self.add_missing_eth_wrapping_unwrapping_swaps(solution);
+        self.add_missing_eth_wrapping_unwrapping_swaps(solution, &self.chain);
 
         let protocols: HashSet<String> = solution
             .swaps
@@ -298,7 +298,7 @@ impl TychoEncoder for TychoExecutorEncoder {
             .first_mut()
             .ok_or(EncodingError::FatalError("No solutions found".to_string()))?;
         self.validate_solution(solution)?;
-        self.add_missing_eth_wrapping_unwrapping_swaps(solution);
+        self.add_missing_eth_wrapping_unwrapping_swaps(solution, &self.chain);
 
         let encoded_solution = self.encode_executor_calldata(solution)?;
 
@@ -600,7 +600,7 @@ mod tests {
                 ..Default::default()
             };
 
-            encoder.add_missing_eth_wrapping_unwrapping_swaps(&mut solution);
+            encoder.add_missing_eth_wrapping_unwrapping_swaps(&mut solution, &encoder.chain);
             assert_eq!(solution.swaps.len(), 4);
             assert_eq!(solution.swaps[2].token_in(), &eth());
             assert_eq!(solution.swaps[2].token_out(), &weth());
@@ -631,7 +631,7 @@ mod tests {
                 ..Default::default()
             };
 
-            encoder.add_missing_eth_wrapping_unwrapping_swaps(&mut solution);
+            encoder.add_missing_eth_wrapping_unwrapping_swaps(&mut solution, &encoder.chain);
             assert_eq!(solution.swaps.len(), 2);
             assert_eq!(solution.swaps[0].token_in(), &eth());
             assert_eq!(solution.swaps[0].token_out(), &weth());
@@ -651,7 +651,7 @@ mod tests {
                 ..Default::default()
             };
 
-            encoder.add_missing_eth_wrapping_unwrapping_swaps(&mut solution);
+            encoder.add_missing_eth_wrapping_unwrapping_swaps(&mut solution, &encoder.chain);
             assert_eq!(solution.swaps.len(), 2);
             assert_eq!(
                 solution

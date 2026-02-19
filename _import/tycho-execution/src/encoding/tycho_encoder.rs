@@ -1,6 +1,7 @@
-use std::str::FromStr;
-
-use tycho_common::{models::protocol::ProtocolComponent, Bytes};
+use tycho_common::{
+    models::{protocol::ProtocolComponent, Chain},
+    Bytes,
+};
 
 use crate::encoding::{
     errors::EncodingError,
@@ -81,9 +82,9 @@ pub trait TychoEncoder: Send + Sync {
     /// - `Err(EncodingError)` if the solution is malformed or unsupported.
     fn validate_solution(&self, solution: &Solution) -> Result<(), EncodingError>;
 
-    fn add_missing_eth_wrapping_unwrapping_swaps(&self, solution: &mut Solution) {
-        let weth_address = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let eth_address = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
+    fn add_missing_eth_wrapping_unwrapping_swaps(&self, solution: &mut Solution, chain: &Chain) {
+        let eth_address = &chain.native_token().address;
+        let weth_address = &chain.wrapped_native_token().address;
 
         let wrapping_swap = Swap::new(
             ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
@@ -98,9 +99,9 @@ pub trait TychoEncoder: Send + Sync {
         );
 
         let wrapping_bridge = |a: &Bytes, b: &Bytes| -> Option<Swap> {
-            if a == &weth_address && b == &eth_address {
+            if a == weth_address && b == eth_address {
                 Some(unwrapping_swap.clone())
-            } else if a == &eth_address && b == &weth_address {
+            } else if a == eth_address && b == weth_address {
                 Some(wrapping_swap.clone())
             } else {
                 None
