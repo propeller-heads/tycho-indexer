@@ -577,15 +577,17 @@ pub mod fixtures {
     /// Both indices share the same keys (component `"pool_0"`, token `0xaa..`, contract `0xbb..`)
     /// but with different values, so "later wins" precedence can be verified across all fields:
     ///
-    /// - Index 0: tx_index=1, component_balance=800, account_balance=500, slots {1=>100, 2=>200},
+    /// - Index 0: tx_index=1, component_balance {token=800, token2=300},
+    ///   account_balance {token=500, token2=150}, slots {1=>100, 2=>200},
     ///   state {"reserve"=>1000, "fee"=>50}, 1 entrypoint, ChangeType::Creation
-    /// - Index 1: tx_index=2, component_balance=1000, account_balance=700, slots {1=>300}
-    ///   (overlaps slot 1), state {"reserve"=>2000} (overlaps), 2 entrypoints (superset),
-    ///   ChangeType::Update
+    /// - Index 1: tx_index=2, component_balance {token=1000}, account_balance {token=700},
+    ///   slots {1=>300} (overlaps slot 1), state {"reserve"=>2000} (overlaps),
+    ///   2 entrypoints (superset), ChangeType::Update
     // PERF: duplicated from tycho_common::models::blockchain::fixtures::tx_with_changes.
     // Consider adding a `test-utils` feature flag to share test fixtures cross-crate.
     pub fn tx_with_changes(index: u8) -> TxWithChanges {
         let token = Bytes::from(vec![0xaa; 20]);
+        let token2 = Bytes::from(vec![0xcc; 20]);
         let contract = Bytes::from(vec![0xbb; 20]);
         let c_id = "pool_0".to_string();
 
@@ -631,28 +633,51 @@ pub mod fixtures {
                     )]),
                     balance_changes: HashMap::from([(
                         c_id.clone(),
-                        HashMap::from([(
-                            token.clone(),
-                            ComponentBalance {
-                                token: token.clone(),
-                                balance: Bytes::from(800_u64).lpad(32, 0),
-                                balance_float: 800.0,
-                                component_id: c_id.clone(),
-                                modify_tx: tx.hash.clone(),
-                            },
-                        )]),
+                        HashMap::from([
+                            (
+                                token.clone(),
+                                ComponentBalance {
+                                    token: token.clone(),
+                                    balance: Bytes::from(800_u64).lpad(32, 0),
+                                    balance_float: 800.0,
+                                    component_id: c_id.clone(),
+                                    modify_tx: tx.hash.clone(),
+                                },
+                            ),
+                            (
+                                token2.clone(),
+                                ComponentBalance {
+                                    token: token2.clone(),
+                                    balance: Bytes::from(300_u64).lpad(32, 0),
+                                    balance_float: 300.0,
+                                    component_id: c_id.clone(),
+                                    modify_tx: tx.hash.clone(),
+                                },
+                            ),
+                        ]),
                     )]),
                     account_balance_changes: HashMap::from([(
                         contract.clone(),
-                        HashMap::from([(
-                            token.clone(),
-                            AccountBalance {
-                                token: token.clone(),
-                                balance: Bytes::from(500_u64).lpad(32, 0),
-                                modify_tx: tx.hash,
-                                account: contract,
-                            },
-                        )]),
+                        HashMap::from([
+                            (
+                                token.clone(),
+                                AccountBalance {
+                                    token: token.clone(),
+                                    balance: Bytes::from(500_u64).lpad(32, 0),
+                                    modify_tx: tx.hash.clone(),
+                                    account: contract.clone(),
+                                },
+                            ),
+                            (
+                                token2,
+                                AccountBalance {
+                                    token: Bytes::from(vec![0xcc; 20]),
+                                    balance: Bytes::from(150_u64).lpad(32, 0),
+                                    modify_tx: tx.hash,
+                                    account: contract,
+                                },
+                            ),
+                        ]),
                     )]),
                     entrypoints: HashMap::from([(
                         c_id.clone(),
@@ -700,10 +725,7 @@ pub mod fixtures {
                         c_id.clone(),
                         ProtocolComponentStateDelta::new(
                             &c_id,
-                            HashMap::from([(
-                                "reserve".into(),
-                                Bytes::from(2000u64).lpad(32, 0),
-                            )]),
+                            HashMap::from([("reserve".into(), Bytes::from(2000u64).lpad(32, 0))]),
                             HashSet::new(),
                         ),
                     )]),
@@ -775,6 +797,35 @@ mod test {
 
     fn block_changes_from_fixtures() -> BlockChanges {
         block_changes_with(vec![fixtures::tx_with_changes(0), fixtures::tx_with_changes(1)])
+    }
+
+    /// Creates a partial `BlockChanges` from `tx_with_changes(index)`.
+    ///
+    /// Reuses the shared fixture for tx-level data (balances, deltas, state, entrypoints)
+    /// and adds block-level objects: `partial_block_index`, `new_tokens`,
+    /// `block_contract_changes`. Overrides tx index to 5/2 for sort-order testing.
+    fn partial_block_changes(index: u8) -> BlockChanges {
+        let mut tx = fixtures::tx_with_changes(index);
+        let (tx_index, token_addr, symbol, decimals): (u64, _, _, u32) = match index {
+            0 => (5, Bytes::from(vec![0x33; 20]), "TOKEN1", 18),
+            1 => (2, Bytes::from(vec![0x44; 20]), "TOKEN2", 6),
+            _ => panic!("partial_block_changes: index must be 0 or 1, got {index}"),
+        };
+        tx.tx.index = tx_index;
+
+        BlockChanges {
+            extractor: "test".to_string(),
+            chain: Chain::Ethereum,
+            block: Block { number: 100, ..Block::default() },
+            partial_block_index: Some(index as u32),
+            txs_with_update: vec![tx],
+            new_tokens: HashMap::from([(
+                token_addr.clone(),
+                Token::new(&token_addr, symbol, decimals, 0, &[], Chain::Ethereum, 0),
+            )]),
+            block_contract_changes: vec![TxWithContractChanges::default()],
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -850,27 +901,46 @@ mod test {
 
         let c_id = "pool_0".to_string();
         let token = Bytes::from(vec![0xaa; 20]);
+        let token2 = Bytes::from(vec![0xcc; 20]);
         let missing_token = Bytes::zero(20);
         let missing_component = "missing".to_string();
 
-        let keys = vec![(&c_id, &token), (&c_id, &missing_token), (&missing_component, &token)];
+        let keys = vec![
+            (&c_id, &token),
+            (&c_id, &token2),
+            (&c_id, &missing_token),
+            (&missing_component, &token),
+        ];
 
         #[allow(clippy::mutable_key_type)]
         let filtered = block_changes.get_filtered_component_balance_update(keys);
 
         assert_eq!(
             filtered,
-            HashMap::from([(
-                (c_id.clone(), token.clone()),
-                // token in both txs: tx1 balance (1000) wins over tx0 balance (800)
-                ComponentBalance {
-                    token: token.clone(),
-                    balance: Bytes::from(1000_u64).lpad(32, 0),
-                    balance_float: 1000.0,
-                    modify_tx: "0x02".parse().unwrap(),
-                    component_id: c_id.clone(),
-                }
-            )])
+            HashMap::from([
+                (
+                    (c_id.clone(), token.clone()),
+                    // token in both txs: tx1 balance (1000) wins over tx0 balance (800)
+                    ComponentBalance {
+                        token: token.clone(),
+                        balance: Bytes::from(1000_u64).lpad(32, 0),
+                        balance_float: 1000.0,
+                        modify_tx: "0x02".parse().unwrap(),
+                        component_id: c_id.clone(),
+                    }
+                ),
+                (
+                    (c_id.clone(), token2.clone()),
+                    // token2 only in tx0: value (300) returned
+                    ComponentBalance {
+                        token: token2,
+                        balance: Bytes::from(300_u64).lpad(32, 0),
+                        balance_float: 300.0,
+                        modify_tx: "0x01".parse().unwrap(),
+                        component_id: c_id.clone(),
+                    }
+                ),
+            ])
         );
     }
 
@@ -1113,119 +1183,17 @@ mod test {
             .contains("existing_deleted_attr"));
     }
 
-    /// Creates pre-configured partial blocks for testing.
-    ///
-    /// - Index 0: tx_index=5, protocol_1, component_balance, TOKEN1 (18 decimals)
-    /// - Index 1: tx_index=2, protocol_2, account_balance, TOKEN2 (6 decimals)
-    fn create_partial_block(index: u8) -> BlockChanges {
-        let mut block = BlockChanges {
-            extractor: "test_extractor".to_string(),
-            chain: Chain::Ethereum,
-            block: Block { number: 100, ..Block::default() },
-            ..Default::default()
-        };
-
-        match index {
-            0 => {
-                block.partial_block_index = Some(0);
-
-                let component_id = "protocol_1".to_string();
-                let addr1 =
-                    Address::from_str("0x1111111111111111111111111111111111111111").unwrap();
-                let token_addr =
-                    Address::from_str("0x3333333333333333333333333333333333333333").unwrap();
-
-                let mut tx = TxWithChanges::default();
-                tx.tx.index = 5;
-                tx.protocol_components
-                    .insert(component_id.clone(), ProtocolComponent::default());
-                tx.balance_changes.insert(
-                    component_id.clone(),
-                    HashMap::from([(
-                        addr1.clone(),
-                        ComponentBalance::new(
-                            addr1,
-                            Bytes::from(1000u64.to_be_bytes().to_vec()),
-                            1000.0,
-                            Bytes::zero(32),
-                            &component_id,
-                        ),
-                    )]),
-                );
-                tx.state_updates.insert(
-                    component_id,
-                    ProtocolComponentStateDelta::new(
-                        "protocol_1",
-                        HashMap::new(),
-                        Default::default(),
-                    ),
-                );
-                block.txs_with_update.push(tx);
-
-                block.new_tokens.insert(
-                    token_addr.clone(),
-                    Token::new(&token_addr, "TOKEN1", 18, 0, &[], Chain::Ethereum, 0),
-                );
-
-                block
-                    .block_contract_changes
-                    .push(TxWithContractChanges::default());
-            }
-            1 => {
-                block.partial_block_index = Some(1);
-
-                let component_id = "protocol_2".to_string();
-                let addr1 =
-                    Address::from_str("0x1111111111111111111111111111111111111111").unwrap();
-                let addr2 =
-                    Address::from_str("0x2222222222222222222222222222222222222222").unwrap();
-                let token_addr =
-                    Address::from_str("0x4444444444444444444444444444444444444444").unwrap();
-
-                let mut tx = TxWithChanges::default();
-                tx.tx.index = 2;
-                tx.protocol_components
-                    .insert(component_id, ProtocolComponent::default());
-                tx.account_balance_changes.insert(
-                    addr2.clone(),
-                    HashMap::from([(
-                        addr1.clone(),
-                        AccountBalance::new(
-                            addr2,
-                            addr1,
-                            Bytes::from(500u64.to_be_bytes().to_vec()),
-                            Bytes::zero(32),
-                        ),
-                    )]),
-                );
-                block.txs_with_update.push(tx);
-
-                block.new_tokens.insert(
-                    token_addr.clone(),
-                    Token::new(&token_addr, "TOKEN2", 6, 0, &[], Chain::Ethereum, 0),
-                );
-
-                block
-                    .block_contract_changes
-                    .push(TxWithContractChanges::default());
-            }
-            _ => panic!("Invalid partial block index: {} (must be 0 or 1)", index),
-        }
-
-        block
-    }
-
     #[rstest]
     #[case::merge_newer(0, 1)] // block0.merge(block1)
     #[case::merge_older(1, 0)] // block1.merge(block0) - should produce identical result
     fn test_merge_partial_combines_all_fields(#[case] first_idx: u8, #[case] second_idx: u8) {
-        let first = create_partial_block(first_idx);
-        let second = create_partial_block(second_idx);
+        let first = partial_block_changes(first_idx);
+        let second = partial_block_changes(second_idx);
 
         let result = first.merge_partial(second).unwrap();
 
+        // txs from both partials are combined and sorted by index
         assert_eq!(result.txs_with_update.len(), 2);
-
         let indices: Vec<u64> = result
             .txs_with_update
             .iter()
@@ -1233,36 +1201,30 @@ mod test {
             .collect();
         assert_eq!(indices, vec![2, 5]);
 
+        // tokens from both partials are merged
         assert_eq!(result.new_tokens.len(), 2);
-        let token_addr1 = Address::from_str("0x3333333333333333333333333333333333333333").unwrap();
-        let token_addr2 = Address::from_str("0x4444444444444444444444444444444444444444").unwrap();
+        let token_addr0 = Bytes::from(vec![0x33; 20]);
+        let token_addr1 = Bytes::from(vec![0x44; 20]);
+        assert!(result
+            .new_tokens
+            .contains_key(&token_addr0));
         assert!(result
             .new_tokens
             .contains_key(&token_addr1));
-        assert!(result
-            .new_tokens
-            .contains_key(&token_addr2));
 
+        // both txs retain their fixture data (balance_changes, account_balance_changes)
+        let token = Bytes::from(vec![0xaa; 20]);
+        let contract = Bytes::from(vec![0xbb; 20]);
         assert!(result.txs_with_update[0]
-            .protocol_components
-            .contains_key("protocol_2"));
-        assert!(result.txs_with_update[1]
-            .protocol_components
-            .contains_key("protocol_1"));
-
-        let addr1 = Address::from_str("0x1111111111111111111111111111111111111111").unwrap();
-        assert!(result.txs_with_update[1]
             .balance_changes
-            .get("protocol_1")
+            .get("pool_0")
             .unwrap()
-            .contains_key(&addr1));
-
-        let addr2 = Address::from_str("0x2222222222222222222222222222222222222222").unwrap();
-        assert!(result.txs_with_update[0]
+            .contains_key(&token));
+        assert!(result.txs_with_update[1]
             .account_balance_changes
-            .get(&addr2)
+            .get(&contract)
             .unwrap()
-            .contains_key(&addr1));
+            .contains_key(&token));
 
         assert_eq!(result.block_contract_changes.len(), 2);
         assert_eq!(result.partial_block_index, Some(1));
@@ -1280,7 +1242,7 @@ mod test {
         #[case] revert_override: Option<bool>,
         #[case] expected_error_msg: &str,
     ) {
-        let original_partial_block = create_partial_block(0);
+        let original_partial_block = partial_block_changes(0);
 
         let mut other_block = original_partial_block.clone();
         other_block.partial_block_index = Some(1);
@@ -1319,8 +1281,8 @@ mod test {
 
     #[test]
     fn test_merge_partial_same_index_fails() {
-        let partial = create_partial_block(0);
-        let duplicate = create_partial_block(0);
+        let partial = partial_block_changes(0);
+        let duplicate = partial_block_changes(0);
 
         let result = partial.clone().merge_partial(duplicate);
         assert!(matches!(result, Err(MergeError::InvalidState(_))));
@@ -1328,8 +1290,8 @@ mod test {
 
     #[test]
     fn test_merge_partial_transaction_sorting() {
-        let mut partial1 = create_partial_block(0);
-        let mut partial2 = create_partial_block(1);
+        let mut partial1 = partial_block_changes(0);
+        let mut partial2 = partial_block_changes(1);
 
         let mut tx1 = TxWithChanges::default();
         tx1.tx.index = 7;
@@ -1353,7 +1315,7 @@ mod test {
 
     #[test]
     fn test_normalize_block_hash_empty() {
-        let mut block_changes = create_partial_block(0);
+        let mut block_changes = partial_block_changes(0);
         block_changes.txs_with_update.clear();
         block_changes
             .block_contract_changes
@@ -1402,8 +1364,8 @@ mod test {
     #[case::merge_newer(0, 1)] // block0.merge(block1)
     #[case::merge_older(1, 0)] // block1.merge(block0)
     fn test_merge_partial_token_precedence(#[case] first_idx: u8, #[case] second_idx: u8) {
-        let mut first = create_partial_block(first_idx);
-        let mut second = create_partial_block(second_idx);
+        let mut first = partial_block_changes(first_idx);
+        let mut second = partial_block_changes(second_idx);
 
         let shared_token_addr =
             Address::from_str("0x5555555555555555555555555555555555555555").unwrap();
