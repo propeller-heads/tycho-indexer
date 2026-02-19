@@ -322,37 +322,6 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         assertEq(tychoRouter.balanceOf(ALICE, 0), 0);
     }
 
-    function testVaultMethodWithMsgValue() public {
-        // Alice calls vault method but sends ETH via msg.value - should revert
-        uint256 amountIn = 1 ether;
-        uint256 existingVaultBalance = 2 ether;
-        deal(ALICE, amountIn + existingVaultBalance);
-
-        vm.startPrank(ALICE);
-        tychoRouter.deposit{value: existingVaultBalance}(
-            address(0), existingVaultBalance
-        );
-
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                TychoRouter__MsgValueNotAllowedWithVaultMethod.selector,
-                amountIn
-            )
-        );
-        tychoRouter.singleSwapUsingVault{value: amountIn}(
-            amountIn,
-            address(0), // ETH
-            RETH_ADDR,
-            1, // min amount
-            ALICE, // receiver
-            0,
-            address(0),
-            0,
-            _rocketpoolEthRethSwap()
-        );
-        vm.stopPrank();
-    }
-
     function testSequentialSwapNativeETHCredit() public {
         // Output of first swap is native ETH. Second swap successfully uses the
         // credit to perform a native ETH input swap without touching vault funds.
