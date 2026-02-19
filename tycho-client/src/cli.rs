@@ -118,6 +118,10 @@ struct CliArgs {
     /// synchronization process and any errors that occur.
     #[clap(long)]
     verbose: bool,
+
+    /// Maximum number of retry attempts for failed startups
+    #[clap(long, default_value = "32")]
+    max_retries: u64,
 }
 
 impl CliArgs {
@@ -285,7 +289,7 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
             id.clone(),
             true,
             filter,
-            32,
+            args.max_retries,
             Duration::from_secs(args.block_time / 2),
             !args.no_state,
             args.include_tvl,
