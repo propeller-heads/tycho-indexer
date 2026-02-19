@@ -12,6 +12,7 @@ error Dispatcher__ExecutorIsTimelocked(address executor);
 error Dispatcher__NonContractExecutor();
 error Dispatcher__InvalidDataLength();
 error Dispatcher__AddressZero();
+error Dispatcher__ExecutorAlreadyExists(address executor);
 
 /**
  * @title Dispatcher - Dispatch execution to external contracts
@@ -25,7 +26,7 @@ error Dispatcher__AddressZero();
  *  an alternate selector is specified.
  */
 contract Dispatcher is RestrictTransferFrom {
-    mapping(address => uint64) public executorsActivationBlock;
+    mapping(address => uint256) public executorsActivationTimestamp;
 
     // keccak256("Dispatcher#CURRENTLY_SWAPPING_EXECUTOR_SLOT")
     uint256 private constant _CURRENTLY_SWAPPING_EXECUTOR_SLOT =
@@ -37,16 +38,12 @@ contract Dispatcher is RestrictTransferFrom {
     uint256 private constant _IS_FIRST_SWAP_SLOT =
         0x8c47a7e3f4c2e1b5a6d9f0e8c7b3a2d1e4f5c6b7a8d9e0f1c2b3a4d5e6f7c8d9;
 
-    uint256 private immutable blocksToDelayExecutorActivation;
+    uint256 public constant DELAY_EXECUTOR_ACTIVATION = 3 days;
 
-    event ExecutorSet(address indexed executor);
+    event ExecutorSet(address indexed executor, uint256 timelockExpiresAt);
     event ExecutorRemoved(address indexed executor);
 
-    constructor(address _permit2, uint256 _blocksToDelayExecutorActivation)
-        RestrictTransferFrom(_permit2)
-    {
-        blocksToDelayExecutorActivation = _blocksToDelayExecutorActivation;
-    }
+    constructor(address _permit2) RestrictTransferFrom(_permit2) {}
 
     /**
      * @dev Adds or replaces an approved executor contract address if it is a
@@ -58,9 +55,14 @@ contract Dispatcher is RestrictTransferFrom {
             revert Dispatcher__NonContractExecutor();
         }
 
-        executorsActivationBlock[target] =
-            uint64(block.number + blocksToDelayExecutorActivation);
-        emit ExecutorSet(target);
+        // slither-disable-next-line timestamp
+        if (executorsActivationTimestamp[target] != 0) {
+            revert Dispatcher__ExecutorAlreadyExists(target);
+        }
+
+        uint256 timelockExpiresAt = block.timestamp + DELAY_EXECUTOR_ACTIVATION;
+        executorsActivationTimestamp[target] = uint256(timelockExpiresAt);
+        emit ExecutorSet(target, timelockExpiresAt);
     }
 
     /**
@@ -68,7 +70,7 @@ contract Dispatcher is RestrictTransferFrom {
      * @param target address of the executor contract
      */
     function _removeExecutor(address target) internal {
-        delete executorsActivationBlock[target];
+        delete executorsActivationTimestamp[target];
         emit ExecutorRemoved(target);
     }
 
@@ -85,13 +87,14 @@ contract Dispatcher is RestrictTransferFrom {
         bool isSplitSwap,
         address receiver
     ) internal returns (uint256 calculatedAmount) {
-        uint64 activationBlock = executorsActivationBlock[executor];
+        uint256 activationTimestamp = executorsActivationTimestamp[executor];
 
         // slither-disable-next-line incorrect-equality
-        if (activationBlock == 0) {
+        if (activationTimestamp == 0) {
             revert Dispatcher__UnapprovedExecutor(executor);
         }
-        if (block.number < activationBlock) {
+        // slither-disable-next-line timestamp
+        if (block.timestamp < activationTimestamp) {
             revert Dispatcher__ExecutorIsTimelocked(executor);
         }
 
@@ -182,13 +185,14 @@ contract Dispatcher is RestrictTransferFrom {
             isSplitSwap := tload(_IS_SPLIT_SWAP_SLOT)
         }
 
-        uint64 activationBlock = executorsActivationBlock[executor];
+        uint256 activationTimestamp = executorsActivationTimestamp[executor];
 
         // slither-disable-next-line incorrect-equality
-        if (activationBlock == 0) {
+        if (activationTimestamp == 0) {
             revert Dispatcher__UnapprovedExecutor(executor);
         }
-        if (block.number < activationBlock) {
+        // slither-disable-next-line timestamp
+        if (block.timestamp < activationTimestamp) {
             revert Dispatcher__ExecutorIsTimelocked(executor);
         }
 
@@ -262,13 +266,14 @@ contract Dispatcher is RestrictTransferFrom {
         view
         returns (address receiver)
     {
-        uint64 activationBlock = executorsActivationBlock[executor];
+        uint256 activationTimestamp = executorsActivationTimestamp[executor];
 
         // slither-disable-next-line incorrect-equality
-        if (activationBlock == 0) {
+        if (activationTimestamp == 0) {
             revert Dispatcher__UnapprovedExecutor(executor);
         }
-        if (block.number < activationBlock) {
+        // slither-disable-next-line timestamp
+        if (block.timestamp < activationTimestamp) {
             revert Dispatcher__ExecutorIsTimelocked(executor);
         }
 

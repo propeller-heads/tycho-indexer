@@ -459,8 +459,8 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
 
     function setUp() public override {
         super.setUp();
-        uint256 forkBlock = getForkBlock();
-        vm.roll(forkBlock - _SETUP_BLOCK_OFFSET_ETHEREUM);
+        uint256 forkBlockTime = vm.getBlockTimestamp();
+        vm.warp(forkBlockTime - _SETUP_TIME_OFFSET_NEW_EXECUTOR);
         wrapUnwrapExecutor = new WrapUnwrapExecutor(WETH_ADDR);
 
         // Add wrapUnwrapExecutor to allowed executors
@@ -470,7 +470,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
 
         tychoRouter.setExecutors(executors);
         vm.stopPrank();
-        vm.roll(forkBlock);
+        vm.warp(forkBlockTime);
     }
 
     function testSequentialCyclicSwapAndVaultIntegration() public {

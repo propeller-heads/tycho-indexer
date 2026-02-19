@@ -106,11 +106,7 @@ contract TychoRouter is AccessControl, Dispatcher {
         address indexed oldCalculator, address indexed newCalculator
     );
 
-    constructor(
-        address _permit2,
-        address feeCalculator,
-        uint256 _blocksToDelayExecutorActivation
-    ) Dispatcher(_permit2, _blocksToDelayExecutorActivation) {
+    constructor(address _permit2, address feeCalculator) Dispatcher(_permit2) {
         if (feeCalculator.code.length == 0) {
             revert TychoRouter__NotAContract(feeCalculator);
         }

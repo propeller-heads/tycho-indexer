@@ -32,11 +32,9 @@ import "@src/TychoRouter.sol";
 import "@src/FeeCalculator.sol";
 
 contract TychoRouterExposed is TychoRouter {
-    constructor(
-        address _permit2,
-        address feeCalculator,
-        uint256 _blocksToDelayExecutorActivation
-    ) TychoRouter(_permit2, feeCalculator, _blocksToDelayExecutorActivation) {}
+    constructor(address _permit2, address feeCalculator)
+        TychoRouter(_permit2, feeCalculator)
+    {}
 
     function tstoreExposed(
         address tokenIn,
@@ -103,12 +101,16 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         return 22082754;
     }
 
+    uint256 internal forkTimestamp;
+
     function setUp() public virtual {
         string memory chain = getChain();
         uint256 forkBlock = getForkBlock();
         vm.createSelectFork(vm.rpcUrl(chain), forkBlock);
-        uint256 setupBlock = forkBlock - _SETUP_BLOCK_OFFSET_ETHEREUM;
-        vm.roll(setupBlock);
+
+        forkTimestamp = block.timestamp;
+        uint256 setupTime = forkTimestamp - _SETUP_TIME_OFFSET_NEW_EXECUTOR;
+        vm.warp(setupTime);
 
         vm.startPrank(ADMIN);
         tychoRouter = deployRouter();
@@ -125,7 +127,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         vm.prank(FEE_SETTER);
         tychoRouter.setFeeCalculator(address(feeCalculator));
         vm.stopPrank();
-        vm.roll(forkBlock);
+        vm.warp(forkTimestamp);
     }
 
     function deployRouter() public returns (TychoRouterExposed) {
@@ -135,11 +137,8 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         address placeholderFeeCalculator = address(123);
         vm.etch(placeholderFeeCalculator, hex"00");
 
-        tychoRouter = new TychoRouterExposed(
-            PERMIT2_ADDRESS,
-            placeholderFeeCalculator,
-            BLOCK_DELAY_EXECUTOR_ACTIVATION_ETHEREUM
-        );
+        tychoRouter =
+            new TychoRouterExposed(PERMIT2_ADDRESS, placeholderFeeCalculator);
         tychoRouterAddr = address(tychoRouter);
         tychoRouter.grantRole(keccak256("PAUSER_ROLE"), PAUSER);
         tychoRouter.grantRole(keccak256("UNPAUSER_ROLE"), UNPAUSER);
