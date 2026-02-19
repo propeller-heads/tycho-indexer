@@ -950,27 +950,44 @@ mod test {
 
         let contract = Bytes::from(vec![0xbb; 20]);
         let token = Bytes::from(vec![0xaa; 20]);
+        let token2 = Bytes::from(vec![0xcc; 20]);
         let missing_token = Bytes::zero(20);
         let missing_account = Bytes::from(vec![0xff; 20]);
 
-        let keys =
-            vec![(&contract, &token), (&contract, &missing_token), (&missing_account, &token)];
+        let keys = vec![
+            (&contract, &token),
+            (&contract, &token2),
+            (&contract, &missing_token),
+            (&missing_account, &token),
+        ];
 
         #[allow(clippy::mutable_key_type)]
         let filtered = block_changes.get_filtered_account_balance_update(keys);
 
         assert_eq!(
             filtered,
-            HashMap::from([(
-                (contract.clone(), token.clone()),
-                // token in both txs: tx1 balance (700) wins over tx0 balance (500)
-                AccountBalance {
-                    token: token.clone(),
-                    balance: Bytes::from(700_u64).lpad(32, 0),
-                    modify_tx: "0x02".parse().unwrap(),
-                    account: contract.clone(),
-                }
-            )])
+            HashMap::from([
+                (
+                    (contract.clone(), token.clone()),
+                    // token in both txs: tx1 balance (700) wins over tx0 balance (500)
+                    AccountBalance {
+                        token: token.clone(),
+                        balance: Bytes::from(700_u64).lpad(32, 0),
+                        modify_tx: "0x02".parse().unwrap(),
+                        account: contract.clone(),
+                    }
+                ),
+                (
+                    (contract.clone(), token2.clone()),
+                    // token2 only in tx0: value (150) returned
+                    AccountBalance {
+                        token: token2,
+                        balance: Bytes::from(150_u64).lpad(32, 0),
+                        modify_tx: "0x01".parse().unwrap(),
+                        account: contract.clone(),
+                    }
+                ),
+            ])
         );
     }
 
