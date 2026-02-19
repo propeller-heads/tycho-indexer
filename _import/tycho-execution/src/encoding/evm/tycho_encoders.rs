@@ -171,15 +171,10 @@ impl TychoRouterEncoder {
             }
         }
 
-        if let Some(s) = wrapping_bridge(
-            solution
-                .swaps
-                .last()
-                .unwrap()
-                .token_out(),
-            &solution.token_out,
-        ) {
-            solution_with_added_wraps_unwraps.push(s);
+        if let Some(last_swap) = solution.swaps.last() {
+            if let Some(s) = wrapping_bridge(last_swap.token_out(), &solution.token_out) {
+                solution_with_added_wraps_unwraps.push(s);
+            }
         }
 
         solution.swaps = solution_with_added_wraps_unwraps;
