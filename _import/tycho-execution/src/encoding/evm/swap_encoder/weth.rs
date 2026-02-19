@@ -14,12 +14,10 @@ use crate::encoding::{
 /// # Fields
 /// * `executor_address` - The address of the executor contract that will perform the swap.
 /// * `native_token_address` - The address of the native token.
-/// * `wrapped_native_token_address` - The address of the wrapped native token.
 #[derive(Clone)]
 pub struct WethSwapEncoder {
     executor_address: Bytes,
     native_token_address: Bytes,
-    wrapped_native_token_address: Bytes,
 }
 
 impl SwapEncoder for WethSwapEncoder {
@@ -29,9 +27,7 @@ impl SwapEncoder for WethSwapEncoder {
         _config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
         let native_token_address = chain.native_token().address;
-        let wrapped_native_token_address = chain.wrapped_native_token().address;
-
-        Ok(Self { executor_address, native_token_address, wrapped_native_token_address })
+        Ok(Self { executor_address, native_token_address })
     }
 
     fn encode_swap(
