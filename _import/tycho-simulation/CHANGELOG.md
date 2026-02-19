@@ -1,3 +1,15 @@
+## [0.242.0](https://github.com/propeller-heads/tycho-simulation/compare/0.241.2...0.242.0) (2026-02-19)
+
+
+### Features
+
+* update tycho-client/common/ethereum to 0.143.0 and tycho-execution to 0.160.0 ([22fb2cf](https://github.com/propeller-heads/tycho-simulation/commit/22fb2cfed001645baa1ff2d143e17ac1b5da55e3))
+
+
+### Bug Fixes
+
+* adapt to PricePoint struct change in tycho-common 0.143.0 ([9f0c67d](https://github.com/propeller-heads/tycho-simulation/commit/9f0c67d51b085929ce495374f8288ef1a2c3a7dc))
+
 ## [0.241.2](https://github.com/propeller-heads/tycho-simulation/compare/0.241.1...0.241.2) (2026-02-13)
 
 
