@@ -177,9 +177,7 @@ impl LiquoriceClient {
                         .data
                         .trim_start_matches("0x"),
                 )
-                .map_err(|e| {
-                    RFQError::ParsingError(format!("Failed to parse calldata: {e}"))
-                })?,
+                .map_err(|e| RFQError::ParsingError(format!("Failed to parse calldata: {e}")))?,
             ),
         );
 
