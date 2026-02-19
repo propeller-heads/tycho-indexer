@@ -208,9 +208,9 @@ contract wethWrapTest is TychoRouterTestSetup {
         );
 
         // Fund Bob with ETH to deposit to wETH
-        vm.deal(BOB, amountIn);
         vm.startPrank(BOB);
-        WETH.deposit{value: amountIn}();
+        deal(WETH_ADDR, BOB, amountIn);
+
         WETH.approve(tychoRouterAddr, amountIn);
 
         uint256 wethBalanceBefore = WETH.balanceOf(BOB);
