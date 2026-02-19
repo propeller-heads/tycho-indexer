@@ -22,12 +22,11 @@ use tycho_common::{
     models::token::Token,
     simulation::{
         errors::SimulationError,
-        protocol_sim::{PoolSwap, Price, ProtocolSim, QueryPoolSwapParams, SwapConstraint},
+        protocol_sim::{
+            PoolSwap, Price, PricePoint, ProtocolSim, QueryPoolSwapParams, SwapConstraint,
+        },
     },
 };
-
-/// A point in the search history: (amount_in, amount_out, price).
-pub type PricePoint = (BigUint, BigUint, f64);
 
 const MAX_ITERATIONS: u32 = 30;
 const IQI_THRESHOLD: f64 = 0.01;
@@ -177,8 +176,8 @@ fn search(
     let mut low = BigUint::zero();
     let mut high = max_in.clone();
     let mut price_points: Vec<PricePoint> = vec![
-        (BigUint::zero(), BigUint::zero(), spot),
-        (max_in, limit_result.amount.clone(), limit_price),
+        PricePoint::new(BigUint::zero(), BigUint::zero(), spot),
+        PricePoint::new(max_in, limit_result.amount.clone(), limit_price),
     ];
 
     let mut best: Option<PoolSwap> = Some(PoolSwap::new(
@@ -206,7 +205,7 @@ fn search(
                 .spot_price(token_in, token_out)?
         };
 
-        price_points.push((amount.clone(), result.amount.clone(), price));
+        price_points.push(PricePoint::new(amount.clone(), result.amount.clone(), price));
 
         if price >= target_price {
             let error = (price - target_price) / target_price;
@@ -320,11 +319,11 @@ fn iqi(p: &[PricePoint], target_price: f64) -> Option<f64> {
         return None;
     }
     let (a0, a1, a2) = (
-        p[0].0.to_f64().unwrap_or(0.0),
-        p[1].0.to_f64().unwrap_or(0.0),
-        p[2].0.to_f64().unwrap_or(0.0),
+        p[0].amount_in.to_f64().unwrap_or(0.0),
+        p[1].amount_in.to_f64().unwrap_or(0.0),
+        p[2].amount_in.to_f64().unwrap_or(0.0),
     );
-    let (pr0, pr1, pr2) = (p[0].2, p[1].2, p[2].2);
+    let (pr0, pr1, pr2) = (p[0].price, p[1].price, p[2].price);
 
     let d1 = (pr0 - pr1) * (pr0 - pr2);
     let d2 = (pr1 - pr0) * (pr1 - pr2);
@@ -344,8 +343,8 @@ fn secant(p: &[PricePoint], target_price: f64) -> Option<f64> {
     if p.len() != 2 {
         return None;
     }
-    let (a0, a1) = (p[0].0.to_f64().unwrap_or(0.0), p[1].0.to_f64().unwrap_or(0.0));
-    let (pr0, pr1) = (p[0].2, p[1].2);
+    let (a0, a1) = (p[0].amount_in.to_f64().unwrap_or(0.0), p[1].amount_in.to_f64().unwrap_or(0.0));
+    let (pr0, pr1) = (p[0].price, p[1].price);
     let dp = pr1 - pr0;
     let result = a1 - (pr1 - target_price) * (a1 - a0) / dp;
     (result.is_finite() && result > 0.0).then_some(result)
@@ -508,9 +507,9 @@ mod tests {
     #[test]
     fn test_iqi_linear_data() {
         let points = vec![
-            (BigUint::from(1u32), BigUint::zero(), 2.0),
-            (BigUint::from(2u32), BigUint::zero(), 4.0),
-            (BigUint::from(3u32), BigUint::zero(), 6.0),
+            PricePoint::new(BigUint::from(1u32), BigUint::zero(), 2.0),
+            PricePoint::new(BigUint::from(2u32), BigUint::zero(), 4.0),
+            PricePoint::new(BigUint::from(3u32), BigUint::zero(), 6.0),
         ];
         let result = iqi(&points, 3.5);
         assert!(result.is_some());
@@ -520,9 +519,9 @@ mod tests {
     #[test]
     fn test_iqi_same_prices() {
         let points = vec![
-            (BigUint::from(1u32), BigUint::zero(), 5.0),
-            (BigUint::from(2u32), BigUint::zero(), 5.0),
-            (BigUint::from(3u32), BigUint::zero(), 5.0),
+            PricePoint::new(BigUint::from(1u32), BigUint::zero(), 5.0),
+            PricePoint::new(BigUint::from(2u32), BigUint::zero(), 5.0),
+            PricePoint::new(BigUint::from(3u32), BigUint::zero(), 5.0),
         ];
         assert!(iqi(&points, 5.0).is_none());
     }
@@ -530,8 +529,8 @@ mod tests {
     #[test]
     fn test_iqi_two_points() {
         let points = vec![
-            (BigUint::from(1u32), BigUint::zero(), 2.0),
-            (BigUint::from(2u32), BigUint::zero(), 4.0),
+            PricePoint::new(BigUint::from(1u32), BigUint::zero(), 2.0),
+            PricePoint::new(BigUint::from(2u32), BigUint::zero(), 4.0),
         ];
         assert!(iqi(&points, 3.0).is_none());
     }
@@ -539,9 +538,9 @@ mod tests {
     #[test]
     fn test_iqi_quadratic_data() {
         let points = vec![
-            (BigUint::from(100u32), BigUint::zero(), 1.0),
-            (BigUint::from(200u32), BigUint::zero(), 0.5),
-            (BigUint::from(400u32), BigUint::zero(), 0.25),
+            PricePoint::new(BigUint::from(100u32), BigUint::zero(), 1.0),
+            PricePoint::new(BigUint::from(200u32), BigUint::zero(), 0.5),
+            PricePoint::new(BigUint::from(400u32), BigUint::zero(), 0.25),
         ];
         let result = iqi(&points, 0.4);
         assert!(result.is_some());
@@ -556,8 +555,8 @@ mod tests {
     #[test]
     fn test_secant_basic() {
         let points = vec![
-            (BigUint::from(1u32), BigUint::zero(), 2.0),
-            (BigUint::from(3u32), BigUint::zero(), 6.0),
+            PricePoint::new(BigUint::from(1u32), BigUint::zero(), 2.0),
+            PricePoint::new(BigUint::from(3u32), BigUint::zero(), 6.0),
         ];
         let result = secant(&points, 4.0);
         assert!(result.is_some());
@@ -567,8 +566,8 @@ mod tests {
     #[test]
     fn test_secant_same_prices() {
         let points = vec![
-            (BigUint::from(1u32), BigUint::zero(), 5.0),
-            (BigUint::from(2u32), BigUint::zero(), 5.0),
+            PricePoint::new(BigUint::from(1u32), BigUint::zero(), 5.0),
+            PricePoint::new(BigUint::from(2u32), BigUint::zero(), 5.0),
         ];
         let result = secant(&points, 5.0);
         assert!(result.is_none());
@@ -576,15 +575,15 @@ mod tests {
 
     #[test]
     fn test_secant_one_point() {
-        let points = vec![(BigUint::from(1u32), BigUint::zero(), 2.0)];
+        let points = vec![PricePoint::new(BigUint::from(1u32), BigUint::zero(), 2.0)];
         assert!(secant(&points, 3.0).is_none());
     }
 
     #[test]
     fn test_secant_negative_result() {
         let points = vec![
-            (BigUint::from(1u32), BigUint::zero(), 2.0),
-            (BigUint::from(2u32), BigUint::zero(), 1.0),
+            PricePoint::new(BigUint::from(1u32), BigUint::zero(), 2.0),
+            PricePoint::new(BigUint::from(2u32), BigUint::zero(), 1.0),
         ];
         let result = secant(&points, 5.0);
         assert!(result.is_none());
@@ -596,7 +595,7 @@ mod tests {
 
     #[test]
     fn test_next_amount_fallback_to_geometric_mean() {
-        let history = vec![(BigUint::from(100u32), BigUint::zero(), 1.0)];
+        let history = vec![PricePoint::new(BigUint::from(100u32), BigUint::zero(), 1.0)];
         let low = BigUint::from(100u32);
         let high = BigUint::from(400u32);
         let result = next_amount(&history, &low, &high, 0.5);
@@ -606,8 +605,8 @@ mod tests {
     #[test]
     fn test_next_amount_uses_secant() {
         let history = vec![
-            (BigUint::from(100u32), BigUint::zero(), 1.0),
-            (BigUint::from(400u32), BigUint::zero(), 0.25),
+            PricePoint::new(BigUint::from(100u32), BigUint::zero(), 1.0),
+            PricePoint::new(BigUint::from(400u32), BigUint::zero(), 0.25),
         ];
         let low = BigUint::from(100u32);
         let high = BigUint::from(400u32);
