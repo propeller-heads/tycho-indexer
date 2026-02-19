@@ -1,3 +1,11 @@
+## [0.143.0](https://github.com/propeller-heads/tycho-indexer/compare/0.142.0...0.143.0) (2026-02-19)
+
+
+### Features
+
+* Add a public PricePoint struct ([49c5dde](https://github.com/propeller-heads/tycho-indexer/commit/49c5dde44dd12aa2b3b6a575add4f9189aad7447))
+* Add a public PricePoint struct ([#819](https://github.com/propeller-heads/tycho-indexer/issues/819)) ([970dbf8](https://github.com/propeller-heads/tycho-indexer/commit/970dbf86807e3d94abeb25c5a818dba9830a3d22))
+
 ## [0.142.0](https://github.com/propeller-heads/tycho-indexer/compare/0.141.1...0.142.0) (2026-02-16)
 
 
