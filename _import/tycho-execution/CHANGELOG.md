@@ -1,3 +1,10 @@
+## [0.28.0](https://github.com/propeller-heads/tycho-contracts/compare/0.27.0...0.28.0) (2026-02-19)
+
+
+### Features
+
+* Safer role handling ([9456c21](https://github.com/propeller-heads/tycho-contracts/commit/9456c219a10a4683380c2e7714a2828a39a16d9f))
+
 ## [0.27.0](https://github.com/propeller-heads/tycho-contracts/compare/0.26.0...0.27.0) (2026-02-19)
 
 
