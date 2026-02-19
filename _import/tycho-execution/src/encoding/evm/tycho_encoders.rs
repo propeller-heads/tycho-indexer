@@ -626,17 +626,10 @@ mod tests {
 
         #[test]
         fn test_add_missing_wrapped_eth_swap_in_the_middle() {
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+            // before adding swap: DAI -> USDC -> ETH (no swap) WETH -> DAI
+            // after adding swap:  DAI -> USDC -> ETH -> WETH -> DAI
 
-            let swap_weth_dai = Swap::new(
-                ProtocolComponent {
-                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                weth().clone(),
-                dai().clone(),
-            );
+            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
             let swap_dai_usdc = Swap::new(
                 ProtocolComponent {
@@ -646,6 +639,16 @@ mod tests {
                 },
                 dai().clone(),
                 usdc().clone(),
+            );
+
+            let swap_weth_dai = Swap::new(
+                ProtocolComponent {
+                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                weth().clone(),
+                dai().clone(),
             );
 
             let solution = Solution {
@@ -664,10 +667,19 @@ mod tests {
             assert_eq!(solution.swaps.len(), 4);
             assert_eq!(solution.swaps[2].token_in(), &eth());
             assert_eq!(solution.swaps[2].token_out(), &weth());
+            assert_eq!(
+                solution.swaps[2]
+                    .component()
+                    .protocol_system,
+                "weth"
+            );
         }
 
         #[test]
         fn test_add_missing_wrapped_eth_swap_in_the_beginning() {
+            // before adding swap: ETH is the solution token_in, WETH -> DAI
+            // after adding swap:  ETH -> WETH -> DAI
+
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
             let swap_weth_dai = Swap::new(
@@ -696,10 +708,19 @@ mod tests {
             assert_eq!(solution.swaps.len(), 2);
             assert_eq!(solution.swaps[0].token_in(), &eth());
             assert_eq!(solution.swaps[0].token_out(), &weth());
+            assert_eq!(
+                solution.swaps[0]
+                    .component()
+                    .protocol_system,
+                "weth"
+            );
         }
 
         #[test]
         fn test_add_missing_wrapped_eth_swap_in_the_end() {
+            // before adding swap: USDC -> ETH, WETH is the solution token_out
+            // after adding swap:  USDC -> ETH -> WETH
+
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
             let solution = Solution {
                 exact_out: false,
@@ -730,6 +751,15 @@ mod tests {
                     .unwrap()
                     .token_out(),
                 &weth()
+            );
+            assert_eq!(
+                solution
+                    .swaps
+                    .last()
+                    .unwrap()
+                    .component()
+                    .protocol_system,
+                "weth"
             );
         }
 
