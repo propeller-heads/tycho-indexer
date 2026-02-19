@@ -135,6 +135,113 @@ impl LiquoriceClient {
         }
     }
 
+    fn process_quote_response(
+        quote_response: LiquoriceQuoteResponse,
+        params: &GetAmountOutParams,
+    ) -> Result<SignedQuote, RFQError> {
+        if !quote_response.liquidity_available {
+            return Err(RFQError::QuoteNotFound(format!(
+                "Liquorice quote not found for {} {} ->{}",
+                params.amount_in, params.token_in, params.token_out,
+            )));
+        }
+
+        // Find the valid level with the largest quote_token_amount
+        let best_level = quote_response
+            .levels
+            .iter()
+            .filter(|level| level.validate(params).is_ok())
+            .filter_map(|level| {
+                BigUint::from_str(&level.quote_token_amount)
+                    .ok()
+                    .map(|amount| (level, amount))
+            })
+            .max_by(|(_, a), (_, b)| a.cmp(b));
+
+        let (quote_level, _) = best_level.ok_or_else(|| {
+            RFQError::QuoteNotFound(format!(
+                "No valid Liquorice quote levels for {} {} ->{}",
+                params.amount_in, params.token_in, params.token_out,
+            ))
+        })?;
+
+        let mut quote_attributes: HashMap<String, Bytes> = HashMap::new();
+
+        // calldata (pre-encoded by Liquorice API)
+        quote_attributes.insert(
+            "calldata".to_string(),
+            Bytes::from(
+                hex::decode(
+                    quote_level
+                        .tx
+                        .data
+                        .trim_start_matches("0x"),
+                )
+                .map_err(|e| {
+                    RFQError::ParsingError(format!("Failed to parse calldata: {e}"))
+                })?,
+            ),
+        );
+
+        // base_token_amount as U256 (32 bytes big-endian)
+        quote_attributes.insert(
+            "base_token_amount".to_string(),
+            Bytes::from(
+                biguint_to_u256(&BigUint::from_str(&quote_level.base_token_amount).map_err(
+                    |_| {
+                        RFQError::ParsingError(format!(
+                            "Failed to parse base token amount: {}",
+                            quote_level.base_token_amount
+                        ))
+                    },
+                )?)
+                .to_be_bytes::<32>()
+                .to_vec(),
+            ),
+        );
+
+        // partial fill info (if present)
+        if let Some(pf) = &quote_level.partial_fill {
+            quote_attributes.insert(
+                "partial_fill_offset".to_string(),
+                Bytes::from(pf.offset.to_be_bytes().to_vec()),
+            );
+            quote_attributes.insert(
+                "min_base_token_amount".to_string(),
+                Bytes::from(
+                    biguint_to_u256(&BigUint::from_str(&pf.min_base_token_amount).map_err(
+                        |_| {
+                            RFQError::ParsingError(format!(
+                                "Failed to parse min_base_token_amount: {}",
+                                pf.min_base_token_amount
+                            ))
+                        },
+                    )?)
+                    .to_be_bytes::<32>()
+                    .to_vec(),
+                ),
+            );
+        }
+
+        Ok(SignedQuote {
+            base_token: params.token_in.clone(),
+            quote_token: params.token_out.clone(),
+            amount_in: BigUint::from_str(&quote_level.base_token_amount).map_err(|_| {
+                RFQError::ParsingError(format!(
+                    "Failed to parse amount in string: {}",
+                    quote_level.base_token_amount
+                ))
+            })?,
+            amount_out: BigUint::from_str(&quote_level.quote_token_amount).map_err(|_| {
+                RFQError::ParsingError(format!(
+                    "Failed to parse amount out string: {}",
+                    quote_level.quote_token_amount
+                ))
+            })?,
+            quote_attributes,
+        })
+    }
+
     async fn fetch_price_levels(
         &self,
     ) -> Result<HashMap<String, Vec<LiquoriceMarketMakerLevels>>, RFQError> {
@@ -298,13 +405,14 @@ impl RFQClient for LiquoriceClient {
             .duration_since(SystemTime::UNIX_EPOCH)
             .map_err(|_| RFQError::ParsingError("SystemTime before UNIX EPOCH!".into()))?
             .as_secs() +
-            60; // 60 seconds from now
+            300; // 5 minutes from now
 
         let rfq_id = uuid::Uuid::new_v4().to_string();
 
         let quote_request = LiquoriceQuoteRequest {
             chain_id: self.chain.id(),
             rfq_id: rfq_id.clone(),
+            // TODO: use self.quote_timeout?
             expiry,
             base_token: params.token_in.to_string(),
             quote_token: params.token_out.to_string(),
@@ -312,6 +420,7 @@ impl RFQClient for LiquoriceClient {
             effective_trader: Some(params.sender.to_string()),
             base_token_amount: Some(params.amount_in.to_string()),
             quote_token_amount: None,
+            // TODO: is not needed?
             excluded_makers: None,
         };
 
@@ -431,92 +540,7 @@ impl RFQClient for LiquoriceClient {
                 }
             };
 
-            if !quote_response.liquidity_available || quote_response.levels.is_empty() {
-                return Err(RFQError::QuoteNotFound(format!(
-                    "Liquorice quote not found for {} {} ->{}",
-                    params.amount_in, params.token_in, params.token_out,
-                )));
-            }
-
-            let quote_level = &quote_response.levels[0];
-            quote_level.validate(params)?;
-
-            let mut quote_attributes: HashMap<String, Bytes> = HashMap::new();
-
-            // calldata (pre-encoded by Liquorice API)
-            quote_attributes.insert(
-                "calldata".to_string(),
-                Bytes::from(
-                    hex::decode(
-                        quote_level
-                            .tx
-                            .data
-                            .trim_start_matches("0x"),
-                    )
-                    .map_err(|e| {
-                        RFQError::ParsingError(format!("Failed to parse calldata: {e}"))
-                    })?,
-                ),
-            );
-
-            // base_token_amount as U256 (32 bytes big-endian)
-            quote_attributes.insert(
-                "base_token_amount".to_string(),
-                Bytes::from(
-                    biguint_to_u256(&BigUint::from_str(&quote_level.base_token_amount).map_err(
-                        |_| {
-                            RFQError::ParsingError(format!(
-                                "Failed to parse base token amount: {}",
-                                quote_level.base_token_amount
-                            ))
-                        },
-                    )?)
-                    .to_be_bytes::<32>()
-                    .to_vec(),
-                ),
-            );
-
-            // partial fill info (if present)
-            if let Some(pf) = &quote_level.partial_fill {
-                quote_attributes.insert(
-                    "partial_fill_offset".to_string(),
-                    Bytes::from(pf.offset.to_be_bytes().to_vec()),
-                );
-                quote_attributes.insert(
-                    "min_base_token_amount".to_string(),
-                    Bytes::from(
-                        biguint_to_u256(&BigUint::from_str(&pf.min_base_token_amount).map_err(
-                            |_| {
-                                RFQError::ParsingError(format!(
-                                    "Failed to parse min_base_token_amount: {}",
-                                    pf.min_base_token_amount
-                                ))
-                            },
-                        )?)
-                        .to_be_bytes::<32>()
-                        .to_vec(),
-                    ),
-                );
-            }
-
-            let signed_quote = SignedQuote {
-                base_token: params.token_in.clone(),
-                quote_token: params.token_out.clone(),
-                amount_in: BigUint::from_str(&quote_level.base_token_amount).map_err(|_| {
-                    RFQError::ParsingError(format!(
-                        "Failed to parse amount in string: {}",
-                        quote_level.base_token_amount
-                    ))
-                })?,
-                amount_out: BigUint::from_str(&quote_level.quote_token_amount).map_err(|_| {
-                    RFQError::ParsingError(format!(
-                        "Failed to parse amount out string: {}",
-                        quote_level.quote_token_amount
-                    ))
-                })?,
-                quote_attributes,
-            };
-            return Ok(signed_quote);
+            return Self::process_quote_response(quote_response, params);
         }
 
         Err(last_error.unwrap_or_else(|| {
