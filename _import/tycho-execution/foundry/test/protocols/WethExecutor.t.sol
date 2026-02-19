@@ -99,7 +99,7 @@ contract WethExecutorTest is TestUtils, Constants {
         assertEq(receiver, address(WethExecutor));
         assertEq(
             uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.Transfer)
+            uint8(RestrictTransferFrom.TransferType.ProtocolWillDebit)
         );
         assertEq(tokenIn, WETH_ADDR);
     }
