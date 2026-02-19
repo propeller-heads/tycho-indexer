@@ -298,7 +298,10 @@ impl TychoEncoder for TychoExecutorEncoder {
             .first_mut()
             .ok_or(EncodingError::FatalError("No solutions found".to_string()))?;
         self.validate_solution(solution)?;
-        self.add_missing_eth_wrapping_unwrapping_swaps(solution, &self.chain);
+        self.add_missing_eth_wrapping_unwrapping_swaps(
+            solution,
+            self.swap_encoder_registry.chain(),
+        );
 
         let encoded_solution = self.encode_executor_calldata(solution)?;
 
