@@ -43,7 +43,7 @@ contract Dispatcher is RestrictTransferFrom {
     event ExecutorSet(address indexed executor, uint256 timelockExpiresAt);
     event ExecutorRemoved(address indexed executor);
 
-    constructor(address _permit2) RestrictTransferFrom(_permit2) {}
+    constructor(address permit2_) RestrictTransferFrom(permit2_) {}
 
     /**
      * @dev Adds or replaces an approved executor contract address if it is a
