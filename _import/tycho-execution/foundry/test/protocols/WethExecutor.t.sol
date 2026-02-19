@@ -17,7 +17,7 @@ import {StdUtils} from "../../lib/forge-std/src/StdUtils.sol";
 import {TestUtils} from "../TestUtils.sol";
 
 contract WethExecutorExposed is WethExecutor {
-    constructor(address _wEthAddress) WethExecutor(_wEthAddress) {}
+    constructor(address _wrappedEthAddress) WethExecutor(_wrappedEthAddress) {}
 
     function decodeParams(bytes calldata data)
         external

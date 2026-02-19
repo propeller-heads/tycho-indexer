@@ -24,11 +24,11 @@ contract WethExecutor is IExecutor {
 
     IWETH public immutable wETH;
 
-    constructor(address _wEthAddress) {
-        if (_wEthAddress == address(0)) {
+    constructor(address _wrappedEthAddress) {
+        if (_wrappedEthAddress == address(0)) {
             revert WethExecutor__ZeroAddres();
         }
-        wETH = IWETH(_wEthAddress);
+        wETH = IWETH(_wrappedEthAddress);
     }
 
     function fundsExpectedAddress(
