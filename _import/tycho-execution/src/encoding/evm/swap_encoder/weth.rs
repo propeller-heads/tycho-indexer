@@ -69,7 +69,7 @@ mod tests {
             group_token_out: token_out.clone(),
         };
         let encoder = WethSwapEncoder::new(
-            Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"), //TODO: is this correct?
+            Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
             Chain::Ethereum,
             None,
         )
@@ -103,7 +103,7 @@ mod tests {
             group_token_out: token_out.clone(),
         };
         let encoder = WethSwapEncoder::new(
-            Bytes::from("0x13aa49bAc059d709dd0a18D6bb63290076a702D7"), //TODO: is this correct?
+            Bytes::from("0x13aa49bAc059d709dd0a18D6bb63290076a702D7"),
             Chain::Ethereum,
             None,
         )
