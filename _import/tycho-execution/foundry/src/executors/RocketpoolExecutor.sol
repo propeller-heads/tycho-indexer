@@ -115,5 +115,5 @@ interface IRocketDepositPool {
 }
 
 interface IRocketTokenRETH is IERC20 {
-    function burn(uint256 _rethAmount) external;
+    function burn(uint256 rethAmount) external;
 }
