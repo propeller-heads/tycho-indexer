@@ -37,18 +37,19 @@ use tycho_common::{
 use tycho_storage::postgres::cache::CachedGateway;
 use tycho_substreams::pb::tycho::evm::v1 as tycho_substreams;
 
-#[allow(deprecated)]
 use crate::{
     extractor::{
         chain_state::ChainState,
-        models::{BlockChanges, BlockContractChanges, BlockEntityChanges},
+        models::BlockChanges,
         protobuf_deserialisation::TryFromMessage,
         protocol_cache::{ProtocolDataCache, ProtocolMemoryCache},
         reorg_buffer::ReorgBuffer,
         BlockUpdateWithCursor, ExtractionError, Extractor, ExtractorExtension, ExtractorMsg,
     },
-    pb::sf::substreams::rpc::v2::{BlockScopedData, BlockUndoSignal, ModulesProgress},
-    pb::sf::substreams::v1::Clock,
+    pb::sf::substreams::{
+        rpc::v2::{BlockScopedData, BlockUndoSignal, ModulesProgress},
+        v1::Clock,
+    },
 };
 
 pub struct Inner {
@@ -878,7 +879,6 @@ where
             .clone()
     }
 
-    #[allow(deprecated)]
     #[instrument(skip_all, fields(block_number, partial_block_index, final_block_height))]
     async fn handle_tick_scoped_data(
         &self,
@@ -898,53 +898,23 @@ where
                 )
             })?;
         let msg = {
-            // Backwards Compatibility:
-            // Check if message_type ends with BlockAccountChanges or BlockEntityChanges. If it
-            // does, then we need to decode as the corresponding message type, then convert it to
-            // BlockChanges
-            let msg = match data.type_url.as_str() {
-                url if url.ends_with("BlockChanges") => {
-                    let raw_msg = tycho_substreams::BlockChanges::decode(data.value.as_slice())?;
-                    trace!(?raw_msg, "Received BlockChanges message");
-                    BlockChanges::try_from_message((
-                        raw_msg,
-                        &self.name,
-                        self.chain,
-                        &self.protocol_system,
-                        &self.protocol_types,
-                        inp.final_block_height,
-                        inp.partial_index,
-                    ))
-                }
-                url if url.ends_with("BlockContractChanges") => {
-                    let raw_msg =
-                        tycho_substreams::BlockContractChanges::decode(data.value.as_slice())?;
-                    trace!(?raw_msg, "Received BlockContractChanges message");
-                    BlockContractChanges::try_from_message((
-                        raw_msg,
-                        &self.name,
-                        self.chain,
-                        self.protocol_system.clone(),
-                        &self.protocol_types,
-                        inp.final_block_height,
-                    ))
-                    .map(Into::into)
-                }
-                url if url.ends_with("BlockEntityChanges") => {
-                    let raw_msg =
-                        tycho_substreams::BlockEntityChanges::decode(data.value.as_slice())?;
-                    trace!(?raw_msg, "Received BlockEntityChanges message");
-                    BlockEntityChanges::try_from_message((
-                        raw_msg,
-                        &self.name,
-                        self.chain,
-                        &self.protocol_system,
-                        &self.protocol_types,
-                        inp.final_block_height,
-                    ))
-                    .map(Into::into)
-                }
-                _ => return Err(ExtractionError::DecodeError("Unknown message type".into())),
+            let msg = if data.type_url.ends_with("BlockChanges") {
+                let raw_msg = tycho_substreams::BlockChanges::decode(data.value.as_slice())?;
+                trace!(?raw_msg, "Received BlockChanges message");
+                BlockChanges::try_from_message((
+                    raw_msg,
+                    &self.name,
+                    self.chain,
+                    &self.protocol_system,
+                    &self.protocol_types,
+                    inp.final_block_height,
+                    inp.partial_index,
+                ))
+            } else {
+                return Err(ExtractionError::DecodeError(format!(
+                    "Unknown message type: {}",
+                    data.type_url
+                )));
             };
 
             let msg = match msg {
@@ -2200,14 +2170,11 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_handle_tick_scoped_data_old_native_msg() {
+    async fn test_handle_tick_scoped_data_unknown_message_type() {
         let mut gw = MockExtractorGateway::new();
         gw.expect_ensure_protocol_types()
             .times(1)
             .returning(|_| ());
-        gw.expect_advance()
-            .times(1)
-            .returning(|_, _, _| Ok(()));
         gw.expect_get_cursor()
             .times(1)
             .returning(|| Ok(("cursor".into(), Bytes::default())));
@@ -2217,105 +2184,43 @@ mod test {
 
         let extractor = create_extractor(gw).await;
 
-        extractor
-            .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
-                tycho_substreams::BlockEntityChanges {
-                    block: Some(pb_fixtures::pb_blocks(1)),
-                    changes: vec![tycho_substreams::TransactionEntityChanges {
-                        tx: Some(pb_fixtures::pb_transactions(1, 1)),
-                        entity_changes: vec![],
-                        component_changes: vec![],
-                        balance_changes: vec![],
-                    }],
-                },
-                Some(format!("cursor@{}", 1).as_str()),
-                Some(1),
-            ))
-            .await
-            .map(|o| o.map(|_| ()))
-            .unwrap()
-            .unwrap();
+        // Construct a BlockScopedData with an unknown type_url
+        let data = {
+            use crate::pb::sf::substreams::{rpc::v2::*, v1::Clock};
+            BlockScopedData {
+                output: Some(MapModuleOutput {
+                    name: "map_changes".to_owned(),
+                    map_output: Some(prost_types::Any {
+                        type_url: "tycho.evm.v1.UnknownType".to_owned(),
+                        value: vec![],
+                    }),
+                    debug_info: None,
+                }),
+                clock: Some(Clock {
+                    id: "0x0000000000000000000000000000000000000000000000000000000000000000"
+                        .to_owned(),
+                    number: 1,
+                    timestamp: Some(prost_types::Timestamp { seconds: 1000, nanos: 0 }),
+                }),
+                cursor: "cursor@1".to_owned(),
+                final_block_height: 1,
+                debug_map_outputs: vec![],
+                debug_store_outputs: vec![],
+                attestation: "test".to_owned(),
+                is_partial: false,
+                partial_index: None,
+                is_last_partial: None,
+            }
+        };
 
-        extractor
-            .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
-                tycho_substreams::BlockEntityChanges {
-                    block: Some(pb_fixtures::pb_blocks(2)),
-                    changes: vec![tycho_substreams::TransactionEntityChanges {
-                        tx: Some(pb_fixtures::pb_transactions(2, 1)),
-                        entity_changes: vec![],
-                        component_changes: vec![],
-                        balance_changes: vec![],
-                    }],
-                },
-                Some(format!("cursor@{}", 2).as_str()),
-                Some(2),
-            ))
-            .await
-            .map(|o| o.map(|_| ()))
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(extractor.get_cursor().await, "cursor@2");
+        let result = extractor
+            .handle_tick_scoped_data(data)
+            .await;
+        assert!(
+            matches!(result, Err(ExtractionError::DecodeError(msg)) if msg.contains("Unknown message type"))
+        );
     }
 
-    #[tokio::test]
-    async fn test_handle_tick_scoped_data_old_vm_msg() {
-        let mut gw = MockExtractorGateway::new();
-        gw.expect_ensure_protocol_types()
-            .times(1)
-            .returning(|_| ());
-        gw.expect_get_cursor()
-            .times(1)
-            .returning(|| Ok(("cursor".into(), Bytes::default())));
-        gw.expect_advance()
-            .times(1)
-            .returning(|_, _, _| Ok(()));
-        gw.expect_get_block()
-            .times(1)
-            .returning(|_| Ok(Block::default()));
-
-        let extractor = create_extractor(gw).await;
-
-        extractor
-            .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
-                tycho_substreams::BlockContractChanges {
-                    block: Some(pb_fixtures::pb_blocks(1)),
-                    changes: vec![tycho_substreams::TransactionContractChanges {
-                        tx: Some(pb_fixtures::pb_transactions(1, 1)),
-                        contract_changes: vec![],
-                        component_changes: vec![],
-                        balance_changes: vec![],
-                    }],
-                },
-                Some(format!("cursor@{}", 1).as_str()),
-                Some(1),
-            ))
-            .await
-            .map(|o| o.map(|_| ()))
-            .unwrap()
-            .unwrap();
-
-        extractor
-            .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
-                tycho_substreams::BlockContractChanges {
-                    block: Some(pb_fixtures::pb_blocks(2)),
-                    changes: vec![tycho_substreams::TransactionContractChanges {
-                        tx: Some(pb_fixtures::pb_transactions(2, 1)),
-                        contract_changes: vec![],
-                        component_changes: vec![],
-                        balance_changes: vec![],
-                    }],
-                },
-                Some(format!("cursor@{}", 2).as_str()),
-                Some(2),
-            ))
-            .await
-            .map(|o| o.map(|_| ()))
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(extractor.get_cursor().await, "cursor@2");
-    }
     #[tokio::test]
     async fn test_handle_tick_scoped_data_skip() {
         let mut gw = MockExtractorGateway::new();

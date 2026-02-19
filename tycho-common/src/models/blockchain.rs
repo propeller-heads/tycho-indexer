@@ -8,10 +8,8 @@ use tracing::warn;
 use crate::{
     dto,
     models::{
-        contract::{AccountBalance, AccountChangesWithTx, AccountDelta},
-        protocol::{
-            ComponentBalance, ProtocolChangesWithTx, ProtocolComponent, ProtocolComponentStateDelta,
-        },
+        contract::{AccountBalance, AccountDelta},
+        protocol::{ComponentBalance, ProtocolComponent, ProtocolComponentStateDelta},
         token::Token,
         Address, Balance, BlockHash, Chain, Code, ComponentId, EntryPointId, MergeError, StoreKey,
         StoreVal,
@@ -350,31 +348,6 @@ impl TxWithChanges {
         }
 
         Ok(())
-    }
-}
-
-impl From<AccountChangesWithTx> for TxWithChanges {
-    fn from(value: AccountChangesWithTx) -> Self {
-        Self {
-            tx: value.tx,
-            protocol_components: value.protocol_components,
-            account_deltas: value.account_deltas,
-            balance_changes: value.component_balances,
-            account_balance_changes: value.account_balances,
-            ..Default::default()
-        }
-    }
-}
-
-impl From<ProtocolChangesWithTx> for TxWithChanges {
-    fn from(value: ProtocolChangesWithTx) -> Self {
-        Self {
-            tx: value.tx,
-            protocol_components: value.new_protocol_components,
-            state_updates: value.protocol_states,
-            balance_changes: value.balance_changes,
-            ..Default::default()
-        }
     }
 }
 
@@ -724,16 +697,8 @@ pub mod fixtures {
     use super::*;
     use crate::models::ChangeType;
 
-    pub fn transaction01() -> Transaction {
-        Transaction::new(
-            Bytes::zero(32),
-            Bytes::zero(32),
-            Bytes::zero(20),
-            Some(Bytes::zero(20)),
-            10,
-        )
-    }
-
+    // PERF: duplicated in crate::extractor::models::fixtures — consider a `test-utils`
+    // feature flag to share test fixtures cross-crate.
     pub fn create_transaction(hash: &str, block: &str, index: u64) -> Transaction {
         Transaction::new(
             hash.parse().unwrap(),
@@ -744,199 +709,219 @@ pub mod fixtures {
         )
     }
 
+    /// Returns a pre-built `TxWithChanges` for testing.
+    ///
+    /// Both indices share the same keys (component `"pool_0"`, token `0xaa..`, contract `0xbb..`)
+    /// but with different values, so "later wins" precedence can be verified across all fields:
+    ///
+    /// - Index 0: tx_index=1, component_balance=800, account_balance=500, slots {1=>100, 2=>200},
+    ///   state {"reserve"=>1000, "fee"=>50}, 1 entrypoint, ChangeType::Creation
+    /// - Index 1: tx_index=2, component_balance=1000, account_balance=700, slots {1=>300}
+    ///   (overlaps slot 1), state {"reserve"=>2000} (overlaps), 2 entrypoints (superset),
+    ///   ChangeType::Update
+    // PERF: duplicated in crate::extractor::models::fixtures — consider a `test-utils`
+    // feature flag to share test fixtures cross-crate.
+    pub fn tx_with_changes(index: u8) -> TxWithChanges {
+        let token = Bytes::from(vec![0xaa; 20]);
+        let contract = Bytes::from(vec![0xbb; 20]);
+        let c_id = "pool_0".to_string();
+
+        match index {
+            0 => {
+                let tx = create_transaction("0x01", "0x00", 1);
+                TxWithChanges {
+                    tx: tx.clone(),
+                    protocol_components: HashMap::from([(
+                        c_id.clone(),
+                        ProtocolComponent { id: c_id.clone(), ..Default::default() },
+                    )]),
+                    account_deltas: HashMap::from([(
+                        contract.clone(),
+                        AccountDelta::new(
+                            Chain::Ethereum,
+                            contract.clone(),
+                            HashMap::from([
+                                (
+                                    Bytes::from(1u64).lpad(32, 0),
+                                    Some(Bytes::from(100u64).lpad(32, 0)),
+                                ),
+                                (
+                                    Bytes::from(2u64).lpad(32, 0),
+                                    Some(Bytes::from(200u64).lpad(32, 0)),
+                                ),
+                            ]),
+                            None,
+                            Some(Bytes::from(vec![0; 4])),
+                            ChangeType::Creation,
+                        ),
+                    )]),
+                    state_updates: HashMap::from([(
+                        c_id.clone(),
+                        ProtocolComponentStateDelta::new(
+                            &c_id,
+                            HashMap::from([
+                                ("reserve".into(), Bytes::from(1000u64).lpad(32, 0)),
+                                ("fee".into(), Bytes::from(50u64).lpad(32, 0)),
+                            ]),
+                            HashSet::new(),
+                        ),
+                    )]),
+                    balance_changes: HashMap::from([(
+                        c_id.clone(),
+                        HashMap::from([(
+                            token.clone(),
+                            ComponentBalance {
+                                token: token.clone(),
+                                balance: Bytes::from(800_u64).lpad(32, 0),
+                                balance_float: 800.0,
+                                component_id: c_id.clone(),
+                                modify_tx: tx.hash.clone(),
+                            },
+                        )]),
+                    )]),
+                    account_balance_changes: HashMap::from([(
+                        contract.clone(),
+                        HashMap::from([(
+                            token.clone(),
+                            AccountBalance {
+                                token: token.clone(),
+                                balance: Bytes::from(500_u64).lpad(32, 0),
+                                modify_tx: tx.hash,
+                                account: contract,
+                            },
+                        )]),
+                    )]),
+                    entrypoints: HashMap::from([(
+                        c_id.clone(),
+                        HashSet::from([EntryPoint::new(
+                            "ep_0".into(),
+                            Bytes::zero(20),
+                            "fn_a()".into(),
+                        )]),
+                    )]),
+                    entrypoint_params: HashMap::from([(
+                        "ep_0".into(),
+                        HashSet::from([(
+                            TracingParams::RPCTracer(RPCTracerParams::new(
+                                None,
+                                Bytes::from(vec![1]),
+                            )),
+                            c_id,
+                        )]),
+                    )]),
+                }
+            }
+            1 => {
+                let tx = create_transaction("0x02", "0x00", 2);
+                TxWithChanges {
+                    tx: tx.clone(),
+                    protocol_components: HashMap::from([(
+                        c_id.clone(),
+                        ProtocolComponent { id: c_id.clone(), ..Default::default() },
+                    )]),
+                    account_deltas: HashMap::from([(
+                        contract.clone(),
+                        AccountDelta::new(
+                            Chain::Ethereum,
+                            contract.clone(),
+                            HashMap::from([(
+                                Bytes::from(1u64).lpad(32, 0),
+                                Some(Bytes::from(300u64).lpad(32, 0)),
+                            )]),
+                            None,
+                            None,
+                            ChangeType::Update,
+                        ),
+                    )]),
+                    state_updates: HashMap::from([(
+                        c_id.clone(),
+                        ProtocolComponentStateDelta::new(
+                            &c_id,
+                            HashMap::from([(
+                                "reserve".into(),
+                                Bytes::from(2000u64).lpad(32, 0),
+                            )]),
+                            HashSet::new(),
+                        ),
+                    )]),
+                    balance_changes: HashMap::from([(
+                        c_id.clone(),
+                        HashMap::from([(
+                            token.clone(),
+                            ComponentBalance {
+                                token: token.clone(),
+                                balance: Bytes::from(1000_u64).lpad(32, 0),
+                                balance_float: 1000.0,
+                                component_id: c_id.clone(),
+                                modify_tx: tx.hash.clone(),
+                            },
+                        )]),
+                    )]),
+                    account_balance_changes: HashMap::from([(
+                        contract.clone(),
+                        HashMap::from([(
+                            token.clone(),
+                            AccountBalance {
+                                token: token.clone(),
+                                balance: Bytes::from(700_u64).lpad(32, 0),
+                                modify_tx: tx.hash,
+                                account: contract,
+                            },
+                        )]),
+                    )]),
+                    entrypoints: HashMap::from([(
+                        c_id.clone(),
+                        HashSet::from([
+                            EntryPoint::new("ep_0".into(), Bytes::zero(20), "fn_a()".into()),
+                            EntryPoint::new("ep_1".into(), Bytes::zero(20), "fn_b()".into()),
+                        ]),
+                    )]),
+                    entrypoint_params: HashMap::from([(
+                        "ep_1".into(),
+                        HashSet::from([(
+                            TracingParams::RPCTracer(RPCTracerParams::new(
+                                None,
+                                Bytes::from(vec![2]),
+                            )),
+                            c_id,
+                        )]),
+                    )]),
+                }
+            }
+            _ => panic!("tx_with_changes: index must be 0 or 1, got {index}"),
+        }
+    }
+
     #[test]
     fn test_merge_tx_with_changes() {
-        let base_token = Bytes::from_str("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
-        let quote_token = Bytes::from_str("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
-        let contract_addr = Bytes::from_str("aaaaaaaaa24eeeb8d57d431224f73832bc34f688").unwrap();
-        let tx_hash0 = "0x2f6350a292c0fc918afe67cb893744a080dacb507b0cea4cc07437b8aff23cdb";
-        let tx_hash1 = "0x0d9e0da36cf9f305a189965b248fc79c923619801e8ab5ef158d4fd528a291ad";
-        let block = "0x0000000000000000000000000000000000000000000000000000000000000000";
-        let component = ProtocolComponent::new(
-            "ambient_USDC_ETH",
-            "test",
-            "vm:pool",
-            Chain::Ethereum,
-            vec![base_token.clone(), quote_token.clone()],
-            vec![contract_addr.clone()],
-            Default::default(),
-            Default::default(),
-            Bytes::from_str(tx_hash0).unwrap(),
-            Default::default(),
-        );
-        let account_delta = AccountDelta::new(
-            Chain::Ethereum,
-            contract_addr.clone(),
-            HashMap::new(),
-            None,
-            Some(vec![0, 0, 0, 0].into()),
-            ChangeType::Creation,
-        );
+        let mut changes1 = tx_with_changes(0);
+        let changes2 = tx_with_changes(1);
 
-        let mut changes1 = TxWithChanges::new(
-            create_transaction(tx_hash0, block, 1),
-            HashMap::from([(component.id.clone(), component.clone())]),
-            HashMap::from([(contract_addr.clone(), account_delta.clone())]),
-            HashMap::new(),
-            HashMap::from([(
-                component.id.clone(),
-                HashMap::from([(
-                    base_token.clone(),
-                    ComponentBalance {
-                        token: base_token.clone(),
-                        balance: Bytes::from(800_u64).lpad(32, 0),
-                        balance_float: 800.0,
-                        component_id: component.id.clone(),
-                        modify_tx: Bytes::from_str(tx_hash0).unwrap(),
-                    },
-                )]),
-            )]),
-            HashMap::from([(
-                contract_addr.clone(),
-                HashMap::from([(
-                    base_token.clone(),
-                    AccountBalance {
-                        token: base_token.clone(),
-                        balance: Bytes::from(800_u64).lpad(32, 0),
-                        modify_tx: Bytes::from_str(tx_hash0).unwrap(),
-                        account: contract_addr.clone(),
-                    },
-                )]),
-            )]),
-            HashMap::from([(
-                component.id.clone(),
-                HashSet::from([EntryPoint::new(
-                    "test".to_string(),
-                    contract_addr.clone(),
-                    "function()".to_string(),
-                )]),
-            )]),
-            HashMap::from([(
-                "test".to_string(),
-                HashSet::from([(
-                    TracingParams::RPCTracer(RPCTracerParams::new(
-                        None,
-                        Bytes::from_str("0x000001ef").unwrap(),
-                    )),
-                    component.id.clone(),
-                )]),
-            )]),
-        );
-        let changes2 = TxWithChanges::new(
-            create_transaction(tx_hash1, block, 2),
-            HashMap::from([(
-                component.id.clone(),
-                ProtocolComponent {
-                    creation_tx: Bytes::from_str(tx_hash1).unwrap(),
-                    ..component.clone()
-                },
-            )]),
-            HashMap::from([(
-                contract_addr.clone(),
-                AccountDelta::new(
-                    Chain::Ethereum,
-                    contract_addr.clone(),
-                    HashMap::from([(vec![0, 0, 0, 0].into(), Some(vec![0, 0, 0, 0].into()))]),
-                    None,
-                    None,
-                    ChangeType::Update,
-                ),
-            )]),
-            HashMap::new(),
-            HashMap::from([(
-                component.id.clone(),
-                HashMap::from([(
-                    base_token.clone(),
-                    ComponentBalance {
-                        token: base_token.clone(),
-                        balance: Bytes::from(1000_u64).lpad(32, 0),
-                        balance_float: 1000.0,
-                        component_id: component.id.clone(),
-                        modify_tx: Bytes::from_str(tx_hash1).unwrap(),
-                    },
-                )]),
-            )]),
-            HashMap::from([(
-                contract_addr.clone(),
-                HashMap::from([(
-                    base_token.clone(),
-                    AccountBalance {
-                        token: base_token.clone(),
-                        balance: Bytes::from(1000_u64).lpad(32, 0),
-                        modify_tx: Bytes::from_str(tx_hash1).unwrap(),
-                        account: contract_addr.clone(),
-                    },
-                )]),
-            )]),
-            HashMap::from([(
-                component.id.clone(),
-                HashSet::from([
-                    EntryPoint::new(
-                        "test".to_string(),
-                        contract_addr.clone(),
-                        "function()".to_string(),
-                    ),
-                    EntryPoint::new(
-                        "test2".to_string(),
-                        contract_addr.clone(),
-                        "function_2()".to_string(),
-                    ),
-                ]),
-            )]),
-            HashMap::from([(
-                "test2".to_string(),
-                HashSet::from([(
-                    TracingParams::RPCTracer(RPCTracerParams::new(
-                        None,
-                        Bytes::from_str("0x000001").unwrap(),
-                    )),
-                    component.id.clone(),
-                )]),
-            )]),
-        );
+        let token = Bytes::from(vec![0xaa; 20]);
+        let contract = Bytes::from(vec![0xbb; 20]);
+        let c_id = "pool_0".to_string();
 
         assert!(changes1.merge(changes2).is_ok());
+
+        // After merge, balances should reflect changes2 ("later wins")
         assert_eq!(
-            changes1
-                .account_balance_changes
-                .get(&contract_addr)
-                .unwrap()
-                .get(&base_token)
-                .unwrap()
-                .balance,
+            changes1.balance_changes[&c_id][&token].balance,
             Bytes::from(1000_u64).lpad(32, 0),
         );
         assert_eq!(
-            changes1
-                .balance_changes
-                .get(&component.id)
-                .unwrap()
-                .get(&base_token)
-                .unwrap()
-                .balance,
-            Bytes::from(1000_u64).lpad(32, 0),
+            changes1.account_balance_changes[&contract][&token].balance,
+            Bytes::from(700_u64).lpad(32, 0),
         );
-        assert_eq!(changes1.tx.hash, Bytes::from_str(tx_hash1).unwrap(),);
-        assert_eq!(changes1.entrypoints.len(), 1);
-        assert_eq!(
-            changes1
-                .entrypoints
-                .get(&component.id)
-                .unwrap()
-                .len(),
-            2
-        );
-        let mut expected_entry_points = changes1
-            .entrypoints
-            .values()
-            .flat_map(|ep| ep.iter())
+        // tx should be updated to changes2's tx
+        assert_eq!(changes1.tx.hash, Bytes::from(vec![2]));
+        // Entrypoints should be merged (union of both)
+        assert_eq!(changes1.entrypoints[&c_id].len(), 2);
+        let mut sigs: Vec<_> = changes1.entrypoints[&c_id]
+            .iter()
             .map(|ep| ep.signature.clone())
-            .collect::<Vec<_>>();
-        expected_entry_points.sort();
-        assert_eq!(
-            expected_entry_points,
-            vec!["function()".to_string(), "function_2()".to_string()],
-        );
+            .collect();
+        sigs.sort();
+        assert_eq!(sigs, vec!["fn_a()", "fn_b()"]);
     }
 
     #[rstest]

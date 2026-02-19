@@ -1,15 +1,14 @@
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 use chrono::NaiveDateTime;
 use deepsize::{Context, DeepSizeOf};
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
-use tracing::warn;
 
 use crate::{
     models::{
-        blockchain::Transaction, Address, AttrStoreKey, Balance, Chain, ChangeType, ComponentId,
-        MergeError, StoreVal, TxHash,
+        Address, AttrStoreKey, Balance, Chain, ChangeType, ComponentId, MergeError, StoreVal,
+        TxHash,
     },
     Bytes,
 };
@@ -244,99 +243,6 @@ impl QualityRange {
     }
 }
 
-/// Updates grouped by their respective transaction.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct ProtocolChangesWithTx {
-    pub new_protocol_components: HashMap<ComponentId, ProtocolComponent>,
-    pub protocol_states: HashMap<ComponentId, ProtocolComponentStateDelta>,
-    pub balance_changes: HashMap<ComponentId, HashMap<Bytes, ComponentBalance>>,
-    pub tx: Transaction,
-}
-
-impl ProtocolChangesWithTx {
-    /// Merges this update with another one.
-    ///
-    /// The method combines two `ProtocolStatesWithTx` instances under certain
-    /// conditions:
-    /// - The block from which both updates came should be the same. If the updates are from
-    ///   different blocks, the method will return an error.
-    /// - The transactions for each of the updates should be distinct. If they come from the same
-    ///   transaction, the method will return an error.
-    /// - The order of the transaction matters. The transaction from `other` must have occurred
-    ///   later than the self transaction. If the self transaction has a higher index than `other`,
-    ///   the method will return an error.
-    ///
-    /// The merged update keeps the transaction of `other`.
-    ///
-    /// # Errors
-    /// This method will return an error if any of the above conditions is violated.
-    pub fn merge(&mut self, other: ProtocolChangesWithTx) -> Result<(), MergeError> {
-        if self.tx.block_hash != other.tx.block_hash {
-            return Err(MergeError::BlockMismatch(
-                "ProtocolChangesWithTx".to_string(),
-                self.tx.block_hash.clone(),
-                other.tx.block_hash,
-            ));
-        }
-        if self.tx.hash == other.tx.hash {
-            return Err(MergeError::SameTransaction(
-                "ProtocolChangesWithTx".to_string(),
-                other.tx.hash,
-            ));
-        }
-        if self.tx.index > other.tx.index {
-            return Err(MergeError::TransactionOrderError(
-                "ProtocolChangesWithTx".to_string(),
-                self.tx.index,
-                other.tx.index,
-            ));
-        }
-        self.tx = other.tx;
-        // Merge protocol states
-        for (key, value) in other.protocol_states {
-            match self.protocol_states.entry(key) {
-                Entry::Occupied(mut entry) => {
-                    entry.get_mut().merge(value)?;
-                }
-                Entry::Vacant(entry) => {
-                    entry.insert(value);
-                }
-            }
-        }
-
-        // Merge token balances
-        for (component_id, balance_changes) in other.balance_changes {
-            let token_balances = self
-                .balance_changes
-                .entry(component_id)
-                .or_default();
-            for (token, balance) in balance_changes {
-                token_balances.insert(token, balance);
-            }
-        }
-
-        // Merge new protocol components
-        // Log a warning if a new protocol component for the same id already exists, because this
-        // should never happen.
-        for (key, value) in other.new_protocol_components {
-            match self.new_protocol_components.entry(key) {
-                Entry::Occupied(mut entry) => {
-                    warn!(
-                        "Overwriting new protocol component for id {} with a new one. This should never happen! Please check logic",
-                        entry.get().id
-                    );
-                    entry.insert(value);
-                }
-                Entry::Vacant(entry) => {
-                    entry.insert(value);
-                }
-            }
-        }
-
-        Ok(())
-    }
-}
-
 pub struct GetAmountOutParams {
     pub amount_in: BigUint,
     pub token_in: Bytes,
@@ -347,13 +253,7 @@ pub struct GetAmountOutParams {
 
 #[cfg(test)]
 mod test {
-    use rstest::rstest;
-
     use super::*;
-    use crate::models::blockchain::fixtures as block_fixtures;
-
-    const HASH_256_0: &str = "0x0000000000000000000000000000000000000000000000000000000000000000";
-    const HASH_256_1: &str = "0x0000000000000000000000000000000000000000000000000000000000000001";
 
     fn create_state(id: String) -> ProtocolComponentStateDelta {
         let attributes1: HashMap<String, Bytes> = vec![
@@ -412,105 +312,6 @@ mod test {
             .into_iter()
             .collect();
         assert_eq!(state_1.deleted_attributes, expected_del_attributes);
-    }
-
-    fn protocol_state_with_tx() -> ProtocolChangesWithTx {
-        let state_1 = create_state("State1".to_owned());
-        let state_2 = create_state("State2".to_owned());
-        let states: HashMap<String, ProtocolComponentStateDelta> =
-            vec![(state_1.component_id.clone(), state_1), (state_2.component_id.clone(), state_2)]
-                .into_iter()
-                .collect();
-        ProtocolChangesWithTx {
-            protocol_states: states,
-            tx: block_fixtures::transaction01(),
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn test_merge_protocol_state_update_with_tx() {
-        let mut base_state = protocol_state_with_tx();
-
-        let new_attributes: HashMap<String, Bytes> = vec![
-            ("reserve1".to_owned(), Bytes::from(600u64).lpad(32, 0)),
-            ("new_attribute".to_owned(), Bytes::from(10u64).lpad(32, 0)),
-        ]
-        .into_iter()
-        .collect();
-        let new_tx = block_fixtures::create_transaction(HASH_256_1, HASH_256_0, 11);
-        let new_states: HashMap<String, ProtocolComponentStateDelta> = vec![(
-            "State1".to_owned(),
-            ProtocolComponentStateDelta {
-                component_id: "State1".to_owned(),
-                updated_attributes: new_attributes,
-                deleted_attributes: HashSet::new(),
-            },
-        )]
-        .into_iter()
-        .collect();
-
-        let tx_update =
-            ProtocolChangesWithTx { protocol_states: new_states, tx: new_tx, ..Default::default() };
-
-        let res = base_state.merge(tx_update);
-
-        assert!(res.is_ok());
-        assert_eq!(base_state.protocol_states.len(), 2);
-        let expected_attributes: HashMap<String, Bytes> = vec![
-            ("reserve1".to_owned(), Bytes::from(600u64).lpad(32, 0)),
-            ("reserve2".to_owned(), Bytes::from(500u64).lpad(32, 0)),
-            ("static_attribute".to_owned(), Bytes::from(1u64).lpad(32, 0)),
-            ("new_attribute".to_owned(), Bytes::from(10u64).lpad(32, 0)),
-        ]
-        .into_iter()
-        .collect();
-        assert_eq!(
-            base_state
-                .protocol_states
-                .get("State1")
-                .unwrap()
-                .updated_attributes,
-            expected_attributes
-        );
-    }
-
-    #[rstest]
-    #[case::diff_block(
-    block_fixtures::create_transaction(HASH_256_1, HASH_256_1, 11),
-    Err(MergeError::BlockMismatch(
-        "ProtocolChangesWithTx".to_string(),
-        Bytes::zero(32),
-        HASH_256_1.into(),
-    ))
-    )]
-    #[case::same_tx(
-    block_fixtures::create_transaction(HASH_256_0, HASH_256_0, 11),
-    Err(MergeError::SameTransaction(
-        "ProtocolChangesWithTx".to_string(),
-        Bytes::zero(32),
-    ))
-    )]
-    #[case::lower_idx(
-    block_fixtures::create_transaction(HASH_256_1, HASH_256_0, 1),
-    Err(MergeError::TransactionOrderError(
-        "ProtocolChangesWithTx".to_string(),
-        10,
-        1,
-    ))
-    )]
-    fn test_merge_pool_state_update_with_tx_errors(
-        #[case] tx: Transaction,
-        #[case] exp: Result<(), MergeError>,
-    ) {
-        let mut base_state = protocol_state_with_tx();
-
-        let mut new_state = protocol_state_with_tx();
-        new_state.tx = tx;
-
-        let res = base_state.merge(new_state);
-
-        assert_eq!(res, exp);
     }
 
     #[test]

@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use deepsize::DeepSizeOf;
@@ -8,10 +7,8 @@ use tycho_common::{
             Block, BlockAggregatedChanges, BlockScoped, DCIUpdate, TracedEntryPoint, TracingResult,
             Transaction, TxWithChanges,
         },
-        contract::{AccountBalance, AccountChangesWithTx, AccountToContractChanges},
-        protocol::{
-            ComponentBalance, ProtocolChangesWithTx, ProtocolComponent, ProtocolComponentStateDelta,
-        },
+        contract::{AccountBalance, AccountToContractChanges},
+        protocol::{ComponentBalance, ProtocolComponent, ProtocolComponentStateDelta},
         token::Token,
         Address, AttrStoreKey, Chain, ComponentId, MergeError,
     },
@@ -23,120 +20,6 @@ use crate::extractor::{
     AccountStateValueType, ExtractionError, ProtocolStateKeyType, ProtocolStateValueType,
     StateUpdateBufferEntry,
 };
-
-/// A container for account updates grouped by transaction.
-///
-/// Hold the detailed state changes for a block alongside with protocol
-/// component changes.
-#[derive(Debug, PartialEq, Clone)]
-#[deprecated(note = "Use BlockChanges instead")]
-pub struct BlockContractChanges {
-    extractor: String,
-    chain: Chain,
-    pub block: Block,
-    pub finalized_block_height: u64,
-    pub revert: bool,
-    /// Required here, so it is part of the revert buffer and thus inserted into storage once
-    /// finalized.
-    pub new_tokens: HashMap<Address, Token>,
-    /// Vec of updates at this block, aggregated by tx and sorted by tx index in ascending order
-    pub tx_updates: Vec<AccountChangesWithTx>,
-}
-
-impl BlockContractChanges {
-    pub fn new(
-        extractor: String,
-        chain: Chain,
-        block: Block,
-        finalized_block_height: u64,
-        revert: bool,
-        tx_updates: Vec<AccountChangesWithTx>,
-    ) -> Self {
-        BlockContractChanges {
-            extractor,
-            chain,
-            block,
-            finalized_block_height,
-            revert,
-            new_tokens: HashMap::new(),
-            tx_updates,
-        }
-    }
-
-    pub fn protocol_components(&self) -> Vec<ProtocolComponent> {
-        self.tx_updates
-            .iter()
-            .flat_map(|tx_u| {
-                tx_u.protocol_components
-                    .values()
-                    .cloned()
-            })
-            .collect()
-    }
-}
-
-impl BlockScoped for BlockContractChanges {
-    fn block(&self) -> tycho_common::models::blockchain::Block {
-        self.block.clone()
-    }
-}
-
-/// A container for state updates grouped by transaction
-///
-/// Hold the detailed state changes for a block alongside with protocol
-/// component changes.
-#[derive(Debug, PartialEq, Default, Clone)]
-#[deprecated(note = "Use BlockChanges instead")]
-pub struct BlockEntityChanges {
-    extractor: String,
-    chain: Chain,
-    pub block: Block,
-    pub finalized_block_height: u64,
-    pub revert: bool,
-    /// Required here, so it is part of the revert buffer and thus inserted into storage once
-    /// finalized.
-    pub new_tokens: HashMap<Address, Token>,
-    /// Vec of updates at this block, aggregated by tx and sorted by tx index in ascending order
-    pub txs_with_update: Vec<ProtocolChangesWithTx>,
-}
-
-impl BlockEntityChanges {
-    pub fn new(
-        extractor: String,
-        chain: Chain,
-        block: Block,
-        finalized_block_height: u64,
-        revert: bool,
-        txs_with_update: Vec<ProtocolChangesWithTx>,
-    ) -> Self {
-        BlockEntityChanges {
-            extractor,
-            chain,
-            block,
-            finalized_block_height,
-            revert,
-            new_tokens: HashMap::new(),
-            txs_with_update,
-        }
-    }
-
-    pub fn protocol_components(&self) -> Vec<ProtocolComponent> {
-        self.txs_with_update
-            .iter()
-            .flat_map(|tx_u| {
-                tx_u.new_protocol_components
-                    .values()
-                    .cloned()
-            })
-            .collect()
-    }
-}
-
-impl BlockScoped for BlockEntityChanges {
-    fn block(&self) -> tycho_common::models::blockchain::Block {
-        self.block.clone()
-    }
-}
 
 /// Storage changes grouped by transaction
 #[derive(Debug, PartialEq, Default, Clone, DeepSizeOf)]
@@ -623,55 +506,13 @@ impl BlockScoped for BlockChanges {
     }
 }
 
-impl From<BlockContractChanges> for BlockChanges {
-    fn from(value: BlockContractChanges) -> Self {
-        Self {
-            extractor: value.extractor,
-            chain: value.chain,
-            block: value.block,
-            finalized_block_height: value.finalized_block_height,
-            revert: value.revert,
-            new_tokens: value.new_tokens,
-            txs_with_update: value
-                .tx_updates
-                .into_iter()
-                .map(Into::into)
-                .collect(),
-            ..Default::default()
-        }
-    }
-}
-
-impl From<BlockEntityChanges> for BlockChanges {
-    fn from(value: BlockEntityChanges) -> Self {
-        Self {
-            extractor: value.extractor,
-            chain: value.chain,
-            block: value.block,
-            finalized_block_height: value.finalized_block_height,
-            revert: value.revert,
-            new_tokens: value.new_tokens,
-            txs_with_update: value
-                .txs_with_update
-                .into_iter()
-                .map(Into::into)
-                .collect(),
-            ..Default::default()
-        }
-    }
-}
-
 #[cfg(test)]
 pub mod fixtures {
-    use std::str::FromStr;
-
-    use chrono::DateTime;
-    use prost::Message;
     use tycho_common::models::{
-        blockchain::Transaction, contract::AccountDelta, protocol::ProtocolComponentStateDelta,
+        blockchain::{EntryPoint, RPCTracerParams, TracingParams},
+        contract::AccountDelta,
         ChangeType,
     };
-    use tycho_storage::postgres::db_fixtures::yesterday_midnight;
 
     use super::*;
 
@@ -719,16 +560,8 @@ pub mod fixtures {
             .collect()
     }
 
-    pub fn transaction01() -> Transaction {
-        Transaction::new(
-            Bytes::zero(32),
-            Bytes::zero(32),
-            Bytes::zero(20),
-            Some(Bytes::zero(20)),
-            10,
-        )
-    }
-
+    // PERF: duplicated in tycho_common::models::blockchain::fixtures — consider a `test-utils`
+    // feature flag to share test fixtures cross-crate.
     pub fn create_transaction(hash: &str, block: &str, index: u64) -> Transaction {
         Transaction::new(
             hash.parse().unwrap(),
@@ -739,310 +572,187 @@ pub mod fixtures {
         )
     }
 
-    pub fn create_full_transaction(
-        hash: &str,
-        block: &str,
-        from: &str,
-        to: &str,
-        index: u64,
-    ) -> Transaction {
-        Transaction::new(
-            hash.parse().unwrap(),
-            block.parse().unwrap(),
-            from.parse().unwrap(),
-            Some(to.parse().unwrap()),
-            index,
-        )
-    }
+    /// Returns a pre-built `TxWithChanges` for testing.
+    ///
+    /// Both indices share the same keys (component `"pool_0"`, token `0xaa..`, contract `0xbb..`)
+    /// but with different values, so "later wins" precedence can be verified across all fields:
+    ///
+    /// - Index 0: tx_index=1, component_balance=800, account_balance=500, slots {1=>100, 2=>200},
+    ///   state {"reserve"=>1000, "fee"=>50}, 1 entrypoint, ChangeType::Creation
+    /// - Index 1: tx_index=2, component_balance=1000, account_balance=700, slots {1=>300}
+    ///   (overlaps slot 1), state {"reserve"=>2000} (overlaps), 2 entrypoints (superset),
+    ///   ChangeType::Update
+    // PERF: duplicated from tycho_common::models::blockchain::fixtures::tx_with_changes.
+    // Consider adding a `test-utils` feature flag to share test fixtures cross-crate.
+    pub fn tx_with_changes(index: u8) -> TxWithChanges {
+        let token = Bytes::from(vec![0xaa; 20]);
+        let contract = Bytes::from(vec![0xbb; 20]);
+        let c_id = "pool_0".to_string();
 
-    fn create_protocol_component(tx_hash: Bytes) -> ProtocolComponent {
-        ProtocolComponent {
-            id: "d417ff54652c09bd9f31f216b1a2e5d1e28c1dce1ba840c40d16f2b4d09b5902".to_owned(),
-            protocol_system: "ambient".to_string(),
-            protocol_type_name: String::from("WeightedPool"),
-            chain: Chain::Ethereum,
-            tokens: vec![
-                Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
-                Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
-            ],
-            contract_addresses: vec![
-                Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
-                Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
-            ],
-            static_attributes: HashMap::from([
-                ("key1".to_string(), Bytes::from(b"value1".to_vec())),
-                ("key2".to_string(), Bytes::from(b"value2".to_vec())),
-            ]),
-            change: ChangeType::Creation,
-            creation_tx: tx_hash,
-            created_at: DateTime::from_timestamp(1000, 0)
-                .unwrap()
-                .naive_utc(),
-        }
-    }
-
-    pub fn block_state_changes() -> BlockContractChanges {
-        let tx = create_full_transaction(
-            "0000000000000000000000000000000000000000000000000000000011121314",
-            "0000000000000000000000000000000000000000000000000000000031323334",
-            "0x0000000000000000000000000000000041424344",
-            "0x0000000000000000000000000000000051525354",
-            2,
-        );
-        let tx_5 = create_full_transaction(
-            HASH_256_1,
-            "0000000000000000000000000000000000000000000000000000000031323334",
-            "0x0000000000000000000000000000000041424344",
-            "0x0000000000000000000000000000000051525354",
-            5,
-        );
-        let protocol_component = create_protocol_component(tx.hash.clone());
-        let account_addr = Bytes::from_str("0x0000000000000000000000000000000061626364").unwrap();
-        let weth_addr = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        BlockContractChanges::new(
-            "test".to_string(),
-            Chain::Ethereum,
-            Block::new(
-                1,
-                Chain::Ethereum,
-                Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000031323334").unwrap(),
-                Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000021222324").unwrap(),
-                DateTime::from_timestamp(1000, 0).unwrap().naive_utc(),
-            ),
-            0,
-            false,
-            vec![
-                AccountChangesWithTx {
-                    account_deltas: [(
-                        account_addr.clone(),
+        match index {
+            0 => {
+                let tx = create_transaction("0x01", "0x00", 1);
+                TxWithChanges {
+                    tx: tx.clone(),
+                    protocol_components: HashMap::from([(
+                        c_id.clone(),
+                        ProtocolComponent { id: c_id.clone(), ..Default::default() },
+                    )]),
+                    account_deltas: HashMap::from([(
+                        contract.clone(),
                         AccountDelta::new(
                             Chain::Ethereum,
-                            account_addr.clone(),
-                            fixtures::optional_slots([
-                                (2711790500, 2981278644),
-                                (3250766788, 3520254932),
+                            contract.clone(),
+                            HashMap::from([
+                                (
+                                    Bytes::from(1u64).lpad(32, 0),
+                                    Some(Bytes::from(100u64).lpad(32, 0)),
+                                ),
+                                (
+                                    Bytes::from(2u64).lpad(32, 0),
+                                    Some(Bytes::from(200u64).lpad(32, 0)),
+                                ),
                             ]),
-                            Some(Bytes::from(1903326068u64).lpad(32,0)),
-                            Some(vec![129, 130, 131, 132].into()),
-                            ChangeType::Update,
+                            None,
+                            Some(Bytes::from(vec![0; 4])),
+                            ChangeType::Creation,
                         ),
-                    )]
-                        .into_iter()
-                        .collect(),
-                    protocol_components: [(protocol_component.id.clone(), protocol_component)]
-                        .into_iter()
-                        .collect(),
-                    component_balances: [(
-                        "d417ff54652c09bd9f31f216b1a2e5d1e28c1dce1ba840c40d16f2b4d09b5902".to_string(),
-                        [(
-                            weth_addr.clone(),
+                    )]),
+                    state_updates: HashMap::from([(
+                        c_id.clone(),
+                        ProtocolComponentStateDelta::new(
+                            &c_id,
+                            HashMap::from([
+                                ("reserve".into(), Bytes::from(1000u64).lpad(32, 0)),
+                                ("fee".into(), Bytes::from(50u64).lpad(32, 0)),
+                            ]),
+                            HashSet::new(),
+                        ),
+                    )]),
+                    balance_changes: HashMap::from([(
+                        c_id.clone(),
+                        HashMap::from([(
+                            token.clone(),
                             ComponentBalance {
-                                token: weth_addr.clone(),
-                                balance: Bytes::from(50000000.encode_to_vec()),
-                                balance_float: 36522027799.0,
-                                modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000011121314").unwrap(),
-                                component_id: "d417ff54652c09bd9f31f216b1a2e5d1e28c1dce1ba840c40d16f2b4d09b5902".to_string(),
+                                token: token.clone(),
+                                balance: Bytes::from(800_u64).lpad(32, 0),
+                                balance_float: 800.0,
+                                component_id: c_id.clone(),
+                                modify_tx: tx.hash.clone(),
                             },
-                        )]
-                            .into_iter()
-                            .collect(),
-                    )]
-                        .into_iter()
-                        .collect(),
-                    account_balances: [(
-                        account_addr.clone(),
-                        [(
-                            weth_addr.clone(),
+                        )]),
+                    )]),
+                    account_balance_changes: HashMap::from([(
+                        contract.clone(),
+                        HashMap::from([(
+                            token.clone(),
                             AccountBalance {
-                                token: weth_addr.clone(),
-                                balance: Bytes::from(50000000.encode_to_vec()),
-                                modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000011121314").unwrap(),
-                                account: account_addr.clone(),
+                                token: token.clone(),
+                                balance: Bytes::from(500_u64).lpad(32, 0),
+                                modify_tx: tx.hash,
+                                account: contract,
                             },
-                        )]
-                        .into_iter()
-                        .collect(),
-                    )]
-                        .into_iter()
-                        .collect(),
-                    tx,
-                },
-                AccountChangesWithTx {
-                    account_deltas: [(
-                        account_addr.clone(),
+                        )]),
+                    )]),
+                    entrypoints: HashMap::from([(
+                        c_id.clone(),
+                        HashSet::from([EntryPoint::new(
+                            "ep_0".into(),
+                            Bytes::zero(20),
+                            "fn_a()".into(),
+                        )]),
+                    )]),
+                    entrypoint_params: HashMap::from([(
+                        "ep_0".into(),
+                        HashSet::from([(
+                            TracingParams::RPCTracer(RPCTracerParams::new(
+                                None,
+                                Bytes::from(vec![1]),
+                            )),
+                            c_id,
+                        )]),
+                    )]),
+                }
+            }
+            1 => {
+                let tx = create_transaction("0x02", "0x00", 2);
+                TxWithChanges {
+                    tx: tx.clone(),
+                    protocol_components: HashMap::from([(
+                        c_id.clone(),
+                        ProtocolComponent { id: c_id.clone(), ..Default::default() },
+                    )]),
+                    account_deltas: HashMap::from([(
+                        contract.clone(),
                         AccountDelta::new(
                             Chain::Ethereum,
-                            account_addr.clone(),
-                            fixtures::optional_slots([
-                                (2711790500, 3250766788),
-                                (2442302356, 2711790500),
-                            ]),
-                            Some(Bytes::from(4059231220u64).lpad(32,0)),
-                            Some(vec![1, 2, 3, 4].into()),
+                            contract.clone(),
+                            HashMap::from([(
+                                Bytes::from(1u64).lpad(32, 0),
+                                Some(Bytes::from(300u64).lpad(32, 0)),
+                            )]),
+                            None,
+                            None,
                             ChangeType::Update,
                         ),
-                    )]
-                        .into_iter()
-                        .collect(),
-                    protocol_components: HashMap::new(),
-                    component_balances: [(
-                        "d417ff54652c09bd9f31f216b1a2e5d1e28c1dce1ba840c40d16f2b4d09b5902".to_string(),
-                        [(
-                            weth_addr.clone(),
+                    )]),
+                    state_updates: HashMap::from([(
+                        c_id.clone(),
+                        ProtocolComponentStateDelta::new(
+                            &c_id,
+                            HashMap::from([(
+                                "reserve".into(),
+                                Bytes::from(2000u64).lpad(32, 0),
+                            )]),
+                            HashSet::new(),
+                        ),
+                    )]),
+                    balance_changes: HashMap::from([(
+                        c_id.clone(),
+                        HashMap::from([(
+                            token.clone(),
                             ComponentBalance {
-                                token: weth_addr.clone(),
-                                balance: Bytes::from(10.encode_to_vec()),
-                                balance_float: 2058.0,
-                                modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000001").unwrap(),
-                                component_id: "d417ff54652c09bd9f31f216b1a2e5d1e28c1dce1ba840c40d16f2b4d09b5902".to_string(),
+                                token: token.clone(),
+                                balance: Bytes::from(1000_u64).lpad(32, 0),
+                                balance_float: 1000.0,
+                                component_id: c_id.clone(),
+                                modify_tx: tx.hash.clone(),
                             },
-                        )]
-                            .into_iter()
-                            .collect(),
-                    )]
-                        .into_iter()
-                        .collect(),
-                    account_balances: [(
-                        account_addr.clone(),
-                        [(
-                            weth_addr.clone(),
+                        )]),
+                    )]),
+                    account_balance_changes: HashMap::from([(
+                        contract.clone(),
+                        HashMap::from([(
+                            token.clone(),
                             AccountBalance {
-                                token: weth_addr,
-                                balance: Bytes::from(10.encode_to_vec()),
-                                modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000001").unwrap(),
-                                account: account_addr,
+                                token: token.clone(),
+                                balance: Bytes::from(700_u64).lpad(32, 0),
+                                modify_tx: tx.hash,
+                                account: contract,
                             },
-                        )]
-                        .into_iter()
-                        .collect(),
-                    )]
-                        .into_iter()
-                        .collect(),
-                    tx: tx_5,
-                },
-            ],
-            )
-    }
-
-    fn create_state(id: String) -> ProtocolComponentStateDelta {
-        let attributes1: HashMap<String, Bytes> = vec![
-            ("reserve1".to_owned(), Bytes::from(1000u64).lpad(32, 0)),
-            ("reserve2".to_owned(), Bytes::from(500u64).lpad(32, 0)),
-            ("static_attribute".to_owned(), Bytes::from(1u64).lpad(32, 0)),
-        ]
-        .into_iter()
-        .collect();
-        ProtocolComponentStateDelta {
-            component_id: id,
-            updated_attributes: attributes1,
-            deleted_attributes: HashSet::new(),
+                        )]),
+                    )]),
+                    entrypoints: HashMap::from([(
+                        c_id.clone(),
+                        HashSet::from([
+                            EntryPoint::new("ep_0".into(), Bytes::zero(20), "fn_a()".into()),
+                            EntryPoint::new("ep_1".into(), Bytes::zero(20), "fn_b()".into()),
+                        ]),
+                    )]),
+                    entrypoint_params: HashMap::from([(
+                        "ep_1".into(),
+                        HashSet::from([(
+                            TracingParams::RPCTracer(RPCTracerParams::new(
+                                None,
+                                Bytes::from(vec![2]),
+                            )),
+                            c_id,
+                        )]),
+                    )]),
+                }
+            }
+            _ => panic!("tx_with_changes: index must be 0 or 1, got {index}"),
         }
-    }
-
-    fn protocol_state_with_tx() -> ProtocolChangesWithTx {
-        let state_1 = create_state("State1".to_owned());
-        let state_2 = create_state("State2".to_owned());
-        let states: HashMap<String, ProtocolComponentStateDelta> =
-            vec![(state_1.component_id.clone(), state_1), (state_2.component_id.clone(), state_2)]
-                .into_iter()
-                .collect();
-        ProtocolChangesWithTx { protocol_states: states, tx: transaction01(), ..Default::default() }
-    }
-
-    pub fn block_entity_changes() -> BlockEntityChanges {
-        let tx = create_full_transaction(
-            "0x0000000000000000000000000000000000000000000000000000000011121314",
-            "0000000000000000000000000000000000000000000000000000000000000000",
-            "0x0000000000000000000000000000000041424344",
-            "0x0000000000000000000000000000000051525354",
-            11,
-        );
-        let attr: HashMap<String, Bytes> = vec![
-            ("reserve".to_owned(), Bytes::from(600u64).lpad(32, 0)),
-            ("new".to_owned(), Bytes::zero(32)),
-        ]
-        .into_iter()
-        .collect();
-        let state_updates: HashMap<String, ProtocolComponentStateDelta> = vec![(
-            "State1".to_owned(),
-            ProtocolComponentStateDelta {
-                component_id: "State1".to_owned(),
-                updated_attributes: attr,
-                deleted_attributes: HashSet::new(),
-            },
-        )]
-        .into_iter()
-        .collect();
-        let static_attr: HashMap<String, Bytes> =
-            vec![("key".to_owned(), Bytes::from(600u64).lpad(32, 0))]
-                .into_iter()
-                .collect();
-        let new_protocol_components: HashMap<String, ProtocolComponent> = vec![(
-            "Pool".to_owned(),
-            ProtocolComponent {
-                id: "Pool".to_owned(),
-                protocol_system: "ambient".to_string(),
-                protocol_type_name: "WeightedPool".to_owned(),
-                chain: Chain::Ethereum,
-                tokens: vec![
-                    Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
-                    Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
-                ],
-                static_attributes: static_attr,
-                contract_addresses: vec![Bytes::from_str(
-                    "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-                )
-                .unwrap()],
-                change: ChangeType::Creation,
-                creation_tx: tx.hash.clone(),
-                created_at: yesterday_midnight(),
-            },
-        )]
-        .into_iter()
-        .collect();
-        let new_balances = HashMap::from([(
-            "Balance1".to_string(),
-            [(
-                Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
-                ComponentBalance {
-                    token: Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
-                    balance: Bytes::from(1_i32.to_be_bytes()),
-                    modify_tx: tx.hash.clone(),
-                    component_id: "Balance1".to_string(),
-                    balance_float: 1.0,
-                },
-            )]
-            .into_iter()
-            .collect(),
-        )]);
-        BlockEntityChanges::new(
-            "test".to_string(),
-            Chain::Ethereum,
-            Block::new(
-                1,
-                Chain::Ethereum,
-                Bytes::from_str(
-                    "0x0000000000000000000000000000000000000000000000000000000000000000",
-                )
-                .unwrap(),
-                Bytes::from_str(
-                    "0x0000000000000000000000000000000000000000000000000000000021222324",
-                )
-                .unwrap(),
-                yesterday_midnight(),
-            ),
-            420,
-            false,
-            vec![
-                protocol_state_with_tx(),
-                ProtocolChangesWithTx {
-                    protocol_states: state_updates,
-                    tx,
-                    new_protocol_components: new_protocol_components.clone(),
-                    balance_changes: new_balances,
-                },
-            ],
-        )
     }
 }
 
@@ -1050,40 +760,50 @@ pub mod fixtures {
 mod test {
     use std::str::FromStr;
 
-    use chrono::NaiveDateTime;
-    use fixtures::create_transaction;
-    use prost::Message;
+    use fixtures::{create_transaction, HASH_256_0};
     use rstest::rstest;
-    use tycho_common::models::token::Token;
 
     use super::*;
 
-    #[test]
-    fn test_block_contract_changes_state_filter() {
-        let block = fixtures::block_state_changes();
+    fn default_tx() -> Transaction {
+        create_transaction(HASH_256_0, HASH_256_0, 0)
+    }
 
-        let account1 = Bytes::from_str("0000000000000000000000000000000061626364").unwrap();
-        let slot1 = Bytes::from(2711790500_u64).lpad(32, 0);
-        let slot2 = Bytes::from(3250766788_u64).lpad(32, 0);
-        let account_missing = Bytes::from_str("000000000000000000000000000000000badbabe").unwrap();
-        let slot_missing = Bytes::from(12345678_u64).lpad(32, 0);
+    fn block_changes_with(txs: Vec<TxWithChanges>) -> BlockChanges {
+        BlockChanges::new("test".into(), Chain::Ethereum, Block::default(), 0, false, txs, vec![])
+    }
+
+    fn block_changes_from_fixtures() -> BlockChanges {
+        block_changes_with(vec![fixtures::tx_with_changes(0), fixtures::tx_with_changes(1)])
+    }
+
+    #[test]
+    fn test_block_changes_account_state_filter() {
+        let block_changes = block_changes_from_fixtures();
+
+        let contract = Bytes::from(vec![0xbb; 20]);
+        let slot1 = Bytes::from(1u64).lpad(32, 0);
+        let slot2 = Bytes::from(2u64).lpad(32, 0);
+        let missing_account = Bytes::from(vec![0xff; 20]);
+        let missing_slot = Bytes::from(99u64).lpad(32, 0);
 
         let keys = vec![
-            (&account1, &slot1),
-            (&account1, &slot2),
-            (&account_missing, &slot1),
-            (&account1, &slot_missing),
+            (&contract, &slot1),
+            (&contract, &slot2),
+            (&missing_account, &slot1),
+            (&contract, &missing_slot),
         ];
 
         #[allow(clippy::mutable_key_type)]
-        // Clippy thinks that hashmaps with Bytes are a mutable type.
-        let filtered = BlockChanges::from(block).get_filtered_account_state_update(keys);
+        let filtered = block_changes.get_filtered_account_state_update(keys);
 
         assert_eq!(
             filtered,
             HashMap::from([
-                ((account1.clone(), slot1), Bytes::from(3250766788_u64).lpad(32, 0)),
-                ((account1, slot2), Bytes::from(3520254932_u64).lpad(32, 0))
+                // slot1 in both txs: tx1 value (300) wins over tx0 value (100)
+                ((contract.clone(), slot1), Bytes::from(300u64).lpad(32, 0)),
+                // slot2 only in tx0: value (200) returned
+                ((contract, slot2), Bytes::from(200u64).lpad(32, 0)),
             ])
         );
     }
@@ -1092,25 +812,18 @@ mod test {
     #[case::commit_before_finalized(None, Ok(None))]
     #[case::commit_before_finalized(Some(4), Ok(Some(4)))]
     #[case::commit_equals_finalized(Some(5), Ok(Some(5)))]
-    #[case::commit_exceeds_finalized(Some(6), Err(ExtractionError::ReorgBufferError("Some Error".to_string())))]
+    #[case::commit_exceeds_finalized(
+        Some(6),
+        Err(ExtractionError::ReorgBufferError(String::new()))
+    )]
     fn into_aggregated_respects_commit_invariant(
         #[case] committed_height: Option<u64>,
         #[case] expected: Result<Option<u64>, ExtractionError>,
     ) {
-        use chrono::NaiveDateTime;
-
-        let block = Block::new(
-            1,
-            Chain::Ethereum,
-            Bytes::zero(32),
-            Bytes::zero(32),
-            NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
-        );
-
         let changes = BlockChanges::new(
             "test".to_string(),
             Chain::Ethereum,
-            block,
+            Block::default(),
             5,
             false,
             Vec::new(),
@@ -1132,164 +845,99 @@ mod test {
     }
 
     #[test]
-    fn test_block_contract_changes_balance_filter() {
-        let block = fixtures::block_state_changes();
+    fn test_block_changes_component_balance_filter() {
+        let block_changes = block_changes_from_fixtures();
 
-        let c_id_key =
-            "d417ff54652c09bd9f31f216b1a2e5d1e28c1dce1ba840c40d16f2b4d09b5902".to_string();
-        let token_key = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let missing_token = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
+        let c_id = "pool_0".to_string();
+        let token = Bytes::from(vec![0xaa; 20]);
+        let missing_token = Bytes::zero(20);
         let missing_component = "missing".to_string();
 
-        let keys = vec![
-            (&c_id_key, &token_key),
-            (&c_id_key, &missing_token),
-            (&missing_component, &token_key),
-        ];
+        let keys = vec![(&c_id, &token), (&c_id, &missing_token), (&missing_component, &token)];
 
         #[allow(clippy::mutable_key_type)]
-        // Clippy thinks that hashmaps with Bytes are a mutable type.
-        let filtered = BlockChanges::from(block).get_filtered_component_balance_update(keys);
+        let filtered = block_changes.get_filtered_component_balance_update(keys);
 
         assert_eq!(
             filtered,
             HashMap::from([(
-                (c_id_key.clone(), token_key.clone()),
-                tycho_common::models::protocol::ComponentBalance {
-                    token: Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
-                    balance: Bytes::from(10.encode_to_vec()),
-                    balance_float: 2058.0,
-                    modify_tx: Bytes::from(
-                        "0x0000000000000000000000000000000000000000000000000000000000000001"
-                    ),
-                    component_id: c_id_key.clone()
+                (c_id.clone(), token.clone()),
+                // token in both txs: tx1 balance (1000) wins over tx0 balance (800)
+                ComponentBalance {
+                    token: token.clone(),
+                    balance: Bytes::from(1000_u64).lpad(32, 0),
+                    balance_float: 1000.0,
+                    modify_tx: "0x02".parse().unwrap(),
+                    component_id: c_id.clone(),
                 }
-            )])
-        )
-    }
-
-    #[test]
-    fn test_block_contract_changes_account_balance_filter() {
-        let block = fixtures::block_state_changes();
-
-        let account = Bytes::from_str("0x0000000000000000000000000000000061626364").unwrap();
-        let token_key = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let missing_token = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
-        let missing_account =
-            Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap();
-
-        let keys = vec![
-            (&account, &token_key),
-            (&account, &missing_token),
-            (&missing_account, &token_key),
-        ];
-
-        #[allow(clippy::mutable_key_type)]
-        // Clippy thinks that hashmaps with Bytes are a mutable type.
-        let filtered = BlockChanges::from(block).get_filtered_account_balance_update(keys);
-
-        assert_eq!(
-            filtered,
-            HashMap::from([(
-                (account.clone(), token_key.clone()),
-                AccountBalance {
-                    token: Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
-                    balance: Bytes::from(10.encode_to_vec()),
-                    modify_tx: Bytes::from(
-                        "0x0000000000000000000000000000000000000000000000000000000000000001"
-                    ),
-                    account: account.clone()
-                }
-            )])
-        )
-    }
-
-    #[test]
-    fn test_block_entity_changes_state_filter() {
-        let block = fixtures::block_entity_changes();
-
-        let state1_key = "State1".to_string();
-        let reserve_value = "reserve".to_string();
-        let missing = "missing".to_string();
-
-        let keys = vec![
-            (&state1_key, &reserve_value),
-            (&missing, &reserve_value),
-            (&state1_key, &missing),
-        ];
-
-        let filtered = BlockChanges::from(block).get_filtered_protocol_state_update(keys);
-        assert_eq!(
-            filtered,
-            HashMap::from([(
-                (state1_key.clone(), reserve_value.clone()),
-                Bytes::from(600u64).lpad(32, 0),
             )])
         );
     }
 
     #[test]
-    fn test_block_entity_changes_balance_filter() {
-        let block = fixtures::block_entity_changes();
+    fn test_block_changes_account_balance_filter() {
+        let block_changes = block_changes_from_fixtures();
 
-        let c_id_key = "Balance1".to_string();
-        let token_key = Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap();
-        let missing_token = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
-        let missing_component = "missing".to_string();
+        let contract = Bytes::from(vec![0xbb; 20]);
+        let token = Bytes::from(vec![0xaa; 20]);
+        let missing_token = Bytes::zero(20);
+        let missing_account = Bytes::from(vec![0xff; 20]);
 
-        let keys = vec![
-            (&c_id_key, &token_key),
-            (&c_id_key, &missing_token),
-            (&missing_component, &token_key),
-        ];
+        let keys =
+            vec![(&contract, &token), (&contract, &missing_token), (&missing_account, &token)];
 
         #[allow(clippy::mutable_key_type)]
-        // Clippy thinks that hashmaps with Bytes are a mutable type.
-        let filtered = BlockChanges::from(block).get_filtered_component_balance_update(keys);
+        let filtered = block_changes.get_filtered_account_balance_update(keys);
 
         assert_eq!(
             filtered,
             HashMap::from([(
-                (c_id_key.clone(), token_key.clone()),
-                tycho_common::models::protocol::ComponentBalance {
-                    token: Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
-                    balance: Bytes::from(1_i32.to_be_bytes()),
-                    balance_float: 1.0,
-                    modify_tx: Bytes::from(
-                        "0x0000000000000000000000000000000000000000000000000000000011121314"
-                    ),
-                    component_id: c_id_key.clone()
+                (contract.clone(), token.clone()),
+                // token in both txs: tx1 balance (700) wins over tx0 balance (500)
+                AccountBalance {
+                    token: token.clone(),
+                    balance: Bytes::from(700_u64).lpad(32, 0),
+                    modify_tx: "0x02".parse().unwrap(),
+                    account: contract.clone(),
                 }
             )])
-        )
+        );
+    }
+
+    #[test]
+    fn test_block_changes_protocol_state_filter() {
+        let block_changes = block_changes_from_fixtures();
+
+        let c_id = "pool_0".to_string();
+        let attr_reserve = "reserve".to_string();
+        let attr_fee = "fee".to_string();
+        let missing = "missing".to_string();
+
+        let keys = vec![
+            (&c_id, &attr_reserve),
+            (&c_id, &attr_fee),
+            (&missing, &attr_reserve),
+            (&c_id, &missing),
+        ];
+
+        let filtered = block_changes.get_filtered_protocol_state_update(keys);
+        assert_eq!(
+            filtered,
+            HashMap::from([
+                // "reserve" in both txs: tx1 value (2000) wins over tx0 value (1000)
+                ((c_id.clone(), attr_reserve), Bytes::from(2000u64).lpad(32, 0)),
+                // "fee" only in tx0: value (50) returned
+                ((c_id, attr_fee), Bytes::from(50u64).lpad(32, 0)),
+            ])
+        );
     }
 
     #[test]
     fn test_insert_state_attribute_update_new_transaction() {
-        use chrono::NaiveDateTime;
-
-        let mut block_changes = BlockChanges::new(
-            "test_extractor".to_string(),
-            Chain::Ethereum,
-            Block::new(
-                1,
-                Chain::Ethereum,
-                Bytes::zero(32),
-                Bytes::zero(32),
-                NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
-            ),
-            0,
-            false,
-            vec![],
-            vec![],
-        );
+        let mut block_changes = block_changes_with(vec![]);
 
         let component_id = "test_component".to_string();
-        let tx = create_transaction(
-            "0x1111111111111111111111111111111111111111111111111111111111111111",
-            "0x0000000000000000000000000000000000000000000000000000000000000000",
-            0,
-        );
+        let tx = default_tx();
         let attr = "reserve0".to_string();
         let val = Bytes::from(1000u64).lpad(32, 0);
 
@@ -1309,32 +957,11 @@ mod test {
 
     #[test]
     fn test_insert_state_attribute_update_existing_transaction_no_component() {
-        use chrono::NaiveDateTime;
-        use tycho_common::models::blockchain::TxWithChanges;
-
-        let tx = create_transaction(
-            "0x1111111111111111111111111111111111111111111111111111111111111111",
-            "0x0000000000000000000000000000000000000000000000000000000000000000",
-            0,
-        );
+        let tx = default_tx();
         let existing_tx_with_changes =
             TxWithChanges { tx: tx.clone(), state_updates: HashMap::new(), ..Default::default() };
 
-        let mut block_changes = BlockChanges::new(
-            "test_extractor".to_string(),
-            Chain::Ethereum,
-            Block::new(
-                1,
-                Chain::Ethereum,
-                Bytes::zero(32),
-                Bytes::zero(32),
-                NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
-            ),
-            0,
-            false,
-            vec![existing_tx_with_changes],
-            vec![],
-        );
+        let mut block_changes = block_changes_with(vec![existing_tx_with_changes]);
 
         let component_id = "test_component".to_string();
         let attr = "reserve0".to_string();
@@ -1356,15 +983,8 @@ mod test {
 
     #[test]
     fn test_insert_state_attribute_update_existing_transaction_with_component() {
-        use chrono::NaiveDateTime;
-        use tycho_common::models::blockchain::TxWithChanges;
-
         let component_id = "test_component".to_string();
-        let tx = create_transaction(
-            "0x1111111111111111111111111111111111111111111111111111111111111111",
-            "0x0000000000000000000000000000000000000000000000000000000000000000",
-            0,
-        );
+        let tx = default_tx();
 
         // Create existing delta for the component
         let existing_delta = ProtocolComponentStateDelta::new(
@@ -1379,21 +999,7 @@ mod test {
             ..Default::default()
         };
 
-        let mut block_changes = BlockChanges::new(
-            "test_extractor".to_string(),
-            Chain::Ethereum,
-            Block::new(
-                1,
-                Chain::Ethereum,
-                Bytes::zero(32),
-                Bytes::zero(32),
-                NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
-            ),
-            0,
-            false,
-            vec![existing_tx_with_changes],
-            vec![],
-        );
+        let mut block_changes = block_changes_with(vec![existing_tx_with_changes]);
 
         let attr = "new_attr".to_string();
         let val = Bytes::from(1000u64).lpad(32, 0);
@@ -1419,30 +1025,10 @@ mod test {
 
     #[test]
     fn test_insert_state_attribute_deletion_new_transaction() {
-        use chrono::NaiveDateTime;
-
-        let mut block_changes = BlockChanges::new(
-            "test_extractor".to_string(),
-            Chain::Ethereum,
-            Block::new(
-                1,
-                Chain::Ethereum,
-                Bytes::zero(32),
-                Bytes::zero(32),
-                NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
-            ),
-            0,
-            false,
-            vec![],
-            vec![],
-        );
+        let mut block_changes = block_changes_with(vec![]);
 
         let component_id = "test_component".to_string();
-        let tx = create_transaction(
-            "0x2222222222222222222222222222222222222222222222222222222222222222",
-            "0x0000000000000000000000000000000000000000000000000000000000000000",
-            0,
-        );
+        let tx = default_tx();
         let attr = "deprecated_attr".to_string();
 
         insert_state_attribute_deletion(
@@ -1462,32 +1048,11 @@ mod test {
 
     #[test]
     fn test_insert_state_attribute_deletion_existing_transaction_no_component() {
-        use chrono::NaiveDateTime;
-        use tycho_common::models::blockchain::TxWithChanges;
-
-        let tx = create_transaction(
-            "0x2222222222222222222222222222222222222222222222222222222222222222",
-            "0x0000000000000000000000000000000000000000000000000000000000000000",
-            0,
-        );
+        let tx = default_tx();
         let existing_tx_with_changes =
             TxWithChanges { tx: tx.clone(), state_updates: HashMap::new(), ..Default::default() };
 
-        let mut block_changes = BlockChanges::new(
-            "test_extractor".to_string(),
-            Chain::Ethereum,
-            Block::new(
-                1,
-                Chain::Ethereum,
-                Bytes::zero(32),
-                Bytes::zero(32),
-                NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
-            ),
-            0,
-            false,
-            vec![existing_tx_with_changes],
-            vec![],
-        );
+        let mut block_changes = block_changes_with(vec![existing_tx_with_changes]);
 
         let component_id = "test_component".to_string();
         let attr = "deprecated_attr".to_string();
@@ -1509,15 +1074,8 @@ mod test {
 
     #[test]
     fn test_insert_state_attribute_deletion_existing_transaction_with_component() {
-        use chrono::NaiveDateTime;
-        use tycho_common::models::blockchain::TxWithChanges;
-
         let component_id = "test_component".to_string();
-        let tx = create_transaction(
-            "0x2222222222222222222222222222222222222222222222222222222222222222",
-            "0x0000000000000000000000000000000000000000000000000000000000000000",
-            0,
-        );
+        let tx = default_tx();
 
         // Create existing delta for the component
         let existing_delta = ProtocolComponentStateDelta::new(
@@ -1532,21 +1090,7 @@ mod test {
             ..Default::default()
         };
 
-        let mut block_changes = BlockChanges::new(
-            "test_extractor".to_string(),
-            Chain::Ethereum,
-            Block::new(
-                1,
-                Chain::Ethereum,
-                Bytes::zero(32),
-                Bytes::zero(32),
-                NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
-            ),
-            0,
-            false,
-            vec![existing_tx_with_changes],
-            vec![],
-        );
+        let mut block_changes = block_changes_with(vec![existing_tx_with_changes]);
 
         let attr = "new_deleted_attr".to_string();
 
@@ -1577,13 +1121,7 @@ mod test {
         let mut block = BlockChanges {
             extractor: "test_extractor".to_string(),
             chain: Chain::Ethereum,
-            block: Block::new(
-                100,
-                Chain::Ethereum,
-                Bytes::zero(32),
-                Bytes::zero(32),
-                NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
-            ),
+            block: Block { number: 100, ..Block::default() },
             ..Default::default()
         };
 
@@ -1827,21 +1365,13 @@ mod test {
 
     #[test]
     fn test_normalize_block_hash() {
-        use tycho_common::models::blockchain::Block;
-
         let block_hash =
             Bytes::from_str("0xabababababababababababababababababababababababababababababababab")
                 .unwrap();
         let wrong_hash = Bytes::zero(32);
 
         let mut block_changes = BlockChanges {
-            block: Block::new(
-                42,
-                Chain::Ethereum,
-                block_hash.clone(),
-                Bytes::zero(32),
-                NaiveDateTime::from_timestamp_opt(2000, 0).unwrap(),
-            ),
+            block: Block { hash: block_hash.clone(), ..Block::default() },
             ..Default::default()
         };
         for i in 0..3 {
