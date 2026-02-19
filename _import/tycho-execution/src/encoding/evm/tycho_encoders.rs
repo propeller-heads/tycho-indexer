@@ -81,9 +81,9 @@ impl TychoRouterEncoder {
         })
     }
 
-    fn encode_solution(&self, solution: &mut Solution) -> Result<EncodedSolution, EncodingError> {
+    fn encode_solution(&self, solution: &Solution) -> Result<EncodedSolution, EncodingError> {
         self.validate_solution(solution)?;
-        self.add_missing_eth_wrapping_unwrapping_swaps(solution, &self.chain);
+        let solution = self.add_missing_eth_wrapping_unwrapping_swaps(solution, &self.chain);
 
         let protocols: HashSet<String> = solution
             .swaps
@@ -102,17 +102,17 @@ impl TychoRouterEncoder {
                     .all(|swap| swap.get_split() == 0.0))
         {
             self.single_swap_strategy
-                .encode_strategy(solution)?
+                .encode_strategy(&solution)?
         } else if solution
             .swaps
             .iter()
             .all(|swap| swap.get_split() == 0.0)
         {
             self.sequential_swap_strategy
-                .encode_strategy(solution)?
+                .encode_strategy(&solution)?
         } else {
             self.split_swap_strategy
-                .encode_strategy(solution)?
+                .encode_strategy(&solution)?
         };
 
         if let Some(permit2) = &self.permit2 {
@@ -127,7 +127,11 @@ impl TychoRouterEncoder {
         Ok(encoded_solution)
     }
 
-    fn add_missing_eth_wrapping_unwrapping_swaps(&self, solution: &mut Solution, chain: &Chain) {
+    fn add_missing_eth_wrapping_unwrapping_swaps(
+        &self,
+        solution: &Solution,
+        chain: &Chain,
+    ) -> Solution {
         let eth_address = &chain.native_token().address;
         let weth_address = &chain.wrapped_native_token().address;
 
@@ -177,7 +181,7 @@ impl TychoRouterEncoder {
             }
         }
 
-        solution.swaps = solution_with_added_wraps_unwraps;
+        Solution { swaps: solution_with_added_wraps_unwraps, ..solution.clone() }
     }
 }
 
@@ -600,7 +604,7 @@ mod tests {
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
             let mut swap_usdc_eth = swap_usdc_eth_univ4();
             swap_usdc_eth = swap_usdc_eth.split(0.5); // Set split to 50%
-            let mut solution = Solution {
+            let solution = Solution {
                 exact_out: false,
                 token_in: usdc(),
                 amount_in: BigUint::from_str("1000_000000").unwrap(),
@@ -611,7 +615,7 @@ mod tests {
                 ..Default::default()
             };
 
-            let encoded_solution_res = encoder.encode_solution(&mut solution);
+            let encoded_solution_res = encoder.encode_solution(&solution);
             assert!(encoded_solution_res.is_ok());
 
             let encoded_solution = encoded_solution_res.unwrap();
@@ -644,7 +648,7 @@ mod tests {
                 usdc().clone(),
             );
 
-            let mut solution = Solution {
+            let solution = Solution {
                 exact_out: false,
                 token_in: dai(),
                 amount_in: BigUint::from_str("1000_000000").unwrap(),
@@ -655,7 +659,8 @@ mod tests {
                 ..Default::default()
             };
 
-            encoder.add_missing_eth_wrapping_unwrapping_swaps(&mut solution, &encoder.chain);
+            let solution =
+                encoder.add_missing_eth_wrapping_unwrapping_swaps(&solution, &encoder.chain);
             assert_eq!(solution.swaps.len(), 4);
             assert_eq!(solution.swaps[2].token_in(), &eth());
             assert_eq!(solution.swaps[2].token_out(), &weth());
@@ -675,7 +680,7 @@ mod tests {
                 dai().clone(),
             );
 
-            let mut solution = Solution {
+            let solution = Solution {
                 exact_out: false,
                 token_in: eth(),
                 amount_in: BigUint::from_str("1000_000000").unwrap(),
@@ -686,7 +691,8 @@ mod tests {
                 ..Default::default()
             };
 
-            encoder.add_missing_eth_wrapping_unwrapping_swaps(&mut solution, &encoder.chain);
+            let solution =
+                encoder.add_missing_eth_wrapping_unwrapping_swaps(&solution, &encoder.chain);
             assert_eq!(solution.swaps.len(), 2);
             assert_eq!(solution.swaps[0].token_in(), &eth());
             assert_eq!(solution.swaps[0].token_out(), &weth());
@@ -695,7 +701,7 @@ mod tests {
         #[test]
         fn test_add_missing_wrapped_eth_swap_in_the_end() {
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let mut solution = Solution {
+            let solution = Solution {
                 exact_out: false,
                 token_in: usdc(),
                 amount_in: BigUint::from_str("1000_000000").unwrap(),
@@ -706,7 +712,8 @@ mod tests {
                 ..Default::default()
             };
 
-            encoder.add_missing_eth_wrapping_unwrapping_swaps(&mut solution, &encoder.chain);
+            let solution =
+                encoder.add_missing_eth_wrapping_unwrapping_swaps(&solution, &encoder.chain);
             assert_eq!(solution.swaps.len(), 2);
             assert_eq!(
                 solution
