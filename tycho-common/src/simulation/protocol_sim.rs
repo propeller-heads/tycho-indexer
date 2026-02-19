@@ -415,10 +415,13 @@ where
             .iter()
             .map(|(t0, t1)| {
                 let amount = BigUint::from(10u32).pow(t0.decimals);
-                let params = QuoteParams::fixed_in(&t0.address, &t1.address, amount);
-                self.fee(params)
-                    .map(|f| f.fee())
-                    .unwrap_or(f64::MAX)
+                if let Ok(params) = QuoteParams::fixed_in(&t0.address, &t1.address, amount) {
+                    self.fee(params)
+                        .map(|f| f.fee())
+                        .unwrap_or(f64::MAX)
+                } else {
+                    f64::MAX
+                }
             })
             .reduce(f64::min)
             .unwrap_or(f64::MAX)
@@ -437,7 +440,7 @@ where
     ) -> Result<GetAmountOutResult, SimulationError> {
         #[allow(deprecated)]
         self.quote(
-            QuoteParams::fixed_in(&token_in.address, &token_out.address, amount_in)
+            QuoteParams::fixed_in(&token_in.address, &token_out.address, amount_in)?
                 .with_new_state(),
         )
         .map(|r| {
@@ -457,7 +460,7 @@ where
         buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
         self.swap_limits(LimitsParams::new(&sell_token, &buy_token))
-            .map(|r| (r.amount_in().upper().clone(), r.amount_out().upper().clone()))
+            .map(|r| (r.range_in().upper().clone(), r.range_out().upper().clone()))
     }
 
     fn delta_transition(
@@ -500,7 +503,18 @@ where
                 r.amount_in().clone(),
                 r.amount_out().clone(),
                 r.new_state().unwrap().to_protocol_sim(),
-                r.price_points().clone(),
+                r.price_points().as_ref().map(|points| {
+                    points
+                        .iter()
+                        .map(|p| {
+                            PricePoint::new(
+                                p.amount_in().clone(),
+                                p.amount_out().clone(),
+                                p.price(),
+                            )
+                        })
+                        .collect()
+                }),
             )
         })
     }

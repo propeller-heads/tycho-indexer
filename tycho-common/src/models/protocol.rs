@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     models::{
-        token::Token, Address, AttrStoreKey, Balance, Chain, ChangeType,
-        ComponentId, MergeError, StoreVal, TxHash,
+        token::Token, Address, AttrStoreKey, Balance, Chain, ChangeType, ComponentId, MergeError,
+        StoreVal, TxHash,
     },
     Bytes,
 };

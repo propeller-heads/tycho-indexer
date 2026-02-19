@@ -86,12 +86,12 @@ params_with_context! {
 /// Parameters for requesting a swap quote from a pool.
 ///
 /// Contains the tokens to swap between, the input amount, and whether the
-/// simulation should return a modified the state to reflect the swap execution.
+/// simulation should return a modified state to reflect the swap execution.
 pub struct QuoteParams<'a>{
         token_in: &'a TokenAddress,
         token_out: &'a TokenAddress,
         amount: QuoteAmount,
-        modify_state: bool,
+        return_new_state: bool,
     }
 }
 
@@ -112,14 +112,20 @@ impl<'a> QuoteParams<'a> {
         token_in: &'a TokenAddress,
         token_out: &'a TokenAddress,
         amount: BigUint,
-    ) -> Self {
-        Self {
+    ) -> SimulationResult<Self> {
+        if token_out == token_in {
+            return Err(SimulationError::InvalidInput(
+                "Quote tokens have to differ!".to_string(),
+                None,
+            ))
+        }
+        Ok(Self {
             context: Context::default(),
             token_in,
             token_out,
             amount: QuoteAmount::FixedIn(amount),
-            modify_state: false,
-        }
+            return_new_state: false,
+        })
     }
 
     /// Creates new fixed output parameters with default settings (no state modification).
@@ -132,14 +138,21 @@ impl<'a> QuoteParams<'a> {
         token_in: &'a TokenAddress,
         token_out: &'a TokenAddress,
         amount: BigUint,
-    ) -> Self {
-        Self {
+    ) -> SimulationResult<Self> {
+        if token_out == token_in {
+            return Err(SimulationError::InvalidInput(
+                "Quote tokens have to differ!".to_string(),
+                None,
+            ))
+        }
+
+        Ok(Self {
             context: Context::default(),
             token_in,
             token_out,
             amount: QuoteAmount::FixedOut(amount),
-            modify_state: false,
-        }
+            return_new_state: false,
+        })
     }
 
     pub fn amount(&self) -> &QuoteAmount {
@@ -151,7 +164,7 @@ impl<'a> QuoteParams<'a> {
     /// When enabled, the quote simulation will return an updated state
     /// as if the swap was actually executed.
     pub fn with_new_state(mut self) -> Self {
-        self.modify_state = true;
+        self.return_new_state = true;
         self
     }
 
@@ -166,8 +179,8 @@ impl<'a> QuoteParams<'a> {
     }
 
     /// Returns whether the simulation should return the post-swap state.
-    pub fn modify_state(&self) -> bool {
-        self.modify_state
+    pub fn should_return_new_state(&self) -> bool {
+        self.return_new_state
     }
 }
 
@@ -290,7 +303,7 @@ impl Quote {
     ///
     /// # Arguments
     /// * `amount_out` - The amount of output tokens that would be received
-    /// * `gas` - The estimated gas cost for executing this swap
+    /// * `gas` - The estimated gas cost for executing this swap, excluding token transfers cost
     /// * `new_state` - The new pool state after the swap (if state modification was requested)
     pub fn new(amount_out: BigUint, gas: BigUint, new_state: Option<Arc<dyn SwapQuoter>>) -> Self {
         Self { amount_out, gas, new_state }
@@ -301,7 +314,7 @@ impl Quote {
         &self.amount_out
     }
 
-    /// Returns the estimated gas cost.
+    /// Returns the estimated swap gas cost excluding including token transfer cost.
     pub fn gas(&self) -> &BigUint {
         &self.gas
     }
@@ -331,7 +344,10 @@ impl Range {
     /// Returns `SimulationError::InvalidInput` if lower > upper.
     pub fn new(lower: BigUint, upper: BigUint) -> SimulationResult<Self> {
         if lower > upper {
-            return Err(SimulationError::InvalidInput("lower > upper".to_string(), None))
+            return Err(SimulationError::InvalidInput(
+                "Invalid range! Argument lower > upper".to_string(),
+                None,
+            ))
         }
         Ok(Self { lower, upper })
     }
@@ -352,28 +368,28 @@ impl Range {
 /// Specifies the minimum and maximum amounts that can be traded through a pool
 /// for both input and output tokens.
 pub struct SwapLimits {
-    amount_in: Range,
-    amount_out: Range,
+    range_in: Range,
+    range_out: Range,
 }
 
 impl SwapLimits {
     /// Creates new swap limits.
     ///
     /// # Arguments
-    /// * `amount_in` - The valid range for input token amounts
-    /// * `amount_out` - The valid range for output token amounts
-    pub fn new(amount_in: Range, amount_out: Range) -> Self {
-        Self { amount_in, amount_out }
+    /// * `range_in` - The valid range for input token amounts
+    /// * `range_out` - The valid range for output token amounts
+    pub fn new(range_in: Range, range_out: Range) -> Self {
+        Self { range_in, range_out }
     }
 
     /// Returns the input amount limits.
-    pub fn amount_in(&self) -> &Range {
-        &self.amount_in
+    pub fn range_in(&self) -> &Range {
+        &self.range_in
     }
 
     /// Returns the output amount limits.
-    pub fn amount_out(&self) -> &Range {
-        &self.amount_out
+    pub fn range_out(&self) -> &Range {
+        &self.range_out
     }
 }
 
@@ -613,7 +629,37 @@ pub struct Swap {
     /// Optional price points that the pool was transitioned through while computing this swap.
     /// The values are tuples of (amount_in, amount_out, price). This is useful for repeated calls
     /// by providing good bounds for the next call.
-    price_points: Option<Vec<(BigUint, BigUint, f64)>>,
+    price_points: Option<Vec<PricePoint>>,
+}
+
+/// A point on the AMM price curve.
+///
+/// Collected during iterative numerical search algorithms.
+/// These points can be reused as bounds for subsequent searches, improving convergence speed.
+#[derive(Debug, Clone)]
+pub struct PricePoint {
+    /// The amount of token_in in atomic units (wei).
+    amount_in: BigUint,
+    /// The amount of token_out in atomic units (wei).
+    amount_out: BigUint,
+    /// The price in units of `[token_out/token_in]` scaled by decimals.
+    ///
+    /// Computed as `(amount_out / 10^token_out_decimals) / (amount_in / 10^token_in_decimals)`.
+    price: f64,
+}
+
+impl PricePoint {
+    pub fn amount_in(&self) -> &BigUint {
+        &self.amount_in
+    }
+
+    pub fn amount_out(&self) -> &BigUint {
+        &self.amount_out
+    }
+
+    pub fn price(&self) -> f64 {
+        self.price
+    }
 }
 
 impl Swap {
@@ -628,7 +674,7 @@ impl Swap {
         amount_in: BigUint,
         amount_out: BigUint,
         new_state: Option<Arc<dyn SwapQuoter>>,
-        price_points: Option<Vec<(BigUint, BigUint, f64)>>,
+        price_points: Option<Vec<PricePoint>>,
     ) -> Self {
         Self { amount_in, amount_out, new_state, price_points }
     }
@@ -652,7 +698,7 @@ impl Swap {
     ///
     /// Each tuple contains (amount_in, amount_out, price) at various points
     /// during the swap calculation, useful for optimizing subsequent calls.
-    pub fn price_points(&self) -> &Option<Vec<(BigUint, BigUint, f64)>> {
+    pub fn price_points(&self) -> &Option<Vec<PricePoint>> {
         &self.price_points
     }
 }
@@ -698,7 +744,7 @@ pub trait SwapQuoter: fmt::Debug + Send + Sync + 'static {
     /// Returns the set of **directed token pairs** for which this quoter can produce swap quotes.
     ///
     /// Each `(base, quote)` pair indicates that a swap from `base` to `quote` is supported.
-    /// Direction matters: `(A, B)` and `(B, A)` are considered distinct pairs and may not
+    /// Direction matters: `(A, B)` and `(B, A)` are considered distinct pairs and might not
     /// both be present.
     ///
     /// # Semantics
@@ -803,6 +849,7 @@ pub trait SwapQuoter: fmt::Debug + Send + Sync + 'static {
     ///
     /// - Fees are **always included** in the quoted price and amounts. Callers should not apply
     ///   additional protocol fees on top of the returned quote.
+    /// - Fees mentioned above **do not include** chain fees such as gas costs.
     /// - The quote reflects a **finite-size trade** and therefore accounts for price impact where
     ///   applicable.
     /// - This method is **pure and side-effect free**; it must not mutate internal state.
@@ -852,7 +899,7 @@ pub trait SwapQuoter: fmt::Debug + Send + Sync + 'static {
     /// pair is not quotable or required inputs are missing).
     fn swap_limits(&self, params: LimitsParams) -> SimulationResult<SwapLimits>;
 
-    /// Searches for an **advanced, price-constraint-based quote**
+    /// Produces an **advanced, price-constraint-based quote**
     ///
     /// Unlike [`quote`], which prices a swap for a fixed input or output amount,
     /// `query_swap` solves for a swap that satisfies a higher-level [`SwapConstraint`],
@@ -899,7 +946,7 @@ pub trait SwapQuoter: fmt::Debug + Send + Sync + 'static {
     /// - The swap is undefined under the current protocol state
     fn query_swap(&self, params: QuerySwapParams) -> SimulationResult<Swap>;
 
-    /// Applies a **protocol state delta** and returns the resulting state transition.
+    /// Applies a **protocol state delta**
     ///
     /// This method updates the internal protocol state of the quoter by applying the
     /// incremental changes described by `params`, typically derived from an external
