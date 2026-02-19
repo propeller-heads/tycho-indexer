@@ -52,8 +52,8 @@ contract UniswapV4Executor is IExecutor, ICallback {
     using TransientStateLibrary for IPoolManager;
     using LibPrefixLengthEncodedByteArray for bytes;
 
-    bytes4 private constant SWAP_EXACT_INPUT_SELECTOR = 0xc4881bc7;
-    bytes4 private constant SWAP_EXACT_INPUT_SINGLE_SELECTOR = 0x105c1b93;
+    bytes4 private constant _SWAP_EXACT_INPUT_SELECTOR = 0xc4881bc7;
+    bytes4 private constant _SWAP_EXACT_INPUT_SINGLE_SELECTOR = 0x105c1b93;
 
     IPoolManager public immutable poolManager;
     address private immutable _angstromHookAddress;
@@ -67,12 +67,12 @@ contract UniswapV4Executor is IExecutor, ICallback {
         bytes hookData;
     }
 
-    constructor(IPoolManager _poolManager, address _angstromHook) {
-        if (_angstromHook == address(0)) {
+    constructor(IPoolManager poolManager_, address angstromHook) {
+        if (angstromHook == address(0)) {
             revert UniswapV4Executor__ZeroAddressAngstromHook();
         }
-        poolManager = _poolManager;
-        _angstromHookAddress = _angstromHook;
+        poolManager = poolManager_;
+        _angstromHookAddress = angstromHook;
         _self = address(this);
     }
 
@@ -280,8 +280,8 @@ contract UniswapV4Executor is IExecutor, ICallback {
     {
         bytes4 selector = bytes4(data[:4]);
         if (
-            selector != SWAP_EXACT_INPUT_SELECTOR
-                && selector != SWAP_EXACT_INPUT_SINGLE_SELECTOR
+            selector != _SWAP_EXACT_INPUT_SELECTOR
+                && selector != _SWAP_EXACT_INPUT_SINGLE_SELECTOR
         ) {
             revert UniswapV4Executor__UnknownCallback(selector);
         }
@@ -542,7 +542,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         bytes calldata stripped = data[68:];
         bytes4 selector = bytes4(stripped[:4]);
         receiver = address(poolManager);
-        if (selector == SWAP_EXACT_INPUT_SINGLE_SELECTOR) {
+        if (selector == _SWAP_EXACT_INPUT_SINGLE_SELECTOR) {
             // swapExactInputSingle(PoolKey memory poolKey, bool zeroForOne, uint128 amountIn, address receiver, bytes calldata hookData)
             // Data layout: selector(4) + PoolKey(160) + bool(32) + uint128(32) + address(32) + hookData(variable)
 
@@ -568,7 +568,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
             } else {
                 transferType = RestrictTransferFrom.TransferType.Transfer;
             }
-        } else if (selector == SWAP_EXACT_INPUT_SELECTOR) {
+        } else if (selector == _SWAP_EXACT_INPUT_SELECTOR) {
             // swapExactInput(Currency currencyIn, uint128 amountIn, address receiver, PathKey[] calldata path)
             // Data layout: selector(4) + Currency(32) + uint128(32) + address(32) + PathKey[](variable)
 

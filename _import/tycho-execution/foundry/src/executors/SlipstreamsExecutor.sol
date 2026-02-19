@@ -25,13 +25,13 @@ interface ICLFactory {
 contract SlipstreamsExecutor is IExecutor, ICallback {
     using SafeERC20 for IERC20;
 
-    uint160 private constant MIN_SQRT_RATIO = 4295128739;
-    uint160 private constant MAX_SQRT_RATIO =
+    uint160 private constant _MIN_SQRT_RATIO = 4295128739;
+    uint160 private constant _MAX_SQRT_RATIO =
         1461446703485210103287273052203988822378723970342;
 
     address public immutable factory1;
     address public immutable factory2;
-    address private immutable self;
+    address private immutable _self;
 
     /// @notice The identifying key of the pool
     struct PoolKey {
@@ -40,13 +40,13 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         int24 tickSpacing;
     }
 
-    constructor(address _factory1, address _factory2) {
-        if (_factory1 == address(0) || _factory2 == address(0)) {
+    constructor(address factory1_, address factory2_) {
+        if (factory1_ == address(0) || factory2_ == address(0)) {
             revert SlipstreamsExecutor__InvalidFactory();
         }
-        factory1 = _factory1;
-        factory2 = _factory2;
-        self = address(this);
+        factory1 = factory1_;
+        factory2 = factory2_;
+        _self = address(this);
     }
 
     function fundsExpectedAddress(
@@ -85,7 +85,7 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
                 zeroForOne,
                 // positive means exactIn
                 int256(amountIn),
-                zeroForOne ? MIN_SQRT_RATIO + 1 : MAX_SQRT_RATIO - 1,
+                zeroForOne ? _MIN_SQRT_RATIO + 1 : _MAX_SQRT_RATIO - 1,
                 callbackData
             );
         }

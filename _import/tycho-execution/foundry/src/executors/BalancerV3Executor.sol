@@ -20,7 +20,7 @@ error BalancerV3Executor__SenderIsNotVault(address sender);
 contract BalancerV3Executor is IExecutor, ICallback {
     using SafeERC20 for IERC20;
 
-    IVault private constant VAULT =
+    IVault private constant _VAULT =
         IVault(0xbA1333333333a1BA1108E8412f11850A5C319bA9);
 
     constructor() {}
@@ -45,7 +45,7 @@ contract BalancerV3Executor is IExecutor, ICallback {
             revert BalancerV3Executor__InvalidDataLength();
         }
         bytes memory result =
-            VAULT.unlock(abi.encodePacked(amountIn, data, receiver));
+            _VAULT.unlock(abi.encodePacked(amountIn, data, receiver));
         (amountOut, tokenOut) =
             abi.decode(abi.decode(result, (bytes)), (uint256, address));
     }
@@ -56,7 +56,7 @@ contract BalancerV3Executor is IExecutor, ICallback {
         public
         view
     {
-        if (msg.sender != address(VAULT)) {
+        if (msg.sender != address(_VAULT)) {
             revert BalancerV3Executor__SenderIsNotVault(msg.sender);
         }
     }
@@ -77,7 +77,7 @@ contract BalancerV3Executor is IExecutor, ICallback {
         uint256 amountCalculated;
         uint256 amountIn;
         uint256 amountOut;
-        (amountCalculated, amountIn, amountOut) = VAULT.swap(
+        (amountCalculated, amountIn, amountOut) = _VAULT.swap(
             VaultSwapParams({
                 kind: SwapKind.EXACT_IN,
                 pool: poolId,
@@ -90,8 +90,8 @@ contract BalancerV3Executor is IExecutor, ICallback {
         );
 
         // slither-disable-next-line unused-return
-        VAULT.settle(tokenIn, amountIn);
-        VAULT.sendTo(tokenOut, receiver, amountOut);
+        _VAULT.settle(tokenIn, amountIn);
+        _VAULT.sendTo(tokenOut, receiver, amountOut);
         return abi.encode(amountCalculated, tokenOut);
     }
 
@@ -148,7 +148,7 @@ contract BalancerV3Executor is IExecutor, ICallback {
             uint256 amount
         )
     {
-        receiver = address(VAULT);
+        receiver = address(_VAULT);
         amount = uint256(bytes32(data[0:32]));
         tokenIn = address(bytes20(data[32:52]));
         transferType = RestrictTransferFrom.TransferType.Transfer;

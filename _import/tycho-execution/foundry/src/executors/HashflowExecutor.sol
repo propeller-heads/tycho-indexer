@@ -41,11 +41,11 @@ contract HashflowExecutor is IExecutor {
     /// @notice The Hashflow router address
     address public immutable hashflowRouter;
 
-    constructor(address _hashflowRouter) {
-        if (_hashflowRouter == address(0)) {
+    constructor(address hashflowRouter_) {
+        if (hashflowRouter_ == address(0)) {
             revert HashflowExecutor__InvalidHashflowRouter();
         }
-        hashflowRouter = _hashflowRouter;
+        hashflowRouter = hashflowRouter_;
     }
 
     function fundsExpectedAddress(

@@ -26,11 +26,11 @@ contract BebopExecutor is IExecutor {
     /// @notice The Bebop settlement contract address
     address public immutable bebopSettlement;
 
-    constructor(address _bebopSettlement) {
-        if (_bebopSettlement == address(0)) {
+    constructor(address bebopSettlement_) {
+        if (bebopSettlement_ == address(0)) {
             revert BebopExecutor__ZeroAddress();
         }
-        bebopSettlement = _bebopSettlement;
+        bebopSettlement = bebopSettlement_;
     }
 
     function fundsExpectedAddress(

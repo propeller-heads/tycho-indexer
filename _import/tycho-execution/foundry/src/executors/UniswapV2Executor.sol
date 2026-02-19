@@ -22,23 +22,23 @@ contract UniswapV2Executor is IExecutor {
 
     address public immutable factory;
     bytes32 public immutable initCode;
-    address private immutable self;
     uint256 public immutable feeBps;
+    address private immutable _self;
 
-    constructor(address _factory, bytes32 _initCode, uint256 _feeBps) {
-        if (_factory == address(0)) {
+    constructor(address factory_, bytes32 initCode_, uint256 feeBps_) {
+        if (factory_ == address(0)) {
             revert UniswapV2Executor__InvalidFactory();
         }
-        if (_initCode == bytes32(0)) {
+        if (initCode_ == bytes32(0)) {
             revert UniswapV2Executor__InvalidInitCode();
         }
-        factory = _factory;
-        initCode = _initCode;
-        if (_feeBps > 30) {
+        factory = factory_;
+        initCode = initCode_;
+        if (feeBps_ > 30) {
             revert UniswapV2Executor__InvalidFee();
         }
-        feeBps = _feeBps;
-        self = address(this);
+        feeBps = feeBps_;
+        _self = address(this);
     }
 
     function fundsExpectedAddress(bytes calldata data)

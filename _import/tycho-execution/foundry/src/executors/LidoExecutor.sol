@@ -42,15 +42,15 @@ contract LidoExecutor is IExecutor {
 
     IERC20 public immutable stEth;
     address public immutable stEthAddress;
-    address public immutable wstEth;
+    address public immutable wstEthAddress;
 
-    constructor(address _stEthAddress, address _wstEthAddress) {
-        if (_stEthAddress == address(0) || _wstEthAddress == address(0)) {
+    constructor(address stEthAddress_, address wstEthAddress_) {
+        if (stEthAddress_ == address(0) || wstEthAddress_ == address(0)) {
             revert LidoExecutor__ZeroAddress();
         }
-        stEth = IERC20(_stEthAddress);
-        stEthAddress = _stEthAddress;
-        wstEth = _wstEthAddress;
+        stEth = IERC20(stEthAddress_);
+        stEthAddress = stEthAddress_;
+        wstEthAddress = wstEthAddress_;
     }
 
     function fundsExpectedAddress(
@@ -103,18 +103,18 @@ contract LidoExecutor is IExecutor {
             pool == LidoPoolType.wstETH && direction == LidoPoolDirection.Wrap
         ) {
             // WST_ETH wrapping: ST_ETH -> WST_ETH
-            tokenOut = wstEth;
-            amountOut = LidoWrappedPool(wstEth).wrap(amountIn);
+            tokenOut = wstEthAddress;
+            amountOut = LidoWrappedPool(wstEthAddress).wrap(amountIn);
 
             if (receiver != address(this)) {
-                IERC20(wstEth).safeTransfer(receiver, amountOut);
+                IERC20(wstEthAddress).safeTransfer(receiver, amountOut);
             }
         } else if (
             pool == LidoPoolType.wstETH && direction == LidoPoolDirection.Unwrap
         ) {
             tokenOut = stEthAddress;
             // WST_ETH unwrapping: WST_ETH -> ST_ETH
-            amountOut = LidoWrappedPool(wstEth).unwrap(amountIn);
+            amountOut = LidoWrappedPool(wstEthAddress).unwrap(amountIn);
             if (receiver != address(this)) {
                 uint256 receiverBalanceBefore = stEth.balanceOf(receiver);
                 stEth.safeTransfer(receiver, amountOut);
@@ -173,12 +173,12 @@ contract LidoExecutor is IExecutor {
             tokenIn = stEthAddress;
             transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
             // The receiver of the funds will be the wstEth contract.
-            receiver = wstEth;
+            receiver = wstEthAddress;
         } else if (
             pool == LidoPoolType.wstETH && direction == LidoPoolDirection.Unwrap
         ) {
             // WST_ETH unwrapping: WST_ETH -> ST_ETH
-            tokenIn = wstEth;
+            tokenIn = wstEthAddress;
             transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
             // The receiver needs to be TychoRouter because the wstETH contract will burn it from the msg.sender
             receiver = address(this);

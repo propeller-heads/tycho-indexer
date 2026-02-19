@@ -21,24 +21,24 @@ error UniswapV3Executor__InvalidInitCode();
 contract UniswapV3Executor is IExecutor, ICallback {
     using SafeERC20 for IERC20;
 
-    uint160 private constant MIN_SQRT_RATIO = 4295128739;
-    uint160 private constant MAX_SQRT_RATIO =
+    uint160 private constant _MIN_SQRT_RATIO = 4295128739;
+    uint160 private constant _MAX_SQRT_RATIO =
         1461446703485210103287273052203988822378723970342;
 
     address public immutable factory;
     bytes32 public immutable initCode;
-    address private immutable self;
+    address private immutable _self;
 
-    constructor(address _factory, bytes32 _initCode) {
-        if (_factory == address(0)) {
+    constructor(address factory_, bytes32 initCode_) {
+        if (factory_ == address(0)) {
             revert UniswapV3Executor__InvalidFactory();
         }
-        if (_initCode == bytes32(0)) {
+        if (initCode_ == bytes32(0)) {
             revert UniswapV3Executor__InvalidInitCode();
         }
-        factory = _factory;
-        initCode = _initCode;
-        self = address(this);
+        factory = factory_;
+        initCode = initCode_;
+        _self = address(this);
     }
 
     function fundsExpectedAddress(
@@ -77,7 +77,7 @@ contract UniswapV3Executor is IExecutor, ICallback {
                 zeroForOne,
                 // positive means exactIn
                 int256(amountIn),
-                zeroForOne ? MIN_SQRT_RATIO + 1 : MAX_SQRT_RATIO - 1,
+                zeroForOne ? _MIN_SQRT_RATIO + 1 : _MAX_SQRT_RATIO - 1,
                 callbackData
             );
         }

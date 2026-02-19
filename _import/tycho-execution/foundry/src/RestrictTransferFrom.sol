@@ -46,11 +46,11 @@ contract RestrictTransferFrom is Vault {
     uint256 private constant _SENDER_SLOT =
         0x6249046ac25ba4612871a1715b1abd1de7cf9c973c5045a9b08ce3f441ce6e3a;
 
-    constructor(address _permit2) {
-        if (_permit2.code.length == 0) {
-            revert RestrictTransferFrom__NotAContract(_permit2);
+    constructor(address permit2_) {
+        if (permit2_.code.length == 0) {
+            revert RestrictTransferFrom__NotAContract(permit2_);
         }
-        permit2 = IAllowanceTransfer(_permit2);
+        permit2 = IAllowanceTransfer(permit2_);
     }
 
     enum TransferType {

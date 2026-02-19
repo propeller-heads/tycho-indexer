@@ -17,7 +17,8 @@ error BalancerV2Executor__InvalidDataLength();
 contract BalancerV2Executor is IExecutor {
     using SafeERC20 for IERC20;
 
-    address private constant VAULT = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
+    address private constant _VAULT =
+        0xBA12222222228d8Ba445958a75a0704d566BF2C8;
 
     constructor() {}
 
@@ -61,7 +62,7 @@ contract BalancerV2Executor is IExecutor {
         uint256 limit = 0;
 
         amountOut =
-            IVault(VAULT).swap(singleSwap, funds, limit, block.timestamp);
+            IVault(_VAULT).swap(singleSwap, funds, limit, block.timestamp);
     }
 
     function _decodeData(bytes calldata data)
@@ -92,7 +93,7 @@ contract BalancerV2Executor is IExecutor {
         }
 
         tokenIn = address(bytes20(data[0:20]));
-        receiver = VAULT;
+        receiver = _VAULT;
         transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
     }
 }

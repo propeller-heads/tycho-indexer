@@ -42,18 +42,18 @@ contract CurveExecutor is IExecutor {
     address public immutable stEthAddress;
     bool public immutable hasStETH;
 
-    constructor(address _nativeToken, address _stEthAddress) {
-        if (_nativeToken == address(0)) {
+    constructor(address nativeToken_, address stEthAddress_) {
+        if (nativeToken_ == address(0)) {
             revert CurveExecutor__AddressZero();
         }
-        nativeToken = _nativeToken;
+        nativeToken = nativeToken_;
 
-        if (_stEthAddress != address(0)) {
+        if (stEthAddress_ != address(0)) {
             hasStETH = true;
         } else {
             hasStETH = false;
         }
-        stEthAddress = _stEthAddress;
+        stEthAddress = stEthAddress_;
     }
 
     function fundsExpectedAddress(
