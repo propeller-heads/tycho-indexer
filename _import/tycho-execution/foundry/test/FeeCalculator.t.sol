@@ -2,6 +2,9 @@
 pragma solidity ^0.8.26;
 
 import "@src/FeeCalculator.sol";
+import {
+    IAccessControl
+} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {FeeRecipient} from "../lib/FeeStructs.sol";
 import "./Constants.sol";
 
@@ -9,8 +12,7 @@ contract FeeCalculatorTest is Constants {
     FeeCalculator feeCalculator;
 
     function setUp() public {
-        feeCalculator = new FeeCalculator();
-        feeCalculator.grantRole(ROUTER_FEE_SETTER_ROLE, FEE_SETTER);
+        feeCalculator = new FeeCalculator(FEE_SETTER);
     }
 
     function testCalculateOnlyRouterFeeOnOutput() public {
@@ -269,8 +271,7 @@ contract FeeCalculatorConfigTest is Constants {
     FeeCalculator feeCalculator;
 
     function setUp() public {
-        feeCalculator = new FeeCalculator();
-        feeCalculator.grantRole(ROUTER_FEE_SETTER_ROLE, FEE_SETTER);
+        feeCalculator = new FeeCalculator(FEE_SETTER);
     }
 
     // ROUTER FEE ON OUTPUT TESTS
@@ -570,5 +571,41 @@ contract FeeCalculatorConfigTest is Constants {
 
         assertEq(feeCalculator.getRouterFeeOnOutput(), maxFee);
         assertEq(feeCalculator.getRouterFeeOnClientFee(), maxFee);
+    }
+
+    function testRoleHolderCanTransferOwnRole() public {
+        address newFeeSetter = makeAddr("newFeeSetter");
+
+        vm.startPrank(FEE_SETTER);
+        feeCalculator.grantRole(ROUTER_FEE_SETTER_ROLE, newFeeSetter);
+        feeCalculator.revokeRole(ROUTER_FEE_SETTER_ROLE, FEE_SETTER);
+        vm.stopPrank();
+
+        // Old fee setter can no longer set fees
+        vm.prank(FEE_SETTER);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                FEE_SETTER,
+                ROUTER_FEE_SETTER_ROLE
+            )
+        );
+        feeCalculator.setRouterFeeOnOutput(100);
+
+        // New fee setter can
+        vm.prank(newFeeSetter);
+        feeCalculator.setRouterFeeOnOutput(200);
+        assertEq(feeCalculator.getRouterFeeOnOutput(), 200);
+    }
+
+    function testDefaultAdminRoleDoesNotExist() public view {
+        bytes32 DEFAULT_ADMIN_ROLE = 0x00;
+
+        assertFalse(feeCalculator.hasRole(DEFAULT_ADMIN_ROLE, address(this)));
+
+        assertNotEq(
+            feeCalculator.getRoleAdmin(ROUTER_FEE_SETTER_ROLE),
+            DEFAULT_ADMIN_ROLE
+        );
     }
 }

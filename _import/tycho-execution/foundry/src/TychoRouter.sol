@@ -104,12 +104,30 @@ contract TychoRouter is AccessControl, Dispatcher {
         address indexed oldCalculator, address indexed newCalculator
     );
 
-    constructor(address _permit2, address feeCalculator) Dispatcher(_permit2) {
+    constructor(
+        address _permit2,
+        address feeCalculator,
+        address pauser,
+        address unpauser,
+        address executorSetter,
+        address routerFeeSetter
+    ) Dispatcher(_permit2) {
         if (feeCalculator.code.length == 0) {
             revert TychoRouter__NotAContract(feeCalculator);
         }
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _feeCalculator = feeCalculator;
+
+        // Make each role its own admin so role holders can manage their own role
+        _setRoleAdmin(PAUSER_ROLE, PAUSER_ROLE);
+        _setRoleAdmin(UNPAUSER_ROLE, UNPAUSER_ROLE);
+        _setRoleAdmin(EXECUTOR_SETTER_ROLE, EXECUTOR_SETTER_ROLE);
+        _setRoleAdmin(ROUTER_FEE_SETTER_ROLE, ROUTER_FEE_SETTER_ROLE);
+
+        // Grant initial roles
+        _grantRole(PAUSER_ROLE, pauser);
+        _grantRole(UNPAUSER_ROLE, unpauser);
+        _grantRole(EXECUTOR_SETTER_ROLE, executorSetter);
+        _grantRole(ROUTER_FEE_SETTER_ROLE, routerFeeSetter);
     }
 
     /**
@@ -1006,18 +1024,6 @@ contract TychoRouter is AccessControl, Dispatcher {
      */
     function unpause() external onlyRole(UNPAUSER_ROLE) {
         _unpause();
-    }
-
-    /**
-     * @dev Allows granting roles to multiple accounts in a single call.
-     */
-    function batchGrantRole(bytes32 role, address[] memory accounts)
-        external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
-        for (uint256 i = 0; i < accounts.length; i++) {
-            _grantRole(role, accounts[i]);
-        }
     }
 
     /**
