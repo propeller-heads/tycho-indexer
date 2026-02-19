@@ -207,25 +207,25 @@ contract wethWrapTest is TychoRouterTestSetup {
             "test_single_encoding_strategy_weth_unwrapping"
         );
 
-        // Fund ALICE with wETH to send with the call
-        deal(WETH_ADDR, ALICE, amountIn);
-        // vm.deal(ALICE, amountIn);
-
-        vm.startPrank(ALICE);
-        // WETH.deposit{value: amountIn}();
+        // Fund Bob with ETH to deposit to wETH
+        vm.deal(BOB, amountIn);
+        vm.startPrank(BOB);
+        WETH.deposit{value: amountIn}();
         WETH.approve(tychoRouterAddr, amountIn);
 
-        uint256 wethBalanceBefore = WETH.balanceOf(ALICE);
-        console.log("wethBalanceBefore:", wethBalanceBefore);
+        uint256 wethBalanceBefore = WETH.balanceOf(BOB);
+        uint256 ethBalanceBefore = BOB.balance;
         (bool success,) = tychoRouterAddr.call(callData);
-        uint256 wethBalanceAfter = WETH.balanceOf(ALICE);
+        uint256 wethBalanceAfter = WETH.balanceOf(BOB);
+        uint256 ethBalanceAfter = BOB.balance;
 
         // Check balances
         assertTrue(success, "Call Failed");
         assertEq(
             wethBalanceBefore - wethBalanceAfter, 1_000_000_000_000_000_000
         );
-        assertEq(WETH.balanceOf(tychoRouterAddr), 1_000_000_000_000_000_000);
-        assertEq(tychoRouterAddr.balance, 1_000_000_000_000_000_000);
+        assertEq(ethBalanceAfter - ethBalanceBefore, 1_000_000_000_000_000_000);
+        assertEq(WETH.balanceOf(tychoRouterAddr), 0);
+        assertEq(tychoRouterAddr.balance, 0);
     }
 }

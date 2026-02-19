@@ -1800,6 +1800,8 @@ fn test_single_encoding_strategy_weth_wrap() {
 
 #[test]
 fn test_single_encoding_strategy_weth_unwrap() {
+    // We use `bob*` address as sender/receiver as Alice's address has a drainer deployed that
+    // would interfere with the test when we send ETH back to her.
     let weth_executor =
         ProtocolComponent { protocol_system: String::from("weth"), ..Default::default() };
     let token_in = weth();
@@ -1814,9 +1816,9 @@ fn test_single_encoding_strategy_weth_unwrap() {
         amount_in: BigUint::from(1_000_000_000_000_000_000_u128),
         token_out,
         min_amount_out: BigUint::from(1_000_000_000_000_000_000_u128),
-        // Alice
-        sender: alice_address(),
-        receiver: alice_address(),
+        // Bob*
+        sender: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
+        receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
         swaps: vec![swap],
         ..Default::default()
     };
