@@ -105,9 +105,9 @@ contract WethExecutor is IExecutor {
         } else {
             // WETH -> ETH: Unwrap
             tokenIn = address(WETH);
-            transferType = RestrictTransferFrom.TransferType.Transfer;
+            transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
         }
 
-        receiver = address(this); // TODO: is this true?
+        receiver = address(this);
     }
 }
