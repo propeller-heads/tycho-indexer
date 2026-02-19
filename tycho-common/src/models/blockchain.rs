@@ -714,12 +714,12 @@ pub mod fixtures {
     /// Both indices share the same keys (component `"pool_0"`, token `0xaa..`, contract `0xbb..`)
     /// but with different values, so "later wins" precedence can be verified across all fields:
     ///
-    /// - Index 0: tx_index=1, component_balance {token=800, token2=300},
-    ///   account_balance {token=500, token2=150}, slots {1=>100, 2=>200},
-    ///   state {"reserve"=>1000, "fee"=>50}, 1 entrypoint, ChangeType::Creation
-    /// - Index 1: tx_index=2, component_balance {token=1000}, account_balance {token=700},
-    ///   slots {1=>300} (overlaps slot 1), state {"reserve"=>2000} (overlaps),
-    ///   2 entrypoints (superset), ChangeType::Update
+    /// - Index 0: tx_index=1, component_balance {token=800, token2=300}, account_balance
+    ///   {token=500, token2=150}, slots {1=>100, 2=>200}, state {"reserve"=>1000, "fee"=>50}, 1
+    ///   entrypoint, ChangeType::Creation
+    /// - Index 1: tx_index=2, component_balance {token=1000}, account_balance {token=700}, slots
+    ///   {1=>300} (overlaps slot 1), state {"reserve"=>2000} (overlaps), 2 entrypoints (superset),
+    ///   ChangeType::Update
     // PERF: duplicated in crate::extractor::models::fixtures — consider a `test-utils`
     // feature flag to share test fixtures cross-crate.
     pub fn tx_with_changes(index: u8) -> TxWithChanges {
@@ -862,10 +862,7 @@ pub mod fixtures {
                         c_id.clone(),
                         ProtocolComponentStateDelta::new(
                             &c_id,
-                            HashMap::from([(
-                                "reserve".into(),
-                                Bytes::from(2000u64).lpad(32, 0),
-                            )]),
+                            HashMap::from([("reserve".into(), Bytes::from(2000u64).lpad(32, 0))]),
                             HashSet::new(),
                         ),
                     )]),
