@@ -127,6 +127,9 @@ impl TychoRouterEncoder {
         Ok(encoded_solution)
     }
 
+    /// Returns a new solution with added wrapping/unwrapping swaps if the original solution
+    /// contains a swap that goes from ETH to WETH or vice versa but doesn't include the
+    /// corresponding wrapping or unwrapping swap.
     fn add_missing_eth_wrapping_unwrapping_swaps(
         &self,
         solution: &Solution,
@@ -135,6 +138,7 @@ impl TychoRouterEncoder {
         let eth_address = &chain.native_token().address;
         let weth_address = &chain.wrapped_native_token().address;
 
+        // Create the potential missing swaps for wrapping and unwrapping
         let wrapping_swap = Swap::new(
             ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
             eth_address.clone(),
@@ -147,6 +151,8 @@ impl TychoRouterEncoder {
             eth_address.clone(),
         );
 
+        // This closure checks if a ETH <-> WETH swap is needed between two tokens and
+        // returns the corresponding swap if needed
         let wrapping_bridge = |a: &Bytes, b: &Bytes| -> Option<Swap> {
             if a == weth_address && b == eth_address {
                 Some(unwrapping_swap.clone())
@@ -160,10 +166,13 @@ impl TychoRouterEncoder {
         let mut solution_with_added_wraps_unwraps: Vec<Swap> =
             Vec::with_capacity(solution.swaps.len());
 
+        // Check if we need to add a wrapping swap at the beginning of the solution
         if let Some(s) = wrapping_bridge(&solution.token_in, solution.swaps[0].token_in()) {
             solution_with_added_wraps_unwraps.push(s);
         }
 
+        // Iterate through the swaps and add them to the new solution, adding wrapping/unwrapping
+        // swaps in between if needed
         for i in 0..solution.swaps.len() {
             solution_with_added_wraps_unwraps.push(solution.swaps[i].clone());
             if i + 1 < solution.swaps.len() {
@@ -175,6 +184,7 @@ impl TychoRouterEncoder {
             }
         }
 
+        // Check if we need to add an unwrapping swap at the end of the solution
         if let Some(last_swap) = solution.swaps.last() {
             if let Some(s) = wrapping_bridge(last_swap.token_out(), &solution.token_out) {
                 solution_with_added_wraps_unwraps.push(s);
