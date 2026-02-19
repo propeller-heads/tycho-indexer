@@ -1,7 +1,10 @@
 use std::collections::HashSet;
 
 use alloy::signers::local::PrivateKeySigner;
-use tycho_common::{models::Chain, Bytes};
+use tycho_common::{
+    models::{protocol::ProtocolComponent, Chain},
+    Bytes,
+};
 
 use crate::encoding::{
     errors::EncodingError,
@@ -16,7 +19,7 @@ use crate::encoding::{
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         utils::ple_encode,
     },
-    models::{EncodedSolution, EncodingContext, Solution, Transaction, UserTransferType},
+    models::{EncodedSolution, EncodingContext, Solution, Swap, Transaction, UserTransferType},
     strategy_encoder::StrategyEncoder,
     tycho_encoder::TychoEncoder,
 };
@@ -122,6 +125,64 @@ impl TychoRouterEncoder {
             encoded_solution.permit = Some(permit);
         }
         Ok(encoded_solution)
+    }
+
+    fn add_missing_eth_wrapping_unwrapping_swaps(&self, solution: &mut Solution, chain: &Chain) {
+        let eth_address = &chain.native_token().address;
+        let weth_address = &chain.wrapped_native_token().address;
+
+        let wrapping_swap = Swap::new(
+            ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
+            eth_address.clone(),
+            weth_address.clone(),
+        );
+
+        let unwrapping_swap = Swap::new(
+            ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
+            weth_address.clone(),
+            eth_address.clone(),
+        );
+
+        let wrapping_bridge = |a: &Bytes, b: &Bytes| -> Option<Swap> {
+            if a == weth_address && b == eth_address {
+                Some(unwrapping_swap.clone())
+            } else if a == eth_address && b == weth_address {
+                Some(wrapping_swap.clone())
+            } else {
+                None
+            }
+        };
+
+        let mut solution_with_added_wraps_unwraps: Vec<Swap> =
+            Vec::with_capacity(solution.swaps.len());
+
+        if let Some(s) = wrapping_bridge(&solution.token_in, solution.swaps[0].token_in()) {
+            solution_with_added_wraps_unwraps.push(s);
+        }
+
+        for i in 0..solution.swaps.len() {
+            solution_with_added_wraps_unwraps.push(solution.swaps[i].clone());
+            if i + 1 < solution.swaps.len() {
+                let token_out = solution.swaps[i].token_out();
+                let token_in = solution.swaps[i + 1].token_in();
+                if let Some(s) = wrapping_bridge(token_out, token_in) {
+                    solution_with_added_wraps_unwraps.push(s);
+                }
+            }
+        }
+
+        if let Some(s) = wrapping_bridge(
+            solution
+                .swaps
+                .last()
+                .unwrap()
+                .token_out(),
+            &solution.token_out,
+        ) {
+            solution_with_added_wraps_unwraps.push(s);
+        }
+
+        solution.swaps = solution_with_added_wraps_unwraps;
     }
 }
 
@@ -298,10 +359,6 @@ impl TychoEncoder for TychoExecutorEncoder {
             .first_mut()
             .ok_or(EncodingError::FatalError("No solutions found".to_string()))?;
         self.validate_solution(solution)?;
-        self.add_missing_eth_wrapping_unwrapping_swaps(
-            solution,
-            self.swap_encoder_registry.chain(),
-        );
 
         let encoded_solution = self.encode_executor_calldata(solution)?;
 
