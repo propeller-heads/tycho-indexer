@@ -66,6 +66,9 @@ pub(super) struct DCICache {
     /// Deferred tracing work accumulated across partials for the current block. Partials are
     /// assumed in order; on the final partial we run all deferred entrypoints and clear this.
     pub(super) deferred_tracing: Vec<(EntryPointWithTracingParams, Transaction)>,
+    /// New components linked to deferred entrypoints, accumulated across non-final partials.
+    /// Keyed by tx hash; on the final partial these are merged back into block_changes.
+    pub(super) deferred_new_components: HashMap<TxHash, HashMap<ComponentId, ProtocolComponent>>,
 }
 
 impl DCICache {
@@ -81,6 +84,7 @@ impl DCICache {
             component_id_to_entrypoint_params: VersionedCache::new(),
             tracing_retry_counts: VersionedCache::new(),
             deferred_tracing: Vec::new(),
+            deferred_new_components: HashMap::new(),
         }
     }
 
@@ -114,6 +118,7 @@ impl DCICache {
         self.tracing_retry_counts
             .revert_to(block)?;
         self.clear_deferred_tracing();
+        self.clear_deferred_new_components();
 
         Ok(())
     }
@@ -246,6 +251,34 @@ impl DCICache {
     /// Clears the defer buffer. Used on revert.
     pub(super) fn clear_deferred_tracing(&mut self) {
         self.deferred_tracing.clear();
+    }
+
+    /// Appends new components to the defer buffer. Partials are assumed in order for the current
+    /// block. Components are keyed by tx hash for merging back into txs_with_update on final
+    /// partial.
+    pub(super) fn defer_new_components(
+        &mut self,
+        components: impl IntoIterator<Item = (TxHash, HashMap<ComponentId, ProtocolComponent>)>,
+    ) {
+        for (tx_hash, map) in components {
+            self.deferred_new_components
+                .entry(tx_hash)
+                .or_default()
+                .extend(map);
+        }
+    }
+
+    /// Takes and clears the deferred new components buffer. Call when processing the final partial
+    /// for the block.
+    pub(super) fn take_deferred_new_components(
+        &mut self,
+    ) -> HashMap<TxHash, HashMap<ComponentId, ProtocolComponent>> {
+        std::mem::take(&mut self.deferred_new_components)
+    }
+
+    /// Clears the deferred new components buffer. Used on revert.
+    pub(super) fn clear_deferred_new_components(&mut self) {
+        self.deferred_new_components.clear();
     }
 }
 
@@ -1341,6 +1374,57 @@ mod tests {
         cache.defer_tracing(vec![(ep.clone(), tx)]);
         cache.clear_deferred_tracing();
         assert!(cache.take_deferred_tracing().is_empty());
+    }
+
+    #[test]
+    fn test_dci_defer_new_components() {
+        let mut cache = DCICache::new();
+        let tx_hash = Bytes::from(2_u8).lpad(32, 0);
+        let component = ProtocolComponent::new(
+            "component_1",
+            "test",
+            "TestPool",
+            Chain::Ethereum,
+            vec![],
+            vec![],
+            HashMap::new(),
+            tycho_common::models::ChangeType::Creation,
+            tx_hash.clone(),
+            chrono::DateTime::from_timestamp(0, 0)
+                .unwrap()
+                .naive_utc(),
+        );
+
+        assert!(cache
+            .take_deferred_new_components()
+            .is_empty());
+        cache.defer_new_components([(
+            tx_hash.clone(),
+            HashMap::from([("component_1".to_string(), component.clone())]),
+        )]);
+        let taken = cache.take_deferred_new_components();
+        assert_eq!(taken.len(), 1);
+        assert_eq!(
+            taken
+                .get(&tx_hash)
+                .unwrap()
+                .get("component_1")
+                .unwrap()
+                .id,
+            component.id
+        );
+        assert!(cache
+            .take_deferred_new_components()
+            .is_empty());
+
+        cache.defer_new_components([(
+            tx_hash.clone(),
+            HashMap::from([("component_1".to_string(), component)]),
+        )]);
+        cache.clear_deferred_new_components();
+        assert!(cache
+            .take_deferred_new_components()
+            .is_empty());
     }
 
     #[test]
