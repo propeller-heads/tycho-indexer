@@ -198,10 +198,10 @@ impl TychoRouterEncoder {
 impl TychoEncoder for TychoRouterEncoder {
     fn encode_solutions(
         &self,
-        mut solutions: Vec<Solution>,
+        solutions: Vec<Solution>,
     ) -> Result<Vec<EncodedSolution>, EncodingError> {
         let mut result: Vec<EncodedSolution> = Vec::new();
-        for solution in solutions.iter_mut() {
+        for solution in solutions.iter() {
             let encoded_solution = self.encode_solution(solution)?;
             result.push(encoded_solution);
         }
@@ -210,10 +210,10 @@ impl TychoEncoder for TychoRouterEncoder {
 
     fn encode_full_calldata(
         &self,
-        mut solutions: Vec<Solution>,
+        solutions: Vec<Solution>,
     ) -> Result<Vec<Transaction>, EncodingError> {
         let mut transactions: Vec<Transaction> = Vec::new();
-        for solution in solutions.iter_mut() {
+        for solution in solutions.iter() {
             let encoded_solution = self.encode_solution(solution)?;
 
             let transaction = encode_tycho_router_call(
@@ -362,10 +362,10 @@ impl TychoExecutorEncoder {
 impl TychoEncoder for TychoExecutorEncoder {
     fn encode_solutions(
         &self,
-        mut solutions: Vec<Solution>,
+        solutions: Vec<Solution>,
     ) -> Result<Vec<EncodedSolution>, EncodingError> {
         let solution = solutions
-            .first_mut()
+            .first()
             .ok_or(EncodingError::FatalError("No solutions found".to_string()))?;
         self.validate_solution(solution)?;
 
