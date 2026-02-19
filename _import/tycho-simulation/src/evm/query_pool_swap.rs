@@ -23,7 +23,7 @@ use tycho_common::{
     simulation::{
         errors::SimulationError,
         protocol_sim::{
-            PoolSwap, PricePoint, Price, ProtocolSim, QueryPoolSwapParams, SwapConstraint,
+            PoolSwap, Price, PricePoint, ProtocolSim, QueryPoolSwapParams, SwapConstraint,
         },
     },
 };
