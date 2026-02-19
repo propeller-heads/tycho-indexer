@@ -196,7 +196,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         rocketpoolExecutor = new RocketpoolExecutor();
         erc4626Executor = new ERC4626Executor();
         lidoExecutor = new LidoExecutor(STETH_ADDR, WSTETH_ADDR);
-        wethExecutor = new WethExecutor();
+        wethExecutor = new WethExecutor(WETH_ADDR);
 
         address[] memory executors = new address[](17);
         executors[0] = address(usv2Executor);

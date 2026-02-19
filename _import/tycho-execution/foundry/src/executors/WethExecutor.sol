@@ -14,6 +14,7 @@ interface IWETH is IERC20 {
 }
 
 error WethExecutor__InvalidDataLength();
+error WethExecutor__ZeroAddres();
 error WethExecutor__SenderIsNotVault(address sender);
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
@@ -21,10 +22,14 @@ contract WethExecutor is IExecutor {
     using SafeERC20 for IWETH;
     using SafeERC20 for IERC20;
 
-    IWETH public constant WETH =
-        IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    IWETH public immutable WETH;
 
-    constructor() {}
+    constructor(address _wEthAddress) {
+        if (_wEthAddress == address(0)) {
+            revert WethExecutor__ZeroAddres();
+        }
+        WETH = IWETH(_wEthAddress);
+    }
 
     function fundsExpectedAddress(
         bytes calldata /* data */

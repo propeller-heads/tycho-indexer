@@ -17,7 +17,7 @@ import {StdUtils} from "../../lib/forge-std/src/StdUtils.sol";
 import {TestUtils} from "../TestUtils.sol";
 
 contract WethExecutorExposed is WethExecutor {
-    constructor() WethExecutor() {}
+    constructor(address _wEthAddress) WethExecutor(_wEthAddress) {}
 
     function decodeParams(bytes calldata data)
         external
@@ -33,7 +33,7 @@ contract WethExecutorTest is TestUtils, Constants {
 
     modifier setUpFork(uint256 blockNumber) {
         vm.createSelectFork(vm.rpcUrl("mainnet"), blockNumber);
-        WethExecutor = new WethExecutorExposed();
+        WethExecutor = new WethExecutorExposed(WETH_ADDR);
         _;
     }
 
