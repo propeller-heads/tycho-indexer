@@ -1,3 +1,12 @@
+## [0.27.0](https://github.com/propeller-heads/tycho-contracts/compare/0.26.0...0.27.0) (2026-02-19)
+
+
+### Features
+
+* add test for existing executor ([c829f3e](https://github.com/propeller-heads/tycho-contracts/commit/c829f3ef0f366de682040c879ae8accd33b0f993))
+* make expiration of the timelock obvious for users ([9bd0961](https://github.com/propeller-heads/tycho-contracts/commit/9bd0961e62797bdfae9038117da376234c3d8841))
+* revert if the executor already exists ([be7d1c1](https://github.com/propeller-heads/tycho-contracts/commit/be7d1c1ffcd9c8834671085292aa61334c37f34a))
+
 ## [0.26.0](https://github.com/propeller-heads/tycho-contracts/compare/0.25.4...0.26.0) (2026-02-16)
 
 
