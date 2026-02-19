@@ -714,15 +714,17 @@ pub mod fixtures {
     /// Both indices share the same keys (component `"pool_0"`, token `0xaa..`, contract `0xbb..`)
     /// but with different values, so "later wins" precedence can be verified across all fields:
     ///
-    /// - Index 0: tx_index=1, component_balance=800, account_balance=500, slots {1=>100, 2=>200},
+    /// - Index 0: tx_index=1, component_balance {token=800, token2=300},
+    ///   account_balance {token=500, token2=150}, slots {1=>100, 2=>200},
     ///   state {"reserve"=>1000, "fee"=>50}, 1 entrypoint, ChangeType::Creation
-    /// - Index 1: tx_index=2, component_balance=1000, account_balance=700, slots {1=>300}
-    ///   (overlaps slot 1), state {"reserve"=>2000} (overlaps), 2 entrypoints (superset),
-    ///   ChangeType::Update
+    /// - Index 1: tx_index=2, component_balance {token=1000}, account_balance {token=700},
+    ///   slots {1=>300} (overlaps slot 1), state {"reserve"=>2000} (overlaps),
+    ///   2 entrypoints (superset), ChangeType::Update
     // PERF: duplicated in crate::extractor::models::fixtures — consider a `test-utils`
     // feature flag to share test fixtures cross-crate.
     pub fn tx_with_changes(index: u8) -> TxWithChanges {
         let token = Bytes::from(vec![0xaa; 20]);
+        let token2 = Bytes::from(vec![0xcc; 20]);
         let contract = Bytes::from(vec![0xbb; 20]);
         let c_id = "pool_0".to_string();
 
@@ -768,28 +770,51 @@ pub mod fixtures {
                     )]),
                     balance_changes: HashMap::from([(
                         c_id.clone(),
-                        HashMap::from([(
-                            token.clone(),
-                            ComponentBalance {
-                                token: token.clone(),
-                                balance: Bytes::from(800_u64).lpad(32, 0),
-                                balance_float: 800.0,
-                                component_id: c_id.clone(),
-                                modify_tx: tx.hash.clone(),
-                            },
-                        )]),
+                        HashMap::from([
+                            (
+                                token.clone(),
+                                ComponentBalance {
+                                    token: token.clone(),
+                                    balance: Bytes::from(800_u64).lpad(32, 0),
+                                    balance_float: 800.0,
+                                    component_id: c_id.clone(),
+                                    modify_tx: tx.hash.clone(),
+                                },
+                            ),
+                            (
+                                token2.clone(),
+                                ComponentBalance {
+                                    token: token2.clone(),
+                                    balance: Bytes::from(300_u64).lpad(32, 0),
+                                    balance_float: 300.0,
+                                    component_id: c_id.clone(),
+                                    modify_tx: tx.hash.clone(),
+                                },
+                            ),
+                        ]),
                     )]),
                     account_balance_changes: HashMap::from([(
                         contract.clone(),
-                        HashMap::from([(
-                            token.clone(),
-                            AccountBalance {
-                                token: token.clone(),
-                                balance: Bytes::from(500_u64).lpad(32, 0),
-                                modify_tx: tx.hash,
-                                account: contract,
-                            },
-                        )]),
+                        HashMap::from([
+                            (
+                                token.clone(),
+                                AccountBalance {
+                                    token: token.clone(),
+                                    balance: Bytes::from(500_u64).lpad(32, 0),
+                                    modify_tx: tx.hash.clone(),
+                                    account: contract.clone(),
+                                },
+                            ),
+                            (
+                                token2,
+                                AccountBalance {
+                                    token: Bytes::from(vec![0xcc; 20]),
+                                    balance: Bytes::from(150_u64).lpad(32, 0),
+                                    modify_tx: tx.hash,
+                                    account: contract,
+                                },
+                            ),
+                        ]),
                     )]),
                     entrypoints: HashMap::from([(
                         c_id.clone(),
