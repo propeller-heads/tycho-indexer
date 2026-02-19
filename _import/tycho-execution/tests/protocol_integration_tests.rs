@@ -13,7 +13,7 @@ use tycho_contracts::encoding::{
 };
 
 use crate::common::{
-    alice_address, encoding::encode_tycho_router_call, eth, eth_chain,
+    alice_address, dai, encoding::encode_tycho_router_call, eth, eth_chain,
     get_base_tycho_router_encoder, get_signer, get_tycho_router_encoder, ondo, pepe, usdc, wbtc,
     weth,
 };
@@ -1834,4 +1834,49 @@ fn test_single_encoding_strategy_weth_unwrap() {
             .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_weth_unwrapping", hex_calldata.as_str());
+}
+
+#[test]
+fn test_sequential_encoding_strategy_weth_wrap_added() {
+    // We use `bob*` address as sender/receiver as Alice's address has a drainer deployed that
+    // would interfere with the test when we send ETH back to her.
+
+    let swap_weth_dai = Swap::new(
+        ProtocolComponent {
+            id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+            protocol_system: "uniswap_v2".to_string(),
+            ..Default::default()
+        },
+        weth().clone(),
+        dai().clone(),
+    );
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        token_in: eth(),
+        amount_in: BigUint::from(1_000_000_000_000_000_000_u128),
+        token_out: dai(),
+        min_amount_out: BigUint::from(1_000_000_000_000_000_000_u128),
+        // Bob*
+        sender: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
+        receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
+        swaps: vec![swap_weth_dai],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata =
+        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
+            .unwrap()
+            .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file(
+        "test_sequential_encoding_strategy_weth_wrap_added",
+        hex_calldata.as_str(),
+    );
 }
