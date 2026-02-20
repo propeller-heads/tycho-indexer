@@ -1,18 +1,17 @@
 use std::collections::{HashMap, HashSet};
-#[cfg(not(test))]
-use std::time::SystemTime;
 
 use alloy::eips::merge::SLOT_DURATION_SECS;
 use ekubo_sdk::{
     chain::evm::{
         EvmPoolKey, EvmTokenAmount, EvmTwammPool, EvmTwammPoolConstructionError, EvmTwammPoolKey,
-        EvmTwammPoolState,
+        EvmTwammPoolResources, EvmTwammPoolState,
     },
-    quoting::types::{Pool, QuoteParams, TimeRateDelta, TokenAmount},
+    quoting::{
+        pools::twamm::TwammStandalonePoolResources,
+        types::{Pool, QuoteParams, TimeRateDelta, TokenAmount},
+    },
     U256,
 };
-use itertools::Itertools;
-use num_traits::Zero;
 use revm::primitives::Address;
 use serde::{Deserialize, Serialize};
 use tycho_common::{
@@ -20,25 +19,38 @@ use tycho_common::{
     Bytes,
 };
 
-use super::{full_range::FullRangePool, EkuboPool, EkuboPoolQuote};
+use super::{EkuboPool, EkuboPoolQuote};
 use crate::{
-    evm::protocol::ekubo_v3::attributes::sale_rate_deltas_from_attributes,
+    evm::protocol::ekubo_v3::pool::{
+        full_range,
+        timed::{self, estimate_block_timestamp, TimedTransition, GAS_COST_OF_ONE_BITMAP_SLOAD},
+    },
     protocol::errors::InvalidSnapshotError,
 };
+
+const UNDERESTIMATION_SLOT_COUNT: u64 = 4;
+
+const EXTRA_BASE_GAS_COST: u64 = 5_302;
+const GAS_COST_OF_EXECUTING_VIRTUAL_ORDERS: u64 = 20_554;
+const GAS_COST_OF_CROSSING_ONE_VIRTUAL_ORDER_DELTA: u64 = 19_980;
 
 #[derive(Debug, Eq, Clone, Serialize, Deserialize)]
 pub struct TwammPool {
     imp: EvmTwammPool,
-    state: EvmTwammPoolState,
+    swap_state: TwammPoolSwapState,
+}
 
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+struct TwammPoolSwapState {
+    sdk_state: EvmTwammPoolState,
     swapped_this_block: bool,
 }
 
 impl PartialEq for TwammPool {
-    fn eq(&self, other: &Self) -> bool {
-        self.key() == other.key() &&
-            self.imp.sale_rate_deltas() == other.imp.sale_rate_deltas() &&
-            self.state == other.state
+    fn eq(&self, Self { imp, swap_state }: &Self) -> bool {
+        self.imp.key() == imp.key() &&
+            self.imp.sale_rate_deltas() == imp.sale_rate_deltas() &&
+            &self.swap_state == swap_state
     }
 }
 
@@ -62,32 +74,19 @@ fn impl_from_state(
 }
 
 impl TwammPool {
-    const GAS_COST_OF_ONE_VIRTUAL_ORDER_DELTA: u64 = 25_000;
-    const BASE_GAS_COST_OF_EXECUTING_VIRTUAL_ORDERS: u64 = 15_000;
-
-    const UNDERESTIMATION_SLOT_COUNT: u64 = 4;
-
     pub fn new(
         key: EvmTwammPoolKey,
-        state: EvmTwammPoolState,
+        sdk_state: EvmTwammPoolState,
         virtual_order_deltas: Vec<TimeRateDelta>,
     ) -> Result<Self, InvalidSnapshotError> {
-        Ok(Self {
-            imp: impl_from_state(key, state, virtual_order_deltas).map_err(|err| {
+        impl_from_state(key, sdk_state, virtual_order_deltas)
+            .map(|imp| Self {
+                imp,
+                swap_state: TwammPoolSwapState { sdk_state, swapped_this_block: false },
+            })
+            .map_err(|err| {
                 InvalidSnapshotError::ValueError(format!("creating TWAMM pool: {err:?}"))
-            })?,
-            state,
-            swapped_this_block: false,
-        })
-    }
-
-    fn estimate_block_timestamp(&self) -> Result<u64, SimulationError> {
-        if self.swapped_this_block {
-            Ok(self.state.last_execution_time)
-        } else {
-            // TODO How accurate is it to take the current timestamp?
-            Ok(Ord::max(self.state.last_execution_time + SLOT_DURATION_SECS, current_timestamp()?))
-        }
+            })
     }
 }
 
@@ -97,62 +96,65 @@ impl EkuboPool for TwammPool {
     }
 
     fn sqrt_ratio(&self) -> U256 {
-        self.state
+        self.swap_state
+            .sdk_state
             .full_range_pool_state
             .sqrt_ratio
     }
 
     fn set_sqrt_ratio(&mut self, sqrt_ratio: U256) {
-        self.state
+        self.swap_state
+            .sdk_state
             .full_range_pool_state
             .sqrt_ratio = sqrt_ratio;
     }
 
     fn set_liquidity(&mut self, liquidity: u128) {
-        self.state
+        self.swap_state
+            .sdk_state
             .full_range_pool_state
             .liquidity = liquidity;
     }
 
     fn quote(&self, token_amount: EvmTokenAmount) -> Result<EkuboPoolQuote, SimulationError> {
-        let quote = self
-            .imp
+        let timestamp = estimate_block_timestamp(
+            self.swap_state.swapped_this_block,
+            self.swap_state
+                .sdk_state
+                .last_execution_time,
+        )?;
+
+        self.imp
             .quote(QuoteParams {
                 token_amount,
                 sqrt_ratio_limit: None,
-                override_state: Some(self.state),
-                meta: self.estimate_block_timestamp()?,
+                override_state: Some(self.swap_state.sdk_state),
+                meta: timestamp,
             })
-            .map_err(|err| SimulationError::RecoverableError(format!("{err:?}")))?;
-
-        Ok(EkuboPoolQuote {
-            consumed_amount: quote.consumed_amount,
-            calculated_amount: quote.calculated_amount,
-            gas: FullRangePool::gas_costs() +
-                u64::from(
-                    quote
-                        .execution_resources
-                        .twamm
-                        .virtual_orders_executed,
-                ) * Self::BASE_GAS_COST_OF_EXECUTING_VIRTUAL_ORDERS +
-                u64::from(
-                    quote
-                        .execution_resources
-                        .twamm
-                        .virtual_order_delta_times_crossed,
-                ) * Self::GAS_COST_OF_ONE_VIRTUAL_ORDER_DELTA,
-            new_state: Self {
-                imp: self.imp.clone(),
-                state: quote.state_after,
-                swapped_this_block: true,
-            }
-            .into(),
-        })
+            .map(|quote| EkuboPoolQuote {
+                consumed_amount: quote.consumed_amount,
+                calculated_amount: quote.calculated_amount,
+                gas: gas_costs(quote.execution_resources),
+                new_state: Self {
+                    imp: self.imp.clone(),
+                    swap_state: TwammPoolSwapState {
+                        sdk_state: quote.state_after,
+                        swapped_this_block: true,
+                    },
+                }
+                .into(),
+            })
+            .map_err(|err| SimulationError::RecoverableError(format!("{err:?}")))
     }
 
     fn get_limit(&self, token_in: Address) -> Result<i128, SimulationError> {
-        let key = self.key();
-        let estimated_timestamp = self.estimate_block_timestamp()?;
+        let key = self.imp.key();
+        let estimated_timestamp = estimate_block_timestamp(
+            self.swap_state.swapped_this_block,
+            self.swap_state
+                .sdk_state
+                .last_execution_time,
+        )?;
 
         // Only execute the virtual orders up to a given timestamp
         let virtual_order_quote = self
@@ -160,8 +162,8 @@ impl EkuboPool for TwammPool {
             .quote(QuoteParams {
                 token_amount: TokenAmount { token: token_in, amount: 0 },
                 sqrt_ratio_limit: None,
-                override_state: Some(self.state),
-                meta: estimated_timestamp + Self::UNDERESTIMATION_SLOT_COUNT * SLOT_DURATION_SECS,
+                override_state: Some(self.swap_state.sdk_state),
+                meta: estimated_timestamp + UNDERESTIMATION_SLOT_COUNT * SLOT_DURATION_SECS,
             })
             .map_err(|err| {
                 SimulationError::RecoverableError(format!(
@@ -175,7 +177,8 @@ impl EkuboPool for TwammPool {
             .state_after
             .full_range_pool_state
             .sqrt_ratio <
-            self.state
+            self.swap_state
+                .sdk_state
                 .full_range_pool_state
                 .sqrt_ratio) ==
             (token_in == key.token0);
@@ -188,7 +191,7 @@ impl EkuboPool for TwammPool {
                     .last_execution_time,
             )
         } else {
-            (self.state, estimated_timestamp)
+            (self.swap_state.sdk_state, estimated_timestamp)
         };
 
         // Quote with the less favorable state (either the current one or the one where future
@@ -210,90 +213,66 @@ impl EkuboPool for TwammPool {
         updated_attributes: HashMap<String, Bytes>,
         deleted_attributes: HashSet<String>,
     ) -> Result<(), TransitionError<String>> {
-        if let Some(token0_sale_rate) = updated_attributes.get("token0_sale_rate") {
-            self.state.token0_sale_rate = token0_sale_rate.clone().into();
+        let TimedTransition {
+            rate_token0,
+            rate_token1,
+            last_time,
+            time_rate_deltas: sale_rate_deltas,
+        } = timed::finish_transition(
+            self.swap_state
+                .sdk_state
+                .last_execution_time,
+            self.imp.sale_rate_deltas(),
+            updated_attributes,
+            deleted_attributes,
+        )?;
+
+        if let Some(token0_sale_rate) = rate_token0 {
+            self.swap_state
+                .sdk_state
+                .token0_sale_rate = token0_sale_rate;
+        }
+        if let Some(token1_sale_rate) = rate_token1 {
+            self.swap_state
+                .sdk_state
+                .token1_sale_rate = token1_sale_rate;
+        }
+        if let Some(last_execution_time) = last_time {
+            self.swap_state
+                .sdk_state
+                .last_execution_time = last_execution_time;
         }
 
-        if let Some(token1_sale_rate) = updated_attributes.get("token1_sale_rate") {
-            self.state.token1_sale_rate = token1_sale_rate.clone().into();
-        }
-
-        let first_active_virtual_order_idx =
-            if let Some(last_execution_time) = updated_attributes.get("last_execution_time") {
-                let last_execution_time = last_execution_time.clone().into();
-
-                self.state.last_execution_time = last_execution_time;
-
-                self.imp
-                    .sale_rate_deltas()
-                    .partition_point(|srd| srd.time <= last_execution_time)
-            } else {
-                0
-            };
-
-        let changed_virtual_order_deltas = sale_rate_deltas_from_attributes(
-            updated_attributes.into_iter().chain(
-                deleted_attributes
-                    .into_iter()
-                    .map(|key| (key, Bytes::new())),
-            ),
-            self.state.last_execution_time,
-        )
-        .map_err(TransitionError::DecodeError)?
-        .collect_vec();
-
-        if !changed_virtual_order_deltas.is_empty() || !first_active_virtual_order_idx.is_zero() {
-            let mut virtual_order_deltas =
-                self.imp.sale_rate_deltas()[first_active_virtual_order_idx..].to_vec();
-
-            for virtual_order_delta in changed_virtual_order_deltas {
-                let res = virtual_order_deltas
-                    .binary_search_by_key(&virtual_order_delta.time, |d| d.time);
-
-                match res {
-                    Ok(idx) => {
-                        if virtual_order_delta
-                            .rate_delta0
-                            .is_zero() &&
-                            virtual_order_delta
-                                .rate_delta1
-                                .is_zero()
-                        {
-                            virtual_order_deltas.remove(idx);
-                        } else {
-                            virtual_order_deltas[idx] = virtual_order_delta;
-                        }
-                    }
-                    Err(idx) => {
-                        virtual_order_deltas.insert(idx, virtual_order_delta);
-                    }
-                }
-            }
-
-            self.imp = impl_from_state(self.imp.key(), self.state, virtual_order_deltas).map_err(
-                |err| {
+        if let Some(sale_rate_deltas) = sale_rate_deltas {
+            self.imp = impl_from_state(self.imp.key(), self.swap_state.sdk_state, sale_rate_deltas)
+                .map_err(|err| {
                     TransitionError::SimulationError(SimulationError::RecoverableError(format!(
                         "reinstantiate TWAMM pool: {err:?}"
                     )))
-                },
-            )?;
+                })?;
         }
 
-        self.swapped_this_block = false;
+        self.swap_state.swapped_this_block = false;
 
         Ok(())
     }
 }
 
-#[cfg(test)]
-fn current_timestamp() -> Result<u64, SimulationError> {
-    Ok(crate::evm::protocol::ekubo_v3::test_cases::TEST_TIMESTAMP)
-}
-
-#[cfg(not(test))]
-fn current_timestamp() -> Result<u64, SimulationError> {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map_err(|e| SimulationError::FatalError(format!("System time before UNIX EPOCH: {e:?}")))
-        .map(|d| d.as_secs())
+fn gas_costs(
+    EvmTwammPoolResources {
+        full_range,
+        twamm:
+            TwammStandalonePoolResources {
+                extra_distinct_bitmap_lookups,
+                virtual_order_delta_times_crossed,
+                virtual_orders_executed,
+            },
+    }: EvmTwammPoolResources,
+) -> u64 {
+    full_range::gas_costs(full_range) +
+        EXTRA_BASE_GAS_COST +
+        u64::from(virtual_orders_executed) * GAS_COST_OF_EXECUTING_VIRTUAL_ORDERS +
+        u64::from(virtual_order_delta_times_crossed) *
+            GAS_COST_OF_CROSSING_ONE_VIRTUAL_ORDER_DELTA +
+        u64::from(extra_distinct_bitmap_lookups) * GAS_COST_OF_ONE_BITMAP_SLOAD
 }

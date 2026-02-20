@@ -1,17 +1,19 @@
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
 use alloy::primitives::aliases::B32;
 use ekubo_sdk::{
-    chain::evm::{EvmBasePoolKey, EvmOraclePoolKey, EvmPoolTypeConfig, EvmTwammPoolKey},
+    chain::evm::{
+        EvmConcentratedPoolConfig, EvmConcentratedPoolKey, EvmConcentratedPoolState,
+        EvmFullRangePoolState, EvmOraclePoolKey, EvmPoolTypeConfig, EvmTwammPoolKey,
+    },
     quoting::{
         pools::{
             full_range::{FullRangePoolKey, FullRangePoolState, FullRangePoolTypeConfig},
-            mev_capture::MevCapturePoolKey,
-            oracle::OraclePoolState,
             stableswap::{StableswapPoolKey, StableswapPoolState},
             twamm::TwammPoolState,
         },
-        types::PoolConfig,
+        types::{PoolConfig, Tick, TimeRateDelta},
+        util::find_nearest_initialized_tick_index,
     },
     U256,
 };
@@ -21,38 +23,52 @@ use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
 use tycho_common::{models::token::Token, Bytes};
 
 use super::{
-    attributes::{sale_rate_deltas_from_attributes, ticks_from_attributes},
-    pool::{base::BasePool, full_range::FullRangePool, oracle::OraclePool, twamm::TwammPool},
+    attributes::{rate_deltas_from_attributes, ticks_from_attributes},
+    pool::{
+        concentrated::ConcentratedPool, full_range::FullRangePool, oracle::OraclePool,
+        twamm::TwammPool,
+    },
     state::EkuboV3State,
 };
 use crate::{
-    evm::protocol::ekubo_v3::pool::{mev_capture::MevCapturePool, stableswap::StableswapPool},
+    evm::protocol::ekubo_v3::pool::{
+        boosted_fees::BoostedFeesPool, mev_capture::MevCapturePool, stableswap::StableswapPool,
+    },
     protocol::{
         errors::InvalidSnapshotError,
         models::{DecoderContext, TryFromWithBlock},
     },
 };
 
-enum EkuboExtension {
-    Base,
+enum ExtensionType {
+    NoSwapCallPoints,
     Oracle,
     Twamm,
     MevCapture,
+    BoostedFeesConcentrated,
 }
 
-impl TryFrom<Bytes> for EkuboExtension {
+struct TimedStateDetails {
+    rate_token0: u128,
+    rate_token1: u128,
+    last_time: u64,
+    rate_deltas: Vec<TimeRateDelta>,
+}
+
+impl TryFrom<Bytes> for ExtensionType {
     type Error = InvalidSnapshotError;
 
     fn try_from(value: Bytes) -> Result<Self, Self::Error> {
         // See extension ID encoding in tycho-protocol-sdk
         match i32::from(value) {
             0 => Err(InvalidSnapshotError::ValueError("Unknown Ekubo extension".to_string())),
-            1 => Ok(Self::Base),
+            1 => Ok(Self::NoSwapCallPoints),
             2 => Ok(Self::Oracle),
             3 => Ok(Self::Twamm),
             4 => Ok(Self::MevCapture),
+            5 => Ok(Self::BoostedFeesConcentrated),
             discriminant => Err(InvalidSnapshotError::ValueError(format!(
-                "Unknown Ekubo extension discriminant {discriminant}"
+                "Unknown Ekubo extension type discriminant {discriminant}"
             ))),
         }
     }
@@ -71,7 +87,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EkuboV3State {
         let static_attrs = snapshot.component.static_attributes;
         let state_attrs = snapshot.state.attributes;
 
-        let extension_id = attribute(&static_attrs, "extension_id")?
+        let extension_type = attribute(&static_attrs, "extension_type")?
             .clone()
             .try_into()?;
 
@@ -111,8 +127,43 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EkuboV3State {
         let sqrt_ratio = U256::try_from_be_slice(&attribute(&state_attrs, "sqrt_ratio")?[..])
             .ok_or_else(|| InvalidSnapshotError::ValueError("invalid pool price".to_string()))?;
 
-        Ok(match extension_id {
-            EkuboExtension::Base => match pool_type_config {
+        let concentrated_pool = |state_attrs,
+                                 pool_type_config|
+         -> Result<
+            (EvmConcentratedPoolKey, EvmConcentratedPoolState, i32, Vec<Tick>),
+            InvalidSnapshotError,
+        > {
+            let tick = attribute(state_attrs, "tick")?
+                .clone()
+                .into();
+
+            let mut ticks = ticks_from_attributes(
+                state_attrs
+                    .iter()
+                    .map(|(key, value)| (key.as_str(), Cow::Borrowed(value))),
+            )
+            .map_err(InvalidSnapshotError::ValueError)?;
+
+            ticks.sort_unstable_by_key(|tick| tick.index);
+
+            Ok((
+                EvmConcentratedPoolKey {
+                    token0,
+                    token1,
+                    config: EvmConcentratedPoolConfig { extension, fee, pool_type_config },
+                },
+                EvmConcentratedPoolState {
+                    sqrt_ratio,
+                    liquidity,
+                    active_tick_index: find_nearest_initialized_tick_index(&ticks, tick),
+                },
+                tick,
+                ticks,
+            ))
+        };
+
+        Ok(match extension_type {
+            ExtensionType::NoSwapCallPoints => match pool_type_config {
                 EvmPoolTypeConfig::FullRange(pool_type_config) => {
                     Self::FullRange(FullRangePool::new(
                         FullRangePoolKey {
@@ -134,29 +185,13 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EkuboV3State {
                     )?)
                 }
                 EvmPoolTypeConfig::Concentrated(pool_type_config) => {
-                    let tick = attribute(&state_attrs, "tick")?
-                        .clone()
-                        .into();
+                    let (key, state, tick, ticks) =
+                        concentrated_pool(&state_attrs, pool_type_config)?;
 
-                    let mut ticks = ticks_from_attributes(state_attrs)
-                        .map_err(InvalidSnapshotError::ValueError)?;
-
-                    ticks.sort_unstable_by_key(|tick| tick.index);
-
-                    Self::Base(BasePool::new(
-                        EvmBasePoolKey {
-                            token0,
-                            token1,
-                            config: PoolConfig { extension, fee, pool_type_config },
-                        },
-                        ticks,
-                        sqrt_ratio,
-                        liquidity,
-                        tick,
-                    )?)
+                    Self::Concentrated(ConcentratedPool::new(key, state, tick, ticks)?)
                 }
             },
-            EkuboExtension::Oracle => Self::Oracle(OraclePool::new(
+            ExtensionType::Oracle => Self::Oracle(OraclePool::new(
                 EvmOraclePoolKey {
                     token0,
                     token1,
@@ -166,32 +201,15 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EkuboV3State {
                         pool_type_config: FullRangePoolTypeConfig,
                     },
                 },
-                OraclePoolState {
-                    full_range_pool_state: FullRangePoolState { sqrt_ratio, liquidity },
-                    last_snapshot_time: 0, /* For the purpose of quote computation it isn't
-                                            * required to track actual timestamps */
-                },
+                EvmFullRangePoolState { sqrt_ratio, liquidity },
             )?),
-            EkuboExtension::Twamm => {
-                let (token0_sale_rate, token1_sale_rate) = (
-                    attribute(&state_attrs, "token0_sale_rate")?
-                        .clone()
-                        .into(),
-                    attribute(&state_attrs, "token1_sale_rate")?
-                        .clone()
-                        .into(),
-                );
-
-                let last_execution_time = attribute(&state_attrs, "last_execution_time")?
-                    .clone()
-                    .into();
-
-                let mut virtual_order_deltas =
-                    sale_rate_deltas_from_attributes(state_attrs, last_execution_time)
-                        .map_err(InvalidSnapshotError::ValueError)?
-                        .collect_vec();
-
-                virtual_order_deltas.sort_unstable_by_key(|delta| delta.time);
+            ExtensionType::Twamm => {
+                let TimedStateDetails {
+                    rate_token0: token0_sale_rate,
+                    rate_token1: token1_sale_rate,
+                    last_time: last_execution_time,
+                    rate_deltas: virtual_order_deltas,
+                } = timed_state_details(state_attrs)?;
 
                 Self::Twamm(TwammPool::new(
                     EvmTwammPoolKey {
@@ -212,31 +230,43 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EkuboV3State {
                     virtual_order_deltas,
                 )?)
             }
-            EkuboExtension::MevCapture => {
-                let tick = attribute(&state_attrs, "tick")?
-                    .clone()
-                    .into();
-
-                let mut ticks =
-                    ticks_from_attributes(state_attrs).map_err(InvalidSnapshotError::ValueError)?;
-
-                ticks.sort_unstable_by_key(|tick| tick.index);
-
+            ExtensionType::MevCapture => {
                 let EvmPoolTypeConfig::Concentrated(pool_type_config) = pool_type_config else {
                     return Err(InvalidSnapshotError::ValueError(
-                        "expected concentrated pool config for MEV-capture pool".to_string(),
+                        "expected concentrated pool type config for MEVCapture pool".to_string(),
                     ));
                 };
 
-                Self::MevCapture(MevCapturePool::new(
-                    MevCapturePoolKey {
-                        token0,
-                        token1,
-                        config: PoolConfig { extension, fee, pool_type_config },
-                    },
+                let (key, concentrated_state, tick, ticks) =
+                    concentrated_pool(&state_attrs, pool_type_config)?;
+
+                Self::MevCapture(MevCapturePool::new(key, tick, concentrated_state, ticks)?)
+            }
+            ExtensionType::BoostedFeesConcentrated => {
+                let EvmPoolTypeConfig::Concentrated(pool_type_config) = pool_type_config else {
+                    return Err(InvalidSnapshotError::ValueError(
+                        "expected concentrated pool type config for BoostedFees pool".to_string(),
+                    ));
+                };
+
+                let (key, concentrated_pool_state, tick, ticks) =
+                    concentrated_pool(&state_attrs, pool_type_config)?;
+
+                let TimedStateDetails {
+                    rate_token0: donate_rate0,
+                    rate_token1: donate_rate1,
+                    last_time: last_donate_time,
+                    rate_deltas: donate_rate_deltas,
+                } = timed_state_details(state_attrs)?;
+
+                Self::BoostedFees(BoostedFeesPool::new(
+                    key,
+                    concentrated_pool_state,
+                    donate_rate0,
+                    donate_rate1,
+                    last_donate_time,
+                    donate_rate_deltas,
                     ticks,
-                    sqrt_ratio,
-                    liquidity,
                     tick,
                 )?)
             }
@@ -255,6 +285,33 @@ fn attribute<'a>(
 fn parse_address(bytes: &Bytes, attr_name: &str) -> Result<Address, InvalidSnapshotError> {
     Address::try_from(&bytes[..])
         .map_err(|err| InvalidSnapshotError::ValueError(format!("parsing {attr_name}: {err}")))
+}
+
+fn timed_state_details(
+    attrs: HashMap<String, Bytes>,
+) -> Result<TimedStateDetails, InvalidSnapshotError> {
+    let last_time = attribute(&attrs, "last_time")?
+        .clone()
+        .into();
+
+    Ok(TimedStateDetails {
+        rate_token0: attribute(&attrs, "rate_token0")?
+            .clone()
+            .into(),
+        rate_token1: attribute(&attrs, "rate_token1")?
+            .clone()
+            .into(),
+        last_time,
+        rate_deltas: rate_deltas_from_attributes(
+            attrs
+                .into_iter()
+                .map(|(key, value)| (key, Cow::Owned(value))),
+            last_time,
+        )
+        .map_err(InvalidSnapshotError::ValueError)?
+        .sorted_unstable_by_key(|delta| delta.time)
+        .collect(),
+    })
 }
 
 #[cfg(test)]

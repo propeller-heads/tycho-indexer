@@ -1,8 +1,14 @@
 use std::collections::{HashMap, HashSet};
 
 use ekubo_sdk::{
-    chain::evm::{EvmOraclePool, EvmOraclePoolKey, EvmOraclePoolState, EvmPoolKey, EvmTokenAmount},
-    quoting::types::{Pool, QuoteParams, TokenAmount},
+    chain::evm::{
+        EvmFullRangePoolState, EvmOraclePool, EvmOraclePoolKey, EvmOraclePoolResources,
+        EvmOraclePoolState, EvmPoolKey, EvmTokenAmount,
+    },
+    quoting::{
+        pools::oracle::OracleStandalonePoolResources,
+        types::{Pool, QuoteParams, TokenAmount},
+    },
     U256,
 };
 use revm::primitives::Address;
@@ -12,45 +18,47 @@ use tycho_common::{
     Bytes,
 };
 
-use super::{full_range::FullRangePool, EkuboPool, EkuboPoolQuote};
-use crate::protocol::errors::InvalidSnapshotError;
+use super::{EkuboPool, EkuboPoolQuote};
+use crate::{evm::protocol::ekubo_v3::pool::full_range, protocol::errors::InvalidSnapshotError};
+
+// The negative costs come from savings compared to a full range swap which usually touches
+// fee-related storage slots
+const REDUCED_BASE_GAS_COST: u64 = 1_801;
+const GAS_COST_OF_UPDATING_SNAPSHOT: u64 = 9_709;
 
 #[derive(Debug, Eq, Clone, Serialize, Deserialize)]
 pub struct OraclePool {
     imp: EvmOraclePool,
-    state: EvmOraclePoolState,
+    swap_state: OraclePoolSwapState,
+}
 
+#[derive(Debug, Eq, Clone, Serialize, Deserialize)]
+struct OraclePoolSwapState {
+    sdk_state: EvmFullRangePoolState,
     swapped_this_block: bool,
 }
 
-impl PartialEq for OraclePool {
-    fn eq(&self, other: &Self) -> bool {
-        self.key() == other.key() && self.state == other.state
-    }
-}
-
 impl OraclePool {
-    const GAS_COST_OF_UPDATING_ORACLE_SNAPSHOT: u64 = 15_000;
-
     pub fn new(
         key: EvmOraclePoolKey,
-        state: EvmOraclePoolState,
+        full_range_sdk_state: EvmFullRangePoolState,
     ) -> Result<Self, InvalidSnapshotError> {
-        Ok(Self {
-            imp: EvmOraclePool::new(
-                key.token0,
-                key.token1,
-                key.config.extension,
-                state.full_range_pool_state.sqrt_ratio,
-                state.full_range_pool_state.liquidity,
-                state.last_snapshot_time,
-            )
-            .map_err(|err| {
-                InvalidSnapshotError::ValueError(format!("creating oracle pool: {err:?}"))
-            })?,
-            state,
-            swapped_this_block: false,
+        EvmOraclePool::new(
+            key.token0,
+            key.token1,
+            key.config.extension,
+            full_range_sdk_state.sqrt_ratio,
+            full_range_sdk_state.liquidity,
+            0,
+        )
+        .map(|imp| Self {
+            imp,
+            swap_state: OraclePoolSwapState {
+                sdk_state: full_range_sdk_state,
+                swapped_this_block: false,
+            },
         })
+        .map_err(|err| InvalidSnapshotError::ValueError(format!("creating oracle pool: {err:?}")))
     }
 }
 
@@ -60,72 +68,59 @@ impl EkuboPool for OraclePool {
     }
 
     fn sqrt_ratio(&self) -> U256 {
-        self.state
-            .full_range_pool_state
-            .sqrt_ratio
+        self.swap_state.sdk_state.sqrt_ratio
     }
 
     fn set_sqrt_ratio(&mut self, sqrt_ratio: U256) {
-        self.state
-            .full_range_pool_state
-            .sqrt_ratio = sqrt_ratio;
+        self.swap_state.sdk_state.sqrt_ratio = sqrt_ratio;
     }
 
     fn set_liquidity(&mut self, liquidity: u128) {
-        self.state
-            .full_range_pool_state
-            .liquidity = liquidity;
+        self.swap_state.sdk_state.liquidity = liquidity;
     }
 
     fn quote(&self, token_amount: EvmTokenAmount) -> Result<EkuboPoolQuote, SimulationError> {
-        // Not actual timestamps but the Ekubo SDK only cares about the existence of time
-        // differences
-        let timestamp = if self.swapped_this_block {
-            self.state.last_snapshot_time
-        } else {
-            self.state.last_snapshot_time + 1
-        };
+        let first_swap_this_block = !self.swap_state.swapped_this_block;
 
-        let quote = self
-            .imp
+        self.imp
             .quote(QuoteParams {
                 token_amount,
                 sqrt_ratio_limit: None,
-                override_state: Some(self.state),
-                meta: timestamp,
+                override_state: Some(EvmOraclePoolState {
+                    full_range_pool_state: self.swap_state.sdk_state,
+                    last_snapshot_time: 0,
+                }),
+                meta: u64::from(first_swap_this_block),
             })
-            .map_err(|err| SimulationError::RecoverableError(format!("{err:?}")))?;
-
-        Ok(EkuboPoolQuote {
-            consumed_amount: quote.consumed_amount,
-            calculated_amount: quote.calculated_amount,
-            gas: FullRangePool::gas_costs() +
-                u64::from(
-                    quote
-                        .execution_resources
-                        .oracle
-                        .snapshots_written,
-                ) * Self::GAS_COST_OF_UPDATING_ORACLE_SNAPSHOT,
-            new_state: Self {
-                imp: self.imp.clone(),
-                state: quote.state_after,
-                swapped_this_block: true,
-            }
-            .into(),
-        })
+            .map(|quote| EkuboPoolQuote {
+                consumed_amount: quote.consumed_amount,
+                calculated_amount: quote.calculated_amount,
+                gas: gas_costs(quote.execution_resources),
+                new_state: Self {
+                    imp: self.imp.clone(),
+                    swap_state: OraclePoolSwapState {
+                        sdk_state: quote.state_after.full_range_pool_state,
+                        swapped_this_block: true,
+                    },
+                }
+                .into(),
+            })
+            .map_err(|err| SimulationError::RecoverableError(format!("{err:?}")))
     }
 
     fn get_limit(&self, token_in: Address) -> Result<i128, SimulationError> {
-        Ok(self
-            .imp
+        self.imp
             .quote(QuoteParams {
                 token_amount: TokenAmount { amount: i128::MAX, token: token_in },
                 sqrt_ratio_limit: None,
-                override_state: Some(self.state),
+                override_state: Some(EvmOraclePoolState {
+                    full_range_pool_state: self.swap_state.sdk_state,
+                    last_snapshot_time: 0,
+                }),
                 meta: 0,
             })
-            .map_err(|err| SimulationError::RecoverableError(format!("quoting error: {err:?}")))?
-            .consumed_amount)
+            .map(|quote| quote.consumed_amount)
+            .map_err(|err| SimulationError::RecoverableError(format!("quoting error: {err:?}")))
     }
 
     fn finish_transition(
@@ -133,8 +128,29 @@ impl EkuboPool for OraclePool {
         _updated_attributes: HashMap<String, Bytes>,
         _deleted_attributes: HashSet<String>,
     ) -> Result<(), TransitionError<String>> {
-        self.swapped_this_block = false;
+        self.swap_state.swapped_this_block = false;
 
         Ok(())
     }
+}
+
+impl PartialEq for OraclePool {
+    fn eq(&self, Self { imp, swap_state }: &Self) -> bool {
+        self.imp.key() == imp.key() && &self.swap_state == swap_state
+    }
+}
+impl PartialEq for OraclePoolSwapState {
+    fn eq(&self, Self { sdk_state, swapped_this_block: _ }: &Self) -> bool {
+        &self.sdk_state == sdk_state
+    }
+}
+
+fn gas_costs(
+    EvmOraclePoolResources {
+        full_range,
+        oracle: OracleStandalonePoolResources { snapshots_written },
+    }: EvmOraclePoolResources,
+) -> u64 {
+    full_range::gas_costs(full_range) - REDUCED_BASE_GAS_COST +
+        u64::from(snapshots_written) * GAS_COST_OF_UPDATING_SNAPSHOT
 }

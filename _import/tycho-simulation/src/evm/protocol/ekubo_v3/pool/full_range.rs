@@ -1,7 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
 use ekubo_sdk::{
-    chain::evm::{EvmFullRangePool, EvmPoolKey, EvmTokenAmount},
+    chain::evm::{
+        EvmFullRangePool, EvmFullRangePoolResources, EvmFullRangePoolState, EvmPoolKey,
+        EvmTokenAmount,
+    },
     quoting::{
         pools::full_range::{FullRangePoolKey, FullRangePoolState},
         types::{Pool, QuoteParams, TokenAmount},
@@ -18,35 +21,29 @@ use tycho_common::{
 use super::{EkuboPool, EkuboPoolQuote};
 use crate::protocol::errors::InvalidSnapshotError;
 
+const BASE_GAS_COST: u64 = 15_920;
+
 #[derive(Debug, Clone, Eq, Serialize, Deserialize)]
 pub struct FullRangePool {
     imp: EvmFullRangePool,
-    state: FullRangePoolState,
+    swap_state: FullRangePoolSwapState,
 }
 
-impl PartialEq for FullRangePool {
-    fn eq(&self, other: &Self) -> bool {
-        self.key() == other.key() && self.state == other.state
-    }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct FullRangePoolSwapState {
+    sdk_state: EvmFullRangePoolState,
 }
 
 impl FullRangePool {
-    const BASE_GAS_COST: u64 = 20_000;
-
     pub fn new(
         key: FullRangePoolKey,
-        state: FullRangePoolState,
+        sdk_state: FullRangePoolState,
     ) -> Result<Self, InvalidSnapshotError> {
-        Ok(Self {
-            state,
-            imp: EvmFullRangePool::new(key, state).map_err(|err| {
+        EvmFullRangePool::new(key, sdk_state)
+            .map(|imp| Self { swap_state: FullRangePoolSwapState { sdk_state }, imp })
+            .map_err(|err| {
                 InvalidSnapshotError::ValueError(format!("creating full range pool: {err:?}"))
-            })?,
-        })
-    }
-
-    pub(super) fn gas_costs() -> u64 {
-        Self::BASE_GAS_COST
+            })
     }
 }
 
@@ -56,47 +53,48 @@ impl EkuboPool for FullRangePool {
     }
 
     fn sqrt_ratio(&self) -> U256 {
-        self.state.sqrt_ratio
+        self.swap_state.sdk_state.sqrt_ratio
     }
 
     fn set_sqrt_ratio(&mut self, sqrt_ratio: U256) {
-        self.state.sqrt_ratio = sqrt_ratio;
+        self.swap_state.sdk_state.sqrt_ratio = sqrt_ratio;
     }
 
     fn set_liquidity(&mut self, liquidity: u128) {
-        self.state.liquidity = liquidity;
+        self.swap_state.sdk_state.liquidity = liquidity;
     }
 
     fn quote(&self, token_amount: EvmTokenAmount) -> Result<EkuboPoolQuote, SimulationError> {
-        let quote = self
-            .imp
+        self.imp
             .quote(QuoteParams {
                 token_amount,
                 sqrt_ratio_limit: None,
-                override_state: Some(self.state),
+                override_state: Some(self.swap_state.sdk_state),
                 meta: (),
             })
-            .map_err(|err| SimulationError::RecoverableError(format!("{err:?}")))?;
-
-        Ok(EkuboPoolQuote {
-            consumed_amount: quote.consumed_amount,
-            calculated_amount: quote.calculated_amount,
-            gas: Self::gas_costs(),
-            new_state: Self { imp: self.imp.clone(), state: quote.state_after }.into(),
-        })
+            .map(|quote| EkuboPoolQuote {
+                consumed_amount: quote.consumed_amount,
+                calculated_amount: quote.calculated_amount,
+                gas: gas_costs(quote.execution_resources),
+                new_state: Self {
+                    imp: self.imp.clone(),
+                    swap_state: FullRangePoolSwapState { sdk_state: quote.state_after },
+                }
+                .into(),
+            })
+            .map_err(|err| SimulationError::RecoverableError(format!("{err:?}")))
     }
 
     fn get_limit(&self, token_in: Address) -> Result<i128, SimulationError> {
-        Ok(self
-            .imp
+        self.imp
             .quote(QuoteParams {
                 token_amount: TokenAmount { amount: i128::MAX, token: token_in },
                 sqrt_ratio_limit: None,
-                override_state: Some(self.state),
+                override_state: Some(self.swap_state.sdk_state),
                 meta: (),
             })
-            .map_err(|err| SimulationError::RecoverableError(format!("quoting error: {err:?}")))?
-            .consumed_amount)
+            .map(|quote| quote.consumed_amount)
+            .map_err(|err| SimulationError::RecoverableError(format!("quoting error: {err:?}")))
     }
 
     fn finish_transition(
@@ -106,4 +104,16 @@ impl EkuboPool for FullRangePool {
     ) -> Result<(), TransitionError<String>> {
         Ok(())
     }
+}
+
+impl PartialEq for FullRangePool {
+    fn eq(&self, Self { imp, swap_state }: &Self) -> bool {
+        self.imp.key() == imp.key() && &self.swap_state == swap_state
+    }
+}
+
+pub(super) fn gas_costs(
+    EvmFullRangePoolResources { no_override_price_change: _ }: EvmFullRangePoolResources,
+) -> u64 {
+    BASE_GAS_COST
 }

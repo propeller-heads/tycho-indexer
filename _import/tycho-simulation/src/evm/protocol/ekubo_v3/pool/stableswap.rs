@@ -17,31 +17,29 @@ use tycho_common::{
 use super::{EkuboPool, EkuboPoolQuote};
 use crate::protocol::errors::InvalidSnapshotError;
 
-const BASE_GAS_COST: u64 = 20_000;
+const BASE_GAS_COST: u64 = 17_400;
 
 #[derive(Debug, Clone, Eq, Serialize, Deserialize)]
 pub struct StableswapPool {
     imp: EvmStableswapPool,
-    state: EvmStableswapPoolState,
+    swap_state: StableswapPoolSwapState,
 }
 
-impl PartialEq for StableswapPool {
-    fn eq(&self, other: &Self) -> bool {
-        self.key() == other.key() && self.state == other.state
-    }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct StableswapPoolSwapState {
+    sdk_state: EvmStableswapPoolState,
 }
 
 impl StableswapPool {
     pub fn new(
         key: EvmStableswapPoolKey,
-        state: EvmStableswapPoolState,
+        sdk_state: EvmStableswapPoolState,
     ) -> Result<Self, InvalidSnapshotError> {
-        Ok(Self {
-            state,
-            imp: EvmStableswapPool::new(key, state).map_err(|err| {
+        EvmStableswapPool::new(key, sdk_state)
+            .map(|imp| Self { swap_state: StableswapPoolSwapState { sdk_state }, imp })
+            .map_err(|err| {
                 InvalidSnapshotError::ValueError(format!("creating stableswap pool: {err:?}"))
-            })?,
-        })
+            })
     }
 
     pub(super) fn gas_costs() -> u64 {
@@ -55,47 +53,48 @@ impl EkuboPool for StableswapPool {
     }
 
     fn sqrt_ratio(&self) -> U256 {
-        self.state.sqrt_ratio
+        self.swap_state.sdk_state.sqrt_ratio
     }
 
     fn set_sqrt_ratio(&mut self, sqrt_ratio: U256) {
-        self.state.sqrt_ratio = sqrt_ratio;
+        self.swap_state.sdk_state.sqrt_ratio = sqrt_ratio;
     }
 
     fn set_liquidity(&mut self, liquidity: u128) {
-        self.state.liquidity = liquidity;
+        self.swap_state.sdk_state.liquidity = liquidity;
     }
 
     fn quote(&self, token_amount: EvmTokenAmount) -> Result<EkuboPoolQuote, SimulationError> {
-        let quote = self
-            .imp
+        self.imp
             .quote(QuoteParams {
                 token_amount,
                 sqrt_ratio_limit: None,
-                override_state: Some(self.state),
+                override_state: Some(self.swap_state.sdk_state),
                 meta: (),
             })
-            .map_err(|err| SimulationError::RecoverableError(format!("{err:?}")))?;
-
-        Ok(EkuboPoolQuote {
-            consumed_amount: quote.consumed_amount,
-            calculated_amount: quote.calculated_amount,
-            gas: Self::gas_costs(),
-            new_state: Self { imp: self.imp.clone(), state: quote.state_after }.into(),
-        })
+            .map(|quote| EkuboPoolQuote {
+                consumed_amount: quote.consumed_amount,
+                calculated_amount: quote.calculated_amount,
+                gas: Self::gas_costs(),
+                new_state: Self {
+                    imp: self.imp.clone(),
+                    swap_state: StableswapPoolSwapState { sdk_state: quote.state_after },
+                }
+                .into(),
+            })
+            .map_err(|err| SimulationError::RecoverableError(format!("{err:?}")))
     }
 
     fn get_limit(&self, token_in: Address) -> Result<i128, SimulationError> {
-        Ok(self
-            .imp
+        self.imp
             .quote(QuoteParams {
                 token_amount: TokenAmount { amount: i128::MAX, token: token_in },
                 sqrt_ratio_limit: None,
-                override_state: Some(self.state),
+                override_state: Some(self.swap_state.sdk_state),
                 meta: (),
             })
-            .map_err(|err| SimulationError::RecoverableError(format!("quoting error: {err:?}")))?
-            .consumed_amount)
+            .map(|quote| quote.consumed_amount)
+            .map_err(|err| SimulationError::RecoverableError(format!("quoting error: {err:?}")))
     }
 
     fn finish_transition(
@@ -104,5 +103,11 @@ impl EkuboPool for StableswapPool {
         _deleted_attributes: HashSet<String>,
     ) -> Result<(), TransitionError<String>> {
         Ok(())
+    }
+}
+
+impl PartialEq for StableswapPool {
+    fn eq(&self, Self { imp, swap_state }: &Self) -> bool {
+        self.imp.key() == imp.key() && &self.swap_state == swap_state
     }
 }

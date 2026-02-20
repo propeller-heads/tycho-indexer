@@ -50,40 +50,51 @@ tycho-execution = ">=0.160.0"
 # EVM dependencies
 # Alloy's dyn-abi 1.4.0 has a security vulnerability, so we require at least 1.4.1
 alloy-dyn-abi = ">=1.4.1"
-alloy = { version = "1.0.30", features = ["providers", "signer-local", "rpc-types-eth", "rand", "eip712"] }
+alloy = { version = "1.0.30", features = [
+    "providers",
+    "signer-local",
+    "rpc-types-eth",
+    "rand",
+    "eip712",
+] }
 
 [dependencies]
 # Serialization/Deserialization
+chrono = { version = "0.4.26", features = ["serde"] }
+hex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-uuid = { version = "1.4.1", features = ["serde", "v4", "fast-rng", "macro-diagnostics"] }
-hex = { workspace = true }
-chrono = { version = "0.4.26", features = ["serde"] }
 typetag = { workspace = true }
+uuid = { version = "1.4.1", features = [
+    "serde",
+    "v4",
+    "fast-rng",
+    "macro-diagnostics",
+] }
 
 # Error handling
 thiserror = "1"
 
 # Async & concurrency
-tokio = { workspace = true }
 futures = { workspace = true }
+tokio = { workspace = true }
 
 # Logging & Tracing
 tracing = { workspace = true }
 
 # Utility
-num-traits = { workspace = true }
 dotenv = { workspace = true }
-itertools = { workspace = true }
 enum_delegate = "0.2.0"
+itertools = { workspace = true }
+num-traits = { workspace = true }
 
 # Enum utilities
 strum = "0.25.0"
 strum_macros = "0.25.2"
 
 # Caching
-mini-moka = "0.10"
 lazy_static = "1.4.0"
+mini-moka = "0.10"
 
 # Tycho dependencies
 tycho-client = { workspace = true }
@@ -91,30 +102,36 @@ tycho-common = { workspace = true }
 tycho-ethereum = { workspace = true }
 
 # EVM dependencies
-foundry-block-explorers = { version = "0.22.0", optional = true }
 alloy = { workspace = true, features = ["sol-types", "rand"], optional = true }
-ruint.workspace = true
-revm = { version = "29.0.1", features = ["alloydb", "serde", "optional_eip3607"], optional = true }
-revm-inspectors = { version = "0.30.0", features = ["serde"], optional = true }
+foundry-block-explorers = { version = "0.22.0", optional = true }
 num-bigint = { workspace = true }
+revm = { version = "29.0.1", features = [
+    "alloydb",
+    "serde",
+    "optional_eip3607",
+], optional = true }
+revm-inspectors = { version = "0.30.0", features = ["serde"], optional = true }
+ruint.workspace = true
 tokio-stream = "0.1.16"
 
 # Dialoguer
 dialoguer = "0.10.4"
 
 # Ekubo
-evm_ekubo_sdk = {version = "0.6.5", features = ["serde"]}
-ekubo_sdk = { version = "2", features = ["evm", "serde"] }
+ekubo_sdk = { version = "3", features = ["evm", "serde"] }
+evm_ekubo_sdk = { version = "0.6.5", features = ["serde"] }
 
 # rfq
-reqwest = { version = "0.12.22", optional = true }
-async-trait = { workspace = true, optional = true }
-tokio-tungstenite = { version = "0.28.0", features = ["native-tls"], optional = true }
+alloy-chains = "0.2.18"
 async-stream = { version = "0.3.6", optional = true }
+async-trait = { workspace = true, optional = true }
+hex-literal.workspace = true
 http = { version = "1.0", optional = true }
 prost = { version = "0.13", optional = true }
-alloy-chains = "0.2.18"
-hex-literal.workspace = true
+reqwest = { version = "0.12.22", optional = true }
+tokio-tungstenite = { version = "0.28.0", features = [
+    "native-tls",
+], optional = true }
 
 
 [dev-dependencies]
@@ -145,9 +162,20 @@ tracing-appender = "0.2.3"
 default = ["evm", "rfq"]
 network_tests = []
 evm = [
-    "dep:foundry-block-explorers", "dep:revm", "dep:revm-inspectors", "dep:alloy", "dep:reqwest"
+    "dep:foundry-block-explorers",
+    "dep:revm",
+    "dep:revm-inspectors",
+    "dep:alloy",
+    "dep:reqwest",
 ]
-rfq = ["dep:reqwest", "dep:async-trait", "dep:tokio-tungstenite", "dep:async-stream", "dep:http", "dep:prost"]
+rfq = [
+    "dep:reqwest",
+    "dep:async-trait",
+    "dep:tokio-tungstenite",
+    "dep:async-stream",
+    "dep:http",
+    "dep:prost",
+]
 
 [profile.bench]
 debug = true
