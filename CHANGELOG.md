@@ -1,3 +1,10 @@
+## [0.143.1](https://github.com/propeller-heads/tycho-indexer/compare/0.143.0...0.143.1) (2026-02-20)
+
+
+### Bug Fixes
+
+* remove depreceated models for BlockContractChanges and BlockEntityChanges ([#857](https://github.com/propeller-heads/tycho-indexer/issues/857)) ([35852c0](https://github.com/propeller-heads/tycho-indexer/commit/35852c0a58fdd470295fe61ce35642c65b562afd))
+
 ## [0.143.0](https://github.com/propeller-heads/tycho-indexer/compare/0.142.0...0.143.0) (2026-02-19)
 
 
