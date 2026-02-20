@@ -1,3 +1,10 @@
+## [0.28.1](https://github.com/propeller-heads/tycho-contracts/compare/0.28.0...0.28.1) (2026-02-20)
+
+
+### Bug Fixes
+
+* Avoid unnecessary approval token protocols like RETH ([97e5574](https://github.com/propeller-heads/tycho-contracts/commit/97e5574f4bbf80d6d334914b70f956fce4a0d7b8))
+
 ## [0.28.0](https://github.com/propeller-heads/tycho-contracts/compare/0.27.0...0.28.0) (2026-02-19)
 
 
