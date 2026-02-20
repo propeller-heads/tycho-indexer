@@ -17,7 +17,7 @@ import {StdUtils} from "../../lib/forge-std/src/StdUtils.sol";
 import {TestUtils} from "../TestUtils.sol";
 
 contract WethExecutorExposed is WethExecutor {
-    constructor(address _wrappedEthAddress) WethExecutor(_wrappedEthAddress) {}
+    constructor(address wrappedEthAddress) WethExecutor(wrappedEthAddress) {}
 
     function decodeParams(bytes calldata data)
         external
@@ -191,9 +191,7 @@ contract wethWrapTest is TychoRouterTestSetup {
 
         // Check balances
         assertTrue(success, "Call Failed");
-        assertEq(
-            wethBalanceAfter - wethBalanceBefore, 1_000_000_000_000_000_000
-        );
+        assertEq(wethBalanceAfter - wethBalanceBefore, 1 ether);
         assertEq(WETH.balanceOf(tychoRouterAddr), 0);
         assertEq(tychoRouterAddr.balance, 0);
     }
@@ -221,10 +219,8 @@ contract wethWrapTest is TychoRouterTestSetup {
 
         // Check balances
         assertTrue(success, "Call Failed");
-        assertEq(
-            wethBalanceBefore - wethBalanceAfter, 1_000_000_000_000_000_000
-        );
-        assertEq(ethBalanceAfter - ethBalanceBefore, 1_000_000_000_000_000_000);
+        assertEq(wethBalanceBefore - wethBalanceAfter, 1 ether);
+        assertEq(ethBalanceAfter - ethBalanceBefore, 1 ether);
         assertEq(WETH.balanceOf(tychoRouterAddr), 0);
         assertEq(tychoRouterAddr.balance, 0);
     }
@@ -254,7 +250,7 @@ contract wethWrapTest is TychoRouterTestSetup {
 
         // Check balances
         assertTrue(success, "Call Failed");
-        assertEq(ethBalanceBefore - ethBalanceAfter, 1_000_000_000_000_000_000);
+        assertEq(ethBalanceBefore - ethBalanceAfter, 1 ether);
         assertEq(
             daiBalanceAfter - daiBalanceBefore, 3_037_253_804_206_974_049_100
         );

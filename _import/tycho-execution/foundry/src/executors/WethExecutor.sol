@@ -22,13 +22,13 @@ contract WethExecutor is IExecutor {
     using SafeERC20 for IWETH;
     using SafeERC20 for IERC20;
 
-    IWETH public immutable wETH;
+    IWETH public immutable weth;
 
-    constructor(address _wrappedEthAddress) {
-        if (_wrappedEthAddress == address(0)) {
+    constructor(address wrappedEthAddress) {
+        if (wrappedEthAddress == address(0)) {
             revert WethExecutor__ZeroAddres();
         }
-        wETH = IWETH(_wrappedEthAddress);
+        weth = IWETH(wrappedEthAddress);
     }
 
     function fundsExpectedAddress(
@@ -52,16 +52,16 @@ contract WethExecutor is IExecutor {
 
         if (isWrapping) {
             // ETH -> WETH: Wrap
-            wETH.deposit{value: amountIn}();
+            weth.deposit{value: amountIn}();
             amountOut = amountIn;
-            tokenOut = address(wETH);
+            tokenOut = address(weth);
 
             if (receiver != address(this)) {
-                wETH.safeTransfer(receiver, amountOut);
+                weth.safeTransfer(receiver, amountOut);
             }
         } else {
             // WETH -> ETH: Unwrap
-            wETH.withdraw(amountIn);
+            weth.withdraw(amountIn);
             amountOut = amountIn;
             tokenOut = address(0);
 
@@ -109,7 +109,7 @@ contract WethExecutor is IExecutor {
             RestrictTransferFrom.TransferType.TransferNativeInExecutor;
         } else {
             // WETH -> ETH: Unwrap
-            tokenIn = address(wETH);
+            tokenIn = address(weth);
             transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
         }
 

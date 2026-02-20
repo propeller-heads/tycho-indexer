@@ -83,7 +83,7 @@ impl TychoRouterEncoder {
 
     fn encode_solution(&self, solution: &Solution) -> Result<EncodedSolution, EncodingError> {
         self.validate_solution(solution)?;
-        let solution = self.add_missing_eth_wrapping_unwrapping_swaps(solution, &self.chain);
+        let solution = self.add_weth_swaps(solution, &self.chain);
 
         let protocols: HashSet<String> = solution
             .swaps
@@ -130,11 +130,7 @@ impl TychoRouterEncoder {
     /// Returns a new solution with added wrapping/unwrapping swaps if the original solution
     /// contains a swap that goes from ETH to WETH or vice versa but doesn't include the
     /// corresponding wrapping or unwrapping swap.
-    fn add_missing_eth_wrapping_unwrapping_swaps(
-        &self,
-        solution: &Solution,
-        chain: &Chain,
-    ) -> Solution {
+    fn add_weth_swaps(&self, solution: &Solution, chain: &Chain) -> Solution {
         let eth_address = &chain.native_token().address;
         let weth_address = &chain.wrapped_native_token().address;
 
@@ -672,8 +668,7 @@ mod tests {
                 ..Default::default()
             };
 
-            let solution =
-                encoder.add_missing_eth_wrapping_unwrapping_swaps(&solution, &encoder.chain);
+            let solution = encoder.add_weth_swaps(&solution, &encoder.chain);
             assert_eq!(solution.swaps.len(), 4);
             assert_eq!(solution.swaps[2].token_in(), &eth());
             assert_eq!(solution.swaps[2].token_out(), &weth());
@@ -713,8 +708,7 @@ mod tests {
                 ..Default::default()
             };
 
-            let solution =
-                encoder.add_missing_eth_wrapping_unwrapping_swaps(&solution, &encoder.chain);
+            let solution = encoder.add_weth_swaps(&solution, &encoder.chain);
             assert_eq!(solution.swaps.len(), 2);
             assert_eq!(solution.swaps[0].token_in(), &eth());
             assert_eq!(solution.swaps[0].token_out(), &weth());
@@ -743,8 +737,7 @@ mod tests {
                 ..Default::default()
             };
 
-            let solution =
-                encoder.add_missing_eth_wrapping_unwrapping_swaps(&solution, &encoder.chain);
+            let solution = encoder.add_weth_swaps(&solution, &encoder.chain);
             assert_eq!(solution.swaps.len(), 2);
             assert_eq!(
                 solution
