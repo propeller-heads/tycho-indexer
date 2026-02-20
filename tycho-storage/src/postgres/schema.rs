@@ -294,6 +294,7 @@ diesel::table! {
         token_id -> Int8,
         inserted_ts -> Timestamptz,
         modified_ts -> Timestamptz,
+        token_index -> Int2,
     }
 }
 

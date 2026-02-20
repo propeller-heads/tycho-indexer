@@ -1823,6 +1823,8 @@ impl From<NewSlot> for NewSlotLatest {
 pub struct ProtocolHoldsToken {
     protocol_component_id: i64,
     token_id: i64,
+    #[allow(dead_code)]
+    token_index: i16,
     pub inserted_ts: NaiveDateTime,
     pub modified_ts: NaiveDateTime,
 }
@@ -1832,6 +1834,7 @@ pub struct ProtocolHoldsToken {
 pub struct NewProtocolComponentHoldsToken {
     pub protocol_component_id: i64,
     pub token_id: i64,
+    pub token_index: i16,
 }
 
 #[derive(Identifiable, Queryable, Associations, Selectable, Debug)]

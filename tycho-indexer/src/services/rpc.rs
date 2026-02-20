@@ -759,9 +759,7 @@ where
                     )
                     .take(pagination_params.page_size as usize)
                     .map(|c| {
-                        let mut pc = dto::ProtocolComponent::from(c);
-                        pc.tokens.sort_unstable();
-                        pc
+                        return dto::ProtocolComponent::from(c);
                     })
                     .collect();
 
@@ -818,9 +816,7 @@ where
                 let response_components = components
                     .into_iter()
                     .map(|c| {
-                        let mut pc = dto::ProtocolComponent::from(c);
-                        pc.tokens.sort_unstable();
-                        pc
+                        return dto::ProtocolComponent::from(c);
                     })
                     .collect::<Vec<dto::ProtocolComponent>>();
                 Ok(dto::ProtocolComponentRequestResponse::new(
