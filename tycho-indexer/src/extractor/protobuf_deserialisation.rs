@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use chrono::{DateTime, NaiveDateTime};
@@ -8,13 +7,8 @@ use tycho_common::{
         blockchain::{
             Block, EntryPoint, RPCTracerParams, TracingParams, Transaction, TxWithChanges,
         },
-        contract::{
-            AccountBalance, AccountChangesWithTx, AccountDelta, ContractChanges,
-            ContractStorageChange,
-        },
-        protocol::{
-            ComponentBalance, ProtocolChangesWithTx, ProtocolComponent, ProtocolComponentStateDelta,
-        },
+        contract::{AccountBalance, AccountDelta, ContractChanges, ContractStorageChange},
+        protocol::{ComponentBalance, ProtocolComponent, ProtocolComponentStateDelta},
         Address, Chain, ChangeType, ComponentId, EntryPointId, ProtocolType, TxHash,
     },
     Bytes,
@@ -22,7 +16,7 @@ use tycho_common::{
 use tycho_substreams::pb::tycho::evm::v1 as substreams;
 
 use crate::extractor::{
-    models::{BlockChanges, BlockContractChanges, BlockEntityChanges, TxWithContractChanges},
+    models::{BlockChanges, TxWithContractChanges},
     u256_num::bytes_to_f64,
     ExtractionError,
 };
@@ -259,86 +253,6 @@ impl TryFromMessage for TracingParams {
     }
 }
 
-impl TryFromMessage for ProtocolChangesWithTx {
-    type Args<'a> = (
-        substreams::TransactionEntityChanges,
-        &'a Block,
-        &'a str,
-        &'a HashMap<String, ProtocolType>,
-    );
-
-    fn try_from_message(args: Self::Args<'_>) -> Result<Self, ExtractionError> {
-        let (msg, block, protocol_system, protocol_types) = args;
-        let tx = Transaction::try_from_message((
-            msg.tx
-                .expect("TransactionEntityChanges should have a transaction"),
-            &block.hash.clone(),
-        ))?;
-
-        let mut new_protocol_components: HashMap<String, ProtocolComponent> = HashMap::new();
-        let mut state_updates: HashMap<String, ProtocolComponentStateDelta> = HashMap::new();
-        let mut component_balances: HashMap<String, HashMap<Bytes, ComponentBalance>> =
-            HashMap::new();
-
-        // First, parse the new protocol components
-        for change in msg.component_changes.into_iter() {
-            let component = ProtocolComponent::try_from_message((
-                change.clone(),
-                block.chain,
-                protocol_system,
-                protocol_types,
-                tx.hash.clone(),
-                block.ts,
-            ))?;
-            new_protocol_components.insert(change.id, component);
-        }
-
-        // Then, parse the state updates
-        for state_msg in msg.entity_changes.into_iter() {
-            let state = ProtocolComponentStateDelta::try_from_message(state_msg)?;
-            // Check if a state update for the same component already exists
-            // If it exists, overwrite the existing state update with the new one and log a warning
-            match state_updates.entry(state.component_id.clone()) {
-                Entry::Vacant(e) => {
-                    e.insert(state);
-                }
-                Entry::Occupied(mut e) => {
-                    warn!("Received two state updates for the same component. Overwriting state for component {}", e.key());
-                    e.insert(state);
-                }
-            }
-        }
-
-        // Finally, parse the balance changes
-        for balance_change in msg.balance_changes.into_iter() {
-            let component_balance = ComponentBalance::try_from_message((balance_change, &tx))?;
-
-            // Check if a balance change for the same token and component already exists
-            // If it exists, overwrite the existing balance change with the new one and log a
-            // warning
-            let token_balances = component_balances
-                .entry(component_balance.component_id.clone())
-                .or_default();
-
-            if let Some(existing_balance) =
-                token_balances.insert(component_balance.token.clone(), component_balance)
-            {
-                warn!(
-                    "Received two balance updates for the same component id: {} and token {}. Overwriting balance change",
-                    existing_balance.component_id, existing_balance.token
-                );
-            }
-        }
-
-        Ok(Self {
-            new_protocol_components,
-            protocol_states: state_updates,
-            balance_changes: component_balances,
-            tx,
-        })
-    }
-}
-
 impl TryFromMessage for TxWithChanges {
     type Args<'a> =
         (substreams::TransactionChanges, &'a Block, &'a str, &'a HashMap<String, ProtocolType>);
@@ -469,165 +383,6 @@ impl TryFromMessage for TxWithChanges {
     }
 }
 
-impl TryFromMessage for BlockContractChanges {
-    type Args<'a> = (
-        substreams::BlockContractChanges,
-        &'a str,
-        Chain,
-        String,
-        &'a HashMap<String, ProtocolType>,
-        u64,
-    );
-
-    fn try_from_message(args: Self::Args<'_>) -> Result<Self, ExtractionError> {
-        let (msg, extractor, chain, protocol_system, protocol_types, finalized_block_height) = args;
-
-        if let Some(block) = msg.block {
-            let block = Block::try_from_message((block, chain))?;
-            let mut tx_updates = Vec::new();
-
-            for change in msg.changes.into_iter() {
-                let mut account_updates = HashMap::new();
-                let mut protocol_components = HashMap::new();
-                let mut balances_changes: HashMap<ComponentId, HashMap<Address, ComponentBalance>> =
-                    HashMap::new();
-                let mut account_balance_changes: HashMap<
-                    Address,
-                    HashMap<Address, AccountBalance>,
-                > = HashMap::new();
-
-                if let Some(tx) = change.tx {
-                    let tx = Transaction::try_from_message((tx, &block.hash.clone()))?;
-                    for contract_change in change
-                        .contract_changes
-                        .clone()
-                        .into_iter()
-                    {
-                        let update = AccountDelta::try_from_message((contract_change, chain))?;
-                        account_updates.insert(update.address.clone(), update);
-                    }
-                    for component_msg in change.component_changes.into_iter() {
-                        let component = ProtocolComponent::try_from_message((
-                            component_msg,
-                            chain,
-                            &protocol_system,
-                            protocol_types,
-                            tx.hash.clone(),
-                            block.ts,
-                        ))?;
-                        protocol_components.insert(component.id.clone(), component);
-                    }
-
-                    // parse the balance changes
-                    for balance_change in change.balance_changes.into_iter() {
-                        let component_id =
-                            String::from_utf8(balance_change.component_id.clone())
-                                .map_err(|error| ExtractionError::DecodeError(error.to_string()))?;
-                        let token_address = balance_change.token.clone().into();
-                        let balance = ComponentBalance::try_from_message((balance_change, &tx))?;
-
-                        balances_changes
-                            .entry(component_id)
-                            .or_default()
-                            .insert(token_address, balance);
-                    }
-
-                    // parse the account balance changes
-                    for contract_change in change.contract_changes.into_iter() {
-                        for balance_change in contract_change
-                            .token_balances
-                            .into_iter()
-                        {
-                            let account_addr = contract_change.address.clone().into();
-                            let token_address = Bytes::from(balance_change.token.clone());
-                            let balance = AccountBalance::try_from_message((
-                                balance_change,
-                                &account_addr,
-                                &tx,
-                            ))?;
-
-                            account_balance_changes
-                                .entry(account_addr)
-                                .or_default()
-                                .insert(token_address, balance);
-                        }
-                    }
-
-                    tx_updates.push(AccountChangesWithTx::new(
-                        account_updates,
-                        protocol_components,
-                        balances_changes,
-                        account_balance_changes,
-                        tx,
-                    ));
-                }
-            }
-            tx_updates.sort_unstable_by_key(|update| update.tx.index);
-            return Ok(Self::new(
-                extractor.to_owned(),
-                chain,
-                block,
-                finalized_block_height,
-                false,
-                tx_updates,
-            ));
-        }
-        Err(ExtractionError::Empty)
-    }
-}
-
-impl TryFromMessage for BlockEntityChanges {
-    type Args<'a> = (
-        substreams::BlockEntityChanges,
-        &'a str,
-        Chain,
-        &'a str,
-        &'a HashMap<String, ProtocolType>,
-        u64,
-    );
-
-    fn try_from_message(args: Self::Args<'_>) -> Result<Self, ExtractionError> {
-        let (msg, extractor, chain, protocol_system, protocol_types, finalized_block_height) = args;
-
-        if let Some(block) = msg.block {
-            let block = Block::try_from_message((block, chain))?;
-
-            let mut txs_with_update = msg
-                .changes
-                .into_iter()
-                .map(|change| {
-                    change.tx.as_ref().ok_or_else(|| {
-                        ExtractionError::DecodeError(
-                            "TransactionEntityChanges misses a transaction".to_owned(),
-                        )
-                    })?;
-
-                    ProtocolChangesWithTx::try_from_message((
-                        change,
-                        &block,
-                        protocol_system,
-                        protocol_types,
-                    ))
-                })
-                .collect::<Result<Vec<ProtocolChangesWithTx>, ExtractionError>>()?;
-
-            // Sort updates by transaction index
-            txs_with_update.sort_unstable_by_key(|update| update.tx.index);
-
-            Ok(Self::new(
-                extractor.to_string(),
-                chain,
-                block,
-                finalized_block_height,
-                false,
-                txs_with_update,
-            ))
-        } else {
-            Err(ExtractionError::Empty)
-        }
-    }
-}
-
 impl TryFromMessage for TxWithContractChanges {
     type Args<'a> = (substreams::TransactionStorageChanges, &'a Block);
 
@@ -694,7 +449,7 @@ impl TryFromMessage for BlockChanges {
                 .map(|change| {
                     change.tx.as_ref().ok_or_else(|| {
                         ExtractionError::DecodeError(
-                            "TransactionEntityChanges misses a transaction".to_owned(),
+                            "TransactionChanges misses a transaction".to_owned(),
                         )
                     })?;
 
@@ -742,12 +497,7 @@ mod test {
     use rstest::rstest;
 
     use super::*;
-    use crate::{
-        extractor::models::fixtures::{
-            block_entity_changes, block_state_changes, create_transaction,
-        },
-        testing::fixtures,
-    };
+    use crate::{extractor::models::fixtures::create_transaction, testing::fixtures};
 
     #[test]
     fn test_parse_protocol_state_update() {
@@ -899,41 +649,6 @@ mod test {
         assert_eq!(from_message.modify_tx, tx.hash);
         assert_eq!(from_message.token, expected_token);
         assert_eq!(from_message.component_id, expected_component_id);
-    }
-
-    #[test]
-    fn test_parse_block_contract_changes() {
-        let msg = fixtures::pb_block_contract_changes(0);
-
-        let res = BlockContractChanges::try_from_message((
-            msg,
-            "test",
-            Chain::Ethereum,
-            "ambient".to_string(),
-            &HashMap::from([("WeightedPool".to_string(), ProtocolType::default())]),
-            0,
-        ))
-        .unwrap();
-        assert_eq!(res, block_state_changes());
-    }
-
-    #[test]
-    fn test_block_entity_changes_parse_msg() {
-        let msg = fixtures::pb_block_entity_changes(0);
-
-        let res = BlockEntityChanges::try_from_message((
-            msg,
-            "test",
-            Chain::Ethereum,
-            "ambient",
-            &HashMap::from([
-                ("Pool".to_string(), ProtocolType::default()),
-                ("WeightedPool".to_string(), ProtocolType::default()),
-            ]),
-            420,
-        ))
-        .unwrap();
-        assert_eq!(res, block_entity_changes());
     }
 
     #[rstest]
