@@ -145,6 +145,21 @@ pub struct TxWithContractChanges {
     pub contract_changes: AccountToContractChanges,
 }
 
+/// Information about a partial block.
+#[derive(Debug, PartialEq, Default, Clone, DeepSizeOf)]
+pub struct PartialBlockInfo {
+    /// Index of this partial within the block.
+    pub index: u32,
+    /// True if this is the last partial for the block.
+    pub is_last: bool,
+}
+
+impl PartialBlockInfo {
+    pub fn new(index: u32, is_last: bool) -> Self {
+        Self { index, is_last }
+    }
+}
+
 #[derive(Debug, PartialEq, Default, Clone, DeepSizeOf)]
 pub struct BlockChanges {
     extractor: String,
@@ -162,8 +177,8 @@ pub struct BlockChanges {
     /// finalized.
     /// Populated by the `DynamicContractIndexer`
     pub trace_results: Vec<TracedEntryPoint>,
-    /// The index of the partial block. None if it's a full block.
-    pub partial_block_index: Option<u32>,
+    /// If present, this block is a partial block (index and whether it is the final partial).
+    pub partial_block: Option<PartialBlockInfo>,
 }
 
 impl BlockChanges {
@@ -186,7 +201,7 @@ impl BlockChanges {
             txs_with_update,
             block_contract_changes,
             trace_results: Vec::new(),
-            partial_block_index: None,
+            partial_block: None,
         }
     }
 
@@ -260,7 +275,10 @@ impl BlockChanges {
                 new_entrypoint_params: aggregated_changes.entrypoint_params,
                 trace_results: aggregated_trace_results,
             },
-            partial_block_index: self.partial_block_index,
+            partial_block_index: self
+                .partial_block
+                .as_ref()
+                .map(|p| p.index),
         })
     }
 
@@ -277,12 +295,20 @@ impl BlockChanges {
 
     /// Returns true if the block is a partial block.
     pub fn is_partial_block(&self) -> bool {
-        self.partial_block_index.is_some()
+        self.partial_block.is_some()
     }
 
-    /// Sets the partial block index.
-    pub fn set_partial_block_index(&mut self, index: Option<u32>) {
-        self.partial_block_index = index;
+    /// Sets partial block info. Use `None` for a full block.
+    pub fn set_partial_block(&mut self, info: Option<PartialBlockInfo>) {
+        self.partial_block = info;
+    }
+
+    /// Returns true if this is the final partial block (last partial for the block).
+    /// Full blocks are not "final partial" (they are complete blocks).
+    pub fn is_final_partial_block(&self) -> bool {
+        self.partial_block
+            .as_ref()
+            .is_some_and(|p| p.is_last)
     }
 
     /// Sets every transaction's `block_hash` in `txs_with_update` and `block_contract_changes`
@@ -316,11 +342,19 @@ impl BlockChanges {
     /// - Revert mismatch: Different revert status
     pub fn merge_partial(self, other: Self) -> Result<Self, MergeError> {
         // Validate both blocks are partial
-        let Some(self_index) = self.partial_block_index else {
+        let Some(self_index) = self
+            .partial_block
+            .as_ref()
+            .map(|p| p.index)
+        else {
             return Err(MergeError::InvalidState("self is not a partial block".to_string()));
         };
 
-        let Some(other_index) = other.partial_block_index else {
+        let Some(other_index) = other
+            .partial_block
+            .as_ref()
+            .map(|p| p.index)
+        else {
             return Err(MergeError::InvalidState("other is not a partial block".to_string()));
         };
 
@@ -1132,6 +1166,42 @@ mod test {
     }
 
     #[test]
+    fn test_partial_block_info_and_predicates() {
+        use chrono::NaiveDateTime;
+
+        let block = Block::new(
+            1,
+            Chain::Ethereum,
+            Bytes::zero(32),
+            Bytes::zero(32),
+            NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+        );
+        let mut changes = BlockChanges::new(
+            "test".to_string(),
+            Chain::Ethereum,
+            block.clone(),
+            1,
+            false,
+            Vec::new(),
+            Vec::new(),
+        );
+
+        // Full block: not partial, not final partial
+        assert!(!changes.is_partial_block());
+        assert!(!changes.is_final_partial_block());
+
+        // Non-final partial
+        changes.set_partial_block(Some(PartialBlockInfo { index: 0, is_last: false }));
+        assert!(changes.is_partial_block());
+        assert!(!changes.is_final_partial_block());
+
+        // Final partial
+        changes.set_partial_block(Some(PartialBlockInfo { index: 1, is_last: true }));
+        assert!(changes.is_partial_block());
+        assert!(changes.is_final_partial_block());
+    }
+
+    #[test]
     fn test_block_contract_changes_balance_filter() {
         let block = fixtures::block_state_changes();
 
@@ -1589,7 +1659,7 @@ mod test {
 
         match index {
             0 => {
-                block.partial_block_index = Some(0);
+                block.partial_block = Some(PartialBlockInfo::new(0, false));
 
                 let component_id = "protocol_1".to_string();
                 let addr1 =
@@ -1634,7 +1704,7 @@ mod test {
                     .push(TxWithContractChanges::default());
             }
             1 => {
-                block.partial_block_index = Some(1);
+                block.partial_block = Some(PartialBlockInfo::new(1, false));
 
                 let component_id = "protocol_2".to_string();
                 let addr1 =
@@ -1727,7 +1797,13 @@ mod test {
             .contains_key(&addr1));
 
         assert_eq!(result.block_contract_changes.len(), 2);
-        assert_eq!(result.partial_block_index, Some(1));
+        assert_eq!(
+            result
+                .partial_block
+                .as_ref()
+                .map(|p| p.index),
+            Some(1)
+        );
     }
 
     #[rstest]
@@ -1745,7 +1821,7 @@ mod test {
         let original_partial_block = create_partial_block(0);
 
         let mut other_block = original_partial_block.clone();
-        other_block.partial_block_index = Some(1);
+        other_block.partial_block = Some(PartialBlockInfo::new(1, false));
 
         other_block.extractor =
             extractor_override.unwrap_or(original_partial_block.extractor.clone());

@@ -914,6 +914,7 @@ where
                         &self.protocol_types,
                         inp.final_block_height,
                         inp.partial_index,
+                        inp.is_last_partial,
                     ))
                 }
                 url if url.ends_with("BlockContractChanges") => {
@@ -1099,8 +1100,8 @@ where
             .lock()
             .await
             .as_ref()
-            .and_then(|b| b.partial_block_index)
-            .map_or("None".to_string(), |i| i.to_string());
+            .and_then(|b| b.partial_block.as_ref())
+            .map_or("None".to_string(), |i| i.index.to_string());
 
         tracing::Span::current().record("current_block", &last_processed_block_number);
         tracing::Span::current()
@@ -1156,7 +1157,10 @@ where
             // If we have not reverted any full blocks and the partial block buffer is not empty,
             // mark it as a partial revert to avoid sending to full block subscribers.
             if reverted_state.is_empty() {
-                revert_partial_block_index = partial.partial_block_index
+                revert_partial_block_index = partial
+                    .partial_block
+                    .as_ref()
+                    .map(|p| p.index);
             }
 
             // The partial block's cursor should be the current cursor

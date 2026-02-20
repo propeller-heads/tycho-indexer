@@ -265,30 +265,134 @@ where
         // Update the entrypoint results with the retriggered entrypoints
         entrypoints_to_analyze.extend(retriggered_entrypoints);
 
-        if !entrypoints_to_analyze.is_empty() {
+        // On non-final partial blocks: defer all tracing (and thus params/retries) to the final
+        // partial. Still extract contract changes, detect retriggers, and update the cache below.
+        let is_non_final_partial =
+            block_changes.is_partial_block() && !block_changes.is_final_partial_block();
+        let all_to_trace: Vec<(EntryPointWithTracingParams, Transaction)> = if is_non_final_partial
+        {
+            if !entrypoints_to_analyze.is_empty() {
+                self.cache.defer_tracing(
+                    entrypoints_to_analyze
+                        .iter()
+                        .map(|(ep, tx)| (ep.clone(), (*tx).clone())),
+                );
+                // Buffer new components linked to deferred entrypoints and remove them from the
+                // message so consumers only receive them when we trace on the final partial.
+                let deferred_ep_ids_by_tx: HashMap<TxHash, HashSet<EntryPointId>> = {
+                    let mut m: HashMap<TxHash, HashSet<EntryPointId>> = HashMap::new();
+                    for (ep, tx) in &entrypoints_to_analyze {
+                        m.entry(tx.hash.clone())
+                            .or_default()
+                            .insert(ep.entry_point.external_id.clone());
+                    }
+                    m
+                };
+                let mut to_defer: HashMap<
+                    TxHash,
+                    HashMap<ComponentId, tycho_common::models::protocol::ProtocolComponent>,
+                > = HashMap::new();
+                for tx_with_changes in block_changes.txs_with_update.iter_mut() {
+                    let Some(deferred_ep_ids) = deferred_ep_ids_by_tx.get(&tx_with_changes.tx.hash)
+                    else {
+                        continue;
+                    };
+                    let linked_ids: Vec<ComponentId> = tx_with_changes
+                        .protocol_components
+                        .iter()
+                        .filter(|(component_id, _)| {
+                            tx_with_changes
+                                .entrypoints
+                                .get(*component_id)
+                                .map(|eps| {
+                                    eps.iter()
+                                        .any(|e| deferred_ep_ids.contains(&e.external_id))
+                                })
+                                .unwrap_or(false)
+                        })
+                        .map(|(id, _)| id.clone())
+                        .collect();
+                    let mut linked_components = HashMap::new();
+                    for component_id in linked_ids {
+                        if let Some(component) = tx_with_changes
+                            .protocol_components
+                            .remove(&component_id)
+                        {
+                            linked_components.insert(component_id, component);
+                        }
+                    }
+                    if !linked_components.is_empty() {
+                        to_defer.insert(tx_with_changes.tx.hash.clone(), linked_components);
+                    }
+                }
+                if !to_defer.is_empty() {
+                    self.cache
+                        .defer_new_components(to_defer);
+                }
+            }
+            vec![]
+        } else {
+            // Full block or final partial: flush deferred work (from prior partials) and merge with
+            // current
+            let deferred = self.cache.take_deferred_tracing();
+            let mut seen = HashSet::new();
+            let mut all = Vec::new();
+            for (ep, tx) in deferred {
+                if seen.insert(ep.clone()) {
+                    all.push((ep, tx));
+                }
+            }
+            for (ep, tx) in &entrypoints_to_analyze {
+                if seen.insert(ep.clone()) {
+                    all.push((ep.clone(), (*tx).clone()));
+                }
+            }
+            // Merge deferred new components back into the message so consumers receive them with
+            // the trace results from the final partial.
+            let deferred_components = self
+                .cache
+                .take_deferred_new_components();
+            for (tx_hash, components) in deferred_components {
+                if let Some(tx_with_changes) = block_changes
+                    .txs_with_update
+                    .iter_mut()
+                    .find(|t| t.tx.hash == tx_hash)
+                {
+                    tx_with_changes
+                        .protocol_components
+                        .extend(components);
+                }
+                // If the tx is not in this partial, the final partial omits it; deferred
+                // components for that tx are dropped (final partial is assumed to include all txs
+                // that had deferred work).
+            }
+            all
+        };
+
+        if !all_to_trace.is_empty() {
             debug!(
-                entrypoints_to_analyze = entrypoints_to_analyze
-                    .keys()
-                    .map(|x| x.to_string())
+                entrypoints_to_analyze = all_to_trace
+                    .iter()
+                    .map(|(x, _)| x.to_string())
                     .collect::<Vec<String>>()
                     .join(", "),
                 "DCI: Will analyze {:?} entrypoints",
-                entrypoints_to_analyze.len()
+                all_to_trace.len()
             );
 
             let tracing_results = self
                 .tracer
                 .trace(
                     block_changes.block.hash.clone(),
-                    entrypoints_to_analyze
-                        .keys()
-                        .cloned()
+                    all_to_trace
+                        .iter()
+                        .map(|(ep, _)| ep.clone())
                         .collect(),
                 )
                 .instrument(span!(
                     Level::INFO,
                     "dci_rpc_tracing",
-                    entrypoint_count = entrypoints_to_analyze.len(),
+                    entrypoint_count = all_to_trace.len(),
                     block_hash = %block_changes.block.hash
                 ))
                 .await;
@@ -297,15 +401,12 @@ where
             let mut failed_entrypoints = vec![];
 
             // This is safe because tracer ensures order is preserved
-            for ((ep, tx), result) in entrypoints_to_analyze
-                .iter()
-                .zip(tracing_results)
-            {
+            for ((ep, tx), result) in all_to_trace.iter().zip(tracing_results) {
                 match result {
                     Ok(tracing_result) => traced_entrypoints.push(tracing_result),
                     Err(e) => {
                         tracing::warn!("DCI: Failed to trace entrypoint {:?}: {:?}", ep, e);
-                        failed_entrypoints.push((ep.clone(), *tx));
+                        failed_entrypoints.push((ep.clone(), tx.clone()));
                     }
                 }
             }
@@ -338,7 +439,7 @@ where
                         .into_iter()
                         .flatten()
                         .flatten() // Flatten the inner iterator of component IDs
-                        .map(move |component_id| (component_id, *tx))
+                        .map(move |component_id| (component_id, tx.clone()))
                 })
                 .collect::<HashMap<_, _>>();
 
@@ -351,10 +452,14 @@ where
                 "DCI: Traced entrypoints"
             );
 
+            let all_to_trace_tx_map: HashMap<_, _> = all_to_trace
+                .iter()
+                .map(|(ep, tx)| (ep.clone(), tx))
+                .collect();
             let mut tx_to_traced_entrypoint: HashMap<&Transaction, Vec<&TracedEntryPoint>> =
                 HashMap::new();
             for traced_entrypoint in traced_entrypoints.iter() {
-                let tx = entrypoints_to_analyze
+                let tx = all_to_trace_tx_map
                     .get(&traced_entrypoint.entry_point_with_params)
                     .ok_or_else(|| {
                         ExtractionError::Unknown(format!(
@@ -545,7 +650,7 @@ where
             }
 
             // Insert the "paused" component state for the components that are paused
-            for (component_id, tx) in component_ids_to_pause {
+            for (component_id, tx) in &component_ids_to_pause {
                 insert_state_attribute_update(
                     &mut block_changes.txs_with_update,
                     component_id,
@@ -556,8 +661,16 @@ where
             }
 
             // Only update the cache if there were traces done (failed or succeeded)
+            let failed_entrypoints_refs: Vec<(_, _)> = failed_entrypoints
+                .iter()
+                .map(|(ep, tx)| (ep.clone(), tx))
+                .collect();
             if !traced_entrypoints.is_empty() || !failed_entrypoints.is_empty() {
-                self.update_cache(&block_changes.block, &traced_entrypoints, &failed_entrypoints)?;
+                self.update_cache(
+                    &block_changes.block,
+                    &traced_entrypoints,
+                    &failed_entrypoints_refs,
+                )?;
             }
 
             // Only emit metric if there were successful traces (count may have changed)
@@ -1404,7 +1517,7 @@ mod tests {
                 TracingParams, Transaction, TxWithChanges,
             },
             contract::{AccountDelta, ContractChanges},
-            protocol::ProtocolComponentStateDelta,
+            protocol::{ProtocolComponent, ProtocolComponentStateDelta},
             Chain, ChangeType, EntryPointId,
         },
         storage::WithTotal,
@@ -1414,7 +1527,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        extractor::models::BlockChanges,
+        extractor::models::{BlockChanges, PartialBlockInfo},
         testing::{self, MockGateway},
     };
 
@@ -1635,6 +1748,23 @@ mod tests {
         )
     }
 
+    fn make_protocol_component(component_id: &str, creation_tx: Bytes) -> ProtocolComponent {
+        ProtocolComponent::new(
+            component_id,
+            "test",
+            "TestPool",
+            Chain::Ethereum,
+            vec![],
+            vec![],
+            HashMap::new(),
+            ChangeType::Creation,
+            creation_tx,
+            chrono::DateTime::from_timestamp(0, 0)
+                .unwrap()
+                .naive_utc(),
+        )
+    }
+
     fn get_mock_gateway() -> MockGateway {
         let mut gateway = MockGateway::new();
         let entrypoints_map = HashMap::from([
@@ -1837,6 +1967,259 @@ mod tests {
             .unwrap();
 
         assert_eq!(block_changes, get_block_changes(1));
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_process_partial_block_update_defers_tracing() {
+        let gateway = get_mock_gateway();
+        let account_extractor = MockAccountExtractor::new();
+        let mut entrypoint_tracer = MockEntryPointTracer::new();
+        entrypoint_tracer.expect_trace().never();
+
+        let mut dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+        dci.initialize().await.unwrap();
+
+        let mut block_changes = get_block_changes(2);
+        block_changes.set_partial_block(Some(PartialBlockInfo { index: 0, is_last: false }));
+
+        dci.process_block_update(&mut block_changes)
+            .await
+            .unwrap();
+
+        // Tracing was deferred, so no trace results on the block
+        assert!(block_changes.trace_results.is_empty());
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_process_final_partial_block_update() {
+        let gateway = get_mock_gateway();
+        let mut account_extractor = MockAccountExtractor::new();
+        let mut entrypoint_tracer = MockEntryPointTracer::new();
+
+        let ep9 = EntryPointWithTracingParams::new(get_entrypoint(9), get_tracing_params(9));
+        entrypoint_tracer
+            .expect_trace()
+            .with(always(), always())
+            .return_once(move |_block_hash, entrypoints: Vec<EntryPointWithTracingParams>| {
+                entrypoints
+                    .into_iter()
+                    .map(|ep| {
+                        Ok(TracedEntryPoint::new(
+                            ep.clone(),
+                            Bytes::zero(32),
+                            if ep == ep9 { get_tracing_result(9) } else { get_tracing_result(2) },
+                        ))
+                    })
+                    .collect()
+            });
+        account_extractor
+            .expect_get_accounts_at_block()
+            .with(always(), always())
+            .return_once(|_block, requests: &[StorageSnapshotRequest]| {
+                Ok(requests
+                    .iter()
+                    .map(|r| {
+                        (
+                            r.address.clone(),
+                            AccountDelta::new(
+                                Chain::Ethereum,
+                                r.address.clone(),
+                                HashMap::new(),
+                                None,
+                                None,
+                                ChangeType::Update,
+                            ),
+                        )
+                    })
+                    .collect())
+            });
+
+        let mut dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+        dci.initialize().await.unwrap();
+
+        // First: non-final partial (defers tracing) — block 2, partial 0
+        let mut non_final_partial = get_block_changes(2);
+        non_final_partial.set_partial_block(Some(PartialBlockInfo { index: 0, is_last: false }));
+        dci.process_block_update(&mut non_final_partial)
+            .await
+            .unwrap();
+        assert!(non_final_partial
+            .trace_results
+            .is_empty());
+
+        // Second: final partial (flushes deferred + current, traces once) — block 2, partial 1
+        let mut final_partial = get_block_changes(3);
+        final_partial.block = testing::block(2);
+        final_partial.finalized_block_height = 2;
+        final_partial
+            .txs_with_update
+            .push(TxWithChanges {
+                tx: get_transaction(3),
+                entrypoints: HashMap::from([(
+                    "component_2".to_string(),
+                    HashSet::from([get_entrypoint(2)]),
+                )]),
+                entrypoint_params: HashMap::from([(
+                    "entrypoint_2".to_string(),
+                    HashSet::from([(get_tracing_params(1), "component_2".to_string())]),
+                )]),
+                ..Default::default()
+            });
+        final_partial.set_partial_block(Some(PartialBlockInfo { index: 1, is_last: true }));
+        dci.process_block_update(&mut final_partial)
+            .await
+            .unwrap();
+        // Assert we have results for entrypoints from both partials
+        assert_eq!(final_partial.trace_results.len(), 2);
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_process_partial_block_defers_new_components_linked_to_deferred_entrypoints() {
+        // On non-final partials, new components linked to deferred entrypoints are buffered and
+        // removed from the message; on the final partial they are merged back so consumers receive
+        // them with the trace results.
+        let gateway = get_mock_gateway();
+        let account_extractor = MockAccountExtractor::new();
+        let mut entrypoint_tracer = MockEntryPointTracer::new();
+
+        // Only the final partial will run tracing.
+        entrypoint_tracer.expect_trace().never();
+        let mut dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+        dci.initialize().await.unwrap();
+
+        // Non-final partial: block 2 with one tx that has entrypoints (to be deferred) and a new
+        // component linked to that entrypoint (component_1 -> entrypoint_9).
+        let tx2 = get_transaction(2);
+        let linked_component = make_protocol_component("component_1", tx2.hash.clone());
+        let mut non_final_partial = get_block_changes(2);
+        non_final_partial.txs_with_update[0]
+            .protocol_components
+            .insert("component_1".to_string(), linked_component.clone());
+        non_final_partial.set_partial_block(Some(PartialBlockInfo { index: 0, is_last: false }));
+
+        dci.process_block_update(&mut non_final_partial)
+            .await
+            .unwrap();
+
+        // Tracing was deferred
+        assert!(non_final_partial
+            .trace_results
+            .is_empty());
+        // New component linked to deferred entrypoint was buffered and removed from the message
+        assert!(
+            non_final_partial.txs_with_update[0]
+                .protocol_components
+                .is_empty(),
+            "consumers must not receive the new component until the final partial"
+        );
+
+        // Final partial: same block, include the same tx so deferred components can merge back.
+        let mut entrypoint_tracer = MockEntryPointTracer::new();
+        entrypoint_tracer
+            .expect_trace()
+            .with(always(), always())
+            .return_once(|_block_hash, entrypoints: Vec<EntryPointWithTracingParams>| {
+                entrypoints
+                    .into_iter()
+                    .map(|ep| Ok(TracedEntryPoint::new(ep, Bytes::zero(32), get_tracing_result(9))))
+                    .collect()
+            });
+        let mut account_extractor = MockAccountExtractor::new();
+        account_extractor
+            .expect_get_accounts_at_block()
+            .with(always(), always())
+            .return_once(|_block, requests: &[StorageSnapshotRequest]| {
+                Ok(requests
+                    .iter()
+                    .map(|r| {
+                        (
+                            r.address.clone(),
+                            AccountDelta::new(
+                                Chain::Ethereum,
+                                r.address.clone(),
+                                HashMap::new(),
+                                None,
+                                None,
+                                ChangeType::Update,
+                            ),
+                        )
+                    })
+                    .collect())
+            });
+
+        let gateway = get_mock_gateway();
+        let mut dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+        dci.initialize().await.unwrap();
+
+        // Re-run the non-final partial to populate the defer buffers again
+        let mut non_final_again = get_block_changes(2);
+        non_final_again.txs_with_update[0]
+            .protocol_components
+            .insert("component_1".to_string(), linked_component.clone());
+        non_final_again.set_partial_block(Some(PartialBlockInfo { index: 0, is_last: false }));
+        dci.process_block_update(&mut non_final_again)
+            .await
+            .unwrap();
+
+        // Final partial: single tx same as block 2's tx so deferred components merge into it
+        let mut final_partial = BlockChanges::new(
+            "test".to_string(),
+            Chain::Ethereum,
+            testing::block(2),
+            2,
+            false,
+            vec![TxWithChanges {
+                tx: tx2.clone(),
+                entrypoints: HashMap::from([(
+                    "component_1".to_string(),
+                    HashSet::from([get_entrypoint(9)]),
+                )]),
+                entrypoint_params: HashMap::from([(
+                    "entrypoint_9".to_string(),
+                    HashSet::from([(get_tracing_params(9), "component_1".to_string())]),
+                )]),
+                ..Default::default()
+            }],
+            Vec::new(),
+        );
+        final_partial.set_partial_block(Some(PartialBlockInfo { index: 1, is_last: true }));
+
+        dci.process_block_update(&mut final_partial)
+            .await
+            .unwrap();
+
+        // Deferred component was merged back; consumers receive it with the trace results
+        assert_eq!(final_partial.txs_with_update.len(), 1);
+        let restored = final_partial.txs_with_update[0]
+            .protocol_components
+            .get("component_1")
+            .expect("deferred new component must be restored on final partial");
+        assert_eq!(restored.id, "component_1");
+        assert_eq!(final_partial.trace_results.len(), 1);
     }
 
     #[test_log::test(tokio::test)]
