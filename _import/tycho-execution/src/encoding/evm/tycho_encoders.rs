@@ -127,43 +127,40 @@ impl TychoRouterEncoder {
         Ok(encoded_solution)
     }
 
+    // This function checks if a ETH <-> WETH swap is needed between two tokens and
+    // returns the corresponding swap if needed
+    fn _wrapping_bridge(&self, token_a: &Bytes, token_b: &Bytes, chain: &Chain) -> Option<Swap> {
+        let eth_address = &chain.native_token().address;
+        let weth_address = &chain.wrapped_native_token().address;
+
+        if token_a == weth_address && token_b == eth_address {
+            Some(Swap::new(
+                ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
+                weth_address.clone(),
+                eth_address.clone(),
+            ))
+        } else if token_a == eth_address && token_b == weth_address {
+            Some(Swap::new(
+                ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
+                eth_address.clone(),
+                weth_address.clone(),
+            ))
+        } else {
+            None
+        }
+    }
+
     /// Returns a new solution with added wrapping/unwrapping swaps if the original solution
     /// contains a swap that goes from ETH to WETH or vice versa but doesn't include the
     /// corresponding wrapping or unwrapping swap.
     fn add_weth_swaps(&self, solution: &Solution, chain: &Chain) -> Solution {
-        let eth_address = &chain.native_token().address;
-        let weth_address = &chain.wrapped_native_token().address;
-
-        // Create the potential missing swaps for wrapping and unwrapping
-        let wrapping_swap = Swap::new(
-            ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
-            eth_address.clone(),
-            weth_address.clone(),
-        );
-
-        let unwrapping_swap = Swap::new(
-            ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
-            weth_address.clone(),
-            eth_address.clone(),
-        );
-
-        // This closure checks if a ETH <-> WETH swap is needed between two tokens and
-        // returns the corresponding swap if needed
-        let wrapping_bridge = |a: &Bytes, b: &Bytes| -> Option<Swap> {
-            if a == weth_address && b == eth_address {
-                Some(unwrapping_swap.clone())
-            } else if a == eth_address && b == weth_address {
-                Some(wrapping_swap.clone())
-            } else {
-                None
-            }
-        };
-
         let mut solution_with_added_wraps_unwraps: Vec<Swap> =
             Vec::with_capacity(solution.swaps.len());
 
         // Check if we need to add a wrapping swap at the beginning of the solution
-        if let Some(s) = wrapping_bridge(&solution.token_in, solution.swaps[0].token_in()) {
+        if let Some(s) =
+            self._wrapping_bridge(&solution.token_in, solution.swaps[0].token_in(), chain)
+        {
             solution_with_added_wraps_unwraps.push(s);
         }
 
@@ -174,7 +171,7 @@ impl TychoRouterEncoder {
             if i + 1 < solution.swaps.len() {
                 let token_out = solution.swaps[i].token_out();
                 let token_in = solution.swaps[i + 1].token_in();
-                if let Some(s) = wrapping_bridge(token_out, token_in) {
+                if let Some(s) = self._wrapping_bridge(token_out, token_in, chain) {
                     solution_with_added_wraps_unwraps.push(s);
                 }
             }
@@ -182,7 +179,9 @@ impl TychoRouterEncoder {
 
         // Check if we need to add an unwrapping swap at the end of the solution
         if let Some(last_swap) = solution.swaps.last() {
-            if let Some(s) = wrapping_bridge(last_swap.token_out(), &solution.token_out) {
+            if let Some(s) =
+                self._wrapping_bridge(last_swap.token_out(), &solution.token_out, chain)
+            {
                 solution_with_added_wraps_unwraps.push(s);
             }
         }
