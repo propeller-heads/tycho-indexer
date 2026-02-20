@@ -181,7 +181,7 @@ contract LidoExecutor is IExecutor {
             tokenIn = wstEthAddress;
             transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
             // The receiver needs to be TychoRouter because the wstETH contract will burn it from the msg.sender
-            receiver = address(this);
+            receiver = msg.sender;
         } else {
             revert LidoExecutor__InvalidSwapDirection();
         }
