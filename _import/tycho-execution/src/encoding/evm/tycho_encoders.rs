@@ -766,6 +766,34 @@ mod tests {
         }
 
         #[test]
+        fn test_sanity_check_no_missing_wrapped_eth_swap() {
+            // USDC -> ETH -> WETH (no swap needed to be added)
+            let eth_weth_swap = Swap::new(
+                ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
+                eth(),
+                weth(),
+            );
+
+            let input_swaps = vec![swap_usdc_eth_univ4(), eth_weth_swap];
+
+            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+            let solution = Solution {
+                exact_out: false,
+                token_in: usdc(),
+                amount_in: BigUint::from_str("1000_000000").unwrap(),
+                token_out: weth(),
+                min_amount_out: BigUint::from_str("105_152_000000000000000000").unwrap(),
+                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                swaps: input_swaps.clone(),
+                ..Default::default()
+            };
+
+            let solution = encoder.add_weth_swaps(&solution, &encoder.chain);
+            assert_eq!(solution.swaps.len(), 2);
+            assert_eq!(solution.swaps, input_swaps);
+        }
+
+        #[test]
         fn test_validate_fails_for_exact_out() {
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
             let solution = Solution {
