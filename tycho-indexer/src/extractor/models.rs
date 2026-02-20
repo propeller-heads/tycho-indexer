@@ -342,11 +342,19 @@ impl BlockChanges {
     /// - Revert mismatch: Different revert status
     pub fn merge_partial(self, other: Self) -> Result<Self, MergeError> {
         // Validate both blocks are partial
-        let Some(self_index) = self.partial_block.as_ref().map(|p| p.index) else {
+        let Some(self_index) = self
+            .partial_block
+            .as_ref()
+            .map(|p| p.index)
+        else {
             return Err(MergeError::InvalidState("self is not a partial block".to_string()));
         };
 
-        let Some(other_index) = other.partial_block.as_ref().map(|p| p.index) else {
+        let Some(other_index) = other
+            .partial_block
+            .as_ref()
+            .map(|p| p.index)
+        else {
             return Err(MergeError::InvalidState("other is not a partial block".to_string()));
         };
 
@@ -1651,7 +1659,7 @@ mod test {
 
         match index {
             0 => {
-                block.partial_block_index = Some(0);
+                block.partial_block = Some(PartialBlockInfo::new(0, false));
 
                 let component_id = "protocol_1".to_string();
                 let addr1 =
@@ -1696,7 +1704,7 @@ mod test {
                     .push(TxWithContractChanges::default());
             }
             1 => {
-                block.partial_block_index = Some(1);
+                block.partial_block = Some(PartialBlockInfo::new(1, false));
 
                 let component_id = "protocol_2".to_string();
                 let addr1 =
@@ -1789,7 +1797,13 @@ mod test {
             .contains_key(&addr1));
 
         assert_eq!(result.block_contract_changes.len(), 2);
-        assert_eq!(result.partial_block_index, Some(1));
+        assert_eq!(
+            result
+                .partial_block
+                .as_ref()
+                .map(|p| p.index),
+            Some(1)
+        );
     }
 
     #[rstest]
@@ -1807,7 +1821,7 @@ mod test {
         let original_partial_block = create_partial_block(0);
 
         let mut other_block = original_partial_block.clone();
-        other_block.partial_block_index = Some(1);
+        other_block.partial_block = Some(PartialBlockInfo::new(1, false));
 
         other_block.extractor =
             extractor_override.unwrap_or(original_partial_block.extractor.clone());
