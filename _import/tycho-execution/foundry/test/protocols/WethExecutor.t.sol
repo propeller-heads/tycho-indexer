@@ -37,7 +37,7 @@ contract WethExecutorTest is TestUtils, Constants {
         _;
     }
 
-    function setUp() public setUpFork(23899254) {}
+    function setUp() public {}
 
     function testDecodeParamsWrap() public view {
         bytes memory params = abi.encodePacked(
@@ -104,7 +104,7 @@ contract WethExecutorTest is TestUtils, Constants {
         assertEq(tokenIn, WETH_ADDR);
     }
 
-    function testSwapWrap() public setUpFork(23899254) {
+    function testSwapWrap() public {
         // ETH -> wETH
         IWETH WETH = IWETH(WETH_ADDR);
         uint256 amountIn = 1 ether;
@@ -125,7 +125,7 @@ contract WethExecutorTest is TestUtils, Constants {
         assertEq(tokenOut, WETH_ADDR);
     }
 
-    function testSwapUnwrap() public setUpFork(23939127) {
+    function testSwapUnwrap() public {
         // wETH -> ETH
         uint256 amountIn = 1 ether;
         bytes memory protocolData = abi.encodePacked(
