@@ -1800,8 +1800,6 @@ fn test_single_encoding_strategy_weth_wrap() {
 
 #[test]
 fn test_single_encoding_strategy_weth_unwrap() {
-    // We use `bob*` address as sender/receiver as Alice's address has a drainer deployed that
-    // would interfere with the test when we send ETH back to her.
     let weth_executor =
         ProtocolComponent { protocol_system: String::from("weth"), ..Default::default() };
     let token_in = weth();
@@ -1838,8 +1836,6 @@ fn test_single_encoding_strategy_weth_unwrap() {
 
 #[test]
 fn test_sequential_encoding_strategy_weth_wrap_added() {
-    // We use `bob*` address as sender/receiver as Alice's address has a drainer deployed that
-    // would interfere with the test when we send ETH back to her.
     // The solution is initially a single swap. The wrapping step is inserted automatically.
     // Final execution flow:
     // ETH → (wrap to WETH) → WETH → (Uniswap V2 swap) → DAI

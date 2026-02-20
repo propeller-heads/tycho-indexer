@@ -127,29 +127,6 @@ impl TychoRouterEncoder {
         Ok(encoded_solution)
     }
 
-    // This function checks if a ETH <-> WETH swap is needed between two tokens and
-    // returns the corresponding swap if needed
-    fn _wrapping_bridge(&self, token_a: &Bytes, token_b: &Bytes, chain: &Chain) -> Option<Swap> {
-        let eth_address = &chain.native_token().address;
-        let weth_address = &chain.wrapped_native_token().address;
-
-        if token_a == weth_address && token_b == eth_address {
-            Some(Swap::new(
-                ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
-                weth_address.clone(),
-                eth_address.clone(),
-            ))
-        } else if token_a == eth_address && token_b == weth_address {
-            Some(Swap::new(
-                ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
-                eth_address.clone(),
-                weth_address.clone(),
-            ))
-        } else {
-            None
-        }
-    }
-
     /// Returns a new solution with added wrapping/unwrapping swaps if the original solution
     /// contains a swap that goes from ETH to WETH or vice versa but doesn't include the
     /// corresponding wrapping or unwrapping swap.
@@ -187,6 +164,29 @@ impl TychoRouterEncoder {
         }
 
         Solution { swaps: solution_with_added_wraps_unwraps, ..solution.clone() }
+    }
+
+    // This method checks if an ETH <-> WETH swap is needed between two tokens and
+    // returns the corresponding swap if needed
+    fn _wrapping_bridge(&self, token_a: &Bytes, token_b: &Bytes, chain: &Chain) -> Option<Swap> {
+        let eth_address = &chain.native_token().address;
+        let weth_address = &chain.wrapped_native_token().address;
+
+        if token_a == weth_address && token_b == eth_address {
+            Some(Swap::new(
+                ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
+                weth_address.clone(),
+                eth_address.clone(),
+            ))
+        } else if token_a == eth_address && token_b == weth_address {
+            Some(Swap::new(
+                ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
+                eth_address.clone(),
+                weth_address.clone(),
+            ))
+        } else {
+            None
+        }
     }
 }
 
