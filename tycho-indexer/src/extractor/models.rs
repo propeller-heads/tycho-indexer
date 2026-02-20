@@ -1229,19 +1229,42 @@ mod test {
             .new_tokens
             .contains_key(&token_addr1));
 
-        // both txs retain their fixture data (balance_changes, account_balance_changes)
+        // Each partial's per-tx data survives the merge intact.
+        // After sorting: [0] = second partial (tx_index=2), [1] = first partial (tx_index=5).
         let token = Bytes::from(vec![0xaa; 20]);
+        let token2 = Bytes::from(vec![0xcc; 20]);
         let contract = Bytes::from(vec![0xbb; 20]);
-        assert!(result.txs_with_update[0]
-            .balance_changes
-            .get("pool_0")
-            .unwrap()
-            .contains_key(&token));
-        assert!(result.txs_with_update[1]
-            .account_balance_changes
-            .get(&contract)
-            .unwrap()
-            .contains_key(&token));
+        let c_id = "pool_0".to_string();
+
+        // Second partial (tx_index=2): token balance=1000, account_balance=700 (no token2)
+        assert_eq!(
+            result.txs_with_update[0].balance_changes[&c_id][&token].balance,
+            Bytes::from(1000_u64).lpad(32, 0)
+        );
+        assert_eq!(
+            result.txs_with_update[0].account_balance_changes[&contract][&token].balance,
+            Bytes::from(700_u64).lpad(32, 0)
+        );
+
+        // First partial (tx_index=5): token balance=800, token2 balance=300
+        assert_eq!(
+            result.txs_with_update[1].balance_changes[&c_id][&token].balance,
+            Bytes::from(800_u64).lpad(32, 0)
+        );
+        assert_eq!(
+            result.txs_with_update[1].balance_changes[&c_id][&token2].balance,
+            Bytes::from(300_u64).lpad(32, 0)
+        );
+
+        // First partial (tx_index=5): account_balance token=500, token2=150
+        assert_eq!(
+            result.txs_with_update[1].account_balance_changes[&contract][&token].balance,
+            Bytes::from(500_u64).lpad(32, 0)
+        );
+        assert_eq!(
+            result.txs_with_update[1].account_balance_changes[&contract][&token2].balance,
+            Bytes::from(150_u64).lpad(32, 0)
+        );
 
         assert_eq!(result.block_contract_changes.len(), 2);
         assert_eq!(result.partial_block_index, Some(1));
