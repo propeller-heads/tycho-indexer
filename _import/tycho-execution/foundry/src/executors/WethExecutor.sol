@@ -113,6 +113,6 @@ contract WethExecutor is IExecutor {
             transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
         }
 
-        receiver = address(this);
+        receiver = msg.sender;
     }
 }

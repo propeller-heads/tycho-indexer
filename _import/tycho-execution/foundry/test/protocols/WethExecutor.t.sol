@@ -37,7 +37,7 @@ contract WethExecutorTest is TestUtils, Constants {
         _;
     }
 
-    function setUp() public {}
+    function setUp() public setUpFork(23899254) {}
 
     function testDecodeParamsWrap() public view {
         bytes memory params = abi.encodePacked(
@@ -77,7 +77,7 @@ contract WethExecutorTest is TestUtils, Constants {
             address tokenIn
         ) = wethExecutor.getTransferData(params);
 
-        assertEq(receiver, address(wethExecutor));
+        assertEq(receiver, address(this));
         assertEq(
             uint8(transferType),
             uint8(RestrictTransferFrom.TransferType.TransferNativeInExecutor)
@@ -96,7 +96,7 @@ contract WethExecutorTest is TestUtils, Constants {
             address tokenIn
         ) = wethExecutor.getTransferData(params);
 
-        assertEq(receiver, address(wethExecutor));
+        assertEq(receiver, address(this));
         assertEq(
             uint8(transferType),
             uint8(RestrictTransferFrom.TransferType.ProtocolWillDebit)
