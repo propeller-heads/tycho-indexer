@@ -1,0 +1,74 @@
+specVersion: v0.1.0
+package:
+  name: "ethereum_liquidityparty"
+  version: v0.1.0
+  url: "https://github.com/propeller-heads/tycho-protocol-sdk/tree/main/protocols/substreams/ethereum-liquidityparty"
+
+protobuf:
+  files:
+    - tycho/protocols/adapter-integration/evm/v1/vm.proto
+    - tycho/protocols/adapter-integration/evm/v1/common.proto
+    - tycho/protocols/adapter-integration/evm/v1/utils.proto
+  importPaths:
+    - ../../proto
+
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ../target/wasm32-unknown-unknown/release/ethereum_liquidityparty.wasm
+
+network: mainnet
+networks:
+  mainnet:
+    params:
+      map_protocol_components: start_block=24338007&planner=0x62445ed780658B25547bF65b9FCD3b67FE2e4e4c&info=0x605F803cD27F5c1fa01440B2cbd5D3E4Cf7EE850&mint_impl=0xA0375403921e9B357E1BeD57bef3fA3FCE80acd0&swap_impl=0x6aA001e87F86E83bc4D569883332882cb47E2A13
+      map_protocol_changes: start_block=24338007&planner=0x62445ed780658B25547bF65b9FCD3b67FE2e4e4c&info=0x605F803cD27F5c1fa01440B2cbd5D3E4Cf7EE850&mint_impl=0xA0375403921e9B357E1BeD57bef3fA3FCE80acd0&swap_impl=0x6aA001e87F86E83bc4D569883332882cb47E2A13
+
+modules:
+  - name: map_protocol_components
+    kind: map
+    initialBlock: 24338007
+    inputs:
+      - params: string
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:tycho.evm.v1.BlockTransactionProtocolComponents
+
+  - name: store_protocol_components
+    kind: store
+    initialBlock: 24338007
+    updatePolicy: set
+    valueType: string
+    inputs:
+      - map: map_protocol_components
+
+  - name: map_relative_component_balance
+    kind: map
+    initialBlock: 24338007
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+      - store: store_protocol_components
+    output:
+      type: proto:tycho.evm.v1.BlockBalanceDeltas
+
+  - name: store_balances
+    kind: store
+    initialBlock: 24338007
+    updatePolicy: add
+    valueType: bigint
+    inputs:
+      - map: map_relative_component_balance
+
+  - name: map_protocol_changes
+    kind: map
+    initialBlock: 24338007
+    inputs:
+      - params: string
+      - source: sf.ethereum.type.v2.Block
+      - map: map_protocol_components
+      - map: map_relative_component_balance
+      - store: store_protocol_components
+      - store: store_balances
+        mode: deltas
+    output:
+      type: proto:tycho.evm.v1.BlockChanges
