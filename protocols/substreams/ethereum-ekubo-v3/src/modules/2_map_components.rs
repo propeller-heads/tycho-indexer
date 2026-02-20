@@ -99,7 +99,7 @@ fn maybe_create_component(
                 },
                 Attribute {
                     change: ChangeType::Creation.into(),
-                    name: "last_execution_time".to_string(),
+                    name: "last_time".to_string(),
                     value: timestamp.to_be_bytes().to_vec(),
                 },
             ]);

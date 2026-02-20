@@ -47,14 +47,12 @@ fn maybe_rate_change(log: &PoolLog, timestamp: u64) -> Option<PartialRateChange>
         // For TWAMM this is `OrderUpdated`; for BoostedFees this is `PoolBoosted`.
         Event::RateUpdate(ev) => {
             // An execution always happens before a rate update
-            let last_execution_time = timestamp;
+            let last_time = timestamp;
 
-            (last_execution_time >= ev.start_time && last_execution_time < ev.end_time).then(|| {
-                PartialRateChange {
-                    change_type: ChangeType::Delta,
-                    token0_value: ev.token0_rate_delta.clone(),
-                    token1_value: ev.token1_rate_delta.clone(),
-                }
+            (last_time >= ev.start_time && last_time < ev.end_time).then(|| PartialRateChange {
+                change_type: ChangeType::Delta,
+                token0_value: ev.token0_rate_delta.clone(),
+                token1_value: ev.token1_rate_delta.clone(),
             })
         }
         _ => None,

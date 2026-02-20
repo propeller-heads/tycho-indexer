@@ -135,7 +135,7 @@ fn map_protocol_changes(
             builder.add_entity_change(&EntityChanges {
                 component_id: rate_delta.pool_id.to_hex(),
                 attributes: vec![Attribute {
-                    name: format!("rates/{}/{}", token, rate_delta.time),
+                    name: format!("rate_delta/{}/{}", token, rate_delta.time),
                     value: new_value.to_signed_bytes_be(),
                     change: change_type_from_delta(&old_value, &new_value).into(),
                 }],
@@ -256,7 +256,7 @@ fn maybe_attribute_updates(ev: Event, timestamp: u64) -> Option<Vec<Attribute>> 
             },
         ]),
         Event::VirtualExecution(_) => Some(vec![Attribute {
-            name: "last_execution_time".to_string(),
+            name: "last_time".to_string(),
             value: timestamp.to_be_bytes().to_vec(),
             change: ChangeType::Update.into(),
         }]),
