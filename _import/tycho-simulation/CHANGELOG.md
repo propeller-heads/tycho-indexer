@@ -1,3 +1,10 @@
+## [0.243.0](https://github.com/propeller-heads/tycho-simulation/compare/0.242.0...0.243.0) (2026-02-20)
+
+
+### Features
+
+* remove rocketpool from the integration test setup ([18265ef](https://github.com/propeller-heads/tycho-simulation/commit/18265ef43a70b3e59e00a46e98cb1162ccd0820f))
+
 ## [0.242.0](https://github.com/propeller-heads/tycho-simulation/compare/0.241.2...0.242.0) (2026-02-19)
 
 
