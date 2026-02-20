@@ -44,7 +44,7 @@ pub struct ConcentratedPool {
     swap_state: ConcentratedPoolSwapState,
 }
 
-#[derive(Debug, Clone, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Eq, Serialize, Deserialize)]
 struct ConcentratedPoolSwapState {
     sdk_state: EvmConcentratedPoolState,
     active_tick: Option<i32>,
@@ -139,16 +139,19 @@ impl EkuboPool for ConcentratedPool {
 }
 
 impl PartialEq for ConcentratedPool {
-    fn eq(&self, other @ Self { imp, swap_state }: &Self) -> bool {
-        self.key() == other.key() &&
+    fn eq(&self, &Self { ref imp, swap_state }: &Self) -> bool {
+        self.imp.key() == imp.key() &&
             self.imp.ticks() == imp.ticks() &&
-            &self.swap_state == swap_state
+            self.swap_state == swap_state
     }
 }
 
 impl PartialEq for ConcentratedPoolSwapState {
-    fn eq(&self, Self { sdk_state, active_tick: _ }: &Self) -> bool {
-        &self.sdk_state == sdk_state
+    fn eq(&self, &Self { sdk_state, active_tick }: &Self) -> bool {
+        self.sdk_state == sdk_state &&
+            self.active_tick
+                .zip(active_tick)
+                .is_none_or(|(t1, t2)| t1 == t2)
     }
 }
 

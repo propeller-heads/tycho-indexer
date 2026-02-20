@@ -148,7 +148,6 @@ impl ProtocolSim for EkuboV3State {
         self
     }
 
-    // TODO Check what needs to be compared
     fn eq(&self, other: &dyn ProtocolSim) -> bool {
         other
             .as_any()

@@ -39,7 +39,7 @@ pub struct BoostedFeesPool {
     swap_state: BoostedFeesPoolSwapState,
 }
 
-#[derive(Debug, Eq, Clone, Serialize, Deserialize)]
+#[derive(Debug, Eq, Clone, Copy, Serialize, Deserialize)]
 struct BoostedFeesPoolSwapState {
     sdk_state: EvmBoostedFeesConcentratedPoolState,
     swapped_this_block: bool,
@@ -230,20 +230,25 @@ impl EkuboPool for BoostedFeesPool {
 }
 
 impl PartialEq for BoostedFeesPool {
-    fn eq(&self, Self { imp, swap_state }: &Self) -> bool {
+    fn eq(&self, &Self { ref imp, swap_state }: &Self) -> bool {
         self.imp.key() == imp.key() &&
             self.imp.donate_rate_deltas() == imp.donate_rate_deltas() &&
             self.imp.concentrated_pool().ticks() == imp.concentrated_pool().ticks() &&
-            &self.swap_state == swap_state
+            self.swap_state == swap_state
     }
 }
 
 impl PartialEq for BoostedFeesPoolSwapState {
     fn eq(
         &self,
-        Self { sdk_state, swapped_this_block: _, last_real_time: _, active_tick: _ }: &Self,
+        &Self { sdk_state, swapped_this_block, last_real_time, active_tick }: &Self,
     ) -> bool {
-        &self.sdk_state == sdk_state
+        self.sdk_state == sdk_state &&
+            self.swapped_this_block == swapped_this_block &&
+            self.last_real_time == last_real_time &&
+            self.active_tick
+                .zip(active_tick)
+                .is_none_or(|(t1, t2)| t1 == t2)
     }
 }
 

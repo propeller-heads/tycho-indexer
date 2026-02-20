@@ -40,18 +40,10 @@ pub struct TwammPool {
     swap_state: TwammPoolSwapState,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 struct TwammPoolSwapState {
     sdk_state: EvmTwammPoolState,
     swapped_this_block: bool,
-}
-
-impl PartialEq for TwammPool {
-    fn eq(&self, Self { imp, swap_state }: &Self) -> bool {
-        self.imp.key() == imp.key() &&
-            self.imp.sale_rate_deltas() == imp.sale_rate_deltas() &&
-            &self.swap_state == swap_state
-    }
 }
 
 fn impl_from_state(
@@ -255,6 +247,14 @@ impl EkuboPool for TwammPool {
         self.swap_state.swapped_this_block = false;
 
         Ok(())
+    }
+}
+
+impl PartialEq for TwammPool {
+    fn eq(&self, &Self { ref imp, swap_state }: &Self) -> bool {
+        self.imp.key() == imp.key() &&
+            self.imp.sale_rate_deltas() == imp.sale_rate_deltas() &&
+            self.swap_state == swap_state
     }
 }
 

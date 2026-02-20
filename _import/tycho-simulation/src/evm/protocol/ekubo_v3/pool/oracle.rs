@@ -32,7 +32,7 @@ pub struct OraclePool {
     swap_state: OraclePoolSwapState,
 }
 
-#[derive(Debug, Eq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 struct OraclePoolSwapState {
     sdk_state: EvmFullRangePoolState,
     swapped_this_block: bool,
@@ -135,13 +135,8 @@ impl EkuboPool for OraclePool {
 }
 
 impl PartialEq for OraclePool {
-    fn eq(&self, Self { imp, swap_state }: &Self) -> bool {
-        self.imp.key() == imp.key() && &self.swap_state == swap_state
-    }
-}
-impl PartialEq for OraclePoolSwapState {
-    fn eq(&self, Self { sdk_state, swapped_this_block: _ }: &Self) -> bool {
-        &self.sdk_state == sdk_state
+    fn eq(&self, &Self { ref imp, swap_state }: &Self) -> bool {
+        self.imp.key() == imp.key() && self.swap_state == swap_state
     }
 }
 

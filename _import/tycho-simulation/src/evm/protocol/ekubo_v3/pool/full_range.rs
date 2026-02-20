@@ -29,7 +29,7 @@ pub struct FullRangePool {
     swap_state: FullRangePoolSwapState,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 struct FullRangePoolSwapState {
     sdk_state: EvmFullRangePoolState,
 }
@@ -107,8 +107,8 @@ impl EkuboPool for FullRangePool {
 }
 
 impl PartialEq for FullRangePool {
-    fn eq(&self, Self { imp, swap_state }: &Self) -> bool {
-        self.imp.key() == imp.key() && &self.swap_state == swap_state
+    fn eq(&self, &Self { ref imp, swap_state }: &Self) -> bool {
+        self.imp.key() == imp.key() && self.swap_state == swap_state
     }
 }
 

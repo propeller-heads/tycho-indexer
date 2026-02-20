@@ -25,7 +25,7 @@ pub struct StableswapPool {
     swap_state: StableswapPoolSwapState,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 struct StableswapPoolSwapState {
     sdk_state: EvmStableswapPoolState,
 }
@@ -107,7 +107,7 @@ impl EkuboPool for StableswapPool {
 }
 
 impl PartialEq for StableswapPool {
-    fn eq(&self, Self { imp, swap_state }: &Self) -> bool {
-        self.imp.key() == imp.key() && &self.swap_state == swap_state
+    fn eq(&self, &Self { ref imp, swap_state }: &Self) -> bool {
+        self.imp.key() == imp.key() && self.swap_state == swap_state
     }
 }

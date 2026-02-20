@@ -33,7 +33,7 @@ pub struct MevCapturePool {
     swap_state: MevCapturePoolSwapState,
 }
 
-#[derive(Debug, Eq, Clone, Serialize, Deserialize)]
+#[derive(Debug, Eq, Clone, Copy, Serialize, Deserialize)]
 struct MevCapturePoolSwapState {
     sdk_state: EvmConcentratedPoolState,
     last_tick: i32,
@@ -161,16 +161,20 @@ impl EkuboPool for MevCapturePool {
 }
 
 impl PartialEq for MevCapturePool {
-    fn eq(&self, other @ Self { imp, swap_state }: &Self) -> bool {
-        self.imp.key() == other.imp.key() &&
+    fn eq(&self, &Self { ref imp, swap_state }: &Self) -> bool {
+        self.imp.key() == imp.key() &&
             self.imp.concentrated_pool().ticks() == imp.concentrated_pool().ticks() &&
-            &self.swap_state == swap_state
+            self.swap_state == swap_state
     }
 }
 
 impl PartialEq for MevCapturePoolSwapState {
-    fn eq(&self, Self { last_tick, active_tick: _, sdk_state }: &Self) -> bool {
-        &self.sdk_state == sdk_state && self.last_tick == *last_tick
+    fn eq(&self, &Self { last_tick, active_tick, sdk_state }: &Self) -> bool {
+        self.sdk_state == sdk_state &&
+            self.last_tick == last_tick &&
+            self.active_tick
+                .zip(active_tick)
+                .is_none_or(|(t1, t2)| t1 == t2)
     }
 }
 
