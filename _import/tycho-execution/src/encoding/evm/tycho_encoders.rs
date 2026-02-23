@@ -1,7 +1,10 @@
 use std::collections::HashSet;
 
 use alloy::signers::local::PrivateKeySigner;
-use tycho_common::{models::Chain, Bytes};
+use tycho_common::{
+    models::{protocol::ProtocolComponent, Chain},
+    Bytes,
+};
 
 use crate::encoding::{
     errors::EncodingError,
@@ -16,7 +19,7 @@ use crate::encoding::{
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         utils::ple_encode,
     },
-    models::{EncodedSolution, EncodingContext, Solution, Transaction, UserTransferType},
+    models::{EncodedSolution, EncodingContext, Solution, Swap, Transaction, UserTransferType},
     strategy_encoder::StrategyEncoder,
     tycho_encoder::TychoEncoder,
 };
@@ -80,6 +83,8 @@ impl TychoRouterEncoder {
 
     fn encode_solution(&self, solution: &Solution) -> Result<EncodedSolution, EncodingError> {
         self.validate_solution(solution)?;
+        let solution = self.add_weth_swaps(solution, &self.chain);
+
         let protocols: HashSet<String> = solution
             .swaps
             .iter()
@@ -97,17 +102,17 @@ impl TychoRouterEncoder {
                     .all(|swap| swap.get_split() == 0.0))
         {
             self.single_swap_strategy
-                .encode_strategy(solution)?
+                .encode_strategy(&solution)?
         } else if solution
             .swaps
             .iter()
             .all(|swap| swap.get_split() == 0.0)
         {
             self.sequential_swap_strategy
-                .encode_strategy(solution)?
+                .encode_strategy(&solution)?
         } else {
             self.split_swap_strategy
-                .encode_strategy(solution)?
+                .encode_strategy(&solution)?
         };
 
         if let Some(permit2) = &self.permit2 {
@@ -120,6 +125,68 @@ impl TychoRouterEncoder {
             encoded_solution.permit = Some(permit);
         }
         Ok(encoded_solution)
+    }
+
+    /// Returns a new solution with added wrapping/unwrapping swaps if the original solution
+    /// contains a swap that goes from ETH to WETH or vice versa but doesn't include the
+    /// corresponding wrapping or unwrapping swap.
+    fn add_weth_swaps(&self, solution: &Solution, chain: &Chain) -> Solution {
+        let mut solution_with_added_wraps_unwraps: Vec<Swap> =
+            Vec::with_capacity(solution.swaps.len());
+
+        // Check if we need to add a wrapping swap at the beginning of the solution
+        if let Some(s) =
+            self._wrapping_bridge(&solution.token_in, solution.swaps[0].token_in(), chain)
+        {
+            solution_with_added_wraps_unwraps.push(s);
+        }
+
+        // Iterate through the swaps and add them to the new solution, adding wrapping/unwrapping
+        // swaps in between if needed
+        for i in 0..solution.swaps.len() {
+            solution_with_added_wraps_unwraps.push(solution.swaps[i].clone());
+            if i + 1 < solution.swaps.len() {
+                let token_out = solution.swaps[i].token_out();
+                let token_in = solution.swaps[i + 1].token_in();
+                if let Some(s) = self._wrapping_bridge(token_out, token_in, chain) {
+                    solution_with_added_wraps_unwraps.push(s);
+                }
+            }
+        }
+
+        // Check if we need to add an unwrapping swap at the end of the solution
+        if let Some(last_swap) = solution.swaps.last() {
+            if let Some(s) =
+                self._wrapping_bridge(last_swap.token_out(), &solution.token_out, chain)
+            {
+                solution_with_added_wraps_unwraps.push(s);
+            }
+        }
+
+        Solution { swaps: solution_with_added_wraps_unwraps, ..solution.clone() }
+    }
+
+    // This method checks if an ETH <-> WETH swap is needed between two tokens and
+    // returns the corresponding swap if needed
+    fn _wrapping_bridge(&self, token_a: &Bytes, token_b: &Bytes, chain: &Chain) -> Option<Swap> {
+        let eth_address = &chain.native_token().address;
+        let weth_address = &chain.wrapped_native_token().address;
+
+        if token_a == weth_address && token_b == eth_address {
+            Some(Swap::new(
+                ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
+                weth_address.clone(),
+                eth_address.clone(),
+            ))
+        } else if token_a == eth_address && token_b == weth_address {
+            Some(Swap::new(
+                ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
+                eth_address.clone(),
+                weth_address.clone(),
+            ))
+        } else {
+            None
+        }
     }
 }
 
@@ -560,6 +627,149 @@ mod tests {
             assert!(encoded_solution
                 .function_signature
                 .contains("splitSwap"));
+        }
+
+        #[test]
+        fn test_add_missing_wrapped_eth_swap_in_the_middle() {
+            // before adding swap: DAI -> USDC -> ETH (no swap) WETH -> DAI
+            // after adding swap:  DAI -> USDC -> ETH -> WETH -> DAI
+
+            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+            let swap_dai_usdc = Swap::new(
+                ProtocolComponent {
+                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                dai().clone(),
+                usdc().clone(),
+            );
+
+            let swap_weth_dai = Swap::new(
+                ProtocolComponent {
+                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                weth().clone(),
+                dai().clone(),
+            );
+
+            let solution = Solution {
+                exact_out: false,
+                token_in: dai(),
+                amount_in: BigUint::from_str("1000_000000").unwrap(),
+                token_out: dai(),
+                min_amount_out: BigUint::from_str("105_152_000000000000000000").unwrap(),
+                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                swaps: vec![swap_dai_usdc, swap_usdc_eth_univ4(), swap_weth_dai],
+                ..Default::default()
+            };
+
+            let solution = encoder.add_weth_swaps(&solution, &encoder.chain);
+            assert_eq!(solution.swaps.len(), 4);
+            assert_eq!(solution.swaps[2].token_in(), &eth());
+            assert_eq!(solution.swaps[2].token_out(), &weth());
+            assert_eq!(
+                solution.swaps[2]
+                    .component()
+                    .protocol_system,
+                "weth"
+            );
+        }
+
+        #[test]
+        fn test_add_missing_wrapped_eth_swap_in_the_beginning() {
+            // before adding swap: ETH is the solution token_in, WETH -> DAI
+            // after adding swap:  ETH -> WETH -> DAI
+
+            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+            let swap_weth_dai = Swap::new(
+                ProtocolComponent {
+                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                weth().clone(),
+                dai().clone(),
+            );
+
+            let solution = Solution {
+                exact_out: false,
+                token_in: eth(),
+                amount_in: BigUint::from_str("1000_000000").unwrap(),
+                token_out: dai(),
+                min_amount_out: BigUint::from_str("105_152_000000000000000000").unwrap(),
+                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                swaps: vec![swap_weth_dai],
+                ..Default::default()
+            };
+
+            let solution = encoder.add_weth_swaps(&solution, &encoder.chain);
+            assert_eq!(solution.swaps.len(), 2);
+            assert_eq!(solution.swaps[0].token_in(), &eth());
+            assert_eq!(solution.swaps[0].token_out(), &weth());
+            assert_eq!(
+                solution.swaps[0]
+                    .component()
+                    .protocol_system,
+                "weth"
+            );
+        }
+
+        #[test]
+        fn test_add_missing_wrapped_eth_swap_in_the_end() {
+            // before adding swap: USDC -> ETH, WETH is the solution token_out
+            // after adding swap:  USDC -> ETH -> WETH
+
+            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+            let solution = Solution {
+                exact_out: false,
+                token_in: usdc(),
+                amount_in: BigUint::from_str("1000_000000").unwrap(),
+                token_out: weth(),
+                min_amount_out: BigUint::from_str("105_152_000000000000000000").unwrap(),
+                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                swaps: vec![swap_usdc_eth_univ4()],
+                ..Default::default()
+            };
+
+            let solution = encoder.add_weth_swaps(&solution, &encoder.chain);
+            let last_swap = solution.swaps.last().unwrap();
+            assert_eq!(solution.swaps.len(), 2);
+            assert_eq!(last_swap.token_in(), &eth());
+            assert_eq!(last_swap.token_out(), &weth());
+            assert_eq!(last_swap.component().protocol_system, "weth");
+        }
+
+        #[test]
+        fn test_sanity_check_no_missing_wrapped_eth_swap() {
+            // USDC -> ETH -> WETH (no swap needed to be added)
+            let eth_weth_swap = Swap::new(
+                ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
+                eth(),
+                weth(),
+            );
+
+            let input_swaps = vec![swap_usdc_eth_univ4(), eth_weth_swap];
+
+            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+            let solution = Solution {
+                exact_out: false,
+                token_in: usdc(),
+                amount_in: BigUint::from_str("1000_000000").unwrap(),
+                token_out: weth(),
+                min_amount_out: BigUint::from_str("105_152_000000000000000000").unwrap(),
+                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                swaps: input_swaps.clone(),
+                ..Default::default()
+            };
+
+            let solution = encoder.add_weth_swaps(&solution, &encoder.chain);
+            assert_eq!(solution.swaps.len(), 2);
+            assert_eq!(solution.swaps, input_swaps);
         }
 
         #[test]
