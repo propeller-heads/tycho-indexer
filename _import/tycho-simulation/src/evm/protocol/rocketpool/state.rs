@@ -48,6 +48,9 @@ pub struct RocketpoolState {
     pub megapool_queue_index: U256,
     /// How many express assignments per standard assignment (e.g., 4)
     pub express_queue_rate: U256,
+    /// Target rETH collateral rate as fraction of total ETH, scaled by 1e18.
+    /// E.g. 1e16 = 1%. Used by processDeposit() to route ETH to rETH contract first.
+    pub reth_collateral_target: U256,
 }
 
 impl RocketpoolState {
@@ -67,6 +70,7 @@ impl RocketpoolState {
         megapool_queue_requested_total: U256,
         megapool_queue_index: U256,
         express_queue_rate: U256,
+        reth_collateral_target: U256,
     ) -> Self {
         Self {
             reth_supply,
@@ -83,6 +87,7 @@ impl RocketpoolState {
             megapool_queue_requested_total,
             megapool_queue_index,
             express_queue_rate,
+            reth_collateral_target,
         }
     }
 
@@ -146,25 +151,49 @@ impl RocketpoolState {
         safe_add_u256(self.reth_contract_liquidity, deposit_pool_excess)
     }
 
+    /// Returns the ETH shortfall for the rETH collateral buffer.
+    ///
+    /// Formula from RocketDepositPool._getRethCollateralShortfall():
+    ///   targetBalance = totalEth * rethCollateralTarget / 1e18
+    ///   shortfall = targetBalance > rethBalance ? targetBalance - rethBalance : 0
+    fn get_reth_collateral_shortfall(&self) -> Result<U256, SimulationError> {
+        if self.reth_collateral_target.is_zero() {
+            return Ok(U256::ZERO);
+        }
+        let target_balance =
+            mul_div(self.total_eth, self.reth_collateral_target, U256::from(DEPOSIT_FEE_BASE))?;
+        if target_balance > self.reth_contract_liquidity {
+            safe_sub_u256(target_balance, self.reth_contract_liquidity)
+        } else {
+            Ok(U256::ZERO)
+        }
+    }
+
+    /// Splits a deposit amount into (to_reth, to_vault) following v4's processDeposit() logic.
+    ///
+    /// processDeposit() routes ETH to the rETH contract first (up to collateral shortfall),
+    /// then sends the remainder to the vault.
+    fn split_deposit(&self, amount: U256) -> Result<(U256, U256), SimulationError> {
+        let shortfall = self.get_reth_collateral_shortfall()?;
+        let to_reth = amount.min(shortfall);
+        let to_vault = safe_sub_u256(amount, to_reth)?;
+        Ok((to_reth, to_vault))
+    }
+
     /// Approximates ETH assigned from the deposit pool after a deposit.
     ///
     /// In Saturn v4, `_assignMegapools(count)` dequeues up to `count` entries from the
     /// express/standard queues (capped at `deposit_assign_maximum`). Each entry has a variable
-    /// ETH amount. We can't model individual entry sizes, so we approximate the total assigned
-    /// as `min(deposit_contract_balance, megapool_queue_requested_total)`.
+    /// ETH amount. We approximate the total assigned as
+    /// `min(deposit_contract_balance, megapool_queue_requested_total)`.
     ///
     /// Note: `deposit_assign_maximum` limits the *number* of entries processed, not the ETH
     /// amount. Without knowing per-entry sizes, we can't use it to tighten the bound.
-    ///
-    /// Note: In v4, `processDeposit()` routes incoming ETH to the rETH contract first (up to
-    /// the collateral shortfall) before the vault. This means `deposit_contract_balance` may
-    /// increase by less than the deposit amount (or not at all). Our state transition
-    /// conservatively adds the full deposit to `deposit_contract_balance`, which may overestimate
-    /// it. This is safe for routing — it makes withdrawal limits slightly too generous rather
-    /// than too restrictive. The output amount (rETH minted / ETH burned) is always correct
-    /// because it depends only on `total_eth` and `reth_supply`, not on pool balances.
     fn calculate_assign_deposits(&self) -> U256 {
-        if !self.deposit_assigning_enabled || self.megapool_queue_requested_total.is_zero() {
+        if !self.deposit_assigning_enabled ||
+            self.megapool_queue_requested_total
+                .is_zero()
+        {
             return U256::ZERO;
         }
 
@@ -245,17 +274,19 @@ impl ProtocolSim for RocketpoolState {
 
         let mut new_state = self.clone();
         if is_depositing_eth {
+            // v4 processDeposit() splits: ETH → rETH contract (collateral buffer) then vault
+            let (to_reth, to_vault) = new_state.split_deposit(amount_in)?;
+            new_state.reth_contract_liquidity =
+                safe_add_u256(new_state.reth_contract_liquidity, to_reth)?;
             new_state.deposit_contract_balance =
-                safe_add_u256(new_state.deposit_contract_balance, amount_in)?;
+                safe_add_u256(new_state.deposit_contract_balance, to_vault)?;
 
             let eth_assigned = new_state.calculate_assign_deposits();
             if eth_assigned > U256::ZERO {
                 new_state.deposit_contract_balance =
                     safe_sub_u256(new_state.deposit_contract_balance, eth_assigned)?;
-                new_state.megapool_queue_requested_total = safe_sub_u256(
-                    new_state.megapool_queue_requested_total,
-                    eth_assigned,
-                )?;
+                new_state.megapool_queue_requested_total =
+                    safe_sub_u256(new_state.megapool_queue_requested_total, eth_assigned)?;
             }
         } else {
             #[allow(clippy::collapsible_else_if)]
@@ -361,6 +392,10 @@ impl ProtocolSim for RocketpoolState {
             .updated_attributes
             .get("express_queue_rate")
             .map_or(self.express_queue_rate, U256::from_bytes);
+        self.reth_collateral_target = delta
+            .updated_attributes
+            .get("reth_collateral_target")
+            .map_or(self.reth_collateral_target, U256::from_bytes);
 
         Ok(())
     }
@@ -424,20 +459,23 @@ mod tests {
     /// - Express queue rate: 4
     fn create_state() -> RocketpoolState {
         RocketpoolState::new(
-            U256::from(100e18),                     // reth_supply: 100 rETH
-            U256::from(200e18),                     // total_eth: 200 ETH (1 rETH = 2 ETH)
-            U256::from(50e18),                      // deposit_contract_balance: 50 ETH
-            U256::ZERO,                             // reth_contract_liquidity: 0 ETH
+            U256::from(100e18), // reth_supply: 100 rETH
+            U256::from(200e18), /* total_eth: 200 ETH (1 rETH =
+                                 * 2 ETH) */
+            U256::from(50e18), // deposit_contract_balance: 50 ETH
+            U256::ZERO,        // reth_contract_liquidity: 0 ETH
             U256::from(400_000_000_000_000_000u64), // deposit_fee: 40% (0.4e18)
-            true,                                   // deposits_enabled
-            U256::ZERO,                             // min_deposit_amount
-            U256::from(1000e18),                    // max_deposit_pool_size: 1000 ETH
-            false,                                  // deposit_assigning_enabled
-            U256::ZERO,                             // deposit_assign_maximum
-            U256::ZERO,                             // deposit_assign_socialised_maximum
-            U256::ZERO,                             // megapool_queue_requested_total
-            U256::ZERO,                             // megapool_queue_index
-            U256::from(4u64),                       // express_queue_rate: 4
+            true,              // deposits_enabled
+            U256::ZERO,        // min_deposit_amount
+            U256::from(1000e18), // max_deposit_pool_size: 1000 ETH
+            false,             // deposit_assigning_enabled
+            U256::ZERO,        // deposit_assign_maximum
+            U256::ZERO,        // deposit_assign_socialised_maximum
+            U256::ZERO,        // megapool_queue_requested_total
+            U256::ZERO,        // megapool_queue_index
+            U256::from(4u64),  // express_queue_rate: 4
+            U256::from_str_radix("2386f26fc10000", 16).unwrap(), /* reth_collateral_target: 1e16
+                                * (1%) */
         )
     }
 
@@ -477,14 +515,24 @@ mod tests {
     #[test]
     fn test_max_capacity_assign_disabled() {
         let state = create_state();
-        assert_eq!(state.get_max_deposit_capacity().unwrap(), U256::from(1000e18));
+        assert_eq!(
+            state
+                .get_max_deposit_capacity()
+                .unwrap(),
+            U256::from(1000e18)
+        );
     }
 
     #[test]
     fn test_max_capacity_assign_enabled_empty_queue() {
         let mut state = create_state();
         state.deposit_assigning_enabled = true;
-        assert_eq!(state.get_max_deposit_capacity().unwrap(), U256::from(1000e18));
+        assert_eq!(
+            state
+                .get_max_deposit_capacity()
+                .unwrap(),
+            U256::from(1000e18)
+        );
     }
 
     #[test]
@@ -493,7 +541,12 @@ mod tests {
         state.deposit_assigning_enabled = true;
         state.megapool_queue_requested_total = U256::from(500e18);
         // 1000 + 500 = 1500 ETH
-        assert_eq!(state.get_max_deposit_capacity().unwrap(), U256::from(1500e18));
+        assert_eq!(
+            state
+                .get_max_deposit_capacity()
+                .unwrap(),
+            U256::from(1500e18)
+        );
     }
 
     // ============ Delta Transition Tests ============
@@ -561,14 +614,18 @@ mod tests {
     #[test]
     fn test_spot_price_deposit() {
         let state = create_state();
-        let price = state.spot_price(&eth_token(), &reth_token()).unwrap();
+        let price = state
+            .spot_price(&eth_token(), &reth_token())
+            .unwrap();
         assert_ulps_eq!(price, 0.5);
     }
 
     #[test]
     fn test_spot_price_withdraw() {
         let state = create_state();
-        let price = state.spot_price(&reth_token(), &eth_token()).unwrap();
+        let price = state
+            .spot_price(&reth_token(), &eth_token())
+            .unwrap();
         assert_ulps_eq!(price, 1.0 / 0.3);
     }
 
@@ -635,8 +692,15 @@ mod tests {
 
         assert_eq!(res.amount, BigUint::from(3_000_000_000_000_000_000u128));
 
-        let new_state = res.new_state.as_any().downcast_ref::<RocketpoolState>().unwrap();
-        assert_eq!(new_state.deposit_contract_balance, U256::from(60e18));
+        // Collateral buffer: target = 200e18 * 1e16 / 1e18 = 2e18.
+        // Shortfall = 2e18 - 0 = 2e18. to_reth = min(10, 2) = 2, to_vault = 8.
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketpoolState>()
+            .unwrap();
+        assert_eq!(new_state.deposit_contract_balance, U256::from(58e18));
+        assert_eq!(new_state.reth_contract_liquidity, U256::from(2e18));
     }
 
     #[test]
@@ -653,7 +717,11 @@ mod tests {
 
         assert_eq!(res.amount, BigUint::from(20_000_000_000_000_000_000u128));
 
-        let new_state = res.new_state.as_any().downcast_ref::<RocketpoolState>().unwrap();
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketpoolState>()
+            .unwrap();
         assert_eq!(new_state.deposit_contract_balance, U256::from(30e18));
     }
 
@@ -740,7 +808,11 @@ mod tests {
 
         assert_eq!(res.amount, BigUint::from(30_000_000_000_000_000_000u128));
 
-        let new_state = res.new_state.as_any().downcast_ref::<RocketpoolState>().unwrap();
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketpoolState>()
+            .unwrap();
         assert_eq!(new_state.reth_contract_liquidity, U256::ZERO);
         assert_eq!(new_state.deposit_contract_balance, U256::from(30e18));
     }
@@ -762,10 +834,16 @@ mod tests {
             )
             .unwrap();
 
-        let new_state = res.new_state.as_any().downcast_ref::<RocketpoolState>().unwrap();
-        // 100 + 10 = 110 balance, min(110, 40) = 40 assigned
-        // final balance = 110 - 40 = 70
-        assert_eq!(new_state.deposit_contract_balance, U256::from(70e18));
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketpoolState>()
+            .unwrap();
+        // Collateral shortfall = 2 (target = 200*1% = 2, reth_liq = 0).
+        // 10 ETH deposit: to_reth = 2, to_vault = 8.
+        // balance = 100 + 8 = 108, min(108, 40) = 40 assigned.
+        // final balance = 108 - 40 = 68
+        assert_eq!(new_state.deposit_contract_balance, U256::from(68e18));
         assert_eq!(new_state.megapool_queue_requested_total, U256::ZERO);
     }
 
@@ -782,9 +860,13 @@ mod tests {
             )
             .unwrap();
 
-        let new_state = res.new_state.as_any().downcast_ref::<RocketpoolState>().unwrap();
-        // No queue, no assignment: 50 + 10 = 60
-        assert_eq!(new_state.deposit_contract_balance, U256::from(60e18));
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketpoolState>()
+            .unwrap();
+        // Collateral: to_reth = 2, to_vault = 8. No queue assignment: 50 + 8 = 58
+        assert_eq!(new_state.deposit_contract_balance, U256::from(58e18));
     }
 
     #[test]
@@ -801,9 +883,13 @@ mod tests {
             )
             .unwrap();
 
-        let new_state = res.new_state.as_any().downcast_ref::<RocketpoolState>().unwrap();
-        // Assign disabled, no assignment: 50 + 10 = 60
-        assert_eq!(new_state.deposit_contract_balance, U256::from(60e18));
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketpoolState>()
+            .unwrap();
+        // Assign disabled, collateral: to_reth = 2, to_vault = 8. 50 + 8 = 58
+        assert_eq!(new_state.deposit_contract_balance, U256::from(58e18));
     }
 
     // ============ Live Post-Saturn Transaction Tests ============
@@ -814,18 +900,20 @@ mod tests {
         RocketpoolState::new(
             U256::from_str_radix("489a96a246a2e92bbbd1", 16).unwrap(), // reth_supply
             U256::from_str_radix("540e645ee4119f4d8b9e", 16).unwrap(), // total_eth
-            U256::from_str_radix("8dcfa9d0071987bb", 16).unwrap(), // deposit_contract_balance
-            U256::from_str_radix("c28d2e1d64f99ea24", 16).unwrap(), // reth_contract_liquidity
-            U256::from_str_radix("1c6bf52634000", 16).unwrap(),    // deposit_fee (0.05%)
-            true,                                                   // deposits_enabled
-            U256::from_str_radix("2386f26fc10000", 16).unwrap(),   // min_deposit_amount
+            U256::from_str_radix("8dcfa9d0071987bb", 16).unwrap(),     // deposit_contract_balance
+            U256::from_str_radix("c28d2e1d64f99ea24", 16).unwrap(),    // reth_contract_liquidity
+            U256::from_str_radix("1c6bf52634000", 16).unwrap(),        // deposit_fee (0.05%)
+            true,                                                      // deposits_enabled
+            U256::from_str_radix("2386f26fc10000", 16).unwrap(),       // min_deposit_amount
             U256::from_str_radix("4f68ca6d8cd91c6000000", 16).unwrap(), // max_deposit_pool_size
-            true,                                                   // deposit_assigning_enabled
-            U256::from(90u64),                                      // deposit_assign_maximum
-            U256::ZERO,                                             // deposit_assign_socialised_maximum
-            U256::from_str_radix("4a60532ad51bf000000", 16).unwrap(), // megapool_queue_requested_total
-            U256::ZERO,                                             // megapool_queue_index
-            U256::from(4u64),                                       // express_queue_rate
+            true,                                                      // deposit_assigning_enabled
+            U256::from(90u64),                                         // deposit_assign_maximum
+            U256::ZERO, // deposit_assign_socialised_maximum
+            U256::from_str_radix("4a60532ad51bf000000", 16).unwrap(), /* megapool_queue_requested_total */
+            U256::ZERO,                                               // megapool_queue_index
+            U256::from(4u64),                                         // express_queue_rate
+            U256::from_str_radix("2386f26fc10000", 16).unwrap(),      /* reth_collateral_target:
+                                                                       * 1e16 (1%) */
         )
     }
 
@@ -852,9 +940,9 @@ mod tests {
 
         // Post-state: document known divergence from on-chain behavior.
         // On-chain, processDeposit() routes ETH to rETH contract first (collateral buffer),
-        // so deposit_contract_balance was unchanged. Our simulation adds to deposit_contract_balance
-        // and then subtracts via queue assignment. The total_eth and reth_supply (oracle-managed)
-        // are always unchanged, which is correct.
+        // so deposit_contract_balance was unchanged. Our simulation adds to
+        // deposit_contract_balance and then subtracts via queue assignment. The total_eth
+        // and reth_supply (oracle-managed) are always unchanged, which is correct.
         let new_state = res
             .new_state
             .as_any()
@@ -888,7 +976,9 @@ mod tests {
         assert_eq!(new_state.total_eth, state.total_eth);
         assert_eq!(new_state.reth_supply, state.reth_supply);
         // Withdrawal should reduce available liquidity
-        assert!(new_state.reth_contract_liquidity < state.reth_contract_liquidity
-            || new_state.deposit_contract_balance < state.deposit_contract_balance);
+        assert!(
+            new_state.reth_contract_liquidity < state.reth_contract_liquidity ||
+                new_state.deposit_contract_balance < state.deposit_contract_balance
+        );
     }
 }

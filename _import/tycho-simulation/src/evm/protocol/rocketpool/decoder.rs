@@ -56,6 +56,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketpoolState {
             get_u256("megapool_queue_requested_total")?,
             get_u256("megapool_queue_index")?,
             get_u256("express_queue_rate")?,
+            get_u256("reth_collateral_target")?,
         ))
     }
 }
@@ -132,6 +133,10 @@ mod tests {
                         "express_queue_rate".to_string(),
                         Bytes::from(U256::from(4u64).to_be_bytes_vec()),
                     ),
+                    (
+                        "reth_collateral_target".to_string(),
+                        Bytes::from(U256::from(10_000_000_000_000_000u128).to_be_bytes_vec()),
+                    ),
                 ]),
                 balances: HashMap::new(),
             },
@@ -161,6 +166,7 @@ mod tests {
         );
         assert_eq!(state.megapool_queue_index, U256::from(42u64));
         assert_eq!(state.express_queue_rate, U256::from(4u64));
+        assert_eq!(state.reth_collateral_target, U256::from(10_000_000_000_000_000u128));
     }
 
     #[tokio::test]
@@ -179,6 +185,7 @@ mod tests {
     #[case::missing_megapool_queue_requested_total("megapool_queue_requested_total")]
     #[case::missing_megapool_queue_index("megapool_queue_index")]
     #[case::missing_express_queue_rate("express_queue_rate")]
+    #[case::missing_reth_collateral_target("reth_collateral_target")]
     async fn test_rocketpool_try_from_missing_attribute(#[case] missing_attribute: &str) {
         let mut snapshot = create_test_snapshot();
         snapshot
