@@ -35,7 +35,11 @@ contract UniswapV2ExecutorExposed is UniswapV2Executor {
         view
         returns (uint256 amount)
     {
-        return _getAmountOut(target, amountIn, zeroForOne);
+        IUniswapV2Pair pair = IUniswapV2Pair(target);
+        (uint112 reserve0, uint112 reserve1,) = pair.getReserves();
+        uint112 reserveIn = zeroForOne ? reserve0 : reserve1;
+        uint112 reserveOut = zeroForOne ? reserve1 : reserve0;
+        return _getAmountOut(amountIn, reserveIn, reserveOut);
     }
 
     function verifyPairAddress(address target) external view {
