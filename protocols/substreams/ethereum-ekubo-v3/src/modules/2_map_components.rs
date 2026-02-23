@@ -104,10 +104,10 @@ fn maybe_create_component(
                 },
             ]);
         }
-        Extension::Unknown
-        | Extension::NoSwapCallPoints
-        | Extension::Oracle
-        | Extension::MevCapture => {}
+        Extension::Unknown |
+        Extension::NoSwapCallPoints |
+        Extension::Oracle |
+        Extension::MevCapture => {}
     }
 
     let pool_config = EvmPoolConfig::try_from(
@@ -117,7 +117,7 @@ fn maybe_create_component(
 
     let component_id = log.pool_id.to_hex();
 
-    return Some((
+    Some((
         ProtocolComponent {
             id: component_id.clone(),
             tokens: vec![pi.token0.clone(), pi.token1.clone()],
@@ -175,5 +175,5 @@ fn maybe_create_component(
                 balance: BigInt::zero().to_signed_bytes_be(),
             },
         ],
-    ));
+    ))
 }

@@ -43,12 +43,12 @@ fn maybe_pool_details(event: Event) -> Option<PoolDetails> {
     )
     .expect("pool config to be valid");
 
-    return Some(PoolDetails {
+    Some(PoolDetails {
         token0: pi.token0,
         token1: pi.token1,
         is_stableswap: matches!(
             config.pool_type_config,
             EvmPoolTypeConfig::FullRange(_) | EvmPoolTypeConfig::Stableswap(_)
         ),
-    });
+    })
 }

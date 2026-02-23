@@ -1,10 +1,12 @@
 use substreams::store::{StoreGet, StoreGetProto, StoreNew, StoreSet, StoreSetInt64};
 use substreams_helper::hex::Hexable;
 
-use crate::details_store::is_pool_tracked;
-use crate::pb::ekubo::PoolDetails;
-use crate::pb::ekubo::{
-    block_transaction_events::transaction_events::pool_log::Event, BlockTransactionEvents,
+use crate::{
+    details_store::is_pool_tracked,
+    pb::ekubo::{
+        block_transaction_events::transaction_events::pool_log::Event, BlockTransactionEvents,
+        PoolDetails,
+    },
 };
 
 #[substreams::handlers::store]

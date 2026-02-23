@@ -73,8 +73,8 @@ fn maybe_active_liquidity_change(
                         .get_at(log.ordinal, &pool_id)
                         .expect("pool should have active tick when initialized");
 
-                    current_tick >= position_updated.lower.into()
-                        && current_tick < position_updated.upper.into()
+                    current_tick >= position_updated.lower.into() &&
+                        current_tick < position_updated.upper.into()
                 };
 
             update_active_liquidity.then(|| PartialLiquidityChange {

@@ -4,10 +4,12 @@ use substreams::{
 };
 use substreams_helper::hex::Hexable;
 
-use crate::details_store::is_pool_tracked;
-use crate::pb::ekubo::{
-    block_transaction_events::transaction_events::pool_log::Event, BlockTransactionEvents,
-    PoolDetails, TickDelta, TickDeltas,
+use crate::{
+    details_store::is_pool_tracked,
+    pb::ekubo::{
+        block_transaction_events::transaction_events::pool_log::Event, BlockTransactionEvents,
+        PoolDetails, TickDelta, TickDeltas,
+    },
 };
 
 #[substreams::handlers::map]
