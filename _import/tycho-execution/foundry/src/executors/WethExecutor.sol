@@ -7,6 +7,7 @@ import {
     SafeERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 interface IWETH is IERC20 {
     function deposit() external payable;
@@ -15,8 +16,6 @@ interface IWETH is IERC20 {
 
 error WethExecutor__InvalidDataLength();
 error WethExecutor__ZeroAddres();
-error WethExecutor__SenderIsNotVault(address sender);
-import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 contract WethExecutor is IExecutor {
     using SafeERC20 for IWETH;
@@ -24,11 +23,11 @@ contract WethExecutor is IExecutor {
 
     IWETH public immutable weth;
 
-    constructor(address wrappedEthAddress) {
-        if (wrappedEthAddress == address(0)) {
+    constructor(address wethAddress) {
+        if (wethAddress == address(0)) {
             revert WethExecutor__ZeroAddres();
         }
-        weth = IWETH(wrappedEthAddress);
+        weth = IWETH(wethAddress);
     }
 
     function fundsExpectedAddress(
@@ -113,6 +112,11 @@ contract WethExecutor is IExecutor {
             transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
         }
 
+        // Since unwrapping withdraws the funds from the msg.sender, the user's funds need to be sent to the
+        // TychoRouter initially. This does not require an actual approval since our
+        // router is interacting directly with the token contract.
+        // We use msg.sender (the TychoRouter) instead of address(this) because
+        // getTransferData is called via staticcall.
         receiver = msg.sender;
     }
 }

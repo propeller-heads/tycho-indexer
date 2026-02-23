@@ -17,7 +17,7 @@ import {StdUtils} from "../../lib/forge-std/src/StdUtils.sol";
 import {TestUtils} from "../TestUtils.sol";
 
 contract WethExecutorExposed is WethExecutor {
-    constructor(address wrappedEthAddress) WethExecutor(wrappedEthAddress) {}
+    constructor(address wethAddress) WethExecutor(wethAddress) {}
 
     function decodeParams(bytes calldata data)
         external
@@ -31,13 +31,10 @@ contract WethExecutorExposed is WethExecutor {
 contract WethExecutorTest is TestUtils, Constants {
     WethExecutorExposed wethExecutor;
 
-    modifier setUpFork(uint256 blockNumber) {
-        vm.createSelectFork(vm.rpcUrl("mainnet"), blockNumber);
+    function setUp() public {
+        vm.createSelectFork(vm.rpcUrl("mainnet"), 23899254);
         wethExecutor = new WethExecutorExposed(WETH_ADDR);
-        _;
     }
-
-    function setUp() public setUpFork(23899254) {}
 
     function testDecodeParamsWrap() public view {
         bytes memory params = abi.encodePacked(
@@ -168,10 +165,6 @@ contract WethExecutorTest is TestUtils, Constants {
 }
 
 contract wethWrapTest is TychoRouterTestSetup {
-    function getForkBlock() public pure override returns (uint256) {
-        return 23899254;
-    }
-
     function testSingleSwapWrap() public {
         // ETH -> wETH
         IWETH WETH = IWETH(WETH_ADDR);
@@ -205,7 +198,6 @@ contract wethWrapTest is TychoRouterTestSetup {
             "test_single_encoding_strategy_weth_unwrapping"
         );
 
-        // Fund Bob with ETH to deposit to wETH
         vm.startPrank(BOB);
         deal(WETH_ADDR, BOB, amountIn);
 
@@ -252,7 +244,7 @@ contract wethWrapTest is TychoRouterTestSetup {
         assertTrue(success, "Call Failed");
         assertEq(ethBalanceBefore - ethBalanceAfter, 1 ether);
         assertEq(
-            daiBalanceAfter - daiBalanceBefore, 3_037_253_804_206_974_049_100
+            daiBalanceAfter - daiBalanceBefore, 2_018_817_438_608_734_439_722
         );
         assertEq(WETH.balanceOf(tychoRouterAddr), 0);
         assertEq(tychoRouterAddr.balance, 0);

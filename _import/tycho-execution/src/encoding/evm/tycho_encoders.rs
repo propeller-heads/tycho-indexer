@@ -737,32 +737,11 @@ mod tests {
             };
 
             let solution = encoder.add_weth_swaps(&solution, &encoder.chain);
+            let last_swap = solution.swaps.last().unwrap();
             assert_eq!(solution.swaps.len(), 2);
-            assert_eq!(
-                solution
-                    .swaps
-                    .last()
-                    .unwrap()
-                    .token_in(),
-                &eth()
-            );
-            assert_eq!(
-                solution
-                    .swaps
-                    .last()
-                    .unwrap()
-                    .token_out(),
-                &weth()
-            );
-            assert_eq!(
-                solution
-                    .swaps
-                    .last()
-                    .unwrap()
-                    .component()
-                    .protocol_system,
-                "weth"
-            );
+            assert_eq!(last_swap.token_in(), &eth());
+            assert_eq!(last_swap.token_out(), &weth());
+            assert_eq!(last_swap.component().protocol_system, "weth");
         }
 
         #[test]
