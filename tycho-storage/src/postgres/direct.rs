@@ -1,5 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
+use super::{PostgresError, PostgresGateway};
+use crate::postgres::token_ordering::sort_tokens_by_protocol_system;
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use diesel_async::{
@@ -30,8 +32,6 @@ use tycho_common::{
     },
     Bytes,
 };
-
-use super::{PostgresError, PostgresGateway};
 
 #[derive(Clone)]
 pub struct DirectGateway {
@@ -337,6 +337,12 @@ impl ProtocolGateway for DirectGateway {
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
+        // Protocol systems prior to indexer version 0.144.0 had tokens sorted lexicographically
+        // by address. We replicate this behavior here.
+        let mut components = new.to_vec();
+        for component in components.iter_mut() {
+            sort_tokens_by_protocol_system(component);
+        }
         self.state_gateway
             .add_protocol_components(new.to_vec().as_slice(), &mut conn)
             .await?;

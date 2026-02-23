@@ -154,6 +154,7 @@ mod extraction_state;
 mod orm;
 mod protocol;
 mod schema;
+mod token_ordering;
 mod versioning;
 
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!("./migrations/");

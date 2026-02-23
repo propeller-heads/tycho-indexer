@@ -758,9 +758,7 @@ where
                             .min(total as usize),
                     )
                     .take(pagination_params.page_size as usize)
-                    .map(|c| {
-                        return dto::ProtocolComponent::from(c);
-                    })
+                    .map(|c| dto::ProtocolComponent::from(c))
                     .collect();
 
                 return Ok(dto::ProtocolComponentRequestResponse::new(
@@ -815,9 +813,7 @@ where
 
                 let response_components = components
                     .into_iter()
-                    .map(|c| {
-                        return dto::ProtocolComponent::from(c);
-                    })
+                    .map(|c| dto::ProtocolComponent::from(c))
                     .collect::<Vec<dto::ProtocolComponent>>();
                 Ok(dto::ProtocolComponentRequestResponse::new(
                     response_components,
@@ -2544,7 +2540,7 @@ mod tests {
             "ambient",
             "pool",
             Chain::Ethereum,
-            vec![Bytes::from_str("0x00").unwrap(), Bytes::from_str("0x01").unwrap()],
+            vec![Bytes::from_str("0x01").unwrap(), Bytes::from_str("0x00").unwrap()],
             vec![],
             HashMap::new(),
             ChangeType::Creation,
@@ -2568,7 +2564,7 @@ mod tests {
             "ambient",
             "pool",
             Chain::Ethereum,
-            vec![Bytes::from_str("0x00").unwrap(), Bytes::from_str("0x01").unwrap()],
+            vec![Bytes::from_str("0x01").unwrap(), Bytes::from_str("0x00").unwrap()],
             vec![],
             HashMap::new(),
             ChangeType::Creation,
