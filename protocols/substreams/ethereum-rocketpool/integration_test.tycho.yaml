@@ -4,20 +4,15 @@ protocol_type_names:
   - "rocketpool_pool"
 skip_balance_check: true # Rocket Deposit Pool components do not hold user funds directly
 tests:
-  - name: test_pool_creation
-    start_block: 17069898 # Rocket Deposit Pool was upgraded to V1.2
-    stop_block: 17070006 # First deposit after V1.2 upgrade
+  - name: test_saturn_pool_creation
+    start_block: 24479942 # Saturn I activation block
+    stop_block: 24480200 # Includes first deposits after Saturn activation
     expected_components:
       - id: "0xdd3f50f8a6cafbe9b31a427582963f465e745af8"
         tokens:
           - "0xae78736Cd615f374D3085123A210448E74Fc6393"
           - "0x0000000000000000000000000000000000000000"
         static_attributes: { }
-        creation_tx: "0x78adcfc97632d86ea9dbfadcbabbf6257baf1893b81e8d1cd69d09ec1c8ef3b4" # Rocket Pool Deposit Pool V1.2 Upgrade Tx
+        creation_tx: "0x24ae3e31c87739794e4f2ad49aa6f47760901bb2ba52de6f7a19e560820b4425" # Saturn I activation tx
         skip_simulation: false
-        # Skip execution because the test block (17070006) is pre-Cancun, but the TychoRouter
-        # and execution contracts (RestrictTransferFrom, Dispatcher) use Cancun opcodes (TSTORE/TLOAD).
-        # Most RPC providers use historical EVM rules for historical blocks, causing either
-        # "NotActivated" errors or "invalid opcode: TSTORE" failures. Execution will be validated
-        # via cluster integration tests or quickstart after deploying the executor.
         skip_execution: true
