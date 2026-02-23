@@ -148,9 +148,21 @@ impl RocketpoolState {
 
     /// Approximates ETH assigned from the deposit pool after a deposit.
     ///
-    /// In Saturn v4, `_assignMegapools()` dequeues from express/standard queues with variable
-    /// ETH amounts. We approximate the total assigned as the minimum of available balance
-    /// and total requested.
+    /// In Saturn v4, `_assignMegapools(count)` dequeues up to `count` entries from the
+    /// express/standard queues (capped at `deposit_assign_maximum`). Each entry has a variable
+    /// ETH amount. We can't model individual entry sizes, so we approximate the total assigned
+    /// as `min(deposit_contract_balance, megapool_queue_requested_total)`.
+    ///
+    /// Note: `deposit_assign_maximum` limits the *number* of entries processed, not the ETH
+    /// amount. Without knowing per-entry sizes, we can't use it to tighten the bound.
+    ///
+    /// Note: In v4, `processDeposit()` routes incoming ETH to the rETH contract first (up to
+    /// the collateral shortfall) before the vault. This means `deposit_contract_balance` may
+    /// increase by less than the deposit amount (or not at all). Our state transition
+    /// conservatively adds the full deposit to `deposit_contract_balance`, which may overestimate
+    /// it. This is safe for routing — it makes withdrawal limits slightly too generous rather
+    /// than too restrictive. The output amount (rETH minted / ETH burned) is always correct
+    /// because it depends only on `total_eth` and `reth_supply`, not on pool balances.
     fn calculate_assign_deposits(&self) -> U256 {
         if !self.deposit_assigning_enabled || self.megapool_queue_requested_total.is_zero() {
             return U256::ZERO;
@@ -390,7 +402,6 @@ mod tests {
 
     use approx::assert_ulps_eq;
     use num_bigint::BigUint;
-    use num_traits::ToPrimitive;
     use tycho_common::{
         dto::ProtocolStateDelta,
         hex_bytes::Bytes,
@@ -402,7 +413,6 @@ mod tests {
     };
 
     use super::*;
-    use crate::evm::protocol::utils::add_fee_markup;
 
     /// Helper function to create a RocketpoolState with easy-to-compute defaults for testing.
     /// - Exchange rate: 1 rETH = 2 ETH (100 rETH backed by 200 ETH)
@@ -822,6 +832,11 @@ mod tests {
     /// Test against real post-Saturn deposit transaction.
     /// Tx 0xe0f1db165b621cb1e50b629af9d47e064be464fbcc7f2bcba3df1d27dbb916be at block 24480105.
     /// User deposited 85 ETH and received 73382345660413064855 rETH (0.05% fee applied).
+    ///
+    /// Note on post-state: On-chain, the 85 ETH went entirely to the rETH collateral buffer
+    /// (deposit_contract_balance unchanged at 10218572790464350139). Our simulation
+    /// conservatively adds the full amount to deposit_contract_balance. This is a known
+    /// approximation — the output amount is exact, but post-state balance distribution differs.
     #[test]
     fn test_live_deposit_post_saturn() {
         let state = create_state_at_block_24480104();
@@ -831,8 +846,22 @@ mod tests {
             .get_amount_out(deposit_amount, &eth_token(), &reth_token())
             .unwrap();
 
+        // Output amount: exact match with on-chain result
         let expected_reth_out = BigUint::from(73_382_345_660_413_064_855u128);
         assert_eq!(res.amount, expected_reth_out);
+
+        // Post-state: document known divergence from on-chain behavior.
+        // On-chain, processDeposit() routes ETH to rETH contract first (collateral buffer),
+        // so deposit_contract_balance was unchanged. Our simulation adds to deposit_contract_balance
+        // and then subtracts via queue assignment. The total_eth and reth_supply (oracle-managed)
+        // are always unchanged, which is correct.
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketpoolState>()
+            .unwrap();
+        assert_eq!(new_state.total_eth, state.total_eth);
+        assert_eq!(new_state.reth_supply, state.reth_supply);
     }
 
     /// Test against real post-Saturn burn transaction.
@@ -846,7 +875,20 @@ mod tests {
             .get_amount_out(burn_amount, &reth_token(), &eth_token())
             .unwrap();
 
+        // Output amount: exact match with on-chain result
         let expected_eth_out = BigUint::from(2_912_504_376_202_664_754u128);
         assert_eq!(res.amount, expected_eth_out);
+
+        // Post-state: verify oracle values unchanged and liquidity decreased
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketpoolState>()
+            .unwrap();
+        assert_eq!(new_state.total_eth, state.total_eth);
+        assert_eq!(new_state.reth_supply, state.reth_supply);
+        // Withdrawal should reduce available liquidity
+        assert!(new_state.reth_contract_liquidity < state.reth_contract_liquidity
+            || new_state.deposit_contract_balance < state.deposit_contract_balance);
     }
 }
