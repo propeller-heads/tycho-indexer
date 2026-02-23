@@ -91,20 +91,7 @@ impl ProtocolSim for LiquoriceState {
 
         self.prices_by_mm
             .values()
-            .filter(|price| !price.levels.is_empty())
-            .map(|price| {
-                let total_quantity: f64 = price
-                    .levels
-                    .iter()
-                    .map(|l| l.quantity)
-                    .sum();
-                let total_value: f64 = price
-                    .levels
-                    .iter()
-                    .map(|l| l.quantity * l.price)
-                    .sum();
-                total_value / total_quantity
-            })
+            .filter_map(|price| price.get_price())
             .reduce(f64::max)
             .ok_or(SimulationError::RecoverableError("No liquidity".into()))
     }

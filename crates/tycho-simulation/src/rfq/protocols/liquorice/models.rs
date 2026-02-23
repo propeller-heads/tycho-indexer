@@ -118,7 +118,16 @@ impl LiquoriceTokenPairPrice {
             .sum()
     }
 
-    pub fn get_price(&self, base_token_amount: f64) -> Option<f64> {
+    pub fn get_price(&self) -> Option<f64> {
+        if self.levels.is_empty() {
+            return None;
+        }
+        let total_quantity: f64 = self.levels.iter().map(|l| l.quantity).sum();
+        let total_value: f64 = self.levels.iter().map(|l| l.quantity * l.price).sum();
+        Some(total_value / total_quantity)
+    }
+
+    pub fn get_price_for_amount(&self, base_token_amount: f64) -> Option<f64> {
         if self.levels.is_empty() {
             return None;
         }
@@ -271,10 +280,26 @@ mod tests {
     fn test_get_price() {
         let levels = liquorice_mm_levels();
 
-        let price = levels.get_price(1.0);
+        let price = levels.get_price();
+        assert!((price.unwrap() - 8998.0 / 3.0).abs() < 1e-10);
+
+        let empty_levels = LiquoriceTokenPairPrice {
+            base_token: Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
+            quote_token: Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
+            levels: vec![],
+            updated_at: None,
+        };
+        assert_eq!(empty_levels.get_price(), None);
+    }
+
+    #[test]
+    fn test_get_price_for_amount() {
+        let levels = liquorice_mm_levels();
+
+        let price = levels.get_price_for_amount(1.0);
         assert_eq!(price, Some(3000.0));
 
-        let multi_level_price = levels.get_price(2.0);
+        let multi_level_price = levels.get_price_for_amount(2.0);
         assert_eq!(multi_level_price, Some(2999.5));
 
         let empty_levels = LiquoriceTokenPairPrice {
@@ -283,7 +308,7 @@ mod tests {
             levels: vec![],
             updated_at: None,
         };
-        assert_eq!(empty_levels.get_price(1.0), None);
+        assert_eq!(empty_levels.get_price_for_amount(1.0), None);
     }
 
     #[test]

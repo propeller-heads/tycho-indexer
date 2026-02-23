@@ -94,7 +94,7 @@ impl LiquoriceClient {
                     if token_price.base_token == quote_token &&
                         token_price.quote_token == *approved_quote_token
                     {
-                        if let Some(price) = token_price.get_price(1.0) {
+                        if let Some(price) = token_price.get_price_for_amount(1.0) {
                             return Ok(raw_tvl * price);
                         }
                     }
@@ -420,7 +420,6 @@ impl RFQClient for LiquoriceClient {
             effective_trader: Some(params.sender.to_string()),
             base_token_amount: Some(params.amount_in.to_string()),
             quote_token_amount: None,
-            // TODO: is not needed?
             excluded_makers: None,
         };
 
