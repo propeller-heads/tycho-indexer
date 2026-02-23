@@ -4,8 +4,7 @@ use tycho_client::feed::synchronizer::ComponentWithState;
 use tycho_common::{models::token::Token, Bytes};
 
 use super::{
-    client_builder::LiquoriceClientBuilder, models::LiquoriceMarketMakerLevels,
-    state::LiquoriceState,
+    client_builder::LiquoriceClientBuilder, models::LiquoriceTokenPairPrice, state::LiquoriceState,
 };
 use crate::{
     protocol::{
@@ -54,14 +53,14 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for LiquoriceState {
             })?
             .clone();
 
-        let empty_levels_map: Bytes = "{}".as_bytes().to_vec().into();
-        let levels_data = state_attrs
-            .get("levels")
-            .unwrap_or(&empty_levels_map);
+        let empty_prices_map: Bytes = "{}".as_bytes().to_vec().into();
+        let prices_data = state_attrs
+            .get("prices")
+            .unwrap_or(&empty_prices_map);
 
-        let levels_by_mm: HashMap<String, LiquoriceMarketMakerLevels> =
-            serde_json::from_slice(levels_data).map_err(|e| {
-                InvalidSnapshotError::ValueError(format!("Invalid levels JSON: {e}"))
+        let prices_by_mm: HashMap<String, LiquoriceTokenPairPrice> =
+            serde_json::from_slice(prices_data).map_err(|e| {
+                InvalidSnapshotError::ValueError(format!("Invalid prices JSON: {e}"))
             })?;
 
         let auth = get_liquorice_auth().map_err(|e| {
@@ -78,7 +77,7 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for LiquoriceState {
                     ))
                 })?;
 
-        Ok(LiquoriceState::new(base_token, quote_token, levels_by_mm, client))
+        Ok(LiquoriceState::new(base_token, quote_token, prices_by_mm, client))
     }
 }
 
@@ -121,7 +120,7 @@ mod tests {
         )
     }
 
-    fn create_test_levels() -> serde_json::Value {
+    fn create_test_price_levels() -> serde_json::Value {
         serde_json::json!({
             "test_market_maker": {
                 "baseToken": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
@@ -139,7 +138,7 @@ mod tests {
     fn create_test_snapshot() -> (ComponentWithState, HashMap<Bytes, Token>) {
         let wbtc_token = wbtc();
         let usdc_token = usdc();
-        let levels = create_test_levels();
+        let price_levels = create_test_price_levels();
 
         let mut tokens = HashMap::new();
         tokens.insert(wbtc_token.address.clone(), wbtc_token.clone());
@@ -147,8 +146,8 @@ mod tests {
 
         let mut state_attributes = HashMap::new();
 
-        let levels_json = serde_json::to_vec(&levels).expect("Failed to serialize levels");
-        state_attributes.insert("levels".to_string(), levels_json.into());
+        let prices_json = serde_json::to_vec(&price_levels).expect("Failed to serialize prices");
+        state_attributes.insert("prices".to_string(), prices_json.into());
 
         let snapshot = ComponentWithState {
             state: ResponseProtocolState {
@@ -195,20 +194,20 @@ mod tests {
         assert_eq!(result.base_token.symbol, "WBTC");
         assert_eq!(result.quote_token.symbol, "USDC");
         assert!(result
-            .levels_by_mm
+            .prices_by_mm
             .contains_key("test_market_maker"));
-        let mm_levels = &result.levels_by_mm["test_market_maker"];
-        assert_eq!(mm_levels.levels.len(), 3);
-        assert_eq!(mm_levels.levels[0].quantity, 1.5);
-        assert_eq!(mm_levels.levels[0].price, 65000.0);
-        assert_eq!(mm_levels.levels[1].quantity, 2.0);
-        assert_eq!(mm_levels.levels[1].price, 64950.0);
-        assert_eq!(mm_levels.levels[2].quantity, 0.5);
-        assert_eq!(mm_levels.levels[2].price, 65100.0);
+        let mm_price = &result.prices_by_mm["test_market_maker"];
+        assert_eq!(mm_price.levels.len(), 3);
+        assert_eq!(mm_price.levels[0].quantity, 1.5);
+        assert_eq!(mm_price.levels[0].price, 65000.0);
+        assert_eq!(mm_price.levels[1].quantity, 2.0);
+        assert_eq!(mm_price.levels[1].price, 64950.0);
+        assert_eq!(mm_price.levels[2].quantity, 0.5);
+        assert_eq!(mm_price.levels[2].price, 65100.0);
     }
 
     #[tokio::test]
-    async fn test_try_from_missing_levels() {
+    async fn test_try_from_missing_prices() {
         env::set_var("LIQUORICE_USER", "test_solver");
         env::set_var("LIQUORICE_KEY", "test_key");
 
@@ -216,7 +215,7 @@ mod tests {
         snapshot
             .state
             .attributes
-            .remove("levels");
+            .remove("prices");
 
         let result = LiquoriceState::try_from_with_header(
             snapshot,
@@ -226,11 +225,11 @@ mod tests {
             &DecoderContext::new(),
         )
         .await
-        .expect("create state with missing levels should default to empty levels");
+        .expect("create state with missing prices should default to empty prices");
 
         assert_eq!(result.base_token.symbol, "WBTC");
         assert_eq!(result.quote_token.symbol, "USDC");
-        assert!(result.levels_by_mm.is_empty());
+        assert!(result.prices_by_mm.is_empty());
     }
 
     #[tokio::test]
@@ -293,14 +292,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_try_from_invalid_levels_json() {
+    async fn test_try_from_invalid_prices_json() {
         env::set_var("LIQUORICE_USER", "test_solver");
         env::set_var("LIQUORICE_KEY", "test_key");
 
         let (mut snapshot, tokens) = create_test_snapshot();
 
         snapshot.state.attributes.insert(
-            "levels".to_string(),
+            "prices".to_string(),
             "invalid json"
                 .as_bytes()
                 .to_vec()

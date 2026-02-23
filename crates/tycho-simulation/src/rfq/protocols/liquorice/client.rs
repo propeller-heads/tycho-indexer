@@ -10,7 +10,7 @@ use futures::stream::BoxStream;
 use num_bigint::BigUint;
 use reqwest::Client;
 use tokio::time::{interval, timeout, Duration};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use tycho_common::{
     models::{protocol::GetAmountOutParams, Chain},
     simulation::indicatively_priced::SignedQuote,
@@ -24,8 +24,8 @@ use crate::{
         errors::RFQError,
         models::TimestampHeader,
         protocols::liquorice::models::{
-            LiquoriceMarketMakerLevels, LiquoricePriceLevelsResponse, LiquoriceQuoteRequest,
-            LiquoriceQuoteResponse,
+            LiquoricePriceLevelsResponse, LiquoriceQuoteRequest, LiquoriceQuoteResponse,
+            LiquoriceTokenPairPrice,
         },
     },
     tycho_client::feed::synchronizer::{ComponentWithState, Snapshot, StateSyncMessage},
@@ -37,9 +37,13 @@ pub struct LiquoriceClient {
     chain: Chain,
     price_levels_endpoint: String,
     quote_endpoint: String,
+    // Tokens that we want prices for
     tokens: HashSet<Bytes>,
+    // Min tvl value in the quote token.
     tvl: f64,
+    // solver header for authentication
     auth_solver: String,
+    // key header for authentication
     auth_key: String,
     quote_tokens: HashSet<Bytes>,
     poll_time: Duration,
@@ -78,19 +82,19 @@ impl LiquoriceClient {
         &self,
         raw_tvl: f64,
         quote_token: Bytes,
-        levels_by_mm: &HashMap<String, Vec<LiquoriceMarketMakerLevels>>,
+        prices_by_mm: &HashMap<String, Vec<LiquoriceTokenPairPrice>>,
     ) -> Result<f64, RFQError> {
         if self.quote_tokens.contains(&quote_token) {
             return Ok(raw_tvl);
         }
 
         for approved_quote_token in &self.quote_tokens {
-            for (_mm, mm_levels_inner) in levels_by_mm.iter() {
-                for quote_mm_level in mm_levels_inner {
-                    if quote_mm_level.base_token == quote_token &&
-                        quote_mm_level.quote_token == *approved_quote_token
+            for (_mm, token_prices) in prices_by_mm.iter() {
+                for token_price in token_prices {
+                    if token_price.base_token == quote_token &&
+                        token_price.quote_token == *approved_quote_token
                     {
-                        if let Some(price) = quote_mm_level.get_price(1.0) {
+                        if let Some(price) = token_price.get_price(1.0) {
                             return Ok(raw_tvl * price);
                         }
                     }
@@ -105,7 +109,7 @@ impl LiquoriceClient {
         &self,
         component_id: String,
         tokens: Vec<Bytes>,
-        mm_levels: &HashMap<String, LiquoriceMarketMakerLevels>,
+        prices_by_mm: &HashMap<String, LiquoriceTokenPairPrice>,
         tvl: f64,
     ) -> ComponentWithState {
         let protocol_component = ProtocolComponent {
@@ -120,8 +124,8 @@ impl LiquoriceClient {
 
         let mut attributes = HashMap::new();
 
-        let levels_json = serde_json::to_string(&mm_levels).unwrap_or_default();
-        attributes.insert("levels".to_string(), levels_json.as_bytes().to_vec().into());
+        let prices_json = serde_json::to_string(&prices_by_mm).unwrap_or_default();
+        attributes.insert("prices".to_string(), prices_json.as_bytes().to_vec().into());
 
         ComponentWithState {
             state: ResponseProtocolState {
@@ -140,11 +144,14 @@ impl LiquoriceClient {
         params: &GetAmountOutParams,
     ) -> Result<SignedQuote, RFQError> {
         if !quote_response.liquidity_available {
+            debug!(quote_response = ?quote_response, "Liquorice quote response indicates no liquidity");
             return Err(RFQError::QuoteNotFound(format!(
                 "Liquorice quote not found for {} {} ->{}",
                 params.amount_in, params.token_in, params.token_out,
             )));
         }
+
+        info!("Received Liquorice quote response with {} levels", quote_response.levels.len());
 
         // Find the valid level with the largest quote_token_amount
         let best_level = quote_response
@@ -242,7 +249,7 @@ impl LiquoriceClient {
 
     async fn fetch_price_levels(
         &self,
-    ) -> Result<HashMap<String, Vec<LiquoriceMarketMakerLevels>>, RFQError> {
+    ) -> Result<HashMap<String, Vec<LiquoriceTokenPairPrice>>, RFQError> {
         let query_params = vec![("chainId", self.chain.id().to_string())];
 
         let http_client = Client::new();
@@ -295,28 +302,28 @@ impl RFQClient for LiquoriceClient {
                 ticker.tick().await;
 
                 match client.fetch_price_levels().await {
-                    Ok(levels_by_mm) => {
+                    Ok(prices_by_mm) => {
                         let mut new_components = HashMap::new();
 
                         // Group qualifying MMs by token pair
                         // Key: (base_token, quote_token) -> HashMap<mm_name, (levels, normalized_tvl)>
-                        let mut pair_mm_levels: HashMap<(Bytes, Bytes), HashMap<String, (LiquoriceMarketMakerLevels, f64)>> = HashMap::new();
+                        let mut pair_mm_prices: HashMap<(Bytes, Bytes), HashMap<String, (LiquoriceTokenPairPrice, f64)>> = HashMap::new();
 
-                        info!("Fetched price levels from {} market makers", levels_by_mm.len());
-                        for (mm_name, mm_levels) in levels_by_mm.iter() {
-                            for parsed_levels in mm_levels {
-                                let base_token = &parsed_levels.base_token;
-                                let quote_token = &parsed_levels.quote_token;
+                        info!("Fetched price levels from {} market makers", prices_by_mm.len());
+                        for (mm_name, token_pair_prices) in prices_by_mm.iter() {
+                            for token_pair_price in token_pair_prices {
+                                let base_token = &token_pair_price.base_token;
+                                let quote_token = &token_pair_price.quote_token;
 
                                 if !client.tokens.contains(base_token) || !client.tokens.contains(quote_token) {
                                     continue;
                                 }
 
-                                let tvl = parsed_levels.calculate_tvl();
+                                let tvl = token_pair_price.calculate_tvl();
                                 let normalized_tvl = client.normalize_tvl(
                                     tvl,
-                                    parsed_levels.quote_token.clone(),
-                                    &levels_by_mm,
+                                    token_pair_price.quote_token.clone(),
+                                    &prices_by_mm,
                                 )?;
 
                                 if normalized_tvl < client.tvl {
@@ -326,34 +333,34 @@ impl RFQClient for LiquoriceClient {
                                     continue;
                                 }
 
-                                pair_mm_levels
+                                pair_mm_prices
                                     .entry((base_token.clone(), quote_token.clone()))
                                     .or_default()
-                                    .insert(mm_name.clone(), (parsed_levels.clone(), normalized_tvl));
+                                    .insert(mm_name.clone(), (token_pair_price.clone(), normalized_tvl));
                             }
                         }
 
-                        for ((base_token, quote_token), mm_entries) in &pair_mm_levels {
+                        for ((base_token, quote_token), prices_by_mm) in &pair_mm_prices {
                             let pair_str = format!("liquorice_{}/{}", hex::encode(base_token), hex::encode(quote_token));
                             let component_id = format!("{}", keccak256(pair_str.as_bytes()));
 
                             let tokens = vec![base_token.clone(), quote_token.clone()];
 
                             // Choose market maker with highest TVL for the component's TVL, because we are not going to aggregate firm quotes from multiple MMs in the current implementation
-                            let component_tvl = mm_entries
+                            let component_tvl = prices_by_mm
                                 .values()
                                 .map(|(_, tvl)| *tvl)
                                 .fold(f64::NEG_INFINITY, f64::max);
 
-                            let mm_levels: HashMap<String, LiquoriceMarketMakerLevels> = mm_entries
+                            let prices_by_mm: HashMap<String, LiquoriceTokenPairPrice> = prices_by_mm
                                 .iter()
-                                .map(|(name, (levels, _))| (name.clone(), levels.clone()))
+                                .map(|(name, (price, _))| (name.clone(), price.clone()))
                                 .collect();
 
                             let component_with_state = client.create_component_with_state(
                                 component_id.clone(),
                                 tokens,
-                                &mm_levels,
+                                &prices_by_mm,
                                 component_tvl,
                             );
                             new_components.insert(component_id, component_with_state);
@@ -421,6 +428,8 @@ impl RFQClient for LiquoriceClient {
             // TODO: is not needed?
             excluded_makers: None,
         };
+
+        debug!(quote_request = ?quote_request, "Sending Liquorice quote request");
 
         let url = self.quote_endpoint.clone();
 
@@ -552,19 +561,17 @@ mod tests {
     use std::{str::FromStr, time::Duration};
 
     use super::*;
-    use crate::rfq::protocols::liquorice::models::{
-        LiquoriceMarketMakerLevels, LiquoricePriceLevel,
-    };
+    use crate::rfq::protocols::liquorice::models::{LiquoricePriceLevel, LiquoriceTokenPairPrice};
 
     #[test]
     fn test_normalize_tvl_same_quote_token() {
         let client = create_test_client();
-        let levels = HashMap::new();
+        let prices = HashMap::new();
 
         let result = client.normalize_tvl(
             1000.0,
             Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
-            &levels,
+            &prices,
         );
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 1000.0);
@@ -573,20 +580,20 @@ mod tests {
     #[test]
     fn test_normalize_tvl_different_quote_token() {
         let client = create_test_client();
-        let mut levels = HashMap::new();
+        let mut prices = HashMap::new();
         let weth = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
         let usdc = Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
 
-        let eth_usdc_level = LiquoriceMarketMakerLevels {
+        let eth_usdc_price = LiquoriceTokenPairPrice {
             base_token: weth.clone(),
             quote_token: usdc,
             levels: vec![LiquoricePriceLevel { quantity: 1.0, price: 3000.0 }],
             updated_at: None,
         };
 
-        levels.insert("test_mm".to_string(), vec![eth_usdc_level]);
+        prices.insert("test_mm".to_string(), vec![eth_usdc_price]);
 
-        let result = client.normalize_tvl(2.0, weth, &levels);
+        let result = client.normalize_tvl(2.0, weth, &prices);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 6000.0);
     }
@@ -594,11 +601,11 @@ mod tests {
     #[test]
     fn test_normalize_tvl_no_conversion_available() {
         let client = create_test_client();
-        let levels = HashMap::new();
+        let prices = HashMap::new();
         let result = client.normalize_tvl(
             1000.0,
             Bytes::from_str("0x1234567890123456789012345678901234567890").unwrap(),
-            &levels,
+            &prices,
         );
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 0.0);

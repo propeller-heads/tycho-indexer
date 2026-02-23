@@ -9,12 +9,12 @@ use crate::rfq::errors::RFQError;
 /// Response from GET /price-levels?chainId=<id>
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LiquoricePriceLevelsResponse {
-    pub prices: HashMap<String, Vec<LiquoriceMarketMakerLevels>>,
+    pub prices: HashMap<String, Vec<LiquoriceTokenPairPrice>>,
 }
 
 /// A market maker's pricing for a token pair with price levels
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct LiquoriceMarketMakerLevels {
+pub struct LiquoriceTokenPairPrice {
     #[serde(rename = "baseToken", deserialize_with = "deserialize_string_to_checksummed_bytes")]
     pub base_token: Bytes,
     #[serde(rename = "quoteToken", deserialize_with = "deserialize_string_to_checksummed_bytes")]
@@ -110,7 +110,7 @@ where
     serializer.serialize_str(&value.to_string())
 }
 
-impl LiquoriceMarketMakerLevels {
+impl LiquoriceTokenPairPrice {
     pub fn calculate_tvl(&self) -> f64 {
         self.levels
             .iter()
@@ -255,8 +255,8 @@ impl LiquoriceQuoteLevel {
 mod tests {
     use super::*;
 
-    fn liquorice_mm_levels() -> LiquoriceMarketMakerLevels {
-        LiquoriceMarketMakerLevels {
+    fn liquorice_mm_levels() -> LiquoriceTokenPairPrice {
+        LiquoriceTokenPairPrice {
             base_token: Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
             quote_token: Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
             levels: vec![
@@ -285,7 +285,7 @@ mod tests {
         let multi_level_price = levels.get_price(2.0);
         assert_eq!(multi_level_price, Some(2999.5));
 
-        let empty_levels = LiquoriceMarketMakerLevels {
+        let empty_levels = LiquoriceTokenPairPrice {
             base_token: Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
             quote_token: Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
             levels: vec![],
@@ -313,9 +313,9 @@ mod tests {
 
     #[test]
     fn test_deserialize_price_levels_response() {
-        let json = r#"{"prices":{"ventolabs":[{"baseToken":"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48","quoteToken":"0xdac17f958d2ee523a2206206994597c13d831ec7","levels":[["1.00115000","100.000000000000000000"],["1.00125000","500.000000000000000000"]],"updatedAt":1769707860675}]}}"#;
+        let json = r#"{"prices":{"maker_0":[{"baseToken":"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48","quoteToken":"0xdac17f958d2ee523a2206206994597c13d831ec7","levels":[["1.00115000","100.000000000000000000"],["1.00125000","500.000000000000000000"]],"updatedAt":1769707860675}]}}"#;
         let response: LiquoricePriceLevelsResponse = serde_json::from_str(json).unwrap();
-        let mm_levels = &response.prices["ventolabs"];
+        let mm_levels = &response.prices["maker_0"];
         assert_eq!(mm_levels.len(), 1);
         assert_eq!(mm_levels[0].levels.len(), 2);
         assert_eq!(mm_levels[0].levels[0].price, 1.00115);
