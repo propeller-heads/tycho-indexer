@@ -117,39 +117,78 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for RocketpoolState {
                 )
             })?;
 
-        let queue_variable_start = snapshot
+        // Queue fields: try v4 megapool fields first, fall back to pre-Saturn minipool fields.
+        // The presence of express_queue_rate distinguishes v4 from pre-Saturn state.
+        let megapool_queue_requested_total = snapshot
             .state
             .attributes
-            .get("queue_variable_start")
-            .map(U256::from_bytes)
-            .ok_or_else(|| {
-                InvalidSnapshotError::MissingAttribute("queue_variable_start".to_string())
-            })?;
-
-        let queue_variable_end = snapshot
+            .get("megapool_queue_requested_total")
+            .map(U256::from_bytes);
+        let megapool_queue_index = snapshot
             .state
             .attributes
-            .get("queue_variable_end")
-            .map(U256::from_bytes)
-            .ok_or_else(|| {
-                InvalidSnapshotError::MissingAttribute("queue_variable_end".to_string())
-            })?;
+            .get("megapool_queue_index")
+            .map(U256::from_bytes);
+        let express_queue_rate = snapshot
+            .state
+            .attributes
+            .get("express_queue_rate")
+            .map(U256::from_bytes);
 
-        Ok(RocketpoolState::new(
-            reth_supply,
-            total_eth,
-            deposit_contract_balance,
-            reth_contract_liquidity,
-            deposit_fee,
-            deposits_enabled,
-            min_deposit_amount,
-            max_deposit_pool_size,
-            deposit_assigning_enabled,
-            deposit_assign_maximum,
-            deposit_assign_socialised_maximum,
-            queue_variable_start,
-            queue_variable_end,
-        ))
+        let is_saturn = express_queue_rate.is_some();
+
+        if is_saturn {
+            Ok(RocketpoolState::new_v4(
+                reth_supply,
+                total_eth,
+                deposit_contract_balance,
+                reth_contract_liquidity,
+                deposit_fee,
+                deposits_enabled,
+                min_deposit_amount,
+                max_deposit_pool_size,
+                deposit_assigning_enabled,
+                deposit_assign_maximum,
+                deposit_assign_socialised_maximum,
+                megapool_queue_requested_total.unwrap_or(U256::ZERO),
+                megapool_queue_index.unwrap_or(U256::ZERO),
+                express_queue_rate.unwrap_or(U256::ZERO),
+            ))
+        } else {
+            let queue_variable_start = snapshot
+                .state
+                .attributes
+                .get("queue_variable_start")
+                .map(U256::from_bytes)
+                .ok_or_else(|| {
+                    InvalidSnapshotError::MissingAttribute("queue_variable_start".to_string())
+                })?;
+
+            let queue_variable_end = snapshot
+                .state
+                .attributes
+                .get("queue_variable_end")
+                .map(U256::from_bytes)
+                .ok_or_else(|| {
+                    InvalidSnapshotError::MissingAttribute("queue_variable_end".to_string())
+                })?;
+
+            Ok(RocketpoolState::new(
+                reth_supply,
+                total_eth,
+                deposit_contract_balance,
+                reth_contract_liquidity,
+                deposit_fee,
+                deposits_enabled,
+                min_deposit_amount,
+                max_deposit_pool_size,
+                deposit_assigning_enabled,
+                deposit_assign_maximum,
+                deposit_assign_socialised_maximum,
+                queue_variable_start,
+                queue_variable_end,
+            ))
+        }
     }
 }
 
