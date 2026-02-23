@@ -6,12 +6,12 @@
 #
 # Usage: RPC_URL=<your-rpc-url> ./compute_initial_state.sh [block_number]
 #
-# The block number defaults to 17069898 (Rocket Deposit Pool V1.2 upgrade block).
+# The block number defaults to 24479942 (Saturn I activation block).
 
 set -e
 
-# Default to the V1.2 upgrade block
-BLOCK_NUMBER=${1:-17069898}
+# Default to the Saturn I activation block
+BLOCK_NUMBER=${1:-24479942}
 
 if [ -z "$RPC_URL" ]; then
     echo "Error: RPC_URL environment variable is required"
@@ -25,20 +25,7 @@ echo ""
 ROCKET_VAULT="0x3bDC69C4E5e13E52A65f5583c23EFB9636b469d6"
 ROCKET_STORAGE="0x1d8f8f00cfa6758d7bE78336684788Fb0ee0Fa46"
 RETH_ADDRESS="0xae78736Cd615f374D3085123A210448E74Fc6393"
-
-# Network Balances contract addresses - V3 was activated at block 20107789
-ROCKET_NETWORK_BALANCES_V2="0x07FCaBCbe4ff0d80c2b1eb42855C0131b6cba2F4"
-ROCKET_NETWORK_BALANCES_V3="0x6Cc65bF618F55ce2433f9D8d827Fc44117D81399"
-NETWORK_BALANCES_V3_BLOCK=20107789
-
-# Select the appropriate Network Balances contract based on block number
-if [ "$BLOCK_NUMBER" -ge "$NETWORK_BALANCES_V3_BLOCK" ]; then
-    ROCKET_NETWORK_BALANCES="$ROCKET_NETWORK_BALANCES_V3"
-    echo "Using RocketNetworkBalances V3 (block >= $NETWORK_BALANCES_V3_BLOCK)"
-else
-    ROCKET_NETWORK_BALANCES="$ROCKET_NETWORK_BALANCES_V2"
-    echo "Using RocketNetworkBalances V2 (block < $NETWORK_BALANCES_V3_BLOCK)"
-fi
+ROCKET_NETWORK_BALANCES_V4="0x1D9F14C6Bfd8358b589964baD8665AdD248E9473"
 
 # Storage slots (from constants.rs)
 DEPOSIT_POOL_ETH_BALANCE_SLOT="0x00ab4654686e0d7a1f921cc85a932fd8efbc8a1f247b51fa6bca2f7a3976a5bb"
@@ -49,8 +36,11 @@ DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT="0xd6794381ca0356c0f5fabe729b1ea706b25013
 MIN_DEPOSIT_AMOUNT_SLOT="0xba4dab8f9b8f22679cf8c926f5bd528d08a526cbe2bb39d1b1f1566d0d30ad0c"
 MAX_DEPOSIT_POOL_SIZE_SLOT="0xefeb8d9f341f931c14ed8c1156bdb235390b183f1b94f522d4d72c5d24779598"
 DEPOSIT_FEE_SLOT="0xa1713e68e8e6d7580de48bb14bd78c7f293a5a0e42a40f7fe428d9943dc63264"
-QUEUE_VARIABLE_START_SLOT="0x3d568e1d0910a705e47c1e34016aabfe207c556ec3d7b6bced9112251062388b"
-QUEUE_VARIABLE_END_SLOT="0xf4cc19457af09f7bd6b792f1932b490f46f646363b59314a4c6ad6ef1c9f44e4"
+
+# Saturn v4 megapool queue slots
+MEGAPOOL_QUEUE_REQUESTED_TOTAL_SLOT="0x70acbb59da22199e2dc0759d60b0224ec935b6c5c70975c698025712f413ccdd"
+MEGAPOOL_QUEUE_INDEX_SLOT="0xf64759318134d5196993dc645609e8125eff4429ad94d537e335f2d6388069d7"
+EXPRESS_QUEUE_RATE_SLOT="0x76db7078bc37e9c3634c81dc384e741875c5d95ee6d5bcae0fb5d844d3189423"
 
 # Helper function to read storage
 read_storage() {
@@ -66,22 +56,6 @@ call_method() {
     cast call "$contract" "$signature" --block "$BLOCK_NUMBER" --rpc-url "$RPC_URL" 2>/dev/null
 }
 
-# Read storage values from RocketVault
-echo "Reading from RocketVault ($ROCKET_VAULT)..."
-deposit_contract_balance=$(read_storage "$ROCKET_VAULT" "$DEPOSIT_POOL_ETH_BALANCE_SLOT")
-
-# Read storage values from RocketStorage
-echo "Reading from RocketStorage ($ROCKET_STORAGE)..."
-deposits_enabled=$(read_storage "$ROCKET_STORAGE" "$DEPOSITS_ENABLED_SLOT")
-deposit_assigning_enabled=$(read_storage "$ROCKET_STORAGE" "$DEPOSIT_ASSIGN_ENABLED_SLOT")
-deposit_assign_maximum=$(read_storage "$ROCKET_STORAGE" "$DEPOSIT_ASSIGN_MAXIMUM_SLOT")
-deposit_assign_socialised_maximum=$(read_storage "$ROCKET_STORAGE" "$DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT")
-min_deposit_amount=$(read_storage "$ROCKET_STORAGE" "$MIN_DEPOSIT_AMOUNT_SLOT")
-max_deposit_pool_size=$(read_storage "$ROCKET_STORAGE" "$MAX_DEPOSIT_POOL_SIZE_SLOT")
-deposit_fee=$(read_storage "$ROCKET_STORAGE" "$DEPOSIT_FEE_SLOT")
-queue_variable_start=$(read_storage "$ROCKET_STORAGE" "$QUEUE_VARIABLE_START_SLOT")
-queue_variable_end=$(read_storage "$ROCKET_STORAGE" "$QUEUE_VARIABLE_END_SLOT")
-
 # Helper function to convert decimal to 32-byte padded hex
 to_padded_hex() {
     local dec_value=$1
@@ -90,17 +64,37 @@ to_padded_hex() {
     printf "0x%064s" "$hex_value" | tr ' ' '0'
 }
 
+# Read storage values from RocketVault
+echo "Reading from RocketVault ($ROCKET_VAULT)..."
+deposit_contract_balance=$(read_storage "$ROCKET_VAULT" "$DEPOSIT_POOL_ETH_BALANCE_SLOT")
+
+# Read storage values from RocketStorage (settings — same slots for v3 and v4)
+echo "Reading from RocketStorage ($ROCKET_STORAGE)..."
+deposits_enabled=$(read_storage "$ROCKET_STORAGE" "$DEPOSITS_ENABLED_SLOT")
+deposit_assigning_enabled=$(read_storage "$ROCKET_STORAGE" "$DEPOSIT_ASSIGN_ENABLED_SLOT")
+deposit_assign_maximum=$(read_storage "$ROCKET_STORAGE" "$DEPOSIT_ASSIGN_MAXIMUM_SLOT")
+deposit_assign_socialised_maximum=$(read_storage "$ROCKET_STORAGE" "$DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT")
+min_deposit_amount=$(read_storage "$ROCKET_STORAGE" "$MIN_DEPOSIT_AMOUNT_SLOT")
+max_deposit_pool_size=$(read_storage "$ROCKET_STORAGE" "$MAX_DEPOSIT_POOL_SIZE_SLOT")
+deposit_fee=$(read_storage "$ROCKET_STORAGE" "$DEPOSIT_FEE_SLOT")
+
+# Read Saturn v4 megapool queue state
+echo "Reading Saturn v4 megapool queue state..."
+megapool_queue_requested_total=$(read_storage "$ROCKET_STORAGE" "$MEGAPOOL_QUEUE_REQUESTED_TOTAL_SLOT")
+megapool_queue_index=$(read_storage "$ROCKET_STORAGE" "$MEGAPOOL_QUEUE_INDEX_SLOT")
+express_queue_rate=$(read_storage "$ROCKET_STORAGE" "$EXPRESS_QUEUE_RATE_SLOT")
+
 # Get rETH contract ETH balance
 echo "Reading rETH contract balance..."
 reth_balance_wei=$(cast balance "$RETH_ADDRESS" --block "$BLOCK_NUMBER" --rpc-url "$RPC_URL" 2>/dev/null | cut -d' ' -f1)
 reth_contract_liquidity=$(to_padded_hex "$reth_balance_wei")
 
-# Call RocketNetworkBalances for total_eth and reth_supply
-echo "Calling RocketNetworkBalances ($ROCKET_NETWORK_BALANCES)..."
-total_eth_dec=$(call_method "$ROCKET_NETWORK_BALANCES" "getTotalETHBalance()(uint256)" | cut -d' ' -f1)
+# Call RocketNetworkBalances v4 for total_eth and reth_supply
+echo "Calling RocketNetworkBalances V4 ($ROCKET_NETWORK_BALANCES_V4)..."
+total_eth_dec=$(call_method "$ROCKET_NETWORK_BALANCES_V4" "getTotalETHBalance()(uint256)" | cut -d' ' -f1)
 total_eth=$(to_padded_hex "$total_eth_dec")
 
-reth_supply_dec=$(call_method "$ROCKET_NETWORK_BALANCES" "getTotalRETHSupply()(uint256)" | cut -d' ' -f1)
+reth_supply_dec=$(call_method "$ROCKET_NETWORK_BALANCES_V4" "getTotalRETHSupply()(uint256)" | cut -d' ' -f1)
 reth_supply=$(to_padded_hex "$reth_supply_dec")
 
 # Output the JSON for substreams.yaml
@@ -119,8 +113,9 @@ map_protocol_changes: |
       "min_deposit_amount": "$min_deposit_amount",
       "max_deposit_pool_size": "$max_deposit_pool_size",
       "deposit_fee": "$deposit_fee",
-      "queue_variable_start": "$queue_variable_start",
-      "queue_variable_end": "$queue_variable_end",
+      "megapool_queue_requested_total": "$megapool_queue_requested_total",
+      "megapool_queue_index": "$megapool_queue_index",
+      "express_queue_rate": "$express_queue_rate",
       "total_eth": "$total_eth",
       "reth_supply": "$reth_supply"
     }
