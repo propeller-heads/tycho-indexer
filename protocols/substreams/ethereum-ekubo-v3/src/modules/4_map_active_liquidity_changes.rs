@@ -70,7 +70,7 @@ fn maybe_active_liquidity_change(
                     true
                 } else {
                     let current_tick = current_tick_store
-                        .get_at(log.ordinal, format!("pool:{0}", pool_id))
+                        .get_at(log.ordinal, &pool_id)
                         .expect("pool should have active tick when initialized");
 
                     current_tick >= position_updated.lower.into()

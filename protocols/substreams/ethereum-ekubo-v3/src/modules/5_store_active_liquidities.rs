@@ -18,7 +18,7 @@ pub fn store_active_liquidities(
             store_method_from_change_type(changes.change_type())(
                 &store,
                 changes.ordinal,
-                format!("pool:{}", changes.pool_id.to_hex()),
+                changes.pool_id.to_hex(),
                 BigInt::from_signed_bytes_be(&changes.value),
             );
         });

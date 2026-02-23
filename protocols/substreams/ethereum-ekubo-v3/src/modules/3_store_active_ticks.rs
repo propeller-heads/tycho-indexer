@@ -24,7 +24,7 @@ pub fn store_active_ticks(
             is_pool_tracked(&details_store, &pool_id).then_some((pool_id, log.ordinal, tick))
         })
         .for_each(|(pool, ordinal, new_tick_index)| {
-            tick_store.set(ordinal, format!("pool:{pool}"), &new_tick_index.into())
+            tick_store.set(ordinal, pool, &new_tick_index.into())
         });
 }
 

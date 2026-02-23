@@ -14,11 +14,11 @@ pub fn store_rate_deltas(rate_deltas: RateDeltas, store: StoreAddBigInt) {
         .for_each(|delta| {
             let pool_id = delta.pool_id.to_hex();
             let time = delta.time;
-            let token = if delta.is_token1 { "token1" } else { "token0" };
+            let token = if delta.is_token1 { "1" } else { "0" };
 
             store.add(
                 delta.ordinal,
-                format!("pool:{pool_id}:{token}:time:{time}:"),
+                format!("{pool_id}:{token}:{time}"),
                 BigInt::from_signed_bytes_be(&delta.rate_delta),
             );
         });
