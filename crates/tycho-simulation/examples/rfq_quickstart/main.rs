@@ -635,7 +635,7 @@ async fn main() {
                                         input: Some(AlloyBytes::from(swap_tx.data)),
                                         data: None,
                                     },
-                                    gas: Some(800_000u64),
+                                    gas: Some(1_000_000u64),
                                     chain_id: Some(chain.id()),
                                     max_fee_per_gas: Some(max_fee_per_gas.into()),
                                     max_priority_fee_per_gas: Some(max_priority_fee_per_gas.into()),
