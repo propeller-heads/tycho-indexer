@@ -304,13 +304,14 @@ impl RFQClient for LiquoriceClient {
                 match client.fetch_price_levels().await {
                     Ok(prices_by_mm) => {
                         let mut new_components = HashMap::new();
-
+                    
+                        // Group qualifying MMs by token pair
                         struct PricesWithTvl {
+                            // MM name -> price levels for the token pair
                             mm_prices: HashMap<String, LiquoriceTokenPairPrice>,
+                            // The highest TVL among MMs for this token pair, used as the component's TVL
                             tvl: f64,
                         }
-
-                        // Group qualifying MMs by token pair
                         let mut pair_mm_prices: HashMap<(Bytes, Bytes), PricesWithTvl> = HashMap::new();
 
                         info!("Fetched price levels from {} market makers", prices_by_mm.len());
@@ -412,7 +413,6 @@ impl RFQClient for LiquoriceClient {
         let quote_request = LiquoriceQuoteRequest {
             chain_id: self.chain.id(),
             rfq_id: rfq_id.clone(),
-            // TODO: use self.quote_timeout?
             expiry,
             base_token: params.token_in.to_string(),
             quote_token: params.token_out.to_string(),
@@ -677,6 +677,133 @@ mod tests {
             poll_time: Duration::from_secs(0),
             quote_timeout,
         }
+    }
+
+    fn make_quote_level(
+        base_token: &str,
+        quote_token: &str,
+        base_token_amount: &str,
+        quote_token_amount: &str,
+        partial_fill: Option<crate::rfq::protocols::liquorice::models::LiquoricePartialFill>,
+    ) -> crate::rfq::protocols::liquorice::models::LiquoriceQuoteLevel {
+        use crate::rfq::protocols::liquorice::models::{LiquoriceTx, LiquoriceQuoteLevel};
+        LiquoriceQuoteLevel {
+            maker_rfq_id: "maker-1".to_string(),
+            maker: "test-maker".to_string(),
+            nonce: "0x01".to_string(),
+            expiry: 9999999999,
+            tx: LiquoriceTx {
+                to: "0x1111111111111111111111111111111111111111".to_string(),
+                data: "0xdeadbeef".to_string(),
+            },
+            base_token: base_token.to_string(),
+            quote_token: quote_token.to_string(),
+            base_token_amount: base_token_amount.to_string(),
+            quote_token_amount: quote_token_amount.to_string(),
+            partial_fill,
+            allowances: vec![],
+        }
+    }
+
+    fn make_params(
+        token_in: &str,
+        token_out: &str,
+        amount_in: u64,
+    ) -> GetAmountOutParams {
+        GetAmountOutParams {
+            amount_in: BigUint::from(amount_in),
+            token_in: Bytes::from_str(token_in).unwrap(),
+            token_out: Bytes::from_str(token_out).unwrap(),
+            sender: Bytes::from_str("0x3333333333333333333333333333333333333333").unwrap(),
+            receiver: Bytes::from_str("0x4444444444444444444444444444444444444444").unwrap(),
+        }
+    }
+
+    #[test]
+    fn test_process_quote_response_no_liquidity() {
+        use crate::rfq::protocols::liquorice::models::LiquoriceQuoteResponse;
+
+        let response = LiquoriceQuoteResponse {
+            rfq_id: "r1".to_string(),
+            liquidity_available: false,
+            levels: vec![],
+        };
+        let params = make_params(
+            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+            1_000_000_000_000_000_000,
+        );
+        let result = LiquoriceClient::process_quote_response(response, &params);
+        assert!(
+            matches!(result, Err(RFQError::QuoteNotFound(_))),
+            "expected QuoteNotFound, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_process_quote_response_partial_fill_attributes() {
+        use crate::rfq::protocols::liquorice::models::{LiquoricePartialFill, LiquoriceQuoteResponse};
+
+        let token_in = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+        let token_out = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599";
+        let amount_in = 1_000_000_000_000_000_000u64;
+
+        let level = make_quote_level(
+            token_in,
+            token_out,
+            &amount_in.to_string(),
+            "3329502",
+            Some(LiquoricePartialFill {
+                offset: 68,
+                min_base_token_amount: "500000000000000000".to_string(),
+            }),
+        );
+        let response = LiquoriceQuoteResponse {
+            rfq_id: "r1".to_string(),
+            liquidity_available: true,
+            levels: vec![level],
+        };
+        let params = make_params(token_in, token_out, amount_in);
+
+        let quote = LiquoriceClient::process_quote_response(response, &params).unwrap();
+
+        // partial_fill_offset: 4-byte big-endian encoding of 68
+        let offset_bytes = quote.quote_attributes["partial_fill_offset"].clone();
+        assert_eq!(offset_bytes.as_ref(), &68u32.to_be_bytes());
+
+        // min_base_token_amount: 32-byte big-endian U256 of 500000000000000000
+        let min_amount_bytes = quote.quote_attributes["min_base_token_amount"].clone();
+        assert_eq!(min_amount_bytes.len(), 32);
+        let expected_min = BigUint::from(500_000_000_000_000_000u64);
+        let actual_min = BigUint::from_bytes_be(min_amount_bytes.as_ref());
+        assert_eq!(actual_min, expected_min);
+    }
+
+    #[test]
+    fn test_process_quote_response_selects_best_valid_level() {
+        use crate::rfq::protocols::liquorice::models::LiquoriceQuoteResponse;
+
+        let token_in = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+        let token_out = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599";
+        let amount_in = 1_000_000_000_000_000_000u64;
+
+        // One level with wrong base_token_amount (will fail validate) and two
+        // valid levels with different quote_token_amounts; expect the higher one
+        // to be chosen.
+        let invalid_level = make_quote_level(token_in, token_out, "999", "9999999", None);
+        let lower_level = make_quote_level(token_in, token_out, &amount_in.to_string(), "3000000", None);
+        let best_level = make_quote_level(token_in, token_out, &amount_in.to_string(), "3500000", None);
+
+        let response = LiquoriceQuoteResponse {
+            rfq_id: "r1".to_string(),
+            liquidity_available: true,
+            levels: vec![invalid_level, lower_level, best_level],
+        };
+        let params = make_params(token_in, token_out, amount_in);
+
+        let quote = LiquoriceClient::process_quote_response(response, &params).unwrap();
+        assert_eq!(quote.amount_out, BigUint::from(3_500_000u64));
     }
 
     fn create_test_quote_params() -> GetAmountOutParams {

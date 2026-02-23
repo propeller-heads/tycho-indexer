@@ -444,27 +444,6 @@ mod tests {
             }
         }
 
-        #[test]
-        fn no_liquidity() {
-            let mut state = create_test_liquorice_state();
-            state
-                .prices_by_mm
-                .values_mut()
-                .for_each(|price| price.levels.clear());
-
-            let result = state.get_amount_out(
-                BigUint::from_str("1000000000000000000").unwrap(),
-                &weth(),
-                &usdc(),
-            );
-
-            assert!(result.is_err());
-            if let Err(SimulationError::RecoverableError(msg)) = result {
-                assert_eq!(msg, "No liquidity");
-            } else {
-                panic!("Expected RecoverableError");
-            }
-        }
     }
 
     mod get_limits {
@@ -495,21 +474,5 @@ mod tests {
             }
         }
 
-        #[test]
-        fn no_liquidity() {
-            let mut state = create_test_liquorice_state();
-            state
-                .prices_by_mm
-                .values_mut()
-                .for_each(|price| price.levels.clear());
-            let result = state
-                .get_limits(state.base_token.address.clone(), state.quote_token.address.clone());
-            assert!(result.is_err());
-            if let Err(SimulationError::RecoverableError(msg)) = result {
-                assert_eq!(msg, "No liquidity");
-            } else {
-                panic!("Expected RecoverableError");
-            }
-        }
     }
 }

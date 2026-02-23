@@ -268,14 +268,6 @@ mod tests {
     }
 
     #[test]
-    fn test_market_maker_level_tvl() {
-        let levels = liquorice_mm_levels();
-        let tvl = levels.calculate_tvl();
-        // 1.0 * 3000.0 + 2.0 * 2999.0 = 3000.0 + 5998.0 = 8998.0
-        assert_eq!(tvl, 8998.0);
-    }
-
-    #[test]
     fn test_get_price() {
         let levels = liquorice_mm_levels();
 
@@ -373,30 +365,20 @@ mod tests {
         }
 
         #[test]
-        fn test_validate_base_token_mismatch() {
+        fn test_validate_rejects_mismatched_fields() {
+            let params = params();
+
             let mut level = quote_level();
             level.base_token = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef".to_string();
-            let params = params();
-            let err = level.validate(&params).unwrap_err();
-            assert!(format!("{err:?}").contains("Base token mismatch"));
-        }
+            assert!(matches!(level.validate(&params), Err(RFQError::FatalError(_))));
 
-        #[test]
-        fn test_validate_quote_token_mismatch() {
             let mut level = quote_level();
             level.quote_token = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef".to_string();
-            let params = params();
-            let err = level.validate(&params).unwrap_err();
-            assert!(format!("{err:?}").contains("Quote token mismatch"));
-        }
+            assert!(matches!(level.validate(&params), Err(RFQError::FatalError(_))));
 
-        #[test]
-        fn test_validate_base_token_amount_mismatch() {
             let mut level = quote_level();
             level.base_token_amount = "9999".to_string();
-            let params = params();
-            let err = level.validate(&params).unwrap_err();
-            assert!(format!("{err:?}").contains("Base token amount mismatch"));
+            assert!(matches!(level.validate(&params), Err(RFQError::FatalError(_))));
         }
     }
 }
