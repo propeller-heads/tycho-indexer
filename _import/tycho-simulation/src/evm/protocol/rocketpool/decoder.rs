@@ -70,8 +70,10 @@ mod tests {
     use tycho_common::{dto::ResponseProtocolState, Bytes};
 
     use super::super::state::RocketpoolState;
-    use crate::evm::protocol::test_utils::try_decode_snapshot_with_defaults;
-    use crate::protocol::errors::InvalidSnapshotError;
+    use crate::{
+        evm::protocol::test_utils::try_decode_snapshot_with_defaults,
+        protocol::errors::InvalidSnapshotError,
+    };
 
     fn create_test_snapshot() -> ComponentWithState {
         ComponentWithState {
@@ -153,7 +155,10 @@ mod tests {
         assert!(state.deposits_enabled);
         assert!(state.deposit_assigning_enabled);
         assert_eq!(state.deposit_assign_maximum, U256::from(90u64));
-        assert_eq!(state.megapool_queue_requested_total, U256::from(1000_000_000_000_000_000_000u128));
+        assert_eq!(
+            state.megapool_queue_requested_total,
+            U256::from(1000_000_000_000_000_000_000u128)
+        );
         assert_eq!(state.megapool_queue_index, U256::from(42u64));
         assert_eq!(state.express_queue_rate, U256::from(4u64));
     }
@@ -176,7 +181,10 @@ mod tests {
     #[case::missing_express_queue_rate("express_queue_rate")]
     async fn test_rocketpool_try_from_missing_attribute(#[case] missing_attribute: &str) {
         let mut snapshot = create_test_snapshot();
-        snapshot.state.attributes.remove(missing_attribute);
+        snapshot
+            .state
+            .attributes
+            .remove(missing_attribute);
 
         let result = try_decode_snapshot_with_defaults::<RocketpoolState>(snapshot).await;
 
