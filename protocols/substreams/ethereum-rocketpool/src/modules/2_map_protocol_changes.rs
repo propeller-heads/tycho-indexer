@@ -1,11 +1,12 @@
 use crate::{
-    abi::{rocket_dao_protocol_proposal, rocket_deposit_pool_v4, rocket_network_balances_v3,
+    abi::{rocket_dao_protocol_proposal, rocket_deposit_pool_v4, rocket_network_balances_v4,
         rocket_token_reth},
     constants::{
         ALL_STORAGE_SLOTS, DEPOSITS_ENABLED_SLOT, DEPOSIT_ASSIGN_ENABLED_SLOT,
         DEPOSIT_ASSIGN_MAXIMUM_SLOT, DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT, DEPOSIT_FEE_SLOT,
         ETH_ADDRESS, EXPRESS_QUEUE_RATE_SLOT, MAX_DEPOSIT_POOL_SIZE_SLOT, MIN_DEPOSIT_AMOUNT_SLOT,
-        RETH_ADDRESS, ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS, ROCKET_DEPOSIT_POOL_ADDRESS_V4,
+        RETH_ADDRESS, RETH_COLLATERAL_TARGET_SLOT, ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS,
+        ROCKET_DEPOSIT_POOL_ADDRESS_V4,
         ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT, ROCKET_NETWORK_BALANCES_ADDRESS_V4,
         ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS, ROCKET_VAULT_ADDRESS,
     },
@@ -220,9 +221,8 @@ fn update_network_balance(
             continue;
         }
 
-        // The v4 BalancesUpdated event has the same signature as v3
         let balance_update =
-            rocket_network_balances_v3::events::BalancesUpdated::match_and_decode(log)
+            rocket_network_balances_v4::events::BalancesUpdated::match_and_decode(log)
                 .map(|event| (event.total_eth, event.reth_supply));
 
         let (total_eth, reth_supply) = match balance_update {
@@ -299,6 +299,7 @@ fn update_protocol_settings(
                         MAX_DEPOSIT_POOL_SIZE_SLOT,
                         DEPOSIT_FEE_SLOT,
                         EXPRESS_QUEUE_RATE_SLOT,
+                        RETH_COLLATERAL_TARGET_SLOT,
                     ],
                 )
             })
