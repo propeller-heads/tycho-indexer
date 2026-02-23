@@ -1,3 +1,34 @@
+## [0.29.0](https://github.com/propeller-heads/tycho-contracts/compare/0.28.1...0.29.0) (2026-02-23)
+
+
+### Features
+
+* add function to insert missing (un)wrapping swaps ([c5e9d7d](https://github.com/propeller-heads/tycho-contracts/commit/c5e9d7df889574e2f3f48ee40abbb89417197ceb))
+* add protocol system check and comments for tests ([9bb1b67](https://github.com/propeller-heads/tycho-contracts/commit/9bb1b67a458d0b4f429220dba413c538c7936675))
+* add sequential wETH test where wrapping swap is added automatically ([45150b3](https://github.com/propeller-heads/tycho-contracts/commit/45150b382b0c9601cb772a0ff7b1de4a3073c400))
+* add test for unwrapping in weth executor ([f46ee8f](https://github.com/propeller-heads/tycho-contracts/commit/f46ee8f36bef93436c7b4ca4403bd255d6ba1a6b))
+* add test to check there is no unneeded swap added ([50ff35a](https://github.com/propeller-heads/tycho-contracts/commit/50ff35af380caa1c8eb8cbec99ff66a553a2ee55))
+* add tests for executor ([e519893](https://github.com/propeller-heads/tycho-contracts/commit/e519893f1747265e50e28483cd53a5a4d35301c4))
+* add TychoRouterTestSetup for wethWrapTest ([d9b2d17](https://github.com/propeller-heads/tycho-contracts/commit/d9b2d17708296d14b947bad7a7c7892e60b7048e))
+* add weth address via constructor ([cc7390e](https://github.com/propeller-heads/tycho-contracts/commit/cc7390efcb0bfce4fa4c8236db465a253f520ee1))
+* add weth executor ([0172ab3](https://github.com/propeller-heads/tycho-contracts/commit/0172ab366f6a213b5d46a67d80dabe0b0a10a752))
+* add Weth executor ([c5f9303](https://github.com/propeller-heads/tycho-contracts/commit/c5f93031f0740f159f9d71398be4c175288fc03c))
+* add weth protocol integration test ([5042ebd](https://github.com/propeller-heads/tycho-contracts/commit/5042ebde5db4eb75c86eaa74349a12ebdaa8b452))
+* add weth swap encoder ([8829b7e](https://github.com/propeller-heads/tycho-contracts/commit/8829b7ed80da5837f71fef1d7751bd01d8b13a6d))
+* update receiver due to interacting with the  token directly instead of a pool ([152042f](https://github.com/propeller-heads/tycho-contracts/commit/152042f919dcbf7d0aee02152e614b7502920148))
+
+
+### Bug Fixes
+
+* fix the test setup ([7bb3bd7](https://github.com/propeller-heads/tycho-contracts/commit/7bb3bd7b6f530e5c92396d61ba3ad66e217eace5))
+* get chain from the correct source for TychoExecutorEncoder ([befbeb7](https://github.com/propeller-heads/tycho-contracts/commit/befbeb72d112da9ad42bb76cfe26932f9fcad918))
+* remove unneeded mutability ([6ee938f](https://github.com/propeller-heads/tycho-contracts/commit/6ee938f23b86884397095e7635d39166056f84bf))
+* remove unneeded setup ([90a49a9](https://github.com/propeller-heads/tycho-contracts/commit/90a49a984de7beac030185cead7ddea41d006d83))
+* remove unwrap ([24fffd9](https://github.com/propeller-heads/tycho-contracts/commit/24fffd9bf3a91a45e908d2f6008d588f23339f13))
+* revert change in the test for deprecated method ([c6bb544](https://github.com/propeller-heads/tycho-contracts/commit/c6bb5444e09636856dd3a1c975cd596c9e3710b2))
+* update test with the correct value ([fd8aedf](https://github.com/propeller-heads/tycho-contracts/commit/fd8aedf2e005d4209e342e79cc899f9459702731))
+* update transfer type ([5e653cd](https://github.com/propeller-heads/tycho-contracts/commit/5e653cd38f0ef72cdd632783444601ccbc77b149))
+
 ## [0.28.1](https://github.com/propeller-heads/tycho-contracts/compare/0.28.0...0.28.1) (2026-02-20)
 
 
