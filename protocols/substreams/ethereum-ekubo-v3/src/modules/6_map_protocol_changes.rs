@@ -107,7 +107,7 @@ fn map_protocol_changes(
             builder.add_entity_change(&EntityChanges {
                 component_id: tick_delta.pool_id.to_hex(),
                 attributes: vec![Attribute {
-                    name: format!("ticks/{}", tick_delta.tick_index),
+                    name: format!("tick/{}", tick_delta.tick_index),
                     value: new_value.to_signed_bytes_be(),
                     change: change_type_from_delta(&old_value, &new_value).into(),
                 }],

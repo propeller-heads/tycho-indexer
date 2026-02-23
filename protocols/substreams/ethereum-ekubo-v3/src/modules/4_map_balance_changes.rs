@@ -29,8 +29,9 @@ fn map_balance_changes(
                     .into_iter()
                     .flat_map(move |log| {
                         let (delta0, delta1) = maybe_balance_deltas(log.event.unwrap())?;
+                        let pool_id = log.pool_id.to_hex();
 
-                        get_pool_details(store, &log.pool_id.to_hex()).map(|pool_details| {
+                        get_pool_details(store, &pool_id).map(|pool_details| {
                             let tx = tx.clone();
 
                             [(delta0, pool_details.token0), (delta1, pool_details.token1)]
@@ -40,7 +41,7 @@ fn map_balance_changes(
                                     tx: Some(tx.clone()),
                                     token,
                                     delta,
-                                    component_id: log.pool_id.clone(),
+                                    component_id: pool_id.clone().into_bytes(),
                                 })
                         })
                     })
