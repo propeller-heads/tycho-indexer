@@ -280,7 +280,7 @@ impl ProtocolType {
     }
 }
 
-#[derive(Debug, PartialEq, Default, Copy, Clone, Deserialize, Serialize, DeepSizeOf)]
+#[derive(Debug, PartialEq, Eq, Default, Copy, Clone, Deserialize, Serialize, DeepSizeOf)]
 pub enum ChangeType {
     #[default]
     Update,

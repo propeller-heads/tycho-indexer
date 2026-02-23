@@ -1,3 +1,36 @@
+## [0.144.0](https://github.com/propeller-heads/tycho-indexer/compare/0.143.1...0.144.0) (2026-02-20)
+
+
+### Features
+
+* Blanket implementation for legacy trait ([f54ae4b](https://github.com/propeller-heads/tycho-indexer/commit/f54ae4b189e9701d2addacefdcb2beda6c755377))
+* Blanket implementation query_pool_swap ([bd79bca](https://github.com/propeller-heads/tycho-indexer/commit/bd79bcaa742de5c2e3b32761e3f33fa7e559b79c))
+* expose parameters ([3f9a838](https://github.com/propeller-heads/tycho-indexer/commit/3f9a838c56336a00d0729899d24d5d3578e1bf37))
+* Generic protocol component to dto conversion. ([1d3c826](https://github.com/propeller-heads/tycho-indexer/commit/1d3c826aee1bb1ad23f4ce49fc2103ccb6cd4dce))
+* get_token helper on ProtocolComponent ([0a7b006](https://github.com/propeller-heads/tycho-indexer/commit/0a7b00668b991d96bd32c2760c723396b4e7c415))
+* implement default quotable pairs ([ade05b6](https://github.com/propeller-heads/tycho-indexer/commit/ade05b60e6bde4f4bfb6b09290085f6dd0ad8a47))
+* include tokens in protocol component ([9256a41](https://github.com/propeller-heads/tycho-indexer/commit/9256a41913bc9a88b5ae138e1608fe40720f1b14))
+* Misc fixes to SwapQuoter & docs ([bccd3a4](https://github.com/propeller-heads/tycho-indexer/commit/bccd3a4606938482f9d31a82dd895347bc35d14f))
+* quotable pair returns full tokens ([cc7ade4](https://github.com/propeller-heads/tycho-indexer/commit/cc7ade47497b23a09c0d9b002be0973b0493c5b0))
+* Simplify transition error struct ([713421d](https://github.com/propeller-heads/tycho-indexer/commit/713421dbc60a6ddfee8eb2a35ff3dcda0b78d6f1))
+* Support for fixed out quotes ([79098ab](https://github.com/propeller-heads/tycho-indexer/commit/79098aba139551169910593247931dcfea88b69a))
+* v1 quote interface proposal ([3952d29](https://github.com/propeller-heads/tycho-indexer/commit/3952d295938fd912b4a73f93a276843de3ab7f49))
+* v1 quote interface proposal ([#837](https://github.com/propeller-heads/tycho-indexer/issues/837)) ([a448aae](https://github.com/propeller-heads/tycho-indexer/commit/a448aae4151b263b02b1a35a6988fa97b118c98a))
+
+
+### Bug Fixes
+
+* delta_transition error type ([21b3d53](https://github.com/propeller-heads/tycho-indexer/commit/21b3d5315a775eb2663a70e50e2d49a7a45a81f8))
+* force include new state in get_amount_out ([4e76170](https://github.com/propeller-heads/tycho-indexer/commit/4e76170c5738c54072e16e9c67465cd14c40499e))
+* post rebase fixes ([e0123f8](https://github.com/propeller-heads/tycho-indexer/commit/e0123f850dc6c903a9bfe55fc5ccafe82a981128))
+
+## [0.143.1](https://github.com/propeller-heads/tycho-indexer/compare/0.143.0...0.143.1) (2026-02-20)
+
+
+### Bug Fixes
+
+* remove depreceated models for BlockContractChanges and BlockEntityChanges ([#857](https://github.com/propeller-heads/tycho-indexer/issues/857)) ([35852c0](https://github.com/propeller-heads/tycho-indexer/commit/35852c0a58fdd470295fe61ce35642c65b562afd))
+
 ## [0.143.0](https://github.com/propeller-heads/tycho-indexer/compare/0.142.0...0.143.0) (2026-02-19)
 
 

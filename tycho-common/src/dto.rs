@@ -687,14 +687,21 @@ impl DeepSizeOf for ProtocolComponent {
     }
 }
 
-impl From<models::protocol::ProtocolComponent> for ProtocolComponent {
-    fn from(value: models::protocol::ProtocolComponent) -> Self {
+impl<T> From<models::protocol::ProtocolComponent<T>> for ProtocolComponent
+where
+    T: Into<Address> + Clone,
+{
+    fn from(value: models::protocol::ProtocolComponent<T>) -> Self {
         Self {
             id: value.id,
             protocol_system: value.protocol_system,
             protocol_type_name: value.protocol_type_name,
             chain: value.chain.into(),
-            tokens: value.tokens,
+            tokens: value
+                .tokens
+                .into_iter()
+                .map(|t| t.into())
+                .collect(),
             contract_ids: value.contract_addresses,
             static_attributes: value.static_attributes,
             change: value.change.into(),

@@ -23,15 +23,14 @@ pub enum SimulationError {
 }
 
 #[derive(Debug)]
-pub enum TransitionError<T> {
-    OutOfOrder { state: T, event: T },
+pub enum TransitionError {
     MissingAttribute(String),
     DecodeError(String),
     InvalidEventType(),
     SimulationError(SimulationError),
 }
 
-impl<T> From<SimulationError> for TransitionError<T> {
+impl From<SimulationError> for TransitionError {
     fn from(error: SimulationError) -> Self {
         TransitionError::SimulationError(error)
     }

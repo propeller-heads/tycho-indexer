@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     hash::{Hash, Hasher},
+    sync::Arc,
 };
 
 use deepsize::DeepSizeOf;
@@ -94,6 +95,12 @@ impl PartialEq for Token {
 impl Hash for Token {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.address.hash(state);
+    }
+}
+
+impl From<Arc<Token>> for Address {
+    fn from(val: Arc<Token>) -> Self {
+        val.address.clone()
     }
 }
 
