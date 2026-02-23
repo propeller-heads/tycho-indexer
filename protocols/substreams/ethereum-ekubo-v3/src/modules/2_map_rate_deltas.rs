@@ -44,7 +44,7 @@ struct PartialRateDelta {
 
 fn rate_deltas(ev: Event) -> Vec<PartialRateDelta> {
     match ev {
-        Event::RateUpdate(ev) => {
+        Event::RateUpdated(ev) => {
             let mut deltas = Vec::with_capacity(2);
 
             if !ev.token0_rate_delta.is_empty() {

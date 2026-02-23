@@ -3,20 +3,21 @@ use substreams::store::{StoreGet, StoreGetInt64, StoreGetProto};
 use substreams_helper::hex::Hexable;
 
 use crate::{
+    details_store::{get_pool_details, is_pool_tracked},
     pb::ekubo::{
         block_transaction_events::transaction_events::{pool_log::Event, PoolLog},
-        BlockTransactionEvents, ChangeType, LiquidityChange, LiquidityChanges, PoolDetails,
+        ActiveLiquidityChange, ActiveLiquidityChanges, BlockTransactionEvents, ChangeType,
+        PoolDetails,
     },
-    store::get_pool_details,
 };
 
 #[substreams::handlers::map]
-pub fn map_liquidity_changes(
+pub fn map_active_liquidity_changes(
     block_tx_events: BlockTransactionEvents,
     pool_details_store: StoreGetProto<PoolDetails>,
     current_tick_store: StoreGetInt64,
-) -> LiquidityChanges {
-    LiquidityChanges {
+) -> ActiveLiquidityChanges {
+    ActiveLiquidityChanges {
         changes: block_tx_events
             .block_transaction_events
             .into_iter()
@@ -28,15 +29,14 @@ pub fn map_liquidity_changes(
                     .pool_logs
                     .into_iter()
                     .filter_map(move |log| {
-                        maybe_liquidity_change(&log, pool_details_store, current_tick_store).map(
-                            |partial| LiquidityChange {
+                        maybe_active_liquidity_change(&log, pool_details_store, current_tick_store)
+                            .map(|partial| ActiveLiquidityChange {
                                 change_type: partial.change_type.into(),
                                 pool_id: log.pool_id,
                                 value: partial.value,
                                 ordinal: log.ordinal,
                                 transaction: tx_events.transaction.clone(),
-                            },
-                        )
+                            })
                     })
             })
             .collect(),
@@ -48,21 +48,25 @@ struct PartialLiquidityChange {
     change_type: ChangeType,
 }
 
-fn maybe_liquidity_change(
+fn maybe_active_liquidity_change(
     log: &PoolLog,
     pool_details_store: &StoreGetProto<PoolDetails>,
     current_tick_store: &StoreGetInt64,
 ) -> Option<PartialLiquidityChange> {
     match log.event.as_ref().unwrap() {
-        Event::Swapped(swapped) => Some(PartialLiquidityChange {
-            value: swapped.liquidity_after.clone(),
-            change_type: ChangeType::Absolute,
-        }),
+        Event::Swapped(swapped) => {
+            is_pool_tracked(pool_details_store, &log.pool_id.to_hex()).then(|| {
+                PartialLiquidityChange {
+                    value: swapped.liquidity_after.clone(),
+                    change_type: ChangeType::Absolute,
+                }
+            })
+        }
         Event::PositionUpdated(position_updated) => {
             let pool_id = log.pool_id.to_hex();
 
             let update_active_liquidity =
-                if get_pool_details(pool_details_store, &pool_id).is_stableswap {
+                if get_pool_details(pool_details_store, &pool_id)?.is_stableswap {
                     true
                 } else {
                     let current_tick = current_tick_store

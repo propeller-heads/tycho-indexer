@@ -62,7 +62,7 @@ pub struct RateDeltas {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct LiquidityChange {
+pub struct ActiveLiquidityChange {
     /// bytes32
     #[prost(bytes="vec", tag="1")]
     pub pool_id: ::prost::alloc::vec::Vec<u8>,
@@ -78,13 +78,13 @@ pub struct LiquidityChange {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct LiquidityChanges {
+pub struct ActiveLiquidityChanges {
     #[prost(message, repeated, tag="1")]
-    pub changes: ::prost::alloc::vec::Vec<LiquidityChange>,
+    pub changes: ::prost::alloc::vec::Vec<ActiveLiquidityChange>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RateChange {
+pub struct ActiveRateChange {
     /// bytes32
     #[prost(bytes="vec", tag="1")]
     pub pool_id: ::prost::alloc::vec::Vec<u8>,
@@ -103,9 +103,9 @@ pub struct RateChange {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RateChanges {
+pub struct ActiveRateChanges {
     #[prost(message, repeated, tag="1")]
-    pub changes: ::prost::alloc::vec::Vec<RateChange>,
+    pub changes: ::prost::alloc::vec::Vec<ActiveRateChange>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -265,7 +265,7 @@ pub mod block_transaction_events {
             }
             #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-            pub struct RateUpdate {
+            pub struct RateUpdated {
                 /// block timestamp
                 #[prost(uint64, tag="1")]
                 pub start_time: u64,
@@ -291,7 +291,7 @@ pub mod block_transaction_events {
                 #[prost(message, tag="6")]
                 VirtualExecution(VirtualExecution),
                 #[prost(message, tag="7")]
-                RateUpdate(RateUpdate),
+                RateUpdated(RateUpdated),
             }
         }
     }

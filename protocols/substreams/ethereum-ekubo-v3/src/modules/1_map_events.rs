@@ -22,7 +22,7 @@ use crate::{
             transaction_events::{
                 pool_log::{
                     pool_initialized::Extension, Event, PoolInitialized, PositionUpdated,
-                    RateUpdate, Swapped, VirtualExecution,
+                    RateUpdated, Swapped, VirtualExecution,
                 },
                 PoolLog,
             },
@@ -176,7 +176,7 @@ fn maybe_pool_log(log: &Log) -> Option<PoolLog> {
 
             (
                 pool_id,
-                Event::RateUpdate(RateUpdate {
+                Event::RateUpdated(RateUpdated {
                     start_time: order_key.config.start_time,
                     end_time: order_key.config.end_time,
                     token0_rate_delta,
@@ -202,7 +202,7 @@ fn maybe_pool_log(log: &Log) -> Option<PoolLog> {
         } else if let Some(ev) = boosted_fees_events::PoolBoosted::match_and_decode(log) {
             (
                 ev.pool_id.to_vec(),
-                Event::RateUpdate(RateUpdate {
+                Event::RateUpdated(RateUpdated {
                     start_time: ev.start_time.to_u64(),
                     end_time: ev.end_time.to_u64(),
                     token0_rate_delta: ev.rate0.to_signed_bytes_be(),

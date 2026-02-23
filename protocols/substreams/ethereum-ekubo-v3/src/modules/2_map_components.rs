@@ -129,7 +129,6 @@ fn maybe_create_component(
                 implementation_type: ImplementationType::Custom.into(),
                 attribute_schema: vec![],
             }),
-            // Order of attributes matters (used in store_pool_details)
             static_att: vec![
                 Attribute {
                     change: ChangeType::Creation.into(),

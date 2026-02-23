@@ -7,7 +7,7 @@ use substreams_helper::hex::Hexable;
 use crate::pb::ekubo::TickDeltas;
 
 #[substreams::handlers::store]
-pub fn store_tick_liquidities(tick_deltas: TickDeltas, store: StoreAddBigInt) {
+pub fn store_tick_deltas(tick_deltas: TickDeltas, store: StoreAddBigInt) {
     tick_deltas
         .deltas
         .into_iter()

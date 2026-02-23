@@ -13,8 +13,8 @@ use tycho_substreams::{
 };
 
 use crate::pb::ekubo::{
-    block_transaction_events::transaction_events::pool_log::Event, BlockTransactionEvents,
-    LiquidityChanges, RateChanges, RateDeltas, TickDeltas,
+    block_transaction_events::transaction_events::pool_log::Event, ActiveLiquidityChanges,
+    ActiveRateChanges, BlockTransactionEvents, RateDeltas, TickDeltas,
 };
 
 /// Aggregates protocol components and balance changes by transaction.
@@ -32,9 +32,9 @@ fn map_protocol_changes(
     ticks_store_deltas: StoreDeltas,
     rate_map_deltas: RateDeltas,
     rate_delta_store_deltas: StoreDeltas,
-    liquidity_changes: LiquidityChanges,
+    active_liquidity_changes: ActiveLiquidityChanges,
     liquidity_store_deltas: StoreDeltas,
-    rate_changes: RateChanges,
+    active_rate_changes: ActiveRateChanges,
     active_rate_store_deltas: StoreDeltas,
 ) -> Result<BlockChanges, substreams::errors::Error> {
     let mut transaction_changes: HashMap<_, TransactionChangesBuilder> = HashMap::new();
@@ -146,7 +146,7 @@ fn map_protocol_changes(
     liquidity_store_deltas
         .deltas
         .into_iter()
-        .zip(liquidity_changes.changes)
+        .zip(active_liquidity_changes.changes)
         .for_each(|(store_delta, change)| {
             let tx = change.transaction.unwrap();
             let builder = transaction_changes
@@ -168,7 +168,7 @@ fn map_protocol_changes(
     active_rate_store_deltas
         .deltas
         .chunks(2)
-        .zip(rate_changes.changes)
+        .zip(active_rate_changes.changes)
         .for_each(|(store_deltas, change)| {
             let tx = change.transaction.unwrap();
             let builder = transaction_changes

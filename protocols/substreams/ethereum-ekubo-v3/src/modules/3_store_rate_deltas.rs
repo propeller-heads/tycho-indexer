@@ -7,7 +7,7 @@ use substreams_helper::hex::Hexable;
 use crate::pb::ekubo::RateDeltas;
 
 #[substreams::handlers::store]
-pub fn store_rates(rate_deltas: RateDeltas, store: StoreAddBigInt) {
+pub fn store_rate_deltas(rate_deltas: RateDeltas, store: StoreAddBigInt) {
     rate_deltas
         .deltas
         .into_iter()

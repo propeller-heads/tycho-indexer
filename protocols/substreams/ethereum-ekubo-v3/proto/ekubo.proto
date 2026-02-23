@@ -37,7 +37,7 @@ enum ChangeType {
   ABSOLUTE = 1;
 }
 
-message LiquidityChange {
+message ActiveLiquidityChange {
   bytes pool_id = 1; // bytes32
   bytes value = 2;   // uint128 or int128, depending on change_type
   ChangeType change_type = 3;
@@ -45,9 +45,9 @@ message LiquidityChange {
   Transaction transaction = 5;
 }
 
-message LiquidityChanges { repeated LiquidityChange changes = 1; }
+message ActiveLiquidityChanges { repeated ActiveLiquidityChange changes = 1; }
 
-message RateChange {
+message ActiveRateChange {
   bytes pool_id = 1;      // bytes32
   bytes token0_value = 2; // uint112 or int112, depending on change_type
   bytes token1_value = 3; // uint112 or int112, depending on change_type
@@ -56,7 +56,7 @@ message RateChange {
   Transaction transaction = 6;
 }
 
-message RateChanges { repeated RateChange changes = 1; }
+message ActiveRateChanges { repeated ActiveRateChange changes = 1; }
 
 message PoolDetails {
   bytes token0 = 1; // address
@@ -81,7 +81,7 @@ message BlockTransactionEvents {
         PositionUpdated position_updated = 4;
         PoolInitialized pool_initialized = 5;
         VirtualExecution virtual_execution = 6;
-        RateUpdate rate_update = 7;
+        RateUpdated rate_updated = 7;
       }
 
       message Swapped {
@@ -123,7 +123,7 @@ message BlockTransactionEvents {
         bytes token1_rate = 2; // int112/uint112
       }
 
-      message RateUpdate {
+      message RateUpdated {
         uint64 start_time = 1;       // block timestamp
         uint64 end_time = 2;         // block timestamp
         bytes token0_rate_delta = 3; // int112
