@@ -6,12 +6,13 @@
 #
 # Usage: RPC_URL=<your-rpc-url> ./compute_initial_state.sh [block_number]
 #
-# The block number defaults to 24479942 (Saturn I activation block).
+# The block number defaults to 24479994 (Saturn I settings migration block —
+# the block where all v4 settings including express_queue_rate are finalized).
 
 set -e
 
-# Default to the Saturn I activation block
-BLOCK_NUMBER=${1:-24479942}
+# Default to the Saturn I settings migration block
+BLOCK_NUMBER=${1:-24479994}
 
 if [ -z "$RPC_URL" ]; then
     echo "Error: RPC_URL environment variable is required"

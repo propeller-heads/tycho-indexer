@@ -40,23 +40,22 @@ fn map_protocol_changes(
     let mut transaction_changes: HashMap<_, TransactionChangesBuilder> = HashMap::new();
 
     // On the starting block, initialize the component with provided initial state values
-    // that represent the state at the END of the starting block.
+    // that represent the state at the END of the starting block. We skip update handlers on
+    // this block because the initial params already capture the final state — running handlers
+    // would emit Update attrs that overwrite the Creation attrs via last-writer-wins merging.
     let component_created = !protocol_components
         .tx_components
         .is_empty();
 
     if component_created {
         initialize_protocol_component(&params, protocol_components, &mut transaction_changes)?;
+    } else {
+        update_deposit_liquidity(&block, &mut transaction_changes);
+        update_reth_liquidity(&block, &mut transaction_changes);
+        update_network_balance(&block, &mut transaction_changes);
+        update_protocol_settings(&block, &mut transaction_changes);
+        update_megapool_queue_state(&block, &mut transaction_changes);
     }
-
-    // Always run update handlers, including on the creation block. The initial state captures
-    // values at the end of the starting block, but any same-block changes after the creation
-    // tx are processed by these handlers, ensuring correctness for low-frequency attributes.
-    update_deposit_liquidity(&block, &mut transaction_changes);
-    update_reth_liquidity(&block, &mut transaction_changes);
-    update_network_balance(&block, &mut transaction_changes);
-    update_protocol_settings(&block, &mut transaction_changes);
-    update_megapool_queue_state(&block, &mut transaction_changes);
 
     Ok(BlockChanges {
         block: Some((&block).into()),
