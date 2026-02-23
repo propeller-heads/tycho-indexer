@@ -430,7 +430,6 @@ mod tests {
                 panic!("Expected InvalidInput");
             }
         }
-
     }
 
     mod get_limits {
@@ -460,6 +459,5 @@ mod tests {
                 panic!("Expected InvalidInput");
             }
         }
-
     }
 }

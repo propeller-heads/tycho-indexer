@@ -304,7 +304,7 @@ impl RFQClient for LiquoriceClient {
                 match client.fetch_price_levels().await {
                     Ok(prices_by_mm) => {
                         let mut new_components = HashMap::new();
-                    
+
                         // Group qualifying MMs by token pair
                         struct PricesWithTvl {
                             // MM name -> price levels for the token pair
@@ -685,7 +685,7 @@ mod tests {
         quote_token_amount: &str,
         partial_fill: Option<crate::rfq::protocols::liquorice::models::LiquoricePartialFill>,
     ) -> crate::rfq::protocols::liquorice::models::LiquoriceQuoteLevel {
-        use crate::rfq::protocols::liquorice::models::{LiquoriceTx, LiquoriceQuoteLevel};
+        use crate::rfq::protocols::liquorice::models::{LiquoriceQuoteLevel, LiquoriceTx};
         LiquoriceQuoteLevel {
             maker_rfq_id: "maker-1".to_string(),
             maker: "test-maker".to_string(),
@@ -704,11 +704,7 @@ mod tests {
         }
     }
 
-    fn make_params(
-        token_in: &str,
-        token_out: &str,
-        amount_in: u64,
-    ) -> GetAmountOutParams {
+    fn make_params(token_in: &str, token_out: &str, amount_in: u64) -> GetAmountOutParams {
         GetAmountOutParams {
             amount_in: BigUint::from(amount_in),
             token_in: Bytes::from_str(token_in).unwrap(),
@@ -742,7 +738,9 @@ mod tests {
 
     #[test]
     fn test_process_quote_response_partial_fill_attributes() {
-        use crate::rfq::protocols::liquorice::models::{LiquoricePartialFill, LiquoriceQuoteResponse};
+        use crate::rfq::protocols::liquorice::models::{
+            LiquoricePartialFill, LiquoriceQuoteResponse,
+        };
 
         let token_in = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
         let token_out = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599";
@@ -791,8 +789,10 @@ mod tests {
         // valid levels with different quote_token_amounts; expect the higher one
         // to be chosen.
         let invalid_level = make_quote_level(token_in, token_out, "999", "9999999", None);
-        let lower_level = make_quote_level(token_in, token_out, &amount_in.to_string(), "3000000", None);
-        let best_level = make_quote_level(token_in, token_out, &amount_in.to_string(), "3500000", None);
+        let lower_level =
+            make_quote_level(token_in, token_out, &amount_in.to_string(), "3000000", None);
+        let best_level =
+            make_quote_level(token_in, token_out, &amount_in.to_string(), "3500000", None);
 
         let response = LiquoriceQuoteResponse {
             rfq_id: "r1".to_string(),

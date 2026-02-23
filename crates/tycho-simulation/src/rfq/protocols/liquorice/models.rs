@@ -122,8 +122,16 @@ impl LiquoriceTokenPairPrice {
         if self.levels.is_empty() {
             return None;
         }
-        let total_quantity: f64 = self.levels.iter().map(|l| l.quantity).sum();
-        let total_value: f64 = self.levels.iter().map(|l| l.quantity * l.price).sum();
+        let total_quantity: f64 = self
+            .levels
+            .iter()
+            .map(|l| l.quantity)
+            .sum();
+        let total_value: f64 = self
+            .levels
+            .iter()
+            .map(|l| l.quantity * l.price)
+            .sum();
         Some(total_value / total_quantity)
     }
 
