@@ -305,9 +305,13 @@ impl RFQClient for LiquoriceClient {
                     Ok(prices_by_mm) => {
                         let mut new_components = HashMap::new();
 
+                        struct PricesWithTvl {
+                            mm_prices: HashMap<String, LiquoriceTokenPairPrice>,
+                            tvl: f64,
+                        }
+
                         // Group qualifying MMs by token pair
-                        // Key: (base_token, quote_token) -> HashMap<mm_name, (levels, normalized_tvl)>
-                        let mut pair_mm_prices: HashMap<(Bytes, Bytes), HashMap<String, (LiquoriceTokenPairPrice, f64)>> = HashMap::new();
+                        let mut pair_mm_prices: HashMap<(Bytes, Bytes), PricesWithTvl> = HashMap::new();
 
                         info!("Fetched price levels from {} market makers", prices_by_mm.len());
                         for (mm_name, token_pair_prices) in prices_by_mm.iter() {
@@ -333,34 +337,25 @@ impl RFQClient for LiquoriceClient {
                                     continue;
                                 }
 
-                                pair_mm_prices
+                                let entry = pair_mm_prices
                                     .entry((base_token.clone(), quote_token.clone()))
-                                    .or_default()
-                                    .insert(mm_name.clone(), (token_pair_price.clone(), normalized_tvl));
+                                    .or_insert_with(|| PricesWithTvl { mm_prices: HashMap::new(), tvl: f64::NEG_INFINITY });
+                                entry.tvl = entry.tvl.max(normalized_tvl);
+                                entry.mm_prices.insert(mm_name.clone(), token_pair_price.clone());
                             }
                         }
 
-                        for ((base_token, quote_token), prices_by_mm) in &pair_mm_prices {
-                            let pair_str = format!("liquorice_{}/{}", hex::encode(base_token), hex::encode(quote_token));
+                        // Choose market maker with highest TVL for the component's TVL, because we are not going to aggregate firm quotes from multiple MMs in the current implementation
+                        for ((base_token, quote_token), PricesWithTvl { mm_prices, tvl: component_tvl }) in pair_mm_prices {
+                            let pair_str = format!("liquorice_{}/{}", hex::encode(&base_token), hex::encode(&quote_token));
                             let component_id = format!("{}", keccak256(pair_str.as_bytes()));
 
-                            let tokens = vec![base_token.clone(), quote_token.clone()];
-
-                            // Choose market maker with highest TVL for the component's TVL, because we are not going to aggregate firm quotes from multiple MMs in the current implementation
-                            let component_tvl = prices_by_mm
-                                .values()
-                                .map(|(_, tvl)| *tvl)
-                                .fold(f64::NEG_INFINITY, f64::max);
-
-                            let prices_by_mm: HashMap<String, LiquoriceTokenPairPrice> = prices_by_mm
-                                .iter()
-                                .map(|(name, (price, _))| (name.clone(), price.clone()))
-                                .collect();
+                            let tokens = vec![base_token, quote_token];
 
                             let component_with_state = client.create_component_with_state(
                                 component_id.clone(),
                                 tokens,
-                                &prices_by_mm,
+                                &mm_prices,
                                 component_tvl,
                             );
                             new_components.insert(component_id, component_with_state);
