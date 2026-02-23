@@ -23,6 +23,7 @@ members = [
     "ethereum-fluid",
     "base-aerodrome-slipstreams",
     "ethereum-erc4626",
+    "ethereum-liquidityparty",
 ]
 resolver = "2"
 
