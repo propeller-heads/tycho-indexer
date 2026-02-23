@@ -183,8 +183,6 @@ pub struct LiquoriceQuoteRequest {
     pub base_token_amount: Option<String>,
     #[serde(rename = "quoteTokenAmount", skip_serializing_if = "Option::is_none")]
     pub quote_token_amount: Option<String>,
-    #[serde(rename = "excludedMakers", skip_serializing_if = "Option::is_none")]
-    pub excluded_makers: Option<Vec<String>>,
 }
 
 /// RFQ response from POST /rfq
@@ -203,7 +201,6 @@ pub struct LiquoriceQuoteLevel {
     #[serde(rename = "makerRfqId")]
     pub maker_rfq_id: String,
     pub maker: String,
-    pub nonce: String,
     pub expiry: u64,
     pub tx: LiquoriceTx,
     #[serde(rename = "baseToken")]
@@ -216,7 +213,6 @@ pub struct LiquoriceQuoteLevel {
     pub quote_token_amount: String,
     #[serde(rename = "partialFill")]
     pub partial_fill: Option<LiquoricePartialFill>,
-    pub allowances: Vec<LiquoriceAllowance>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -230,13 +226,6 @@ pub struct LiquoricePartialFill {
     pub offset: u32,
     #[serde(rename = "minBaseTokenAmount")]
     pub min_base_token_amount: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LiquoriceAllowance {
-    pub token: String,
-    pub spender: String,
-    pub amount: String,
 }
 
 impl LiquoriceQuoteLevel {
@@ -364,8 +353,6 @@ mod tests {
             LiquoriceQuoteLevel {
                 maker_rfq_id: "maker-rfq-1".to_string(),
                 maker: "test-maker".to_string(),
-                nonce: "0x0000000000000000000000000000000000000000000000000000000000000001"
-                    .to_string(),
                 expiry: 123456,
                 tx: LiquoriceTx {
                     to: "0x5555555555555555555555555555555555555555".to_string(),
@@ -376,7 +363,6 @@ mod tests {
                 base_token_amount: "1000".to_string(),
                 quote_token_amount: "2000".to_string(),
                 partial_fill: None,
-                allowances: vec![],
             }
         }
 

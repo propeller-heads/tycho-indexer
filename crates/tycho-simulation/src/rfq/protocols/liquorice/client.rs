@@ -346,7 +346,6 @@ impl RFQClient for LiquoriceClient {
                             }
                         }
 
-                        // Choose market maker with highest TVL for the component's TVL, because we are not going to aggregate firm quotes from multiple MMs in the current implementation
                         for ((base_token, quote_token), PricesWithTvl { mm_prices, tvl: component_tvl }) in pair_mm_prices {
                             let pair_str = format!("liquorice_{}/{}", hex::encode(&base_token), hex::encode(&quote_token));
                             let component_id = format!("{}", keccak256(pair_str.as_bytes()));
@@ -406,7 +405,7 @@ impl RFQClient for LiquoriceClient {
             .duration_since(SystemTime::UNIX_EPOCH)
             .map_err(|_| RFQError::ParsingError("SystemTime before UNIX EPOCH!".into()))?
             .as_secs() +
-            300; // 5 minutes from now
+            300;
 
         let rfq_id = uuid::Uuid::new_v4().to_string();
 
@@ -420,7 +419,6 @@ impl RFQClient for LiquoriceClient {
             effective_trader: Some(params.sender.to_string()),
             base_token_amount: Some(params.amount_in.to_string()),
             quote_token_amount: None,
-            excluded_makers: None,
         };
 
         debug!(quote_request = ?quote_request, "Sending Liquorice quote request");
@@ -689,7 +687,6 @@ mod tests {
         LiquoriceQuoteLevel {
             maker_rfq_id: "maker-1".to_string(),
             maker: "test-maker".to_string(),
-            nonce: "0x01".to_string(),
             expiry: 9999999999,
             tx: LiquoriceTx {
                 to: "0x1111111111111111111111111111111111111111".to_string(),
@@ -700,7 +697,6 @@ mod tests {
             base_token_amount: base_token_amount.to_string(),
             quote_token_amount: quote_token_amount.to_string(),
             partial_fill,
-            allowances: vec![],
         }
     }
 

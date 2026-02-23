@@ -84,8 +84,7 @@ impl ProtocolSim for LiquoriceState {
         todo!()
     }
 
-    /// Returns the best available price across all market makers, calculated as a weighted average
-    /// price of the best price levels from each market maker.
+    /// Returns the best available price across all market makers
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
         self.valid_direction_guard(&base.address, &quote.address)?;
 
@@ -333,8 +332,6 @@ mod tests {
             let price = state
                 .spot_price(&state.base_token, &state.quote_token)
                 .unwrap();
-            // Best maker (test_mm) weighted avg: (0.5*3000 + 1.5*3000 + 5.0*2999) / 7.0
-            // = 20995/7 ≈ 2999.2857, which beats test_mm_2's 2998.0
             assert!((price - 20995.0 / 7.0).abs() < 1e-10);
         }
 
@@ -442,7 +439,6 @@ mod tests {
                 .get_limits(state.base_token.address.clone(), state.quote_token.address.clone())
                 .unwrap();
 
-            // Best maker (test_mm): sell=0.5+1.5+5.0=7.0, buy=0.5*3000+1.5*3000+5.0*2999=20995.0
             assert_eq!(sell_limit, BigUint::from((7.0 * 10f64.powi(18)) as u128));
             assert_eq!(buy_limit, BigUint::from((20995.0 * 10f64.powi(6)) as u128));
         }
