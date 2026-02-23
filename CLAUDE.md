@@ -1,17 +1,17 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## Development Environment
+- Requires PostgreSQL (via `docker-compose up -d db`)
+- Uses Diesel for ORM and migrations
+- Uses `nextest` for parallel test execution; DB tests tagged `serial_db` run sequentially
+- Follows Conventional Commits for automated versioning (see `release.config.js`)
+
+## Testing Conventions
+- For `rstest` parameterized tests, **name each case** with `#[case::descriptive_name(...)]` — test names should be self-documenting so failures are immediately identifiable
+- Keep test function names concise; avoid suffixes that restate what parameters already express
+- Don't nest `mod` wrappers inside `#[cfg(test)] mod test` unless there's a concrete isolation benefit
 
 ## Commands
-
-### Build & Release
-```bash
-# Build all packages in release mode
-cargo build --release
-
-# Build tycho-indexer with unstable tokio features (for production)
-RUSTFLAGS="--cfg tokio_unstable" cargo build --package tycho-indexer --release
-```
 
 ### Testing
 ```bash
@@ -20,6 +20,12 @@ cargo nextest run --workspace --locked --all-targets --all-features --bin tycho-
 
 # Run serial database tests (must be run separately)
 cargo nextest run --workspace --locked --all-targets --all-features --bin tycho-indexer -E 'test(serial_db)'
+
+# Run a single test by name
+cargo nextest run --workspace --locked --all-targets --all-features -E 'test(my_test_name)'
+
+# Run all tests in a specific crate
+cargo nextest run --package tycho-storage --locked --all-targets --all-features
 ```
 
 ### Code Quality
@@ -37,80 +43,80 @@ cargo +nightly clippy --locked --all --all-features --all-targets -- -D warnings
 ./check.sh
 ```
 
-### Database Operations
-```bash
-# Start PostgreSQL service
-docker-compose up -d db
-
-# Run database migrations
-diesel migration run --migration-dir ./tycho-storage/migrations
-
-# Redo last migration (useful for testing)
-diesel migration redo --migration-dir ./tycho-storage/migrations
-
-# Update schema.rs after migrations
-diesel print-schema --config-file ./tycho-storage/diesel.toml > ./tycho-storage/src/postgres/schema.rs
-```
-
-### Running Tycho Indexer
-```bash
-# Run indexer for all extractors in extractors.yaml
-cargo run --bin tycho-indexer -- index
-
-# Run indexer for a single extractor
-cargo run --bin tycho-indexer -- run
-
-# Run token analyzer cronjob
-cargo run --bin tycho-indexer -- analyze-tokens
-
-# Run only the RPC server
-cargo run --bin tycho-indexer -- rpc
-```
-
 ## Architecture Overview
 
-Tycho is a multi-crate Rust workspace designed for indexing and processing DEX/DeFi protocol data from blockchains. The system follows an extractor-service architecture where extractors process incoming blockchain data and services distribute data to clients.
+Tycho is a multi-crate Rust workspace for indexing DEX/DeFi protocol data from blockchains, streaming real-time state to solvers via WebSocket deltas and HTTP snapshots.
 
 ### Core Crates
-- **tycho-indexer**: Main indexing logic, extractor management, RPC services, and WebSocket subscriptions
-- **tycho-storage**: Database layer with PostgreSQL backend, migrations, and versioned data storage
-- **tycho-common**: Shared types, traits, and DTOs used across all crates
-- **tycho-client**: Consumer-facing client library and CLI for streaming protocol data
-- **tycho-client-py**: Python bindings for the Rust client (currently not maintained/outdated)
-- **tycho-ethereum**: Ethereum-specific blockchain integration and token analysis
+- **tycho-indexer**: Main indexing engine, extractor management, RPC + WebSocket services
+- **tycho-storage**: PostgreSQL backend with Diesel ORM, versioned data, migrations
+- **tycho-common**: Shared domain types, storage/blockchain traits, DTOs
+- **tycho-client**: Consumer library — HTTP snapshot client + WebSocket delta client
+- **tycho-ethereum**: Ethereum specific implementations: RPC, token analysis, EVM account/trace extraction
+- **tycho-client-py**: Python bindings (not maintained)
 
-### Data Flow Architecture
-1. **Substreams** send fork-aware blockchain messages to tycho-indexer
-2. **Extractors** process incoming data, maintain protocol state, and emit deltas
-3. **Services** distribute real-time data via WebSocket and provide historical data via RPC
-4. **Storage** persists versioned protocol states and component data in PostgreSQL
+### End-to-End Data Flow
 
-### Key Architectural Concepts
-- **Protocol Components**: Static configuration of protocol pools/contracts
-- **Protocol State**: Dynamic attributes that change per block (reserves, balances, etc.)
-- **Reorg Handling**: Automatic chain reorganization detection and revert message emission
-- **Versioning System**: Historical data tracking with valid_to timestamps
-- **Delta Streaming**: Lightweight state change messages for real-time updates
+```
+── INGESTION ──────────────────────────────────────────────────────────────────
 
-### Special Attributes System
-- `manual_updates`: Controls automatic vs manual component updates
-- `update_marker`: Signals component state changes for manual update components
-- `balance_owner`: Specifies token balance ownership for components
-- `stateless_contract_addr/_code`: References to stateless contracts needed for simulations
+  Substreams gRPC                                    Ethereum RPC
+       │                                                   │
+       ▼                                                   │
+  ProtocolExtractor                                        │
+  ├─ Deserialize BlockScopedData (protobuf)                │
+  ├─ PartialBlockBuffer: accumulate sub-block msgs         │
+  │  until full-block signal arrives                       │
+  ├─ TokenPreProcessor: for each unknown token address ────┘
+  │  fetch metadata (symbol, decimals) via eth_call
+  └─ Produce BlockChanges (tx-level state/balance/token deltas)
+       │
+       ▼
+  ReorgBuffer (extractor-owned, one per ProtocolExtractor)
+  ├─ Insert BlockChanges for every new block
+  ├─ On BlockUndoSignal: purge blocks after reverted hash,
+  │  emit revert messages (revert=true) — no DB rollback needed
+  └─ Drain to DB when count_blocks_before(finalized_block_height)
+       >= commit_batch_size  ← only finalized blocks ever reach DB
+       │
+       ▼ (drained blocks only)
+  BlockChanges → BlockAggregatedChanges
+  │  merge all tx-level deltas into one state per component/account;
+  │  new_tokens, new_protocol_components, component_balances included
+  │
+  ├─ DB write (CachedGateway → Postgres)
+  │  upsert blocks, tokens, protocol components, state, balances
+  │  sets db_committed_block_height on outgoing message
+  │
+  └─ Broadcast BlockAggregatedChanges on internal channel
+       │ (all blocks, including pending/non-committed)
+       │
+── SERVER ─────────────────────────────────────────────────────────────────────
+       │
+       ├──► WebSocket subscribers (tycho-indexer/src/services/ws.rs)
+       │    emit message directly; revert flag signals chain reorg
+       │
+       └──► PendingDeltasBuffer (tycho-indexer/src/services/deltas_buffer.rs)
+            per-extractor ReorgBuffer of BlockAggregatedChanges
+            ├─ Insert every full block (partial blocks skipped)
+            ├─ Auto-drain blocks ≤ db_committed_block_height
+            │  (they're in DB, no longer "pending")
+            └─ Used by RPC handlers: DB snapshot + pending deltas
+               = consistent view of latest state for HTTP queries
 
-### Development Environment
-- Requires PostgreSQL (via docker-compose or local installation)
-- Uses Diesel for database migrations and ORM
-- Employs nextest for parallel test execution with special handling for database tests
-- Follows Conventional Commits format for automated versioning
+── CLIENT (tycho-client) ──────────────────────────────────────────────────────
 
-### Testing Strategy
-- Standard tests run in parallel
-- Database tests (`serial_db`) run sequentially to avoid interference
-- Integration tests can use tycho-client to generate test fixtures
-- Mock data available in various test directories
+  StateSynchronizer (one per extractor subscription)
+  ├─ 1. Subscribe to WebSocket stream (WsDeltasClient)
+  ├─ 2. On first message: query HTTP snapshot (HttpRPCClient)
+  │     fetches protocol_state / contract_state at that block height
+  └─ 3. Buffer WebSocket deltas received before snapshot arrives;
+        apply buffered deltas on top of snapshot to catch up
 
-### Testing Conventions
-- For `rstest` parameterized tests, **name each case** with `#[case::descriptive_name(...)]` instead of relying on inline comments — test names should be self-documenting so failures are immediately identifiable
-- Keep test function names concise; avoid redundant suffixes that restate what parameters already express
-- Don't nest `mod` wrappers inside `#[cfg(test)] mod test` unless there's a concrete isolation benefit
+  BlockSynchronizer (across all extractors)
+  ├─ Tracks state per synchronizer: Ready / Delayed / Stale
+  ├─ Delayed synchronizers consume buffered messages to catch up
+  └─ When all synchronizers reach the same block: emit FeedMessage
+     (unified view of all protocol state at that block) to consumer
+```
+
