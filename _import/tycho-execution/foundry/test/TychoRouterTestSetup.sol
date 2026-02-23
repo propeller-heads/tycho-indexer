@@ -211,7 +211,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         executors[12] = address(slipstreamsExecutor);
         executors[13] = address(rocketpoolExecutor);
         executors[14] = address(erc4626Executor);
-        executors[16] = address(wethExecutor);
+        executors[15] = address(wethExecutor);
 
         return executors;
     }
