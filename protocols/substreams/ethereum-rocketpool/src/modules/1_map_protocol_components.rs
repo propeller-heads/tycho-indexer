@@ -24,7 +24,7 @@ fn map_protocol_components(
         return Ok(BlockTransactionProtocolComponents { tx_components: vec![] });
     }
 
-    // Find the transaction that activated the deposit pool V1.2 address in the Rocket Storage
+    // Find the transaction that touched RocketStorage on the starting block (Saturn I activation)
     let tx = block
         .transactions()
         .find(|tx| {
