@@ -13,6 +13,6 @@ pub fn store_method_from_change_type<T, S: StoreSetSum<T>>(
 
 pub fn get_pool_details(store: &StoreGetProto<PoolDetails>, component_id: &str) -> PoolDetails {
     store
-        .get_at(0, component_id)
+        .get_last(component_id)
         .expect("pool id should exist in store")
 }
