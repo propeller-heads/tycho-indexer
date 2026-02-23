@@ -795,4 +795,58 @@ mod tests {
         // Assign disabled, no assignment: 50 + 10 = 60
         assert_eq!(new_state.deposit_contract_balance, U256::from(60e18));
     }
+
+    // ============ Live Post-Saturn Transaction Tests ============
+
+    /// State at block 24480104 (just before first post-Saturn deposit).
+    /// Verified against on-chain data via cast calls at this block.
+    fn create_state_at_block_24480104() -> RocketpoolState {
+        RocketpoolState::new(
+            U256::from_str_radix("489a96a246a2e92bbbd1", 16).unwrap(), // reth_supply
+            U256::from_str_radix("540e645ee4119f4d8b9e", 16).unwrap(), // total_eth
+            U256::from_str_radix("8dcfa9d0071987bb", 16).unwrap(), // deposit_contract_balance
+            U256::from_str_radix("c28d2e1d64f99ea24", 16).unwrap(), // reth_contract_liquidity
+            U256::from_str_radix("1c6bf52634000", 16).unwrap(),    // deposit_fee (0.05%)
+            true,                                                   // deposits_enabled
+            U256::from_str_radix("2386f26fc10000", 16).unwrap(),   // min_deposit_amount
+            U256::from_str_radix("4f68ca6d8cd91c6000000", 16).unwrap(), // max_deposit_pool_size
+            true,                                                   // deposit_assigning_enabled
+            U256::from(90u64),                                      // deposit_assign_maximum
+            U256::ZERO,                                             // deposit_assign_socialised_maximum
+            U256::from_str_radix("4a60532ad51bf000000", 16).unwrap(), // megapool_queue_requested_total
+            U256::ZERO,                                             // megapool_queue_index
+            U256::from(4u64),                                       // express_queue_rate
+        )
+    }
+
+    /// Test against real post-Saturn deposit transaction.
+    /// Tx 0xe0f1db165b621cb1e50b629af9d47e064be464fbcc7f2bcba3df1d27dbb916be at block 24480105.
+    /// User deposited 85 ETH and received 73382345660413064855 rETH (0.05% fee applied).
+    #[test]
+    fn test_live_deposit_post_saturn() {
+        let state = create_state_at_block_24480104();
+
+        let deposit_amount = BigUint::from(85_000_000_000_000_000_000u128);
+        let res = state
+            .get_amount_out(deposit_amount, &eth_token(), &reth_token())
+            .unwrap();
+
+        let expected_reth_out = BigUint::from(73_382_345_660_413_064_855u128);
+        assert_eq!(res.amount, expected_reth_out);
+    }
+
+    /// Test against real post-Saturn burn transaction.
+    /// Block 24481338: user burned 2515686112138065226 rETH and received 2912504376202664754 ETH.
+    #[test]
+    fn test_live_burn_post_saturn() {
+        let state = create_state_at_block_24480104();
+
+        let burn_amount = BigUint::from(2_515_686_112_138_065_226u128);
+        let res = state
+            .get_amount_out(burn_amount, &reth_token(), &eth_token())
+            .unwrap();
+
+        let expected_eth_out = BigUint::from(2_912_504_376_202_664_754u128);
+        assert_eq!(res.amount, expected_eth_out);
+    }
 }
