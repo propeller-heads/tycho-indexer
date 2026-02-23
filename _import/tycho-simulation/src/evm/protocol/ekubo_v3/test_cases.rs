@@ -93,7 +93,7 @@ impl TestCase {
 }
 
 #[fixture]
-pub fn base() -> TestCase {
+pub fn concentrated() -> TestCase {
     const POOL_KEY: EvmConcentratedPoolKey = EvmConcentratedPoolKey {
         token0: TOKEN0,
         token1: TOKEN1,
@@ -174,14 +174,14 @@ pub fn base() -> TestCase {
         transition_attributes: [
             ("liquidity".to_string(), LIQUIDITY_BETWEEN.to_be_bytes().into()),
             (
-                format!("ticks/{}", LOWER_TICK.index),
+                format!("tick/{}", LOWER_TICK.index),
                 LOWER_TICK
                     .liquidity_delta
                     .to_be_bytes()
                     .into(),
             ),
             (
-                format!("ticks/{}", UPPER_TICK.index),
+                format!("tick/{}", UPPER_TICK.index),
                 UPPER_TICK
                     .liquidity_delta
                     .to_be_bytes()
@@ -774,14 +774,14 @@ pub fn boosted_fees() -> TestCase {
         transition_attributes: [
             ("liquidity".to_string(), LIQUIDITY_BETWEEN.to_be_bytes().into()),
             (
-                format!("ticks/{}", LOWER_TICK.index),
+                format!("tick/{}", LOWER_TICK.index),
                 LOWER_TICK
                     .liquidity_delta
                     .to_be_bytes()
                     .into(),
             ),
             (
-                format!("ticks/{}", UPPER_TICK.index),
+                format!("tick/{}", UPPER_TICK.index),
                 UPPER_TICK
                     .liquidity_delta
                     .to_be_bytes()
@@ -945,14 +945,14 @@ pub fn mev_capture() -> TestCase {
         transition_attributes: [
             ("liquidity".to_string(), LIQUIDITY_BETWEEN.to_be_bytes().into()),
             (
-                format!("ticks/{}", LOWER_TICK.index),
+                format!("tick/{}", LOWER_TICK.index),
                 LOWER_TICK
                     .liquidity_delta
                     .to_be_bytes()
                     .into(),
             ),
             (
-                format!("ticks/{}", UPPER_TICK.index),
+                format!("tick/{}", UPPER_TICK.index),
                 UPPER_TICK
                     .liquidity_delta
                     .to_be_bytes()
@@ -978,7 +978,7 @@ pub fn mev_capture() -> TestCase {
 
 #[template]
 #[rstest]
-#[case::base(base())]
+#[case::concentrated(concentrated())]
 #[case::full_range(full_range())]
 #[case::stableswap(stableswap())]
 #[case::oracle(oracle())]

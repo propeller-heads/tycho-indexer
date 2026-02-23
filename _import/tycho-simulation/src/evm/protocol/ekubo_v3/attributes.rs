@@ -11,7 +11,7 @@ pub fn ticks_from_attributes<'a, T: IntoIterator<Item = (impl AsRef<str>, Cow<'a
         .into_iter()
         .filter_map(|(key, value)| {
             let key = key.as_ref();
-            key.starts_with("ticks/").then(|| {
+            key.starts_with("tick/").then(|| {
                 key.split('/')
                     .nth(1)
                     .ok_or_else(|| "expected key name to contain tick index".to_string())?
