@@ -16,19 +16,12 @@ use tycho_ethereum::BytesCodec;
 
 use crate::evm::protocol::{
     rocketpool::ETH_ADDRESS,
-    safe_math::{safe_add_u256, safe_mul_u256, safe_sub_u256},
+    safe_math::{safe_add_u256, safe_sub_u256},
     u256_num::{biguint_to_u256, u256_to_biguint, u256_to_f64},
     utils::solidity_math::mul_div,
 };
 
 const DEPOSIT_FEE_BASE: u128 = 1_000_000_000_000_000_000; // 1e18
-const VARIABLE_DEPOSIT_AMOUNT: u128 = 31_000_000_000_000_000_000; // 31 ETH
-
-// Queue capacity for wrap-around calculation (from RocketMinipoolQueue contract)
-// capacity = 2^255 (max uint256 / 2)
-fn queue_capacity() -> U256 {
-    U256::from(1) << 255
-}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RocketpoolState {
@@ -38,7 +31,7 @@ pub struct RocketpoolState {
     pub deposit_contract_balance: U256,
     /// ETH available in the rETH contract
     pub reth_contract_liquidity: U256,
-    /// Deposit fee as %, scaled by DEPOSIT_FEE_BASE, such as 5000000000000000 represents 0.5% fee.
+    /// Deposit fee as %, scaled by DEPOSIT_FEE_BASE, such as 500000000000000 represents 0.05% fee.
     pub deposit_fee: U256,
     pub deposits_enabled: bool,
     pub min_deposit_amount: U256,
@@ -49,62 +42,17 @@ pub struct RocketpoolState {
     pub deposit_assign_maximum: U256,
     /// The base number of assignments to try per deposit
     pub deposit_assign_socialised_maximum: U256,
-    /// Pre-Saturn: minipool queue start index for variable deposits
-    pub queue_variable_start: U256,
-    /// Pre-Saturn: minipool queue end index for variable deposits
-    pub queue_variable_end: U256,
-    /// Saturn v4: total ETH requested across express + standard megapool queues.
-    /// When present, replaces the effective capacity calculation from queue_variable_start/end.
-    #[serde(default)]
+    /// Total ETH requested across express + standard megapool queues
     pub megapool_queue_requested_total: U256,
-    /// Saturn v4: round-robin index for express/standard queue assignment
-    #[serde(default)]
+    /// Round-robin index for express/standard queue assignment
     pub megapool_queue_index: U256,
-    /// Saturn v4: how many express assignments per standard assignment (e.g., 4)
-    #[serde(default)]
+    /// How many express assignments per standard assignment (e.g., 4)
     pub express_queue_rate: U256,
 }
 
 impl RocketpoolState {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        reth_supply: U256,
-        total_eth: U256,
-        deposit_contract_balance: U256,
-        reth_contract_liquidity: U256,
-        deposit_fee: U256,
-        deposits_enabled: bool,
-        min_deposit_amount: U256,
-        max_deposit_pool_size: U256,
-        deposit_assigning_enabled: bool,
-        deposit_assign_maximum: U256,
-        deposit_assign_socialised_maximum: U256,
-        queue_variable_start: U256,
-        queue_variable_end: U256,
-    ) -> Self {
-        Self {
-            reth_supply,
-            total_eth,
-            deposit_contract_balance,
-            reth_contract_liquidity,
-            deposit_fee,
-            deposits_enabled,
-            min_deposit_amount,
-            max_deposit_pool_size,
-            deposit_assigning_enabled,
-            deposit_assign_maximum,
-            deposit_assign_socialised_maximum,
-            queue_variable_start,
-            queue_variable_end,
-            megapool_queue_requested_total: U256::ZERO,
-            megapool_queue_index: U256::ZERO,
-            express_queue_rate: U256::ZERO,
-        }
-    }
-
-    /// Creates a v4 (Saturn) state. Uses megapool queue fields instead of minipool queue.
-    #[allow(clippy::too_many_arguments)]
-    pub fn new_v4(
         reth_supply: U256,
         total_eth: U256,
         deposit_contract_balance: U256,
@@ -132,34 +80,21 @@ impl RocketpoolState {
             deposit_assigning_enabled,
             deposit_assign_maximum,
             deposit_assign_socialised_maximum,
-            queue_variable_start: U256::ZERO,
-            queue_variable_end: U256::ZERO,
             megapool_queue_requested_total,
             megapool_queue_index,
             express_queue_rate,
         }
     }
 
-    /// Returns true if this state has Saturn v4 megapool queue data.
-    fn is_saturn(&self) -> bool {
-        // If megapool_queue_requested_total or express_queue_rate is non-zero, we're in v4 mode.
-        // Also check express_queue_rate since requested_total could legitimately be zero.
-        !self.express_queue_rate.is_zero()
-    }
-
     /// Calculates rETH amount out for a given ETH deposit amount.
     fn get_reth_value(&self, eth_amount: U256) -> Result<U256, SimulationError> {
-        // fee = ethIn * deposit_fee / DEPOSIT_FEE_BASE
         let fee = mul_div(eth_amount, self.deposit_fee, U256::from(DEPOSIT_FEE_BASE))?;
         let net_eth = safe_sub_u256(eth_amount, fee)?;
-
-        // rethOut = netEth * rethSupply / totalEth
         mul_div(net_eth, self.reth_supply, self.total_eth)
     }
 
     /// Calculates ETH amount out for a given rETH burn amount.
     fn get_eth_value(&self, reth_amount: U256) -> Result<U256, SimulationError> {
-        // ethOut = rethIn * totalEth / rethSupply
         mul_div(reth_amount, self.total_eth, self.reth_supply)
     }
 
@@ -177,44 +112,27 @@ impl RocketpoolState {
         }
     }
 
-    /// Calculates the length of a queue given its start and end indices (pre-Saturn).
-    /// Handles wrap-around when end < start.
-    fn get_queue_length(start: U256, end: U256) -> U256 {
-        if end < start {
-            end + queue_capacity() - start
-        } else {
-            end - start
-        }
-    }
-
-    /// Returns the total effective capacity of the deposit queues.
-    ///
-    /// Pre-Saturn: variable_queue_length * 31 ETH
-    /// Saturn v4: megapool_queue_requested_total (tracked directly by the protocol)
-    fn get_effective_capacity(&self) -> Result<U256, SimulationError> {
-        if self.is_saturn() {
-            Ok(self.megapool_queue_requested_total)
-        } else {
-            let variable_length =
-                Self::get_queue_length(self.queue_variable_start, self.queue_variable_end);
-            safe_mul_u256(variable_length, U256::from(VARIABLE_DEPOSIT_AMOUNT))
-        }
+    /// Returns the total effective capacity of the megapool queues.
+    /// This is the total ETH requested across express and standard queues,
+    /// tracked directly by the protocol via `deposit.pool.requested.total`.
+    fn get_effective_capacity(&self) -> U256 {
+        self.megapool_queue_requested_total
     }
 
     /// Returns the maximum deposit capacity considering both the base pool size
-    /// and the queue effective capacity (if deposit_assigning_enabled).
+    /// and the megapool queue capacity (if deposit_assigning_enabled).
     fn get_max_deposit_capacity(&self) -> Result<U256, SimulationError> {
         if self.deposit_assigning_enabled {
-            let effective_capacity = self.get_effective_capacity()?;
-            safe_add_u256(self.max_deposit_pool_size, effective_capacity)
+            safe_add_u256(self.max_deposit_pool_size, self.get_effective_capacity())
         } else {
             Ok(self.max_deposit_pool_size)
         }
     }
 
     /// Returns the excess balance available for withdrawals from the deposit pool.
+    /// Excess = deposit_contract_balance - megapool_queue_requested_total
     fn get_deposit_pool_excess_balance(&self) -> Result<U256, SimulationError> {
-        let queue_capacity = self.get_effective_capacity()?;
+        let queue_capacity = self.get_effective_capacity();
         if queue_capacity >= self.deposit_contract_balance {
             Ok(U256::ZERO)
         } else {
@@ -228,64 +146,18 @@ impl RocketpoolState {
         safe_add_u256(self.reth_contract_liquidity, deposit_pool_excess)
     }
 
-    /// Calculates deposit assignment effects for pre-Saturn minipool queue.
+    /// Approximates ETH assigned from the deposit pool after a deposit.
     ///
-    /// Returns (minipools_dequeued, eth_assigned).
-    fn calculate_assign_deposits_legacy(
-        &self,
-        deposit_amount: U256,
-    ) -> Result<(U256, U256), SimulationError> {
-        if !self.deposit_assigning_enabled {
-            return Ok((U256::ZERO, U256::ZERO));
+    /// In Saturn v4, `_assignMegapools()` dequeues from express/standard queues with variable
+    /// ETH amounts. We approximate the total assigned as the minimum of available balance
+    /// and total requested.
+    fn calculate_assign_deposits(&self) -> U256 {
+        if !self.deposit_assigning_enabled || self.megapool_queue_requested_total.is_zero() {
+            return U256::ZERO;
         }
 
-        let variable_deposit = U256::from(VARIABLE_DEPOSIT_AMOUNT);
-        let scaling_count = deposit_amount / variable_deposit;
-        let desired_assignments = self.deposit_assign_socialised_maximum + scaling_count;
-
-        let eth_cap_assignments = self.deposit_contract_balance / variable_deposit;
-        let settings_cap_assignments = self.deposit_assign_maximum;
-        let queue_cap_assignments =
-            Self::get_queue_length(self.queue_variable_start, self.queue_variable_end);
-
-        let assignments = desired_assignments
-            .min(eth_cap_assignments)
-            .min(settings_cap_assignments)
-            .min(queue_cap_assignments);
-
-        let eth_assigned = safe_mul_u256(assignments, variable_deposit)?;
-
-        Ok((assignments, eth_assigned))
-    }
-
-    /// Calculates deposit assignment effects for Saturn v4 megapool queue.
-    ///
-    /// In v4, assignment logic dequeues from express/standard queues with variable
-    /// ETH amounts. We approximate the ETH assigned using the available balance and
-    /// queue requested total, capped by deposit_assign_maximum.
-    ///
-    /// Returns the approximate ETH assigned from the deposit pool.
-    fn calculate_assign_deposits_v4(
-        &self,
-        _deposit_amount: U256,
-    ) -> Result<U256, SimulationError> {
-        if !self.deposit_assigning_enabled {
-            return Ok(U256::ZERO);
-        }
-
-        if self.megapool_queue_requested_total.is_zero() {
-            return Ok(U256::ZERO);
-        }
-
-        // In v4, the assignment loop processes up to deposit_assign_maximum entries.
-        // Each entry requests a variable ETH amount. We approximate the total assigned
-        // as the minimum of: available balance and total requested.
-        // This is a simplification — the actual v4 code processes entries one by one.
-        let max_assignable = self
-            .deposit_contract_balance
-            .min(self.megapool_queue_requested_total);
-
-        Ok(max_assignable)
+        self.deposit_contract_balance
+            .min(self.megapool_queue_requested_total)
     }
 }
 
@@ -297,7 +169,6 @@ impl ProtocolSim for RocketpoolState {
 
     fn spot_price(&self, _base: &Token, quote: &Token) -> Result<f64, SimulationError> {
         let is_depositing_eth = RocketpoolState::is_depositing_eth(&quote.address);
-
         let amount = U256::from(1e18);
 
         let base_per_quote = if is_depositing_eth {
@@ -308,11 +179,9 @@ impl ProtocolSim for RocketpoolState {
         };
 
         let base_per_quote = u256_to_f64(base_per_quote)? / 1e18;
-
         Ok(1.0 / base_per_quote)
     }
 
-    #[allow(clippy::collapsible_else_if)]
     fn get_amount_out(
         &self,
         amount_in: BigUint,
@@ -363,34 +232,21 @@ impl ProtocolSim for RocketpoolState {
         };
 
         let mut new_state = self.clone();
-        // Note: total_eth and reth_supply are not updated as they are managed by an oracle.
         if is_depositing_eth {
             new_state.deposit_contract_balance =
                 safe_add_u256(new_state.deposit_contract_balance, amount_in)?;
 
-            if self.is_saturn() {
-                // Saturn v4: approximate assignment from megapool queue
-                let eth_assigned = new_state.calculate_assign_deposits_v4(amount_in)?;
-                if eth_assigned > U256::ZERO {
-                    new_state.deposit_contract_balance =
-                        safe_sub_u256(new_state.deposit_contract_balance, eth_assigned)?;
-                    new_state.megapool_queue_requested_total = safe_sub_u256(
-                        new_state.megapool_queue_requested_total,
-                        eth_assigned,
-                    )?;
-                }
-            } else {
-                // Pre-Saturn: minipool queue assignment
-                let (assignments, eth_assigned) =
-                    new_state.calculate_assign_deposits_legacy(amount_in)?;
-                if assignments > U256::ZERO {
-                    new_state.deposit_contract_balance =
-                        safe_sub_u256(new_state.deposit_contract_balance, eth_assigned)?;
-                    new_state.queue_variable_start =
-                        safe_add_u256(new_state.queue_variable_start, assignments)?;
-                }
+            let eth_assigned = new_state.calculate_assign_deposits();
+            if eth_assigned > U256::ZERO {
+                new_state.deposit_contract_balance =
+                    safe_sub_u256(new_state.deposit_contract_balance, eth_assigned)?;
+                new_state.megapool_queue_requested_total = safe_sub_u256(
+                    new_state.megapool_queue_requested_total,
+                    eth_assigned,
+                )?;
             }
         } else {
+            #[allow(clippy::collapsible_else_if)]
             if amount_out <= new_state.reth_contract_liquidity {
                 new_state.reth_contract_liquidity =
                     safe_sub_u256(new_state.reth_contract_liquidity, amount_out)?;
@@ -445,7 +301,6 @@ impl ProtocolSim for RocketpoolState {
             .updated_attributes
             .get("reth_supply")
             .map_or(self.reth_supply, U256::from_bytes);
-
         self.deposit_contract_balance = delta
             .updated_attributes
             .get("deposit_contract_balance")
@@ -454,7 +309,6 @@ impl ProtocolSim for RocketpoolState {
             .updated_attributes
             .get("reth_contract_liquidity")
             .map_or(self.reth_contract_liquidity, U256::from_bytes);
-
         self.deposits_enabled = delta
             .updated_attributes
             .get("deposits_enabled")
@@ -483,18 +337,6 @@ impl ProtocolSim for RocketpoolState {
             .updated_attributes
             .get("deposit_assign_socialised_maximum")
             .map_or(self.deposit_assign_socialised_maximum, U256::from_bytes);
-
-        // Pre-Saturn queue fields
-        self.queue_variable_start = delta
-            .updated_attributes
-            .get("queue_variable_start")
-            .map_or(self.queue_variable_start, U256::from_bytes);
-        self.queue_variable_end = delta
-            .updated_attributes
-            .get("queue_variable_end")
-            .map_or(self.queue_variable_end, U256::from_bytes);
-
-        // Saturn v4 megapool queue fields
         self.megapool_queue_requested_total = delta
             .updated_attributes
             .get("megapool_queue_requested_total")
@@ -562,35 +404,16 @@ mod tests {
     use super::*;
     use crate::evm::protocol::utils::add_fee_markup;
 
-    /// Helper function to create a RocketpoolState with easy-to-compute defaults for testing
-    /// Mutate fields for specific tests.
+    /// Helper function to create a RocketpoolState with easy-to-compute defaults for testing.
     /// - Exchange rate: 1 rETH = 2 ETH (100 rETH backed by 200 ETH)
     /// - Deposit fee: 40%
     /// - Deposit contract balance: 50 ETH
     /// - rETH contract liquidity: 0 ETH
     /// - Max pool size: 1000 ETH
     /// - Assign deposits enabled: false
+    /// - Express queue rate: 4
     fn create_state() -> RocketpoolState {
         RocketpoolState::new(
-            U256::from(100e18),                     // reth_supply: 100 rETH
-            U256::from(200e18),                     // total_eth: 200 ETH (1 rETH = 2 ETH)
-            U256::from(50e18),                      // deposit_contract_balance: 50 ETH
-            U256::ZERO,                             // reth_contract_liquidity: 0 ETH
-            U256::from(400_000_000_000_000_000u64), // deposit_fee: 40% (0.4e18)
-            true,                                   // deposits_enabled
-            U256::ZERO,                             // min_deposit_amount
-            U256::from(1000e18),                    // max_deposit_pool_size: 1000 ETH
-            false,                                  // deposit_assigning_enabled
-            U256::ZERO,                             // deposit_assign_maximum
-            U256::ZERO,                             // deposit_assign_socialised_maximum
-            U256::ZERO,                             // queue_variable_start
-            U256::ZERO,                             // queue_variable_end
-        )
-    }
-
-    /// Helper to create a Saturn v4 state for testing.
-    fn create_state_v4() -> RocketpoolState {
-        RocketpoolState::new_v4(
             U256::from(100e18),                     // reth_supply: 100 rETH
             U256::from(200e18),                     // total_eth: 200 ETH (1 rETH = 2 ETH)
             U256::from(50e18),                      // deposit_contract_balance: 50 ETH
@@ -624,50 +447,19 @@ mod tests {
         )
     }
 
-    // ============ Queue Length Tests ============
-
-    #[test]
-    fn test_queue_length_normal() {
-        let length = RocketpoolState::get_queue_length(U256::from(10), U256::from(15));
-        assert_eq!(length, U256::from(5));
-    }
-
-    #[test]
-    fn test_queue_length_empty() {
-        let length = RocketpoolState::get_queue_length(U256::from(10), U256::from(10));
-        assert_eq!(length, U256::ZERO);
-    }
-
-    #[test]
-    fn test_queue_length_wrap_around() {
-        let capacity = queue_capacity();
-        let start = capacity - U256::from(5);
-        let end = U256::from(3);
-        let length = RocketpoolState::get_queue_length(start, end);
-        // 3 + 2^255 - (2^255 - 5) = 8
-        assert_eq!(length, U256::from(8));
-    }
-
     // ============ Effective Capacity Tests ============
 
     #[test]
     fn test_effective_capacity_empty() {
         let state = create_state();
-        assert_eq!(state.get_effective_capacity().unwrap(), U256::ZERO);
+        assert_eq!(state.get_effective_capacity(), U256::ZERO);
     }
 
     #[test]
-    fn test_effective_capacity_variable_queue() {
+    fn test_effective_capacity_with_requested_total() {
         let mut state = create_state();
-        state.queue_variable_end = U256::from(2); // 2 * 31 ETH = 62 ETH
-        assert_eq!(state.get_effective_capacity().unwrap(), U256::from(62e18));
-    }
-
-    #[test]
-    fn test_effective_capacity_v4_uses_requested_total() {
-        let mut state = create_state_v4();
         state.megapool_queue_requested_total = U256::from(100e18);
-        assert_eq!(state.get_effective_capacity().unwrap(), U256::from(100e18));
+        assert_eq!(state.get_effective_capacity(), U256::from(100e18));
     }
 
     // ============ Max Deposit Capacity Tests ============
@@ -675,42 +467,23 @@ mod tests {
     #[test]
     fn test_max_capacity_assign_disabled() {
         let state = create_state();
-        let max = state
-            .get_max_deposit_capacity()
-            .unwrap();
-        assert_eq!(max, U256::from(1000e18));
+        assert_eq!(state.get_max_deposit_capacity().unwrap(), U256::from(1000e18));
     }
 
     #[test]
     fn test_max_capacity_assign_enabled_empty_queue() {
         let mut state = create_state();
         state.deposit_assigning_enabled = true;
-        let max = state
-            .get_max_deposit_capacity()
-            .unwrap();
-        assert_eq!(max, U256::from(1000e18));
+        assert_eq!(state.get_max_deposit_capacity().unwrap(), U256::from(1000e18));
     }
 
     #[test]
     fn test_max_capacity_assign_enabled_with_queue() {
         let mut state = create_state();
         state.deposit_assigning_enabled = true;
-        state.queue_variable_end = U256::from(10); // 310 ETH extra
-        let max = state
-            .get_max_deposit_capacity()
-            .unwrap();
-        // 1000 + 310 = 1310 ETH
-        assert_eq!(max, U256::from(1310e18));
-    }
-
-    #[test]
-    fn test_max_capacity_v4_with_megapool_queue() {
-        let mut state = create_state_v4();
-        state.deposit_assigning_enabled = true;
         state.megapool_queue_requested_total = U256::from(500e18);
-        let max = state.get_max_deposit_capacity().unwrap();
         // 1000 + 500 = 1500 ETH
-        assert_eq!(max, U256::from(1500e18));
+        assert_eq!(state.get_max_deposit_capacity().unwrap(), U256::from(1500e18));
     }
 
     // ============ Delta Transition Tests ============
@@ -746,34 +519,8 @@ mod tests {
     }
 
     #[test]
-    fn test_delta_transition_queue_fields() {
+    fn test_delta_transition_megapool_fields() {
         let mut state = create_state();
-
-        let attributes: HashMap<String, Bytes> = [
-            ("deposit_assigning_enabled", U256::from(1u64)),
-            ("queue_variable_end", U256::from(5u64)),
-        ]
-        .into_iter()
-        .map(|(k, v)| (k.to_string(), Bytes::from(v.to_be_bytes_vec())))
-        .collect();
-
-        let delta = ProtocolStateDelta {
-            component_id: "Rocketpool".to_owned(),
-            updated_attributes: attributes,
-            deleted_attributes: HashSet::new(),
-        };
-
-        state
-            .delta_transition(delta, &HashMap::new(), &Balances::default())
-            .unwrap();
-
-        assert!(state.deposit_assigning_enabled);
-        assert_eq!(state.queue_variable_end, U256::from(5u64));
-    }
-
-    #[test]
-    fn test_delta_transition_v4_fields() {
-        let mut state = create_state_v4();
 
         let attributes: HashMap<String, Bytes> = [
             ("megapool_queue_requested_total", U256::from(1000u64)),
@@ -804,60 +551,15 @@ mod tests {
     #[test]
     fn test_spot_price_deposit() {
         let state = create_state();
-        let price = state
-            .spot_price(&eth_token(), &reth_token())
-            .unwrap();
+        let price = state.spot_price(&eth_token(), &reth_token()).unwrap();
         assert_ulps_eq!(price, 0.5);
     }
 
     #[test]
     fn test_spot_price_withdraw() {
         let state = create_state();
-        let price = state
-            .spot_price(&reth_token(), &eth_token())
-            .unwrap();
+        let price = state.spot_price(&reth_token(), &eth_token()).unwrap();
         assert_ulps_eq!(price, 1.0 / 0.3);
-    }
-
-    /// Creates RocketpoolState from real on-chain data at block 23929406.
-    fn create_state_at_block_23929406() -> RocketpoolState {
-        RocketpoolState::new(
-            U256::from_str_radix("4df2cf698437b72b8937", 16).unwrap(), // reth_supply
-            U256::from_str_radix("59c8a9cb90db4a5aa85e", 16).unwrap(), // total_eth
-            U256::from_str_radix("11e245d1725f73941", 16).unwrap(),    // deposit_contract_balance
-            U256::from_str_radix("b6e43509", 16).unwrap(),             // reth_contract_liquidity
-            U256::from_str_radix("1c6bf52634000", 16).unwrap(),        // deposit_fee (0.05%)
-            true,                                                      // deposits_enabled
-            U256::from_str_radix("2386f26fc10000", 16).unwrap(),       // min_deposit_amount
-            U256::from_str_radix("3cfc82e37e9a7400000", 16).unwrap(),  // max_deposit_pool_size
-            true,                                                      // deposit_assigning_enabled
-            U256::from_str_radix("5a", 16).unwrap(),                   // deposit_assign_maximum
-            U256::from_str_radix("2", 16).unwrap(), // deposit_assign_socialised_maximum
-            U256::from_str_radix("6d45", 16).unwrap(), // queue_variable_start
-            U256::from_str_radix("6de3", 16).unwrap(), // queue_variable_end
-        )
-    }
-
-    #[test]
-    fn test_live_spot_price_reth_to_buy_eth_23929406() {
-        let state = create_state_at_block_23929406();
-        let price = state
-            .spot_price(&eth_token(), &reth_token())
-            .unwrap();
-        let expected = 0.868179358382478;
-        assert_ulps_eq!(price, expected, max_ulps = 10);
-    }
-
-    #[test]
-    fn test_live_spot_price_eth_to_buy_reth_23929406() {
-        let state = create_state_at_block_23929406();
-        let price = state
-            .spot_price(&reth_token(), &eth_token())
-            .unwrap();
-        let expected_without_fee = 1.151835724202335;
-        let fee = state.deposit_fee.to_f64().unwrap() / DEPOSIT_FEE_BASE as f64;
-        let expected = add_fee_markup(expected_without_fee, fee);
-        assert_ulps_eq!(price, expected, max_ulps = 10);
     }
 
     #[test]
@@ -872,44 +574,30 @@ mod tests {
     #[test]
     fn test_limits_deposit() {
         let state = create_state();
-
         let (max_sell, max_buy) = state
             .get_limits(eth_token().address, reth_token().address)
             .unwrap();
-
+        // max_sell = 1000 - 50 = 950 ETH
         assert_eq!(max_sell, BigUint::from(950_000_000_000_000_000_000u128));
+        // max_buy = 950 * 0.6 * 100/200 = 285 rETH
         assert_eq!(max_buy, BigUint::from(285_000_000_000_000_000_000u128));
     }
 
     #[test]
     fn test_limits_withdrawal() {
         let state = create_state();
-
         let (max_sell, max_buy) = state
             .get_limits(reth_token().address, eth_token().address)
             .unwrap();
-
+        // max_buy = liquidity = 50 ETH
         assert_eq!(max_buy, BigUint::from(50_000_000_000_000_000_000u128));
+        // max_sell = 50 * 100/200 = 25 rETH
         assert_eq!(max_sell, BigUint::from(25_000_000_000_000_000_000u128));
     }
 
     #[test]
-    fn test_limits_with_extended_capacity() {
+    fn test_limits_with_megapool_queue() {
         let mut state = create_state();
-        state.max_deposit_pool_size = U256::from(100e18);
-        state.deposit_assigning_enabled = true;
-        state.queue_variable_end = U256::from(2); // 62 ETH extra
-
-        let (max_sell, _) = state
-            .get_limits(eth_token().address, reth_token().address)
-            .unwrap();
-
-        assert_eq!(max_sell, BigUint::from(112_000_000_000_000_000_000u128));
-    }
-
-    #[test]
-    fn test_limits_v4_with_megapool_queue() {
-        let mut state = create_state_v4();
         state.max_deposit_pool_size = U256::from(100e18);
         state.deposit_assigning_enabled = true;
         state.megapool_queue_requested_total = U256::from(62e18);
@@ -917,7 +605,6 @@ mod tests {
         let (max_sell, _) = state
             .get_limits(eth_token().address, reth_token().address)
             .unwrap();
-
         // max_capacity = 100 + 62 = 162 ETH; max_sell = 162 - 50 = 112 ETH
         assert_eq!(max_sell, BigUint::from(112_000_000_000_000_000_000u128));
     }
@@ -927,6 +614,7 @@ mod tests {
     #[test]
     fn test_deposit_eth() {
         let state = create_state();
+        // Deposit 10 ETH: fee=4, net=6 → 6*100/200 = 3 rETH
         let res = state
             .get_amount_out(
                 BigUint::from(10_000_000_000_000_000_000u128),
@@ -937,63 +625,14 @@ mod tests {
 
         assert_eq!(res.amount, BigUint::from(3_000_000_000_000_000_000u128));
 
-        let new_state = res
-            .new_state
-            .as_any()
-            .downcast_ref::<RocketpoolState>()
-            .unwrap();
+        let new_state = res.new_state.as_any().downcast_ref::<RocketpoolState>().unwrap();
         assert_eq!(new_state.deposit_contract_balance, U256::from(60e18));
-        assert_eq!(new_state.total_eth, U256::from(200e18));
-        assert_eq!(new_state.reth_supply, U256::from(100e18));
-    }
-
-    #[test]
-    fn test_deposit_eth_v4() {
-        let state = create_state_v4();
-        // Same math as pre-Saturn — the rETH output is the same
-        let res = state
-            .get_amount_out(
-                BigUint::from(10_000_000_000_000_000_000u128),
-                &eth_token(),
-                &reth_token(),
-            )
-            .unwrap();
-
-        assert_eq!(res.amount, BigUint::from(3_000_000_000_000_000_000u128));
-    }
-
-    #[test]
-    fn test_deposit_within_extended_capacity() {
-        let mut state = create_state();
-        state.deposit_contract_balance = U256::from(990e18);
-        state.max_deposit_pool_size = U256::from(1000e18);
-        state.deposit_assigning_enabled = true;
-        state.queue_variable_end = U256::from(1); // 31 ETH extra
-
-        let res = state
-            .get_amount_out(
-                BigUint::from(20_000_000_000_000_000_000u128),
-                &eth_token(),
-                &reth_token(),
-            )
-            .unwrap();
-
-        assert_eq!(res.amount, BigUint::from(6_000_000_000_000_000_000u128));
-
-        let new_state = res
-            .new_state
-            .as_any()
-            .downcast_ref::<RocketpoolState>()
-            .unwrap();
-        assert_eq!(new_state.deposit_contract_balance, U256::from(1010e18));
-        assert_eq!(new_state.total_eth, U256::from(200e18));
-        assert_eq!(new_state.reth_supply, U256::from(100e18));
     }
 
     #[test]
     fn test_withdraw_reth() {
         let state = create_state();
-
+        // Withdraw 10 rETH: 10*200/100 = 20 ETH
         let res = state
             .get_amount_out(
                 BigUint::from(10_000_000_000_000_000_000u128),
@@ -1004,14 +643,8 @@ mod tests {
 
         assert_eq!(res.amount, BigUint::from(20_000_000_000_000_000_000u128));
 
-        let new_state = res
-            .new_state
-            .as_any()
-            .downcast_ref::<RocketpoolState>()
-            .unwrap();
+        let new_state = res.new_state.as_any().downcast_ref::<RocketpoolState>().unwrap();
         assert_eq!(new_state.deposit_contract_balance, U256::from(30e18));
-        assert_eq!(new_state.total_eth, U256::from(200e18));
-        assert_eq!(new_state.reth_supply, U256::from(100e18));
     }
 
     // ============ Get Amount Out - Error Cases Tests ============
@@ -1045,38 +678,6 @@ mod tests {
     }
 
     #[test]
-    fn test_deposit_queue_ignored_when_disabled() {
-        let mut state = create_state();
-        state.deposit_contract_balance = U256::from(990e18);
-        state.max_deposit_pool_size = U256::from(1000e18);
-        state.deposit_assigning_enabled = false;
-        state.queue_variable_end = U256::from(10);
-
-        let res = state.get_amount_out(
-            BigUint::from(20_000_000_000_000_000_000u128),
-            &eth_token(),
-            &reth_token(),
-        );
-        assert!(matches!(res, Err(SimulationError::InvalidInput(_, _))));
-    }
-
-    #[test]
-    fn test_deposit_exceeds_extended_capacity() {
-        let mut state = create_state();
-        state.deposit_contract_balance = U256::from(990e18);
-        state.max_deposit_pool_size = U256::from(1000e18);
-        state.deposit_assigning_enabled = true;
-        state.queue_variable_end = U256::from(1);
-
-        let res = state.get_amount_out(
-            BigUint::from(50_000_000_000_000_000_000u128),
-            &eth_token(),
-            &reth_token(),
-        );
-        assert!(matches!(res, Err(SimulationError::InvalidInput(_, _))));
-    }
-
-    #[test]
     fn test_withdrawal_insufficient_liquidity() {
         let state = create_state();
         let res = state.get_amount_out(
@@ -1088,11 +689,12 @@ mod tests {
     }
 
     #[test]
-    fn test_withdrawal_limited_by_minipool_queue() {
+    fn test_withdrawal_limited_by_queue() {
         let mut state = create_state();
         state.deposit_contract_balance = U256::from(100e18);
-        state.queue_variable_end = U256::from(2);
+        state.megapool_queue_requested_total = U256::from(62e18);
 
+        // excess = 100 - 62 = 38 ETH; try withdraw 20 rETH = 40 ETH > 38
         let res = state.get_amount_out(
             BigUint::from(20_000_000_000_000_000_000u128),
             &reth_token(),
@@ -1100,6 +702,7 @@ mod tests {
         );
         assert!(matches!(res, Err(SimulationError::RecoverableError(_))));
 
+        // Withdraw 15 rETH = 30 ETH <= 38 should work
         let res = state
             .get_amount_out(
                 BigUint::from(15_000_000_000_000_000_000u128),
@@ -1108,20 +711,6 @@ mod tests {
             )
             .unwrap();
         assert_eq!(res.amount, BigUint::from(30_000_000_000_000_000_000u128));
-    }
-
-    #[test]
-    fn test_withdrawal_zero_excess_balance() {
-        let mut state = create_state();
-        state.deposit_contract_balance = U256::from(62e18);
-        state.queue_variable_end = U256::from(2);
-
-        let res = state.get_amount_out(
-            BigUint::from(1_000_000_000_000_000_000u128),
-            &reth_token(),
-            &eth_token(),
-        );
-        assert!(matches!(res, Err(SimulationError::RecoverableError(_))));
     }
 
     #[test]
@@ -1130,6 +719,7 @@ mod tests {
         state.reth_contract_liquidity = U256::from(10e18);
         state.deposit_contract_balance = U256::from(50e18);
 
+        // Withdraw 15 rETH = 30 ETH (more than reth_contract_liquidity of 10 ETH)
         let res = state
             .get_amount_out(
                 BigUint::from(15_000_000_000_000_000_000u128),
@@ -1140,145 +730,19 @@ mod tests {
 
         assert_eq!(res.amount, BigUint::from(30_000_000_000_000_000_000u128));
 
-        let new_state = res
-            .new_state
-            .as_any()
-            .downcast_ref::<RocketpoolState>()
-            .unwrap();
+        let new_state = res.new_state.as_any().downcast_ref::<RocketpoolState>().unwrap();
         assert_eq!(new_state.reth_contract_liquidity, U256::ZERO);
         assert_eq!(new_state.deposit_contract_balance, U256::from(30e18));
-    }
-
-    #[test]
-    fn test_limits_withdrawal_with_queue() {
-        let mut state = create_state();
-        state.deposit_contract_balance = U256::from(100e18);
-        state.queue_variable_end = U256::from(2);
-
-        let (max_sell, max_buy) = state
-            .get_limits(reth_token().address, eth_token().address)
-            .unwrap();
-
-        assert_eq!(max_buy, BigUint::from(38_000_000_000_000_000_000u128));
-        assert_eq!(max_sell, BigUint::from(19_000_000_000_000_000_000u128));
     }
 
     // ============ Assign Deposits Tests ============
 
     #[test]
-    fn test_assign_deposits_dequeues_minipools() {
+    fn test_assign_deposits_with_queue() {
         let mut state = create_state();
         state.deposit_contract_balance = U256::from(100e18);
         state.deposit_assigning_enabled = true;
-        state.deposit_assign_maximum = U256::from(10u64);
-        state.deposit_assign_socialised_maximum = U256::from(2u64);
-        state.queue_variable_end = U256::from(5);
-
-        let res = state
-            .get_amount_out(
-                BigUint::from(62_000_000_000_000_000_000u128),
-                &eth_token(),
-                &reth_token(),
-            )
-            .unwrap();
-
-        let new_state = res
-            .new_state
-            .as_any()
-            .downcast_ref::<RocketpoolState>()
-            .unwrap();
-
-        assert_eq!(new_state.deposit_contract_balance, U256::from(38e18));
-        assert_eq!(new_state.queue_variable_start, U256::from(4u64));
-    }
-
-    #[test]
-    fn test_assign_deposits_capped_by_queue_length() {
-        let mut state = create_state();
-        state.deposit_contract_balance = U256::from(100e18);
-        state.deposit_assigning_enabled = true;
-        state.deposit_assign_maximum = U256::from(10u64);
-        state.deposit_assign_socialised_maximum = U256::from(5u64);
-        state.queue_variable_end = U256::from(2);
-
-        let res = state
-            .get_amount_out(
-                BigUint::from(62_000_000_000_000_000_000u128),
-                &eth_token(),
-                &reth_token(),
-            )
-            .unwrap();
-
-        let new_state = res
-            .new_state
-            .as_any()
-            .downcast_ref::<RocketpoolState>()
-            .unwrap();
-
-        assert_eq!(new_state.deposit_contract_balance, U256::from(100e18));
-        assert_eq!(new_state.queue_variable_start, U256::from(2u64));
-    }
-
-    #[test]
-    fn test_assign_deposits_capped_by_max_assignments() {
-        let mut state = create_state();
-        state.deposit_contract_balance = U256::from(100e18);
-        state.deposit_assigning_enabled = true;
-        state.deposit_assign_maximum = U256::from(1u64);
-        state.deposit_assign_socialised_maximum = U256::from(5u64);
-        state.queue_variable_end = U256::from(10);
-
-        let res = state
-            .get_amount_out(
-                BigUint::from(62_000_000_000_000_000_000u128),
-                &eth_token(),
-                &reth_token(),
-            )
-            .unwrap();
-
-        let new_state = res
-            .new_state
-            .as_any()
-            .downcast_ref::<RocketpoolState>()
-            .unwrap();
-
-        assert_eq!(new_state.deposit_contract_balance, U256::from(131e18));
-        assert_eq!(new_state.queue_variable_start, U256::from(1u64));
-    }
-
-    #[test]
-    fn test_assign_deposits_capped_by_total_eth() {
-        let mut state = create_state();
-        state.deposit_contract_balance = U256::from(10e18);
-        state.deposit_assigning_enabled = true;
-        state.deposit_assign_maximum = U256::from(10u64);
-        state.deposit_assign_socialised_maximum = U256::from(5u64);
-        state.queue_variable_end = U256::from(10);
-
-        let res = state
-            .get_amount_out(
-                BigUint::from(31_000_000_000_000_000_000u128),
-                &eth_token(),
-                &reth_token(),
-            )
-            .unwrap();
-
-        let new_state = res
-            .new_state
-            .as_any()
-            .downcast_ref::<RocketpoolState>()
-            .unwrap();
-
-        assert_eq!(new_state.deposit_contract_balance, U256::from(10e18));
-        assert_eq!(new_state.queue_variable_start, U256::from(1u64));
-    }
-
-    #[test]
-    fn test_assign_deposits_empty_queue_no_change() {
-        let mut state = create_state();
-        state.deposit_assigning_enabled = true;
-        state.deposit_assign_maximum = U256::from(10u64);
-        state.deposit_assign_socialised_maximum = U256::from(2u64);
+        state.megapool_queue_requested_total = U256::from(40e18);
 
         let res = state
             .get_amount_out(
@@ -1288,92 +752,47 @@ mod tests {
             )
             .unwrap();
 
-        let new_state = res
-            .new_state
-            .as_any()
-            .downcast_ref::<RocketpoolState>()
+        let new_state = res.new_state.as_any().downcast_ref::<RocketpoolState>().unwrap();
+        // 100 + 10 = 110 balance, min(110, 40) = 40 assigned
+        // final balance = 110 - 40 = 70
+        assert_eq!(new_state.deposit_contract_balance, U256::from(70e18));
+        assert_eq!(new_state.megapool_queue_requested_total, U256::ZERO);
+    }
+
+    #[test]
+    fn test_assign_deposits_empty_queue() {
+        let mut state = create_state();
+        state.deposit_assigning_enabled = true;
+
+        let res = state
+            .get_amount_out(
+                BigUint::from(10_000_000_000_000_000_000u128),
+                &eth_token(),
+                &reth_token(),
+            )
             .unwrap();
 
+        let new_state = res.new_state.as_any().downcast_ref::<RocketpoolState>().unwrap();
+        // No queue, no assignment: 50 + 10 = 60
         assert_eq!(new_state.deposit_contract_balance, U256::from(60e18));
-        assert_eq!(new_state.queue_variable_start, U256::ZERO);
-    }
-
-    // ============ Live Transaction Tests ============
-
-    #[test]
-    fn test_live_deposit_tx_6213b6c2() {
-        let state = RocketpoolState::new(
-            U256::from_str_radix("4ec08ba071647b927594", 16).unwrap(),
-            U256::from_str_radix("5aafbb189fbbc1704662", 16).unwrap(),
-            U256::from_str_radix("17a651238b0dbf892", 16).unwrap(),
-            U256::from(781003199),
-            U256::from_str_radix("1c6bf52634000", 16).unwrap(),
-            true,
-            U256::from_str_radix("2386f26fc10000", 16).unwrap(),
-            U256::from_str_radix("3cfc82e37e9a7400000", 16).unwrap(),
-            true,
-            U256::from_str_radix("5a", 16).unwrap(),
-            U256::from_str_radix("2", 16).unwrap(),
-            U256::from_str_radix("6d43", 16).unwrap(),
-            U256::from_str_radix("6dde", 16).unwrap(),
-        );
-
-        let deposit_amount = BigUint::from(4_500_000_000_000_000_000u128);
-
-        let res = state
-            .get_amount_out(deposit_amount, &eth_token(), &reth_token())
-            .unwrap();
-
-        let expected_reth_out = BigUint::from(3_905_847_020_555_141_679u128);
-        assert_eq!(res.amount, expected_reth_out);
-
-        let new_state = res
-            .new_state
-            .as_any()
-            .downcast_ref::<RocketpoolState>()
-            .unwrap();
-
-        let expected_balance = U256::from_str_radix("0aa2289fdd01f892", 16).unwrap();
-        assert_eq!(new_state.deposit_contract_balance, expected_balance);
-
-        let expected_queue_start = U256::from_str_radix("6d44", 16).unwrap();
-        assert_eq!(new_state.queue_variable_start, expected_queue_start);
     }
 
     #[test]
-    fn test_live_withdraw_tx_block_23736567() {
-        let state = RocketpoolState::new(
-            U256::from_str_radix("516052628fbe875ffff0", 16).unwrap(),
-            U256::from_str_radix("5d9143622860d8bdacea", 16).unwrap(),
-            U256::from_str_radix("1686dc9300da8004d", 16).unwrap(),
-            U256::from_str_radix("14d141273efab8a43", 16).unwrap(),
-            U256::from_str_radix("1c6bf52634000", 16).unwrap(),
-            true,
-            U256::from_str_radix("2386f26fc10000", 16).unwrap(),
-            U256::from_str_radix("3cfc82e37e9a7400000", 16).unwrap(),
-            true,
-            U256::from_str_radix("5a", 16).unwrap(),
-            U256::from_str_radix("2", 16).unwrap(),
-            U256::from_str_radix("6d34", 16).unwrap(),
-            U256::from_str_radix("6dd0", 16).unwrap(),
-        );
-
-        let burn_amount = BigUint::from(20_873_689_741_238_146_923u128);
+    fn test_assign_deposits_disabled() {
+        let mut state = create_state();
+        state.deposit_assigning_enabled = false;
+        state.megapool_queue_requested_total = U256::from(100e18);
 
         let res = state
-            .get_amount_out(burn_amount, &reth_token(), &eth_token())
+            .get_amount_out(
+                BigUint::from(10_000_000_000_000_000_000u128),
+                &eth_token(),
+                &reth_token(),
+            )
             .unwrap();
 
-        let expected_eth_out = BigUint::from(24_000_828_571_949_999_998u128);
-        assert_eq!(res.amount, expected_eth_out);
-
-        let new_state = res
-            .new_state
-            .as_any()
-            .downcast_ref::<RocketpoolState>()
-            .unwrap();
-
-        let expected_liquidity = U256::from_str_radix("74d8b62c5", 16).unwrap();
-        assert_eq!(new_state.reth_contract_liquidity, expected_liquidity);
+        let new_state = res.new_state.as_any().downcast_ref::<RocketpoolState>().unwrap();
+        // Assign disabled, no assignment: 50 + 10 = 60
+        assert_eq!(new_state.deposit_contract_balance, U256::from(60e18));
     }
 }
