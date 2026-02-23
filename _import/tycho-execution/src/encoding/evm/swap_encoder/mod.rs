@@ -6,7 +6,6 @@ mod ekubo;
 mod erc_4626;
 mod fluid_v1;
 mod hashflow;
-mod lido;
 mod maverick_v2;
 mod rocketpool;
 mod slipstreams;

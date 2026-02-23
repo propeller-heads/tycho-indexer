@@ -10,11 +10,10 @@ use crate::encoding::{
             balancer_v2::BalancerV2SwapEncoder, balancer_v3::BalancerV3SwapEncoder,
             bebop::BebopSwapEncoder, curve::CurveSwapEncoder, ekubo::EkuboSwapEncoder,
             erc_4626::ERC4626SwapEncoder, fluid_v1::FluidV1SwapEncoder,
-            hashflow::HashflowSwapEncoder, lido::LidoSwapEncoder,
-            maverick_v2::MaverickV2SwapEncoder, rocketpool::RocketpoolSwapEncoder,
-            slipstreams::SlipstreamsSwapEncoder, uniswap_v2::UniswapV2SwapEncoder,
-            uniswap_v3::UniswapV3SwapEncoder, uniswap_v4::UniswapV4SwapEncoder,
-            weth::WethSwapEncoder,
+            hashflow::HashflowSwapEncoder, maverick_v2::MaverickV2SwapEncoder,
+            rocketpool::RocketpoolSwapEncoder, slipstreams::SlipstreamsSwapEncoder,
+            uniswap_v2::UniswapV2SwapEncoder, uniswap_v3::UniswapV3SwapEncoder,
+            uniswap_v4::UniswapV4SwapEncoder, weth::WethSwapEncoder,
         },
     },
     swap_encoder::SwapEncoder,
@@ -145,7 +144,6 @@ impl SwapEncoderRegistry {
             "erc4626" => {
                 Ok(Box::new(ERC4626SwapEncoder::new(executor_address, self.chain, config)?))
             }
-            "lido" => Ok(Box::new(LidoSwapEncoder::new(executor_address, self.chain, config)?)),
             "velodrome_slipstreams" => {
                 Ok(Box::new(SlipstreamsSwapEncoder::new(executor_address, self.chain, config)?))
             }
