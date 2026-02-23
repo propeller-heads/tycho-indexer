@@ -13,6 +13,6 @@ tests:
           - "0xae78736Cd615f374D3085123A210448E74Fc6393"
           - "0x0000000000000000000000000000000000000000"
         static_attributes: { }
-        creation_tx: "0x24ae3e31c87739794e4f2ad49aa6f47760901bb2ba52de6f7a19e560820b4425" # Saturn I activation tx
+        creation_tx: "0x505e00ccb4b1554e7227be91eb92950d485ecf68e3ad4d2659b1c365617bc4a7" # First tx at starting block 24479994
         skip_simulation: false
         skip_execution: true
