@@ -17,11 +17,26 @@ pub const ROCKET_NETWORK_BALANCES_ADDRESS_V2: [u8; 20] =
 /// Rocket Network Balances was upgraded to v3 at the same block 20107789
 pub const ROCKET_NETWORK_BALANCES_ADDRESS_V3: [u8; 20] =
     hex!("6Cc65bF618F55ce2433f9D8d827Fc44117D81399");
+/// Rocket Network Balances was upgraded to v4 at Saturn activation block 24479942
+pub const ROCKET_NETWORK_BALANCES_ADDRESS_V4: [u8; 20] =
+    hex!("1D9F14C6Bfd8358b589964baD8665AdD248E9473");
 pub const ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS: [u8; 20] =
     hex!("2D627A50Dc1C4EDa73E42858E8460b0eCF300b25");
 pub const ROCKET_DEPOSIT_POOL_ADDRESS_V1_2: [u8; 20] =
     hex!("DD3f50F8A6CafbE9b31a427582963f465E745AF8");
+/// Rocket Deposit Pool v4 deployed with Saturn I upgrade, activated at block 24479942
+pub const ROCKET_DEPOSIT_POOL_ADDRESS_V4: [u8; 20] =
+    hex!("CE15294273CFb9D9b628F4D61636623decDF4fdC");
 
+/// Saturn I activation block — the block where v4 contracts were registered in RocketStorage.
+/// All v4 contract events start from this block.
+pub const SATURN_ACTIVATION_BLOCK: u64 = 24479942;
+
+/// All storage slots for initial state and settings tracking.
+/// These are EVM storage slots in RocketStorage (base slot 2 for uintStorage, 5 for boolStorage).
+/// The settings key format is: keccak256(keccak256("dao.protocol.setting.deposit") ++ settingPath)
+/// and the EVM slot is: keccak256(abi.encode(key, mapping_base_slot)).
+/// These slots are UNCHANGED between v3 and v4 because the eternal storage key strings are the same.
 pub(crate) const ALL_STORAGE_SLOTS: [StorageLocation; 10] = [
     ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT,
     DEPOSITS_ENABLED_SLOT,
@@ -35,6 +50,13 @@ pub(crate) const ALL_STORAGE_SLOTS: [StorageLocation; 10] = [
     QUEUE_VARIABLE_END_SLOT,
 ];
 
+/// Storage slots added in Saturn v4 for megapool queue tracking.
+pub(crate) const SATURN_STORAGE_SLOTS: [StorageLocation; 3] = [
+    MEGAPOOL_QUEUE_REQUESTED_TOTAL_SLOT,
+    MEGAPOOL_QUEUE_INDEX_SLOT,
+    EXPRESS_QUEUE_RATE_SLOT,
+];
+
 // ----------- Contract: Rocket Vault -----------
 pub(crate) const ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT: StorageLocation = StorageLocation {
     name: "deposit_contract_balance",
@@ -44,7 +66,7 @@ pub(crate) const ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT: StorageLocation = Storage
     signed: false,
 };
 
-// ----------- Contract: Rocket Storage -----------
+// ----------- Contract: Rocket Storage (pre-Saturn queue) -----------
 pub(crate) const QUEUE_VARIABLE_START_SLOT: StorageLocation = StorageLocation {
     name: "queue_variable_start",
     slot: hex!("3d568e1d0910a705e47c1e34016aabfe207c556ec3d7b6bced9112251062388b"),
@@ -61,6 +83,7 @@ pub(crate) const QUEUE_VARIABLE_END_SLOT: StorageLocation = StorageLocation {
     signed: false,
 };
 
+// ----------- Contract: Rocket Storage (settings — unchanged between v3 and v4) -----------
 pub(crate) const DEPOSITS_ENABLED_SLOT: StorageLocation = StorageLocation {
     name: "deposits_enabled",
     slot: hex!("7bd5d699fdfcd0cf7b26d3fc339f1567cecb978e8ce24b7b6ed7d192e1bbb663"),
@@ -117,7 +140,39 @@ pub(crate) const DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT: StorageLocation = Stora
     signed: false,
 };
 
-// ----------- Queue Keys (keccak256 hashes) -----------
+// ----------- Contract: Rocket Storage (Saturn v4 megapool queue) -----------
+/// Total ETH requested across both express and standard megapool queues.
+/// Storage key: keccak256("deposit.pool.requested.total") in uintStorage (base slot 2).
+pub(crate) const MEGAPOOL_QUEUE_REQUESTED_TOTAL_SLOT: StorageLocation = StorageLocation {
+    name: "megapool_queue_requested_total",
+    slot: hex!("70acbb59da22199e2dc0759d60b0224ec935b6c5c70975c698025712f413ccdd"),
+    offset: 0,
+    number_of_bytes: 32,
+    signed: false,
+};
+
+/// Round-robin index for express/standard queue assignment.
+/// Storage key: keccak256("megapool.queue.index") in uintStorage (base slot 2).
+pub(crate) const MEGAPOOL_QUEUE_INDEX_SLOT: StorageLocation = StorageLocation {
+    name: "megapool_queue_index",
+    slot: hex!("f64759318134d5196993dc645609e8125eff4429ad94d537e335f2d6388069d7"),
+    offset: 0,
+    number_of_bytes: 32,
+    signed: false,
+};
+
+/// Express queue rate: how many express assignments per standard assignment.
+/// Storage key: keccak256(keccak256("dao.protocol.setting.deposit") ++ "express.queue.rate")
+/// in uintStorage (base slot 2).
+pub(crate) const EXPRESS_QUEUE_RATE_SLOT: StorageLocation = StorageLocation {
+    name: "express_queue_rate",
+    slot: hex!("76db7078bc37e9c3634c81dc384e741875c5d95ee6d5bcae0fb5d844d3189423"),
+    offset: 0,
+    number_of_bytes: 32,
+    signed: false,
+};
+
+// ----------- Queue Keys (keccak256 hashes) — pre-Saturn only -----------
 // These are used to identify which queue type an event belongs to
 pub(crate) const QUEUE_KEY_FULL: [u8; 32] =
     hex!("885adb3a1c7cf88a1f3627e1265f3090cd728e0fc96765288e91e8777267ff78");

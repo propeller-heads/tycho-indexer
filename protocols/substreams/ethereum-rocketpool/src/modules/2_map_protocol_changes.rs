@@ -1,17 +1,20 @@
 use crate::{
     abi::{
-        rocket_dao_protocol_proposal, rocket_deposit_pool, rocket_minipool_queue,
-        rocket_network_balances_v2, rocket_network_balances_v3, rocket_token_reth,
+        rocket_dao_protocol_proposal, rocket_deposit_pool, rocket_deposit_pool_v4,
+        rocket_minipool_queue, rocket_network_balances_v2, rocket_network_balances_v3,
+        rocket_token_reth,
     },
     constants::{
         ALL_STORAGE_SLOTS, DEPOSITS_ENABLED_SLOT, DEPOSIT_ASSIGN_ENABLED_SLOT,
         DEPOSIT_ASSIGN_MAXIMUM_SLOT, DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT, DEPOSIT_FEE_SLOT,
-        ETH_ADDRESS, MAX_DEPOSIT_POOL_SIZE_SLOT, MIN_DEPOSIT_AMOUNT_SLOT, QUEUE_KEY_FULL,
-        QUEUE_KEY_HALF, QUEUE_KEY_VARIABLE, QUEUE_VARIABLE_END_SLOT, QUEUE_VARIABLE_START_SLOT,
-        RETH_ADDRESS, ROCKET_DAO_MINIPOOL_QUEUE_ADDRESS, ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS,
-        ROCKET_DEPOSIT_POOL_ADDRESS_V1_2, ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT,
+        ETH_ADDRESS, EXPRESS_QUEUE_RATE_SLOT, MAX_DEPOSIT_POOL_SIZE_SLOT, MIN_DEPOSIT_AMOUNT_SLOT,
+        QUEUE_KEY_FULL, QUEUE_KEY_HALF, QUEUE_KEY_VARIABLE, QUEUE_VARIABLE_END_SLOT,
+        QUEUE_VARIABLE_START_SLOT, RETH_ADDRESS, ROCKET_DAO_MINIPOOL_QUEUE_ADDRESS,
+        ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS, ROCKET_DEPOSIT_POOL_ADDRESS_V1_2,
+        ROCKET_DEPOSIT_POOL_ADDRESS_V4, ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT,
         ROCKET_NETWORK_BALANCES_ADDRESS_V2, ROCKET_NETWORK_BALANCES_ADDRESS_V3,
-        ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS, ROCKET_VAULT_ADDRESS,
+        ROCKET_NETWORK_BALANCES_ADDRESS_V4, ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS,
+        ROCKET_VAULT_ADDRESS, SATURN_ACTIVATION_BLOCK, SATURN_STORAGE_SLOTS,
     },
     utils::{get_changed_attributes, hex_to_bytes},
 };
@@ -53,14 +56,20 @@ fn map_protocol_changes(
     if component_created {
         initialize_protocol_component(&params, protocol_components, &mut transaction_changes)?;
     } else {
-        update_deposit_liquidity(&block, &mut transaction_changes);
+        let is_post_saturn = block.number >= SATURN_ACTIVATION_BLOCK;
+
+        update_deposit_liquidity(&block, is_post_saturn, &mut transaction_changes);
         update_reth_liquidity(&block, &mut transaction_changes);
 
-        update_network_balance(&block, &mut transaction_changes);
+        update_network_balance(&block, is_post_saturn, &mut transaction_changes);
 
-        update_protocol_settings(&block, &mut transaction_changes);
+        update_protocol_settings(&block, is_post_saturn, &mut transaction_changes);
 
-        update_minipool_queue_sizes(&block, &mut transaction_changes)?;
+        if is_post_saturn {
+            update_megapool_queue_state(&block, &mut transaction_changes);
+        } else {
+            update_minipool_queue_sizes(&block, &mut transaction_changes)?;
+        }
     }
 
     Ok(BlockChanges {
@@ -128,30 +137,40 @@ fn initialize_protocol_component(
 }
 
 /// Updates deposit contract liquidity based on deposit pool events.
-/// This is part of the overall Rocket Pool ETH liquidity tracking.
 ///
 /// Listens for DepositReceived, DepositAssigned, DepositRecycled, and ExcessWithdrawn events
-/// from the RocketDepositPool contracts and fetches the updated ETH balance from RocketVault's
-/// etherBalances storage slot.
-/// The reason we do not use the event parameters directly is that they only contain the delta
-/// change, whereas we want to track the absolute balance. We have decided against using the
-/// balance stores to accumulate the changes due to added complexity and need to start from the
-/// first deployed Deposit Pool contract, while with the storage slot approach we can start
-/// indexing at any point in time (in our case, at Deposit Pool V1.2 deployment).
+/// from the RocketDepositPool contracts (v1.2 pre-Saturn, v4 post-Saturn) and fetches the
+/// updated ETH balance from RocketVault's etherBalances storage slot.
 fn update_deposit_liquidity(
     block: &eth::v2::Block,
+    is_post_saturn: bool,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
+    let deposit_pool_address = if is_post_saturn {
+        ROCKET_DEPOSIT_POOL_ADDRESS_V4
+    } else {
+        ROCKET_DEPOSIT_POOL_ADDRESS_V1_2
+    };
+
     for log in block.logs() {
-        // Only process events from RocketDepositPool contracts
-        if log.log.address != ROCKET_DEPOSIT_POOL_ADDRESS_V1_2 {
+        if log.log.address != deposit_pool_address {
             continue;
         }
 
-        let is_deposit_event = rocket_deposit_pool::events::DepositReceived::match_log(log.log) ||
-            rocket_deposit_pool::events::DepositAssigned::match_log(log.log) ||
-            rocket_deposit_pool::events::DepositRecycled::match_log(log.log) ||
-            rocket_deposit_pool::events::ExcessWithdrawn::match_log(log.log);
+        // Both v3 and v4 deposit pools emit the same DepositReceived/DepositAssigned/
+        // DepositRecycled/ExcessWithdrawn events with the same signatures.
+        let is_deposit_event = if is_post_saturn {
+            rocket_deposit_pool_v4::events::DepositReceived::match_log(log.log)
+                || rocket_deposit_pool_v4::events::DepositAssigned::match_log(log.log)
+                || rocket_deposit_pool_v4::events::DepositRecycled::match_log(log.log)
+                || rocket_deposit_pool_v4::events::ExcessWithdrawn::match_log(log.log)
+                || rocket_deposit_pool_v4::events::FundsAssigned::match_log(log.log)
+        } else {
+            rocket_deposit_pool::events::DepositReceived::match_log(log.log)
+                || rocket_deposit_pool::events::DepositAssigned::match_log(log.log)
+                || rocket_deposit_pool::events::DepositRecycled::match_log(log.log)
+                || rocket_deposit_pool::events::ExcessWithdrawn::match_log(log.log)
+        };
 
         if !is_deposit_event {
             continue;
@@ -177,26 +196,21 @@ fn update_deposit_liquidity(
 }
 
 /// Updates rETH contract liquidity based on rETH events.
-/// This is part of the overall Rocket Pool ETH liquidity tracking.
 ///
 /// Listens for EtherDeposited and TokensBurned events from the RocketTokenRETH contract and
 /// fetches the updated native ETH balance from the transaction's balance changes.
-///
-/// The reason we do not use the event parameters directly is that they only contain the delta
-/// change, and would force us to start indexing from the token creation.
+/// Unchanged between v3 and v4 — the rETH token contract is the same.
 fn update_reth_liquidity(
     block: &eth::v2::Block,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
     for log in block.logs() {
-        // Only process events from the RocketTokenRETH contract
         if log.log.address != RETH_ADDRESS {
             continue;
         }
 
-        // Check if any of the relevant rETH token events fired
-        let is_eth_event = rocket_token_reth::events::EtherDeposited::match_log(log.log) ||
-            rocket_token_reth::events::TokensBurned::match_log(log.log);
+        let is_eth_event = rocket_token_reth::events::EtherDeposited::match_log(log.log)
+            || rocket_token_reth::events::TokensBurned::match_log(log.log);
 
         if !is_eth_event {
             continue;
@@ -204,7 +218,6 @@ fn update_reth_liquidity(
 
         let tx = log.receipt.transaction;
 
-        // Extract the updated ETH balance from the transaction's balance changes
         let reth_balance = tx
             .calls
             .iter()
@@ -227,8 +240,13 @@ fn update_reth_liquidity(
 }
 
 /// Extracts Rocket Pool network balance updates from the block logs.
+///
+/// Supports v2, v3, and v4 RocketNetworkBalances contracts. The v3 and v4 contracts share the
+/// same BalancesUpdated event signature (both have 6 fields with `block` indexed), so the v3
+/// decoder works for both.
 fn update_network_balance(
     block: &eth::v2::Block,
+    is_post_saturn: bool,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
     for log in block.logs() {
@@ -236,7 +254,11 @@ fn update_network_balance(
         let balance_update = if log.log.address == ROCKET_NETWORK_BALANCES_ADDRESS_V2 {
             rocket_network_balances_v2::events::BalancesUpdated::match_and_decode(log)
                 .map(|event| (event.total_eth, event.reth_supply))
-        } else if log.log.address == ROCKET_NETWORK_BALANCES_ADDRESS_V3 {
+        } else if log.log.address == ROCKET_NETWORK_BALANCES_ADDRESS_V3 && !is_post_saturn {
+            rocket_network_balances_v3::events::BalancesUpdated::match_and_decode(log)
+                .map(|event| (event.total_eth, event.reth_supply))
+        } else if log.log.address == ROCKET_NETWORK_BALANCES_ADDRESS_V4 && is_post_saturn {
+            // v4 BalancesUpdated has the same signature as v3, so we can reuse the v3 decoder
             rocket_network_balances_v3::events::BalancesUpdated::match_and_decode(log)
                 .map(|event| (event.total_eth, event.reth_supply))
         } else {
@@ -285,19 +307,69 @@ fn update_network_balance(
 
 /// Extracts protocol settings updates from the block logs.
 ///
-/// Note: that the protocol settings updates can only be triggered by executing DAO proposals, hence
-/// it is sufficient to first check for the `ProposalExecuted` event and only then check the
-/// associated storage changes.
+/// Settings updates can only be triggered by executing DAO proposals, so we first check for the
+/// `ProposalExecuted` event and only then check the associated storage changes. Post-Saturn, we
+/// also track the `express_queue_rate` setting.
 fn update_protocol_settings(
+    block: &eth::v2::Block,
+    is_post_saturn: bool,
+    transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
+) {
+    for log in block.logs() {
+        if !(log.log.address == ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS
+            && rocket_dao_protocol_proposal::events::ProposalExecuted::match_log(log.log))
+        {
+            continue;
+        }
+
+        let tx = log.receipt.transaction;
+
+        let mut tracked_slots = vec![
+            DEPOSITS_ENABLED_SLOT,
+            DEPOSIT_ASSIGN_ENABLED_SLOT,
+            DEPOSIT_ASSIGN_MAXIMUM_SLOT,
+            DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT,
+            MIN_DEPOSIT_AMOUNT_SLOT,
+            MAX_DEPOSIT_POOL_SIZE_SLOT,
+            DEPOSIT_FEE_SLOT,
+        ];
+        if is_post_saturn {
+            tracked_slots.push(EXPRESS_QUEUE_RATE_SLOT);
+        }
+
+        let attributes = tx
+            .calls
+            .iter()
+            .filter(|call| !call.state_reverted)
+            .filter(|call| call.address == ROCKET_STORAGE_ADDRESS)
+            .flat_map(|call| get_changed_attributes(&call.storage_changes, &tracked_slots))
+            .collect::<Vec<_>>();
+
+        add_entity_change_if_needed(attributes, tx, transaction_changes);
+    }
+}
+
+/// Updates megapool queue state for Saturn v4.
+///
+/// Listens for FundsRequested, FundsAssigned, and QueueExited events from the v4
+/// RocketDepositPool contract, then extracts the updated queue storage values from
+/// RocketStorage. These events modify `deposit.pool.requested.total` and
+/// `megapool.queue.index`.
+fn update_megapool_queue_state(
     block: &eth::v2::Block,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
     for log in block.logs() {
-        // If the log is not a ProposalExecuted event from the DAO Proposal contract, skip it as no
-        // protocol settings could have changed.
-        if !(log.log.address == ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS &&
-            rocket_dao_protocol_proposal::events::ProposalExecuted::match_log(log.log))
-        {
+        if log.log.address != ROCKET_DEPOSIT_POOL_ADDRESS_V4 {
+            continue;
+        }
+
+        let is_queue_event =
+            rocket_deposit_pool_v4::events::FundsRequested::match_log(log.log)
+                || rocket_deposit_pool_v4::events::FundsAssigned::match_log(log.log)
+                || rocket_deposit_pool_v4::events::QueueExited::match_log(log.log);
+
+        if !is_queue_event {
             continue;
         }
 
@@ -308,69 +380,47 @@ fn update_protocol_settings(
             .iter()
             .filter(|call| !call.state_reverted)
             .filter(|call| call.address == ROCKET_STORAGE_ADDRESS)
-            .flat_map(|call| {
-                get_changed_attributes(
-                    &call.storage_changes,
-                    &[
-                        DEPOSITS_ENABLED_SLOT,
-                        DEPOSIT_ASSIGN_ENABLED_SLOT,
-                        DEPOSIT_ASSIGN_MAXIMUM_SLOT,
-                        DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT,
-                        MIN_DEPOSIT_AMOUNT_SLOT,
-                        MAX_DEPOSIT_POOL_SIZE_SLOT,
-                        DEPOSIT_FEE_SLOT,
-                    ],
-                )
-            })
+            .flat_map(|call| get_changed_attributes(&call.storage_changes, &SATURN_STORAGE_SLOTS))
             .collect::<Vec<_>>();
 
         add_entity_change_if_needed(attributes, tx, transaction_changes);
     }
 }
 
-/// Updates minipool queue sizes based on queue events.
+/// Updates minipool queue sizes based on queue events (pre-Saturn only).
 ///
 /// Listens for MinipoolEnqueued, MinipoolDequeued, and MinipoolRemoved events from the
 /// RocketMinipoolQueue contract and fetches the updated queue storage values from RocketStorage.
-/// - MinipoolEnqueued: updates the end slot for the variable queue
-/// - MinipoolDequeued: updates the start slot for the variable queue
-/// - MinipoolRemoved: updates the end slot for the variable queue
 fn update_minipool_queue_sizes(
     block: &eth::v2::Block,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) -> Result<()> {
     for log in block.logs() {
-        // Only process events from the RocketMinipoolQueue contract
         if log.log.address != ROCKET_DAO_MINIPOOL_QUEUE_ADDRESS {
             continue;
         }
 
         let tx = log.receipt.transaction;
 
-        // Determine which storage slot to check based on the event type and queue_id
         let storage_slot = if let Some(event) =
             rocket_minipool_queue::events::MinipoolEnqueued::match_and_decode(log)
         {
             assert_variable_queue_id(event.queue_id)?;
-
             QUEUE_VARIABLE_END_SLOT
         } else if let Some(event) =
             rocket_minipool_queue::events::MinipoolDequeued::match_and_decode(log)
         {
             assert_variable_queue_id(event.queue_id)?;
-
             QUEUE_VARIABLE_START_SLOT
         } else if let Some(event) =
             rocket_minipool_queue::events::MinipoolRemoved::match_and_decode(log)
         {
             assert_variable_queue_id(event.queue_id)?;
-
             QUEUE_VARIABLE_END_SLOT
         } else {
             continue;
         };
 
-        // Extract changed attributes from RocketStorage contract storage changes
         let slots = &[storage_slot];
         let attributes = tx
             .calls
@@ -386,14 +436,7 @@ fn update_minipool_queue_sizes(
     Ok(())
 }
 
-/// Asserts that the provided queue_id corresponds to the variable queue.
-///
-/// Since the Deposit Pool V1.2 upgrade, the full and half queues can no longer receive minipools,
-/// and as they were empty at the time of the upgrade, they became idle and should never trigger any
-/// events. These error cases are thus defensive checks that should be unreachable in practice. Even
-/// if Rocket Pool upgrades to a new queue contract with different queue types, the
-/// ROCKET_DAO_MINIPOOL_QUEUE_ADDRESS would need to be explicitly updated as otherwise we'd filter
-/// out those events entirely.
+/// Asserts that the provided queue_id corresponds to the variable queue (pre-Saturn only).
 fn assert_variable_queue_id(queue_id: [u8; 32]) -> Result<()> {
     match queue_id {
         QUEUE_KEY_VARIABLE => Ok(()),
