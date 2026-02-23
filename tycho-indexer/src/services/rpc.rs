@@ -758,7 +758,7 @@ where
                             .min(total as usize),
                     )
                     .take(pagination_params.page_size as usize)
-                    .map(|c| dto::ProtocolComponent::from(c))
+                    .map(dto::ProtocolComponent::from)
                     .collect();
 
                 return Ok(dto::ProtocolComponentRequestResponse::new(
@@ -813,7 +813,7 @@ where
 
                 let response_components = components
                     .into_iter()
-                    .map(|c| dto::ProtocolComponent::from(c))
+                    .map(dto::ProtocolComponent::from)
                     .collect::<Vec<dto::ProtocolComponent>>();
                 Ok(dto::ProtocolComponentRequestResponse::new(
                     response_components,
