@@ -1,3 +1,10 @@
+## [0.244.0](https://github.com/propeller-heads/tycho-simulation/compare/0.243.0...0.244.0) (2026-02-23)
+
+
+### Features
+
+* **evm:** wire query_pool_swap for remaining EVM protocols ([a129ced](https://github.com/propeller-heads/tycho-simulation/commit/a129ced3d510281600a193852aa53bd0bb373c17))
+
 ## [0.243.0](https://github.com/propeller-heads/tycho-simulation/compare/0.242.0...0.243.0) (2026-02-20)
 
 
