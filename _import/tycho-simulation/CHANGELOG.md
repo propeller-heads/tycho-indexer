@@ -1,3 +1,10 @@
+## [0.245.0](https://github.com/propeller-heads/tycho-simulation/compare/0.244.0...0.245.0) (2026-02-24)
+
+
+### Features
+
+* remove lido ([b9a5793](https://github.com/propeller-heads/tycho-simulation/commit/b9a5793c208a20eb31caefab01df1412707f8790))
+
 ## [0.244.0](https://github.com/propeller-heads/tycho-simulation/compare/0.243.0...0.244.0) (2026-02-23)
 
 
