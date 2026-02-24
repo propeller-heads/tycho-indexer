@@ -266,6 +266,10 @@ impl PostgresGateway {
                     schema::protocol_component_holds_token::protocol_component_id
                         .eq_any(protocol_component_ids.clone()),
                 )
+                .order_by((
+                    schema::protocol_component_holds_token::protocol_component_id.asc(),
+                    schema::protocol_component_holds_token::token_index.asc(),
+                ))
                 .load::<(i64, Address)>(conn)
                 .await
                 .map_err(PostgresError::from)?;
@@ -513,10 +517,11 @@ impl PostgresGateway {
                 pc.tokens
                     .clone()
                     .into_iter()
-                    .map(move |add| (*pc_id, add))
-                    .collect::<Vec<(i64, Address)>>()
+                    .enumerate()
+                    .map(move |(idx, add)| (*pc_id, add, idx as i16))
+                    .collect::<Vec<(i64, Address, i16)>>()
             })
-            .collect::<Vec<(i64, Address)>>();
+            .collect::<Vec<(i64, Address, i16)>>();
 
         let token_add_by_id: HashMap<Address, i64> = token
             .inner_join(account)
@@ -534,13 +539,14 @@ impl PostgresGateway {
             StorageError,
         > = pc_tokens_map
             .iter()
-            .map(|(pc_id, t_address)| {
+            .map(|(pc_id, t_address, token_idx)| {
                 let t_id = token_add_by_id
                     .get(t_address)
                     .ok_or(StorageError::NotFound("Token".to_string(), t_address.to_string()))?;
                 Ok(orm::NewProtocolComponentHoldsToken {
                     protocol_component_id: *pc_id,
                     token_id: *t_id,
+                    token_index: *token_idx,
                 })
             })
             .collect();

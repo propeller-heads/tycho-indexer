@@ -1260,11 +1260,14 @@ pub mod db_fixtures {
                 .values(
                     t_ids
                         .iter()
-                        .map(|t_id| {
+                        .enumerate()
+                        .map(|(t_idx, t_id)| {
                             (
                                 schema::protocol_component_holds_token::protocol_component_id
                                     .eq(component_id),
                                 schema::protocol_component_holds_token::token_id.eq(t_id),
+                                schema::protocol_component_holds_token::token_index
+                                    .eq(t_idx as i16),
                             )
                         })
                         .collect::<Vec<_>>(),
