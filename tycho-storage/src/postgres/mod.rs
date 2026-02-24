@@ -1266,7 +1266,8 @@ pub mod db_fixtures {
                                 schema::protocol_component_holds_token::protocol_component_id
                                     .eq(component_id),
                                 schema::protocol_component_holds_token::token_id.eq(t_id),
-                                schema::protocol_component_holds_token::token_index.eq(t_idx as i16),
+                                schema::protocol_component_holds_token::token_index
+                                    .eq(t_idx as i16),
                             )
                         })
                         .collect::<Vec<_>>(),
