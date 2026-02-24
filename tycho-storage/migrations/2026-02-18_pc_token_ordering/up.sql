@@ -1,3 +1,6 @@
+-- This trigger drop was missed in a previous migration
+DROP TRIGGER IF EXISTS audit_table_token_price ON protocol_component_holds_token;
+
 -- First add the column without any constraints
 ALTER TABLE protocol_component_holds_token ADD COLUMN token_index SMALLINT DEFAULT NULL;
 
