@@ -48,9 +48,6 @@ pub struct RocketpoolState {
     pub megapool_queue_index: U256,
     /// How many express assignments per standard assignment (e.g., 4)
     pub express_queue_rate: U256,
-    /// Target rETH collateral rate as fraction of total ETH, scaled by 1e18.
-    /// E.g. 1e16 = 1%. Used by processDeposit() to route ETH to rETH contract first.
-    pub reth_collateral_target: U256,
 }
 
 impl RocketpoolState {
@@ -70,7 +67,6 @@ impl RocketpoolState {
         megapool_queue_requested_total: U256,
         megapool_queue_index: U256,
         express_queue_rate: U256,
-        reth_collateral_target: U256,
     ) -> Self {
         Self {
             reth_supply,
@@ -87,7 +83,6 @@ impl RocketpoolState {
             megapool_queue_requested_total,
             megapool_queue_index,
             express_queue_rate,
-            reth_collateral_target,
         }
     }
 
@@ -149,35 +144,6 @@ impl RocketpoolState {
     fn get_total_available_for_withdrawal(&self) -> Result<U256, SimulationError> {
         let deposit_pool_excess = self.get_deposit_pool_excess_balance()?;
         safe_add_u256(self.reth_contract_liquidity, deposit_pool_excess)
-    }
-
-    /// Returns the ETH shortfall for the rETH collateral buffer.
-    ///
-    /// Formula from RocketDepositPool._getRethCollateralShortfall():
-    ///   targetBalance = totalEth * rethCollateralTarget / 1e18
-    ///   shortfall = targetBalance > rethBalance ? targetBalance - rethBalance : 0
-    fn get_reth_collateral_shortfall(&self) -> Result<U256, SimulationError> {
-        if self.reth_collateral_target.is_zero() {
-            return Ok(U256::ZERO);
-        }
-        let target_balance =
-            mul_div(self.total_eth, self.reth_collateral_target, U256::from(DEPOSIT_FEE_BASE))?;
-        if target_balance > self.reth_contract_liquidity {
-            safe_sub_u256(target_balance, self.reth_contract_liquidity)
-        } else {
-            Ok(U256::ZERO)
-        }
-    }
-
-    /// Splits a deposit amount into (to_reth, to_vault) following v4's processDeposit() logic.
-    ///
-    /// processDeposit() routes ETH to the rETH contract first (up to collateral shortfall),
-    /// then sends the remainder to the vault.
-    fn split_deposit(&self, amount: U256) -> Result<(U256, U256), SimulationError> {
-        let shortfall = self.get_reth_collateral_shortfall()?;
-        let to_reth = amount.min(shortfall);
-        let to_vault = safe_sub_u256(amount, to_reth)?;
-        Ok((to_reth, to_vault))
     }
 
     /// Approximates ETH assigned from the deposit pool after a deposit.
@@ -274,12 +240,8 @@ impl ProtocolSim for RocketpoolState {
 
         let mut new_state = self.clone();
         if is_depositing_eth {
-            // v4 processDeposit() splits: ETH → rETH contract (collateral buffer) then vault
-            let (to_reth, to_vault) = new_state.split_deposit(amount_in)?;
-            new_state.reth_contract_liquidity =
-                safe_add_u256(new_state.reth_contract_liquidity, to_reth)?;
             new_state.deposit_contract_balance =
-                safe_add_u256(new_state.deposit_contract_balance, to_vault)?;
+                safe_add_u256(new_state.deposit_contract_balance, amount_in)?;
 
             let eth_assigned = new_state.calculate_assign_deposits();
             if eth_assigned > U256::ZERO {
@@ -392,10 +354,6 @@ impl ProtocolSim for RocketpoolState {
             .updated_attributes
             .get("express_queue_rate")
             .map_or(self.express_queue_rate, U256::from_bytes);
-        self.reth_collateral_target = delta
-            .updated_attributes
-            .get("reth_collateral_target")
-            .map_or(self.reth_collateral_target, U256::from_bytes);
 
         Ok(())
     }
@@ -474,8 +432,6 @@ mod tests {
             U256::ZERO,        // megapool_queue_requested_total
             U256::ZERO,        // megapool_queue_index
             U256::from(4u64),  // express_queue_rate: 4
-            U256::from_str_radix("2386f26fc10000", 16).unwrap(), /* reth_collateral_target: 1e16
-                                * (1%) */
         )
     }
 
@@ -699,8 +655,7 @@ mod tests {
             .as_any()
             .downcast_ref::<RocketpoolState>()
             .unwrap();
-        assert_eq!(new_state.deposit_contract_balance, U256::from(58e18));
-        assert_eq!(new_state.reth_contract_liquidity, U256::from(2e18));
+        assert_eq!(new_state.deposit_contract_balance, U256::from(60e18));
     }
 
     #[test]
@@ -839,11 +794,9 @@ mod tests {
             .as_any()
             .downcast_ref::<RocketpoolState>()
             .unwrap();
-        // Collateral shortfall = 2 (target = 200*1% = 2, reth_liq = 0).
-        // 10 ETH deposit: to_reth = 2, to_vault = 8.
-        // balance = 100 + 8 = 108, min(108, 40) = 40 assigned.
-        // final balance = 108 - 40 = 68
-        assert_eq!(new_state.deposit_contract_balance, U256::from(68e18));
+        // 100 + 10 = 110 balance, min(110, 40) = 40 assigned
+        // final balance = 110 - 40 = 70
+        assert_eq!(new_state.deposit_contract_balance, U256::from(70e18));
         assert_eq!(new_state.megapool_queue_requested_total, U256::ZERO);
     }
 
@@ -865,8 +818,8 @@ mod tests {
             .as_any()
             .downcast_ref::<RocketpoolState>()
             .unwrap();
-        // Collateral: to_reth = 2, to_vault = 8. No queue assignment: 50 + 8 = 58
-        assert_eq!(new_state.deposit_contract_balance, U256::from(58e18));
+        // No queue, no assignment: 50 + 10 = 60
+        assert_eq!(new_state.deposit_contract_balance, U256::from(60e18));
     }
 
     #[test]
@@ -888,8 +841,8 @@ mod tests {
             .as_any()
             .downcast_ref::<RocketpoolState>()
             .unwrap();
-        // Assign disabled, collateral: to_reth = 2, to_vault = 8. 50 + 8 = 58
-        assert_eq!(new_state.deposit_contract_balance, U256::from(58e18));
+        // Assign disabled, no assignment: 50 + 10 = 60
+        assert_eq!(new_state.deposit_contract_balance, U256::from(60e18));
     }
 
     // ============ Live Post-Saturn Transaction Tests ============
@@ -912,8 +865,6 @@ mod tests {
             U256::from_str_radix("4a60532ad51bf000000", 16).unwrap(), /* megapool_queue_requested_total */
             U256::ZERO,                                               // megapool_queue_index
             U256::from(4u64),                                         // express_queue_rate
-            U256::from_str_radix("2386f26fc10000", 16).unwrap(),      /* reth_collateral_target:
-                                                                       * 1e16 (1%) */
         )
     }
 
