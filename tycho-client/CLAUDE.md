@@ -33,4 +33,4 @@ TychoStreamBuilder (stream.rs)
 1. `WsDeltasClient` subscribes; first message determines snapshot block
 2. `HttpRPCClient` fetches snapshot at that block; deltas buffer until it arrives
 3. `BlockSynchronizer` waits for all synchronizers, then emits a `FeedMessage` per block
-4. Synchronizers classified as `Ready | Delayed | Stale | Advanced | Ended`; stale ones are kept but skipped
+4. Synchronizers classified as `Started | Ready | Delayed | Stale | Advanced | Ended`; stale ones are kept but skipped

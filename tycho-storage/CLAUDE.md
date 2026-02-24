@@ -41,7 +41,7 @@ and `apply_versioning()` utility consumed by `contract` and `protocol`.
 `DBCacheWriteExecutor` flushes ops in this fixed sequence to satisfy FK constraints:
 
 1. `UpsertBlock` → `UpsertTx` → `InsertContract` → `UpdateContracts`
-2. `InsertTokens` → `InsertAccountBalances`
+2. `InsertTokens` → `UpdateTokens` → `InsertAccountBalances`
 3. `InsertProtocolComponents` → `InsertComponentBalances` → `UpsertProtocolState`
 4. `InsertEntryPoints` → `InsertEntryPointTracingParams` → `UpsertTracedEntryPoints`
 5. `SaveExtractionState`
