@@ -13,6 +13,6 @@ tests:
           - "0xae78736Cd615f374D3085123A210448E74Fc6393"
           - "0x0000000000000000000000000000000000000000"
         static_attributes: { }
-        creation_tx: "0x505e00ccb4b1554e7227be91eb92950d485ecf68e3ad4d2659b1c365617bc4a7" # First tx at starting block 24479994
+        creation_tx: "0x2fc10aad3c1b00bdfa9b6fddab79e0f2688609848f8f7a1a6449ab42da38530c" # Saturn I upgrade execute() tx
         skip_simulation: false
         skip_execution: true

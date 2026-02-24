@@ -1,14 +1,16 @@
 use crate::{
-    abi::{rocket_dao_protocol_proposal, rocket_deposit_pool_v4, rocket_network_balances_v4,
-        rocket_token_reth},
+    abi::{
+        rocket_dao_protocol_proposal, rocket_deposit_pool_v4, rocket_network_balances_v4,
+        rocket_token_reth,
+    },
     constants::{
         ALL_STORAGE_SLOTS, DEPOSITS_ENABLED_SLOT, DEPOSIT_ASSIGN_ENABLED_SLOT,
         DEPOSIT_ASSIGN_MAXIMUM_SLOT, DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT, DEPOSIT_FEE_SLOT,
         ETH_ADDRESS, EXPRESS_QUEUE_RATE_SLOT, MAX_DEPOSIT_POOL_SIZE_SLOT, MIN_DEPOSIT_AMOUNT_SLOT,
-        RETH_ADDRESS, RETH_COLLATERAL_TARGET_SLOT, ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS,
-        ROCKET_DEPOSIT_POOL_ADDRESS_V4,
-        ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT, ROCKET_NETWORK_BALANCES_ADDRESS_V4,
-        ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS, ROCKET_VAULT_ADDRESS,
+        RETH_ADDRESS, ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS,
+        ROCKET_DEPOSIT_POOL_ADDRESS_V4, ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT,
+        ROCKET_NETWORK_BALANCES_ADDRESS_V4, ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS,
+        ROCKET_VAULT_ADDRESS,
     },
     utils::{get_changed_attributes, hex_to_bytes},
 };
@@ -134,12 +136,11 @@ fn update_deposit_liquidity(
             continue;
         }
 
-        let is_deposit_event =
-            rocket_deposit_pool_v4::events::DepositReceived::match_log(log.log)
-                || rocket_deposit_pool_v4::events::DepositAssigned::match_log(log.log)
-                || rocket_deposit_pool_v4::events::DepositRecycled::match_log(log.log)
-                || rocket_deposit_pool_v4::events::ExcessWithdrawn::match_log(log.log)
-                || rocket_deposit_pool_v4::events::FundsAssigned::match_log(log.log);
+        let is_deposit_event = rocket_deposit_pool_v4::events::DepositReceived::match_log(log.log) ||
+            rocket_deposit_pool_v4::events::DepositAssigned::match_log(log.log) ||
+            rocket_deposit_pool_v4::events::DepositRecycled::match_log(log.log) ||
+            rocket_deposit_pool_v4::events::ExcessWithdrawn::match_log(log.log) ||
+            rocket_deposit_pool_v4::events::FundsAssigned::match_log(log.log);
 
         if !is_deposit_event {
             continue;
@@ -147,6 +148,7 @@ fn update_deposit_liquidity(
 
         let tx = log.receipt.transaction;
 
+        // Extract the updated liquidity from RocketVault's etherBalances storage
         let attributes = tx
             .calls
             .iter()
@@ -168,7 +170,9 @@ fn update_deposit_liquidity(
 ///
 /// Listens for EtherDeposited and TokensBurned events from the RocketTokenRETH contract and
 /// fetches the updated native ETH balance from the transaction's balance changes.
-/// Unchanged between v3 and v4 — the rETH token contract is the same.
+///
+/// The reason we do not use the event parameters directly is that they only contain the delta
+/// change, and would force us to start indexing from the token creation.
 fn update_reth_liquidity(
     block: &eth::v2::Block,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
@@ -178,8 +182,8 @@ fn update_reth_liquidity(
             continue;
         }
 
-        let is_eth_event = rocket_token_reth::events::EtherDeposited::match_log(log.log)
-            || rocket_token_reth::events::TokensBurned::match_log(log.log);
+        let is_eth_event = rocket_token_reth::events::EtherDeposited::match_log(log.log) ||
+            rocket_token_reth::events::TokensBurned::match_log(log.log);
 
         if !is_eth_event {
             continue;
@@ -187,6 +191,7 @@ fn update_reth_liquidity(
 
         let tx = log.receipt.transaction;
 
+        // Extract the updated ETH balance from the transaction's balance changes
         let reth_balance = tx
             .calls
             .iter()
@@ -267,15 +272,16 @@ fn update_network_balance(
 
 /// Extracts protocol settings updates from the block logs.
 ///
-/// Settings updates can only be triggered by executing DAO proposals. Tracks all deposit
-/// settings including the Saturn v4 express_queue_rate.
+/// Note: that the protocol settings updates can only be triggered by executing DAO proposals, hence
+/// it is sufficient to first check for the `ProposalExecuted` event and only then check the
+/// associated storage changes.
 fn update_protocol_settings(
     block: &eth::v2::Block,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
     for log in block.logs() {
-        if !(log.log.address == ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS
-            && rocket_dao_protocol_proposal::events::ProposalExecuted::match_log(log.log))
+        if !(log.log.address == ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS &&
+            rocket_dao_protocol_proposal::events::ProposalExecuted::match_log(log.log))
         {
             continue;
         }
@@ -299,7 +305,6 @@ fn update_protocol_settings(
                         MAX_DEPOSIT_POOL_SIZE_SLOT,
                         DEPOSIT_FEE_SLOT,
                         EXPRESS_QUEUE_RATE_SLOT,
-                        RETH_COLLATERAL_TARGET_SLOT,
                     ],
                 )
             })
@@ -323,10 +328,9 @@ fn update_megapool_queue_state(
             continue;
         }
 
-        let is_queue_event =
-            rocket_deposit_pool_v4::events::FundsRequested::match_log(log.log)
-                || rocket_deposit_pool_v4::events::FundsAssigned::match_log(log.log)
-                || rocket_deposit_pool_v4::events::QueueExited::match_log(log.log);
+        let is_queue_event = rocket_deposit_pool_v4::events::FundsRequested::match_log(log.log) ||
+            rocket_deposit_pool_v4::events::FundsAssigned::match_log(log.log) ||
+            rocket_deposit_pool_v4::events::QueueExited::match_log(log.log);
 
         if !is_queue_event {
             continue;

@@ -1,4 +1,4 @@
-use crate::constants::{ETH_ADDRESS, RETH_ADDRESS, ROCKET_POOL_COMPONENT_ID};
+use crate::constants::{ETH_ADDRESS, RETH_ADDRESS, ROCKET_POOL_COMPONENT_ID, SATURN_I_UPGRADE_TX};
 use anyhow::Result;
 use substreams_ethereum::pb::eth;
 use tycho_substreams::models::{
@@ -9,9 +9,8 @@ use tycho_substreams::models::{
 /// Find and create all relevant protocol components.
 ///
 /// As Rocket Pool has a single deposit pool that supports exchanging between ETH and rETH, we
-/// emit a single hardcoded ProtocolComponent at the specified starting block. We use the first
-/// transaction in the block as the anchor — the specific tx doesn't matter since the component
-/// is initialized from the params in `map_protocol_changes`, not from tx data.
+/// emit a single hardcoded ProtocolComponent at the specified starting block, anchored to the
+/// Saturn I upgrade transaction that activated all v4 contracts and settings.
 ///
 /// We return early for all other blocks since ProtocolComponents only need to be emitted once.
 #[substreams::handlers::map]
@@ -25,8 +24,10 @@ fn map_protocol_components(
 
     let tx = block
         .transactions()
-        .next()
-        .ok_or(anyhow::anyhow!("No transactions found in starting block"))?;
+        .find(|tx| tx.hash == SATURN_I_UPGRADE_TX)
+        .ok_or(anyhow::anyhow!(
+            "Saturn I upgrade tx not found in starting block"
+        ))?;
 
     let component = ProtocolComponent::new(ROCKET_POOL_COMPONENT_ID)
         .with_tokens(&[RETH_ADDRESS.to_vec(), ETH_ADDRESS.to_vec()])

@@ -3,6 +3,11 @@ use substreams::hex;
 
 pub const ROCKET_POOL_COMPONENT_ID: &str = "0xdd3f50f8a6cafbe9b31a427582963f465e745af8";
 
+/// The Saturn I upgrade `execute()` transaction — activates all v4 contracts and settings.
+/// Contract: RocketUpgradeOneDotFour (0x5b3B5C76391662e56d0ff72F31B89C409316c8Ba)
+pub const SATURN_I_UPGRADE_TX: [u8; 32] =
+    hex!("2fc10aad3c1b00bdfa9b6fddab79e0f2688609848f8f7a1a6449ab42da38530c");
+
 pub const ETH_ADDRESS: [u8; 20] = hex!("0000000000000000000000000000000000000000");
 pub const RETH_ADDRESS: [u8; 20] = hex!("ae78736Cd615f374D3085123A210448E74Fc6393");
 
@@ -22,7 +27,7 @@ pub const ROCKET_DEPOSIT_POOL_ADDRESS_V4: [u8; 20] =
 /// These are EVM storage slots in RocketStorage (base slot 2 for uintStorage, 5 for boolStorage).
 /// The settings key format is: keccak256(keccak256("dao.protocol.setting.deposit") ++ settingPath)
 /// and the EVM slot is: keccak256(abi.encode(key, mapping_base_slot)).
-pub(crate) const ALL_STORAGE_SLOTS: [StorageLocation; 12] = [
+pub(crate) const ALL_STORAGE_SLOTS: [StorageLocation; 11] = [
     ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT,
     DEPOSITS_ENABLED_SLOT,
     DEPOSIT_ASSIGN_ENABLED_SLOT,
@@ -34,7 +39,6 @@ pub(crate) const ALL_STORAGE_SLOTS: [StorageLocation; 12] = [
     MEGAPOOL_QUEUE_REQUESTED_TOTAL_SLOT,
     MEGAPOOL_QUEUE_INDEX_SLOT,
     EXPRESS_QUEUE_RATE_SLOT,
-    RETH_COLLATERAL_TARGET_SLOT,
 ];
 
 // ----------- Contract: Rocket Vault -----------
@@ -130,19 +134,6 @@ pub(crate) const MEGAPOOL_QUEUE_INDEX_SLOT: StorageLocation = StorageLocation {
 pub(crate) const EXPRESS_QUEUE_RATE_SLOT: StorageLocation = StorageLocation {
     name: "express_queue_rate",
     slot: hex!("76db7078bc37e9c3634c81dc384e741875c5d95ee6d5bcae0fb5d844d3189423"),
-    offset: 0,
-    number_of_bytes: 32,
-    signed: false,
-};
-
-// ----------- Contract: Rocket Storage (rETH collateral buffer) -----------
-/// Target rETH collateral rate as a fraction of total ETH, scaled by 1e18.
-/// E.g. 1e16 = 1% — the rETH contract should hold 1% of total protocol ETH as native ETH.
-/// Storage key: keccak256(keccak256("dao.protocol.setting.network") ++ "network.reth.collateral.target")
-/// in uintStorage (base slot 2).
-pub(crate) const RETH_COLLATERAL_TARGET_SLOT: StorageLocation = StorageLocation {
-    name: "reth_collateral_target",
-    slot: hex!("e1cd6c7fac18bc41fcd8660dbc3a1370373485f93fbccc910651118840f7c3a8"),
     offset: 0,
     number_of_bytes: 32,
     signed: false,
