@@ -41,7 +41,6 @@ use tycho_common::{
 };
 
 use super::{PostgresError, PostgresGateway};
-use crate::postgres::token_ordering::sort_tokens_by_protocol_system;
 
 /// Represents different types of database write operations.
 #[derive(PartialEq, Clone, Debug)]
@@ -950,13 +949,7 @@ impl ProtocolGateway for CachedGateway {
 
     #[instrument(skip_all)]
     async fn add_protocol_components(&self, new: &[ProtocolComponent]) -> Result<(), StorageError> {
-        // Protocol systems prior to indexer version 0.144.0 had tokens sorted lexicographically
-        // by address. We replicate this behavior here.
-        let mut components = new.to_vec();
-        for component in components.iter_mut() {
-            sort_tokens_by_protocol_system(component);
-        }
-        self.add_op(WriteOp::InsertProtocolComponents(components))
+        self.add_op(WriteOp::InsertProtocolComponents(new.to_vec()))
             .await?;
         Ok(())
     }

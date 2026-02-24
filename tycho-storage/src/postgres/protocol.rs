@@ -424,7 +424,6 @@ impl PostgresGateway {
             account::dsl::*, protocol_component::dsl::*, protocol_component_holds_contract::dsl::*,
             protocol_component_holds_token::dsl::*, token::dsl::*,
         };
-        use crate::postgres::token_ordering::SORTED_TOKEN_PROTOCOL_SYSTEMS;
         let mut values: Vec<orm::NewProtocolComponent> = Vec::with_capacity(new.len());
         let tx_hashes: Vec<TxHash> = new
             .iter()
@@ -515,31 +514,12 @@ impl PostgresGateway {
                             pc.id, pc.protocol_system, pc.chain
                         )
                     });
-                // TWO DIFFERENT BEHAVIORS:
-                // Originally, pc.tokens was sorted lexicographically instead of preserving the
-                // ordering reported by the Substreams adapter. To preserve that behavior, we
-                // detect the protocol system and use a sorted tokens list for earlier protocol
-                // systems
-                if SORTED_TOKEN_PROTOCOL_SYSTEMS.contains(&pc.protocol_system) {
-                    // Use lexicographical token ordering
-                    let mut sorted = pc.tokens.clone();
-                    sorted.sort_unstable();
-                    let n = sorted.len();
-                    sorted
-                        .into_iter()
-                        .enumerate()
-                        .map(move |(idx, add)| (*pc_id, add, (idx-n) as i16))
-                        .collect::<Vec<(i64, Address, i16)>>()
-                }
-                else {
-                    // Preserve token ordering
-                    pc.tokens
-                        .clone()
-                        .into_iter()
-                        .enumerate()
-                        .map(move |(idx, add)| (*pc_id, add, idx as i16))
-                        .collect::<Vec<(i64, Address, i16)>>()
-                }
+                pc.tokens
+                    .clone()
+                    .into_iter()
+                    .enumerate()
+                    .map(move |(idx, add)| (*pc_id, add, idx as i16))
+                    .collect::<Vec<(i64, Address, i16)>>()
             })
             .collect::<Vec<(i64, Address, i16)>>();
 
