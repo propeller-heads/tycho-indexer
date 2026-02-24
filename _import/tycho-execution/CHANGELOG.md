@@ -1,3 +1,12 @@
+## [0.30.0](https://github.com/propeller-heads/tycho-contracts/compare/0.29.0...0.30.0) (2026-02-24)
+
+
+### Features
+
+* regenerate calldata ([092947b](https://github.com/propeller-heads/tycho-contracts/commit/092947bfdd0722b6d754859b80a3aa499b25af94))
+* remove lido ([3232446](https://github.com/propeller-heads/tycho-contracts/commit/323244677acdd78180d2518748a2842c045a49e8))
+* update executor index ([00a5567](https://github.com/propeller-heads/tycho-contracts/commit/00a5567969d8d0222e2895d818d6b8cf0e947ae3))
+
 ## [0.29.0](https://github.com/propeller-heads/tycho-contracts/compare/0.28.1...0.29.0) (2026-02-23)
 
 
