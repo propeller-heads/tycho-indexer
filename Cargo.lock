@@ -7118,7 +7118,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.144.0"
+version = "0.144.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7160,7 +7160,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-common"
-version = "0.144.0"
+version = "0.144.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7192,7 +7192,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-ethereum"
-version = "0.144.0"
+version = "0.144.1"
 dependencies = [
  "alloy",
  "async-trait",
@@ -7217,7 +7217,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-indexer"
-version = "0.144.0"
+version = "0.144.1"
 dependencies = [
  "actix",
  "actix-cors",
@@ -7285,7 +7285,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-storage"
-version = "0.144.0"
+version = "0.144.1"
 dependencies = [
  "async-trait",
  "chrono",

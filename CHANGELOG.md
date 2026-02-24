@@ -1,3 +1,17 @@
+## [0.144.1](https://github.com/propeller-heads/tycho-indexer/compare/0.144.0...0.144.1) (2026-02-24)
+
+
+### Bug Fixes
+
+* [#856](https://github.com/propeller-heads/tycho-indexer/issues/856) pc token ordering ([3f5f961](https://github.com/propeller-heads/tycho-indexer/commit/3f5f96194c63d1d740aa9bd5605d2a4bf04d3d48))
+* [#856](https://github.com/propeller-heads/tycho-indexer/issues/856) pc token ordering ([#859](https://github.com/propeller-heads/tycho-indexer/issues/859)) ([656bb5c](https://github.com/propeller-heads/tycho-indexer/commit/656bb5c60b3403d4b4d80f405acc521f2d2eec81))
+* [#856](https://github.com/propeller-heads/tycho-indexer/issues/856) pc token ordering (fix test case) ([cd932b3](https://github.com/propeller-heads/tycho-indexer/commit/cd932b32d655a8bcf9c058f2763b1239f333f9f7))
+* [#856](https://github.com/propeller-heads/tycho-indexer/issues/856) pc token ordering (lint fix) ([2524339](https://github.com/propeller-heads/tycho-indexer/commit/2524339fd4cabfb408e94f0926b93404874047c5))
+* [#856](https://github.com/propeller-heads/tycho-indexer/issues/856) pc token ordering (linter fix) ([b7e37d2](https://github.com/propeller-heads/tycho-indexer/commit/b7e37d274f67b6d8e2238247d84d9970f0e9ef52))
+* [#856](https://github.com/propeller-heads/tycho-indexer/issues/856) pc token ordering (no gateway sort) ([9e8de35](https://github.com/propeller-heads/tycho-indexer/commit/9e8de35f520fabb667b3cfc0ed248c78885d9504))
+* [#856](https://github.com/propeller-heads/tycho-indexer/issues/856) pc token ordering (part 2) ([3bf64e0](https://github.com/propeller-heads/tycho-indexer/commit/3bf64e0046b7d37d7ea471aef0977a583b2d9c84))
+* [#856](https://github.com/propeller-heads/tycho-indexer/issues/856) pc token ordering (trigger fix) ([32abd2d](https://github.com/propeller-heads/tycho-indexer/commit/32abd2d83b326b3dc48a08ecc6100698ac67eafd))
+
 ## [0.144.0](https://github.com/propeller-heads/tycho-indexer/compare/0.143.1...0.144.0) (2026-02-20)
 
 
