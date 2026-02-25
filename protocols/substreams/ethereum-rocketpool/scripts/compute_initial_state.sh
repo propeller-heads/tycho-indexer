@@ -37,8 +37,6 @@ MIN_DEPOSIT_AMOUNT_SLOT="0xba4dab8f9b8f22679cf8c926f5bd528d08a526cbe2bb39d1b1f15
 MAX_DEPOSIT_POOL_SIZE_SLOT="0xefeb8d9f341f931c14ed8c1156bdb235390b183f1b94f522d4d72c5d24779598"
 DEPOSIT_FEE_SLOT="0xa1713e68e8e6d7580de48bb14bd78c7f293a5a0e42a40f7fe428d9943dc63264"
 MEGAPOOL_QUEUE_REQUESTED_TOTAL_SLOT="0x70acbb59da22199e2dc0759d60b0224ec935b6c5c70975c698025712f413ccdd"
-MEGAPOOL_QUEUE_INDEX_SLOT="0xf64759318134d5196993dc645609e8125eff4429ad94d537e335f2d6388069d7"
-EXPRESS_QUEUE_RATE_SLOT="0x76db7078bc37e9c3634c81dc384e741875c5d95ee6d5bcae0fb5d844d3189423"
 TARGET_RETH_COLLATERAL_RATE_SLOT="0xe1cd6c7fac18bc41fcd8660dbc3a1370373485f93fbccc910651118840f7c3a8"
 
 # Helper function to read storage
@@ -77,8 +75,6 @@ min_deposit_amount=$(read_storage "$ROCKET_STORAGE" "$MIN_DEPOSIT_AMOUNT_SLOT")
 max_deposit_pool_size=$(read_storage "$ROCKET_STORAGE" "$MAX_DEPOSIT_POOL_SIZE_SLOT")
 deposit_fee=$(read_storage "$ROCKET_STORAGE" "$DEPOSIT_FEE_SLOT")
 megapool_queue_requested_total=$(read_storage "$ROCKET_STORAGE" "$MEGAPOOL_QUEUE_REQUESTED_TOTAL_SLOT")
-megapool_queue_index=$(read_storage "$ROCKET_STORAGE" "$MEGAPOOL_QUEUE_INDEX_SLOT")
-express_queue_rate=$(read_storage "$ROCKET_STORAGE" "$EXPRESS_QUEUE_RATE_SLOT")
 target_reth_collateral_rate=$(read_storage "$ROCKET_STORAGE" "$TARGET_RETH_COLLATERAL_RATE_SLOT")
 
 # Get rETH contract ETH balance
@@ -111,8 +107,6 @@ map_protocol_changes: |
       "max_deposit_pool_size": "$max_deposit_pool_size",
       "deposit_fee": "$deposit_fee",
       "megapool_queue_requested_total": "$megapool_queue_requested_total",
-      "megapool_queue_index": "$megapool_queue_index",
-      "express_queue_rate": "$express_queue_rate",
       "target_reth_collateral_rate": "$target_reth_collateral_rate",
       "total_eth": "$total_eth",
       "reth_supply": "$reth_supply"

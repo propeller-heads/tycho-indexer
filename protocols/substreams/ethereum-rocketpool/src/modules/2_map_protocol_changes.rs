@@ -6,7 +6,7 @@ use crate::{
     constants::{
         ALL_STORAGE_SLOTS, DEPOSITS_ENABLED_SLOT, DEPOSIT_ASSIGN_ENABLED_SLOT,
         DEPOSIT_ASSIGN_MAXIMUM_SLOT, DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT, DEPOSIT_FEE_SLOT,
-        ETH_ADDRESS, EXPRESS_QUEUE_RATE_SLOT, MAX_DEPOSIT_POOL_SIZE_SLOT, MIN_DEPOSIT_AMOUNT_SLOT,
+        ETH_ADDRESS, MAX_DEPOSIT_POOL_SIZE_SLOT, MIN_DEPOSIT_AMOUNT_SLOT,
         RETH_ADDRESS, ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS,
         ROCKET_DEPOSIT_POOL_ADDRESS, ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT,
         ROCKET_NETWORK_BALANCES_ADDRESS, ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS,
@@ -33,7 +33,7 @@ use tycho_substreams::{
 ///
 /// Indexes the RocketPool deposit pool from the v1.4 activation block onwards.
 /// Tracks deposit liquidity, rETH liquidity, network balances, protocol settings,
-/// and the megapool express/standard queue state.
+/// and megapool queue state.
 #[substreams::handlers::map]
 fn map_protocol_changes(
     params: String,
@@ -304,7 +304,6 @@ fn update_protocol_settings(
                         MIN_DEPOSIT_AMOUNT_SLOT,
                         MAX_DEPOSIT_POOL_SIZE_SLOT,
                         DEPOSIT_FEE_SLOT,
-                        EXPRESS_QUEUE_RATE_SLOT,
                         TARGET_RETH_COLLATERAL_RATE_SLOT,
                     ],
                 )
@@ -318,8 +317,8 @@ fn update_protocol_settings(
 /// Updates megapool queue state based on queue events.
 ///
 /// Listens for FundsRequested, FundsAssigned, and QueueExited events from the
-/// RocketDepositPool, then extracts the updated megapool_queue_requested_total and
-/// megapool_queue_index from RocketStorage storage changes.
+/// RocketDepositPool, then extracts the updated megapool_queue_requested_total
+/// from RocketStorage storage changes.
 fn update_megapool_queue_state(
     block: &eth::v2::Block,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,

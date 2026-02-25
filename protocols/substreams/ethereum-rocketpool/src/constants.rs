@@ -28,7 +28,7 @@ pub const ROCKET_NETWORK_BALANCES_ADDRESS: [u8; 20] =
 /// These are EVM storage slots in RocketStorage (base slot 2 for uintStorage, 5 for boolStorage).
 /// The settings key format is: keccak256(keccak256("dao.protocol.setting.deposit") ++ settingPath)
 /// and the EVM slot is: keccak256(abi.encode(key, mapping_base_slot)).
-pub(crate) const ALL_STORAGE_SLOTS: [StorageLocation; 12] = [
+pub(crate) const ALL_STORAGE_SLOTS: [StorageLocation; 10] = [
     ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT,
     DEPOSITS_ENABLED_SLOT,
     DEPOSIT_ASSIGN_ENABLED_SLOT,
@@ -38,8 +38,6 @@ pub(crate) const ALL_STORAGE_SLOTS: [StorageLocation; 12] = [
     MAX_DEPOSIT_POOL_SIZE_SLOT,
     DEPOSIT_FEE_SLOT,
     MEGAPOOL_QUEUE_REQUESTED_TOTAL_SLOT,
-    MEGAPOOL_QUEUE_INDEX_SLOT,
-    EXPRESS_QUEUE_RATE_SLOT,
     TARGET_RETH_COLLATERAL_RATE_SLOT,
 ];
 
@@ -139,27 +137,6 @@ pub(crate) const DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT: StorageLocation = Stora
 pub(crate) const MEGAPOOL_QUEUE_REQUESTED_TOTAL_SLOT: StorageLocation = StorageLocation {
     name: "megapool_queue_requested_total",
     slot: hex!("70acbb59da22199e2dc0759d60b0224ec935b6c5c70975c698025712f413ccdd"),
-    offset: 0,
-    number_of_bytes: 32,
-    signed: false,
-};
-
-/// Round-robin index for express/standard queue assignment.
-/// Storage key: keccak256("megapool.queue.index") in uintStorage (base slot 2).
-pub(crate) const MEGAPOOL_QUEUE_INDEX_SLOT: StorageLocation = StorageLocation {
-    name: "megapool_queue_index",
-    slot: hex!("f64759318134d5196993dc645609e8125eff4429ad94d537e335f2d6388069d7"),
-    offset: 0,
-    number_of_bytes: 32,
-    signed: false,
-};
-
-/// Express queue rate: how many express assignments per standard assignment.
-/// Storage key: keccak256(keccak256("dao.protocol.setting.deposit") ++ "express.queue.rate")
-/// in uintStorage (base slot 2).
-pub(crate) const EXPRESS_QUEUE_RATE_SLOT: StorageLocation = StorageLocation {
-    name: "express_queue_rate",
-    slot: hex!("76db7078bc37e9c3634c81dc384e741875c5d95ee6d5bcae0fb5d844d3189423"),
     offset: 0,
     number_of_bytes: 32,
     signed: false,
