@@ -10,7 +10,7 @@ use crate::{
         RETH_ADDRESS, ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS,
         ROCKET_DEPOSIT_POOL_ADDRESS, ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT,
         ROCKET_NETWORK_BALANCES_ADDRESS, ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS,
-        ROCKET_VAULT_ADDRESS,
+        ROCKET_VAULT_ADDRESS, TARGET_RETH_COLLATERAL_RATE_SLOT,
     },
     utils::{get_changed_attributes, hex_to_bytes},
 };
@@ -305,6 +305,7 @@ fn update_protocol_settings(
                         MAX_DEPOSIT_POOL_SIZE_SLOT,
                         DEPOSIT_FEE_SLOT,
                         EXPRESS_QUEUE_RATE_SLOT,
+                        TARGET_RETH_COLLATERAL_RATE_SLOT,
                     ],
                 )
             })
