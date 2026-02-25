@@ -31,7 +31,8 @@ pub struct RocketpoolState {
     pub deposit_contract_balance: U256,
     /// ETH available in the rETH contract
     pub reth_contract_liquidity: U256,
-    /// Deposit fee as %, scaled by DEPOSIT_FEE_BASE, such as 500000000000000 represents 0.05% fee.
+    /// Deposit fee as %, scaled by DEPOSIT_FEE_BASE, such as 500_000_000_000_000 represents 0.05%
+    /// fee.
     pub deposit_fee: U256,
     pub deposits_enabled: bool,
     pub min_deposit_amount: U256,
@@ -112,18 +113,15 @@ impl RocketpoolState {
         }
     }
 
-    /// Returns the total effective capacity of the megapool queues.
-    /// This is the total ETH requested across express and standard queues,
-    /// tracked directly by the protocol via `deposit.pool.requested.total`.
-    fn get_effective_capacity(&self) -> U256 {
-        self.megapool_queue_requested_total
-    }
-
     /// Returns the maximum deposit capacity considering both the base pool size
     /// and the megapool queue capacity (if deposit_assigning_enabled).
+    ///
+    /// Note: we only model megapool queues here. The legacy minipool queues were
+    /// fully drained before the Saturn (v1.4) upgrade activated, and deposits into
+    /// them are disabled, so their capacity is always zero.
     fn get_max_deposit_capacity(&self) -> Result<U256, SimulationError> {
         if self.deposit_assigning_enabled {
-            safe_add_u256(self.max_deposit_pool_size, self.get_effective_capacity())
+            safe_add_u256(self.max_deposit_pool_size, self.megapool_queue_requested_total)
         } else {
             Ok(self.max_deposit_pool_size)
         }
@@ -132,11 +130,10 @@ impl RocketpoolState {
     /// Returns the excess balance available for withdrawals from the deposit pool.
     /// Excess = deposit_contract_balance - megapool_queue_requested_total
     fn get_deposit_pool_excess_balance(&self) -> Result<U256, SimulationError> {
-        let queue_capacity = self.get_effective_capacity();
-        if queue_capacity >= self.deposit_contract_balance {
+        if self.megapool_queue_requested_total >= self.deposit_contract_balance {
             Ok(U256::ZERO)
         } else {
-            safe_sub_u256(self.deposit_contract_balance, queue_capacity)
+            safe_sub_u256(self.deposit_contract_balance, self.megapool_queue_requested_total)
         }
     }
 
@@ -449,21 +446,6 @@ mod tests {
             Chain::Ethereum,
             100,
         )
-    }
-
-    // ============ Effective Capacity Tests ============
-
-    #[test]
-    fn test_effective_capacity_empty() {
-        let state = create_state();
-        assert_eq!(state.get_effective_capacity(), U256::ZERO);
-    }
-
-    #[test]
-    fn test_effective_capacity_with_requested_total() {
-        let mut state = create_state();
-        state.megapool_queue_requested_total = U256::from(100e18);
-        assert_eq!(state.get_effective_capacity(), U256::from(100e18));
     }
 
     // ============ Max Deposit Capacity Tests ============
