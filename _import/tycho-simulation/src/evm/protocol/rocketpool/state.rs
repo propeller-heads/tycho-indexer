@@ -23,6 +23,9 @@ use crate::evm::protocol::{
 
 const DEPOSIT_FEE_BASE: u128 = 1_000_000_000_000_000_000; // 1e18
 
+/// 32 ETH — the hardcoded amount every megapool queue entry requests.
+const FULL_DEPOSIT_VALUE: u128 = 32_000_000_000_000_000_000u128;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RocketpoolState {
     pub reth_supply: U256,
@@ -45,10 +48,9 @@ pub struct RocketpoolState {
     pub deposit_assign_socialised_maximum: U256,
     /// Total ETH requested across express + standard megapool queues
     pub megapool_queue_requested_total: U256,
-    /// Round-robin index for express/standard queue assignment
-    pub megapool_queue_index: U256,
-    /// How many express assignments per standard assignment (e.g., 4)
-    pub express_queue_rate: U256,
+    /// Target rETH collateral rate (scaled by 1e18, e.g. 0.01e18 = 1%).
+    /// On-chain: RocketDAOProtocolSettingsNetwork.getTargetRethCollateralRate()
+    pub target_reth_collateral_rate: U256,
 }
 
 impl RocketpoolState {
@@ -66,8 +68,7 @@ impl RocketpoolState {
         deposit_assign_maximum: U256,
         deposit_assign_socialised_maximum: U256,
         megapool_queue_requested_total: U256,
-        megapool_queue_index: U256,
-        express_queue_rate: U256,
+        target_reth_collateral_rate: U256,
     ) -> Self {
         Self {
             reth_supply,
@@ -82,8 +83,7 @@ impl RocketpoolState {
             deposit_assign_maximum,
             deposit_assign_socialised_maximum,
             megapool_queue_requested_total,
-            megapool_queue_index,
-            express_queue_rate,
+            target_reth_collateral_rate,
         }
     }
 
@@ -143,16 +143,33 @@ impl RocketpoolState {
         safe_add_u256(self.reth_contract_liquidity, deposit_pool_excess)
     }
 
-    /// Approximates ETH assigned from the deposit pool after a deposit.
+    /// Computes how `processDeposit()` routes deposited ETH between the rETH contract
+    /// (collateral buffer) and the deposit pool vault.
+    fn compute_deposit_routing(
+        &self,
+        deposit_amount: U256,
+    ) -> Result<(U256, U256), SimulationError> {
+        let target_collateral = mul_div(
+            self.total_eth,
+            self.target_reth_collateral_rate,
+            U256::from(DEPOSIT_FEE_BASE),
+        )?;
+        let shortfall = target_collateral.saturating_sub(self.reth_contract_liquidity);
+        let to_reth = deposit_amount.min(shortfall);
+        let to_vault = deposit_amount - to_reth;
+        Ok((to_reth, to_vault))
+    }
+
+    /// Calculates ETH assigned from the deposit pool to megapool queue entries.
     ///
-    /// In Saturn v4, `_assignMegapools(count)` dequeues up to `count` entries from the
-    /// express/standard queues (capped at `deposit_assign_maximum`). Each entry has a variable
-    /// ETH amount. We approximate the total assigned as
-    /// `min(deposit_contract_balance, megapool_queue_requested_total)`.
+    /// Three constraints bound assignment:
+    ///   1. Count cap:    floor(deposit / 32 ETH) + socialisedMax, ≤ deposit_assign_maximum
+    ///   2. Vault cap:    floor(deposit_contract_balance / 32 ETH)
+    ///   3. Queue depth:  floor(megapool_queue_requested_total / 32 ETH)
     ///
-    /// Note: `deposit_assign_maximum` limits the *number* of entries processed, not the ETH
-    /// amount. Without knowing per-entry sizes, we can't use it to tighten the bound.
-    fn calculate_assign_deposits(&self) -> U256 {
+    /// The minimum of these three gives the number of entries assigned.
+    /// Total ETH assigned = entries × 32 ETH.
+    fn calculate_assign_deposits(&self, deposit_amount: U256) -> U256 {
         if !self.deposit_assigning_enabled ||
             self.megapool_queue_requested_total
                 .is_zero()
@@ -160,8 +177,25 @@ impl RocketpoolState {
             return U256::ZERO;
         }
 
-        self.deposit_contract_balance
-            .min(self.megapool_queue_requested_total)
+        let full_deposit_value = U256::from(FULL_DEPOSIT_VALUE);
+
+        // Constraint 1: count cap
+        let scaling_count = deposit_amount / full_deposit_value;
+        let count_cap = (self.deposit_assign_socialised_maximum + scaling_count)
+            .min(self.deposit_assign_maximum);
+
+        // Constraint 2: vault balance
+        let vault_cap = self.deposit_contract_balance / full_deposit_value;
+
+        // Constraint 3: queue depth
+        let queue_entries = self.megapool_queue_requested_total / full_deposit_value;
+
+        // Entries assigned = min of all three constraints
+        let entries = count_cap
+            .min(vault_cap)
+            .min(queue_entries);
+
+        entries * full_deposit_value
     }
 }
 
@@ -237,10 +271,14 @@ impl ProtocolSim for RocketpoolState {
 
         let mut new_state = self.clone();
         if is_depositing_eth {
+            // route ETH between rETH collateral buffer and vault.
+            let (to_reth, to_vault) = new_state.compute_deposit_routing(amount_in)?;
+            new_state.reth_contract_liquidity =
+                safe_add_u256(new_state.reth_contract_liquidity, to_reth)?;
             new_state.deposit_contract_balance =
-                safe_add_u256(new_state.deposit_contract_balance, amount_in)?;
+                safe_add_u256(new_state.deposit_contract_balance, to_vault)?;
 
-            let eth_assigned = new_state.calculate_assign_deposits();
+            let eth_assigned = new_state.calculate_assign_deposits(amount_in);
             if eth_assigned > U256::ZERO {
                 new_state.deposit_contract_balance =
                     safe_sub_u256(new_state.deposit_contract_balance, eth_assigned)?;
@@ -343,14 +381,10 @@ impl ProtocolSim for RocketpoolState {
             .updated_attributes
             .get("megapool_queue_requested_total")
             .map_or(self.megapool_queue_requested_total, U256::from_bytes);
-        self.megapool_queue_index = delta
+        self.target_reth_collateral_rate = delta
             .updated_attributes
-            .get("megapool_queue_index")
-            .map_or(self.megapool_queue_index, U256::from_bytes);
-        self.express_queue_rate = delta
-            .updated_attributes
-            .get("express_queue_rate")
-            .map_or(self.express_queue_rate, U256::from_bytes);
+            .get("target_reth_collateral_rate")
+            .map_or(self.target_reth_collateral_rate, U256::from_bytes);
 
         Ok(())
     }
@@ -392,6 +426,7 @@ mod tests {
 
     use approx::assert_ulps_eq;
     use num_bigint::BigUint;
+    use rstest::rstest;
     use tycho_common::{
         dto::ProtocolStateDelta,
         hex_bytes::Bytes,
@@ -411,7 +446,7 @@ mod tests {
     /// - rETH contract liquidity: 0 ETH
     /// - Max pool size: 1000 ETH
     /// - Assign deposits enabled: false
-    /// - Express queue rate: 4
+    /// - Target rETH collateral rate: 1% (0.01e18)
     fn create_state() -> RocketpoolState {
         RocketpoolState::new(
             U256::from(100e18), // reth_supply: 100 rETH
@@ -427,8 +462,7 @@ mod tests {
             U256::ZERO,        // deposit_assign_maximum
             U256::ZERO,        // deposit_assign_socialised_maximum
             U256::ZERO,        // megapool_queue_requested_total
-            U256::ZERO,        // megapool_queue_index
-            U256::from(4u64),  // express_queue_rate: 4
+            U256::from(10_000_000_000_000_000u64), // target_reth_collateral_rate: 1%
         )
     }
 
@@ -487,6 +521,59 @@ mod tests {
         );
     }
 
+    // ============ Deposit Routing Tests ============
+
+    #[rstest]
+    #[case::all_to_reth(
+        U256::ZERO,  // reth_contract_liquidity
+        U256::from(10_000_000_000_000_000u64),  // target_reth_collateral_rate: 1%
+        1_000_000_000_000_000_000u128,  // deposit: 1 ETH
+        1_000_000_000_000_000_000u128,  // expected to_reth
+        0u128,  // expected to_vault
+    )]
+    // shortfall (2 ETH) < deposit (10 ETH) → split
+    #[case::split(
+        U256::ZERO,
+        U256::from(10_000_000_000_000_000u64),
+        10_000_000_000_000_000_000u128,  // deposit: 10 ETH
+        2_000_000_000_000_000_000u128,   // to_reth: 2 ETH (shortfall)
+        8_000_000_000_000_000_000u128,   // to_vault: 8 ETH
+    )]
+    // no shortfall (liquidity 10 ETH > target 2 ETH) → all to vault
+    #[case::all_to_vault(
+        U256::from(10_000_000_000_000_000_000u128),  // liquidity: 10 ETH > 2 ETH target
+        U256::from(10_000_000_000_000_000u64),
+        5_000_000_000_000_000_000u128,  // deposit: 5 ETH
+        0u128,
+        5_000_000_000_000_000_000u128,
+    )]
+    // zero collateral rate → all to vault
+    #[case::zero_collateral_rate(
+        U256::ZERO,
+        U256::ZERO,  // target_reth_collateral_rate: 0%
+        5_000_000_000_000_000_000u128,
+        0u128,
+        5_000_000_000_000_000_000u128,
+    )]
+    fn test_deposit_routing(
+        #[case] reth_contract_liquidity: U256,
+        #[case] target_reth_collateral_rate: U256,
+        #[case] deposit: u128,
+        #[case] expected_to_reth: u128,
+        #[case] expected_to_vault: u128,
+    ) {
+        let mut state = create_state();
+        state.reth_contract_liquidity = reth_contract_liquidity;
+        state.target_reth_collateral_rate = target_reth_collateral_rate;
+
+        let (to_reth, to_vault) = state
+            .compute_deposit_routing(U256::from(deposit))
+            .unwrap();
+
+        assert_eq!(to_reth, U256::from(expected_to_reth));
+        assert_eq!(to_vault, U256::from(expected_to_vault));
+    }
+
     // ============ Delta Transition Tests ============
 
     #[test]
@@ -525,8 +612,7 @@ mod tests {
 
         let attributes: HashMap<String, Bytes> = [
             ("megapool_queue_requested_total", U256::from(1000u64)),
-            ("megapool_queue_index", U256::from(42u64)),
-            ("express_queue_rate", U256::from(5u64)),
+            ("target_reth_collateral_rate", U256::from(20_000_000_000_000_000u64)),
         ]
         .into_iter()
         .map(|(k, v)| (k.to_string(), Bytes::from(v.to_be_bytes_vec())))
@@ -543,8 +629,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(state.megapool_queue_requested_total, U256::from(1000u64));
-        assert_eq!(state.megapool_queue_index, U256::from(42u64));
-        assert_eq!(state.express_queue_rate, U256::from(5u64));
+        assert_eq!(state.target_reth_collateral_rate, U256::from(20_000_000_000_000_000u64));
     }
 
     // ============ Spot Price Tests ============
@@ -630,14 +715,16 @@ mod tests {
 
         assert_eq!(res.amount, BigUint::from(3_000_000_000_000_000_000u128));
 
-        // Collateral buffer: target = 200e18 * 1e16 / 1e18 = 2e18.
+        // Collateral routing: target = 200e18 * 1e16 / 1e18 = 2e18.
         // Shortfall = 2e18 - 0 = 2e18. to_reth = min(10, 2) = 2, to_vault = 8.
+        // deposit_contract_balance = 50 + 8 = 58 ETH
         let new_state = res
             .new_state
             .as_any()
             .downcast_ref::<RocketpoolState>()
             .unwrap();
-        assert_eq!(new_state.deposit_contract_balance, U256::from(60e18));
+        assert_eq!(new_state.deposit_contract_balance, U256::from(58e18));
+        assert_eq!(new_state.reth_contract_liquidity, U256::from(2e18));
     }
 
     #[test]
@@ -759,13 +846,16 @@ mod tests {
     #[test]
     fn test_assign_deposits_with_queue() {
         let mut state = create_state();
-        state.deposit_contract_balance = U256::from(100e18);
+        state.deposit_contract_balance = U256::from(200e18);
+        state.reth_contract_liquidity = U256::from(10e18); // above 1% target, no shortfall
         state.deposit_assigning_enabled = true;
-        state.megapool_queue_requested_total = U256::from(40e18);
+        state.deposit_assign_maximum = U256::from(90u64);
+        state.megapool_queue_requested_total = U256::from(128e18); // 4 entries of 32 ETH
 
+        // Deposit 100 ETH
         let res = state
             .get_amount_out(
-                BigUint::from(10_000_000_000_000_000_000u128),
+                BigUint::from(100_000_000_000_000_000_000u128),
                 &eth_token(),
                 &reth_token(),
             )
@@ -776,10 +866,17 @@ mod tests {
             .as_any()
             .downcast_ref::<RocketpoolState>()
             .unwrap();
-        // 100 + 10 = 110 balance, min(110, 40) = 40 assigned
-        // final balance = 110 - 40 = 70
-        assert_eq!(new_state.deposit_contract_balance, U256::from(70e18));
-        assert_eq!(new_state.megapool_queue_requested_total, U256::ZERO);
+        // Collateral routing: target = 200e18 * 0.01 = 2e18.
+        // Shortfall = 2e18 - 10e18 = 0 (already above target). to_reth=0, to_vault=100.
+        // vault after routing = 200 + 100 = 300 ETH.
+        //
+        // Assignment: scaling_count = 100/32 = 3.
+        // count_cap = min(0 + 3, 90) = 3.
+        // vault_cap = 300/32 = 9. queue_entries = 128/32 = 4.
+        // entries = min(3, 9, 4) = 3. assigned = 3 * 32 = 96 ETH.
+        // vault after = 300 - 96 = 204. queue after = 128 - 96 = 32.
+        assert_eq!(new_state.deposit_contract_balance, U256::from(204e18));
+        assert_eq!(new_state.megapool_queue_requested_total, U256::from(32e18));
     }
 
     #[test]
@@ -800,8 +897,8 @@ mod tests {
             .as_any()
             .downcast_ref::<RocketpoolState>()
             .unwrap();
-        // No queue, no assignment: 50 + 10 = 60
-        assert_eq!(new_state.deposit_contract_balance, U256::from(60e18));
+        // No queue, no assignment. Routing: to_reth=2, to_vault=8. Balance = 50+8 = 58.
+        assert_eq!(new_state.deposit_contract_balance, U256::from(58e18));
     }
 
     #[test]
@@ -823,8 +920,117 @@ mod tests {
             .as_any()
             .downcast_ref::<RocketpoolState>()
             .unwrap();
-        // Assign disabled, no assignment: 50 + 10 = 60
-        assert_eq!(new_state.deposit_contract_balance, U256::from(60e18));
+        // Assign disabled, no assignment. Routing: to_reth=2, to_vault=8. Balance = 50+8 = 58.
+        assert_eq!(new_state.deposit_contract_balance, U256::from(58e18));
+    }
+
+    // ============ Assign Deposits — Constraint Unit Tests ============
+
+    /// Helper: create a state pre-configured for assignment tests.
+    /// Deposits enabled, high max, collateral already met (no routing interference).
+    fn create_assign_state(
+        deposit_contract_balance: U256,
+        megapool_queue_requested_total: U256,
+        deposit_assign_maximum: U256,
+        deposit_assign_socialised_maximum: U256,
+    ) -> RocketpoolState {
+        let mut state = create_state();
+        state.deposit_assigning_enabled = true;
+        state.deposit_contract_balance = deposit_contract_balance;
+        state.megapool_queue_requested_total = megapool_queue_requested_total;
+        state.deposit_assign_maximum = deposit_assign_maximum;
+        state.deposit_assign_socialised_maximum = deposit_assign_socialised_maximum;
+        // Put liquidity above target so routing sends everything to vault
+        state.reth_contract_liquidity = U256::from(10_000_000_000_000_000_000u128);
+        state
+    }
+
+    #[rstest]
+    // Count cap limits: deposit=64 ETH (2 entries), vault=300, queue=128 (4), max=90
+    // count_cap = min(0 + 2, 90) = 2; vault_cap = 9; queue = 4 → 2 entries
+    #[case::count_cap_limits(
+        64_000_000_000_000_000_000u128,   // deposit
+        300_000_000_000_000_000_000u128,  // vault
+        128_000_000_000_000_000_000u128,  // queue
+        90u64,                            // max
+        0u64,                             // socialised
+        64_000_000_000_000_000_000u128,   // expected: 2 * 32 ETH
+    )]
+    // Vault cap limits: deposit=200 ETH (6 entries), vault=64 (2), queue=192 (6), max=90
+    // count_cap = 6; vault_cap = 2; queue = 6 → 2 entries
+    #[case::vault_cap_limits(
+        200_000_000_000_000_000_000u128,
+        64_000_000_000_000_000_000u128,
+        192_000_000_000_000_000_000u128,
+        90u64,
+        0u64,
+        64_000_000_000_000_000_000u128,   // 2 * 32 ETH
+    )]
+    // Queue depth limits: deposit=200 ETH (6), vault=300 (9), queue=64 (2), max=90
+    // count_cap = 6; vault_cap = 9; queue = 2 → 2 entries
+    #[case::queue_depth_limits(
+        200_000_000_000_000_000_000u128,
+        300_000_000_000_000_000_000u128,
+        64_000_000_000_000_000_000u128,
+        90u64,
+        0u64,
+        64_000_000_000_000_000_000u128,   // 2 * 32 ETH
+    )]
+    // Max cap limits: deposit=200 ETH (6), vault=300 (9), queue=192 (6), max=3
+    // count_cap = min(6, 3) = 3; vault_cap = 9; queue = 6 → 3 entries
+    #[case::max_cap_limits(
+        200_000_000_000_000_000_000u128,
+        300_000_000_000_000_000_000u128,
+        192_000_000_000_000_000_000u128,
+        3u64,
+        0u64,
+        96_000_000_000_000_000_000u128,   // 3 * 32 ETH
+    )]
+    // Socialised max: deposit=10 ETH (<32, scaling=0), socialised=2, vault=200, queue=128, max=90
+    // count_cap = min(0 + 2, 90) = 2; vault_cap = 6; queue = 4 → 2 entries
+    #[case::socialised_max(
+        10_000_000_000_000_000_000u128,
+        200_000_000_000_000_000_000u128,
+        128_000_000_000_000_000_000u128,
+        90u64,
+        2u64,
+        64_000_000_000_000_000_000u128,   // 2 * 32 ETH
+    )]
+    // Small deposit, no socialised: deposit=10 ETH, socialised=0 → scaling=0, count_cap=0
+    #[case::small_deposit_no_assignment(
+        10_000_000_000_000_000_000u128,
+        200_000_000_000_000_000_000u128,
+        128_000_000_000_000_000_000u128,
+        90u64,
+        0u64,
+        0u128,
+    )]
+    // Vault below 32 ETH: deposit=100 ETH, vault=20, queue=128, max=90
+    // vault_cap = 20/32 = 0 → 0 entries
+    #[case::vault_below_32(
+        100_000_000_000_000_000_000u128,
+        20_000_000_000_000_000_000u128,
+        128_000_000_000_000_000_000u128,
+        90u64,
+        0u64,
+        0u128,
+    )]
+    fn test_assign_constraint(
+        #[case] deposit: u128,
+        #[case] vault: u128,
+        #[case] queue: u128,
+        #[case] max: u64,
+        #[case] socialised: u64,
+        #[case] expected_assigned: u128,
+    ) {
+        let state = create_assign_state(
+            U256::from(vault),
+            U256::from(queue),
+            U256::from(max),
+            U256::from(socialised),
+        );
+        let assigned = state.calculate_assign_deposits(U256::from(deposit));
+        assert_eq!(assigned, U256::from(expected_assigned));
     }
 
     // ============ Live Post-Saturn Transaction Tests ============
@@ -845,19 +1051,18 @@ mod tests {
             U256::from(90u64),                                         // deposit_assign_maximum
             U256::ZERO, // deposit_assign_socialised_maximum
             U256::from_str_radix("4a60532ad51bf000000", 16).unwrap(), /* megapool_queue_requested_total */
-            U256::ZERO,                                               // megapool_queue_index
-            U256::from(4u64),                                         // express_queue_rate
+            U256::from(10_000_000_000_000_000u64), // target_reth_collateral_rate: 1%
         )
     }
 
-    /// Test against real post-Saturn deposit transaction.
+    /// Test against real v1.4 deposit transaction.
     /// Tx 0xe0f1db165b621cb1e50b629af9d47e064be464fbcc7f2bcba3df1d27dbb916be at block 24480105.
     /// User deposited 85 ETH and received 73382345660413064855 rETH (0.05% fee applied).
     ///
-    /// Note on post-state: On-chain, the 85 ETH went entirely to the rETH collateral buffer
-    /// (deposit_contract_balance unchanged at 10218572790464350139). Our simulation
-    /// conservatively adds the full amount to deposit_contract_balance. This is a known
-    /// approximation — the output amount is exact, but post-state balance distribution differs.
+    /// On-chain, the 85 ETH went entirely to the rETH collateral buffer because
+    /// the collateral shortfall (target ~3965 ETH vs ~224 ETH held) far exceeds 85 ETH.
+    /// The vault balance (deposit_contract_balance) was unchanged at ~10.22 ETH,
+    /// which is < 32 ETH so no queue entries were assigned.
     #[test]
     fn test_live_deposit_post_saturn() {
         let state = create_state_at_block_24480104();
@@ -871,11 +1076,7 @@ mod tests {
         let expected_reth_out = BigUint::from(73_382_345_660_413_064_855u128);
         assert_eq!(res.amount, expected_reth_out);
 
-        // Post-state: document known divergence from on-chain behavior.
-        // On-chain, processDeposit() routes ETH to rETH contract first (collateral buffer),
-        // so deposit_contract_balance was unchanged. Our simulation adds to
-        // deposit_contract_balance and then subtracts via queue assignment. The total_eth
-        // and reth_supply (oracle-managed) are always unchanged, which is correct.
+        // Post-state: now matches on-chain behavior.
         let new_state = res
             .new_state
             .as_any()
@@ -883,10 +1084,24 @@ mod tests {
             .unwrap();
         assert_eq!(new_state.total_eth, state.total_eth);
         assert_eq!(new_state.reth_supply, state.reth_supply);
+        // deposit_contract_balance unchanged — all 85 ETH went to rETH collateral buffer
+        assert_eq!(new_state.deposit_contract_balance, state.deposit_contract_balance);
+        // rETH contract liquidity increased by the full 85 ETH
+        assert_eq!(
+            new_state.reth_contract_liquidity,
+            safe_add_u256(
+                state.reth_contract_liquidity,
+                U256::from(85_000_000_000_000_000_000u128)
+            )
+            .unwrap()
+        );
+        // Queue unchanged — vault had < 32 ETH, no assignment possible
+        assert_eq!(new_state.megapool_queue_requested_total, state.megapool_queue_requested_total);
     }
 
-    /// Test against real post-Saturn burn transaction.
-    /// Block 24481338: user burned 2515686112138065226 rETH and received 2912504376202664754 ETH.
+    /// Test against real v1.4 burn transaction.
+    /// Tx 0x6e70e11475c158ca5f88a6d370dfef90eee6d696dd569c3eaab7d244c7b4a20f at block 24481338.
+    /// User burned 2515686112138065226 rETH and received 2912504376202664754 ETH.
     #[test]
     fn test_live_burn_post_saturn() {
         let state = create_state_at_block_24480104();
