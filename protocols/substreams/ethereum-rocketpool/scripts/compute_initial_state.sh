@@ -6,11 +6,11 @@
 #
 # Usage: RPC_URL=<your-rpc-url> ./compute_initial_state.sh [block_number]
 #
-# The block number defaults to 24479994 (Saturn I (V1.4) upgrade block).
+# The block number defaults to 24479994 (v1.4 upgrade block).
 
 set -e
 
-# Default to the Saturn I (V1.4) settings migration block
+# Default to the v1.4 upgrade block
 BLOCK_NUMBER=${1:-24479994}
 
 if [ -z "$RPC_URL" ]; then
@@ -25,7 +25,7 @@ echo ""
 ROCKET_VAULT="0x3bDC69C4E5e13E52A65f5583c23EFB9636b469d6"
 ROCKET_STORAGE="0x1d8f8f00cfa6758d7bE78336684788Fb0ee0Fa46"
 RETH_ADDRESS="0xae78736Cd615f374D3085123A210448E74Fc6393"
-ROCKET_NETWORK_BALANCES_V4="0x1D9F14C6Bfd8358b589964baD8665AdD248E9473"
+ROCKET_NETWORK_BALANCES="0x1D9F14C6Bfd8358b589964baD8665AdD248E9473"
 
 # Storage slots (from constants.rs)
 DEPOSIT_POOL_ETH_BALANCE_SLOT="0x00ab4654686e0d7a1f921cc85a932fd8efbc8a1f247b51fa6bca2f7a3976a5bb"
@@ -66,7 +66,7 @@ to_padded_hex() {
 echo "Reading from RocketVault ($ROCKET_VAULT)..."
 deposit_contract_balance=$(read_storage "$ROCKET_VAULT" "$DEPOSIT_POOL_ETH_BALANCE_SLOT")
 
-# Read storage values from RocketStorage (settings — same slots for v3 and v4)
+# Read storage values from RocketStorage (settings)
 echo "Reading from RocketStorage ($ROCKET_STORAGE)..."
 deposits_enabled=$(read_storage "$ROCKET_STORAGE" "$DEPOSITS_ENABLED_SLOT")
 deposit_assigning_enabled=$(read_storage "$ROCKET_STORAGE" "$DEPOSIT_ASSIGN_ENABLED_SLOT")
@@ -84,12 +84,12 @@ echo "Reading rETH contract balance..."
 reth_balance_wei=$(cast balance "$RETH_ADDRESS" --block "$BLOCK_NUMBER" --rpc-url "$RPC_URL" 2>/dev/null | cut -d' ' -f1)
 reth_contract_liquidity=$(to_padded_hex "$reth_balance_wei")
 
-# Call RocketNetworkBalances v4 for total_eth and reth_supply
-echo "Calling RocketNetworkBalances V4 ($ROCKET_NETWORK_BALANCES_V4)..."
-total_eth_dec=$(call_method "$ROCKET_NETWORK_BALANCES_V4" "getTotalETHBalance()(uint256)" | cut -d' ' -f1)
+# Call RocketNetworkBalances for total_eth and reth_supply
+echo "Calling RocketNetworkBalances ($ROCKET_NETWORK_BALANCES)..."
+total_eth_dec=$(call_method "$ROCKET_NETWORK_BALANCES" "getTotalETHBalance()(uint256)" | cut -d' ' -f1)
 total_eth=$(to_padded_hex "$total_eth_dec")
 
-reth_supply_dec=$(call_method "$ROCKET_NETWORK_BALANCES_V4" "getTotalRETHSupply()(uint256)" | cut -d' ' -f1)
+reth_supply_dec=$(call_method "$ROCKET_NETWORK_BALANCES" "getTotalRETHSupply()(uint256)" | cut -d' ' -f1)
 reth_supply=$(to_padded_hex "$reth_supply_dec")
 
 # Output the JSON for substreams.yaml

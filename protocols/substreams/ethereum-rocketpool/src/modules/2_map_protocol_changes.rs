@@ -1,6 +1,6 @@
 use crate::{
     abi::{
-        rocket_dao_protocol_proposal, rocket_deposit_pool_v4, rocket_network_balances_v4,
+        rocket_dao_protocol_proposal, rocket_deposit_pool, rocket_network_balances,
         rocket_token_reth,
     },
     constants::{
@@ -8,8 +8,8 @@ use crate::{
         DEPOSIT_ASSIGN_MAXIMUM_SLOT, DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT, DEPOSIT_FEE_SLOT,
         ETH_ADDRESS, EXPRESS_QUEUE_RATE_SLOT, MAX_DEPOSIT_POOL_SIZE_SLOT, MIN_DEPOSIT_AMOUNT_SLOT,
         RETH_ADDRESS, ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS,
-        ROCKET_DEPOSIT_POOL_ADDRESS_V4, ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT,
-        ROCKET_NETWORK_BALANCES_ADDRESS_V4, ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS,
+        ROCKET_DEPOSIT_POOL_ADDRESS, ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT,
+        ROCKET_NETWORK_BALANCES_ADDRESS, ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS,
         ROCKET_VAULT_ADDRESS,
     },
     utils::{get_changed_attributes, hex_to_bytes},
@@ -31,7 +31,7 @@ use tycho_substreams::{
 
 /// Aggregates protocol component, balance and attribute changes by transaction.
 ///
-/// Indexes the RocketPool deposit pool from the Saturn I activation block onwards.
+/// Indexes the RocketPool deposit pool from the v1.4 activation block onwards.
 /// Tracks deposit liquidity, rETH liquidity, network balances, protocol settings,
 /// and the megapool express/standard queue state.
 #[substreams::handlers::map]
@@ -124,7 +124,7 @@ fn initialize_protocol_component(
 
 /// Updates deposit contract liquidity based on deposit pool events.
 ///
-/// Listens for deposit-related events from the v4 RocketDepositPool and fetches the updated
+/// Listens for deposit-related events from the RocketDepositPool and fetches the updated
 /// ETH balance from RocketVault's etherBalances storage slot. Also listens for FundsAssigned
 /// events which change the vault balance when megapool queue entries are processed.
 fn update_deposit_liquidity(
@@ -132,15 +132,15 @@ fn update_deposit_liquidity(
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
     for log in block.logs() {
-        if log.log.address != ROCKET_DEPOSIT_POOL_ADDRESS_V4 {
+        if log.log.address != ROCKET_DEPOSIT_POOL_ADDRESS {
             continue;
         }
 
-        let is_deposit_event = rocket_deposit_pool_v4::events::DepositReceived::match_log(log.log) ||
-            rocket_deposit_pool_v4::events::DepositAssigned::match_log(log.log) ||
-            rocket_deposit_pool_v4::events::DepositRecycled::match_log(log.log) ||
-            rocket_deposit_pool_v4::events::ExcessWithdrawn::match_log(log.log) ||
-            rocket_deposit_pool_v4::events::FundsAssigned::match_log(log.log);
+        let is_deposit_event = rocket_deposit_pool::events::DepositReceived::match_log(log.log) ||
+            rocket_deposit_pool::events::DepositAssigned::match_log(log.log) ||
+            rocket_deposit_pool::events::DepositRecycled::match_log(log.log) ||
+            rocket_deposit_pool::events::ExcessWithdrawn::match_log(log.log) ||
+            rocket_deposit_pool::events::FundsAssigned::match_log(log.log);
 
         if !is_deposit_event {
             continue;
@@ -215,19 +215,19 @@ fn update_reth_liquidity(
 
 /// Extracts Rocket Pool network balance updates from the block logs.
 ///
-/// Uses the v4 RocketNetworkBalances contract. The BalancesUpdated event provides total_eth
+/// Uses the RocketNetworkBalances contract. The BalancesUpdated event provides total_eth
 /// and reth_supply which are used for the rETH exchange rate calculation.
 fn update_network_balance(
     block: &eth::v2::Block,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
     for log in block.logs() {
-        if log.log.address != ROCKET_NETWORK_BALANCES_ADDRESS_V4 {
+        if log.log.address != ROCKET_NETWORK_BALANCES_ADDRESS {
             continue;
         }
 
         let balance_update =
-            rocket_network_balances_v4::events::BalancesUpdated::match_and_decode(log)
+            rocket_network_balances::events::BalancesUpdated::match_and_decode(log)
                 .map(|event| (event.total_eth, event.reth_supply));
 
         let (total_eth, reth_supply) = match balance_update {
@@ -316,7 +316,7 @@ fn update_protocol_settings(
 
 /// Updates megapool queue state based on queue events.
 ///
-/// Listens for FundsRequested, FundsAssigned, and QueueExited events from the v4
+/// Listens for FundsRequested, FundsAssigned, and QueueExited events from the
 /// RocketDepositPool, then extracts the updated megapool_queue_requested_total and
 /// megapool_queue_index from RocketStorage storage changes.
 fn update_megapool_queue_state(
@@ -324,13 +324,13 @@ fn update_megapool_queue_state(
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
     for log in block.logs() {
-        if log.log.address != ROCKET_DEPOSIT_POOL_ADDRESS_V4 {
+        if log.log.address != ROCKET_DEPOSIT_POOL_ADDRESS {
             continue;
         }
 
-        let is_queue_event = rocket_deposit_pool_v4::events::FundsRequested::match_log(log.log) ||
-            rocket_deposit_pool_v4::events::FundsAssigned::match_log(log.log) ||
-            rocket_deposit_pool_v4::events::QueueExited::match_log(log.log);
+        let is_queue_event = rocket_deposit_pool::events::FundsRequested::match_log(log.log) ||
+            rocket_deposit_pool::events::FundsAssigned::match_log(log.log) ||
+            rocket_deposit_pool::events::QueueExited::match_log(log.log);
 
         if !is_queue_event {
             continue;

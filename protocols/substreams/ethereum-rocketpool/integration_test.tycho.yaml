@@ -4,15 +4,15 @@ protocol_type_names:
   - "rocketpool_pool"
 skip_balance_check: true # Rocket Deposit Pool components do not hold user funds directly
 tests:
-  - name: test_saturn_pool_creation
-    start_block: 24479994 # Saturn I settings migration block (all v4 settings finalized)
-    stop_block: 24480200 # Includes first deposits after Saturn activation
+  - name: test_v1_4_pool_creation
+    start_block: 24479994 # v1.4 upgrade block
+    stop_block: 24480200 # Includes first deposits after v1.4 activation
     expected_components:
       - id: "0xdd3f50f8a6cafbe9b31a427582963f465e745af8"
         tokens:
           - "0xae78736Cd615f374D3085123A210448E74Fc6393"
           - "0x0000000000000000000000000000000000000000"
         static_attributes: { }
-        creation_tx: "0x2fc10aad3c1b00bdfa9b6fddab79e0f2688609848f8f7a1a6449ab42da38530c" # Saturn I upgrade execute() tx
+        creation_tx: "0x2fc10aad3c1b00bdfa9b6fddab79e0f2688609848f8f7a1a6449ab42da38530c" # v1.4 upgrade tx
         skip_simulation: false
         skip_execution: true

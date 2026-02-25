@@ -3,9 +3,9 @@ use substreams::hex;
 
 pub const ROCKET_POOL_COMPONENT_ID: &str = "0xdd3f50f8a6cafbe9b31a427582963f465e745af8";
 
-/// The Saturn I upgrade `execute()` transaction — activates all v4 contracts and settings.
-/// Contract: RocketUpgradeOneDotFour (0x5b3B5C76391662e56d0ff72F31B89C409316c8Ba)
-pub const SATURN_I_UPGRADE_TX: [u8; 32] =
+/// The v1.4 upgrade transaction using the 
+/// RocketUpgradeOneDotFour (0x5b3B5C76391662e56d0ff72F31B89C409316c8Ba)
+pub const V1_4_UPGRADE_TX: [u8; 32] =
     hex!("2fc10aad3c1b00bdfa9b6fddab79e0f2688609848f8f7a1a6449ab42da38530c");
 
 pub const ETH_ADDRESS: [u8; 20] = hex!("0000000000000000000000000000000000000000");
@@ -14,14 +14,15 @@ pub const RETH_ADDRESS: [u8; 20] = hex!("ae78736Cd615f374D3085123A210448E74Fc639
 pub const ROCKET_VAULT_ADDRESS: [u8; 20] = hex!("3bDC69C4E5e13E52A65f5583c23EFB9636b469d6");
 pub const ROCKET_STORAGE_ADDRESS: [u8; 20] = hex!("1d8f8f00cfa6758d7bE78336684788Fb0ee0Fa46");
 
-/// Rocket Network Balances v4 — deployed with Saturn I upgrade
-pub const ROCKET_NETWORK_BALANCES_ADDRESS_V4: [u8; 20] =
-    hex!("1D9F14C6Bfd8358b589964baD8665AdD248E9473");
 pub const ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS: [u8; 20] =
     hex!("2D627A50Dc1C4EDa73E42858E8460b0eCF300b25");
-/// Rocket Deposit Pool v4 — deployed with Saturn I upgrade, activated at block 24479942
-pub const ROCKET_DEPOSIT_POOL_ADDRESS_V4: [u8; 20] =
+/// Rocket Deposit Pool v1.4 
+pub const ROCKET_DEPOSIT_POOL_ADDRESS: [u8; 20] =
     hex!("CE15294273CFb9D9b628F4D61636623decDF4fdC");
+/// Rocket Network Balances v1.4
+pub const ROCKET_NETWORK_BALANCES_ADDRESS: [u8; 20] =
+    hex!("1D9F14C6Bfd8358b589964baD8665AdD248E9473");
+
 
 /// All storage slots for initial state and settings tracking.
 /// These are EVM storage slots in RocketStorage (base slot 2 for uintStorage, 5 for boolStorage).
@@ -107,7 +108,6 @@ pub(crate) const DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT: StorageLocation = Stora
     signed: false,
 };
 
-// ----------- Contract: Rocket Storage (Saturn v4 megapool queue) -----------
 /// Total ETH requested across both express and standard megapool queues.
 /// Storage key: keccak256("deposit.pool.requested.total") in uintStorage (base slot 2).
 pub(crate) const MEGAPOOL_QUEUE_REQUESTED_TOTAL_SLOT: StorageLocation = StorageLocation {
