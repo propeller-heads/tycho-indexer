@@ -43,6 +43,9 @@ pub(crate) const ALL_STORAGE_SLOTS: [StorageLocation; 11] = [
 ];
 
 // ----------- Contract: Rocket Vault -----------
+/// ETH held in the vault on behalf of the deposit pool.
+/// RocketVault.etherBalances mapping (string => uint256) at base slot 1.
+/// Slot: keccak256(bytes("rocketDepositPool") ++ pad32(1))
 pub(crate) const ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT: StorageLocation = StorageLocation {
     name: "deposit_contract_balance",
     slot: hex!("00ab4654686e0d7a1f921cc85a932fd8efbc8a1f247b51fa6bca2f7a3976a5bb"),
@@ -52,6 +55,10 @@ pub(crate) const ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT: StorageLocation = Storage
 };
 
 // ----------- Contract: Rocket Storage (settings) -----------
+
+/// Whether deposits are enabled.
+/// Setting key: keccak256(keccak256("dao.protocol.setting.deposit") ++ "deposit.enabled")
+/// in boolStorage (base slot 5).
 pub(crate) const DEPOSITS_ENABLED_SLOT: StorageLocation = StorageLocation {
     name: "deposits_enabled",
     slot: hex!("7bd5d699fdfcd0cf7b26d3fc339f1567cecb978e8ce24b7b6ed7d192e1bbb663"),
@@ -60,6 +67,9 @@ pub(crate) const DEPOSITS_ENABLED_SLOT: StorageLocation = StorageLocation {
     signed: false,
 };
 
+/// Minimum deposit amount in wei.
+/// Setting key: keccak256(keccak256("dao.protocol.setting.deposit") ++ "deposit.minimum")
+/// in uintStorage (base slot 2).
 pub(crate) const MIN_DEPOSIT_AMOUNT_SLOT: StorageLocation = StorageLocation {
     name: "min_deposit_amount",
     slot: hex!("ba4dab8f9b8f22679cf8c926f5bd528d08a526cbe2bb39d1b1f1566d0d30ad0c"),
@@ -68,6 +78,9 @@ pub(crate) const MIN_DEPOSIT_AMOUNT_SLOT: StorageLocation = StorageLocation {
     signed: false,
 };
 
+/// Maximum ETH the deposit pool can hold.
+/// Setting key: keccak256(keccak256("dao.protocol.setting.deposit") ++ "deposit.pool.maximum")
+/// in uintStorage (base slot 2).
 pub(crate) const MAX_DEPOSIT_POOL_SIZE_SLOT: StorageLocation = StorageLocation {
     name: "max_deposit_pool_size",
     slot: hex!("efeb8d9f341f931c14ed8c1156bdb235390b183f1b94f522d4d72c5d24779598"),
@@ -76,6 +89,9 @@ pub(crate) const MAX_DEPOSIT_POOL_SIZE_SLOT: StorageLocation = StorageLocation {
     signed: false,
 };
 
+/// Deposit fee as a fraction of 1 ether (e.g. 0.05e18 = 5%).
+/// Setting key: keccak256(keccak256("dao.protocol.setting.deposit") ++ "deposit.fee")
+/// in uintStorage (base slot 2).
 pub(crate) const DEPOSIT_FEE_SLOT: StorageLocation = StorageLocation {
     name: "deposit_fee",
     slot: hex!("a1713e68e8e6d7580de48bb14bd78c7f293a5a0e42a40f7fe428d9943dc63264"),
@@ -84,6 +100,9 @@ pub(crate) const DEPOSIT_FEE_SLOT: StorageLocation = StorageLocation {
     signed: false,
 };
 
+/// Whether deposit assignment to the minipool queue is enabled.
+/// Setting key: keccak256(keccak256("dao.protocol.setting.deposit") ++ "deposit.assign.enabled")
+/// in boolStorage (base slot 5).
 pub(crate) const DEPOSIT_ASSIGN_ENABLED_SLOT: StorageLocation = StorageLocation {
     name: "deposit_assigning_enabled",
     slot: hex!("3c4ef260cb76105ef0fda3d75cf7af776accf2a871c39fd5530453efa532aba4"),
@@ -92,6 +111,9 @@ pub(crate) const DEPOSIT_ASSIGN_ENABLED_SLOT: StorageLocation = StorageLocation 
     signed: false,
 };
 
+/// Maximum number of minipool assignments per deposit.
+/// Setting key: keccak256(keccak256("dao.protocol.setting.deposit") ++ "deposit.assign.maximum")
+/// in uintStorage (base slot 2).
 pub(crate) const DEPOSIT_ASSIGN_MAXIMUM_SLOT: StorageLocation = StorageLocation {
     name: "deposit_assign_maximum",
     slot: hex!("a2574dbdd30c823af5a27800f3329b5f8f5fa1e4cb116c254794974425497fb3"),
@@ -100,6 +122,9 @@ pub(crate) const DEPOSIT_ASSIGN_MAXIMUM_SLOT: StorageLocation = StorageLocation 
     signed: false,
 };
 
+/// Maximum number of socialised minipool assignments per deposit.
+/// Setting key: keccak256(keccak256("dao.protocol.setting.deposit") ++ "deposit.assign.socialised.maximum")
+/// in uintStorage (base slot 2).
 pub(crate) const DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT: StorageLocation = StorageLocation {
     name: "deposit_assign_socialised_maximum",
     slot: hex!("d6794381ca0356c0f5fabe729b1ea706b25013e48d1d1bb2441c2bd5053a975a"),
