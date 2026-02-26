@@ -327,9 +327,16 @@ impl SnapshotSink for S3Sink {
     async fn write_all(&mut self, buf: &[u8]) -> Result<(), SinkError> {
         self.hasher.update(buf);
         self.position += buf.len() as u64;
-        self.buffer.extend_from_slice(buf);
-        if self.buffer.len() >= self.part_threshold {
-            self.flush_part().await?;
+        let mut remaining = buf;
+        while !remaining.is_empty() {
+            let space = self.part_threshold - self.buffer.len();
+            let take = remaining.len().min(space);
+            self.buffer
+                .extend_from_slice(&remaining[..take]);
+            remaining = &remaining[take..];
+            if self.buffer.len() >= self.part_threshold {
+                self.flush_part().await?;
+            }
         }
         Ok(())
     }
@@ -339,6 +346,13 @@ impl SnapshotSink for S3Sink {
     }
 
     async fn finalize(mut self: Box<Self>) -> Result<SinkResult, SinkError> {
+        if self.buffer.is_empty() && self.completed_parts.is_empty() {
+            let _ = self
+                .ops
+                .abort_multipart_upload(&self.bucket, &self.key, &self.upload_id)
+                .await;
+            return Err(SinkError::CompleteFailed("cannot finalize an empty upload".into()));
+        }
         self.flush_part().await?;
         let sha256: [u8; 32] = self.hasher.finalize().into();
         let size_bytes = self.position;
@@ -379,6 +393,11 @@ impl S3SinkFactory {
     }
 
     pub fn with_client(client: Client, bucket: String, part_threshold: usize) -> Self {
+        const MIN_PART_SIZE: usize = 5 * 1024 * 1024;
+        assert!(
+            part_threshold >= MIN_PART_SIZE,
+            "part_threshold must be >= 5 MiB (S3 minimum part size)"
+        );
         Self { client, bucket, part_threshold }
     }
 }
@@ -463,6 +482,75 @@ mod tests {
                 .send()
                 .await
                 .unwrap();
+        }
+
+        #[test]
+        #[should_panic(expected = "part_threshold must be >= 5 MiB")]
+        fn s3_sink_factory_with_client_rejects_sub_minimum_threshold() {
+            let config = aws_sdk_s3::Config::builder()
+                .behavior_version(BehaviorVersion::latest())
+                .region(Region::new("us-east-1"))
+                .build();
+            S3SinkFactory::with_client(Client::from_conf(config), "bucket".to_string(), 100);
+        }
+
+        #[tokio::test]
+        async fn s3_sink_finalize_empty_upload_aborts_and_returns_error() {
+            let mut mock = MockS3Ops::new();
+            mock.expect_create_multipart_upload()
+                .returning(|_, _| Ok("test-upload-id".to_string()));
+            mock.expect_abort_multipart_upload()
+                .times(1)
+                .returning(|_, _, _| Ok(()));
+
+            let sink = S3Sink::create_with_ops(
+                Box::new(mock),
+                "bucket".to_string(),
+                "key".to_string(),
+                DEFAULT_PART_THRESHOLD,
+            )
+            .await
+            .unwrap();
+
+            let result = Box::new(sink).finalize().await;
+            assert!(matches!(result, Err(SinkError::CompleteFailed(_))));
+        }
+
+        #[tokio::test]
+        async fn s3_sink_write_all_chunks_large_input_into_multiple_parts() {
+            let mut mock = MockS3Ops::new();
+            mock.expect_create_multipart_upload()
+                .returning(|_, _| Ok("test-upload-id".to_string()));
+            mock.expect_upload_part()
+                .times(2)
+                .returning(|_, _, _, part_num, data| {
+                    assert_eq!(data.len(), 5);
+                    Ok(CompletedPart::builder()
+                        .part_number(part_num)
+                        .build())
+                });
+            mock.expect_complete_multipart_upload()
+                .times(1)
+                .returning(|_, _, _, parts| {
+                    assert_eq!(parts.len(), 2);
+                    Ok(())
+                });
+
+            let mut sink = S3Sink::create_with_ops(
+                Box::new(mock),
+                "bucket".to_string(),
+                "key".to_string(),
+                5, // 5-byte threshold
+            )
+            .await
+            .unwrap();
+
+            // Single write_all of 10 bytes must be chunked into 2 × 5-byte parts.
+            sink.write_all(b"0123456789")
+                .await
+                .unwrap();
+            let result = Box::new(sink).finalize().await.unwrap();
+            assert_eq!(result.size_bytes, 10);
         }
 
         #[tokio::test]

@@ -31,9 +31,16 @@ thiserror.workspace = true
 sha2.workspace = true
 aws-sdk-s3 = { version = "1.77", optional = true }
 aws-config = { version = "1.1.8", features = ["behavior-version-latest"], optional = true }
+testcontainers = { version = "0.23", optional = true }
+testcontainers-modules = { version = "0.11", features = ["minio"], optional = true }
 
 [features]
-s3 = ["dep:aws-sdk-s3", "dep:aws-config"]
+s3 = [
+    "dep:aws-sdk-s3",
+    "dep:aws-config",
+    "dep:testcontainers",
+    "dep:testcontainers-modules",
+]
 
 [dev-dependencies]
 pretty_assertions.workspace = true
@@ -41,6 +48,4 @@ rstest.workspace = true
 test-log = { version = "0.2.14", features = ["trace"] }
 mockall.workspace = true
 tempfile = "3"
-testcontainers = "0.23"
-testcontainers-modules = { version = "0.11", features = ["minio"] }
 tokio = { workspace = true, features = ["fs", "io-util"] }
