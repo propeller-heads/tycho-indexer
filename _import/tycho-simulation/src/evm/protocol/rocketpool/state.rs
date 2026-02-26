@@ -89,13 +89,16 @@ impl RocketpoolState {
 
     /// Calculates rETH amount out for a given ETH deposit amount.
     fn get_reth_value(&self, eth_amount: U256) -> Result<U256, SimulationError> {
+        // fee = ethIn * deposit_fee / DEPOSIT_FEE_BASE
         let fee = mul_div(eth_amount, self.deposit_fee, U256::from(DEPOSIT_FEE_BASE))?;
         let net_eth = safe_sub_u256(eth_amount, fee)?;
+        // rethOut = netEth * rethSupply / totalEth
         mul_div(net_eth, self.reth_supply, self.total_eth)
     }
 
     /// Calculates ETH amount out for a given rETH burn amount.
     fn get_eth_value(&self, reth_amount: U256) -> Result<U256, SimulationError> {
+        // ethOut = rethIn * totalEth / rethSupply
         mul_div(reth_amount, self.total_eth, self.reth_supply)
     }
 
@@ -128,7 +131,9 @@ impl RocketpoolState {
     }
 
     /// Returns the excess balance available for withdrawals from the deposit pool.
-    /// Excess = deposit_contract_balance - megapool_queue_requested_total
+    ///
+    /// ETH requested for queued megapool entries is reserved and cannot be withdrawn.
+    /// Only the surplus above queue requested is available.
     fn get_deposit_pool_excess_balance(&self) -> Result<U256, SimulationError> {
         if self.megapool_queue_requested_total >= self.deposit_contract_balance {
             Ok(U256::ZERO)
@@ -138,6 +143,7 @@ impl RocketpoolState {
     }
 
     /// Returns total available liquidity for withdrawals.
+    /// This is the sum of reth_contract_liquidity and the deposit pool excess balance.
     fn get_total_available_for_withdrawal(&self) -> Result<U256, SimulationError> {
         let deposit_pool_excess = self.get_deposit_pool_excess_balance()?;
         safe_add_u256(self.reth_contract_liquidity, deposit_pool_excess)
@@ -145,15 +151,19 @@ impl RocketpoolState {
 
     /// Computes how `processDeposit()` routes deposited ETH between the rETH contract
     /// (collateral buffer) and the deposit pool vault.
+    ///
+    /// Returns `(to_reth_contract, to_deposit_vault)`.
     fn compute_deposit_routing(
         &self,
         deposit_amount: U256,
     ) -> Result<(U256, U256), SimulationError> {
+        // target_collateral = total_eth * target_reth_collateral_rate / 1e18
         let target_collateral = mul_div(
             self.total_eth,
             self.target_reth_collateral_rate,
             U256::from(DEPOSIT_FEE_BASE),
         )?;
+        // Fill the rETH contract up to its target, send the rest to the deposit vault.
         let shortfall = target_collateral.saturating_sub(self.reth_contract_liquidity);
         let to_reth = deposit_amount.min(shortfall);
         let to_vault = deposit_amount - to_reth;
@@ -206,17 +216,24 @@ impl ProtocolSim for RocketpoolState {
     }
 
     fn spot_price(&self, _base: &Token, quote: &Token) -> Result<f64, SimulationError> {
+        // As we are computing the amount of quote needed to buy 1 base, we check the quote token.
         let is_depositing_eth = RocketpoolState::is_depositing_eth(&quote.address);
+
+        // As the protocol has no slippage, we can use a fixed amount for spot price calculation.
+        // We compute how much base we get for 1 quote, then invert to get quote needed for 1 base.
         let amount = U256::from(1e18);
 
         let base_per_quote = if is_depositing_eth {
+            // base=rETH, quote=ETH: compute rETH for given ETH
             self.assert_deposits_enabled()?;
             self.get_reth_value(amount)?
         } else {
+            // base=ETH, quote=rETH: compute ETH for given rETH
             self.get_eth_value(amount)?
         };
 
         let base_per_quote = u256_to_f64(base_per_quote)? / 1e18;
+        // Invert to get how much quote needed to buy 1 base
         Ok(1.0 / base_per_quote)
     }
 
@@ -270,6 +287,7 @@ impl ProtocolSim for RocketpoolState {
         };
 
         let mut new_state = self.clone();
+        // Note: total_eth and reth_supply are not updated as they are managed by an oracle.
         if is_depositing_eth {
             // route ETH between rETH collateral buffer and vault.
             let (to_reth, to_vault) = new_state.compute_deposit_routing(amount_in)?;
@@ -278,6 +296,8 @@ impl ProtocolSim for RocketpoolState {
             new_state.deposit_contract_balance =
                 safe_add_u256(new_state.deposit_contract_balance, to_vault)?;
 
+            // Assign deposits: dequeue megapool entries and send ETH from vault to validators.
+            // Both the vault balance and the queue requested are reduced by the same amount.
             let eth_assigned = new_state.calculate_assign_deposits(amount_in);
             if eth_assigned > U256::ZERO {
                 new_state.deposit_contract_balance =
@@ -286,19 +306,18 @@ impl ProtocolSim for RocketpoolState {
                     safe_sub_u256(new_state.megapool_queue_requested_total, eth_assigned)?;
             }
         } else {
-            #[allow(clippy::collapsible_else_if)]
-            if amount_out <= new_state.reth_contract_liquidity {
-                new_state.reth_contract_liquidity =
-                    safe_sub_u256(new_state.reth_contract_liquidity, amount_out)?;
-            } else {
-                let needed_from_deposit_pool =
-                    safe_sub_u256(amount_out, new_state.reth_contract_liquidity)?;
-                new_state.deposit_contract_balance =
-                    safe_sub_u256(new_state.deposit_contract_balance, needed_from_deposit_pool)?;
-                new_state.reth_contract_liquidity = U256::ZERO;
-            }
-        };
+            // Withdraw from rETH contract first, spill remainder into deposit pool.
+            let needed_from_deposit_pool =
+                amount_out.saturating_sub(new_state.reth_contract_liquidity);
+            new_state.reth_contract_liquidity =
+                new_state.reth_contract_liquidity.saturating_sub(amount_out);
+            new_state.deposit_contract_balance =
+                safe_sub_u256(new_state.deposit_contract_balance, needed_from_deposit_pool)?;
+        }
 
+        // The ETH withdrawal gas estimation assumes a best case scenario when there is sufficient
+        // liquidity in the rETH contract. Note that there has never been a situation during a
+        // withdrawal when this was not the case, hence the simplified gas estimation.
         let gas_used = if is_depositing_eth { 209_000u32 } else { 134_000u32 };
 
         Ok(GetAmountOutResult::new(
@@ -316,11 +335,13 @@ impl ProtocolSim for RocketpoolState {
         let is_depositing_eth = Self::is_depositing_eth(&sell_token);
 
         if is_depositing_eth {
+            // ETH -> rETH: max sell = max_deposit_capacity - deposit_contract_balance
             let max_capacity = self.get_max_deposit_capacity()?;
             let max_eth_sell = safe_sub_u256(max_capacity, self.deposit_contract_balance)?;
             let max_reth_buy = self.get_reth_value(max_eth_sell)?;
             Ok((u256_to_biguint(max_eth_sell), u256_to_biguint(max_reth_buy)))
         } else {
+            // rETH -> ETH: max buy = total available for withdrawal
             let max_eth_buy = self.get_total_available_for_withdrawal()?;
             let max_reth_sell = mul_div(max_eth_buy, self.reth_supply, self.total_eth)?;
             Ok((u256_to_biguint(max_reth_sell), u256_to_biguint(max_eth_buy)))

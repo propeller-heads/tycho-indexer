@@ -90,27 +90,27 @@ mod tests {
                     (
                         "deposit_contract_balance".to_string(),
                         Bytes::from(U256::from(50_000_000_000_000_000_000u128).to_be_bytes_vec()),
-                    ),
+                    ), // 50 ETH in deposit contract
                     (
                         "reth_contract_liquidity".to_string(),
                         Bytes::from(U256::from(10_000_000_000_000_000_000u128).to_be_bytes_vec()),
-                    ),
+                    ), // 10 ETH in rETH contract
                     ("deposits_enabled".to_string(), Bytes::from(vec![0x01])),
                     ("deposit_assigning_enabled".to_string(), Bytes::from(vec![0x01])),
                     (
                         "deposit_fee".to_string(),
                         Bytes::from(U256::from(5_000_000_000_000_000u128).to_be_bytes_vec()),
-                    ),
+                    ), // 0.5%
                     (
                         "min_deposit_amount".to_string(),
                         Bytes::from(U256::from(10_000_000_000_000_000u128).to_be_bytes_vec()),
-                    ),
+                    ), // 0.01 ETH
                     (
                         "max_deposit_pool_size".to_string(),
                         Bytes::from(
                             U256::from(5_000_000_000_000_000_000_000u128).to_be_bytes_vec(),
                         ),
-                    ),
+                    ), // 5000 ETH
                     (
                         "deposit_assign_maximum".to_string(),
                         Bytes::from(U256::from(90u64).to_be_bytes_vec()),
