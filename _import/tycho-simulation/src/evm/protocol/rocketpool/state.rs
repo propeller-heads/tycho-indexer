@@ -652,6 +652,43 @@ mod tests {
         assert_ulps_eq!(price, 1.0 / 0.3);
     }
 
+    /// Validate withdrawal spot price against on-chain getEthValue(1e18) at block 24480104.
+    /// On-chain: getEthValue(1e18) = 1157737589816937166 → 1 rETH = 1.1577... ETH.
+    /// Our spot_price(ETH, rETH) should return 1/1.1577... = 0.8637... (rETH per ETH).
+    #[test]
+    fn test_live_spot_price_withdrawal() {
+        let state = create_state_at_block_24480104();
+        let price = state
+            .spot_price(&eth_token(), &reth_token())
+            .unwrap();
+
+        // Expected from on-chain getEthValue(1e18) = 1157737589816937166
+        let on_chain_eth_value = 1_157_737_589_816_937_166f64;
+        let expected = 1e18 / on_chain_eth_value;
+        assert_ulps_eq!(price, expected, max_ulps = 10);
+    }
+
+    /// Validate deposit spot price against on-chain getRethValue(1e18) at block 24480104.
+    /// On-chain: getRethValue(1e18) = 863753590447141981 (no deposit fee).
+    /// Our spot_price(rETH, ETH) applies the 0.05% deposit fee on top.
+    #[test]
+    fn test_live_spot_price_deposit() {
+        use crate::evm::protocol::utils::add_fee_markup;
+
+        let state = create_state_at_block_24480104();
+        let price = state
+            .spot_price(&reth_token(), &eth_token())
+            .unwrap();
+
+        // On-chain getRethValue(1e18) = 863753590447141981 (no fee)
+        // → exchange rate without fee = 1e18 / 863753590447141981
+        let on_chain_reth_value = 863_753_590_447_141_981f64;
+        let rate_without_fee = 1e18 / on_chain_reth_value;
+        let fee = 500_000_000_000_000f64 / DEPOSIT_FEE_BASE as f64; // 0.05%
+        let expected = add_fee_markup(rate_without_fee, fee);
+        assert_ulps_eq!(price, expected, max_ulps = 10);
+    }
+
     #[test]
     fn test_fee_panics() {
         let state = create_state();
