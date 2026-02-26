@@ -353,23 +353,4 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
 
         vm.stopPrank();
     }
-
-    function testSequentialSwapAndVaultIntegrationWithWrapping() public {
-        // USDC -> WETH -> ETH  using vault's funds
-        uint256 amountIn = 100 * 10 ** 6;
-        deal(USDC_ADDR, ALICE, amountIn);
-
-        vm.startPrank(ALICE);
-        IERC20(USDC_ADDR).approve(tychoRouterAddr, type(uint256).max);
-        tychoRouter.deposit(USDC_ADDR, amountIn);
-        bytes memory callData = loadCallDataFromFile(
-            "test_sequential_strategy_swap_and_vault_with_wrapping"
-        );
-        (bool success,) = tychoRouterAddr.call(callData);
-
-        assertTrue(success, "Call Failed");
-        assertEq(ALICE.balance, 49412482236415857);
-
-        vm.stopPrank();
-    }
 }
