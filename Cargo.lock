@@ -7138,7 +7138,6 @@ dependencies = [
 name = "tycho-client"
 version = "0.144.1"
 dependencies = [
- "anyhow",
  "async-trait",
  "backoff",
  "chrono",
@@ -7220,7 +7219,6 @@ dependencies = [
  "mockito",
  "num-bigint",
  "pretty_assertions",
- "rand 0.8.5",
  "rstest",
  "serde",
  "serde_json",
@@ -7245,7 +7243,6 @@ dependencies = [
  "actix-web-actors",
  "actix-web-opentelemetry",
  "alloy",
- "alloy-sol-types",
  "anyhow",
  "async-stream",
  "async-trait",
@@ -7294,7 +7291,6 @@ dependencies = [
  "tycho-ethereum",
  "tycho-storage",
  "tycho-substreams",
- "typetag",
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",
