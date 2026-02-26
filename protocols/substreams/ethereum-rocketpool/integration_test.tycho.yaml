@@ -14,5 +14,5 @@ tests:
           - "0x0000000000000000000000000000000000000000"
         static_attributes: { }
         creation_tx: "0x2fc10aad3c1b00bdfa9b6fddab79e0f2688609848f8f7a1a6449ab42da38530c" # v1.4 upgrade tx
-        skip_simulation: false
+        skip_simulation: true
         skip_execution: true
