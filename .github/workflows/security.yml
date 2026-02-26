@@ -1,0 +1,53 @@
+name: Security Audit
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Cargo Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9
+        with:
+          toolchain: stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run cargo audit
+        run: |
+          cargo audit --json > audit.json || true
+
+          COUNT=$(jq '.vulnerabilities.count' audit.json)
+
+          if [ "$COUNT" -ne 0 ]; then
+            echo "=============================="
+            echo "CARGO AUDIT FAILED ($COUNT issues)"
+            echo "=============================="
+
+            jq -r '
+              .vulnerabilities.list[] |
+              "[" + (.advisory.severity // "unknown" | ascii_upcase) + "] " +
+              "ID: " + .advisory.id + " | " +
+              "Crate: " + .package.name + " | " +
+              "Version: " + .package.version + " | " +
+              "Error: " + .advisory.title 
+            ' audit.json
+
+            exit 1
+          else
+            echo "cargo audit passed — no vulnerabilities found"
+          fi
