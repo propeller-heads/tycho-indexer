@@ -66,8 +66,8 @@ tokio = { version = "1.27", features = [
 console-subscriber = "0.2.0"
 tokio-tungstenite = { version = "0.20.0", features = ["native-tls"] }
 utoipa = { version = "4.2.0", features = ["chrono"] }
-diesel = { version = "2.1.0", features = ["postgres", "chrono", "serde_json"] }
-diesel-async = { version = "0.4.1", features = ["postgres", "deadpool"] }
+diesel = { version = "2.3.6", features = ["postgres", "chrono", "serde_json"] }
+diesel-async = { version = "0.7.4", features = ["postgres", "deadpool"] }
 ethabi = "18.0.0"
 anyhow = "1.0.76"
 unicode-segmentation = "1.12.0"
