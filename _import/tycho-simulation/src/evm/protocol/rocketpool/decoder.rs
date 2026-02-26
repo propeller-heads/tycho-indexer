@@ -121,13 +121,13 @@ mod tests {
                     ),
                     (
                         "megapool_queue_requested_total".to_string(),
-                        Bytes::from(U256::from(1000_000_000_000_000_000_000u128).to_be_bytes_vec()),
+                        Bytes::from(
+                            U256::from(1_000_000_000_000_000_000_000_u128).to_be_bytes_vec(),
+                        ),
                     ),
                     (
                         "target_reth_collateral_rate".to_string(),
-                        Bytes::from(
-                            U256::from(10_000_000_000_000_000u128).to_be_bytes_vec(),
-                        ),
+                        Bytes::from(U256::from(10_000_000_000_000_000_u128).to_be_bytes_vec()),
                     ),
                 ]),
                 balances: HashMap::new(),
@@ -154,7 +154,7 @@ mod tests {
         assert_eq!(state.deposit_assign_maximum, U256::from(90u64));
         assert_eq!(
             state.megapool_queue_requested_total,
-            U256::from(1000_000_000_000_000_000_000u128)
+            U256::from(1_000_000_000_000_000_000_000u128)
         );
     }
 

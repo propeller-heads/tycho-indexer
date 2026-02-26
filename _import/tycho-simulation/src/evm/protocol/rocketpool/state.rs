@@ -1018,7 +1018,7 @@ mod tests {
         state.deposit_assigning_enabled = true;
         state.deposit_assign_maximum = U256::from(90u64);
         state.megapool_queue_requested_total = U256::from(96e18); // 3 entries
-        // target = 200e18 * 10% / 1e18 = 20 ETH → shortfall = 20 - 0 = 20
+                                                                  // target = 200e18 * 10% / 1e18 = 20 ETH → shortfall = 20 - 0 = 20
         state.target_reth_collateral_rate = U256::from(100_000_000_000_000_000u64); // 10%
 
         let res = state
@@ -1118,7 +1118,7 @@ mod tests {
         128_000_000_000_000_000_000u128,
         90u64,
         0u64,
-        0u128,
+        0u128
     )]
     // Vault below 32 ETH: deposit=100 ETH, vault=20, queue=128, max=90
     // vault_cap = 20/32 = 0 → 0 entries
@@ -1128,7 +1128,7 @@ mod tests {
         128_000_000_000_000_000_000u128,
         90u64,
         0u64,
-        0u128,
+        0u128
     )]
     fn test_assign_constraint(
         #[case] deposit: u128,
@@ -1221,7 +1221,8 @@ mod tests {
     /// Reuses `create_state_at_block_24480104` (~1200 blocks before the burn) because:
     ///   - `total_eth` and `reth_supply` are oracle-reported values (from rocketNetworkBalances)
     ///     updated only by oracle submissions (daily). Verified identical at both blocks:
-    ///     getTotalETHBalance() = 396944271446898073504670, getTotalRETHSupply() = 342862039669683153255377.
+    ///     getTotalETHBalance() = 396944271446898073504670, getTotalRETHSupply() =
+    ///     342862039669683153255377.
     ///   - The burn amount (2.91 ETH) is sourced entirely from `reth_contract_liquidity` (224 ETH),
     ///     so `deposit_contract_balance` and `megapool_queue_requested_total` are not involved.
     #[test]
@@ -1248,11 +1249,8 @@ mod tests {
         // 2.91 ETH withdrawn entirely from reth_contract_liquidity (224 ETH available)
         assert_eq!(
             new_state.reth_contract_liquidity,
-            safe_sub_u256(
-                state.reth_contract_liquidity,
-                U256::from(2_912_504_376_202_664_754u128)
-            )
-            .unwrap()
+            safe_sub_u256(state.reth_contract_liquidity, U256::from(2_912_504_376_202_664_754u128))
+                .unwrap()
         );
         assert_eq!(new_state.deposit_contract_balance, state.deposit_contract_balance);
     }
