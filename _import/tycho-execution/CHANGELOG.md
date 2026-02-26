@@ -1,3 +1,10 @@
+## [0.31.0](https://github.com/propeller-heads/tycho-contracts/compare/0.30.0...0.31.0) (2026-02-26)
+
+
+### Features
+
+* remove unneeded set-executors script and update README instructions ([b5e55d6](https://github.com/propeller-heads/tycho-contracts/commit/b5e55d65d653b7dbc729fb3b729e73bbc4032ba7))
+
 ## [0.30.0](https://github.com/propeller-heads/tycho-contracts/compare/0.29.0...0.30.0) (2026-02-24)
 
 
