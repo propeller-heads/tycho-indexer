@@ -93,6 +93,7 @@ pub struct ProtocolStateSynchronizer<R: RPCClient, D: DeltasClient> {
     include_tvl: bool,
     compression: bool,
     partial_blocks: bool,
+    uses_dci: bool,
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -254,7 +255,15 @@ where
             include_tvl,
             compression,
             partial_blocks: false,
+            uses_dci: false,
         }
+    }
+
+    /// Sets whether this protocol uses Dynamic Contract Indexing (DCI).
+    /// When true, entrypoints will be fetched during snapshot retrieval.
+    pub fn with_dci(mut self, uses_dci: bool) -> Self {
+        self.uses_dci = uses_dci;
+        self
     }
 
     /// Enables receiving partial block updates.
@@ -285,16 +294,7 @@ where
             return Ok(StateSyncMessage { header, ..Default::default() });
         }
 
-        // TODO: Find a smarter way to dynamically detect DCI protocols.
-        const DCI_PROTOCOLS: &[&str] = &[
-            "uniswap_v4_hooks",
-            "vm:curve",
-            "vm:balancer_v2",
-            "vm:balancer_v3",
-            "fluid_v1",
-            "erc4626",
-        ];
-        let entrypoints_result = if DCI_PROTOCOLS.contains(&self.extractor_id.name.as_str()) {
+        let entrypoints_result = if self.uses_dci {
             let result = self
                 .rpc_client
                 .get_traced_entry_points_paginated(
@@ -3099,5 +3099,112 @@ mod test {
 
         let _ = close_tx.send(());
         jh.await.expect("Task should not panic");
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_get_snapshots_skips_entrypoints_when_not_dci() {
+        let header = BlockHeader::default();
+        let mut rpc = make_mock_client();
+        let component = ProtocolComponent { id: "Component1".to_string(), ..Default::default() };
+
+        let component_clone = component.clone();
+        rpc.expect_get_snapshots()
+            .returning(move |_request, _chunk_size, _concurrency| {
+                Ok(Snapshot {
+                    states: [(
+                        "Component1".to_string(),
+                        ComponentWithState {
+                            state: ResponseProtocolState {
+                                component_id: "Component1".to_string(),
+                                ..Default::default()
+                            },
+                            component: component_clone.clone(),
+                            entrypoints: vec![],
+                            component_tvl: None,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    vm_storage: HashMap::new(),
+                })
+            });
+
+        // get_traced_entry_points should NOT be called for a non-DCI protocol
+        rpc.expect_get_traced_entry_points()
+            .never();
+
+        let mut state_sync = with_mocked_clients(true, false, Some(rpc), None);
+        // uses_dci defaults to false, no .with_dci() call needed
+        state_sync
+            .component_tracker
+            .components
+            .insert("Component1".to_string(), component);
+
+        let components_arg = ["Component1".to_string()];
+        let snap = state_sync
+            .get_snapshots(header, Some(&components_arg))
+            .await
+            .expect("Retrieving snapshot failed");
+
+        assert!(snap
+            .snapshots
+            .states
+            .contains_key("Component1"));
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_get_snapshots_fetches_entrypoints_when_dci() {
+        let header = BlockHeader::default();
+        let mut rpc = make_mock_client();
+        let component = ProtocolComponent { id: "Component1".to_string(), ..Default::default() };
+
+        let component_clone = component.clone();
+        rpc.expect_get_snapshots()
+            .returning(move |_request, _chunk_size, _concurrency| {
+                Ok(Snapshot {
+                    states: [(
+                        "Component1".to_string(),
+                        ComponentWithState {
+                            state: ResponseProtocolState {
+                                component_id: "Component1".to_string(),
+                                ..Default::default()
+                            },
+                            component: component_clone.clone(),
+                            entrypoints: vec![],
+                            component_tvl: None,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    vm_storage: HashMap::new(),
+                })
+            });
+
+        // get_traced_entry_points SHOULD be called for a DCI protocol
+        rpc.expect_get_traced_entry_points()
+            .times(1)
+            .returning(|_| {
+                Ok(TracedEntryPointRequestResponse {
+                    traced_entry_points: HashMap::new(),
+                    pagination: PaginationResponse::new(0, 20, 0),
+                })
+            });
+
+        let mut state_sync = with_mocked_clients(true, false, Some(rpc), None).with_dci(true);
+        state_sync
+            .component_tracker
+            .components
+            .insert("Component1".to_string(), component);
+
+        let components_arg = ["Component1".to_string()];
+        let snap = state_sync
+            .get_snapshots(header, Some(&components_arg))
+            .await
+            .expect("Retrieving snapshot failed");
+
+        assert!(snap
+            .snapshots
+            .states
+            .contains_key("Component1"));
     }
 }

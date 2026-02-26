@@ -110,6 +110,10 @@ pub struct RpcHandler<G, T> {
     #[allow(dead_code)]
     tracer: T,
     rpc_config: ServerRpcConfig,
+    /// Protocol systems that use Dynamic Contract Indexing (DCI), derived from
+    /// `ExtractorConfig.dci_plugin` at startup. Included in the `protocol_systems`
+    /// response so clients can skip entrypoint requests for non-DCI protocols.
+    dci_protocols: Vec<String>,
 }
 
 impl<G, T> RpcHandler<G, T>
@@ -122,6 +126,7 @@ where
         pending_deltas: Option<Arc<dyn PendingDeltasBuffer + Send + Sync>>,
         tracer: T,
         rpc_config: ServerRpcConfig,
+        dci_protocols: Vec<String>,
     ) -> Self {
         const ONE_MB: u64 = 1_024 * 1_024;
         const HUNDRED_MB: u64 = ONE_MB * 100;
@@ -166,6 +171,7 @@ where
             traced_entry_point_cache,
             tracer,
             rpc_config,
+            dci_protocols,
         }
     }
 
@@ -535,6 +541,7 @@ where
                     .entity
                     .into_iter()
                     .collect(),
+                self.dci_protocols.clone(),
                 PaginationResponse::new(
                     request.pagination.page,
                     request.pagination.page_size,
@@ -1658,6 +1665,7 @@ mod tests {
             Some(Arc::new(mock_buffer)),
             MockEntryPointTracer::new(),
             ServerRpcConfig::new(),
+            vec![],
         );
 
         let request = dto::StateRequestBody {
@@ -1961,7 +1969,8 @@ mod tests {
             expected_upserted_tracing_results,
         );
 
-        let req_handler = RpcHandler::new(gw, None, mock_entrypoint_tracer, ServerRpcConfig::new());
+        let req_handler =
+            RpcHandler::new(gw, None, mock_entrypoint_tracer, ServerRpcConfig::new(), vec![]);
         let response = req_handler
             .add_entry_points(&req_body)
             .await
@@ -2035,7 +2044,7 @@ mod tests {
             expected_upserted_tracing_results,
         );
 
-        let req_handler = RpcHandler::new(gw, None, tracer, ServerRpcConfig::new());
+        let req_handler = RpcHandler::new(gw, None, tracer, ServerRpcConfig::new(), vec![]);
         let response = req_handler
             .add_entry_points(&req_body)
             .await
@@ -2155,7 +2164,7 @@ mod tests {
             .return_once(|_| Box::pin(async move { mock_traced_entry_points_response }));
 
         let req_handler =
-            RpcHandler::new(gw, None, MockEntryPointTracer::new(), ServerRpcConfig::new());
+            RpcHandler::new(gw, None, MockEntryPointTracer::new(), ServerRpcConfig::new(), vec![]);
 
         // Request for two protocol components
         let request = dto::TracedEntryPointRequestBody {
@@ -2354,7 +2363,7 @@ mod tests {
             .return_once(|_| Box::pin(async move { mock_traced_entry_points_response }));
 
         let req_handler =
-            RpcHandler::new(gw, None, MockEntryPointTracer::new(), ServerRpcConfig::new());
+            RpcHandler::new(gw, None, MockEntryPointTracer::new(), ServerRpcConfig::new(), vec![]);
 
         let request = dto::TracedEntryPointRequestBody {
             chain: dto::Chain::Ethereum,
@@ -2424,7 +2433,7 @@ mod tests {
         gw.expect_get_tokens()
             .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
         let req_handler =
-            RpcHandler::new(gw, None, MockEntryPointTracer::new(), ServerRpcConfig::new());
+            RpcHandler::new(gw, None, MockEntryPointTracer::new(), ServerRpcConfig::new(), vec![]);
 
         // request for 2 tokens that are in the DB (WETH and USDC)
         let request = dto::TokensRequestBody {
@@ -2499,6 +2508,7 @@ mod tests {
             Some(Arc::new(mock_buffer)),
             MockEntryPointTracer::new(),
             ServerRpcConfig::new(),
+            vec![],
         );
 
         let request = dto::ProtocolStateRequestBody {
@@ -2585,6 +2595,7 @@ mod tests {
             Some(Arc::new(mock_buffer)),
             MockEntryPointTracer::new(),
             ServerRpcConfig::new(),
+            vec![],
         );
 
         let request = dto::ProtocolComponentsRequestBody {
@@ -2683,6 +2694,7 @@ mod tests {
             Some(Arc::new(mock_buffer)),
             MockEntryPointTracer::new(),
             ServerRpcConfig::new(),
+            vec![],
         );
 
         let request = dto::ProtocolComponentsRequestBody {
@@ -2739,7 +2751,7 @@ mod tests {
                 .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
         }
         let config = ServerRpcConfig::new().with_min_tvl(min_tvl);
-        let handler = RpcHandler::new(gw, None, MockEntryPointTracer::new(), config);
+        let handler = RpcHandler::new(gw, None, MockEntryPointTracer::new(), config, vec![]);
 
         let app = test::init_service(
             App::new()
@@ -2812,7 +2824,7 @@ mod tests {
                 .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
         }
         let config = ServerRpcConfig::new().with_min_quality(min_quality);
-        let handler = RpcHandler::new(gw, None, MockEntryPointTracer::new(), config);
+        let handler = RpcHandler::new(gw, None, MockEntryPointTracer::new(), config, vec![]);
 
         let app = test::init_service(
             App::new()
@@ -2860,5 +2872,45 @@ mod tests {
                 body_str
             );
         }
+    }
+
+    #[rstest]
+    #[case::with_dci(vec!["vm:curve".to_string()], vec!["vm:curve"])]
+    #[case::no_dci(vec![], vec![])]
+    #[tokio::test]
+    async fn test_get_protocol_systems_dci(
+        #[case] dci_protocols: Vec<String>,
+        #[case] expected_dci: Vec<&str>,
+    ) {
+        let mut gw = MockGateway::new();
+        gw.expect_get_protocol_systems()
+            .return_once(|_, _| {
+                Box::pin(async {
+                    Ok(WithTotal {
+                        entity: vec!["uniswap_v2".to_string(), "vm:curve".to_string()],
+                        total: Some(2),
+                    })
+                })
+            });
+
+        let req_handler = RpcHandler::new(
+            gw,
+            None,
+            MockEntryPointTracer::new(),
+            ServerRpcConfig::new(),
+            dci_protocols,
+        );
+
+        let request = dto::ProtocolSystemsRequestBody {
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams { page: 0, page_size: 100 },
+        };
+        let response = req_handler
+            .get_protocol_systems(&request)
+            .await
+            .unwrap();
+
+        assert_eq!(response.protocol_systems, vec!["uniswap_v2", "vm:curve"]);
+        assert_eq!(response.dci_protocols, expected_dci);
     }
 }

@@ -8,7 +8,10 @@ use std::{
 use thiserror::Error;
 use tokio::{sync::mpsc::Receiver, task::JoinHandle};
 use tracing::{info, warn};
-use tycho_common::dto::{Chain, ExtractorIdentity, PaginationParams, ProtocolSystemsRequestBody};
+use tycho_common::dto::{
+    Chain, ExtractorIdentity, PaginationParams, ProtocolSystemsRequestBody,
+    ProtocolSystemsRequestResponse,
+};
 
 use crate::{
     deltas::DeltasClient,
@@ -272,13 +275,15 @@ impl TychoStreamBuilder {
             self.max_missed_blocks,
         );
 
-        self.display_available_protocols(&rpc_client)
+        let dci_protocols = self
+            .fetch_and_display_available_protocols(&rpc_client)
             .await;
 
         // Register each exchange with the BlockSynchronizer
         for (name, filter) in self.exchanges {
             info!("Registering exchange: {}", name);
             let id = ExtractorIdentity { chain: self.chain, name: name.clone() };
+            let uses_dci = dci_protocols.contains(&name);
             let sync = match &self.state_sync_retry_config {
                 RetryConfiguration::Constant(retry_config) => ProtocolStateSynchronizer::new(
                     id.clone(),
@@ -293,6 +298,7 @@ impl TychoStreamBuilder {
                     ws_client.clone(),
                     self.block_time + self.timeout,
                 )
+                .with_dci(uses_dci)
                 .with_partial_blocks(self.partial_blocks),
             };
             block_sync = block_sync.register_synchronizer(id, sync);
@@ -322,20 +328,18 @@ impl TychoStreamBuilder {
         Ok((handle, rx))
     }
 
-    /// Displays the other available protocols not registered to within this stream builder, for the
-    /// given chain.
-    async fn display_available_protocols(&self, rpc_client: &HttpRPCClient) {
-        let available_protocols_set = rpc_client
+    /// Fetches protocol systems from the server, logs other available protocols, and returns
+    /// the set of DCI-enabled protocol names.
+    async fn fetch_and_display_available_protocols(
+        &self,
+        rpc_client: &HttpRPCClient,
+    ) -> HashSet<String> {
+        let response = rpc_client
             .get_protocol_systems(&ProtocolSystemsRequestBody {
                 chain: self.chain,
                 pagination: PaginationParams { page: 0, page_size: 100 },
             })
             .await
-            .map(|resp| {
-                resp.protocol_systems
-                    .into_iter()
-                    .collect::<HashSet<_>>()
-            })
             .map_err(|e| {
                 warn!(
                     "Failed to fetch protocol systems: {e}. Skipping protocol availability check."
@@ -344,24 +348,35 @@ impl TychoStreamBuilder {
             })
             .ok();
 
-        if let Some(not_requested_protocols) = available_protocols_set
-            .map(|available_protocols_set| {
-                let requested_protocol_set = self
-                    .exchanges
-                    .keys()
-                    .cloned()
-                    .collect::<HashSet<_>>();
+        let Some(response) = response else {
+            return HashSet::new();
+        };
 
-                available_protocols_set
-                    .difference(&requested_protocol_set)
-                    .cloned()
-                    .collect::<Vec<_>>()
-            })
-            .filter(|not_requested_protocols| !not_requested_protocols.is_empty())
-        {
-            info!("Other available protocols: {}", not_requested_protocols.join(", "))
+        let requested: HashSet<_> = self.exchanges.keys().cloned().collect();
+        let available: HashSet<_> = response
+            .protocol_systems
+            .iter()
+            .cloned()
+            .collect();
+        let not_requested: Vec<_> = available
+            .difference(&requested)
+            .cloned()
+            .collect();
+        if !not_requested.is_empty() {
+            info!("Other available protocols: {}", not_requested.join(", "));
         }
+
+        extract_dci_protocols(&response)
     }
+}
+
+/// Extracts DCI protocol names from a protocol systems response.
+fn extract_dci_protocols(response: &ProtocolSystemsRequestResponse) -> HashSet<String> {
+    response
+        .dci_protocols
+        .iter()
+        .cloned()
+        .collect()
 }
 
 #[cfg(test)]
