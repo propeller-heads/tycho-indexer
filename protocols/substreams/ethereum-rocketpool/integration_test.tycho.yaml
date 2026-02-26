@@ -4,7 +4,7 @@ protocol_type_names:
   - "rocketpool_pool"
 skip_balance_check: true # Rocket Deposit Pool components do not hold user funds directly
 tests:
-  - name: test_v1_4_pool_creation
+  - name: test_pool_creation
     start_block: 24479994 # v1.4 upgrade block
     stop_block: 24480200 # Includes first deposits after v1.4 activation
     expected_components:
