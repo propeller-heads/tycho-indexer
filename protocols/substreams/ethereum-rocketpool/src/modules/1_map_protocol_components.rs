@@ -25,9 +25,7 @@ fn map_protocol_components(
     let tx = block
         .transactions()
         .find(|tx| tx.hash == V1_4_UPGRADE_TX)
-        .ok_or(anyhow::anyhow!(
-            "v1.4 upgrade tx not found in starting block"
-        ))?;
+        .ok_or(anyhow::anyhow!("v1.4 upgrade tx not found in starting block"))?;
 
     let component = ProtocolComponent::new(ROCKET_POOL_COMPONENT_ID)
         .with_tokens(&[RETH_ADDRESS.to_vec(), ETH_ADDRESS.to_vec()])
