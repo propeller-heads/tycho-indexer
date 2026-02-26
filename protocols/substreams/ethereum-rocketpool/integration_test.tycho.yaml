@@ -8,11 +8,11 @@ tests:
     start_block: 24479994 # v1.4 upgrade block
     stop_block: 24480200 # Includes first deposits after v1.4 activation
     expected_components:
-      - id: "0xdd3f50f8a6cafbe9b31a427582963f465e745af8"
+      - id: "0xae78736Cd615f374D3085123A210448E74Fc6393"
         tokens:
           - "0xae78736Cd615f374D3085123A210448E74Fc6393"
           - "0x0000000000000000000000000000000000000000"
         static_attributes: { }
         creation_tx: "0x2fc10aad3c1b00bdfa9b6fddab79e0f2688609848f8f7a1a6449ab42da38530c" # v1.4 upgrade tx
-        skip_simulation: true
-        skip_execution: true
+        skip_simulation: false
+        skip_execution: false

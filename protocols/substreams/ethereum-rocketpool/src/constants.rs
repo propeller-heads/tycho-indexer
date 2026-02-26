@@ -1,7 +1,7 @@
 use crate::utils::StorageLocation;
 use substreams::hex;
 
-pub const ROCKET_POOL_COMPONENT_ID: &str = "0xdd3f50f8a6cafbe9b31a427582963f465e745af8";
+pub const ROCKET_POOL_COMPONENT_ID: &str = "0xae78736Cd615f374D3085123A210448E74Fc6393";
 
 /// The v1.4 upgrade transaction using the
 /// RocketUpgradeOneDotFour (0x5b3B5C76391662e56d0ff72F31B89C409316c8Ba)
