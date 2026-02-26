@@ -29,6 +29,11 @@ itertools = "0.12.1"
 lazy_static = "1.4.0"
 thiserror.workspace = true
 sha2.workspace = true
+aws-sdk-s3 = { version = "1.77", optional = true }
+aws-config = { version = "1.1.8", features = ["behavior-version-latest"], optional = true }
+
+[features]
+s3 = ["dep:aws-sdk-s3", "dep:aws-config"]
 
 [dev-dependencies]
 pretty_assertions.workspace = true
@@ -36,4 +41,6 @@ rstest.workspace = true
 test-log = { version = "0.2.14", features = ["trace"] }
 mockall.workspace = true
 tempfile = "3"
+testcontainers = "0.23"
+testcontainers-modules = { version = "0.11", features = ["minio"] }
 tokio = { workspace = true, features = ["fs", "io-util"] }
