@@ -3,7 +3,7 @@ use substreams::hex;
 
 pub const ROCKET_POOL_COMPONENT_ID: &str = "0xdd3f50f8a6cafbe9b31a427582963f465e745af8";
 
-/// The v1.4 upgrade transaction using the 
+/// The v1.4 upgrade transaction using the
 /// RocketUpgradeOneDotFour (0x5b3B5C76391662e56d0ff72F31B89C409316c8Ba)
 pub const V1_4_UPGRADE_TX: [u8; 32] =
     hex!("2fc10aad3c1b00bdfa9b6fddab79e0f2688609848f8f7a1a6449ab42da38530c");
@@ -16,18 +16,12 @@ pub const ROCKET_STORAGE_ADDRESS: [u8; 20] = hex!("1d8f8f00cfa6758d7bE7833668478
 
 pub const ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS: [u8; 20] =
     hex!("2D627A50Dc1C4EDa73E42858E8460b0eCF300b25");
-/// Rocket Deposit Pool v1.4 
-pub const ROCKET_DEPOSIT_POOL_ADDRESS: [u8; 20] =
-    hex!("CE15294273CFb9D9b628F4D61636623decDF4fdC");
+/// Rocket Deposit Pool v1.4
+pub const ROCKET_DEPOSIT_POOL_ADDRESS: [u8; 20] = hex!("CE15294273CFb9D9b628F4D61636623decDF4fdC");
 /// Rocket Network Balances v1.4
 pub const ROCKET_NETWORK_BALANCES_ADDRESS: [u8; 20] =
     hex!("1D9F14C6Bfd8358b589964baD8665AdD248E9473");
 
-
-/// All storage slots for initial state and settings tracking.
-/// These are EVM storage slots in RocketStorage (base slot 2 for uintStorage, 5 for boolStorage).
-/// The settings key format is: keccak256(keccak256("dao.protocol.setting.deposit") ++ settingPath)
-/// and the EVM slot is: keccak256(abi.encode(key, mapping_base_slot)).
 pub(crate) const ALL_STORAGE_SLOTS: [StorageLocation; 10] = [
     ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT,
     DEPOSITS_ENABLED_SLOT,
@@ -42,6 +36,7 @@ pub(crate) const ALL_STORAGE_SLOTS: [StorageLocation; 10] = [
 ];
 
 // ----------- Contract: Rocket Vault -----------
+
 /// ETH held in the vault on behalf of the deposit pool.
 /// RocketVault.etherBalances mapping (string => uint256) at base slot 1.
 /// Slot: keccak256(bytes("rocketDepositPool") ++ pad32(1))
@@ -122,8 +117,8 @@ pub(crate) const DEPOSIT_ASSIGN_MAXIMUM_SLOT: StorageLocation = StorageLocation 
 };
 
 /// Maximum number of socialised minipool assignments per deposit.
-/// Setting key: keccak256(keccak256("dao.protocol.setting.deposit") ++ "deposit.assign.socialised.maximum")
-/// in uintStorage (base slot 2).
+/// Setting key: keccak256(keccak256("dao.protocol.setting.deposit") ++
+/// "deposit.assign.socialised.maximum") in uintStorage (base slot 2).
 pub(crate) const DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT: StorageLocation = StorageLocation {
     name: "deposit_assign_socialised_maximum",
     slot: hex!("d6794381ca0356c0f5fabe729b1ea706b25013e48d1d1bb2441c2bd5053a975a"),
@@ -144,8 +139,8 @@ pub(crate) const MEGAPOOL_QUEUE_REQUESTED_TOTAL_SLOT: StorageLocation = StorageL
 
 /// Target rETH collateral rate as a fraction of 1 ether.
 /// On-chain: RocketDAOProtocolSettingsNetwork.getTargetRethCollateralRate()
-/// Setting key: keccak256(keccak256("dao.protocol.setting.network") ++ "network.reth.collateral.target")
-/// in uintStorage (base slot 2).
+/// Setting key: keccak256(keccak256("dao.protocol.setting.network") ++
+/// "network.reth.collateral.target") in uintStorage (base slot 2).
 pub(crate) const TARGET_RETH_COLLATERAL_RATE_SLOT: StorageLocation = StorageLocation {
     name: "target_reth_collateral_rate",
     slot: hex!("e1cd6c7fac18bc41fcd8660dbc3a1370373485f93fbccc910651118840f7c3a8"),
