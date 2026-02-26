@@ -8,10 +8,7 @@ use std::{
 use thiserror::Error;
 use tokio::{sync::mpsc::Receiver, task::JoinHandle};
 use tracing::{info, warn};
-use tycho_common::dto::{
-    Chain, ExtractorIdentity, PaginationParams, ProtocolSystemsRequestBody,
-    ProtocolSystemsRequestResponse,
-};
+use tycho_common::dto::{Chain, ExtractorIdentity, PaginationParams, ProtocolSystemsRequestBody};
 
 use crate::{
     deltas::DeltasClient,
@@ -275,9 +272,10 @@ impl TychoStreamBuilder {
             self.max_missed_blocks,
         );
 
-        let dci_protocols = self
-            .fetch_and_display_available_protocols(&rpc_client)
-            .await;
+        let requested: HashSet<_> = self.exchanges.keys().cloned().collect();
+        let info = ProtocolSystemsInfo::fetch(&rpc_client, self.chain, &requested).await;
+        info.log_other_available();
+        let dci_protocols = info.dci_protocols;
 
         // Register each exchange with the BlockSynchronizer
         for (name, filter) in self.exchanges {
@@ -327,16 +325,26 @@ impl TychoStreamBuilder {
 
         Ok((handle, rx))
     }
+}
 
-    /// Fetches protocol systems from the server, logs other available protocols, and returns
-    /// the set of DCI-enabled protocol names.
-    async fn fetch_and_display_available_protocols(
-        &self,
+/// Result of fetching protocol systems: which protocols use DCI, and which
+/// available protocols on the server were not requested by the client.
+pub struct ProtocolSystemsInfo {
+    pub dci_protocols: HashSet<String>,
+    pub other_available: HashSet<String>,
+}
+
+impl ProtocolSystemsInfo {
+    /// Fetches protocol systems from the server and classifies them: which use DCI,
+    /// and which are available but not in `requested_exchanges`.
+    pub async fn fetch(
         rpc_client: &HttpRPCClient,
-    ) -> HashSet<String> {
+        chain: Chain,
+        requested_exchanges: &HashSet<String>,
+    ) -> Self {
         let response = rpc_client
             .get_protocol_systems(&ProtocolSystemsRequestBody {
-                chain: self.chain,
+                chain,
                 pagination: PaginationParams { page: 0, page_size: 100 },
             })
             .await
@@ -349,34 +357,36 @@ impl TychoStreamBuilder {
             .ok();
 
         let Some(response) = response else {
-            return HashSet::new();
+            return Self { dci_protocols: HashSet::new(), other_available: HashSet::new() };
         };
 
-        let requested: HashSet<_> = self.exchanges.keys().cloned().collect();
         let available: HashSet<_> = response
             .protocol_systems
-            .iter()
+            .into_iter()
+            .collect();
+        let other_available = available
+            .difference(requested_exchanges)
             .cloned()
             .collect();
-        let not_requested: Vec<_> = available
-            .difference(&requested)
-            .cloned()
+        let dci_protocols = response
+            .dci_protocols
+            .into_iter()
             .collect();
-        if !not_requested.is_empty() {
-            info!("Other available protocols: {}", not_requested.join(", "));
-        }
 
-        extract_dci_protocols(&response)
+        Self { dci_protocols, other_available }
     }
-}
 
-/// Extracts DCI protocol names from a protocol systems response.
-fn extract_dci_protocols(response: &ProtocolSystemsRequestResponse) -> HashSet<String> {
-    response
-        .dci_protocols
-        .iter()
-        .cloned()
-        .collect()
+    /// Logs the protocols available on the server that the client didn't subscribe to.
+    pub fn log_other_available(&self) {
+        if !self.other_available.is_empty() {
+            let names: Vec<_> = self
+                .other_available
+                .iter()
+                .cloned()
+                .collect();
+            info!("Other available protocols: {}", names.join(", "));
+        }
+    }
 }
 
 #[cfg(test)]
