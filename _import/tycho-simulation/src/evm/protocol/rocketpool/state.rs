@@ -309,8 +309,9 @@ impl ProtocolSim for RocketpoolState {
             // Withdraw from rETH contract first, spill remainder into deposit pool.
             let needed_from_deposit_pool =
                 amount_out.saturating_sub(new_state.reth_contract_liquidity);
-            new_state.reth_contract_liquidity =
-                new_state.reth_contract_liquidity.saturating_sub(amount_out);
+            new_state.reth_contract_liquidity = new_state
+                .reth_contract_liquidity
+                .saturating_sub(amount_out);
             new_state.deposit_contract_balance =
                 safe_sub_u256(new_state.deposit_contract_balance, needed_from_deposit_pool)?;
         }
