@@ -405,7 +405,7 @@ fn test_sequential_strategy_cyclic_swap_and_vault() {
 }
 
 #[test]
-fn test_sequential_strategy_cyclic_swap_and_vault_with_wrapping() {
+fn test_sequential_strategy_swap_and_vault_with_wrapping() {
     // USDC -> WETH -> ETH
     // the last unwrapping swap is inserted automatically by the encoder
     // It uses vault's funds
@@ -414,7 +414,7 @@ fn test_sequential_strategy_cyclic_swap_and_vault_with_wrapping() {
     let eth = eth();
     let usdc = usdc();
 
-    // Create two Uniswap V3 pools for the cyclic swap with wrapping inbetween
+    // Create two Uniswap V3 pools for the swap with wrapping
     // USDC -> WETH (Pool 1)
     let swap_usdc_weth = Swap::new(
         ProtocolComponent {
