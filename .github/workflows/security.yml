@@ -51,3 +51,23 @@ jobs:
           else
             echo "cargo audit passed — no vulnerabilities found"
           fi
+
+  unused-deps:
+    name: Unused Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9
+        with:
+          toolchain: stable
+
+      - name: Install cargo-machete
+        run: cargo install cargo-machete
+
+      - name: Run cargo machete
+        run: cargo machete
