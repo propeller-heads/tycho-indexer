@@ -1139,6 +1139,13 @@ mod tests {
     /// Test against real v1.4 burn transaction.
     /// Tx 0x6e70e11475c158ca5f88a6d370dfef90eee6d696dd569c3eaab7d244c7b4a20f at block 24481338.
     /// User burned 2515686112138065226 rETH and received 2912504376202664754 ETH.
+    ///
+    /// Reuses `create_state_at_block_24480104` (~1200 blocks before the burn) because:
+    ///   - `total_eth` and `reth_supply` are oracle-reported values (from rocketNetworkBalances)
+    ///     updated only by oracle submissions (daily). Verified identical at both blocks:
+    ///     getTotalETHBalance() = 396944271446898073504670, getTotalRETHSupply() = 342862039669683153255377.
+    ///   - The burn amount (2.91 ETH) is sourced entirely from `reth_contract_liquidity` (224 ETH),
+    ///     so `deposit_contract_balance` and `megapool_queue_requested_total` are not involved.
     #[test]
     fn test_live_burn_post_saturn() {
         let state = create_state_at_block_24480104();
@@ -1148,7 +1155,7 @@ mod tests {
             .get_amount_out(burn_amount, &reth_token(), &eth_token())
             .unwrap();
 
-        // Output amount: exact match with on-chain result
+        // Output amount: exact match with on-chain getEthValue(burnAmount) at block 24481337
         let expected_eth_out = BigUint::from(2_912_504_376_202_664_754u128);
         assert_eq!(res.amount, expected_eth_out);
 
@@ -1160,10 +1167,15 @@ mod tests {
             .unwrap();
         assert_eq!(new_state.total_eth, state.total_eth);
         assert_eq!(new_state.reth_supply, state.reth_supply);
-        // Withdrawal should reduce available liquidity
-        assert!(
-            new_state.reth_contract_liquidity < state.reth_contract_liquidity ||
-                new_state.deposit_contract_balance < state.deposit_contract_balance
+        // 2.91 ETH withdrawn entirely from reth_contract_liquidity (224 ETH available)
+        assert_eq!(
+            new_state.reth_contract_liquidity,
+            safe_sub_u256(
+                state.reth_contract_liquidity,
+                U256::from(2_912_504_376_202_664_754u128)
+            )
+            .unwrap()
         );
+        assert_eq!(new_state.deposit_contract_balance, state.deposit_contract_balance);
     }
 }
