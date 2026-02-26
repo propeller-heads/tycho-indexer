@@ -736,6 +736,47 @@ mod tests {
         assert_eq!(max_sell, BigUint::from(112_000_000_000_000_000_000u128));
     }
 
+    // ============ Limits Boundary Consistency Tests ============
+
+    #[test]
+    fn test_limits_deposit_boundary_accepted() {
+        let mut state = create_state();
+        state.deposit_assigning_enabled = true;
+        state.megapool_queue_requested_total = U256::from(64e18);
+
+        let (max_sell, _) = state
+            .get_limits(eth_token().address, reth_token().address)
+            .unwrap();
+
+        // Depositing exactly max_sell should succeed
+        let res = state.get_amount_out(max_sell.clone(), &eth_token(), &reth_token());
+        assert!(res.is_ok(), "max_sell should be accepted");
+
+        // Depositing max_sell + 1 wei should fail
+        let over = max_sell + BigUint::from(1u64);
+        let res = state.get_amount_out(over, &eth_token(), &reth_token());
+        assert!(matches!(res, Err(SimulationError::InvalidInput(_, _))));
+    }
+
+    #[test]
+    fn test_limits_withdrawal_boundary_accepted() {
+        let mut state = create_state();
+        state.reth_contract_liquidity = U256::from(30e18);
+
+        let (max_sell, _) = state
+            .get_limits(reth_token().address, eth_token().address)
+            .unwrap();
+
+        // Withdrawing exactly max_sell should succeed
+        let res = state.get_amount_out(max_sell.clone(), &reth_token(), &eth_token());
+        assert!(res.is_ok(), "max_sell should be accepted");
+
+        // Withdrawing max_sell + 1 wei should fail
+        let over = max_sell + BigUint::from(1u64);
+        let res = state.get_amount_out(over, &reth_token(), &eth_token());
+        assert!(matches!(res, Err(SimulationError::RecoverableError(_))));
+    }
+
     // ============ Get Amount Out - Happy Path Tests ============
 
     #[test]
@@ -959,6 +1000,43 @@ mod tests {
             .unwrap();
         // Assign disabled, no assignment. Routing: to_reth=2, to_vault=8. Balance = 50+8 = 58.
         assert_eq!(new_state.deposit_contract_balance, U256::from(58e18));
+    }
+
+    /// Full flow: deposit splits between collateral buffer and vault, then assignment drains vault.
+    /// Exercises the combined routing + assignment path that is unique to Saturn v1.4.
+    ///
+    /// Setup: shortfall = 20 ETH, deposit = 100 ETH, vault = 50 ETH, queue = 96 ETH (3 entries).
+    /// Routing: to_reth = 20 (fills shortfall), to_vault = 80. Vault after = 50 + 80 = 130 ETH.
+    /// Assignment: scaling_count = 100/32 = 3, count_cap = min(3, 90) = 3.
+    ///   vault_cap = 130/32 = 4. queue = 96/32 = 3. entries = min(3, 4, 3) = 3. assigned = 96 ETH.
+    /// Final: vault = 130 - 96 = 34, queue = 96 - 96 = 0, reth_liq = 0 + 20 = 20.
+    #[test]
+    fn test_deposit_split_routing_with_assignment() {
+        let mut state = create_state();
+        state.reth_contract_liquidity = U256::ZERO;
+        state.deposit_contract_balance = U256::from(50e18);
+        state.deposit_assigning_enabled = true;
+        state.deposit_assign_maximum = U256::from(90u64);
+        state.megapool_queue_requested_total = U256::from(96e18); // 3 entries
+        // target = 200e18 * 10% / 1e18 = 20 ETH → shortfall = 20 - 0 = 20
+        state.target_reth_collateral_rate = U256::from(100_000_000_000_000_000u64); // 10%
+
+        let res = state
+            .get_amount_out(
+                BigUint::from(100_000_000_000_000_000_000u128),
+                &eth_token(),
+                &reth_token(),
+            )
+            .unwrap();
+
+        let new_state = res
+            .new_state
+            .as_any()
+            .downcast_ref::<RocketpoolState>()
+            .unwrap();
+        assert_eq!(new_state.reth_contract_liquidity, U256::from(20e18));
+        assert_eq!(new_state.deposit_contract_balance, U256::from(34e18));
+        assert_eq!(new_state.megapool_queue_requested_total, U256::ZERO);
     }
 
     // ============ Assign Deposits — Constraint Unit Tests ============
