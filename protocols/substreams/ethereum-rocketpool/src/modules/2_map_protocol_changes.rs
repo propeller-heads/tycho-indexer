@@ -6,8 +6,8 @@ use crate::{
     constants::{
         ALL_STORAGE_SLOTS, DEPOSITS_ENABLED_SLOT, DEPOSIT_ASSIGN_ENABLED_SLOT,
         DEPOSIT_ASSIGN_MAXIMUM_SLOT, DEPOSIT_ASSIGN_SOCIALISED_MAXIMUM_SLOT, DEPOSIT_FEE_SLOT,
-        ETH_ADDRESS, MAX_DEPOSIT_POOL_SIZE_SLOT, MIN_DEPOSIT_AMOUNT_SLOT,
-        RETH_ADDRESS, ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS,
+        ETH_ADDRESS, MAX_DEPOSIT_POOL_SIZE_SLOT, MEGAPOOL_QUEUE_REQUESTED_TOTAL_SLOT,
+        MIN_DEPOSIT_AMOUNT_SLOT, RETH_ADDRESS, ROCKET_DAO_PROTOCOL_PROPOSAL_ADDRESS,
         ROCKET_DEPOSIT_POOL_ADDRESS, ROCKET_DEPOSIT_POOL_ETH_BALANCE_SLOT,
         ROCKET_NETWORK_BALANCES_ADDRESS, ROCKET_POOL_COMPONENT_ID, ROCKET_STORAGE_ADDRESS,
         ROCKET_VAULT_ADDRESS, TARGET_RETH_COLLATERAL_RATE_SLOT,
@@ -32,8 +32,6 @@ use tycho_substreams::{
 /// Aggregates protocol component, balance and attribute changes by transaction.
 ///
 /// Indexes the RocketPool deposit pool from the v1.4 activation block onwards.
-/// Tracks deposit liquidity, rETH liquidity, network balances, protocol settings,
-/// and megapool queue state.
 #[substreams::handlers::map]
 fn map_protocol_changes(
     params: String,
@@ -44,8 +42,7 @@ fn map_protocol_changes(
 
     // On the starting block, initialize the component with provided initial state values
     // that represent the state at the END of the starting block. We skip update handlers on
-    // this block because the initial params already capture the final state — running handlers
-    // would emit Update attrs that overwrite the Creation attrs via last-writer-wins merging.
+    // this block because the initial params already capture the final state.
     let component_created = !protocol_components
         .tx_components
         .is_empty();
@@ -343,7 +340,12 @@ fn update_megapool_queue_state(
             .iter()
             .filter(|call| !call.state_reverted)
             .filter(|call| call.address == ROCKET_STORAGE_ADDRESS)
-            .flat_map(|call| get_changed_attributes(&call.storage_changes, &ALL_STORAGE_SLOTS))
+            .flat_map(|call| {
+                get_changed_attributes(
+                    &call.storage_changes,
+                    &[MEGAPOOL_QUEUE_REQUESTED_TOTAL_SLOT],
+                )
+            })
             .collect::<Vec<_>>();
 
         add_entity_change_if_needed(attributes, tx, transaction_changes);
