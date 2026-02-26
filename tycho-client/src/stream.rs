@@ -8,7 +8,9 @@ use std::{
 use thiserror::Error;
 use tokio::{sync::mpsc::Receiver, task::JoinHandle};
 use tracing::{info, warn};
-use tycho_common::dto::{Chain, ExtractorIdentity, PaginationParams, ProtocolSystemsRequestBody};
+use tycho_common::dto::{
+    Chain, ExtractorIdentity, PaginationLimits, PaginationParams, ProtocolSystemsRequestBody,
+};
 
 use crate::{
     deltas::DeltasClient,
@@ -342,10 +344,12 @@ impl ProtocolSystemsInfo {
         chain: Chain,
         requested_exchanges: &HashSet<String>,
     ) -> Self {
+        let page_size =
+            ProtocolSystemsRequestBody::effective_max_page_size(rpc_client.compression());
         let response = rpc_client
             .get_protocol_systems(&ProtocolSystemsRequestBody {
                 chain,
-                pagination: PaginationParams { page: 0, page_size: 100 },
+                pagination: PaginationParams { page: 0, page_size },
             })
             .await
             .map_err(|e| {
