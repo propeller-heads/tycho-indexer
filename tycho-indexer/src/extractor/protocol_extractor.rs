@@ -619,7 +619,7 @@ where
             .await;
         let (unknown_tokens, known_tokens) = new_token_addresses
             .into_iter()
-            .zip(is_token_known.into_iter())
+            .zip(is_token_known)
             .partition::<Vec<_>, _>(|(_, known)| !*known);
         let known_tokens = known_tokens
             .into_iter()
@@ -1727,8 +1727,8 @@ impl ExtractorGateway for ExtractorPgGateway {
                 tx_update
                     .balance_changes
                     .clone()
-                    .into_iter()
-                    .flat_map(|(_, tokens_balances)| tokens_balances.into_values()),
+                    .into_values()
+                    .flat_map(|m| m.into_values()),
             );
 
             // Map account balance changes
@@ -1736,8 +1736,8 @@ impl ExtractorGateway for ExtractorPgGateway {
                 tx_update
                     .account_balance_changes
                     .clone()
-                    .into_iter()
-                    .flat_map(|(_, tokens_balances)| tokens_balances.into_values()),
+                    .into_values()
+                    .flat_map(|m| m.into_values()),
             );
 
             // Map new entrypoints

@@ -62,7 +62,10 @@ tokio = { version = "1.27", features = [
     "rt-multi-thread",
     "parking_lot",
     "tracing",
+    "fs",
+    "io-util",
 ] }
+sha2 = "0.10"
 console-subscriber = "0.2.0"
 tokio-tungstenite = { version = "0.20.0", features = ["native-tls"] }
 utoipa = { version = "4.2.0", features = ["chrono"] }
