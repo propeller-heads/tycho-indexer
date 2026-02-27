@@ -1,3 +1,11 @@
+## [0.32.0](https://github.com/propeller-heads/tycho-contracts/compare/0.31.0...0.32.0) (2026-02-27)
+
+
+### Features
+
+* add test which includes wrapping ([fe67481](https://github.com/propeller-heads/tycho-contracts/commit/fe674819a554b0158eefc988d8d4052e88911d27))
+* replace mock eth executor with a real one ([7edf724](https://github.com/propeller-heads/tycho-contracts/commit/7edf7243a3c55d4787cbf989a5473260ed8d93a5))
+
 ## [0.31.0](https://github.com/propeller-heads/tycho-contracts/compare/0.30.0...0.31.0) (2026-02-26)
 
 
