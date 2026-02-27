@@ -38,6 +38,9 @@ testcontainers-modules = { version = "0.11", features = ["minio"], optional = tr
 s3 = [
     "dep:aws-sdk-s3",
     "dep:aws-config",
+]
+s3-integration-tests = [
+    "s3",
     "dep:testcontainers",
     "dep:testcontainers-modules",
 ]

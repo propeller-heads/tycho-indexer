@@ -103,6 +103,12 @@ impl FileSinkFactory {
 #[async_trait]
 impl SinkFactory for FileSinkFactory {
     async fn create_sink(&self, key: &str) -> Result<Box<dyn SnapshotSink>, SinkError> {
+        if key.contains("..") || key.starts_with('/') {
+            return Err(SinkError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "key must not contain '..' or start with '/'",
+            )));
+        }
         let path = self.base_dir.join(key);
         Ok(Box::new(FileSink::create(path).await?))
     }
@@ -455,7 +461,27 @@ mod tests {
         assert_eq!(result.size_bytes, data.len() as u64);
     }
 
-    #[cfg(all(test, feature = "s3"))]
+    #[tokio::test]
+    async fn file_sink_factory_rejects_path_traversal_keys() {
+        let dir = TempDir::new().unwrap();
+        let factory = FileSinkFactory::new(dir.path().to_path_buf());
+
+        let err = factory
+            .create_sink("../escape")
+            .await
+            .err()
+            .unwrap();
+        assert!(matches!(err, SinkError::Io(_)));
+
+        let err = factory
+            .create_sink("/absolute")
+            .await
+            .err()
+            .unwrap();
+        assert!(matches!(err, SinkError::Io(_)));
+    }
+
+    #[cfg(all(test, feature = "s3-integration-tests"))]
     mod s3_tests {
         use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
         use testcontainers::runners::AsyncRunner;
