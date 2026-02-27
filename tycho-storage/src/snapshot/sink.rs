@@ -31,6 +31,9 @@ pub enum SinkError {
     #[cfg(feature = "s3")]
     #[error("Failed to abort multipart upload: {0}")]
     AbortFailed(String),
+    #[cfg(feature = "s3")]
+    #[error("part_threshold {0} is below the S3 minimum part size of 5 MiB")]
+    InvalidPartThreshold(usize),
 }
 
 /// Async write-only byte sink that tracks position and accumulates SHA-256.
@@ -398,13 +401,16 @@ impl S3SinkFactory {
         Self { client, bucket, part_threshold: DEFAULT_PART_THRESHOLD }
     }
 
-    pub fn with_client(client: Client, bucket: String, part_threshold: usize) -> Self {
+    pub fn with_client(
+        client: Client,
+        bucket: String,
+        part_threshold: usize,
+    ) -> Result<Self, SinkError> {
         const MIN_PART_SIZE: usize = 5 * 1024 * 1024;
-        assert!(
-            part_threshold >= MIN_PART_SIZE,
-            "part_threshold must be >= 5 MiB (S3 minimum part size)"
-        );
-        Self { client, bucket, part_threshold }
+        if part_threshold < MIN_PART_SIZE {
+            return Err(SinkError::InvalidPartThreshold(part_threshold));
+        }
+        Ok(Self { client, bucket, part_threshold })
     }
 }
 
@@ -511,13 +517,16 @@ mod tests {
         }
 
         #[test]
-        #[should_panic(expected = "part_threshold must be >= 5 MiB")]
         fn s3_sink_factory_with_client_rejects_sub_minimum_threshold() {
             let config = aws_sdk_s3::Config::builder()
                 .behavior_version(BehaviorVersion::latest())
                 .region(Region::new("us-east-1"))
                 .build();
-            S3SinkFactory::with_client(Client::from_conf(config), "bucket".to_string(), 100);
+            let err =
+                S3SinkFactory::with_client(Client::from_conf(config), "bucket".to_string(), 100)
+                    .err()
+                    .unwrap();
+            assert!(matches!(err, SinkError::InvalidPartThreshold(100)));
         }
 
         #[tokio::test]
