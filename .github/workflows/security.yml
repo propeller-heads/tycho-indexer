@@ -1,0 +1,69 @@
+name: Security Audit
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Cargo Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@aba36d755ec7ca22d38b12111787c26115943952  # v2.68.12
+        with:
+          tool: cargo-audit@0.22.1
+
+      - name: Run cargo audit
+        run: |
+          cargo audit --json > audit.json 2>audit_stderr.txt; AUDIT_EXIT=$?
+
+          if ! jq empty audit.json 2>/dev/null; then
+            echo "cargo audit failed with a tool error (no valid JSON output):"
+            cat audit_stderr.txt
+            exit 1
+          fi
+
+          COUNT=$(jq '.vulnerabilities.count' audit.json)
+
+          if [ "$COUNT" -ne 0 ]; then
+            echo "=============================="
+            echo "CARGO AUDIT FAILED ($COUNT issues)"
+            echo "=============================="
+
+            jq -r '
+              .vulnerabilities.list[] |
+              "[" + (.advisory.severity // "unknown" | ascii_upcase) + "] " +
+              "ID: " + .advisory.id + " | " +
+              "Crate: " + .package.name + " | " +
+              "Version: " + .package.version + " | " +
+              "Error: " + .advisory.title
+            ' audit.json
+
+            exit 1
+          elif [ "$AUDIT_EXIT" -ne 0 ]; then
+            echo "cargo audit exited with code $AUDIT_EXIT (tool error):"
+            cat audit_stderr.txt
+            exit "$AUDIT_EXIT"
+          else
+            echo "cargo audit passed — no vulnerabilities found"
+          fi
+
+  detect-unused-dependencies:
+    name: Cargo machete
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Machete
+        uses: bnjbvr/cargo-machete@main
