@@ -19,96 +19,7 @@ import {
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IWETH} from "../lib/IWETH.sol";
 import "./TychoRouterTestSetup.sol";
-
-/**
- * @title WrapUnwrapExecutor
- * @notice Mock executor that wraps/unwraps ETH <-> WETH
- * @dev Used for testing circular swaps with native ETH
- */
-contract WrapUnwrapExecutor is IExecutor {
-    using SafeERC20 for IWETH;
-    using SafeERC20 for IERC20;
-
-    IWETH public immutable weth;
-
-    constructor(address _weth) {
-        weth = IWETH(_weth);
-    }
-
-    function fundsExpectedAddress(
-        bytes calldata /* data */
-    )
-        external
-        pure
-        returns (address receiver)
-    {
-        return address(0);
-    }
-
-    // slither-disable-next-line locked-ether
-    function swap(uint256 amountIn, bytes calldata data, address receiver)
-        external
-        payable
-        returns (uint256 amountOut, address tokenOut)
-    {
-        address tokenIn;
-        (tokenIn,) = _decodeData(data);
-
-        if (tokenIn == address(weth)) {
-            // WETH -> ETH: Unwrap
-            weth.withdraw(amountIn);
-            amountOut = amountIn;
-            tokenOut = address(0);
-
-            if (receiver != address(this)) {
-                Address.sendValue(payable(receiver), amountOut);
-            }
-        } else {
-            // ETH -> WETH: Wrap
-            weth.deposit{value: amountIn}();
-            amountOut = amountIn;
-            tokenOut = address(weth);
-
-            if (receiver != address(this)) {
-                weth.safeTransfer(receiver, amountOut);
-            }
-        }
-    }
-
-    function _decodeData(bytes calldata data)
-        internal
-        pure
-        returns (address tokenIn, address)
-    {
-        tokenIn = address(bytes20(data[0:20]));
-        return (tokenIn, address(0)); // receiver is no longer encoded in data
-    }
-
-    /// @dev Required to receive ETH
-    receive() external payable {}
-
-    function getTransferData(bytes calldata data)
-        external
-        payable
-        returns (
-            RestrictTransferFrom.TransferType transferType,
-            address receiver,
-            address tokenIn
-        )
-    {
-        tokenIn = address(bytes20(data[0:20]));
-        receiver = address(0); // receiver is no longer encoded in data
-
-        if (tokenIn == address(weth)) {
-            // WETH -> ETH: Unwrap, transfer WETH to executor
-            transferType = RestrictTransferFrom.TransferType.Transfer;
-        } else {
-            // ETH -> WETH: Wrap, transfer ETH via msg.value
-            transferType =
-            RestrictTransferFrom.TransferType.TransferNativeInExecutor;
-        }
-    }
-}
+import {WethExecutor} from "../src/executors/WethExecutor.sol";
 
 /**
  * @title TychoRouterUsingVaultTest
@@ -423,24 +334,6 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
     }
 
     // ==================== Circular Vault tests ====================
-
-    WrapUnwrapExecutor public wrapUnwrapExecutor;
-
-    function setUp() public override {
-        super.setUp();
-        uint256 forkBlockTime = vm.getBlockTimestamp();
-        vm.warp(forkBlockTime - _SETUP_TIME_OFFSET_NEW_EXECUTOR);
-        wrapUnwrapExecutor = new WrapUnwrapExecutor(WETH_ADDR);
-
-        // Add wrapUnwrapExecutor to allowed executors
-        address[] memory executors = new address[](1);
-        executors[0] = address(wrapUnwrapExecutor);
-        vm.startPrank(EXECUTOR_SETTER);
-
-        tychoRouter.setExecutors(executors);
-        vm.stopPrank();
-        vm.warp(forkBlockTime);
-    }
 
     function testSequentialCyclicSwapAndVaultIntegration() public {
         // USDC -> WETH -> USDC  using two pools and vault's funds
