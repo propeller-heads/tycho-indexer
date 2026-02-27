@@ -364,6 +364,15 @@ impl ProtocolSystemsInfo {
             return Self { dci_protocols: HashSet::new(), other_available: HashSet::new() };
         };
 
+        if response.pagination.total > page_size {
+            warn!(
+                "Server has {} protocol systems but only {} were fetched (page_size={page_size}). \
+                 Availability info may be incomplete.",
+                response.pagination.total,
+                response.protocol_systems.len(),
+            );
+        }
+
         let available: HashSet<_> = response
             .protocol_systems
             .into_iter()
