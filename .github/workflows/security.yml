@@ -26,7 +26,13 @@ jobs:
 
       - name: Run cargo audit
         run: |
-          cargo audit --json > audit.json || true
+          cargo audit --json > audit.json 2>audit_stderr.txt; AUDIT_EXIT=$?
+
+          if ! jq empty audit.json 2>/dev/null; then
+            echo "cargo audit failed with a tool error (no valid JSON output):"
+            cat audit_stderr.txt
+            exit 1
+          fi
 
           COUNT=$(jq '.vulnerabilities.count' audit.json)
 
@@ -41,10 +47,14 @@ jobs:
               "ID: " + .advisory.id + " | " +
               "Crate: " + .package.name + " | " +
               "Version: " + .package.version + " | " +
-              "Error: " + .advisory.title 
+              "Error: " + .advisory.title
             ' audit.json
 
             exit 1
+          elif [ "$AUDIT_EXIT" -ne 0 ]; then
+            echo "cargo audit exited with code $AUDIT_EXIT (tool error):"
+            cat audit_stderr.txt
+            exit "$AUDIT_EXIT"
           else
             echo "cargo audit passed — no vulnerabilities found"
           fi
