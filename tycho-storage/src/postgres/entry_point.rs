@@ -78,7 +78,10 @@ impl PostgresGateway {
         // because it doesn't return the ids on conflicts.
         let input_external_ids: Vec<EntryPointId> = new_data
             .values()
-            .flat_map(|ep| ep.iter().map(|ep| ep.external_id.clone()))
+            .flat_map(|ep| {
+                ep.iter()
+                    .map(|ep| ep.external_id.clone())
+            })
             .collect();
 
         let entry_point_ids =
