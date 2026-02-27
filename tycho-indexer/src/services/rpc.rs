@@ -536,20 +536,25 @@ where
             .get_protocol_systems(&chain, Some(&pagination_params))
             .await
         {
-            Ok(protocol_systems) => Ok(dto::ProtocolSystemsRequestResponse::new(
-                protocol_systems
-                    .entity
-                    .into_iter()
-                    .collect(),
-                self.dci_protocols.clone(),
-                PaginationResponse::new(
-                    request.pagination.page,
-                    request.pagination.page_size,
-                    protocol_systems
-                        .total
-                        .unwrap_or_default(),
-                ),
-            )),
+            Ok(protocol_systems) => {
+                let systems: Vec<String> =
+                    protocol_systems.entity.into_iter().collect();
+                let dci_protocols = self
+                    .dci_protocols
+                    .iter()
+                    .filter(|p| systems.contains(p))
+                    .cloned()
+                    .collect();
+                Ok(dto::ProtocolSystemsRequestResponse::new(
+                    systems,
+                    dci_protocols,
+                    PaginationResponse::new(
+                        request.pagination.page,
+                        request.pagination.page_size,
+                        protocol_systems.total.unwrap_or_default(),
+                    ),
+                ))
+            }
             Err(err) => {
                 error!(error = %err, "Error while getting protocol systems.");
                 Err(err.into())
@@ -2877,6 +2882,7 @@ mod tests {
     #[rstest]
     #[case::with_dci(vec!["vm:curve".to_string()], vec!["vm:curve"])]
     #[case::no_dci(vec![], vec![])]
+    #[case::phantom_filtered(vec!["vm:curve".to_string(), "vm:phantom".to_string()], vec!["vm:curve"])]
     #[tokio::test]
     async fn test_get_protocol_systems_dci(
         #[case] dci_protocols: Vec<String>,
