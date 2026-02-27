@@ -8,7 +8,9 @@ use std::{
 use thiserror::Error;
 use tokio::{sync::mpsc::Receiver, task::JoinHandle};
 use tracing::{info, warn};
-use tycho_common::dto::{Chain, ExtractorIdentity, PaginationParams, ProtocolSystemsRequestBody};
+use tycho_common::dto::{
+    Chain, ExtractorIdentity, PaginationLimits, PaginationParams, ProtocolSystemsRequestBody,
+};
 
 use crate::{
     deltas::DeltasClient,
@@ -272,13 +274,16 @@ impl TychoStreamBuilder {
             self.max_missed_blocks,
         );
 
-        self.display_available_protocols(&rpc_client)
-            .await;
+        let requested: HashSet<_> = self.exchanges.keys().cloned().collect();
+        let info = ProtocolSystemsInfo::fetch(&rpc_client, self.chain, &requested).await;
+        info.log_other_available();
+        let dci_protocols = info.dci_protocols;
 
         // Register each exchange with the BlockSynchronizer
         for (name, filter) in self.exchanges {
             info!("Registering exchange: {}", name);
             let id = ExtractorIdentity { chain: self.chain, name: name.clone() };
+            let uses_dci = dci_protocols.contains(&name);
             let sync = match &self.state_sync_retry_config {
                 RetryConfiguration::Constant(retry_config) => ProtocolStateSynchronizer::new(
                     id.clone(),
@@ -293,6 +298,7 @@ impl TychoStreamBuilder {
                     ws_client.clone(),
                     self.block_time + self.timeout,
                 )
+                .with_dci(uses_dci)
                 .with_partial_blocks(self.partial_blocks),
             };
             block_sync = block_sync.register_synchronizer(id, sync);
@@ -321,21 +327,31 @@ impl TychoStreamBuilder {
 
         Ok((handle, rx))
     }
+}
 
-    /// Displays the other available protocols not registered to within this stream builder, for the
-    /// given chain.
-    async fn display_available_protocols(&self, rpc_client: &HttpRPCClient) {
-        let available_protocols_set = rpc_client
+/// Result of fetching protocol systems: which protocols use DCI, and which
+/// available protocols on the server were not requested by the client.
+pub struct ProtocolSystemsInfo {
+    pub dci_protocols: HashSet<String>,
+    pub other_available: HashSet<String>,
+}
+
+impl ProtocolSystemsInfo {
+    /// Fetches protocol systems from the server and classifies them: which use DCI,
+    /// and which are available but not in `requested_exchanges`.
+    pub async fn fetch(
+        rpc_client: &HttpRPCClient,
+        chain: Chain,
+        requested_exchanges: &HashSet<String>,
+    ) -> Self {
+        let page_size =
+            ProtocolSystemsRequestBody::effective_max_page_size(rpc_client.compression());
+        let response = rpc_client
             .get_protocol_systems(&ProtocolSystemsRequestBody {
-                chain: self.chain,
-                pagination: PaginationParams { page: 0, page_size: 100 },
+                chain,
+                pagination: PaginationParams { page: 0, page_size },
             })
             .await
-            .map(|resp| {
-                resp.protocol_systems
-                    .into_iter()
-                    .collect::<HashSet<_>>()
-            })
             .map_err(|e| {
                 warn!(
                     "Failed to fetch protocol systems: {e}. Skipping protocol availability check."
@@ -344,22 +360,44 @@ impl TychoStreamBuilder {
             })
             .ok();
 
-        if let Some(not_requested_protocols) = available_protocols_set
-            .map(|available_protocols_set| {
-                let requested_protocol_set = self
-                    .exchanges
-                    .keys()
-                    .cloned()
-                    .collect::<HashSet<_>>();
+        let Some(response) = response else {
+            return Self { dci_protocols: HashSet::new(), other_available: HashSet::new() };
+        };
 
-                available_protocols_set
-                    .difference(&requested_protocol_set)
-                    .cloned()
-                    .collect::<Vec<_>>()
-            })
-            .filter(|not_requested_protocols| !not_requested_protocols.is_empty())
-        {
-            info!("Other available protocols: {}", not_requested_protocols.join(", "))
+        if response.pagination.total > page_size {
+            warn!(
+                "Server has {} protocol systems but only {} were fetched (page_size={page_size}). \
+                 Availability info may be incomplete.",
+                response.pagination.total,
+                response.protocol_systems.len(),
+            );
+        }
+
+        let available: HashSet<_> = response
+            .protocol_systems
+            .into_iter()
+            .collect();
+        let other_available = available
+            .difference(requested_exchanges)
+            .cloned()
+            .collect();
+        let dci_protocols = response
+            .dci_protocols
+            .into_iter()
+            .collect();
+
+        Self { dci_protocols, other_available }
+    }
+
+    /// Logs the protocols available on the server that the client didn't subscribe to.
+    pub fn log_other_available(&self) {
+        if !self.other_available.is_empty() {
+            let names: Vec<_> = self
+                .other_available
+                .iter()
+                .cloned()
+                .collect();
+            info!("Other available protocols: {}", names.join(", "));
         }
     }
 }

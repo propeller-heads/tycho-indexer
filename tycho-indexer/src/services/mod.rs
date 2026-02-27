@@ -47,6 +47,7 @@ pub struct ServicesBuilder<G> {
     extractor_handles: ws::MessageSenderMap,
     db_gateway: G,
     rpc_config: ServerRpcConfig,
+    dci_protocols: Vec<String>,
 }
 
 impl<G> ServicesBuilder<G>
@@ -63,7 +64,14 @@ where
             extractor_handles: HashMap::new(),
             db_gateway,
             rpc_config: ServerRpcConfig::new(),
+            dci_protocols: Vec::new(),
         }
+    }
+
+    /// Sets protocol systems that use Dynamic Contract Indexing (DCI).
+    pub fn dci_protocols(mut self, dci_protocols: Vec<String>) -> Self {
+        self.dci_protocols = dci_protocols;
+        self
     }
 
     /// Registers extractors for the services
@@ -175,6 +183,7 @@ where
             pending_deltas,
             tracer,
             self.rpc_config,
+            self.dci_protocols,
         ));
 
         let server = HttpServer::new(move || {

@@ -3,7 +3,7 @@ use std::{collections::HashSet, str::FromStr, time::Duration};
 use clap::Parser;
 use tracing::{debug, error, info, warn};
 use tracing_appender::rolling;
-use tycho_common::dto::{Chain, ExtractorIdentity, PaginationParams, ProtocolSystemsRequestBody};
+use tycho_common::dto::{Chain, ExtractorIdentity};
 
 use crate::{
     deltas::DeltasClient,
@@ -11,7 +11,8 @@ use crate::{
         component_tracker::ComponentFilter, synchronizer::ProtocolStateSynchronizer,
         BlockSynchronizer,
     },
-    rpc::{HttpRPCClientOptions, RPCClient},
+    rpc::HttpRPCClientOptions,
+    stream::ProtocolSystemsInfo,
     HttpRPCClient, WsDeltasClient,
 };
 
@@ -244,30 +245,14 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
         block_sync.max_messages(*mm);
     }
 
-    let available_protocols_set = rpc_client
-        .get_protocol_systems(&ProtocolSystemsRequestBody {
-            chain,
-            pagination: PaginationParams { page: 0, page_size: 100 },
-        })
-        .await
-        .map_err(|e| format!("Failed to get protocol systems: {e}"))?
-        .protocol_systems
-        .into_iter()
-        .collect::<HashSet<_>>();
-
-    let requested_protocol_set = exchanges
+    let requested_protocol_set: HashSet<_> = exchanges
         .iter()
         .map(|(name, _)| name.clone())
-        .collect::<HashSet<_>>();
-
-    let not_requested_protocols = available_protocols_set
-        .difference(&requested_protocol_set)
-        .cloned()
-        .collect::<Vec<_>>();
-
-    if !not_requested_protocols.is_empty() {
-        info!("Other available protocols: {}", not_requested_protocols.join(", "));
-    }
+        .collect();
+    let protocol_info =
+        ProtocolSystemsInfo::fetch(&rpc_client, chain, &requested_protocol_set).await;
+    protocol_info.log_other_available();
+    let dci_protocols = protocol_info.dci_protocols;
 
     for (name, address) in exchanges {
         debug!("Registering exchange: {}", name);
@@ -281,6 +266,7 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
         } else {
             ComponentFilter::with_tvl_range(args.min_tvl, args.min_tvl)
         };
+        let uses_dci = dci_protocols.contains(&name);
         let sync = ProtocolStateSynchronizer::new(
             id.clone(),
             true,
@@ -294,6 +280,7 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
             ws_client.clone(),
             args.block_time + args.timeout,
         )
+        .with_dci(uses_dci)
         .with_partial_blocks(args.partial_blocks);
         block_sync = block_sync.register_synchronizer(id, sync);
     }

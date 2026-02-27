@@ -53,8 +53,8 @@ impl PostgresGateway {
         .collect::<HashMap<_, _>>();
 
         let new_entry_points = new_data
-            .iter()
-            .flat_map(|(_, ep)| {
+            .values()
+            .flat_map(|ep| {
                 ep.iter()
                     .map(|ep| NewEntryPoint {
                         external_id: ep.external_id.clone(),
@@ -77,8 +77,8 @@ impl PostgresGateway {
         // Fetch entry points by their external_ids, we can't use .returning() on the insert above
         // because it doesn't return the ids on conflicts.
         let input_external_ids: Vec<EntryPointId> = new_data
-            .iter()
-            .flat_map(|(_, ep)| {
+            .values()
+            .flat_map(|ep| {
                 ep.iter()
                     .map(|ep| ep.external_id.clone())
             })

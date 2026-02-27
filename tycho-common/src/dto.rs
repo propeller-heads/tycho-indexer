@@ -1626,12 +1626,20 @@ impl_pagination_limits!(ProtocolSystemsRequestBody, compressed = 100, uncompress
 pub struct ProtocolSystemsRequestResponse {
     /// List of currently supported protocol systems
     pub protocol_systems: Vec<String>,
+    /// Protocol systems that use Dynamic Contract Indexing (DCI).
+    /// Clients should only fetch entrypoints for these protocols.
+    #[serde(default)]
+    pub dci_protocols: Vec<String>,
     pub pagination: PaginationResponse,
 }
 
 impl ProtocolSystemsRequestResponse {
-    pub fn new(protocol_systems: Vec<String>, pagination: PaginationResponse) -> Self {
-        Self { protocol_systems, pagination }
+    pub fn new(
+        protocol_systems: Vec<String>,
+        dci_protocols: Vec<String>,
+        pagination: PaginationResponse,
+    ) -> Self {
+        Self { protocol_systems, dci_protocols, pagination }
     }
 }
 
@@ -2168,6 +2176,39 @@ mod test {
         } else {
             panic!("Expected Subscribe command");
         }
+    }
+
+    /// Test backward compatibility for ProtocolSystemsRequestResponse dci_protocols field.
+    /// Should default to empty vec when not specified (old server responses).
+    #[rstest]
+    #[case::legacy_format(None, vec![])]
+    #[case::with_dci(Some(vec!["vm:curve"]), vec!["vm:curve"])]
+    #[case::empty_dci(Some(vec![]), vec![])]
+    fn test_protocol_systems_dci_backward_compatibility(
+        #[case] dci_protocols: Option<Vec<&str>>,
+        #[case] expected: Vec<&str>,
+    ) {
+        use serde_json::json;
+
+        let mut json_value = json!({
+            "protocol_systems": ["uniswap_v2", "vm:curve"],
+            "pagination": { "page": 0, "page_size": 20, "total": 2 }
+        });
+
+        if let Some(dci) = dci_protocols {
+            json_value["dci_protocols"] = json!(dci);
+        }
+
+        let resp: ProtocolSystemsRequestResponse =
+            serde_json::from_value(json_value).expect("Failed to deserialize response");
+
+        assert_eq!(resp.dci_protocols, expected);
+
+        // Verify round-trip
+        let serialized = serde_json::to_string(&resp).unwrap();
+        let round_tripped: ProtocolSystemsRequestResponse =
+            serde_json::from_str(&serialized).unwrap();
+        assert_eq!(resp, round_tripped);
     }
 
     #[test]
