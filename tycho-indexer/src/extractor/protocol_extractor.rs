@@ -1728,7 +1728,7 @@ impl ExtractorGateway for ExtractorPgGateway {
                     .balance_changes
                     .clone()
                     .into_values()
-                    .flatten(),
+                    .flat_map(|m| m.into_values()),
             );
 
             // Map account balance changes
@@ -1737,7 +1737,7 @@ impl ExtractorGateway for ExtractorPgGateway {
                     .account_balance_changes
                     .clone()
                     .into_values()
-                    .flatten(),
+                    .flat_map(|m| m.into_values()),
             );
 
             // Map new entrypoints
