@@ -1,3 +1,43 @@
+## [0.246.0](https://github.com/propeller-heads/tycho-simulation/compare/0.245.0...0.246.0) (2026-02-26)
+
+
+### Features
+
+* add Saturn v4 megapool queue support to RocketPool simulation ([066a254](https://github.com/propeller-heads/tycho-simulation/commit/066a254046e7221d7a21710ddd3c48be34402dd1))
+* model rETH collateral buffer split in deposit state transition ([99ec84a](https://github.com/propeller-heads/tycho-simulation/commit/99ec84ad820bf15c4f81401a7afe5c7046c64fb4))
+
+
+### Bug Fixes
+
+* address PR review comments for rocketpool v1.4 ([308d530](https://github.com/propeller-heads/tycho-simulation/commit/308d530def2482110fc1bc6d061720ef65b12a7a))
+* document collateral buffer approximation, add post-state assertions ([1193327](https://github.com/propeller-heads/tycho-simulation/commit/1193327147465708f1b7c880706092305120634f))
+
+
+### Reverts
+
+* remove reth_collateral_target from simulation ([a41dabb](https://github.com/propeller-heads/tycho-simulation/commit/a41dabb1c8d103eb7d269225097a0cf4d4cc9dd7))
+
+## [0.245.0](https://github.com/propeller-heads/tycho-simulation/compare/0.244.0...0.245.0) (2026-02-24)
+
+
+### Features
+
+* remove lido ([b9a5793](https://github.com/propeller-heads/tycho-simulation/commit/b9a5793c208a20eb31caefab01df1412707f8790))
+
+## [0.244.0](https://github.com/propeller-heads/tycho-simulation/compare/0.243.0...0.244.0) (2026-02-23)
+
+
+### Features
+
+* **evm:** wire query_pool_swap for remaining EVM protocols ([a129ced](https://github.com/propeller-heads/tycho-simulation/commit/a129ced3d510281600a193852aa53bd0bb373c17))
+
+## [0.243.0](https://github.com/propeller-heads/tycho-simulation/compare/0.242.0...0.243.0) (2026-02-20)
+
+
+### Features
+
+* remove rocketpool from the integration test setup ([18265ef](https://github.com/propeller-heads/tycho-simulation/commit/18265ef43a70b3e59e00a46e98cb1162ccd0820f))
+
 ## [0.242.0](https://github.com/propeller-heads/tycho-simulation/compare/0.241.2...0.242.0) (2026-02-19)
 
 
