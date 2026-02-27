@@ -537,8 +537,10 @@ where
             .await
         {
             Ok(protocol_systems) => {
-                let systems: Vec<String> =
-                    protocol_systems.entity.into_iter().collect();
+                let systems: Vec<String> = protocol_systems
+                    .entity
+                    .into_iter()
+                    .collect();
                 let dci_protocols = self
                     .dci_protocols
                     .iter()
@@ -551,7 +553,9 @@ where
                     PaginationResponse::new(
                         request.pagination.page,
                         request.pagination.page_size,
-                        protocol_systems.total.unwrap_or_default(),
+                        protocol_systems
+                            .total
+                            .unwrap_or_default(),
                     ),
                 ))
             }
