@@ -64,4 +64,4 @@ abi PartyInfo party_info
 # Generate contract_bytecode.rs from the bytecode of helper contracts
 code PartyPoolMintImpl PartyPoolSwapImpl PartyInfo
 
-cargo fmt
+cargo +nightly fmt

@@ -20,17 +20,17 @@ contract LiquidityPartyFunctionTest is AdapterTest {
     using FractionMath for Fraction;
 
     IPartyPlanner internal constant PLANNER =
-        IPartyPlanner(0x62445ed780658B25547bF65b9FCD3b67FE2e4e4c);
+        IPartyPlanner(0x7692e502FB8cE1c13A97DbBE380Be05A545ee0a9);
     IPartyInfo internal constant INFO =
-        IPartyInfo(0x605F803cD27F5c1fa01440B2cbd5D3E4Cf7EE850);
+        IPartyInfo(0xAAb5751696d081bF077793a6d86EddF9DF512Ac2);
     address internal constant MINT_IMPL =
-        0xA0375403921e9B357E1BeD57bef3fA3FCE80acd0;
+        0x92bb4799Ef9e622Cb9C5bc7c8655ea43c18E7660;
     address internal constant SWAP_IMPL =
-        0x6aA001e87F86E83bc4D569883332882cb47E2A13;
+        0xE64605889C32cC8ec858146b428Fa38302B5baA9;
     IPartyPool internal constant POOL =
-        IPartyPool(0xc9B0e59F2E089bFf63db5A82e91dd0a9FD504D3c);
+        IPartyPool(0xfA0be6148F66A6499666cf790d647D00daB76904);
     bytes32 internal constant POOL_ID = bytes32(bytes20(address(POOL)));
-    uint256 internal constant FORK_BLOCK = 24338007; // block in which the pool
+    uint256 internal constant FORK_BLOCK = 24537169; // block in which the pool
     // was created
 
     LiquidityPartySwapAdapter internal adapter;

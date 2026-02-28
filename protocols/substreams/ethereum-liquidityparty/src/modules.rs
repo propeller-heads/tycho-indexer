@@ -1,12 +1,16 @@
-use crate::params::{decode_addrs, encode_addr, encode_addrs, Params};
-use crate::{contract_bytecode, pool_factories};
+use crate::{
+    abi::party_pool,
+    contract_bytecode,
+    params::{decode_addrs, encode_addr, encode_addrs, Params},
+    pool_factories,
+};
 use anyhow::Result;
 use std::collections::HashMap;
 use substreams::{pb::substreams::StoreDeltas, prelude::*};
 use substreams_ethereum::{pb::eth, Event};
-use tycho_substreams::abi::erc20;
 use tycho_substreams::{
-    balances::aggregate_balances_changes, contract::extract_contract_changes_builder, prelude::*,
+    abi::erc20, balances::aggregate_balances_changes, contract::extract_contract_changes_builder,
+    prelude::*,
 };
 
 /// Find and create all relevant protocol components
@@ -74,6 +78,41 @@ fn store_protocol_components(
                     store.set(0, key, &val);
                 })
         });
+}
+
+#[substreams::handlers::map]
+fn map_killed_components(
+    block: eth::v2::Block,
+    store: StoreGetRaw,
+) -> Result<BlockTransactionProtocolComponents> {
+    Ok(BlockTransactionProtocolComponents {
+        tx_components: block
+            .transactions()
+            .filter_map(|tx| {
+                let components = tx
+                    .logs_with_calls()
+                    .filter_map(|(log, _call)| {
+                        party_pool::events::Killed::match_and_decode(log).and_then(|_event| {
+                            let from_addr = encode_addr(&log.address);
+                            if store.get_last(&from_addr).is_some() {
+                                let mut pc = ProtocolComponent::new(&from_addr);
+                                pc.change = ChangeType::Deletion.into();
+                                Some(pc)
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                    .collect::<Vec<_>>();
+
+                if !components.is_empty() {
+                    Some(TransactionProtocolComponents { tx: Some(tx.into()), components })
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>(),
+    })
 }
 
 /// Extracts balance changes per component
@@ -158,6 +197,7 @@ fn map_protocol_changes(
     param_string: String,
     block: eth::v2::Block,
     new_components: BlockTransactionProtocolComponents,
+    killed_components: BlockTransactionProtocolComponents,
     deltas: BlockBalanceDeltas,
     components_store: StoreGetString,
     balance_store: StoreDeltas, // Note, this map module is using the `deltas` mode for the store.
@@ -219,6 +259,26 @@ fn map_protocol_changes(
                 });
         });
 
+    // Aggregate killed components per tx
+    killed_components
+        .tx_components
+        .iter()
+        .for_each(|tx_component| {
+            // initialise builder if not yet present for this tx
+            let tx = tx_component.tx.as_ref().unwrap();
+            let builder = transaction_changes
+                .entry(tx.index)
+                .or_insert_with(|| TransactionChangesBuilder::new(tx));
+
+            // iterate over individual components killed within this tx
+            tx_component
+                .components
+                .iter()
+                .for_each(|component| {
+                    builder.add_protocol_component(component);
+                });
+        });
+
     // Aggregate absolute balances per transaction.
     aggregate_balances_changes(balance_store, deltas)
         .into_iter()
@@ -251,12 +311,10 @@ fn map_protocol_changes(
 
     // Process all `transaction_changes` for final output in the `BlockChanges`,
     //  sorted by transaction index (the key).
-    Ok(BlockChanges {
-        block: Some((&block).into()),
-        changes: transaction_changes
-            .drain()
-            .filter_map(|(_, builder)| builder.build())
-            .collect::<Vec<_>>(),
-        storage_changes: vec![],
-    })
+    let tx_changes = transaction_changes
+        .drain()
+        .filter_map(|(_, builder)| builder.build())
+        .collect::<Vec<_>>();
+
+    Ok(BlockChanges { block: Some((&block).into()), changes: tx_changes, storage_changes: vec![] })
 }

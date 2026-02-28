@@ -1,8 +1,12 @@
-use crate::abi;
-use crate::params::{encode_addr, Params};
+use crate::{
+    abi,
+    params::{encode_addr, Params},
+};
 use substreams::log;
-use substreams_ethereum::pb::eth::v2::{Call, Log, TransactionTrace};
-use substreams_ethereum::Event;
+use substreams_ethereum::{
+    pb::eth::v2::{Call, Log, TransactionTrace},
+    Event,
+};
 use tycho_substreams::models::{ImplementationType, ProtocolComponent};
 
 /// Potentially constructs a new ProtocolComponent given a call
