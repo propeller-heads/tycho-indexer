@@ -44,6 +44,20 @@ ERC6909 multi-token vault with dual storage:
 
 **Fee accounting**: Fees credited directly to fee receivers' vault balances via `_creditVault()` -- persistent storage writes (~22k gas each) but no ERC20 transfers.
 
+### Fee System (`FeeCalculator.sol`)
+
+Three fee layers, deducted from swap output:
+
+1. **Client fee** (encodable in calldata): `clientFeeBps` + `clientFeeReceiver` passed per-swap by the caller. The client sets their own rate and receiver.
+2. **Router fee on output** (stored): `_routerFeeOnOutputBps` -- Tycho's cut of the swap output amount.
+3. **Router fee on client fee** (stored): `_routerFeeOnClientFeeBps` -- Tycho's cut of the client fee (deducted from the client's portion, not from the user).
+
+**Per-client overrides**: Both router fees can be overridden per user address via `_customRouterFees` mapping (`CustomFees` struct, single storage slot). If set, the custom rate replaces the default for that user. Can be removed to revert to defaults.
+
+**Deduction order**: client fee calculated first, then router's cut of client fee subtracted from it, then router fee on output. `amountOut = amountIn - clientPortion - totalRouterFee`.
+
+**Accounting**: FeeCalculator only computes amounts (called via staticcall). Actual distribution happens in TychoRouter, which credits fee receivers' vault balances via `_creditVault()`.
+
 ### Executors (`foundry/src/executors/`)
 
 Each executor implements `IExecutor` (`swap`, `getTransferData`, `fundsExpectedAddress`). Transfer types and receivers are hardcoded per-executor -- not encodable in calldata.
