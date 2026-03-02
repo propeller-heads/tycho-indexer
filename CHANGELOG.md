@@ -1,3 +1,21 @@
+## [0.145.0](https://github.com/propeller-heads/tycho-indexer/compare/0.144.3...0.145.0) (2026-03-02)
+
+
+### Features
+
+* add a chack that audit.json is valid ([56087a1](https://github.com/propeller-heads/tycho-indexer/commit/56087a1420b51f5053f0742e19b87f7956ab66d7))
+* add cargo audit pipeline ([b9607bf](https://github.com/propeller-heads/tycho-indexer/commit/b9607bfe809e362d23318517aeb06afd439963c5))
+* add cargo audit pipeline ([#861](https://github.com/propeller-heads/tycho-indexer/issues/861)) ([817db0b](https://github.com/propeller-heads/tycho-indexer/commit/817db0bd4986db0324e8a1e8340ec86f61b375a9))
+* add check for unused dependencies ([5891864](https://github.com/propeller-heads/tycho-indexer/commit/5891864ee7207e6ab3a9b73421e651f072c59d19))
+* update versions to remove vulnerabilities ([97cfe26](https://github.com/propeller-heads/tycho-indexer/commit/97cfe2662fe59cb52b6a6ef41a29ad0fc1982fc8))
+
+
+### Bug Fixes
+
+* add action to install cargo-audit ([e7e9ff1](https://github.com/propeller-heads/tycho-indexer/commit/e7e9ff112cfbb71ed98bc1a39f9ec8b6db554e68))
+* replace with fatster job ([9f9ac53](https://github.com/propeller-heads/tycho-indexer/commit/9f9ac5327aeed38bfe67d75de27f12388953d5b6))
+* update packages with vulnerabilities ([d968a9c](https://github.com/propeller-heads/tycho-indexer/commit/d968a9c679c7913da03460bf89e9e72f694c5d47))
+
 ## [0.144.3](https://github.com/propeller-heads/tycho-indexer/compare/0.144.2...0.144.3) (2026-03-02)
 
 ## [0.144.2](https://github.com/propeller-heads/tycho-indexer/compare/0.144.1...0.144.2) (2026-03-02)
