@@ -1,3 +1,10 @@
+## [0.246.1](https://github.com/propeller-heads/tycho-simulation/compare/0.246.0...0.246.1) (2026-03-02)
+
+
+### Bug Fixes
+
+* [#856](https://github.com/propeller-heads/tycho-simulation/issues/856) pc token ordering ([10ef332](https://github.com/propeller-heads/tycho-simulation/commit/10ef3325f1411923a28c3ea44b191b19028cce4a))
+
 ## [0.246.0](https://github.com/propeller-heads/tycho-simulation/compare/0.245.0...0.246.0) (2026-02-26)
 
 
