@@ -72,7 +72,19 @@ impl TychoStreamBuilder {
     /// Creates a new `TychoStreamBuilder` with the given Tycho URL and blockchain network.
     /// Initializes the builder with default values for block time and timeout based on the chain.
     pub fn new(tycho_url: &str, chain: Chain) -> Self {
-        let (block_time, timeout, max_missed_blocks) = Self::default_timing(&chain);
+        let (mut block_time, mut timeout, mut max_missed_blocks) = Self::default_timing(&chain);
+
+        // dynamically override with env variables
+        let read = |k: &str, d: u64| {
+            std::env::var(k)
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(d)
+        };
+        block_time = read("TYCHO_CLIENT_BLOCK_TIME_SECS", block_time);
+        timeout = read("TYCHO_CLIENT_TIMEOUT_SECS", timeout);
+        max_missed_blocks = read("TYCHO_CLIENT_MAX_MISSED_BLOCKS", max_missed_blocks);
+
         Self {
             tycho_url: tycho_url.to_string(),
             chain,
