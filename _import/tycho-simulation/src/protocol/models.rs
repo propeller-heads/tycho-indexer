@@ -117,9 +117,8 @@ impl ProtocolComponent {
 
     pub fn from_with_tokens(
         core_model: tycho_common::dto::ProtocolComponent,
-        mut tokens: Vec<Token>,
+        tokens: Vec<Token>,
     ) -> Self {
-        tokens.sort_unstable_by_key(|t| t.address.clone());
         let id = Bytes::from(core_model.id.as_str());
         ProtocolComponent::new(
             id.clone(),
