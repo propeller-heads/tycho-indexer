@@ -514,8 +514,8 @@ impl PostgresGateway {
             .collect();
         #[allow(clippy::mutable_key_type)]
         let accounts: HashSet<_> = slots
-            .iter()
-            .flat_map(|(_, contract_slots)| contract_slots.keys())
+            .values()
+            .flat_map(|contract_slots| contract_slots.keys())
             .collect();
         let account_ids: HashMap<Bytes, i64> = schema::account::table
             .filter(schema::account::address.eq_any(accounts))
