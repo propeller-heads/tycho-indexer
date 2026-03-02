@@ -267,6 +267,39 @@ where
         self
     }
 
+    /// When using partial blocks, brand-new components are deferred until the first message of the
+    /// next block. This returns snapshots for those deferred components if we just advanced to a
+    /// new block; otherwise returns an empty snapshot. For full blocks this always returns empty.
+    async fn take_flushed_deferred_snapshots(
+        &mut self,
+        header: &BlockHeader,
+    ) -> SyncResult<Snapshot> {
+        if !self.partial_blocks {
+            return Ok(Snapshot::default());
+        }
+        let prev = match self
+            .last_synced_block
+            .as_ref()
+            .filter(|p| header.number > p.number)
+        {
+            Some(p) => p,
+            None => return Ok(Snapshot::default()),
+        };
+        let deferred = std::mem::take(&mut self.deferred_snapshot_components);
+        if deferred.is_empty() {
+            return Ok(Snapshot::default());
+        }
+        let snapshot_header = BlockHeader {
+            number: prev.number,
+            hash: prev.hash.clone(),
+            ..Default::default()
+        };
+        let msg = self
+            .get_snapshots(snapshot_header, Some(&deferred))
+            .await?;
+        Ok(msg.snapshots)
+    }
+
     /// Retrieves state snapshots of the requested components
     async fn get_snapshots<'a, I: IntoIterator<Item = &'a String>>(
         &mut self,
@@ -515,31 +548,8 @@ where
                             let header: BlockHeader = (&deltas).into();
                             debug!(block_number=?header.number, "Received delta message");
 
-                            // Flush deferred brand-new component snapshots on first message of next block.
-                            let flushed_snapshots = if self.partial_blocks
-                                && !self.deferred_snapshot_components.is_empty()
-                                && self
-                                    .last_synced_block
-                                    .as_ref()
-                                    .is_some_and(|prev| header.number > prev.number)
-                            {
-                                let deferred =
-                                    std::mem::take(&mut self.deferred_snapshot_components);
-                                let prev = self.last_synced_block.as_ref().unwrap();
-                                // get snapshot at the previous block
-                                let snapshot_header = BlockHeader {
-                                    number: prev.number,
-                                    hash: prev.hash.clone(),
-                                    ..Default::default()
-                                };
-                                let snap = self
-                                    .get_snapshots(snapshot_header, Some(&deferred))
-                                    .await?
-                                    .snapshots;
-                                Some(snap)
-                            } else {
-                                None
-                            };
+                            let flushed_snapshots =
+                                self.take_flushed_deferred_snapshots(&header).await?;
 
                             let (snapshots, removed_components) = {
                                 // 1. Remove components based on latest changes
@@ -594,9 +604,7 @@ where
                                         .snapshots
                                 };
 
-                                if let Some(flushed) = flushed_snapshots {
-                                    snapshots.extend(flushed);
-                                }
+                                snapshots.extend(flushed_snapshots);
 
                                 let removed_components = if !to_remove.is_empty() {
                                     self.component_tracker.stop_tracking(&to_remove)
