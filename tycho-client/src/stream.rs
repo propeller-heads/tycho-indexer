@@ -381,10 +381,30 @@ impl ProtocolSystemsInfo {
             .difference(requested_exchanges)
             .cloned()
             .collect();
-        let dci_protocols = response
+        let mut dci_protocols: HashSet<String> = response
             .dci_protocols
             .into_iter()
             .collect();
+
+        // TODO(ENG-5302): Remove this fallback once all environments serve
+        // the `dci_protocols` field. Old servers omit the field, which
+        // deserialises as empty — causing clients to skip entrypoint
+        // fetches for DCI protocols.
+        if dci_protocols.is_empty() {
+            const LEGACY_DCI: &[&str] = &[
+                "uniswap_v4_hooks",
+                "vm:curve",
+                "vm:balancer_v2",
+                "vm:balancer_v3",
+                "fluid_v1",
+                "erc4626",
+            ];
+            for name in requested_exchanges {
+                if LEGACY_DCI.contains(&name.as_str()) {
+                    dci_protocols.insert(name.clone());
+                }
+            }
+        }
 
         Self { dci_protocols, other_available }
     }
