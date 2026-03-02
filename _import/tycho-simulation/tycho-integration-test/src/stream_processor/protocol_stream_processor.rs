@@ -176,7 +176,7 @@ impl ProtocolStreamProcessor {
                     "uniswap_v4".to_string(),
                     "uniswap_v4_hooks".to_string(),
                     "velodrome_slipstreams".to_string(),
-                    "vm:curve".to_string(),
+                    // "vm:curve".to_string(), // Temporarily disabled due to indexing issues
                 ]
             }
             _ => vec![],
