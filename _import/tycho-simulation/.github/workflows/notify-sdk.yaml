@@ -15,8 +15,8 @@ jobs:
             -H "Accept: application/vnd.github.v3+json" \
             -H "Authorization: token ${{ secrets.SDK_REPO_DISPATCH_TOKEN }}" \
             https://api.github.com/repos/propeller-heads/tycho-protocol-sdk/dispatches \
-            -d '{"event_type":"tycho-simulation-release","client_payload":{"version":"${{ github.event.release.tag_name }}"}}'
+            -d '{"event_type":"tycho-simulation-release","client_payload":{"version":"${{ github.event.release.tag_name }}","release_author":"${{ github.actor }}"}}'
 
       - name: Log notification
         run: |
-          echo "Notified tycho-protocol-sdk of release ${{ github.event.release.tag_name }}"
+          echo "Notified tycho-protocol-sdk of release ${{ github.event.release.tag_name }} by ${{ github.actor }}"
