@@ -1,3 +1,11 @@
+## [0.144.2](https://github.com/propeller-heads/tycho-indexer/compare/0.144.1...0.144.2) (2026-03-02)
+
+
+### Bug Fixes
+
+* **lint:** fix clippy lints ([88d504a](https://github.com/propeller-heads/tycho-indexer/commit/88d504af29ba421ab7ebdfd27887570460d9c6d2))
+* **lint:** fix clippy lints ([#864](https://github.com/propeller-heads/tycho-indexer/issues/864)) ([c1efdd8](https://github.com/propeller-heads/tycho-indexer/commit/c1efdd80143c00b5d23b5cafce7afe9be17a6d90))
+
 ## [0.144.1](https://github.com/propeller-heads/tycho-indexer/compare/0.144.0...0.144.1) (2026-02-24)
 
 
