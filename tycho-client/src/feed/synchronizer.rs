@@ -289,11 +289,8 @@ where
         if deferred.is_empty() {
             return Ok(Snapshot::default());
         }
-        let snapshot_header = BlockHeader {
-            number: prev.number,
-            hash: prev.hash.clone(),
-            ..Default::default()
-        };
+        let snapshot_header =
+            BlockHeader { number: prev.number, hash: prev.hash.clone(), ..Default::default() };
         let msg = self
             .get_snapshots(snapshot_header, Some(&deferred))
             .await?;
@@ -3179,9 +3176,11 @@ mod test {
         jh.await.expect("Task should not panic");
     }
 
-    /// Test that brand-new components (in new_protocol_components) have their snapshot deferred
-    /// to the first message of the next block when partial_blocks is enabled, and that the
-    /// snapshot is then requested at the completed previous block and included in that message.
+    /// Test that in partial_blocks mode:
+    /// - Preexisting components (in to_add but not in new_protocol_components) get their snapshot
+    ///   requested immediately at the previous block and included in the same message.
+    /// - Brand-new components (in new_protocol_components) have their snapshot deferred to the
+    ///   first message of the next block, then requested at the completed previous block.
     #[test_log::test(tokio::test)]
     async fn test_partial_mode_defers_brand_new_component_snapshot_to_next_block() {
         use std::time::Duration;
@@ -3189,7 +3188,8 @@ mod test {
         use tokio::{sync::mpsc::channel, time::timeout};
 
         let mut rpc_client = make_mock_client();
-        // get_protocol_components for BrandNew when start_tracking is called
+        // get_protocol_components for BrandNew + Preexisting when start_tracking is called (block
+        // 2)
         rpc_client
             .expect_get_protocol_components()
             .with(mockall::predicate::function(|req: &ProtocolComponentsRequestBody| {
@@ -3199,15 +3199,28 @@ mod test {
             }))
             .returning(|_| {
                 Ok(ProtocolComponentRequestResponse {
-                    protocol_components: vec![ProtocolComponent {
-                        id: "BrandNew".to_string(),
-                        ..Default::default()
-                    }],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
+                    protocol_components: vec![
+                        ProtocolComponent { id: "BrandNew".to_string(), ..Default::default() },
+                        ProtocolComponent { id: "Preexisting".to_string(), ..Default::default() },
+                    ],
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 2 },
                 })
             });
-        // get_snapshots for deferred flush: block 2, BrandNew (called when we receive first message
-        // of block 3)
+        // get_protocol_components for initial sync (via get_protocol_components_paginated)
+        rpc_client
+            .expect_get_protocol_components()
+            .returning(|_| {
+                Ok(ProtocolComponentRequestResponse {
+                    protocol_components: vec![
+                        ProtocolComponent { id: "Component1".to_string(), ..Default::default() },
+                        ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
+                    ],
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 2 },
+                })
+            });
+        // get_snapshots: more specific expectations first so init (block 0, all components)
+        // does not match the block 1/2 ones.
+        // get_snapshots for deferred flush: block 2, BrandNew (when processing block 3)
         rpc_client
             .expect_get_snapshots()
             .withf(
@@ -3242,19 +3255,42 @@ mod test {
                     vm_storage: HashMap::new(),
                 })
             });
-        // get_protocol_components for initial sync
+        // get_snapshots for preexisting: block 1, Preexisting (when processing block 2)
         rpc_client
-            .expect_get_protocol_components()
-            .returning(|_| {
-                Ok(ProtocolComponentRequestResponse {
-                    protocol_components: vec![
-                        ProtocolComponent { id: "Component1".to_string(), ..Default::default() },
-                        ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
-                    ],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 2 },
+            .expect_get_snapshots()
+            .withf(
+                |request: &SnapshotParameters,
+                 _chunk_size: &Option<usize>,
+                 _concurrency: &usize| {
+                    request.block_number == 1 &&
+                        request
+                            .components
+                            .contains_key("Preexisting")
+                },
+            )
+            .returning(|_request, _chunk_size, _concurrency| {
+                Ok(Snapshot {
+                    states: [(
+                        "Preexisting".to_string(),
+                        ComponentWithState {
+                            state: ResponseProtocolState {
+                                component_id: "Preexisting".to_string(),
+                                ..Default::default()
+                            },
+                            component: ProtocolComponent {
+                                id: "Preexisting".to_string(),
+                                ..Default::default()
+                            },
+                            component_tvl: Some(75.0),
+                            entrypoints: vec![],
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    vm_storage: HashMap::new(),
                 })
             });
-        // get_snapshots for initial sync
+        // get_snapshots for initial sync (block 0, all components)
         rpc_client
             .expect_get_snapshots()
             .returning(|_request, _chunk_size, _concurrency| {
@@ -3334,19 +3370,36 @@ mod test {
             .expect("Channel open")
             .expect("No error");
 
-        // Block 2 partial (index 2): brand-new component appears mid-block
+        // Block 2 partial (index 2): BrandNew (in new_protocol_components → deferred) and
+        // Preexisting (not in new_protocol_components → snapshot requested immediately at block 1).
         let mut block2 = make_block_changes(2, Some(2));
         block2.new_protocol_components = HashMap::from([(
             "BrandNew".to_string(),
             ProtocolComponent { id: "BrandNew".to_string(), ..Default::default() },
         )]);
-        block2.component_tvl = HashMap::from([("BrandNew".to_string(), 100.0)]);
+        block2.component_tvl = HashMap::from([
+            ("BrandNew".to_string(), 100.0),
+            ("Preexisting".to_string(), 75.0), // > add_tvl (50), not in new_protocol_components
+        ]);
         tx.send(block2).await.unwrap();
-        let _msg2 = timeout(Duration::from_millis(200), block_rx.recv())
+        let msg2 = timeout(Duration::from_millis(200), block_rx.recv())
             .await
             .expect("Should receive block 2")
             .expect("Channel open")
             .expect("No error");
+
+        assert!(
+            msg2.snapshots.states.contains_key("Preexisting"),
+            "Preexisting component snapshot should be requested immediately in same block; got keys: {:?}",
+            msg2.snapshots.states.keys().collect::<Vec<_>>()
+        );
+        assert!(
+            !msg2
+                .snapshots
+                .states
+                .contains_key("BrandNew"),
+            "Brand-new component snapshot should be deferred, not in block 2 message"
+        );
 
         // Block 3 partial (index 1): first partial of next block triggers flush of deferred
         // snapshot at block 2
