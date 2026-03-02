@@ -35,7 +35,6 @@ tycho-common.workspace = true
 tycho-storage.workspace = true
 tycho-ethereum.workspace = true
 anyhow.workspace = true
-typetag.workspace = true
 mockall.workspace = true
 clap = { workspace = true, features = ["derive", "env"] }
 async-stream = "0.3"
@@ -79,8 +78,10 @@ num-traits = "0.2.19"
 num_cpus = "1.16.0"
 tycho-substreams = "0.6.0"
 rand.workspace = true
-alloy-sol-types = "1.2.1"
-alloy = { workspace = true, default-features = false, features = ["sol-types", "reqwest"] }
+alloy = { workspace = true, default-features = false, features = [
+    "sol-types",
+    "reqwest",
+] }
 zstd = "0.13"
 
 [dev-dependencies]
