@@ -235,11 +235,3 @@ Features: `evm` (default, enables alloy + reqwest), `fork-tests` (mainnet fork t
 
 - Submodules for Solidity dependencies (`foundry/lib/`)
 - Checkout with `--recursive` to get all submodules
-
-## Deployed Addresses
-
-See `config/router_addresses.json` and `config/executor_addresses.json` for all chains.
-
-- Ethereum: `0xfD0b31d2E955fA55e3fa641Fe90e08b677188d35`
-- Base: `0xea3207778e39EB02D72C9D3c4Eac7E224ac5d369`
-- Unichain: `0xFfA5ec2e444e4285108e4a17b82dA495c178427B`
