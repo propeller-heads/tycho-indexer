@@ -1,3 +1,10 @@
+## [0.145.1](https://github.com/propeller-heads/tycho-indexer/compare/0.145.0...0.145.1) (2026-03-03)
+
+
+### Bug Fixes
+
+* Use PR author instead of merged_by for release author ([7496350](https://github.com/propeller-heads/tycho-indexer/commit/74963506b1f3493a8f7beda4c6af4401193ebca4))
+
 ## [0.145.0](https://github.com/propeller-heads/tycho-indexer/compare/0.144.3...0.145.0) (2026-03-02)
 
 
