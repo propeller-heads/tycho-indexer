@@ -1,3 +1,10 @@
+## [0.247.2](https://github.com/propeller-heads/tycho-simulation/compare/0.247.1...0.247.2) (2026-03-03)
+
+
+### Bug Fixes
+
+* add rocketpool back to integration test ([eaab73a](https://github.com/propeller-heads/tycho-simulation/commit/eaab73a1f80ae789fe7ea3871dea5d50e87a22ce))
+
 ## [0.247.1](https://github.com/propeller-heads/tycho-simulation/compare/0.247.0...0.247.1) (2026-03-03)
 
 
