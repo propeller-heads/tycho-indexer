@@ -34,7 +34,7 @@ jobs:
 
           AUTHOR=""
           if [ -n "$PARENT_SHA" ]; then
-            AUTHOR=$(gh api "repos/$REPO/commits/$PARENT_SHA/pulls" --jq '.[0].merged_by.login // empty' 2>/dev/null || echo "")
+            AUTHOR=$(gh api "repos/$REPO/commits/$PARENT_SHA/pulls" --jq '.[0].user.login // empty' 2>/dev/null || echo "")
           fi
 
           echo "author=$AUTHOR" >> $GITHUB_OUTPUT
