@@ -29,14 +29,14 @@ fn map_filtered_events(
                             Event::VirtualExecution(_) |
                             Event::RateUpdated(_) => true,
                             Event::Swapped(_) | Event::PositionUpdated(_) => {
-                                pool_details_store.has_last(&log.pool_id.to_hex())
+                                pool_details_store.has_last(log.pool_id.to_hex())
                             }
                         }
                     })
                     .collect();
 
                 (!pool_logs.is_empty())
-                    .then(|| TransactionEvents { transaction: tx_events.transaction, pool_logs })
+                    .then_some(TransactionEvents { transaction: tx_events.transaction, pool_logs })
             })
             .collect(),
         timestamp: block_tx_events.timestamp,

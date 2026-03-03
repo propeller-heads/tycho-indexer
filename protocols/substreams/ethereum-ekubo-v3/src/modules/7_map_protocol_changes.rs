@@ -210,8 +210,8 @@ fn map_protocol_changes(
                 .flat_map(move |log| {
                     let tx = tx.clone();
 
-                    maybe_attribute_updates(log.event.unwrap(), filtered_block_tx_events.timestamp).map(
-                        |attrs| {
+                    maybe_attribute_updates(log.event.unwrap(), filtered_block_tx_events.timestamp)
+                        .map(|attrs| {
                             (
                                 tx,
                                 EntityChanges {
@@ -219,8 +219,7 @@ fn map_protocol_changes(
                                     attributes: attrs,
                                 },
                             )
-                        },
-                    )
+                        })
                 })
         })
         .for_each(|(tx, entity_changes)| {

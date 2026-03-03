@@ -35,8 +35,8 @@ use crate::{
 // Decodes all Ekubo-relevant events that can be recognized from log data alone.
 //
 // This stream is pre-filtered where decode-time information is sufficient:
-// - PoolInitialized events for unsupported pool extensions are dropped immediately because
-//   the full pool config is available at decode time.
+// - PoolInitialized events for unsupported pool extensions are dropped immediately because the full
+//   pool config is available at decode time.
 // - Other events may still belong to pools that are not tracked, because their payloads do not
 //   contain enough information to decide that here.
 #[substreams::handlers::map]

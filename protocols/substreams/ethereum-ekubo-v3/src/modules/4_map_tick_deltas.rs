@@ -1,16 +1,12 @@
 use substreams::scalar::BigInt;
 
-use crate::{
-    pb::ekubo::{
-        block_transaction_events::transaction_events::pool_log::Event, BlockTransactionEvents, TickDelta,
-        TickDeltas,
-    },
+use crate::pb::ekubo::{
+    block_transaction_events::transaction_events::pool_log::Event, BlockTransactionEvents,
+    TickDelta, TickDeltas,
 };
 
 #[substreams::handlers::map]
-pub fn map_tick_deltas(
-    block_tx_events: BlockTransactionEvents,
-) -> TickDeltas {
+pub fn map_tick_deltas(block_tx_events: BlockTransactionEvents) -> TickDeltas {
     TickDeltas {
         deltas: block_tx_events
             .block_transaction_events
