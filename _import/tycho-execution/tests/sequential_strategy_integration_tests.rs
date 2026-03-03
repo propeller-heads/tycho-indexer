@@ -10,8 +10,8 @@ use tycho_contracts::encoding::{
 };
 
 use crate::common::{
-    encoding::encode_tycho_router_call, eth, eth_chain, get_signer, get_tycho_router_encoder, usdc,
-    wbtc, weth,
+    client_fee_receiver, encoding::encode_tycho_router_call, eth, eth_chain, get_signer,
+    get_tycho_router_encoder, usdc, wbtc, weth,
 };
 
 #[test]
@@ -133,25 +133,38 @@ fn test_sequential_swap_strategy_encoder_transfer_from_integration() {
     let hex_calldata = encode(&calldata);
 
     let expected = String::from(concat!(
-        "f0b6a46d", // function selector (sequentialSwap)
+        "6fc8683a", // function selector (sequentialSwap)
         "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount in
         "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
         "00000000000000000000000000000000000000000000000000000000018f61ec", // min amount out
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeBps
-        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeReceiver
-        "0000000000000000000000000000000000000000000000000000000000000000", // maxClientContribution
-        "0000000000000000000000000000000000000000000000000000000000000120", // offset of swap bytes
-        "00000000000000000000000000000000000000000000000000000000000000a4", // len swaps (164 bytes)
+        "00000000000000000000000000000000000000000000000000000000000000e0", /* clientFeeParams
+                     * offset = 224 */
+        "00000000000000000000000000000000000000000000000000000000000001a0", /* swapData offset =
+                                                                             * 416 */
+        // clientFeeParams tail (6 words):
+        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeBps = 0
+        "0000000000000000000000000000000000000000000000000000000000000000", /* clientFeeReceiver
+                                                                             * = 0 */
+        "0000000000000000000000000000000000000000000000000000000000000000", /* maxClientContribution = 0 */
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", // deadline = U256::MAX
+        "00000000000000000000000000000000000000000000000000000000000000a0", /* clientSignature
+                                                                             * offset in struct
+                                                                             * = 160 */
+        "0000000000000000000000000000000000000000000000000000000000000000", /* clientSignature
+                                                                             * length = 0 */
+        // swapData:
+        "00000000000000000000000000000000000000000000000000000000000000a4", /* len swaps (164
+                                                                             * bytes) */
         // swap 1: WETH -> WBTC
-        "0050", // swap length (80 bytes hex = 60 bytes actual)
+        "0050",                                     // swap length (80 hex = 64 bytes)
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
         "bb2b8038a1640196fbe3e38816f3e67cba72d940", // component id (pool address)
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // tokenIn (WETH)
         "2260fac5e5542a773aa44fbcfedf7c193bc2c599", // tokenOut (WBTC)
         // swap 2: WBTC -> USDC
-        "0050", // swap length (80 bytes hex = 60 bytes actual)
+        "0050",                                     // swap length (80 hex = 64 bytes)
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
         "004375dff511095cc5a197a54140a24efef3a416", // component id (pool address)
         "2260fac5e5542a773aa44fbcfedf7c193bc2c599", // tokenIn (WBTC)
@@ -245,15 +258,14 @@ fn test_sequential_strategy_cyclic_swap() {
     .data;
     let hex_calldata = alloy::hex::encode(&calldata);
     let expected_input = [
-        "3f3723ff", // selector (sequentialSwapPermit2)
+        "cd914fde", // selector (sequentialSwapPermit2)
         "0000000000000000000000000000000000000000000000000000000005f5e100", // given amount
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // given token
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // checked token
         "0000000000000000000000000000000000000000000000000000000005ec8f6e", // min amount out
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeBps = 0
-        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeReceiver
-        "0000000000000000000000000000000000000000000000000000000000000000", // maxClientContribution
+        "00000000000000000000000000000000000000000000000000000000000001c0", /* clientFeeParams
+                     * offset = 448 */
     ]
     .join("");
 
@@ -283,8 +295,8 @@ fn test_sequential_strategy_cyclic_swap() {
     ]
     .join("");
 
-    assert_eq!(hex_calldata[..520], expected_input);
-    assert_eq!(hex_calldata[1288..], expected_swaps);
+    assert_eq!(hex_calldata[..392], expected_input);
+    assert_eq!(hex_calldata[1544..], expected_swaps);
     write_calldata_to_file("test_sequential_strategy_cyclic_swap", hex_calldata.as_str());
 }
 
@@ -368,20 +380,23 @@ fn test_sequential_strategy_cyclic_swap_and_vault() {
     .data;
     let hex_calldata = alloy::hex::encode(&calldata);
     let expected_input = [
-        "e51fdfe6", // selector (sequentialSwapUsingVault)
+        "2e7200fc", // selector (sequentialSwapUsingVault)
         "0000000000000000000000000000000000000000000000000000000005f5e100", // amount in
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
         "0000000000000000000000000000000000000000000000000000000005ec8f6e", // min amount out
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
+        "00000000000000000000000000000000000000000000000000000000000000e0", // clientFeeParams offset = 224
+        "00000000000000000000000000000000000000000000000000000000000001a0", // swapData offset = 416
+        // clientFeeParams tail (6 words):
         "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeBps = 0
-        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeReceiver
-        "0000000000000000000000000000000000000000000000000000000000000000", // maxClientContribution
-        "0000000000000000000000000000000000000000000000000000000000000120", // offset of swap bytes
-        "00000000000000000000000000000000000000000000000000000000000000ac", /* length of ple
-                     * encoded swaps
-                     * without padding
-                     * (172 bytes) */
+        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeReceiver = 0
+        "0000000000000000000000000000000000000000000000000000000000000000", // maxClientContribution = 0
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", // deadline = U256::MAX
+        "00000000000000000000000000000000000000000000000000000000000000a0", // clientSignature offset in struct = 160
+        "0000000000000000000000000000000000000000000000000000000000000000", // clientSignature length = 0
+        // swapData:
+        "00000000000000000000000000000000000000000000000000000000000000ac", // length = 172 bytes
         "0054",                                     // ple encoded swaps (84 bytes)
         "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
@@ -446,7 +461,7 @@ fn test_sequential_swap_strategy_encoder_with_fees() {
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
         client_fee_bps: 100, // 1% fee
-        client_fee_receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
+        client_fee_receiver: client_fee_receiver(),
         ..Default::default()
     };
 

@@ -2,7 +2,11 @@
 pragma solidity ^0.8.26;
 
 import "@src/executors/UniswapV4Executor.sol";
-import {TychoRouter, RestrictTransferFrom} from "@src/TychoRouter.sol";
+import {
+    TychoRouter,
+    RestrictTransferFrom,
+    ClientFeeParams
+} from "@src/TychoRouter.sol";
 import "./TychoRouterTestSetup.sol";
 
 import {
@@ -100,9 +104,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             1, // min amount,
             4,
             ALICE,
-            0,
-            address(0),
-            0,
+            noClientFee(),
             permitSingle,
             signature,
             pleEncode(swaps)
@@ -142,9 +144,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             1000_000000, // min amount
             4,
             ALICE,
-            0,
-            address(0),
-            0,
+            noClientFee(),
             pleEncode(swaps)
         );
 
@@ -179,9 +179,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             0, // min amount
             4,
             ALICE,
-            0,
-            address(0),
-            0,
+            noClientFee(),
             pleEncode(swaps)
         );
         vm.stopPrank();
@@ -205,9 +203,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             1000_000000, // min amount
             2,
             ALICE,
-            0,
-            address(0),
-            0,
+            noClientFee(),
             pleEncode(swaps)
         );
 
@@ -263,9 +259,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             200_000000, // min amount (2 WBTC)
             4,
             ALICE,
-            0,
-            address(0),
-            0, // max client contribution
+            noClientFee(),
             pleEncode(swaps)
         );
     }
@@ -299,9 +293,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             minAmountOut,
             4,
             ALICE,
-            0,
-            address(0),
-            0,
+            noClientFee(),
             permitSingle,
             signature,
             pleEncode(swaps)
@@ -428,9 +420,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             1, // min amount out
             2, // number of tokens
             ALICE, // receiver
-            0, // client fee bps
-            address(0), // client fee receiver
-            0, // max client contribution
+            noClientFee(),
             pleEncode(swaps)
         );
         assertEq(IERC20(BAL_ADDR).balanceOf(ALICE), 1328_449676114497362517);
@@ -497,9 +487,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             1, // min amount
             4,
             ALICE,
-            0,
-            address(0),
-            0,
+            noClientFee(),
             pleEncode(swaps)
         );
         vm.stopPrank();

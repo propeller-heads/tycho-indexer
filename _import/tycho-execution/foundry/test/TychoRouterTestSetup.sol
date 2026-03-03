@@ -25,6 +25,7 @@ import {WethExecutor} from "../src/executors/WethExecutor.sol";
 import "./Constants.sol";
 import "./TestUtils.sol";
 import {Permit2TestHelper} from "./Permit2TestHelper.sol";
+import {ClientFeeTestHelper} from "./ClientFeeTestHelper.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 
 // Core contracts
@@ -82,7 +83,12 @@ contract TychoRouterExposed is TychoRouter {
     }
 }
 
-contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
+contract TychoRouterTestSetup is
+    Constants,
+    Permit2TestHelper,
+    ClientFeeTestHelper,
+    TestUtils
+{
     TychoRouterExposed tychoRouter;
     address tychoRouterAddr;
     UniswapV2Executor public usv2Executor;
@@ -219,7 +225,8 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     function deployFeeCalculator() public {
         // Deploy and configure FeeCalculator
         routerFeeReceiver = makeAddr("routerFeeReceiver");
-        clientFeeReceiver = makeAddr("clientFeeReceiver");
+        // clientFeeReceiver is the address corresponding to CLIENT_FEE_RECEIVER_PK
+        clientFeeReceiver = vm.addr(CLIENT_FEE_RECEIVER_PK);
         feeCalculator = new FeeCalculator(FEE_SETTER);
     }
 

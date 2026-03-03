@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import "@src/executors/UniswapV4Executor.sol";
-import {TychoRouter} from "@src/TychoRouter.sol";
+import {TychoRouter, ClientFeeParams} from "@src/TychoRouter.sol";
 import {
     Vault__UnexpectedInputDelta,
     Vault__UnexpectedNonZeroCount,
@@ -86,9 +86,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             1, // min amount
             4,
             ALICE, // receiver
-            0,
-            address(0),
-            0,
+            noClientFee(),
             pleEncode(swaps)
         );
         vm.stopPrank();
@@ -124,9 +122,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             DAI_ADDR,
             1, // min amount
             ALICE, // receiver
-            0, // clientFeeBps
-            address(0), // clientFeeReceiver
-            0, // maxClientContribution
+            noClientFee(),
             swap
         );
         vm.stopPrank();
@@ -159,9 +155,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             RETH_ADDR,
             1, // min amount
             ALICE, // receiver
-            0,
-            address(0),
-            0,
+            noClientFee(),
             _rocketpoolEthRethSwap()
         );
         vm.stopPrank();
@@ -197,9 +191,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             RETH_ADDR,
             1, // min amount
             ALICE, // receiver
-            0,
-            address(0),
-            0,
+            noClientFee(),
             _rocketpoolEthRethSwap()
         );
         vm.stopPrank();
@@ -221,9 +213,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             RETH_ADDR,
             1, // min amount
             ALICE, // receiver
-            0,
-            address(0),
-            0,
+            noClientFee(),
             _rocketpoolEthRethSwap()
         );
         vm.stopPrank();
@@ -283,9 +273,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             RETH_ADDR,
             1, // min amount
             ALICE, // receiver
-            0, // client fee bps
-            address(0), // client fee receiver
-            0, // max client contribution
+            noClientFee(),
             pleEncode(swaps)
         );
         vm.stopPrank();

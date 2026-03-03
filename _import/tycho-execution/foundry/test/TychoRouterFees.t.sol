@@ -7,7 +7,12 @@ import {
     Vault__UnexpectedNonZeroCount,
     Vault__UnexpectedInputDelta
 } from "@src/Vault.sol";
-import {TychoRouter__AmountOutNotFullyReceived} from "@src/TychoRouter.sol";
+import {
+    TychoRouter__AmountOutNotFullyReceived,
+    TychoRouter__InvalidClientSignature,
+    TychoRouter__ExpiredClientSignature,
+    ClientFeeParams
+} from "@src/TychoRouter.sol";
 import {FeeRecipient} from "../lib/FeeStructs.sol";
 
 contract TychoRouterFeesTest is TychoRouterTestSetup {
@@ -36,6 +41,14 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             encodeSingleSwap(address(usv2Executor), protocolData);
 
         uint256 minAmountOut = 1900 * 1e18;
+
+        ClientFeeParams memory feeParams = makeClientFeeParams(
+            200, 0, tychoRouterAddr, CLIENT_FEE_RECEIVER_PK
+        );
+        uint256 swapOutput = tychoRouter.singleSwap(
+            amountIn, WETH_ADDR, DAI_ADDR, minAmountOut, ALICE, feeParams, swap
+        );
+        vm.stopPrank();
 
         // Flow with fees:
         // 1. Swap sends full output to router (2018817438608734439722 DAI)
@@ -129,8 +142,9 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         assertEq(balanceAfter - balanceBefore, expectedAmountOut);
 
         // Check client fee receiver vault balance (BOB)
-        uint256 clientFeeReceiverBalance =
-            tychoRouter.balanceOf(BOB, uint256(uint160(DAI_ADDR)));
+        uint256 clientFeeReceiverBalance = tychoRouter.balanceOf(
+            clientFeeReceiver, uint256(uint160(DAI_ADDR))
+        );
         assertEq(clientFeeReceiverBalance, expectedFeeAmount);
     }
 
@@ -149,14 +163,15 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         deal(WETH_ADDR, ALICE, 1 ether);
         uint256 balanceBefore = IERC20(DAI_ADDR).balanceOf(ALICE);
 
-        vm.startPrank(ALICE);
-        IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
-
         // deal contribution to client
+        vm.startPrank(clientFeeReceiver);
         uint256 contribution = 22_000000000000000000;
-        deal(DAI_ADDR, ALICE, contribution);
+        deal(DAI_ADDR, clientFeeReceiver, contribution);
         IERC20(DAI_ADDR).approve(tychoRouterAddr, contribution);
         tychoRouter.deposit(DAI_ADDR, contribution);
+
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
         bytes memory callData = loadCallDataFromFile(
             "test_single_swap_with_fees_and_client_contribution"
         );
@@ -183,10 +198,12 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         );
         assertEq(routerFeeReceiverBalance, expectedFeeAmount);
 
-        // Check client fee receiver vault balance (BOB)
-        uint256 clientFeeReceiverBalance =
-            tychoRouter.balanceOf(BOB, uint256(uint160(DAI_ADDR)));
-        assertEq(clientFeeReceiverBalance, expectedFeeAmount);
+        // Check client fee receiver vault balance
+        uint256 clientFeeReceiverBalance = tychoRouter.balanceOf(
+            clientFeeReceiver, uint256(uint160(DAI_ADDR))
+        );
+        // there are leftover funds from the contribution so this value is not only the expectedFeeAmount
+        assertGt(clientFeeReceiverBalance, expectedFeeAmount);
     }
 
     function testSequentialSwapWithClientFees() public {
@@ -222,10 +239,105 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         uint256 expectedAmountOut = 1932337710;
         assertEq(balanceAfter - balanceBefore, expectedAmountOut);
 
-        // Check client fee receiver vault balance (BOB)
-        uint256 clientFeeReceiverBalance =
-            tychoRouter.balanceOf(BOB, uint256(uint160(USDC_ADDR)));
+        // Check client fee receiver vault balance
+        uint256 clientFeeReceiverBalance = tychoRouter.balanceOf(
+            clientFeeReceiver, uint256(uint160(USDC_ADDR))
+        );
         assertEq(clientFeeReceiverBalance, expectedFeeAmount);
+    }
+
+    function testRejectsExpiredClientSignature() public {
+        uint256 amountIn = 1 ether;
+        deal(WETH_ADDR, ALICE, amountIn);
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
+
+        bytes memory protocolData =
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR);
+        bytes memory swap =
+            encodeSingleSwap(address(usv2Executor), protocolData);
+
+        ClientFeeParams memory feeParams = ClientFeeParams({
+            clientFeeBps: 100,
+            clientFeeReceiver: vm.addr(CLIENT_FEE_RECEIVER_PK),
+            maxClientContribution: 0,
+            deadline: block.timestamp - 1,
+            clientSignature: new bytes(0)
+        });
+        feeParams.clientSignature =
+            signClientFee(feeParams, tychoRouterAddr, CLIENT_FEE_RECEIVER_PK);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TychoRouter__ExpiredClientSignature.selector,
+                feeParams.deadline,
+                block.timestamp
+            )
+        );
+        tychoRouter.singleSwap(
+            amountIn, WETH_ADDR, DAI_ADDR, 1, ALICE, feeParams, swap
+        );
+        vm.stopPrank();
+    }
+
+    function testRejectsWrongSigner() public {
+        uint256 amountIn = 1 ether;
+        deal(WETH_ADDR, ALICE, amountIn);
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
+
+        bytes memory protocolData =
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR);
+        bytes memory swap =
+            encodeSingleSwap(address(usv2Executor), protocolData);
+
+        ClientFeeParams memory feeParams = ClientFeeParams({
+            clientFeeBps: 100,
+            clientFeeReceiver: vm.addr(CLIENT_FEE_RECEIVER_PK),
+            maxClientContribution: 0,
+            deadline: block.timestamp + 1 hours,
+            clientSignature: new bytes(0)
+        });
+        // Sign with ALICE's key instead of the clientFeeReceiver's key
+        feeParams.clientSignature =
+            signClientFee(feeParams, tychoRouterAddr, ALICE_PK);
+
+        vm.expectRevert(TychoRouter__InvalidClientSignature.selector);
+        tychoRouter.singleSwap(
+            amountIn, WETH_ADDR, DAI_ADDR, 1, ALICE, feeParams, swap
+        );
+        vm.stopPrank();
+    }
+
+    function testRejectsManipulatedFee() public {
+        uint256 amountIn = 1 ether;
+        deal(WETH_ADDR, ALICE, amountIn);
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
+
+        bytes memory protocolData =
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR);
+        bytes memory swap =
+            encodeSingleSwap(address(usv2Executor), protocolData);
+
+        // Sign params with 100 bps
+        ClientFeeParams memory feeParams = ClientFeeParams({
+            clientFeeBps: 100,
+            clientFeeReceiver: vm.addr(CLIENT_FEE_RECEIVER_PK),
+            maxClientContribution: 0,
+            deadline: block.timestamp + 1 hours,
+            clientSignature: new bytes(0)
+        });
+        feeParams.clientSignature =
+            signClientFee(feeParams, tychoRouterAddr, CLIENT_FEE_RECEIVER_PK);
+        // Manipulate: bump fee from 100 to 200 bps after signing
+        feeParams.clientFeeBps = 200;
+
+        vm.expectRevert(TychoRouter__InvalidClientSignature.selector);
+        tychoRouter.singleSwap(
+            amountIn, WETH_ADDR, DAI_ADDR, 1, ALICE, feeParams, swap
+        );
+        vm.stopPrank();
     }
 
     function testSplitSwapWithClientFees() public {
@@ -264,8 +376,9 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         assertEq(balanceAfter - balanceBefore, expectedAmountOut);
 
         // Check client fee receiver vault balance (BOB)
-        uint256 clientFeeReceiverBalance =
-            tychoRouter.balanceOf(BOB, uint256(uint160(USDC_ADDR)));
+        uint256 clientFeeReceiverBalance = tychoRouter.balanceOf(
+            clientFeeReceiver, uint256(uint160(USDC_ADDR))
+        );
         assertEq(clientFeeReceiverBalance, expectedFeeAmount);
     }
 }

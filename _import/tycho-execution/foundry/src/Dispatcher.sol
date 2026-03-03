@@ -299,16 +299,14 @@ contract Dispatcher is RestrictTransferFrom {
         receiver = abi.decode(receiverData, (address));
     }
 
-    function _callGetEffectiveRouterFeeOnOutput(address feeCalculator)
-        internal
-        view
-        returns (uint16 routerFeeOnOutputBps)
-    {
+    function _callGetEffectiveRouterFeeOnOutput(
+        address feeCalculator,
+        address client
+    ) internal view returns (uint16 routerFeeOnOutputBps) {
         // slither-disable-next-line calls-loop,low-level-calls
         (bool success, bytes memory feeData) = feeCalculator.staticcall(
             abi.encodeWithSelector(
-                IFeeCalculator.getEffectiveRouterFeeOnOutput.selector,
-                msg.sender
+                IFeeCalculator.getEffectiveRouterFeeOnOutput.selector, client
             )
         );
 
@@ -329,7 +327,7 @@ contract Dispatcher is RestrictTransferFrom {
         address feeCalculator,
         uint256 amountIn,
         uint16 clientFeeBps,
-        address clientFeeReceiver
+        address client
     )
         internal
         view
@@ -340,9 +338,8 @@ contract Dispatcher is RestrictTransferFrom {
             abi.encodeWithSelector(
                 IFeeCalculator.calculateFee.selector,
                 amountIn,
-                msg.sender,
-                clientFeeBps,
-                clientFeeReceiver
+                client,
+                clientFeeBps
             )
         );
 

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import "@src/executors/UniswapV4Executor.sol";
-import {TychoRouter} from "@src/TychoRouter.sol";
+import {TychoRouter, ClientFeeParams} from "@src/TychoRouter.sol";
 import "./TychoRouterTestSetup.sol";
 
 contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
@@ -50,9 +50,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             USDC_ADDR,
             1000_000000, // min amount,
             ALICE,
-            0,
-            address(0),
-            0,
+            noClientFee(),
             permitSingle,
             signature,
             pleEncode(swaps)
@@ -87,9 +85,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             USDC_ADDR,
             1000_000000, // min amount
             ALICE,
-            0,
-            address(0),
-            0,
+            noClientFee(),
             pleEncode(swaps)
         );
 
@@ -114,9 +110,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             USDC_ADDR,
             0, // min amount
             ALICE,
-            0,
-            address(0),
-            0,
+            noClientFee(),
             pleEncode(swaps)
         );
     }
@@ -137,9 +131,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             USDC_ADDR,
             0, // min amount
             ALICE,
-            0,
-            address(0),
-            0,
+            noClientFee(),
             pleEncode(swaps)
         );
     }
@@ -172,9 +164,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
-            0,
-            address(0),
-            0,
+            noClientFee(),
             permitSingle,
             signature,
             pleEncode(swaps)
