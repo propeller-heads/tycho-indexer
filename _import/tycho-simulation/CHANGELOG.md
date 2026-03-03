@@ -1,3 +1,10 @@
+## [0.247.1](https://github.com/propeller-heads/tycho-simulation/compare/0.247.0...0.247.1) (2026-03-03)
+
+
+### Bug Fixes
+
+* re-enable rocketpool post upgrade ([b351674](https://github.com/propeller-heads/tycho-simulation/commit/b3516746816e41b3c91e3ed61c0b0d3a4703af51))
+
 ## [0.247.0](https://github.com/propeller-heads/tycho-simulation/compare/0.246.1...0.247.0) (2026-03-03)
 
 
