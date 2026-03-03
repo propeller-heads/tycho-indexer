@@ -25,7 +25,7 @@ use crate::pb::ekubo::{
 fn map_protocol_changes(
     block: eth::v2::Block,
     new_components: BlockChanges,
-    block_tx_events: BlockTransactionEvents,
+    filtered_block_tx_events: BlockTransactionEvents,
     balances_map_deltas: BlockBalanceDeltas,
     balances_store_deltas: StoreDeltas,
     ticks_map_deltas: TickDeltas,
@@ -198,7 +198,7 @@ fn map_protocol_changes(
         });
 
     // Remaining event changes not subject to special treatment
-    block_tx_events
+    filtered_block_tx_events
         .block_transaction_events
         .into_iter()
         .flat_map(|tx_events| {
@@ -210,7 +210,7 @@ fn map_protocol_changes(
                 .flat_map(move |log| {
                     let tx = tx.clone();
 
-                    maybe_attribute_updates(log.event.unwrap(), block_tx_events.timestamp).map(
+                    maybe_attribute_updates(log.event.unwrap(), filtered_block_tx_events.timestamp).map(
                         |attrs| {
                             (
                                 tx,

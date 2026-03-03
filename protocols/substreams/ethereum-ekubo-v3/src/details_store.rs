@@ -17,7 +17,3 @@ pub fn get_pool_details(
 ) -> Option<PoolDetails> {
     store.get_last(component_id)
 }
-
-pub fn is_pool_tracked(store: &StoreGetProto<PoolDetails>, component_id: &str) -> bool {
-    store.has_last(component_id)
-}

@@ -3,7 +3,7 @@ use substreams::store::{StoreGet, StoreGetInt64, StoreGetProto};
 use substreams_helper::hex::Hexable;
 
 use crate::{
-    details_store::{get_pool_details, is_pool_tracked},
+    details_store::get_pool_details,
     pb::ekubo::{
         block_transaction_events::transaction_events::{pool_log::Event, PoolLog},
         ActiveLiquidityChange, ActiveLiquidityChanges, BlockTransactionEvents, ChangeType,
@@ -54,28 +54,26 @@ fn maybe_active_liquidity_change(
     current_tick_store: &StoreGetInt64,
 ) -> Option<PartialLiquidityChange> {
     match log.event.as_ref().unwrap() {
-        Event::Swapped(swapped) => {
-            is_pool_tracked(pool_details_store, &log.pool_id.to_hex()).then(|| {
-                PartialLiquidityChange {
-                    value: swapped.liquidity_after.clone(),
-                    change_type: ChangeType::Absolute,
-                }
-            })
-        }
+        Event::Swapped(swapped) => Some(PartialLiquidityChange {
+            value: swapped.liquidity_after.clone(),
+            change_type: ChangeType::Absolute,
+        }),
         Event::PositionUpdated(position_updated) => {
             let pool_id = log.pool_id.to_hex();
 
-            let update_active_liquidity =
-                if get_pool_details(pool_details_store, &pool_id)?.is_stableswap {
-                    true
-                } else {
-                    let current_tick = current_tick_store
-                        .get_at(log.ordinal, &pool_id)
-                        .expect("pool should have active tick when initialized");
+            let pool_details = get_pool_details(pool_details_store, &pool_id)
+                .expect("filtered events should only contain tracked pools");
 
-                    current_tick >= position_updated.lower.into() &&
-                        current_tick < position_updated.upper.into()
-                };
+            let update_active_liquidity = if pool_details.is_stableswap {
+                true
+            } else {
+                let current_tick = current_tick_store
+                    .get_at(log.ordinal, &pool_id)
+                    .expect("pool should have active tick when initialized");
+
+                current_tick >= position_updated.lower.into() &&
+                    current_tick < position_updated.upper.into()
+            };
 
             update_active_liquidity.then(|| PartialLiquidityChange {
                 value: position_updated.liquidity_delta.clone(),

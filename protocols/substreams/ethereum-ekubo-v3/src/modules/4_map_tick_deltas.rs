@@ -1,21 +1,15 @@
-use substreams::{
-    scalar::BigInt,
-    store::{StoreGet, StoreGetProto},
-};
-use substreams_helper::hex::Hexable;
+use substreams::scalar::BigInt;
 
 use crate::{
-    details_store::is_pool_tracked,
     pb::ekubo::{
-        block_transaction_events::transaction_events::pool_log::Event, BlockTransactionEvents,
-        PoolDetails, TickDelta, TickDeltas,
+        block_transaction_events::transaction_events::pool_log::Event, BlockTransactionEvents, TickDelta,
+        TickDeltas,
     },
 };
 
 #[substreams::handlers::map]
 pub fn map_tick_deltas(
     block_tx_events: BlockTransactionEvents,
-    store: StoreGetProto<PoolDetails>,
 ) -> TickDeltas {
     TickDeltas {
         deltas: block_tx_events
@@ -23,15 +17,13 @@ pub fn map_tick_deltas(
             .into_iter()
             .flat_map(|tx_events| {
                 let tx = tx_events.transaction;
-                let store = &store;
-
                 tx_events
                     .pool_logs
                     .into_iter()
                     .flat_map(move |log| {
                         let tx = tx.clone();
 
-                        tick_deltas(log.event.unwrap(), &log.pool_id, store)
+                        tick_deltas(log.event.unwrap())
                             .into_iter()
                             .map(move |partial| TickDelta {
                                 liquidity_net_delta: partial.liquidity_net_delta,
@@ -51,18 +43,10 @@ struct PartialTickDelta {
     liquidity_net_delta: Vec<u8>,
 }
 
-fn tick_deltas(
-    event: Event,
-    pool_id: &Vec<u8>,
-    store: &StoreGetProto<PoolDetails>,
-) -> Vec<PartialTickDelta> {
+fn tick_deltas(event: Event) -> Vec<PartialTickDelta> {
     let Event::PositionUpdated(position_updated) = event else {
         return vec![];
     };
-
-    if !is_pool_tracked(store, &pool_id.to_hex()) {
-        return vec![];
-    }
 
     vec![
         PartialTickDelta {
