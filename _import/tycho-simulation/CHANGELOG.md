@@ -1,3 +1,15 @@
+## [0.247.0](https://github.com/propeller-heads/tycho-simulation/compare/0.246.1...0.247.0) (2026-03-03)
+
+
+### Features
+
+* Use underlying limbs for biguint_to_u256 ([aabda1e](https://github.com/propeller-heads/tycho-simulation/commit/aabda1e738a65c8fffe2d6f5c605fd7ad7dc2c8e))
+
+
+### Bug Fixes
+
+* Add an assert on value being too big to fit into U256 ([1623f0f](https://github.com/propeller-heads/tycho-simulation/commit/1623f0f6e0bc20eaf854b6c058916d4e83450335))
+
 ## [0.246.1](https://github.com/propeller-heads/tycho-simulation/compare/0.246.0...0.246.1) (2026-03-02)
 
 
