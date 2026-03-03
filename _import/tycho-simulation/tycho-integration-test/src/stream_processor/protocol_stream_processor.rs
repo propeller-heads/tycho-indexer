@@ -22,6 +22,7 @@ use tycho_simulation::{
             filters::{balancer_v2_pool_filter, erc4626_filter, fluid_v1_paused_pools_filter},
             fluid::FluidV1,
             pancakeswap_v2::state::PancakeswapV2State,
+            rocketpool::state::RocketpoolState,
             uniswap_v2::state::UniswapV2State,
             uniswap_v3::state::UniswapV3State,
             uniswap_v4::state::UniswapV4State,
@@ -274,6 +275,9 @@ impl ProtocolStreamProcessor {
                     tvl_filter.clone(),
                     None,
                 );
+            }
+            "rocketpool" => {
+                stream = stream.exchange::<RocketpoolState>("rocketpool", tvl_filter.clone(), None);
             }
             "cowamm" => {
                 stream = stream.exchange::<CowAMMState>("cowamm", tvl_filter.clone(), None);
