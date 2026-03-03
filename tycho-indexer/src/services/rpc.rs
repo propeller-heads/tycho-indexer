@@ -110,12 +110,9 @@ pub struct RpcHandler<G, T> {
     #[allow(dead_code)]
     tracer: T,
     rpc_config: ServerRpcConfig,
-    /// Protocol systems that use Dynamic Contract Indexing (DCI), derived from
-    /// `ExtractorConfig.dci_plugin` at startup. Included in the `protocol_systems`
-    /// response so clients can skip entrypoint requests for non-DCI protocols.
+    /// Protocol systems that use Dynamic Contract Indexing (DCI). Included in the
+    /// `protocol_systems` response so clients can skip entrypoint requests for non-DCI protocols.
     dci_protocols: Vec<String>,
-    /// Active protocol systems from extractor config. Used instead of the DB
-    /// so deactivated extractors are not returned to clients.
     protocol_systems: Vec<String>,
 }
 
@@ -2901,13 +2898,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::with_dci(vec!["vm:curve".to_string()], vec!["vm:curve"])]
-    #[case::no_dci(vec![], vec![])]
+    #[case::with_dci(vec!["vm:curve".to_string()])]
+    #[case::no_dci(vec![])]
     #[tokio::test]
-    async fn test_get_protocol_systems_dci(
-        #[case] dci_protocols: Vec<String>,
-        #[case] expected_dci: Vec<&str>,
-    ) {
+    async fn test_get_protocol_systems_dci(#[case] dci_protocols: Vec<String>) {
         let gw = MockGateway::new();
         let protocol_systems = vec!["uniswap_v2".to_string(), "vm:curve".to_string()];
 
@@ -2916,7 +2910,7 @@ mod tests {
             None,
             MockEntryPointTracer::new(),
             ServerRpcConfig::new(),
-            dci_protocols,
+            dci_protocols.clone(),
             protocol_systems,
         );
 
@@ -2930,6 +2924,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.protocol_systems, vec!["uniswap_v2", "vm:curve"]);
-        assert_eq!(response.dci_protocols, expected_dci);
+        assert_eq!(response.dci_protocols, dci_protocols);
     }
 }
