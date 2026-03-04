@@ -1,3 +1,10 @@
+## [0.248.0](https://github.com/propeller-heads/tycho-simulation/compare/0.247.2...0.248.0) (2026-03-04)
+
+
+### Features
+
+* update execution version for new rocketpool executor ([3233e45](https://github.com/propeller-heads/tycho-simulation/commit/3233e454245ae25d912cf0811242bf1c7761f820))
+
 ## [0.247.2](https://github.com/propeller-heads/tycho-simulation/compare/0.247.1...0.247.2) (2026-03-03)
 
 
