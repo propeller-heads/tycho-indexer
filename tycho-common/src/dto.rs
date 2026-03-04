@@ -575,7 +575,7 @@ impl From<BlockAggregatedChanges> for BlockChanges {
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug, ToSchema)]
 pub struct AccountUpdate {
     #[serde(with = "hex_bytes")]
-    #[schema(value_type=Vec<String>)]
+    #[schema(value_type=String)]
     pub address: Bytes,
     pub chain: Chain,
     #[serde(with = "hex_hashmap_key_value")]
