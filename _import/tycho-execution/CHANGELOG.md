@@ -1,3 +1,10 @@
+## [0.33.0](https://github.com/propeller-heads/tycho-contracts/compare/0.32.0...0.33.0) (2026-03-04)
+
+
+### Features
+
+* Emit FeesTaken ([b73394d](https://github.com/propeller-heads/tycho-contracts/commit/b73394db6f3553e1cb8ed3871309ef1e1157e739))
+
 ## [0.32.0](https://github.com/propeller-heads/tycho-contracts/compare/0.31.0...0.32.0) (2026-02-27)
 
 
