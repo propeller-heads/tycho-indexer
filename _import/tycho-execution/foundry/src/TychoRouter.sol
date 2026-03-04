@@ -103,6 +103,7 @@ contract TychoRouter is AccessControl, Dispatcher {
     event FeeCalculatorUpdated(
         address indexed oldCalculator, address indexed newCalculator
     );
+    event FeesTaken(address indexed token, FeeRecipient[] fees);
 
     constructor(
         address permit2_,
@@ -1102,8 +1103,11 @@ contract TychoRouter is AccessControl, Dispatcher {
                 // accounting without funds will result in an additional negative
                 // delta, and cause the _finalizeBalances method to revert.
                 _updateDeltaAccounting(token, -int256(fees[i].feeAmount));
-                _creditVault(fees[i].recipient, token, fees[i].feeAmount);
+                _creditVaultForFees(fees[i].recipient, token, fees[i].feeAmount);
             }
+        }
+        if (fees.length > 0) {
+            emit FeesTaken(token, fees);
         }
     }
 

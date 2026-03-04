@@ -108,19 +108,6 @@ abstract contract Vault is ERC6909, ReentrancyGuard, Pausable {
         _updateWithoutEvent(address(0), to, id, amount);
     }
 
-    /**
-     * @dev Create new _burn that does not emit a Transfer event. This should be used by inner methods of the
-     * TychoRouter to save gas during swapping.
-     */
-    function _burnWithoutEvent(address from, uint256 id, uint256 amount)
-        internal
-    {
-        if (from == address(0)) {
-            revert ERC6909InvalidSender(address(0));
-        }
-        _updateWithoutEvent(from, address(0), id, amount);
-    }
-
     // ============ ERC6909 Vault Functions ============
 
     /**
@@ -281,7 +268,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard, Pausable {
 
     /**
      * @dev Internal helper to debit user's actual vault balance (persistent storage)
-     * @notice This debits the persistent vault balance, not the transient delta
+     * @notice This debits the persistent vault balance and emits a Transfer event
      */
     function _debitVault(address user, address token, uint256 amount)
         internal
@@ -295,14 +282,32 @@ abstract contract Vault is ERC6909, ReentrancyGuard, Pausable {
         if (balance < amount) {
             revert Vault__InsufficientBalance(user, token, amount, balance);
         }
-        _burnWithoutEvent(user, id, amount);
+        _burn(user, id, amount);
     }
 
     /**
      * @dev Internal helper to credit user's actual vault balance (persistent storage)
-     * @notice This credits the persistent vault balance, not the transient delta
+     * @notice This credits the persistent vault balance and emits a Transfer event
      */
+    // slither-disable-next-line dead-code TODO: remove this in ENG-5499
     function _creditVault(address user, address token, uint256 amount)
+        internal
+        virtual
+    {
+        if (amount == 0) return;
+
+        uint256 id = _toId(token);
+
+        _mint(user, id, amount);
+    }
+
+    /**
+     * @dev Internal helper to credit user's actual vault balance (persistent storage)
+     * @notice This debits the persistent vault balance and does not emit an event.
+     * Should be used for fee taking because an extra event is emitted in this case.
+     *
+     */
+    function _creditVaultForFees(address user, address token, uint256 amount)
         internal
         virtual
     {
@@ -339,7 +344,7 @@ abstract contract Vault is ERC6909, ReentrancyGuard, Pausable {
                     revert Vault__UnexpectedInputDelta(inputDelta);
                 }
                 uint256 id = _toId(inputToken);
-                _burnWithoutEvent(user, id, inputAmount);
+                _burn(user, id, inputAmount);
             }
         } else {
             // When vault usage is NOT allowed, all deltas must be zero

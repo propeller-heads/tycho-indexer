@@ -8,8 +8,11 @@ import {
     Vault__UnexpectedInputDelta
 } from "@src/Vault.sol";
 import {TychoRouter__AmountOutNotFullyReceived} from "@src/TychoRouter.sol";
+import {FeeRecipient} from "../lib/FeeStructs.sol";
 
 contract TychoRouterFeesTest is TychoRouterTestSetup {
+    event FeesTaken(address indexed token, FeeRecipient[] fees);
+
     function testSingleSwapWithAllFeeTypes() public {
         // Set up fees: 1% router fee on output, 2% client fee, 10% router fee on client fee
         vm.startPrank(FEE_SETTER);
@@ -34,19 +37,6 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
 
         uint256 minAmountOut = 1900 * 1e18;
 
-        uint256 swapOutput = tychoRouter.singleSwap(
-            amountIn,
-            WETH_ADDR,
-            DAI_ADDR,
-            minAmountOut,
-            ALICE,
-            200, // 2% clientFeeBps
-            clientFeeReceiver,
-            0,
-            swap
-        );
-        vm.stopPrank();
-
         // Flow with fees:
         // 1. Swap sends full output to router (2018817438608734439722 DAI)
         // 2. takeFees deducts fees and credits fee recipients' vaults
@@ -64,6 +54,29 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         uint256 expectedRouterFee = 24225809263304813276;
         uint256 expectedClientFee = 36338713894957219915;
         uint256 expectedAmountOut = 1958252915450472406531;
+
+        FeeRecipient[] memory expectedFees = new FeeRecipient[](2);
+        expectedFees[0] = FeeRecipient({
+            recipient: routerFeeReceiver, feeAmount: expectedRouterFee
+        });
+        expectedFees[1] = FeeRecipient({
+            recipient: clientFeeReceiver, feeAmount: expectedClientFee
+        });
+        vm.expectEmit();
+        emit FeesTaken(DAI_ADDR, expectedFees);
+
+        uint256 swapOutput = tychoRouter.singleSwap(
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            minAmountOut,
+            ALICE,
+            200, // 2% clientFeeBps
+            clientFeeReceiver,
+            0,
+            swap
+        );
+        vm.stopPrank();
 
         assertEq(swapOutput, expectedAmountOut);
 
@@ -97,6 +110,15 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
 
         bytes memory callData =
             loadCallDataFromFile("test_single_swap_with_client_fees");
+        uint256 expectedFeeAmount = 20188174386087344397;
+        FeeRecipient[] memory expectedFees = new FeeRecipient[](2);
+        expectedFees[0] = FeeRecipient({
+            recipient: feeCalculator.getRouterFeeReceiver(), feeAmount: 0
+        });
+        expectedFees[1] =
+            FeeRecipient({recipient: BOB, feeAmount: expectedFeeAmount});
+        vm.expectEmit();
+        emit FeesTaken(DAI_ADDR, expectedFees);
         (bool success,) = tychoRouterAddr.call(callData);
 
         vm.stopPrank();
@@ -105,8 +127,6 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         assertTrue(success, "Call Failed");
         uint256 expectedAmountOut = 1998629264222647095325;
         assertEq(balanceAfter - balanceBefore, expectedAmountOut);
-
-        uint256 expectedFeeAmount = 20188174386087344397;
 
         // Check client fee receiver vault balance (BOB)
         uint256 clientFeeReceiverBalance =
@@ -140,6 +160,15 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         bytes memory callData = loadCallDataFromFile(
             "test_single_swap_with_fees_and_client_contribution"
         );
+        uint256 expectedFeeAmount = 20188174386087344397;
+        FeeRecipient[] memory expectedFees = new FeeRecipient[](2);
+        expectedFees[0] = FeeRecipient({
+            recipient: routerFeeReceiver, feeAmount: expectedFeeAmount
+        });
+        expectedFees[1] =
+            FeeRecipient({recipient: BOB, feeAmount: expectedFeeAmount});
+        vm.expectEmit();
+        emit FeesTaken(DAI_ADDR, expectedFees);
         (bool success,) = tychoRouterAddr.call(callData);
 
         vm.stopPrank();
@@ -148,8 +177,6 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         assertTrue(success, "Call Failed");
         uint256 expectedAmountOut = 2000_000000000000000000;
         assertEq(balanceAfter - balanceBefore, expectedAmountOut);
-
-        uint256 expectedFeeAmount = 20188174386087344397;
         // Check router fee receiver vault balance
         uint256 routerFeeReceiverBalance = tychoRouter.balanceOf(
             routerFeeReceiver, uint256(uint160(DAI_ADDR))
@@ -177,6 +204,15 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
 
         bytes memory callData =
             loadCallDataFromFile("test_sequential_swap_strategy_with_fees");
+        uint256 expectedFeeAmount = 19518562;
+        FeeRecipient[] memory expectedFees = new FeeRecipient[](2);
+        expectedFees[0] = FeeRecipient({
+            recipient: feeCalculator.getRouterFeeReceiver(), feeAmount: 0
+        });
+        expectedFees[1] =
+            FeeRecipient({recipient: BOB, feeAmount: expectedFeeAmount});
+        vm.expectEmit();
+        emit FeesTaken(USDC_ADDR, expectedFees);
         (bool success,) = tychoRouterAddr.call(callData);
 
         vm.stopPrank();
@@ -185,8 +221,6 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         assertTrue(success, "Call Failed");
         uint256 expectedAmountOut = 1932337710;
         assertEq(balanceAfter - balanceBefore, expectedAmountOut);
-
-        uint256 expectedFeeAmount = 19518562;
 
         // Check client fee receiver vault balance (BOB)
         uint256 clientFeeReceiverBalance =
@@ -211,6 +245,15 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
 
         bytes memory callData =
             loadCallDataFromFile("test_split_swap_strategy_with_fees");
+        uint256 expectedFeeAmount = 19958604;
+        FeeRecipient[] memory expectedFees = new FeeRecipient[](2);
+        expectedFees[0] = FeeRecipient({
+            recipient: feeCalculator.getRouterFeeReceiver(), feeAmount: 0
+        });
+        expectedFees[1] =
+            FeeRecipient({recipient: BOB, feeAmount: expectedFeeAmount});
+        vm.expectEmit();
+        emit FeesTaken(USDC_ADDR, expectedFees);
         (bool success,) = tychoRouterAddr.call(callData);
 
         vm.stopPrank();
@@ -219,8 +262,6 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         assertTrue(success, "Call Failed");
         uint256 expectedAmountOut = 1975901850;
         assertEq(balanceAfter - balanceBefore, expectedAmountOut);
-
-        uint256 expectedFeeAmount = 19958604;
 
         // Check client fee receiver vault balance (BOB)
         uint256 clientFeeReceiverBalance =
