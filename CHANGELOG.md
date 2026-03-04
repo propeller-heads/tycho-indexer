@@ -1,3 +1,11 @@
+## [0.145.2](https://github.com/propeller-heads/tycho-indexer/compare/0.145.1...0.145.2) (2026-03-04)
+
+
+### Bug Fixes
+
+* **swagger:** correct AccountUpdate.address schema annotation ([7bd1b0c](https://github.com/propeller-heads/tycho-indexer/commit/7bd1b0c30aaf5f5bd7da6fef474068afd2c17fd2))
+* **swagger:** correct AccountUpdate.address schema type from Vec<String> to String ([#866](https://github.com/propeller-heads/tycho-indexer/issues/866)) ([3cb5b82](https://github.com/propeller-heads/tycho-indexer/commit/3cb5b82a3832f44949bca3bae26f6679ae68e2dd))
+
 ## [0.145.1](https://github.com/propeller-heads/tycho-indexer/compare/0.145.0...0.145.1) (2026-03-03)
 
 
