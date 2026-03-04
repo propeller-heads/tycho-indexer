@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 
-use alloy::signers::local::PrivateKeySigner;
 use tycho_common::{
     models::{protocol::ProtocolComponent, Chain},
     Bytes,
@@ -11,7 +10,6 @@ use crate::encoding::{
     evm::{
         approvals::permit2::Permit2,
         constants::GROUPABLE_PROTOCOLS,
-        encoding_utils::encode_tycho_router_call,
         group_swaps::group_swaps,
         strategy_encoder::strategy_encoders::{
             SequentialSwapStrategyEncoder, SingleSwapStrategyEncoder, SplitSwapStrategyEncoder,
@@ -19,7 +17,7 @@ use crate::encoding::{
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         utils::ple_encode,
     },
-    models::{EncodedSolution, EncodingContext, Solution, Swap, Transaction, UserTransferType},
+    models::{EncodedSolution, EncodingContext, Solution, Swap, UserTransferType},
     strategy_encoder::StrategyEncoder,
     tycho_encoder::TychoEncoder,
 };
@@ -42,7 +40,6 @@ pub struct TychoRouterEncoder {
     split_swap_strategy: SplitSwapStrategyEncoder,
     router_address: Bytes,
     permit2: Option<Permit2>,
-    signer: Option<PrivateKeySigner>,
 }
 
 impl TychoRouterEncoder {
@@ -51,7 +48,6 @@ impl TychoRouterEncoder {
         swap_encoder_registry: SwapEncoderRegistry,
         router_address: Bytes,
         user_transfer_type: UserTransferType,
-        signer: Option<PrivateKeySigner>,
     ) -> Result<Self, EncodingError> {
         let permit2 = if user_transfer_type == UserTransferType::TransferFromPermit2 {
             Some(Permit2::new()?)
@@ -76,7 +72,6 @@ impl TychoRouterEncoder {
             )?,
             router_address,
             permit2,
-            signer,
             chain,
         })
     }
@@ -201,27 +196,6 @@ impl TychoEncoder for TychoRouterEncoder {
             result.push(encoded_solution);
         }
         Ok(result)
-    }
-
-    fn encode_full_calldata(
-        &self,
-        solutions: Vec<Solution>,
-    ) -> Result<Vec<Transaction>, EncodingError> {
-        let mut transactions: Vec<Transaction> = Vec::new();
-        for solution in solutions.iter() {
-            let encoded_solution = self.encode_solution(solution)?;
-
-            let transaction = encode_tycho_router_call(
-                self.chain.id(),
-                encoded_solution,
-                solution,
-                &self.chain.native_token().address,
-                self.signer.clone(),
-            )?;
-
-            transactions.push(transaction);
-        }
-        Ok(transactions)
     }
 
     /// Raises an `EncodingError` if the solution is not considered valid.
@@ -369,15 +343,6 @@ impl TychoEncoder for TychoExecutorEncoder {
         Ok(vec![encoded_solution])
     }
 
-    fn encode_full_calldata(
-        &self,
-        _solutions: Vec<Solution>,
-    ) -> Result<Vec<Transaction>, EncodingError> {
-        Err(EncodingError::NotImplementedError(
-            "Full calldata encoding is not supported for TychoExecutorEncoder".to_string(),
-        ))
-    }
-
     /// Raises an `EncodingError` if the solution is not considered valid.
     ///
     /// A solution is considered valid if all the following conditions are met:
@@ -489,121 +454,12 @@ mod tests {
             get_swap_encoder_registry(),
             router_address(),
             user_transfer_type,
-            None,
         )
         .unwrap()
     }
 
     mod router_encoder {
         use super::*;
-
-        #[test]
-        #[allow(deprecated)]
-        fn test_encode_router_calldata_single_swap() {
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let weth_amount_in = BigUint::from(1000u32);
-            let swap = Swap::new(
-                ProtocolComponent {
-                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                weth().clone(),
-                dai().clone(),
-            );
-
-            let solution = Solution {
-                exact_out: false,
-                amount_in: weth_amount_in.clone(),
-                token_in: weth(),
-                token_out: dai(),
-                swaps: vec![swap],
-                receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                ..Default::default()
-            };
-
-            let transactions = encoder.encode_full_calldata(vec![solution]);
-            assert!(transactions.is_ok());
-            let transactions = transactions.unwrap();
-            assert_eq!(transactions.len(), 1);
-            assert_eq!(transactions[0].value, BigUint::ZERO);
-            assert_eq!(
-                transactions[0].to,
-                Bytes::from_str("0x6bc529DC7B81A031828dDCE2BC419d01FF268C66").unwrap()
-            );
-            // single swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "ce25e49e");
-        }
-
-        #[test]
-        #[allow(deprecated)]
-        fn test_encode_router_calldata_single_swap_group() {
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let solution = Solution {
-                exact_out: false,
-                token_in: usdc(),
-                amount_in: BigUint::from_str("1000_000000").unwrap(),
-                token_out: pepe(),
-                min_amount_out: BigUint::from_str("105_152_000000000000000000").unwrap(),
-                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                swaps: vec![swap_usdc_eth_univ4(), swap_eth_pepe_univ4()],
-                ..Default::default()
-            };
-
-            let transactions = encoder.encode_full_calldata(vec![solution]);
-            assert!(transactions.is_ok());
-            let transactions = transactions.unwrap();
-            assert_eq!(transactions.len(), 1);
-            // single swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "ce25e49e");
-        }
-
-        #[test]
-        #[allow(deprecated)]
-        fn test_encode_router_calldata_sequential_swap() {
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let weth_amount_in = BigUint::from(1000u32);
-            let swap_weth_dai = Swap::new(
-                ProtocolComponent {
-                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                weth().clone(),
-                dai().clone(),
-            );
-
-            let swap_dai_usdc = Swap::new(
-                ProtocolComponent {
-                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
-                    protocol_system: "uniswap_v2".to_string(),
-                    ..Default::default()
-                },
-                dai().clone(),
-                usdc().clone(),
-            );
-
-            let solution = Solution {
-                exact_out: false,
-                amount_in: weth_amount_in.clone(),
-                token_in: weth(),
-                token_out: usdc(),
-                swaps: vec![swap_weth_dai, swap_dai_usdc],
-                receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                min_amount_out: BigUint::from(1000u32),
-                ..Default::default()
-            };
-
-            let transactions = encoder.encode_full_calldata(vec![solution]);
-            assert!(transactions.is_ok());
-            let transactions = transactions.unwrap();
-            assert_eq!(transactions.len(), 1);
-            assert_eq!(transactions[0].value, BigUint::ZERO);
-            // sequential swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "6fc8683a");
-        }
-
         #[test]
         fn test_encode_router_calldata_split_swap_group() {
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);

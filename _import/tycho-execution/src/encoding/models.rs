@@ -173,19 +173,6 @@ impl PartialEq for Swap {
     }
 }
 
-/// Represents a transaction to be executed.
-///
-/// # Fields
-/// * `to`: Address of the contract to call with the calldata
-/// * `value`: Native token value to be sent with the transaction.
-/// * `data`: Encoded calldata for the transaction.
-#[derive(Clone, Debug)]
-pub struct Transaction {
-    pub to: Bytes,
-    pub value: BigUint,
-    pub data: Vec<u8>,
-}
-
 /// Represents a solution that has been encoded for execution.
 ///
 /// # Fields

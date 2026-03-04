@@ -14,8 +14,21 @@ use tycho_contracts::encoding::{
         utils::{biguint_to_u256, bytes_to_address},
     },
     models,
-    models::{EncodedSolution, Solution, Transaction},
+    models::{EncodedSolution, Solution},
 };
+
+/// Represents a transaction to be executed.
+///
+/// # Fields
+/// * `to`: Address of the contract to call with the calldata
+/// * `value`: Native token value to be sent with the transaction.
+/// * `data`: Encoded calldata for the transaction.
+#[derive(Clone, Debug)]
+pub struct Transaction {
+    pub to: Bytes,
+    pub value: BigUint,
+    pub data: Vec<u8>,
+}
 
 /// Private key for client fee signing in tests.
 /// Matches `CLIENT_FEE_RECEIVER_PK` in `foundry/test/Constants.sol`.

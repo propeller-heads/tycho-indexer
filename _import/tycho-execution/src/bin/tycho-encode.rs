@@ -58,8 +58,6 @@ pub struct Cli {
     router_address: Option<Bytes>,
     #[arg(short, long)]
     user_transfer_type: Option<UserTransferType>,
-    #[arg(short, long)]
-    swapper_pk: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -105,10 +103,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             if let Some(user_transfer_type) = cli.user_transfer_type {
                 builder = builder.user_transfer_type(user_transfer_type);
-            }
-            #[allow(deprecated)]
-            if let Some(swapper_pk) = cli.swapper_pk {
-                builder = builder.swapper_pk(swapper_pk);
             }
             builder.build()?
         }
