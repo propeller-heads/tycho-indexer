@@ -4,10 +4,7 @@ use crate::services::rpc::RpcError;
 
 /// Validates pagination limits with compression-aware maximums.
 pub trait RequestPaginationValidation: PaginationLimits {
-    fn validate_pagination(
-        &self,
-        req: &actix_web::HttpRequest,
-    ) -> Result<(), RpcError> {
+    fn validate_pagination(&self, req: &actix_web::HttpRequest) -> Result<(), RpcError> {
         let page_size = self.pagination().page_size;
 
         let supports_compression = req

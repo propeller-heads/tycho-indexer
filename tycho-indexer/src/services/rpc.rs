@@ -1476,10 +1476,12 @@ mod tests {
     };
 
     use super::*;
-    use crate::services::middlewares::plan_restrictions::{
-        ConstraintOp, ParamConstraint, PlanConfig, PlanRegistry,
+    use crate::{
+        services::middlewares::plan_restrictions::{
+            ConstraintOp, ParamConstraint, PlanConfig, PlanRegistry,
+        },
+        testing::{evm_contract_slots, MockGateway},
     };
-    use crate::testing::{evm_contract_slots, MockGateway};
 
     const WETH: &str = "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
     const USDC: &str = "A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
@@ -1602,8 +1604,8 @@ mod tests {
             .version
             .timestamp
             .unwrap()
-            .timestamp_millis()
-            - result
+            .timestamp_millis() -
+            result
                 .version
                 .timestamp
                 .unwrap()

@@ -79,7 +79,6 @@ pub struct GlobalArgs {
     /// RPC configuration (URL and retry settings)
     #[command(flatten)]
     pub rpc: RPCArgs,
-
 }
 
 /// RPC configuration arguments (url, retry settings, and potentially others, such as batching)
@@ -101,7 +100,6 @@ pub struct RPCArgs {
     #[clap(long = "rpc-max-backoff-ms", env = "RPC_MAX_BACKOFF_MS", default_value = "5000")]
     pub max_backoff_ms: u64,
 }
-
 
 impl RPCArgs {
     pub fn build_client(&self) -> Result<EthereumRpcClient, ExtractionError> {

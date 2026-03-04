@@ -96,10 +96,10 @@ pub struct PlanConfig {
 
 impl PlanConfig {
     pub fn has_restrictions(&self) -> bool {
-        self.allowed_protocol_systems.is_some()
-            || self.component_tvl.is_some()
-            || self.token_quality.is_some()
-            || self.traded_n_days_ago.is_some()
+        self.allowed_protocol_systems.is_some() ||
+            self.component_tvl.is_some() ||
+            self.token_quality.is_some() ||
+            self.traded_n_days_ago.is_some()
     }
 }
 
@@ -140,8 +140,7 @@ pub fn check_protocol_system(plan: &PlanConfig, system: Option<&str>) -> Result<
         return Ok(());
     };
     if !allowed.iter().any(|s| s == system) {
-        let allowed_list =
-            if allowed.is_empty() { "none".to_string() } else { allowed.join(", ") };
+        let allowed_list = if allowed.is_empty() { "none".to_string() } else { allowed.join(", ") };
         return Err(RpcError::MinimumFilterNotMet(
             "protocol_system".to_string(),
             format!(
@@ -203,7 +202,11 @@ impl PlanEnforcement for dto::TokensRequestBody {
 
 impl PlanEnforcement for dto::ProtocolComponentsRequestBody {
     fn protocol_system(&self) -> Option<&str> {
-        if self.protocol_system.is_empty() { None } else { Some(&self.protocol_system) }
+        if self.protocol_system.is_empty() {
+            None
+        } else {
+            Some(&self.protocol_system)
+        }
     }
 
     fn check_fields(&self, plan: &PlanConfig) -> Result<(), RpcError> {
@@ -216,13 +219,21 @@ impl PlanEnforcement for dto::ProtocolComponentsRequestBody {
 
 impl PlanEnforcement for dto::StateRequestBody {
     fn protocol_system(&self) -> Option<&str> {
-        if self.protocol_system.is_empty() { None } else { Some(&self.protocol_system) }
+        if self.protocol_system.is_empty() {
+            None
+        } else {
+            Some(&self.protocol_system)
+        }
     }
 }
 
 impl PlanEnforcement for dto::ProtocolStateRequestBody {
     fn protocol_system(&self) -> Option<&str> {
-        if self.protocol_system.is_empty() { None } else { Some(&self.protocol_system) }
+        if self.protocol_system.is_empty() {
+            None
+        } else {
+            Some(&self.protocol_system)
+        }
     }
 }
 
@@ -234,7 +245,11 @@ impl PlanEnforcement for dto::ComponentTvlRequestBody {
 
 impl PlanEnforcement for dto::TracedEntryPointRequestBody {
     fn protocol_system(&self) -> Option<&str> {
-        if self.protocol_system.is_empty() { None } else { Some(&self.protocol_system) }
+        if self.protocol_system.is_empty() {
+            None
+        } else {
+            Some(&self.protocol_system)
+        }
     }
 }
 
@@ -277,7 +292,10 @@ impl PlanRegistry {
             config.name = name.clone();
         }
 
-        let default = plans.get("default").cloned().unwrap_or_default();
+        let default = plans
+            .get("default")
+            .cloned()
+            .unwrap_or_default();
 
         Ok(Self { plans, default })
     }
@@ -302,7 +320,10 @@ impl PlanRegistry {
         for (name, config) in &mut plans {
             config.name = name.clone();
         }
-        let default = plans.get("default").cloned().unwrap_or_default();
+        let default = plans
+            .get("default")
+            .cloned()
+            .unwrap_or_default();
         Self { plans, default }
     }
 }
@@ -341,8 +362,11 @@ mod tests {
 
     fn plan_with_systems(systems: Option<Vec<&str>>) -> PlanConfig {
         PlanConfig {
-            allowed_protocol_systems: systems
-                .map(|v| v.into_iter().map(String::from).collect()),
+            allowed_protocol_systems: systems.map(|v| {
+                v.into_iter()
+                    .map(String::from)
+                    .collect()
+            }),
             ..Default::default()
         }
     }
@@ -490,7 +514,10 @@ mod tests {
             None => assert!(result.is_ok(), "expected ok, got {result:?}"),
             Some(msg) => {
                 assert!(result.is_err());
-                assert!(result.unwrap_err().to_string().contains(msg));
+                assert!(result
+                    .unwrap_err()
+                    .to_string()
+                    .contains(msg));
             }
         }
     }
@@ -539,7 +566,10 @@ mod tests {
             None => assert!(result.is_ok(), "expected ok, got {result:?}"),
             Some(msg) => {
                 assert!(result.is_err());
-                assert!(result.unwrap_err().to_string().contains(msg));
+                assert!(result
+                    .unwrap_err()
+                    .to_string()
+                    .contains(msg));
             }
         }
     }
@@ -574,7 +604,10 @@ mod tests {
             None => assert!(result.is_ok(), "expected ok, got {result:?}"),
             Some(msg) => {
                 assert!(result.is_err());
-                assert!(result.unwrap_err().to_string().contains(msg));
+                assert!(result
+                    .unwrap_err()
+                    .to_string()
+                    .contains(msg));
             }
         }
     }

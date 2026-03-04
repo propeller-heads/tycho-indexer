@@ -31,7 +31,10 @@ mod tests {
         let resp = test::call_service(&app, req).await;
 
         assert!(resp.status().is_success());
-        assert!(resp.headers().get("content-encoding").is_none());
+        assert!(resp
+            .headers()
+            .get("content-encoding")
+            .is_none());
 
         let body = test::read_body(resp).await;
         assert!(!body.is_empty());
@@ -85,7 +88,10 @@ mod tests {
         let resp = test::call_service(&app, req).await;
 
         assert!(resp.status().is_success());
-        assert!(resp.headers().get("content-encoding").is_none());
+        assert!(resp
+            .headers()
+            .get("content-encoding")
+            .is_none());
 
         let body = test::read_body(resp).await;
         assert!(!body.is_empty());
