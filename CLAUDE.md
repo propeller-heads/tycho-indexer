@@ -29,6 +29,9 @@ cargo nextest run --package tycho-storage --locked --all-targets --all-features
 ```
 
 ### Code Quality
+
+**Always run the format command before finishing any coding task.**
+
 ```bash
 # Format code (requires nightly toolchain)
 cargo +nightly fmt
