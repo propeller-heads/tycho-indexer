@@ -360,7 +360,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
     // ==================== Rebalance Vault tests ====================
     function testSingleSwapIntoVault() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2, with the receiver
-        // being the TychoRouter in order to rebalance the Alice's vault.
+        // being the TychoRouter
         uint256 amountIn = 1 ether;
         deal(WETH_ADDR, ALICE, amountIn);
         uint256 vaultBalanceBefore =
@@ -408,7 +408,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
 
     function testCyclicalSwapIntoVault() public {
         // Simulate a profitable arbitrage: USDC -> WETH (USV3) -> USDC (USV2)
-        // We rebalance the USV2 pool by dealing extra USDC into it, making
+        // We force the price of the USV2 pool by dealing extra USDC into it, making
         // WETH more expensive in USDC terms on that pool.
 
         uint256 amountIn = 1_000_000_000; // 1000 USDC

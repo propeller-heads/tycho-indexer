@@ -289,7 +289,6 @@ abstract contract Vault is ERC6909, ReentrancyGuard, Pausable {
      * @dev Internal helper to credit user's actual vault balance (persistent storage)
      * @notice This credits the persistent vault balance and emits a Transfer event
      */
-    // slither-disable-next-line dead-code TODO: remove this in ENG-5499
     function _creditVault(address user, address token, uint256 amount)
         internal
         virtual

@@ -699,11 +699,12 @@ contract TychoRouter is AccessControl, Dispatcher {
             // or credited to the vault
             if (receiver == address(this)) {
                 _creditVault(msg.sender, tokenOut, amountOut);
-            }
-            if (tokenOut == address(0)) {
-                Address.sendValue(payable(receiver), amountOut);
             } else {
-                IERC20(tokenOut).safeTransfer(receiver, amountOut);
+                if (tokenOut == address(0)) {
+                    Address.sendValue(payable(receiver), amountOut);
+                } else {
+                    IERC20(tokenOut).safeTransfer(receiver, amountOut);
+                }
             }
             _updateDeltaAccounting(tokenOut, -int256(amountOut));
         }
@@ -778,11 +779,12 @@ contract TychoRouter is AccessControl, Dispatcher {
             // or credited to the vault
             if (receiver == address(this)) {
                 _creditVault(msg.sender, tokenOut, amountOut);
-            }
-            if (tokenOut == address(0)) {
-                Address.sendValue(payable(receiver), amountOut);
             } else {
-                IERC20(tokenOut).safeTransfer(receiver, amountOut);
+                if (tokenOut == address(0)) {
+                    Address.sendValue(payable(receiver), amountOut);
+                } else {
+                    IERC20(tokenOut).safeTransfer(receiver, amountOut);
+                }
             }
             _updateDeltaAccounting(tokenOut, -int256(amountOut));
         }
@@ -852,11 +854,12 @@ contract TychoRouter is AccessControl, Dispatcher {
             // or credited to the vault
             if (receiver == address(this)) {
                 _creditVault(msg.sender, tokenOut, amountOut);
-            }
-            if (tokenOut == address(0)) {
-                Address.sendValue(payable(receiver), amountOut);
             } else {
-                IERC20(tokenOut).safeTransfer(receiver, amountOut);
+                if (tokenOut == address(0)) {
+                    Address.sendValue(payable(receiver), amountOut);
+                } else {
+                    IERC20(tokenOut).safeTransfer(receiver, amountOut);
+                }
             }
             _updateDeltaAccounting(tokenOut, -int256(amountOut));
         }
