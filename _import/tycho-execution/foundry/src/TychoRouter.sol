@@ -1174,8 +1174,8 @@ contract TychoRouter is AccessControl, Dispatcher {
         bool transferFrom
     ) internal view returns (uint256 initialBalanceTokenOut) {
         initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        // For cyclic swaps (tokenIn == tokenOut), the receiver's current balance
-        // may include amountIn, which would cause _verifyAmountOutWasReceived to
+        // For cyclic swaps (tokenIn == tokenOut), the receiver already holds
+        // some tokenOut before the swap, which would cause _verifyAmountOutWasReceived to
         // undercount the actual output. We subtract amountIn when:
         // - transferFrom && receiver != router: receiver is the user who still holds amountIn
         // - !transferFrom && receiver == router: funds were taken from vault, and
