@@ -2911,5 +2911,71 @@ mod tests {
         }
     }
 
-}
+    #[actix_web::test]
+    async fn test_plan_header_selects_correct_plan() {
+        // default plan: loose (tvl >= 100), strict plan: tight (tvl = 100).
+        // A request with tvl_gt: 200 passes default but fails strict.
+        let mut plans = HashMap::new();
+        plans.insert(
+            "default".to_string(),
+            PlanConfig {
+                component_tvl: Some(ParamConstraint { op: ConstraintOp::Gte, value: 100.0 }),
+                ..Default::default()
+            },
+        );
+        plans.insert(
+            "strict".to_string(),
+            PlanConfig {
+                component_tvl: Some(ParamConstraint { op: ConstraintOp::Eq, value: 100.0 }),
+                ..Default::default()
+            },
+        );
+
+        let mut gw = MockGateway::new();
+        let mock_response = Ok(WithTotal { entity: vec![], total: Some(0) });
+        gw.expect_get_protocol_components()
+            .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
+
+        let handler = RpcHandler::new(
+            gw,
+            None,
+            MockEntryPointTracer::new(),
+            Arc::new(PlanRegistry::from_file_plans(plans)),
+        );
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(handler))
+                .route(
+                    "/v1/protocol_components",
+                    web::post().to(protocol_components::<MockGateway, MockEntryPointTracer>),
+                ),
+        )
+        .await;
+
+        let request_body = dto::ProtocolComponentsRequestBody {
+            protocol_system: "ambient".to_string(),
+            component_ids: None,
+            tvl_gt: Some(200.0),
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::new(0, 10),
+        };
+
+        // No header → default plan (tvl >= 100), 1000 passes.
+        let req = test::TestRequest::post()
+            .uri("/v1/protocol_components")
+            .set_json(&request_body)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+
+        // X-User-Plan: strict → strict plan (tvl >= 5000), 1000 fails.
+        let req = test::TestRequest::post()
+            .uri("/v1/protocol_components")
+            .insert_header(("x-user-plan", "strict"))
+            .set_json(&request_body)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), actix_web::http::StatusCode::BAD_REQUEST);
+    }
 }
