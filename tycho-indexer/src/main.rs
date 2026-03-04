@@ -89,6 +89,7 @@ type ServerTasks = Vec<JoinHandle<Result<(), ExtractionError>>>; //TODO: introdu
 fn load_plan_registry() -> Result<Arc<PlanRegistry>, ExtractionError> {
     let path = std::path::Path::new("./plans.yaml");
     if !path.exists() {
+        warn!("No plans.yaml found; all plan restrictions disabled");
         return Ok(Arc::new(PlanRegistry::empty()));
     }
     PlanRegistry::from_file(path)
