@@ -31,8 +31,10 @@ use crate::{
     services::{
         cache::RpcCache,
         deltas_buffer::{PendingDeltasBuffer, PendingDeltasError},
-        middleware::{RequestPaginationValidation, ValidateFilter},
-        ServerRpcConfig,
+        middlewares::{
+            plan_restrictions::{plan_name_from_request, PlanRegistry},
+            PlanEnforcement, RequestPaginationValidation,
+        },
     },
 };
 
@@ -109,7 +111,7 @@ pub struct RpcHandler<G, T> {
         RpcCache<dto::TracedEntryPointRequestBody, dto::TracedEntryPointRequestResponse>,
     #[allow(dead_code)]
     tracer: T,
-    rpc_config: ServerRpcConfig,
+    plan_registry: Arc<PlanRegistry>,
 }
 
 impl<G, T> RpcHandler<G, T>
@@ -121,7 +123,7 @@ where
         db_gateway: G,
         pending_deltas: Option<Arc<dyn PendingDeltasBuffer + Send + Sync>>,
         tracer: T,
-        rpc_config: ServerRpcConfig,
+        plan_registry: Arc<PlanRegistry>,
     ) -> Self {
         const ONE_MB: u64 = 1_024 * 1_024;
         const HUNDRED_MB: u64 = ONE_MB * 100;
@@ -165,7 +167,7 @@ where
             component_cache,
             traced_entry_point_cache,
             tracer,
-            rpc_config,
+            plan_registry,
         }
     }
 
@@ -1099,6 +1101,11 @@ pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
 
     body.validate_pagination(&req)?;
 
+    let plan = handler
+        .plan_registry
+        .get_plan(plan_name_from_request(&req));
+    body.validate(plan)?;
+
     // Call the handler to get the state
     let response = handler
         .into_inner()
@@ -1140,7 +1147,11 @@ pub async fn tokens<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("page_size", body.pagination.page_size);
 
     body.validate_pagination(&req)?;
-    body.validate_filter(&handler.rpc_config)?;
+
+    let plan = handler
+        .plan_registry
+        .get_plan(plan_name_from_request(&req));
+    body.validate(plan)?;
 
     // Call the handler to get tokens
     let response = handler
@@ -1184,7 +1195,11 @@ pub async fn protocol_components<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("protocol_system", &body.protocol_system);
 
     body.validate_pagination(&req)?;
-    body.validate_filter(&handler.rpc_config)?;
+
+    let plan = handler
+        .plan_registry
+        .get_plan(plan_name_from_request(&req));
+    body.validate(plan)?;
 
     // Call the handler to get protocol components
     let response = handler
@@ -1227,6 +1242,11 @@ pub async fn protocol_state<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("protocol_system", &body.protocol_system);
 
     body.validate_pagination(&req)?;
+
+    let plan = handler
+        .plan_registry
+        .get_plan(plan_name_from_request(&req));
+    body.validate(plan)?;
 
     // Call the handler to get protocol states
     let response = handler
@@ -1310,6 +1330,11 @@ pub async fn component_tvl<G: Gateway, T: EntryPointTracer>(
 
     body.validate_pagination(&req)?;
 
+    let plan = handler
+        .plan_registry
+        .get_plan(plan_name_from_request(&req));
+    body.validate(plan)?;
+
     // Call the handler to get component tvl
     let response = handler
         .into_inner()
@@ -1350,6 +1375,11 @@ pub async fn traced_entry_points<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("page_size", body.pagination.page_size);
 
     body.validate_pagination(&req)?;
+
+    let plan = handler
+        .plan_registry
+        .get_plan(plan_name_from_request(&req));
+    body.validate(plan)?;
 
     // Call the handler to get traced entry points
     let response = handler
@@ -1446,6 +1476,9 @@ mod tests {
     };
 
     use super::*;
+    use crate::services::middlewares::plan_restrictions::{
+        ConstraintOp, ParamConstraint, PlanConfig, PlanRegistry,
+    };
     use crate::testing::{evm_contract_slots, MockGateway};
 
     const WETH: &str = "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
@@ -1569,8 +1602,8 @@ mod tests {
             .version
             .timestamp
             .unwrap()
-            .timestamp_millis() -
-            result
+            .timestamp_millis()
+            - result
                 .version
                 .timestamp
                 .unwrap()
@@ -1657,7 +1690,7 @@ mod tests {
             gw,
             Some(Arc::new(mock_buffer)),
             MockEntryPointTracer::new(),
-            ServerRpcConfig::new(),
+            Arc::new(PlanRegistry::empty()),
         );
 
         let request = dto::StateRequestBody {
@@ -1961,7 +1994,8 @@ mod tests {
             expected_upserted_tracing_results,
         );
 
-        let req_handler = RpcHandler::new(gw, None, mock_entrypoint_tracer, ServerRpcConfig::new());
+        let req_handler =
+            RpcHandler::new(gw, None, mock_entrypoint_tracer, Arc::new(PlanRegistry::empty()));
         let response = req_handler
             .add_entry_points(&req_body)
             .await
@@ -2035,7 +2069,7 @@ mod tests {
             expected_upserted_tracing_results,
         );
 
-        let req_handler = RpcHandler::new(gw, None, tracer, ServerRpcConfig::new());
+        let req_handler = RpcHandler::new(gw, None, tracer, Arc::new(PlanRegistry::empty()));
         let response = req_handler
             .add_entry_points(&req_body)
             .await
@@ -2155,7 +2189,7 @@ mod tests {
             .return_once(|_| Box::pin(async move { mock_traced_entry_points_response }));
 
         let req_handler =
-            RpcHandler::new(gw, None, MockEntryPointTracer::new(), ServerRpcConfig::new());
+            RpcHandler::new(gw, None, MockEntryPointTracer::new(), Arc::new(PlanRegistry::empty()));
 
         // Request for two protocol components
         let request = dto::TracedEntryPointRequestBody {
@@ -2354,7 +2388,7 @@ mod tests {
             .return_once(|_| Box::pin(async move { mock_traced_entry_points_response }));
 
         let req_handler =
-            RpcHandler::new(gw, None, MockEntryPointTracer::new(), ServerRpcConfig::new());
+            RpcHandler::new(gw, None, MockEntryPointTracer::new(), Arc::new(PlanRegistry::empty()));
 
         let request = dto::TracedEntryPointRequestBody {
             chain: dto::Chain::Ethereum,
@@ -2424,7 +2458,7 @@ mod tests {
         gw.expect_get_tokens()
             .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
         let req_handler =
-            RpcHandler::new(gw, None, MockEntryPointTracer::new(), ServerRpcConfig::new());
+            RpcHandler::new(gw, None, MockEntryPointTracer::new(), Arc::new(PlanRegistry::empty()));
 
         // request for 2 tokens that are in the DB (WETH and USDC)
         let request = dto::TokensRequestBody {
@@ -2498,7 +2532,7 @@ mod tests {
             gw,
             Some(Arc::new(mock_buffer)),
             MockEntryPointTracer::new(),
-            ServerRpcConfig::new(),
+            Arc::new(PlanRegistry::empty()),
         );
 
         let request = dto::ProtocolStateRequestBody {
@@ -2584,7 +2618,7 @@ mod tests {
             gw,
             Some(Arc::new(mock_buffer)),
             MockEntryPointTracer::new(),
-            ServerRpcConfig::new(),
+            Arc::new(PlanRegistry::empty()),
         );
 
         let request = dto::ProtocolComponentsRequestBody {
@@ -2682,7 +2716,7 @@ mod tests {
             gw,
             Some(Arc::new(mock_buffer)),
             MockEntryPointTracer::new(),
-            ServerRpcConfig::new(),
+            Arc::new(PlanRegistry::empty()),
         );
 
         let request = dto::ProtocolComponentsRequestBody {
@@ -2722,13 +2756,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case::config_set_no_filter_rejects(Some(1000.0), None, false)]
-    #[case::config_set_below_threshold_rejects(Some(1000.0), Some(500.0), false)]
-    #[case::config_set_above_threshold_accepts(Some(1000.0), Some(1500.0), true)]
+    #[case::config_set_no_filter_rejects(None, false)]
+    #[case::config_set_below_threshold_rejects(Some(500.0), false)]
+    #[case::config_set_above_threshold_accepts(Some(1500.0), true)]
     #[actix_web::test]
     async fn test_protocol_components_endpoint_rejects_invalid_filters(
-        #[case] min_tvl: Option<f64>,
-        #[case] tvl_gt: Option<f64>,
+        #[case] request_tvl: Option<f64>,
         #[case] should_pass: bool,
     ) {
         let mut gw = MockGateway::new();
@@ -2738,8 +2771,16 @@ mod tests {
             gw.expect_get_protocol_components()
                 .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
         }
-        let config = ServerRpcConfig::new().with_min_tvl(min_tvl);
-        let handler = RpcHandler::new(gw, None, MockEntryPointTracer::new(), config);
+        let plan = PlanConfig {
+            component_tvl: Some(ParamConstraint { op: ConstraintOp::Gte, value: 1000.0 }),
+            ..Default::default()
+        };
+        let handler = RpcHandler::new(
+            gw,
+            None,
+            MockEntryPointTracer::new(),
+            Arc::new(PlanRegistry::with_default_plan(plan)),
+        );
 
         let app = test::init_service(
             App::new()
@@ -2754,7 +2795,7 @@ mod tests {
         let request_body = dto::ProtocolComponentsRequestBody {
             protocol_system: "ambient".to_string(),
             component_ids: None,
-            tvl_gt,
+            tvl_gt: request_tvl,
             chain: dto::Chain::Ethereum,
             pagination: dto::PaginationParams::new(0, 10),
         };
@@ -2784,8 +2825,7 @@ mod tests {
             let body = test::read_body(resp).await;
             let body_str = std::str::from_utf8(&body).unwrap_or("");
             assert!(
-                body_str.contains("tvl_gt parameter is required") ||
-                    body_str.contains("tvl_gt must be at least"),
+                body_str.contains("requires 'tvl_gt'"),
                 "Should fail with filter validation error. Body: {}",
                 body_str
             );
@@ -2793,13 +2833,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case::config_set_no_filter_rejects(Some(50), None, None, false)]
-    #[case::config_set_below_threshold_rejects(Some(50), Some(30), None, false)]
-    #[case::config_set_token_addresses_accepts(Some(50), None, Some(vec![Bytes::from_str("0x01").unwrap()]), true)]
-    #[case::config_set_above_threshold_accepts(Some(50), Some(75), None, true)]
+    #[case::config_set_no_filter_rejects(None, None, false)]
+    #[case::config_set_below_threshold_rejects(Some(30), None, false)]
+    #[case::config_set_token_addresses_accepts(None, Some(vec![Bytes::from_str("0x01").unwrap()]), true)]
+    #[case::config_set_above_threshold_accepts(Some(75), None, true)]
     #[actix_web::test]
     async fn test_tokens_endpoint_rejects_invalid_filters(
-        #[case] min_quality: Option<i32>,
         #[case] request_quality: Option<i32>,
         #[case] token_addresses: Option<Vec<tycho_common::Bytes>>,
         #[case] should_pass: bool,
@@ -2811,8 +2850,19 @@ mod tests {
             gw.expect_get_tokens()
                 .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
         }
-        let config = ServerRpcConfig::new().with_min_quality(min_quality);
-        let handler = RpcHandler::new(gw, None, MockEntryPointTracer::new(), config);
+        use crate::services::middlewares::plan_restrictions::{
+            ConstraintOp, ParamConstraint, PlanConfig,
+        };
+        let plan = PlanConfig {
+            token_quality: Some(ParamConstraint { op: ConstraintOp::Gte, value: 50 }),
+            ..Default::default()
+        };
+        let handler = RpcHandler::new(
+            gw,
+            None,
+            MockEntryPointTracer::new(),
+            Arc::new(PlanRegistry::with_default_plan(plan)),
+        );
 
         let app = test::init_service(
             App::new()
@@ -2854,11 +2904,12 @@ mod tests {
             let body = test::read_body(resp).await;
             let body_str = std::str::from_utf8(&body).unwrap_or("");
             assert!(
-                body_str.contains("min_quality parameter is required") ||
-                    body_str.contains("min_quality must be at least"),
+                body_str.contains("requires 'min_quality'"),
                 "Should fail with filter validation error. Body: {}",
                 body_str
             );
         }
     }
+
+}
 }
