@@ -575,7 +575,7 @@ impl From<BlockAggregatedChanges> for BlockChanges {
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug, ToSchema)]
 pub struct AccountUpdate {
     #[serde(with = "hex_bytes")]
-    #[schema(value_type=String)]
+    #[schema(value_type=Vec<String>)]
     pub address: Bytes,
     pub chain: Chain,
     #[serde(with = "hex_hashmap_key_value")]
@@ -1719,6 +1719,7 @@ impl ComponentTvlRequestBody {
         }
     }
 }
+// #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ComponentTvlRequestResponse {
     pub tvl: HashMap<String, f64>,
@@ -1954,7 +1955,7 @@ fn deserialize_retriggers_from_value(
 
 #[derive(Serialize, Debug, Default, PartialEq, ToSchema, Eq, Clone, DeepSizeOf)]
 pub struct TracingResult {
-    #[schema(value_type=Vec<Vec<String>>)]
+    #[schema(value_type=HashSet<(String, String)>)]
     pub retriggers: HashSet<(StoreKey, AddressStorageLocation)>,
     #[schema(value_type=HashMap<String,HashSet<String>>)]
     pub accessed_slots: HashMap<Address, HashSet<StoreKey>>,
