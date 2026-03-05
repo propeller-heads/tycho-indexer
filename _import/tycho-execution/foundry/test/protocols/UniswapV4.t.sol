@@ -611,3 +611,155 @@ contract TychoRouterForUniswapV4AndEulerTest is TychoRouterTestSetup {
         assertGt(balanceAfter - balanceBefore, 0.9 ether); // At least 0.9 ETH
     }
 }
+
+contract TychoRouterUSV4FeeTokenTest is TychoRouterTestSetup {
+    function getForkBlock() public view virtual override returns (uint256) {
+        return 23550000;
+    }
+
+    function testSwapTWIFToUSDCViaV4() public {
+        // Full TychoRouter swap of TWIF (6% fee-on-transfer) to
+        // USDC through a real UniswapV4 pool.
+        //
+        //   TWIF ───(USV4, fee=10000, tick=200)──> USDC
+        //
+        // TWIF charges 6% on every transfer, including to the
+        // V4 Pool Manager. Before the fix, the executor passed
+        // the full amountIn to V4's swap, but only 94% arrived
+        // after the fee deduction, causing CurrencyNotSettled().
+        address TWIF = 0x2Dd636C514Bb4705c756D161585Ff9ec665f18A2;
+
+        // TWIF is nearly worthless (~7.6e-10 USDC per token).
+        // Use a large amount so the swap produces >=1 USDC.
+        uint256 amountIn = 1e34;
+
+        deal(TWIF, ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+        IERC20(TWIF).approve(PERMIT2_ADDRESS, type(uint256).max);
+
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_usv4_twif_fee_token"
+        );
+        (bool success,) = tychoRouterAddr.call(callData);
+        vm.stopPrank();
+
+        uint256 usdcReceived = IERC20(USDC_ADDR).balanceOf(ALICE);
+
+        assertTrue(success, "TychoRouter swap failed");
+        assertGt(usdcReceived, 0, "Should receive USDC");
+    }
+
+    function testSwapUSDCToTWIFViaV4() public {
+        // Full TychoRouter swap of USDC to TWIF (6% fee-on-transfer)
+        // through a real UniswapV4 pool.
+        //
+        //   USDC ───(USV4, fee=10000, tick=200)──> TWIF
+        //
+        // TWIF charges 6% on the output transfer from the V4 Pool
+        // Manager to the receiver. Before the fix, the executor
+        // reported the pre-fee amount from the V4 delta, causing
+        // TychoRouter__AmountOutNotFullyReceived(...)
+        address TWIF = 0x2Dd636C514Bb4705c756D161585Ff9ec665f18A2;
+        uint256 amountIn = 100_000000; // 100 USDC
+
+        deal(USDC_ADDR, ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
+
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_usv4_twif_fee_token_output"
+        );
+        (bool success,) = tychoRouterAddr.call(callData);
+        vm.stopPrank();
+
+        uint256 twifReceived = IERC20(TWIF).balanceOf(ALICE);
+
+        assertTrue(success, "TychoRouter swap failed");
+        assertGt(twifReceived, 0, "Should receive TWIF");
+    }
+
+    // TODO delete this test. This was just for you to see my reasoning.
+    function testFeeTokenBehaviorOnV4() public {
+        // All fee-on-transfer tokens found in V4 pools
+        address[14] memory tokens = [
+            0x14feE680690900BA0ccCfC76AD70Fd1b95D10e16, // $PAAL
+            0xD1F2586790a5bD6DA1e443441df53aF6EC213D83, // LEDGER
+            0xD1e64bcc904Cfdc19d0FABA155a9EdC69b4bcdAe, // PIKA
+            0xf9902EdfCa4F49DcaEBC335C73aEbD82C79C2886, // ADO
+            0xc11158c5dA9db1D553ED28f0C2BA1CbEDD42CFcb, // wPAW
+            0xFbD5fD3f85e9f4c5E8B40EEC9F8B8ab1cAAa146b, // TREAT
+            0x2Dd636C514Bb4705c756D161585Ff9ec665f18A2, // TWIF
+            0x851F679A5eDfb16E7cF1ad157C6995b7E7F333F2, // TrumpBucks
+            0x3ADE1cED4D61D45d735E08880e66f4d8f1E1D9b1, // BP
+            0xEA87148a703ADc0DE89dB2aC2b6b381093aE8ee0, // IRIS
+            0xfC8e44851ccbD13D8F865d65b2425B33dC1E2570, // XOE
+            0x8162b5Bc8F651007cC38a09F557BaB2Bf4CEFb5b, // STRM
+            0x01eefFCD9a10266ed00946121DF097eeD173b43D, // XD
+            0xcDbddbdEFB0eE3eF03a89AFcd714aa4ef310D567 // VERTAI
+        ];
+
+        string[14] memory names = [
+            "$PAAL",
+            "LEDGER",
+            "PIKA",
+            "ADO",
+            "wPAW",
+            "TREAT",
+            "TWIF",
+            "TrumpBucks",
+            "BP",
+            "IRIS",
+            "XOE",
+            "STRM",
+            "XD",
+            "VERTAI"
+        ];
+
+        uint256 amount = 1e18;
+        uint256 feeTokenCount = 0;
+
+        for (uint256 i = 0; i < tokens.length; i++) {
+            uint256 codeSize;
+            address token = tokens[i];
+            assembly {
+                codeSize := extcodesize(token)
+            }
+            if (codeSize == 0) {
+                console.log(names[i], " -- not deployed --");
+                continue;
+            }
+
+            deal(token, ALICE, amount);
+            uint256 pmBefore = IERC20(token).balanceOf(POOL_MANAGER);
+            try this.doTransfer(token, ALICE, POOL_MANAGER, amount) returns (
+                uint256
+            ) {
+                uint256 pmAfter = IERC20(token).balanceOf(POOL_MANAGER);
+                uint256 fee = amount - (pmAfter - pmBefore);
+                if (fee > 0) {
+                    feeTokenCount++;
+                }
+                console.log(names[i], " fee:", fee);
+            } catch {
+                console.log(names[i], " -- transfer reverted --");
+            }
+        }
+
+        console.log("");
+        console.log("Tokens that charged a fee:", feeTokenCount);
+        console.log("Total tokens tested:", tokens.length);
+    }
+
+    /// @dev External helper so we can try/catch transfers
+    function doTransfer(address token, address from, address to, uint256 amount)
+        external
+        returns (uint256 received)
+    {
+        uint256 before = IERC20(token).balanceOf(to);
+        vm.prank(from);
+        IERC20(token).transfer(to, amount);
+        received = IERC20(token).balanceOf(to) - before;
+    }
+}

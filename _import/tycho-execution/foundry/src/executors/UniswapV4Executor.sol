@@ -318,14 +318,20 @@ contract UniswapV4Executor is IExecutor, ICallback {
     ) external returns (uint128) {
         Currency currencyIn = zeroForOne ? poolKey.currency0 : poolKey.currency1;
         _settle(currencyIn, amountIn);
-        uint128 amountOut = _swap(
-                poolKey, zeroForOne, -int256(uint256(amountIn)), hookData
-            ).toUint128();
+
+        // Use actual settled amount to handle possible fee-on-transfer tokens.
+        uint256 actualIn = _getFullCredit(currencyIn);
+
+        uint128 amountOut =
+            _swap(poolKey, zeroForOne, -int256(actualIn), hookData).toUint128();
 
         Currency currencyOut =
             zeroForOne ? poolKey.currency1 : poolKey.currency0;
+        // Measure actual received to handle fee-on-transfer output tokens.
+        uint256 balanceBefore = _balanceOf(currencyOut, receiver);
         _take(currencyOut, receiver, _mapTakeAmount(amountOut, currencyOut));
-        return amountOut;
+        uint256 actualOut = _balanceOf(currencyOut, receiver) - balanceBefore;
+        return actualOut.toUint128();
     }
 
     /**
@@ -343,8 +349,10 @@ contract UniswapV4Executor is IExecutor, ICallback {
     ) external returns (uint128) {
         uint128 amountOut = 0;
         Currency swapCurrencyIn = currencyIn;
-        uint256 swapAmountIn = amountIn;
         _settle(currencyIn, amountIn);
+
+        // Use actual settled amount to handle fee-on-transfer tokens.
+        uint256 swapAmountIn = _getFullCredit(currencyIn);
         unchecked {
             uint256 pathLength = path.length;
             PathKey calldata pathKey;
@@ -366,12 +374,16 @@ contract UniswapV4Executor is IExecutor, ICallback {
             }
         }
 
+        // Measure actual received to handle fee-on-transfer output tokens.
+        uint256 balanceBefore = _balanceOf(swapCurrencyIn, receiver);
         _take(
             swapCurrencyIn, // at the end of the loop this is actually currency out
             receiver,
             _mapTakeAmount(amountOut, swapCurrencyIn)
         );
-        return amountOut;
+        uint256 actualOut = _balanceOf(swapCurrencyIn, receiver) - balanceBefore;
+
+        return actualOut.toUint128();
     }
 
     function _swap(
@@ -446,6 +458,17 @@ contract UniswapV4Executor is IExecutor, ICallback {
     {
         if (amount == 0) return;
         poolManager.take(currency, recipient, amount);
+    }
+
+    function _balanceOf(Currency currency, address account)
+        internal
+        view
+        returns (uint256)
+    {
+        if (currency.isAddressZero()) {
+            return account.balance;
+        }
+        return IERC20(Currency.unwrap(currency)).balanceOf(account);
     }
 
     function _mapTakeAmount(uint256 amount, Currency currency)
