@@ -1,5 +1,4 @@
 //! This module contains Tycho RPC implementation
-#![allow(deprecated)]
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,

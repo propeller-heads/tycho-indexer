@@ -6,7 +6,7 @@ use actix_web::{
     middleware::Next,
 };
 use metrics::{counter, histogram};
-use tracing::instrument;
+use tracing::{instrument, Span};
 
 /// Middleware to record metrics for RPC requests.
 #[instrument(skip_all, fields(user_identity))]
@@ -30,7 +30,7 @@ where
         .unwrap_or("unknown")
         .to_string();
 
-    tracing::Span::current().record("user_identity", &user_identity);
+    Span::current().record("user_identity", &user_identity);
 
     counter!("rpc_requests", "endpoint" => endpoint.clone(), "user_identity" => user_identity.clone()).increment(1);
 

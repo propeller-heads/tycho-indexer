@@ -242,10 +242,8 @@ impl ValidateRestrictions for dto::TracedEntryPointRequestBody {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use rstest::rstest;
-    use tycho_common::{dto, Bytes};
+    use tycho_common::Bytes;
 
     use super::*;
 
@@ -373,35 +371,29 @@ plans:
             .is_ok());
     }
 
-    mod numeric_checks {
-        use rstest::rstest;
-
-        use super::*;
-
-        #[rstest]
-        #[case::gte_passes(Operator::Gte, 100.0, Some(100.0), true)]
-        #[case::gte_above(Operator::Gte, 100.0, Some(200.0), true)]
-        #[case::gte_below(Operator::Gte, 100.0, Some(50.0), false)]
-        #[case::lte_passes(Operator::Lte, 30.0, Some(30.0), true)]
-        #[case::lte_below(Operator::Lte, 30.0, Some(15.0), true)]
-        #[case::lte_above(Operator::Lte, 30.0, Some(60.0), false)]
-        #[case::eq_passes(Operator::Eq, 100.0, Some(100.0), true)]
-        #[case::eq_fails(Operator::Eq, 100.0, Some(99.0), false)]
-        #[case::missing_param(Operator::Gte, 100.0, None, false)]
-        fn test_numeric_restriction(
-            #[case] op: Operator,
-            #[case] threshold: f64,
-            #[case] actual: Option<f64>,
-            #[case] should_pass: bool,
-        ) {
-            let restrictions = PlanRestrictions {
-                component_tvl: Some(NumericRestriction { op, value: threshold }),
-                ..Default::default()
-            };
-            let result =
-                restrictions.check_numeric("component_tvl", &restrictions.component_tvl, actual);
-            assert_eq!(result.is_ok(), should_pass);
-        }
+    #[rstest]
+    #[case::gte_passes(Operator::Gte, 100.0, Some(100.0), true)]
+    #[case::gte_above(Operator::Gte, 100.0, Some(200.0), true)]
+    #[case::gte_below(Operator::Gte, 100.0, Some(50.0), false)]
+    #[case::lte_passes(Operator::Lte, 30.0, Some(30.0), true)]
+    #[case::lte_below(Operator::Lte, 30.0, Some(15.0), true)]
+    #[case::lte_above(Operator::Lte, 30.0, Some(60.0), false)]
+    #[case::eq_passes(Operator::Eq, 100.0, Some(100.0), true)]
+    #[case::eq_fails(Operator::Eq, 100.0, Some(99.0), false)]
+    #[case::missing_param(Operator::Gte, 100.0, None, false)]
+    fn test_numeric_restriction(
+        #[case] op: Operator,
+        #[case] threshold: f64,
+        #[case] actual: Option<f64>,
+        #[case] should_pass: bool,
+    ) {
+        let restrictions = PlanRestrictions {
+            component_tvl: Some(NumericRestriction { op, value: threshold }),
+            ..Default::default()
+        };
+        let result =
+            restrictions.check_numeric("component_tvl", &restrictions.component_tvl, actual);
+        assert_eq!(result.is_ok(), should_pass);
     }
 
     #[test]

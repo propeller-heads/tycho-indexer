@@ -1,4 +1,4 @@
-use actix_web::middleware;
+use actix_web::middleware::Compress;
 
 /// Creates the compression middleware for RPC responses.
 ///
@@ -7,8 +7,8 @@ use actix_web::middleware;
 /// - Clients that send "Accept-Encoding: zstd" will receive compressed responses
 /// - Clients that don't specify Accept-Encoding will receive uncompressed responses
 /// - Clients that explicitly send "Accept-Encoding: identity" will receive uncompressed responses
-pub(in crate::services) fn compression_middleware() -> middleware::Compress {
-    middleware::Compress::default()
+pub(in crate::services) fn compression_middleware() -> Compress {
+    Compress::default()
 }
 
 #[cfg(test)]
@@ -16,15 +16,14 @@ mod tests {
     use actix_web::{test, web, App};
 
     use super::*;
+    use crate::services::rpc::health as health_endpoint;
 
     #[actix_web::test]
     async fn test_without_accept_encoding_header() {
         let app = test::init_service(
             App::new()
                 .wrap(compression_middleware())
-                .service(
-                    web::resource("/health").route(web::get().to(crate::services::rpc::health)),
-                ),
+                .service(web::resource("/health").route(web::get().to(health_endpoint))),
         )
         .await;
 
@@ -48,9 +47,7 @@ mod tests {
         let app = test::init_service(
             App::new()
                 .wrap(compression_middleware())
-                .service(
-                    web::resource("/health").route(web::get().to(crate::services::rpc::health)),
-                ),
+                .service(web::resource("/health").route(web::get().to(health_endpoint))),
         )
         .await;
 
@@ -77,9 +74,7 @@ mod tests {
         let app = test::init_service(
             App::new()
                 .wrap(compression_middleware())
-                .service(
-                    web::resource("/health").route(web::get().to(crate::services::rpc::health)),
-                ),
+                .service(web::resource("/health").route(web::get().to(health_endpoint))),
         )
         .await;
 

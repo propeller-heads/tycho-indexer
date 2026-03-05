@@ -1,11 +1,10 @@
 use tycho_common::dto::PaginationLimits;
 
+use crate::services::rpc::RpcError;
+
 /// Validates pagination limits with compression-aware maximums.
 pub trait RequestPaginationValidation: PaginationLimits {
-    fn validate_pagination(
-        &self,
-        req: &actix_web::HttpRequest,
-    ) -> Result<(), crate::services::rpc::RpcError> {
+    fn validate_pagination(&self, req: &actix_web::HttpRequest) -> Result<(), RpcError> {
         let page_size = self.pagination().page_size;
 
         let supports_compression = req
@@ -18,7 +17,7 @@ pub trait RequestPaginationValidation: PaginationLimits {
         let max_allowed = Self::effective_max_page_size(supports_compression);
 
         if page_size > max_allowed {
-            Err(crate::services::rpc::RpcError::Pagination(max_allowed as usize))
+            Err(RpcError::Pagination(max_allowed as usize))
         } else {
             Ok(())
         }
@@ -34,7 +33,6 @@ mod tests {
     use tycho_common::dto::PaginationParams;
 
     use super::*;
-    use crate::services::rpc::RpcError;
 
     #[derive(Clone)]
     struct TestPaginationRequest {
