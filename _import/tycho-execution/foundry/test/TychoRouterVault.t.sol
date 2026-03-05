@@ -29,6 +29,10 @@ import {WethExecutor} from "../src/executors/WethExecutor.sol";
  * @notice Test cases for different swap scenarios relating to the Vault
  */
 contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
+    function getForkBlock() public pure override returns (uint256) {
+        return 24480104;
+    }
+
     function testCannotDepositWhenPaused() public {
         uint256 depositAmount = 1 ether;
         deal(WETH_ADDR, ALICE, depositAmount * 2);
@@ -161,7 +165,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         vm.stopPrank();
 
         // Alice should have received rETH
-        assertEq(amountOut, 883252117460416988);
+        assertEq(amountOut, 863321713651918410);
         assertEq(IERC20(RETH_ADDR).balanceOf(ALICE), amountOut);
 
         // Alice's ETH vault balance should NOT be touched (still has 2 ether)
@@ -279,7 +283,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         vm.stopPrank();
 
         // Alice should have received rETH from the last swap
-        assertEq(amountOut, 258732654855663419141);
+        assertEq(amountOut, 7830203925762123600242);
         assertEq(IERC20(RETH_ADDR).balanceOf(ALICE), amountOut);
 
         // Router ETH balance should not have changed
@@ -321,7 +325,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             vaultBalance - amountIn
         );
 
-        assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), 999821834);
+        assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), 999812696);
     }
 
     // ==================== Circular Vault tests ====================
@@ -340,7 +344,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         (bool success,) = tychoRouterAddr.call(callData);
 
         assertTrue(success, "Call Failed");
-        assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), 99792554);
+        assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), 99641381);
 
         vm.stopPrank();
     }

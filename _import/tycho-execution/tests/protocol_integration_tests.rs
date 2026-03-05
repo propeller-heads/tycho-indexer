@@ -1161,10 +1161,10 @@ fn test_sequential_encoding_strategy_fluid() {
 #[test]
 fn test_single_encoding_strategy_rocketpool_deposit() {
     // ETH -> (rocketpool) -> rETH
-    // Based on real tx 0x6213b6c235c52d2132711c18a1c66934832722fd71c098e843bc792ecdbd11b3
-    // where 4.5 ETH was deposited for 3.905847020555141679 rETH
+    // Based on real tx 0xe0f1db165b621cb1e50b629af9d47e064be464fbcc7f2bcba3df1d27dbb916be
+    // at block 24480105 where 85 ETH was deposited for 73382345660413064855 rETH
     let rocketpool_pool = ProtocolComponent {
-        id: String::from("0xdd3f50f8a6cafbe9b31a427582963f465e745af8"),
+        id: String::from("0xae78736Cd615f374D3085123A210448E74Fc6393"),
         protocol_system: String::from("rocketpool"),
         ..Default::default()
     };
@@ -1177,9 +1177,9 @@ fn test_single_encoding_strategy_rocketpool_deposit() {
     let solution = Solution {
         exact_out: false,
         token_in,
-        amount_in: BigUint::from(4_500_000_000_000_000_000_u128),
+        amount_in: BigUint::from(85_000_000_000_000_000_000_u128),
         token_out,
-        min_amount_out: BigUint::from(3_905_847_020_555_141_679_u128),
+        min_amount_out: BigUint::from(73_382_345_660_413_064_855_u128),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -1206,12 +1206,11 @@ fn test_single_encoding_strategy_rocketpool_deposit() {
 #[test]
 fn test_single_encoding_strategy_rocketpool_burn() {
     // rETH -> (rocketpool) -> ETH
-    // Based on real tx 0xf461ace5ae15d1db7a9f83da2e5a62745e91ecd1908274fb6583f70a29d8f68d
-    // where 1 rETH was burned for 1.151971256664605227 ETH
+    // Block 24481338: user burned 2515686112138065226 rETH and received 2912504376202664754 ETH
     // We use `bob*` address as sender/receiver as Alice's address has a drainer deployed that
     // would interfere with the test when we send ETH back to her.
     let rocketpool_pool = ProtocolComponent {
-        id: String::from("0xdd3f50f8a6cafbe9b31a427582963f465e745af8"),
+        id: String::from("0xae78736Cd615f374D3085123A210448E74Fc6393"),
         protocol_system: String::from("rocketpool"),
         ..Default::default()
     };
@@ -1224,9 +1223,9 @@ fn test_single_encoding_strategy_rocketpool_burn() {
     let solution = Solution {
         exact_out: false,
         token_in,
-        amount_in: BigUint::from(1_000_000_000_000_000_000u128), // 1 rETH
+        amount_in: BigUint::from(2_515_686_112_138_065_226_u128),
         token_out,
-        min_amount_out: BigUint::from(1_151_971_256_664_605_227u128), // 1.151971256664605227 ETH
+        min_amount_out: BigUint::from(2_912_504_376_202_664_754_u128),
         // Bob*
         sender: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
         receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),

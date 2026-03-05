@@ -200,7 +200,7 @@ contract TychoRouterTestSetup is
         slipstreamsExecutor = new SlipstreamsExecutor(
             SLIPSTREAMS_FACTORY_BASE, SLIPSTREAMS_NEW_FACTORY_BASE
         );
-        rocketpoolExecutor = new RocketpoolExecutor();
+        rocketpoolExecutor = new RocketpoolExecutor(ROCKET_DEPOSIT_POOL);
         erc4626Executor = new ERC4626Executor();
         wethExecutor = new WethExecutor(WETH_ADDR);
         ekuboV3Executor = new EkuboV3Executor();

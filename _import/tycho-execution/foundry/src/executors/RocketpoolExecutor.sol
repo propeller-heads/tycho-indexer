@@ -16,10 +16,11 @@ contract RocketpoolExecutor is IExecutor {
 
     IRocketTokenRETH public constant RETH =
         IRocketTokenRETH(0xae78736Cd615f374D3085123A210448E74Fc6393);
-    IRocketDepositPool public constant ROCKET_DEPOSIT_POOL =
-        IRocketDepositPool(0xDD3f50F8A6CafbE9b31a427582963f465E745AF8);
+    IRocketDepositPool public immutable rocketDepositPool;
 
-    constructor() {}
+    constructor(address _rocketDepositPool) {
+        rocketDepositPool = IRocketDepositPool(_rocketDepositPool);
+    }
 
     function fundsExpectedAddress(
         bytes calldata /* data */
@@ -45,7 +46,7 @@ contract RocketpoolExecutor is IExecutor {
             // ETH -> rETH: Deposit ETH to Rocketpool to receive rETH
             // We don't need to _transfer ETH into this contract since it must be sent along with the call
             uint256 rethBefore = RETH.balanceOf(address(this));
-            ROCKET_DEPOSIT_POOL.deposit{value: amountIn}();
+            rocketDepositPool.deposit{value: amountIn}();
             amountOut = RETH.balanceOf(address(this)) - rethBefore;
 
             if (receiver != address(this)) {

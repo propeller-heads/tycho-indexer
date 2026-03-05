@@ -194,6 +194,9 @@ contract Constants is Test, BaseConstants {
     address REDEMPTION_MANAGER_ADDR =
         0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0;
 
+    // Rocketpool v1.4 (Saturn 1) deposit pool
+    address ROCKET_DEPOSIT_POOL = 0xCE15294273CFb9D9b628F4D61636623decDF4fdC;
+
     /**
      * @dev Deploys a dummy contract with non-empty bytecode
      */
