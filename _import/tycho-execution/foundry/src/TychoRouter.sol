@@ -696,10 +696,15 @@ contract TychoRouter is AccessControl, Dispatcher {
         int256 outputDelta = _getDelta(tokenOut);
         if (outputDelta > 0) {
             // out tokens are still in the Router and need to be sent to the final receiver
-            if (tokenOut == address(0)) {
-                Address.sendValue(payable(receiver), amountOut);
+            // or credited to the vault
+            if (receiver == address(this)) {
+                _creditVault(msg.sender, tokenOut, amountOut);
             } else {
-                IERC20(tokenOut).safeTransfer(receiver, amountOut);
+                if (tokenOut == address(0)) {
+                    Address.sendValue(payable(receiver), amountOut);
+                } else {
+                    IERC20(tokenOut).safeTransfer(receiver, amountOut);
+                }
             }
             _updateDeltaAccounting(tokenOut, -int256(amountOut));
         }
@@ -771,10 +776,15 @@ contract TychoRouter is AccessControl, Dispatcher {
         int256 outputDelta = _getDelta(tokenOut);
         if (outputDelta > 0) {
             // out tokens are still in the Router and need to be sent to the final receiver
-            if (tokenOut == address(0)) {
-                Address.sendValue(payable(receiver), amountOut);
+            // or credited to the vault
+            if (receiver == address(this)) {
+                _creditVault(msg.sender, tokenOut, amountOut);
             } else {
-                IERC20(tokenOut).safeTransfer(receiver, amountOut);
+                if (tokenOut == address(0)) {
+                    Address.sendValue(payable(receiver), amountOut);
+                } else {
+                    IERC20(tokenOut).safeTransfer(receiver, amountOut);
+                }
             }
             _updateDeltaAccounting(tokenOut, -int256(amountOut));
         }
@@ -841,10 +851,15 @@ contract TychoRouter is AccessControl, Dispatcher {
         int256 outputDelta = _getDelta(tokenOut);
         if (outputDelta > 0) {
             // out tokens are still in the Router and need to be sent to the final receiver
-            if (tokenOut == address(0)) {
-                Address.sendValue(payable(receiver), amountOut);
+            // or credited to the vault
+            if (receiver == address(this)) {
+                _creditVault(msg.sender, tokenOut, amountOut);
             } else {
-                IERC20(tokenOut).safeTransfer(receiver, amountOut);
+                if (tokenOut == address(0)) {
+                    Address.sendValue(payable(receiver), amountOut);
+                } else {
+                    IERC20(tokenOut).safeTransfer(receiver, amountOut);
+                }
             }
             _updateDeltaAccounting(tokenOut, -int256(amountOut));
         }
@@ -1159,8 +1174,16 @@ contract TychoRouter is AccessControl, Dispatcher {
         bool transferFrom
     ) internal view returns (uint256 initialBalanceTokenOut) {
         initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        if (tokenIn == tokenOut && transferFrom) {
-            // If it is an arbitrage, we need to remove the amountIn from the initial balance to get a correct initial balance
+        // For cyclic swaps (tokenIn == tokenOut), the receiver already holds
+        // some tokenOut before the swap, which would cause _verifyAmountOutWasReceived to
+        // undercount the actual output. We subtract amountIn when:
+        // - transferFrom && receiver != router: receiver is the user who still holds amountIn
+        // - !transferFrom && receiver == router: funds were taken from vault, and
+        // put back into vault.
+        // We must NOT subtract when transferFrom && receiver == router, because amountIn
+        // is in the user's wallet, not in the router's balance.
+        bool receiverHoldsAmountIn = transferFrom != (receiver == address(this));
+        if (tokenIn == tokenOut && receiverHoldsAmountIn) {
             initialBalanceTokenOut -= amountIn;
         }
     }
