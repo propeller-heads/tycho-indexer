@@ -6,6 +6,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tracing::warn;
+use tycho_common::dto;
 
 use crate::services::rpc::RpcError;
 
@@ -177,9 +178,90 @@ pub trait ValidateRestrictions {
     fn validate_restrictions(&self, restrictions: &PlanRestrictions) -> Result<(), RpcError>;
 }
 
+impl ValidateRestrictions for dto::ProtocolComponentsRequestBody {
+    fn validate_restrictions(&self, restrictions: &PlanRestrictions) -> Result<(), RpcError> {
+        restrictions.check_protocol_system(&self.protocol_system)?;
+        // Skip numeric checks when targeting specific components by ID
+        if self.component_ids.is_none() {
+            restrictions.check_numeric("tvl_gt", &restrictions.component_tvl, self.tvl_gt)?;
+        }
+        Ok(())
+    }
+}
+
+impl ValidateRestrictions for dto::TokensRequestBody {
+    fn validate_restrictions(&self, restrictions: &PlanRestrictions) -> Result<(), RpcError> {
+        // Skip numeric checks when targeting specific token addresses
+        if self.token_addresses.is_none() {
+            restrictions.check_numeric(
+                "min_quality",
+                &restrictions.token_quality,
+                self.min_quality.map(f64::from),
+            )?;
+            restrictions.check_numeric(
+                "traded_n_days_ago",
+                &restrictions.traded_n_days_ago,
+                self.traded_n_days_ago.map(|v| v as f64),
+            )?;
+        }
+        Ok(())
+    }
+}
+
+impl ValidateRestrictions for dto::ProtocolStateRequestBody {
+    fn validate_restrictions(&self, restrictions: &PlanRestrictions) -> Result<(), RpcError> {
+        restrictions.check_protocol_system(&self.protocol_system)
+    }
+}
+
+impl ValidateRestrictions for dto::StateRequestBody {
+    fn validate_restrictions(&self, restrictions: &PlanRestrictions) -> Result<(), RpcError> {
+        // protocol_system defaults to "" via serde; skip check when not provided
+        if !self.protocol_system.is_empty() {
+            restrictions.check_protocol_system(&self.protocol_system)?;
+        }
+        Ok(())
+    }
+}
+
+impl ValidateRestrictions for dto::ComponentTvlRequestBody {
+    fn validate_restrictions(&self, restrictions: &PlanRestrictions) -> Result<(), RpcError> {
+        // protocol_system is optional on this endpoint; skip check when absent
+        if let Some(protocol_system) = &self.protocol_system {
+            restrictions.check_protocol_system(protocol_system)?;
+        }
+        Ok(())
+    }
+}
+
+impl ValidateRestrictions for dto::TracedEntryPointRequestBody {
+    fn validate_restrictions(&self, restrictions: &PlanRestrictions) -> Result<(), RpcError> {
+        restrictions.check_protocol_system(&self.protocol_system)
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
+    use rstest::rstest;
+    use tycho_common::{dto, Bytes};
+
     use super::*;
+
+    fn restricted_plan() -> PlanRestrictions {
+        PlanRestrictions {
+            allowed_protocol_systems: Some(
+                ["uniswap_v2", "uniswap_v3"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<HashSet<_>>(),
+            ),
+            component_tvl: Some(NumericRestriction { op: Operator::Gte, value: 1000.0 }),
+            token_quality: Some(NumericRestriction { op: Operator::Gte, value: 50.0 }),
+            traded_n_days_ago: Some(NumericRestriction { op: Operator::Lte, value: 30.0 }),
+        }
+    }
 
     #[test]
     fn test_yaml_deserialization() {
@@ -362,5 +444,173 @@ plans:
         assert!(err.contains(">="));
         assert!(err.contains("10000"));
         assert!(err.contains("500"));
+    }
+
+    #[rstest]
+    #[case::rejects_missing_tvl(None, None, true)]
+    #[case::rejects_below_threshold(Some(500.0), None, true)]
+    #[case::accepts_at_threshold(Some(1000.0), None, false)]
+    #[case::accepts_above_threshold(Some(5000.0), None, false)]
+    #[case::skips_with_component_ids(None, Some(vec!["c1".to_string()]), false)]
+    #[case::skips_with_low_tvl_and_ids(Some(1.0), Some(vec!["c1".to_string()]), false)]
+    #[tokio::test]
+    async fn test_component_tvl_restriction(
+        #[case] tvl_gt: Option<f64>,
+        #[case] component_ids: Option<Vec<String>>,
+        #[case] should_fail: bool,
+    ) {
+        let plan = restricted_plan();
+        let request = dto::ProtocolComponentsRequestBody {
+            protocol_system: "uniswap_v2".to_string(),
+            component_ids,
+            tvl_gt,
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::new(0, 10),
+        };
+        let result = request.validate_restrictions(&plan);
+        assert_eq!(result.is_err(), should_fail);
+    }
+
+    #[rstest]
+    #[case::allowed_system("uniswap_v2", false)]
+    #[case::blocked_system("sushiswap", true)]
+    #[tokio::test]
+    async fn test_component_protocol_system_restriction(
+        #[case] protocol_system: &str,
+        #[case] should_fail: bool,
+    ) {
+        let plan = restricted_plan();
+        let request = dto::ProtocolComponentsRequestBody {
+            protocol_system: protocol_system.to_string(),
+            component_ids: Some(vec!["c1".to_string()]),
+            tvl_gt: None,
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::new(0, 10),
+        };
+        let result = request.validate_restrictions(&plan);
+        assert_eq!(result.is_err(), should_fail);
+    }
+
+    #[rstest]
+    #[case::rejects_missing_quality(None, Some(15), None, true)]
+    #[case::rejects_below_quality(Some(30), Some(15), None, true)]
+    #[case::accepts_both_valid(Some(50), Some(15), None, false)]
+    #[case::rejects_missing_traded_days(Some(80), None, None, true)]
+    #[case::rejects_above_traded_days(Some(80), Some(60), None, true)]
+    #[case::accepts_within_traded_days(Some(80), Some(15), None, false)]
+    #[case::skips_with_addresses(None, None, Some(vec![Bytes::from("0x01")]), false)]
+    #[tokio::test]
+    async fn test_token_restrictions(
+        #[case] min_quality: Option<i32>,
+        #[case] traded_n_days_ago: Option<u64>,
+        #[case] token_addresses: Option<Vec<Bytes>>,
+        #[case] should_fail: bool,
+    ) {
+        let plan = restricted_plan();
+        let request = dto::TokensRequestBody {
+            chain: dto::Chain::Ethereum,
+            token_addresses,
+            min_quality,
+            traded_n_days_ago,
+            pagination: dto::PaginationParams::new(0, 10),
+        };
+        let result = request.validate_restrictions(&plan);
+        assert_eq!(result.is_err(), should_fail);
+    }
+
+    #[rstest]
+    #[case::allowed_system("uniswap_v2", false)]
+    #[case::blocked_system("sushiswap", true)]
+    #[tokio::test]
+    async fn test_protocol_state_restriction(
+        #[case] protocol_system: &str,
+        #[case] should_fail: bool,
+    ) {
+        let plan = restricted_plan();
+        let request = dto::ProtocolStateRequestBody {
+            protocol_ids: None,
+            protocol_system: protocol_system.to_string(),
+            include_balances: true,
+            version: Default::default(),
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::new(0, 10),
+        };
+        let result = request.validate_restrictions(&plan);
+        assert_eq!(result.is_err(), should_fail);
+    }
+
+    #[rstest]
+    #[case::allowed_system("uniswap_v2", false)]
+    #[case::blocked_system("sushiswap", true)]
+    #[case::empty_system_skips("", false)]
+    #[tokio::test]
+    async fn test_contract_state_restriction(
+        #[case] protocol_system: &str,
+        #[case] should_fail: bool,
+    ) {
+        let plan = restricted_plan();
+        let request = dto::StateRequestBody::new(
+            None,
+            protocol_system.to_string(),
+            Default::default(),
+            dto::Chain::Ethereum,
+            dto::PaginationParams::new(0, 10),
+        );
+        let result = request.validate_restrictions(&plan);
+        assert_eq!(result.is_err(), should_fail);
+    }
+
+    #[rstest]
+    #[case::allowed_system(Some("uniswap_v2".to_string()), false)]
+    #[case::blocked_system(Some("sushiswap".to_string()), true)]
+    #[case::none_skips(None, false)]
+    #[tokio::test]
+    async fn test_component_tvl_protocol_restriction(
+        #[case] protocol_system: Option<String>,
+        #[case] should_fail: bool,
+    ) {
+        let plan = restricted_plan();
+        let request = dto::ComponentTvlRequestBody {
+            chain: dto::Chain::Ethereum,
+            protocol_system,
+            component_ids: None,
+            pagination: dto::PaginationParams::new(0, 10),
+        };
+        let result = request.validate_restrictions(&plan);
+        assert_eq!(result.is_err(), should_fail);
+    }
+
+    #[rstest]
+    #[case::allowed_system("uniswap_v2", false)]
+    #[case::blocked_system("sushiswap", true)]
+    #[tokio::test]
+    async fn test_traced_entry_point_restriction(
+        #[case] protocol_system: &str,
+        #[case] should_fail: bool,
+    ) {
+        let plan = restricted_plan();
+        let request = dto::TracedEntryPointRequestBody {
+            chain: dto::Chain::Ethereum,
+            protocol_system: protocol_system.to_string(),
+            component_ids: None,
+            pagination: dto::PaginationParams::new(0, 10),
+        };
+        let result = request.validate_restrictions(&plan);
+        assert_eq!(result.is_err(), should_fail);
+    }
+
+    #[tokio::test]
+    async fn test_no_restrictions_passes_everything() {
+        let plan = PlanRestrictions::default();
+        let request = dto::ProtocolComponentsRequestBody {
+            protocol_system: "anything".to_string(),
+            component_ids: None,
+            tvl_gt: None,
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::new(0, 10),
+        };
+        assert!(request
+            .validate_restrictions(&plan)
+            .is_ok());
     }
 }

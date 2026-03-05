@@ -31,8 +31,9 @@ use crate::{
     services::{
         cache::RpcCache,
         deltas_buffer::{PendingDeltasBuffer, PendingDeltasError},
-        middleware::RequestPaginationValidation,
-        plan_restrictions::{PlansConfig, ValidateRestrictions},
+        middleware::{
+            PlanRestrictions, PlansConfig, RequestPaginationValidation, ValidateRestrictions,
+        },
     },
 };
 
@@ -182,7 +183,7 @@ where
     fn resolve_plan_restrictions(
         &self,
         req: &actix_web::HttpRequest,
-    ) -> Result<Option<&super::plan_restrictions::PlanRestrictions>, RpcError> {
+    ) -> Result<Option<&PlanRestrictions>, RpcError> {
         match req
             .headers()
             .get("X-User-Plan")
@@ -2805,7 +2806,7 @@ mod tests {
     fn plans_config_with_restrictions() -> PlansConfig {
         use std::collections::HashSet;
 
-        use crate::services::plan_restrictions::{NumericRestriction, Operator, PlanRestrictions};
+        use crate::services::middleware::{NumericRestriction, Operator, PlanRestrictions};
 
         let restrictions = PlanRestrictions {
             allowed_protocol_systems: Some(HashSet::from([

@@ -58,7 +58,7 @@ use tycho_indexer::{
         token_analysis_cron::analyze_tokens,
         ExtractionError,
     },
-    services::{plan_restrictions::PlansConfig, ServicesBuilder},
+    services::{PlansConfig, ServicesBuilder},
 };
 use tycho_storage::postgres::{builder::GatewayBuilder, cache::CachedGateway};
 

@@ -26,7 +26,6 @@ use crate::{
         api_docs::ApiDoc,
         deltas_buffer::PendingDeltas,
         middleware::{compression_middleware, rpc_metrics_middleware},
-        plan_restrictions::PlansConfig,
     },
 };
 
@@ -35,9 +34,10 @@ mod api_docs;
 mod cache;
 mod deltas_buffer;
 mod middleware;
-pub mod plan_restrictions;
 mod rpc;
 mod ws;
+
+pub use middleware::PlansConfig;
 
 /// Helper struct to build Tycho services such as HTTP and WS server.
 pub struct ServicesBuilder<G> {
