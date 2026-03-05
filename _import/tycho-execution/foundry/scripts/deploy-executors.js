@@ -5,210 +5,187 @@ const hre = require("hardhat");
 // Comment out the executors you don't want to deploy
 const executors_to_deploy = {
     "ethereum": [
-        // USV2 - Args: Factory, Pool Init Code Hash, Permit2, Fee BPS
+        // USV2 - Args: Factory, Pool Init Code Hash, Fee BPS
         {
             exchange: "UniswapV2Executor", args: [
                 "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
                 "0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3",
                 30
             ]
         },
-        // SUSHISWAP - Args: Factory, Pool Init Code Hash, Fee BPS, Permit2, Fee BPS
+        // SUSHISWAP - Args: Factory, Pool Init Code Hash, Fee BPS
         {
             exchange: "UniswapV2Executor", args: [
                 "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac",
                 "0xe18a34eb0e04b04f7a0ac29a6e80748dca96319b42c54d679cb821dca90c6303",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3",
                 30
             ]
         },
-        // PANCAKESWAP V2 - Args: Factory, Pool Init Code Hash, Permit2, Fee BPS
+        // PANCAKESWAP V2 - Args: Factory, Pool Init Code Hash, Fee BPS
         {
             exchange: "UniswapV2Executor", args: [
                 "0x1097053Fd2ea711dad45caCcc45EfF7548fCB362",
                 "0x57224589c67f3f30a6b0d7a1b54cf3153ab84563bc609ef41dfb34f8b2974d2d",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3",
                 25
             ]
         },
-        // USV3 -Args: Factory, Pool Init Code Hash, Permit2
+        // USV3 - Args: Factory, Pool Init Code Hash
         {
             exchange: "UniswapV3Executor", args: [
                 "0x1F98431c8aD98523631AE4a59f267346ea31F984",
-                "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+                "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54"
             ]
         },
-        // PANCAKESWAP V3 - Args: Deployer, Pool Init Code Hash, Permit2
+        // PANCAKESWAP V3 - Args: Deployer, Pool Init Code Hash
         {
             exchange: "UniswapV3Executor", args: [
                 "0x41ff9AA7e16B8B1a8a8dc4f0eFacd93D02d071c9",
-                "0x6ce8eb472fa82df5469c6ab6d485f17c3ad13c8cd7af59b3d4a8026c5ce0f7e2",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+                "0x6ce8eb472fa82df5469c6ab6d485f17c3ad13c8cd7af59b3d4a8026c5ce0f7e2"
             ]
         },
-        // Args: Pool manager
+        // Args: Pool manager, State view
         {
             exchange: "UniswapV4Executor", args: [
                 "0x000000000004444c5dc75cB358380D2e3dE08A90",
-                "0x0000000aa232009084Bd71A5797d089AA4Edfad4",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+                "0x0000000aa232009084Bd71A5797d089AA4Edfad4"
             ]
         },
-        // Args: Permit2
-        {exchange: "BalancerV2Executor", args: ["0x000000000022D473030F116dDEE9F6B43aC78BA3"]},
-        // Args: Ekubo core contract, mev resist, Permit2
+        // Args: (none)
+        {exchange: "BalancerV2Executor", args: []},
+        // Args: Ekubo core contract, mev resist
         {
             exchange: "EkuboExecutor", args: [
                 "0xe0e0e08A6A4b9Dc7bD67BCB7aadE5cF48157d444",
-                "0x553a2EFc570c9e104942cEC6aC1c18118e54C091",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+                "0x553a2EFc570c9e104942cEC6aC1c18118e54C091"
             ]
         },
-        // Args: ETH address in curve pools, Permit2, stETH address
+        // Args: ETH address in curve pools, stETH address
         {
             exchange: "CurveExecutor", args: [
                 "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3",
                 "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"
             ]
         },
-        // Args: factory, permit2
+        // Args: factory
         {
             exchange: "MaverickV2Executor", args: [
-                "0x0A7e848Aca42d879EF06507Fca0E7b33A0a63c1e",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+                "0x0A7e848Aca42d879EF06507Fca0E7b33A0a63c1e"
             ]
         },
-        // Args: Permit2
-        {exchange: "BalancerV3Executor", args: ["0x000000000022D473030F116dDEE9F6B43aC78BA3"]},
-        // Args: Bebop Settlement contract, Permit2
+        // Args: (none)
+        {exchange: "BalancerV3Executor", args: []},
+        // Args: Bebop Settlement contract
         {
             exchange: "BebopExecutor",
-            args: ["0xbbbbbBB520d69a9775E85b458C58c648259FAD5F", "0x000000000022D473030F116dDEE9F6B43aC78BA3"]
+            args: ["0xbbbbbBB520d69a9775E85b458C58c648259FAD5F"]
         },
-        // Args: Hashflow router, Permit2
+        // Args: Hashflow router
         {
             exchange: "HashflowExecutor",
-            args: ["0x55084eE0fEf03f14a305cd24286359A35D735151", "0x000000000022D473030F116dDEE9F6B43aC78BA3"]
+            args: ["0x55084eE0fEf03f14a305cd24286359A35D735151"]
         },
-        // Args: liquidity, permit2
+        // Args: liquidity
         {
             exchange: "FluidV1Executor", args: [
-                "0x52Aa899454998Be5b000Ad077a46Bbe360F4e497",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+                "0x52Aa899454998Be5b000Ad077a46Bbe360F4e497"
             ]
         },
-        // Args: permit2
+        // Args:
         {
-            exchange: "ERC4626Executor", args: [
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
-            ]
+            exchange: "ERC4626Executor", args: []
         },
-        // Args: permit2
+        // Args: deposit pool
         {
             exchange: "RocketpoolExecutor", args: [
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+                "0xCE15294273CFb9D9b628F4D61636623decDF4fdC",
             ]
         },
     ],
     "base": [
-        // Args: Factory, Pool Init Code Hash, Permit2, Fee BPS
+        // Args: Factory, Pool Init Code Hash, Fee BPS
         {
             exchange: "UniswapV2Executor", args: [
                 "0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6",
                 "0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3",
                 30
             ]
         },
-        // PANCAKESWAP V2 - Args: Factory, Pool Init Code Hash, Permit2, Fee BPS
+        // PANCAKESWAP V2 - Args: Factory, Pool Init Code Hash, Fee BPS
         {
             exchange: "UniswapV2Executor", args: [
                 "0x1097053Fd2ea711dad45caCcc45EfF7548fCB362",
                 "0x57224589c67f3f30a6b0d7a1b54cf3153ab84563bc609ef41dfb34f8b2974d2d",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3",
                 25
             ]
         },
-        // PANCAKESWAP V3 - Args: Deployer, Pool Init Code Hash, Permit2
+        // PANCAKESWAP V3 - Args: Deployer, Pool Init Code Hash
         {
             exchange: "UniswapV3Executor",
             args: [
                 "0x41ff9AA7e16B8B1a8a8dc4f0eFacd93D02d071c9",
                 "0x6ce8eb472fa82df5469c6ab6d485f17c3ad13c8cd7af59b3d4a8026c5ce0f7e2",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3",
             ],
         },
-        // USV3 - Args: Factory, Pool Init Code Hash, Permit2
+        // USV3 - Args: Factory, Pool Init Code Hash
         {
             exchange: "UniswapV3Executor", args: [
                 "0x33128a8fC17869897dcE68Ed026d694621f6FDfD",
-                "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+                "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54"
             ]
         },
-        // USV4 - Args: Pool manager, Permit2
+        // USV4 - Args: Pool manager
         {
             exchange: "UniswapV4Executor", args: [
-                "0x498581ff718922c3f8e6a244956af099b2652b2b",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+                "0x498581ff718922c3f8e6a244956af099b2652b2b"
             ]
         },
-        // Args: Bebop Settlement contract, Permit2
+        // Args: Bebop Settlement contract
         {
             exchange: "BebopExecutor",
-            args: ["0xbbbbbBB520d69a9775E85b458C58c648259FAD5F", "0x000000000022D473030F116dDEE9F6B43aC78BA3"]
+            args: ["0xbbbbbBB520d69a9775E85b458C58c648259FAD5F"]
         },
-        // Aerodrome Slipstreams - Args: Old Factory, New Factory, Permit2
+        // Aerodrome Slipstreams - Args: Old Factory, New Factory
         {
             exchange: "SlipstreamsExecutor", args: [
                 "0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A",
-                "0xaDe65c38CD4849aDBA595a4323a8C7DdfE89716a",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+                "0xaDe65c38CD4849aDBA595a4323a8C7DdfE89716a"
             ]
         },
     ],
     "unichain": [
-        // Args: Factory, Pool Init Code Hash, Permit2, Fee BPS
+        // Args: Factory, Pool Init Code Hash, Fee BPS
         {
             exchange: "UniswapV2Executor", args: [
                 "0x1f98400000000000000000000000000000000002",
                 "0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3",
                 30
             ]
         },
-        // USV3 - Args: Factory, Pool Init Code Hash, Permit2
+        // USV3 - Args: Factory, Pool Init Code Hash
         {
             exchange: "UniswapV3Executor", args: [
                 "0x1f98400000000000000000000000000000000003",
-                "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+                "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54"
             ]
         },
-        // Args: Pool manager, Permit2
+        // Args: Pool manager
         {
             exchange: "UniswapV4Executor", args: [
-                "0x1f98400000000000000000000000000000000004",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+                "0x1f98400000000000000000000000000000000004"
             ]
         },
-        // Args: ETH address in curve pools, Permit2, stETH address
+        // Args: ETH address in curve pools, stETH address
         {
             exchange: "CurveExecutor", args: [
                 "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3",
                 "0x0000000000000000000000000000000000000000" // No stETH on unichain
             ]
         },
-        // Aerodrome Slipstreams - Args: Old Factory, New Factory, Permit2
+        // Aerodrome Slipstreams - Args: Old Factory, New Factory
         {
             exchange: "SlipstreamsExecutor", args: [
                 "0x04625b046c69577efc40e6c0bb83cdbafab5a55f",
                 "0x04625b046c69577efc40e6c0bb83cdbafab5a55f", // There is no new factory yet
-                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
             ]
         },
     ],
