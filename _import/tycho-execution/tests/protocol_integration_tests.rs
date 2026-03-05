@@ -1738,3 +1738,104 @@ fn test_single_ekubo_v3_grouped_swap() {
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_ekubo_v3_grouped_swap", hex_calldata.as_str());
 }
+
+#[test]
+fn test_sequential_encoding_strategy_etherfi_unwrap_weeth() {
+    // weeth -> (unwrap) -> eeth -> (RedemptionManager) -> eth
+    let weeth_pool = ProtocolComponent {
+        id: String::from("0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee"),
+        protocol_system: String::from("etherfi"),
+        ..Default::default()
+    };
+    let weeth = Bytes::from("0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee");
+    let eeth = Bytes::from("0x35fA164735182de50811E8e2E824cFb9B6118ac2");
+    let swap1 = Swap::new(weeth_pool, weeth.clone(), eeth.clone());
+    let eeth_pool = ProtocolComponent {
+        id: String::from("0x35fA164735182de50811E8e2E824cFb9B6118ac2"),
+        protocol_system: String::from("etherfi"),
+        ..Default::default()
+    };
+    let swap2 = Swap::new(eeth_pool, eeth.clone(), eth());
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        token_in: weeth.clone(),
+        amount_in: BigUint::from_str("1000000000000000000").unwrap(),
+        token_out: eth(),
+        min_amount_out: BigUint::from_str("1000000000000000000").unwrap(),
+        // Bob
+        // Avoid ALICE (0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2):
+        // it's an EIP-7702 address and RedemptionManager(https://vscode.blockscan.com/ethereum/0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0) only forwards 10k gas for ETH sends.
+        sender: Bytes::from_str("0x9964bFf29BAa37B47604F3F3F51F3B3C5149d6DE").unwrap(),
+        receiver: Bytes::from_str("0x9964bFf29BAa37B47604F3F3F51F3B3C5149d6DE").unwrap(),
+        swaps: vec![swap1, swap2],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata =
+        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
+            .unwrap()
+            .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file(
+        "test_sequential_encoding_strategy_etherfi_unwrap_weeth",
+        hex_calldata.as_str(),
+    );
+}
+
+#[test]
+fn test_sequential_encoding_strategy_etherfi_wrap_eeth() {
+    // eth -> (deposit) -> eeth -> (wrap) -> weeth
+    let eeth = Bytes::from("0x35fA164735182de50811E8e2E824cFb9B6118ac2");
+    let eeth_pool = ProtocolComponent {
+        id: String::from("0x35fA164735182de50811E8e2E824cFb9B6118ac2"),
+        protocol_system: String::from("etherfi"),
+        ..Default::default()
+    };
+    let swap1 = Swap::new(eeth_pool, eth(), eeth.clone());
+
+    let weeth_pool = ProtocolComponent {
+        id: String::from("0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee"),
+        protocol_system: String::from("etherfi"),
+        ..Default::default()
+    };
+    let weeth = Bytes::from("0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee");
+    let swap2 = Swap::new(weeth_pool, eeth.clone(), weeth.clone());
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        token_in: eth(),
+        amount_in: BigUint::from_str("1000000000000000000").unwrap(),
+        token_out: weeth.clone(),
+        min_amount_out: BigUint::from_str("900000000000000000").unwrap(),
+        // Bob
+        sender: Bytes::from_str("0x9964bFf29BAa37B47604F3F3F51F3B3C5149d6DE").unwrap(),
+        receiver: Bytes::from_str("0x9964bFf29BAa37B47604F3F3F51F3B3C5149d6DE").unwrap(),
+        swaps: vec![swap1, swap2],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata =
+        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
+            .unwrap()
+            .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file(
+        "test_sequential_encoding_strategy_etherfi_wrap_eeth",
+        hex_calldata.as_str(),
+    );
+}

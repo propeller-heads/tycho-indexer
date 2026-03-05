@@ -58,9 +58,8 @@ contract EkuboV3ExecutorTest is Constants, TestUtils {
         vm.createSelectFork(vm.rpcUrl("mainnet"), blockNumber);
         // Forks always use the default hardfork https://github.com/foundry-rs/foundry/issues/13040
         // vm.setEvmVersion not exposed in forge-std 1.9.5 — use low-level cheatcode call
-        address(vm).call(
-            abi.encodeWithSignature("setEvmVersion(string)", "osaka")
-        );
+        address(vm)
+            .call(abi.encodeWithSignature("setEvmVersion(string)", "osaka"));
 
         _;
     }
@@ -207,9 +206,8 @@ contract TychoRouterForEkuboV3Test is TychoRouterTestSetup {
 
         // Forks always use the default hardfork (foundry-rs/foundry#13040).
         // vm.setEvmVersion not exposed in forge-std 1.9.5 — use low-level cheatcode call
-        address(vm).call(
-            abi.encodeWithSignature("setEvmVersion(string)", "osaka")
-        );
+        address(vm)
+            .call(abi.encodeWithSignature("setEvmVersion(string)", "osaka"));
 
         // Remove delegations
         vm.etch(ALICE, "");
