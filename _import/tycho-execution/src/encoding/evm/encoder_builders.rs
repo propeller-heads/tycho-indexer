@@ -1,6 +1,5 @@
-use std::{collections::HashMap, str::FromStr};
+use std::collections::HashMap;
 
-use alloy::{primitives::B256, signers::local::PrivateKeySigner};
 use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
@@ -22,7 +21,6 @@ pub struct TychoRouterEncoderBuilder {
     user_transfer_type: Option<UserTransferType>,
     swap_encoder_registry: Option<SwapEncoderRegistry>,
     router_address: Option<Bytes>,
-    swapper_pk: Option<String>,
 }
 
 impl Default for TychoRouterEncoderBuilder {
@@ -37,7 +35,6 @@ impl TychoRouterEncoderBuilder {
             chain: None,
             swap_encoder_registry: None,
             router_address: None,
-            swapper_pk: None,
             user_transfer_type: None,
         }
     }
@@ -63,18 +60,6 @@ impl TychoRouterEncoderBuilder {
         self
     }
 
-    /// Sets the `swapper_pk` for the encoder. This is used to sign permit2 objects. This is only
-    /// needed if you intend to get the full calldata for the transfer. We do not recommend
-    /// using this option, you should sign and create the function calldata entirely on your
-    /// own.
-    #[deprecated(
-        note = "This is deprecated and will be removed in the future. You should sign and create the function calldata on your own."
-    )]
-    pub fn swapper_pk(mut self, swapper_pk: String) -> Self {
-        self.swapper_pk = Some(swapper_pk);
-        self
-    }
-
     /// Builds the `TychoRouterEncoder` instance using the configured chain.
     /// Returns an error if either the chain has not been set.
     pub fn build(self) -> Result<Box<dyn TychoEncoder>, EncodingError> {
@@ -95,23 +80,11 @@ impl TychoRouterEncoderBuilder {
                     .to_owned();
             }
 
-            let signer = if let Some(pk) = self.swapper_pk {
-                let pk = B256::from_str(&pk).map_err(|_| {
-                    EncodingError::FatalError("Invalid swapper private key provided".to_string())
-                })?;
-                Some(PrivateKeySigner::from_bytes(&pk).map_err(|_| {
-                    EncodingError::FatalError("Failed to create signer".to_string())
-                })?)
-            } else {
-                None
-            };
-
             Ok(Box::new(TychoRouterEncoder::new(
                 chain,
                 swap_encoder_registry,
                 tycho_router_address,
                 user_transfer_type,
-                signer,
             )?))
         } else {
             Err(EncodingError::FatalError(

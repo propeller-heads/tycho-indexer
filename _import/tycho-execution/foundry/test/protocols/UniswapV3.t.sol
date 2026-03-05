@@ -262,9 +262,7 @@ contract TychoRouterForUniswapV3Test is TychoRouterTestSetup {
             DAI_ADDR,
             expAmountOut - 1,
             ALICE,
-            0,
-            address(0),
-            0,
+            noClientFee(),
             permitSingle,
             signature,
             swap

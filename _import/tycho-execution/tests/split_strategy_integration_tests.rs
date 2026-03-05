@@ -11,8 +11,8 @@ use tycho_contracts::encoding::{
 };
 
 use crate::common::{
-    dai, encoding::encode_tycho_router_call, eth, eth_chain, get_signer, get_tycho_router_encoder,
-    usdc, wbtc, weth,
+    client_fee_receiver, dai, encoding::encode_tycho_router_call, eth, eth_chain, get_signer,
+    get_tycho_router_encoder, usdc, wbtc, weth,
 };
 
 #[test]
@@ -208,17 +208,15 @@ fn test_split_input_cyclic_swap() {
 
     let hex_calldata = alloy::hex::encode(&calldata);
     let expected_input = [
-        "255fc7e7", // selector (splitSwapPermit2)
+        "e6675f5c", // selector (splitSwapPermit2)
         "0000000000000000000000000000000000000000000000000000000005f5e100", // given amount
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // given token
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // checked token
         "0000000000000000000000000000000000000000000000000000000005ef619b", // min amount out
         "0000000000000000000000000000000000000000000000000000000000000002", // tokens length
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeBps = 0
-        "0000000000000000000000000000000000000000000000000000000000000000", /* clientFeeReceiver
-                     * = address(0) */
-        "0000000000000000000000000000000000000000000000000000000000000000", // clientMaxContribution
+        "00000000000000000000000000000000000000000000000000000000000001e0", /* clientFeeParams
+                     * offset = 480 */
     ]
     .join("");
 
@@ -261,8 +259,8 @@ fn test_split_input_cyclic_swap() {
         "00000000000000000000000000000000000000",   // padding (19 bytes)
     ]
     .join("");
-    assert_eq!(hex_calldata[..584], expected_input);
-    assert_eq!(hex_calldata[1352..], expected_swaps);
+    assert_eq!(hex_calldata[..456], expected_input);
+    assert_eq!(hex_calldata[1608..], expected_swaps);
     write_calldata_to_file("test_split_input_cyclic_swap", hex_calldata.as_str());
 }
 
@@ -365,17 +363,15 @@ fn test_split_output_cyclic_swap() {
 
     let hex_calldata = alloy::hex::encode(&calldata);
     let expected_input = [
-        "255fc7e7", // selector (splitSwapPermit2)
+        "e6675f5c", // selector (splitSwapPermit2)
         "0000000000000000000000000000000000000000000000000000000005f5e100", // given amount
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // given token
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // checked token
         "0000000000000000000000000000000000000000000000000000000005e703f4", // min amount out
         "0000000000000000000000000000000000000000000000000000000000000002", // tokens length
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeBps = 0
-        "0000000000000000000000000000000000000000000000000000000000000000", /* clientFeeReceiver
-                     * = address(0) */
-        "0000000000000000000000000000000000000000000000000000000000000000", // clientMaxContribution
+        "00000000000000000000000000000000000000000000000000000000000001e0", /* clientFeeParams
+                     * offset = 480 */
     ]
     .join("");
 
@@ -419,8 +415,8 @@ fn test_split_output_cyclic_swap() {
     ]
     .join("");
 
-    assert_eq!(hex_calldata[..584], expected_input);
-    assert_eq!(hex_calldata[1352..], expected_swaps);
+    assert_eq!(hex_calldata[..456], expected_input);
+    assert_eq!(hex_calldata[1608..], expected_swaps);
     write_calldata_to_file("test_split_output_cyclic_swap", hex_calldata.as_str());
 }
 
@@ -488,7 +484,7 @@ fn test_split_swap_strategy_with_fees() {
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_dai, swap_weth_wbtc, swap_dai_usdc, swap_wbtc_usdc],
         client_fee_bps: 100, // 1% fee
-        client_fee_receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
+        client_fee_receiver: client_fee_receiver(),
         ..Default::default()
     };
 

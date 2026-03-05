@@ -413,17 +413,14 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
     .data;
 
     let expected_input = [
-        "b322d802", // Function selector (singleSwapPermit2)
+        "e7a307b0", // Function selector (singleSwapPermit2)
         "000000000000000000000000000000000000000000000000000000003b9aca00", // amount in
         "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
         "0000000000000000000000006982508145454ce325ddbe47a25d4ec3d2311933", // token out
         "0000000000000000000000000000000000000000005064ff624d54346285543f", // min amount out
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeBps = 0
-        "0000000000000000000000000000000000000000000000000000000000000000", /* clientFeeReceiver
-                     * = address(0) */
-        "0000000000000000000000000000000000000000000000000000000000000000", /* max client
-                                                                             * contribution */
+        "00000000000000000000000000000000000000000000000000000000000001c0", /* clientFeeParams
+                     * offset */
     ]
     .join("");
 
@@ -458,8 +455,8 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
 
     let hex_calldata = encode(&calldata);
 
-    assert_eq!(hex_calldata[..520], expected_input);
-    assert_eq!(hex_calldata[1288..], expected_swaps);
+    assert_eq!(hex_calldata[..392], expected_input);
+    assert_eq!(hex_calldata[1544..], expected_swaps);
     write_calldata_to_file(
         "test_single_encoding_strategy_usv4_grouped_swap",
         hex_calldata.as_str(),

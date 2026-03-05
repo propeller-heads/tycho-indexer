@@ -179,14 +179,14 @@ mod tests {
     use std::str::FromStr;
 
     use alloy::{
-        primitives::{Uint, B256},
-        signers::local::PrivateKeySigner,
+        primitives::{Address, Uint, B256},
+        signers::{local::PrivateKeySigner, Signature, SignerSync},
+        sol_types::{eip712_domain, SolStruct, SolValue},
     };
     use num_bigint::BigUint;
     use tycho_common::models::Chain;
 
     use super::*;
-    use crate::encoding::evm::encoding_utils::sign_permit;
 
     // These two implementations are to avoid comparing the expiration and sig_deadline fields
     // because they are timestamps
@@ -269,6 +269,34 @@ mod tests {
             permit, expected_permit_single,
             "Decoded PermitSingle does not match expected values"
         );
+    }
+
+    /// Signs a Permit2 `PermitSingle` struct using the EIP-712 signing scheme.
+    ///
+    /// This function constructs an EIP-712 domain specific to the Permit2 contract and computes the
+    /// hash of the provided `PermitSingle`. It then uses the given `PrivateKeySigner` to produce
+    /// a cryptographic signature of the permit.
+    fn sign_permit(
+        chain_id: u64,
+        permit_single: &models::PermitSingle,
+        signer: PrivateKeySigner,
+    ) -> Result<Signature, EncodingError> {
+        let permit2_address = Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3")
+            .map_err(|_| EncodingError::FatalError("Permit2 address not valid".to_string()))?;
+        let domain = eip712_domain! {
+            name: "Permit2",
+            chain_id: chain_id,
+            verifying_contract: permit2_address,
+        };
+        let permit_single: PermitSingle = PermitSingle::try_from(permit_single)?;
+        let hash = permit_single.eip712_signing_hash(&domain);
+        signer
+            .sign_hash_sync(&hash)
+            .map_err(|e| {
+                EncodingError::FatalError(format!(
+                    "Failed to sign permit2 approval with error: {e}"
+                ))
+            })
     }
 
     /// This test actually calls the permit method on the Permit2 contract to verify the encoded

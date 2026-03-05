@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import "@src/executors/UniswapV4Executor.sol";
-import {TychoRouter} from "@src/TychoRouter.sol";
+import {TychoRouter, ClientFeeParams} from "@src/TychoRouter.sol";
 import "./TychoRouterTestSetup.sol";
 import {
     RestrictTransferFrom__ExceededTransferFromAllowance
@@ -35,9 +35,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             DAI_ADDR,
             2008817438608734439722,
             ALICE,
-            0,
-            address(0),
-            0,
+            noClientFee(),
             permitSingle,
             signature,
             swap
@@ -73,9 +71,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
-            0,
-            address(0),
-            0,
+            noClientFee(),
             swap
         );
 
@@ -105,7 +101,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
 
         vm.expectRevert(TychoRouter__UndefinedMinAmountOut.selector);
         tychoRouter.singleSwap(
-            amountIn, WETH_ADDR, DAI_ADDR, 0, ALICE, 0, address(0), 0, swap
+            amountIn, WETH_ADDR, DAI_ADDR, 0, ALICE, noClientFee(), swap
         );
     }
 
@@ -132,9 +128,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
-            0,
-            address(0),
-            0,
+            noClientFee(),
             swap
         );
     }
@@ -170,9 +164,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
-            0,
-            address(0),
-            0,
+            noClientFee(),
             swap
         );
     }
@@ -202,16 +194,18 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             encodeSingleSwap(address(usv2Executor), protocolData);
 
         uint256 minAmountOut = 2020 * 1e18;
+        ClientFeeParams memory feeParams = ClientFeeParams({
+            clientFeeBps: 0,
+            clientFeeReceiver: ALICE,
+            maxClientContribution: maxContribution,
+            deadline: block.timestamp + 1 hours,
+            clientSignature: new bytes(0)
+        });
+        feeParams.clientSignature =
+            signClientFee(feeParams, tychoRouterAddr, ALICE_PK);
+
         uint256 amountOut = tychoRouter.singleSwap(
-            amountIn,
-            WETH_ADDR,
-            DAI_ADDR,
-            minAmountOut,
-            ALICE,
-            0,
-            address(0),
-            maxContribution,
-            swap
+            amountIn, WETH_ADDR, DAI_ADDR, minAmountOut, ALICE, feeParams, swap
         );
 
         assertEq(amountOut, minAmountOut);
@@ -259,9 +253,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
-            0,
-            address(0),
-            0,
+            noClientFee(),
             swap
         );
 
@@ -297,16 +289,11 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             )
         );
 
+        ClientFeeParams memory feeParams =
+            makeClientFeeParams(0, 20 * 1e18, tychoRouterAddr, ALICE_PK);
+
         tychoRouter.singleSwap(
-            amountIn,
-            WETH_ADDR,
-            DAI_ADDR,
-            minAmountOut,
-            ALICE,
-            0,
-            address(0),
-            20 * 1e18,
-            swap
+            amountIn, WETH_ADDR, DAI_ADDR, minAmountOut, ALICE, feeParams, swap
         );
 
         vm.stopPrank();
@@ -337,16 +324,11 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             encodeSingleSwap(address(usv2Executor), protocolData);
 
         uint256 minAmountOut = 2020 * 1e18;
+        ClientFeeParams memory feeParams =
+            makeClientFeeParams(0, maxContribution, tychoRouterAddr, ALICE_PK);
+
         uint256 amountOut = tychoRouter.singleSwap(
-            amountIn,
-            WETH_ADDR,
-            DAI_ADDR,
-            minAmountOut,
-            ALICE,
-            0,
-            address(0),
-            maxContribution,
-            swap
+            amountIn, WETH_ADDR, DAI_ADDR, minAmountOut, ALICE, feeParams, swap
         );
 
         assertEq(amountOut, minAmountOut);

@@ -44,6 +44,10 @@ contract Constants is Test, BaseConstants {
     uint256 ALICE_PK =
         0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234;
 
+    // Client fee receiver key pair — address is vm.addr(CLIENT_FEE_RECEIVER_PK)
+    uint256 CLIENT_FEE_RECEIVER_PK =
+        0x6789abcdef1234567890abcdef1234567890abcdef1234567890abcdef123456;
+
     // Dummy contracts
     address DUMMY = makeAddr("dummy");
     address DUMMY2 = makeAddr("dummy2");

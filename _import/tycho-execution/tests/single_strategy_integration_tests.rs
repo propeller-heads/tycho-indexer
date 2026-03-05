@@ -11,8 +11,8 @@ use tycho_contracts::encoding::{
 };
 
 use crate::common::{
-    dai, encoding::encode_tycho_router_call, eth, eth_chain, get_signer, get_tycho_router_encoder,
-    weth,
+    client_fee_receiver, dai, encoding::encode_tycho_router_call, eth, eth_chain, get_signer,
+    get_tycho_router_encoder, weth,
 };
 
 #[test]
@@ -62,16 +62,14 @@ fn test_single_swap_strategy_encoder() {
     .data;
     let expected_min_amount_encoded = encode(U256::abi_encode(&biguint_to_u256(&checked_amount)));
     let expected_input = [
-        "b322d802", // Function selector (singleSwapPermit2)
+        "e7a307b0", // Function selector (singleSwapPermit2)
         "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount in
         "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f", // token out
         &expected_min_amount_encoded, // min amount out
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeBps = 0
-        "0000000000000000000000000000000000000000000000000000000000000000", /* clientFeeReceiver
-                     * = address(0) */
-        "0000000000000000000000000000000000000000000000000000000000000000", // clientMaxContribution
+        "00000000000000000000000000000000000000000000000000000000000001c0", /* clientFeeParams
+                     * offset = 448 */
     ]
     .join("");
 
@@ -91,8 +89,8 @@ fn test_single_swap_strategy_encoder() {
     ));
     let hex_calldata = encode(&calldata);
 
-    assert_eq!(hex_calldata[..520], expected_input);
-    assert_eq!(hex_calldata[1288..], expected_swap);
+    assert_eq!(hex_calldata[..392], expected_input);
+    assert_eq!(hex_calldata[1544..], expected_swap);
     write_calldata_to_file("test_single_swap_strategy_encoder", &hex_calldata.to_string());
 }
 
@@ -139,17 +137,23 @@ fn test_single_swap_strategy_encoder_transfer_from() {
             .data;
     let expected_min_amount_encoded = encode(U256::abi_encode(&expected_min_amount));
     let expected_input = [
-        "d51d2a96", // Function selector
+        "ce25e49e", // Function selector (singleSwap)
         "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount in
         "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f", // token out
         &expected_min_amount_encoded, // min amount out
         "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeBps
-        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeReceiver
-        "0000000000000000000000000000000000000000000000000000000000000000", // clientMaxContribution
-        "0000000000000000000000000000000000000000000000000000000000000120", // offset of swap bytes
-        "0000000000000000000000000000000000000000000000000000000000000050", // len swap (80 bytes hex = 60 bytes actual)
+        "00000000000000000000000000000000000000000000000000000000000000e0", // clientFeeParams offset = 224
+        "00000000000000000000000000000000000000000000000000000000000001a0", // swapData offset = 416
+        // clientFeeParams tail (6 words):
+        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeBps = 0
+        "0000000000000000000000000000000000000000000000000000000000000000", // clientFeeReceiver = 0
+        "0000000000000000000000000000000000000000000000000000000000000000", // maxClientContribution = 0
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", // deadline = U256::MAX
+        "00000000000000000000000000000000000000000000000000000000000000a0", // clientSignature offset in struct = 160
+        "0000000000000000000000000000000000000000000000000000000000000000", // clientSignature length = 0
+        // swapData:
+        "0000000000000000000000000000000000000000000000000000000000000050", // len swap = 80 bytes
         // Swap data
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
         "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id (pool address)
@@ -198,7 +202,7 @@ fn test_single_swap_with_client_fees() {
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
         client_fee_bps: 100, // 1% fee
-        client_fee_receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
+        client_fee_receiver: client_fee_receiver(),
         max_client_contribution: BigUint::ZERO,
     };
 
@@ -253,7 +257,7 @@ fn test_single_swap_with_fees_and_client_contribution() {
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
         client_fee_bps: 100, // 1% fee
-        client_fee_receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
+        client_fee_receiver: client_fee_receiver(),
         max_client_contribution: BigUint::from_str("22_000000000000000000").unwrap(),
     };
 

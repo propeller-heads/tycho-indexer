@@ -29,6 +29,11 @@ pub fn alice_address() -> Bytes {
     Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap()
 }
 
+pub fn client_fee_receiver() -> Bytes {
+    // Address derived from CLIENT_FEE_RECEIVER_PK in foundry/test/Constants.sol
+    Bytes::from_str("0xe1B1380a85Cd5D76F328A184B070E2821593D2a8").unwrap()
+}
+
 pub fn eth_chain() -> Chain {
     Chain::Ethereum
 }

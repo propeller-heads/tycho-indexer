@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use alloy::{
-    primitives::{Address, Keccak256, U256},
+    primitives::{keccak256, Address, Keccak256, B256, U256},
     signers::{local::PrivateKeySigner, Signature, SignerSync},
     sol_types::{eip712_domain, SolStruct, SolValue},
 };
@@ -14,8 +14,27 @@ use tycho_contracts::encoding::{
         utils::{biguint_to_u256, bytes_to_address},
     },
     models,
-    models::{EncodedSolution, Solution, Transaction},
+    models::{EncodedSolution, Solution},
 };
+
+/// Represents a transaction to be executed.
+///
+/// # Fields
+/// * `to`: Address of the contract to call with the calldata
+/// * `value`: Native token value to be sent with the transaction.
+/// * `data`: Encoded calldata for the transaction.
+#[derive(Clone, Debug)]
+pub struct Transaction {
+    pub to: Bytes,
+    pub value: BigUint,
+    pub data: Vec<u8>,
+}
+
+/// Private key for client fee signing in tests.
+/// Matches `CLIENT_FEE_RECEIVER_PK` in `foundry/test/Constants.sol`.
+/// The corresponding address is `vm.addr(CLIENT_FEE_RECEIVER_PK)`.
+const CLIENT_FEE_RECEIVER_PK: &str =
+    "0x6789abcdef1234567890abcdef1234567890abcdef1234567890abcdef123456";
 
 /// Encodes a transaction for the Tycho Router using one of its supported swap methods.
 ///
@@ -83,13 +102,32 @@ pub fn encode_tycho_router_call(
     let checked_token = bytes_to_address(&solution.token_out)?;
     let receiver = bytes_to_address(&solution.receiver)?;
     let n_tokens = U256::from(encoded_solution.n_tokens);
-    let client_fee_bps = U256::from(solution.client_fee_bps);
-    let client_fee_receiver = if solution.client_fee_receiver.is_empty() {
-        Address::ZERO
-    } else {
-        bytes_to_address(&solution.client_fee_receiver)?
-    };
     let max_client_contribution = biguint_to_u256(&solution.max_client_contribution);
+    let deadline = U256::MAX;
+    let (client_fee_receiver, client_signature) = if solution.client_fee_receiver.is_empty() {
+        (Address::ZERO, vec![])
+    } else {
+        let router_address = bytes_to_address(&encoded_solution.interacting_with)?;
+        let client_fee_receiver = bytes_to_address(&solution.client_fee_receiver)?;
+        let sig = sign_client_fee(
+            chain_id,
+            router_address,
+            solution.client_fee_bps,
+            client_fee_receiver,
+            max_client_contribution,
+            deadline,
+        )?;
+        (client_fee_receiver, sig)
+    };
+
+    // ABI tuple matching ClientFeeParams: (uint16, address, uint256, uint256, bytes)
+    let client_fee_params = (
+        solution.client_fee_bps,
+        client_fee_receiver,
+        max_client_contribution,
+        deadline,
+        client_signature,
+    );
     let (permit, signature) = if let Some(p) = encoded_solution.permit {
         let permit = Some(
             PermitSingle::try_from(&p)
@@ -113,9 +151,7 @@ pub fn encode_tycho_router_call(
             checked_token,
             min_amount_out,
             receiver,
-            client_fee_bps,
-            client_fee_receiver,
-            max_client_contribution,
+            client_fee_params,
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
@@ -136,9 +172,7 @@ pub fn encode_tycho_router_call(
             checked_token,
             min_amount_out,
             receiver,
-            client_fee_bps,
-            client_fee_receiver,
-            max_client_contribution,
+            client_fee_params,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -152,9 +186,7 @@ pub fn encode_tycho_router_call(
             checked_token,
             min_amount_out,
             receiver,
-            client_fee_bps,
-            client_fee_receiver,
-            max_client_contribution,
+            client_fee_params,
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
@@ -175,9 +207,7 @@ pub fn encode_tycho_router_call(
             checked_token,
             min_amount_out,
             receiver,
-            client_fee_bps,
-            client_fee_receiver,
-            max_client_contribution,
+            client_fee_params,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -192,9 +222,7 @@ pub fn encode_tycho_router_call(
             min_amount_out,
             n_tokens,
             receiver,
-            client_fee_bps,
-            client_fee_receiver,
-            max_client_contribution,
+            client_fee_params,
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
@@ -216,9 +244,7 @@ pub fn encode_tycho_router_call(
             min_amount_out,
             n_tokens,
             receiver,
-            client_fee_bps,
-            client_fee_receiver,
-            max_client_contribution,
+            client_fee_params,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -233,6 +259,71 @@ pub fn encode_tycho_router_call(
         BigUint::ZERO
     };
     Ok(Transaction { to: encoded_solution.interacting_with, value, data: contract_interaction })
+}
+
+/// Signs `ClientFeeParams` using EIP-712, with the hardcoded `CLIENT_FEE_RECEIVER_PK`
+/// that matches `foundry/test/Constants.sol`.
+///
+/// The signer address equals `vm.addr(CLIENT_FEE_RECEIVER_PK)` and must match the
+/// `clientFeeReceiver` field passed in.
+///
+/// Uses `deadline = U256::MAX` so signatures never expire in fork tests.
+fn sign_client_fee(
+    chain_id: u64,
+    router_address: Address,
+    client_fee_bps: u16,
+    client_fee_receiver: Address,
+    max_client_contribution: U256,
+    deadline: U256,
+) -> Result<Vec<u8>, EncodingError> {
+    let signer = PrivateKeySigner::from_str(CLIENT_FEE_RECEIVER_PK)
+        .map_err(|e| EncodingError::FatalError(format!("Invalid CLIENT_FEE_RECEIVER_PK: {e}")))?;
+
+    assert_eq!(signer.address(), client_fee_receiver);
+    // Must match CLIENT_FEE_TYPEHASH in TychoRouter.sol.
+    let type_hash: B256 = keccak256(
+        b"ClientFee(uint16 clientFeeBps,address clientFeeReceiver,\
+uint256 maxClientContribution,uint256 deadline)",
+    );
+
+    // EIP-712 domain separator for TychoRouter ("TychoRouter", "1")
+    let domain_type_hash: B256 = keccak256(
+        b"EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)",
+    );
+    let domain_separator: B256 = keccak256(
+        (
+            domain_type_hash,
+            keccak256(b"TychoRouter"),
+            keccak256(b"1"),
+            U256::from(chain_id),
+            router_address,
+        )
+            .abi_encode(),
+    );
+
+    let struct_hash: B256 = keccak256(
+        (
+            type_hash,
+            U256::from(client_fee_bps),
+            client_fee_receiver,
+            max_client_contribution,
+            deadline,
+        )
+            .abi_encode(),
+    );
+
+    // Digest: keccak256("\x19\x01" ++ domainSeparator ++ structHash)
+    let mut data = [0u8; 66];
+    data[0] = 0x19;
+    data[1] = 0x01;
+    data[2..34].copy_from_slice(domain_separator.as_ref());
+    data[34..66].copy_from_slice(struct_hash.as_ref());
+    let digest: B256 = keccak256(data);
+
+    signer
+        .sign_hash_sync(&digest)
+        .map(|sig| sig.as_bytes().to_vec())
+        .map_err(|e| EncodingError::FatalError(format!("Failed to sign ClientFeeParams: {e}")))
 }
 
 /// Signs a Permit2 `PermitSingle` struct using the EIP-712 signing scheme.

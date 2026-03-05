@@ -9,7 +9,7 @@ error FeeCalculator__FeeTooHigh();
 error FeeCalculator__AddressZero();
 
 /**
- * @notice Storage-optimized struct for per-user custom fee configuration
+ * @notice Storage-optimized struct for per-client custom fee configuration
  * @dev All fields pack into a single storage slot (6 bytes total)
  */
 struct CustomFees {
@@ -33,9 +33,9 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
     uint16 private _routerFeeOnClientFeeBps; // Router fee on client fee in basis points
     address private _routerFeeReceiver; // Address whose vault balance receives router fees
 
-    // Per-user custom router fees (both output and client fees)
-    // If set, custom values will override the default router fees for the user
-    // Storage-optimized: all custom fee data for a user fits in a single slot
+    // Per-client custom router fees (both output and client fees)
+    // If set, custom values will override the default router fees for the client
+    // Storage-optimized: all custom fee data for a client fits in a single slot
     mapping(address => CustomFees) private _customRouterFees;
 
     //keccak256("ROUTER_FEE_SETTER_ROLE")
@@ -45,13 +45,13 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
     event RouterFeeOnOutputUpdated(uint16 oldFeeBps, uint16 newFeeBps);
     event RouterFeeOnClientFeeUpdated(uint16 oldFeeBps, uint16 newFeeBps);
     event CustomRouterFeeOnOutputUpdated(
-        address indexed user, uint16 oldFeeBps, uint16 newFeeBps
+        address indexed client, uint16 oldFeeBps, uint16 newFeeBps
     );
     event CustomRouterFeeOnClientFeeUpdated(
-        address indexed user, uint16 oldFeeBps, uint16 newFeeBps
+        address indexed client, uint16 oldFeeBps, uint16 newFeeBps
     );
-    event CustomRouterFeeOnOutputRemoved(address indexed user);
-    event CustomRouterFeeOnClientFeeRemoved(address indexed user);
+    event CustomRouterFeeOnOutputRemoved(address indexed client);
+    event CustomRouterFeeOnClientFeeRemoved(address indexed client);
     event RouterFeeReceiverUpdated(
         address indexed oldReceiver, address indexed newReceiver
     );
@@ -67,27 +67,21 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
     /**
      * @notice Calculates fees from the swap output amount
      * @dev Called from TychoRouter. Does not perform any accounting.
-     *      Router fee parameters are retrieved from contract storage based on the user address.
+     *      Router fee parameters are retrieved from contract storage based on the client address.
      *      Client fee parameters are passed as function arguments.
      * @param amountIn The amount before fee deduction
-     * @param user The user address to look up custom router fees for
+     * @param client The client address to look up custom router fees for and to receive fees
      * @param clientFeeBps Client fee in basis points
-     * @param clientFeeReceiver Address to receive client fees
      * @return amountOut The amount remaining after all fee deductions
      * @return feeRecipients Array of (address, feeAmount) tuples for fee distribution
      */
-    function calculateFee(
-        uint256 amountIn,
-        address user,
-        uint16 clientFeeBps,
-        address clientFeeReceiver
-    )
+    function calculateFee(uint256 amountIn, address client, uint16 clientFeeBps)
         external
         view
         returns (uint256 amountOut, FeeRecipient[] memory feeRecipients)
     {
         (uint16 routerFeeOnOutputBps, uint16 routerFeeOnClientFeeBps) =
-            _getFeeInfo(user);
+            _getFeeInfo(client);
 
         if (
             (clientFeeBps + routerFeeOnOutputBps > _MAX_FEE_BPS)
@@ -134,26 +128,25 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
         feeRecipients[0] = FeeRecipient({
             recipient: _routerFeeReceiver, feeAmount: totalRouterFee
         });
-        feeRecipients[1] = FeeRecipient({
-            recipient: clientFeeReceiver, feeAmount: clientPortion
-        });
+        feeRecipients[1] =
+            FeeRecipient({recipient: client, feeAmount: clientPortion});
 
         return (amountOut, feeRecipients);
     }
 
     /**
-     * @notice Gets fee information for a specific user
-     * @dev Returns custom fees if set for the user, otherwise returns default fees
-     * @param user The user address to check
+     * @notice Gets fee information for a specific client
+     * @dev Returns custom fees if set for the client, otherwise returns default fees
+     * @param client The client address to check
      * @return routerFeeOnOutputBps Router fee on output in basis points
      * @return routerFeeOnClientFeeBps Router fee on client fee in basis points
      */
-    function _getFeeInfo(address user)
+    function _getFeeInfo(address client)
         internal
         view
         returns (uint16 routerFeeOnOutputBps, uint16 routerFeeOnClientFeeBps)
     {
-        CustomFees memory customFees = _customRouterFees[user];
+        CustomFees memory customFees = _customRouterFees[client];
 
         routerFeeOnOutputBps = customFees.hasCustomFeeOnOutput
             ? customFees.feeBpsOnOutput
@@ -186,53 +179,53 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
     }
 
     /**
-     * @dev Sets a custom router fee on output amount for a specific user
-     * @param user The user address to set the custom fee for
+     * @dev Sets a custom router fee on output amount for a specific client
+     * @param client The client address to set the custom fee for
      * @param feeBps The fee in basis points (e.g., 1 = 0.01%, 100 = 1%)
      */
-    function setCustomRouterFeeOnOutput(address user, uint16 feeBps)
+    function setCustomRouterFeeOnOutput(address client, uint16 feeBps)
         external
         onlyRole(ROUTER_FEE_SETTER_ROLE)
     {
-        CustomFees memory customFees = _customRouterFees[user];
+        CustomFees memory customFees = _customRouterFees[client];
         uint16 oldFeeBps = customFees.hasCustomFeeOnOutput
             ? customFees.feeBpsOnOutput
             : _routerFeeOnOutputBps;
 
         customFees.feeBpsOnOutput = feeBps;
         customFees.hasCustomFeeOnOutput = true;
-        _customRouterFees[user] = customFees;
+        _customRouterFees[client] = customFees;
 
-        emit CustomRouterFeeOnOutputUpdated(user, oldFeeBps, feeBps);
+        emit CustomRouterFeeOnOutputUpdated(client, oldFeeBps, feeBps);
     }
 
     /**
-     * @dev Removes the custom router fee on output amount for a specific user, reverting to default
-     * @param user The user address to remove the custom fee from
+     * @dev Removes the custom router fee on output amount for a specific client, reverting to default
+     * @param client The client address to remove the custom fee from
      */
-    function removeCustomRouterFeeOnOutput(address user)
+    function removeCustomRouterFeeOnOutput(address client)
         external
         onlyRole(ROUTER_FEE_SETTER_ROLE)
     {
-        CustomFees memory customFees = _customRouterFees[user];
+        CustomFees memory customFees = _customRouterFees[client];
         customFees.hasCustomFeeOnOutput = false;
         customFees.feeBpsOnOutput = 0;
-        _customRouterFees[user] = customFees;
+        _customRouterFees[client] = customFees;
 
-        emit CustomRouterFeeOnOutputRemoved(user);
+        emit CustomRouterFeeOnOutputRemoved(client);
     }
 
     /**
-     * @dev Returns the effective router fee on output amount for a specific user
-     * @param user The user address to check
+     * @dev Returns the effective router fee on output amount for a specific client
+     * @param client The client address to check
      * @return The fee in basis points (custom if set, otherwise default)
      */
-    function getEffectiveRouterFeeOnOutput(address user)
+    function getEffectiveRouterFeeOnOutput(address client)
         external
         view
         returns (uint16)
     {
-        CustomFees memory customFees = _customRouterFees[user];
+        CustomFees memory customFees = _customRouterFees[client];
         return customFees.hasCustomFeeOnOutput
             ? customFees.feeBpsOnOutput
             : _routerFeeOnOutputBps;
@@ -260,53 +253,53 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
     }
 
     /**
-     * @dev Sets a custom router fee on client fee for a specific user
-     * @param user The user address to set the custom fee for
+     * @dev Sets a custom router fee on client fee for a specific client
+     * @param client The client address to set the custom fee for
      * @param feeBps The fee in basis points (e.g., 1 = 0.01%, 100 = 1%)
      */
-    function setCustomRouterFeeOnClientFee(address user, uint16 feeBps)
+    function setCustomRouterFeeOnClientFee(address client, uint16 feeBps)
         external
         onlyRole(ROUTER_FEE_SETTER_ROLE)
     {
-        CustomFees memory customFees = _customRouterFees[user];
+        CustomFees memory customFees = _customRouterFees[client];
         uint16 oldFeeBps = customFees.hasCustomFeeOnClientFee
             ? customFees.feeBpsOnClientFee
             : _routerFeeOnClientFeeBps;
 
         customFees.feeBpsOnClientFee = feeBps;
         customFees.hasCustomFeeOnClientFee = true;
-        _customRouterFees[user] = customFees;
+        _customRouterFees[client] = customFees;
 
-        emit CustomRouterFeeOnClientFeeUpdated(user, oldFeeBps, feeBps);
+        emit CustomRouterFeeOnClientFeeUpdated(client, oldFeeBps, feeBps);
     }
 
     /**
-     * @dev Removes the custom router fee on client fee for a specific user, reverting to default
-     * @param user The user address to remove the custom fee from
+     * @dev Removes the custom router fee on client fee for a specific client, reverting to default
+     * @param client The client address to remove the custom fee from
      */
-    function removeCustomRouterFeeOnClientFee(address user)
+    function removeCustomRouterFeeOnClientFee(address client)
         external
         onlyRole(ROUTER_FEE_SETTER_ROLE)
     {
-        CustomFees memory customFees = _customRouterFees[user];
+        CustomFees memory customFees = _customRouterFees[client];
         customFees.hasCustomFeeOnClientFee = false;
         customFees.feeBpsOnClientFee = 0;
-        _customRouterFees[user] = customFees;
+        _customRouterFees[client] = customFees;
 
-        emit CustomRouterFeeOnClientFeeRemoved(user);
+        emit CustomRouterFeeOnClientFeeRemoved(client);
     }
 
     /**
-     * @dev Returns the effective router fee on client fee for a specific user
-     * @param user The user address to check
+     * @dev Returns the effective router fee on client fee for a specific client
+     * @param client The client address to check
      * @return The fee in basis points (custom if set, otherwise default)
      */
-    function getEffectiveRouterFeeOnClientFee(address user)
+    function getEffectiveRouterFeeOnClientFee(address client)
         external
         view
         returns (uint16)
     {
-        CustomFees memory customFees = _customRouterFees[user];
+        CustomFees memory customFees = _customRouterFees[client];
         return customFees.hasCustomFeeOnClientFee
             ? customFees.feeBpsOnClientFee
             : _routerFeeOnClientFeeBps;
