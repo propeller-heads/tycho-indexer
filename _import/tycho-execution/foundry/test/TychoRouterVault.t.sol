@@ -371,9 +371,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             tychoRouterAddr, // receiver = tychoRouter to rebalance vault
-            0,
-            address(0),
-            0,
+            noClientFee(),
             swap
         );
         vm.stopPrank();
@@ -439,9 +437,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             USDC_ADDR,
             amountIn, // min amount out
             tychoRouterAddr, // receiver = tychoRouter to rebalance vault
-            0,
-            address(0),
-            0,
+            noClientFee(),
             pleEncode(swaps)
         );
         vm.stopPrank();
@@ -505,9 +501,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             USDC_ADDR,
             amountIn, // min amount out
             tychoRouterAddr, // receiver = tychoRouter to credit vault
-            0,
-            address(0),
-            0,
+            noClientFee(),
             pleEncode(swaps)
         );
         vm.stopPrank();
@@ -583,9 +577,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             1000_000000,
             4,
             tychoRouterAddr, // receiver = router
-            0,
-            address(0),
-            0,
+            noClientFee(),
             pleEncode(swaps)
         );
         vm.stopPrank();
@@ -633,9 +625,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             DAI_ADDR,
             2000 * 1e18,
             tychoRouterAddr, // receiver = router
-            0,
-            address(0),
-            0,
+            noClientFee(),
             swap
         );
         vm.stopPrank();
