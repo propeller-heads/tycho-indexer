@@ -100,6 +100,10 @@ const executors_to_deploy = {
                 "0xCE15294273CFb9D9b628F4D61636623decDF4fdC",
             ]
         },
+        // Args:
+        {
+            exchange: "EkuboV3Executor", args: []
+        },
     ],
     "base": [
         // Args: Factory, Pool Init Code Hash, Fee BPS
