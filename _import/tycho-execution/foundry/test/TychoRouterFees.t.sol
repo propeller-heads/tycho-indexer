@@ -42,14 +42,6 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
 
         uint256 minAmountOut = 1900 * 1e18;
 
-        ClientFeeParams memory feeParams = makeClientFeeParams(
-            200, 0, tychoRouterAddr, CLIENT_FEE_RECEIVER_PK
-        );
-        uint256 swapOutput = tychoRouter.singleSwap(
-            amountIn, WETH_ADDR, DAI_ADDR, minAmountOut, ALICE, feeParams, swap
-        );
-        vm.stopPrank();
-
         // Flow with fees:
         // 1. Swap sends full output to router (2018817438608734439722 DAI)
         // 2. takeFees deducts fees and credits fee recipients' vaults
@@ -68,6 +60,9 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         uint256 expectedClientFee = 36338713894957219915;
         uint256 expectedAmountOut = 1958252915450472406531;
 
+        ClientFeeParams memory feeParams = makeClientFeeParams(
+            200, 0, tychoRouterAddr, CLIENT_FEE_RECEIVER_PK
+        );
         FeeRecipient[] memory expectedFees = new FeeRecipient[](2);
         expectedFees[0] = FeeRecipient({
             recipient: routerFeeReceiver, feeAmount: expectedRouterFee
@@ -79,15 +74,7 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         emit FeesTaken(DAI_ADDR, expectedFees);
 
         uint256 swapOutput = tychoRouter.singleSwap(
-            amountIn,
-            WETH_ADDR,
-            DAI_ADDR,
-            minAmountOut,
-            ALICE,
-            200, // 2% clientFeeBps
-            clientFeeReceiver,
-            0,
-            swap
+            amountIn, WETH_ADDR, DAI_ADDR, minAmountOut, ALICE, feeParams, swap
         );
         vm.stopPrank();
 
@@ -128,8 +115,9 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         expectedFees[0] = FeeRecipient({
             recipient: feeCalculator.getRouterFeeReceiver(), feeAmount: 0
         });
-        expectedFees[1] =
-            FeeRecipient({recipient: BOB, feeAmount: expectedFeeAmount});
+        expectedFees[1] = FeeRecipient({
+            recipient: clientFeeReceiver, feeAmount: expectedFeeAmount
+        });
         vm.expectEmit();
         emit FeesTaken(DAI_ADDR, expectedFees);
         (bool success,) = tychoRouterAddr.call(callData);
@@ -180,8 +168,9 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         expectedFees[0] = FeeRecipient({
             recipient: routerFeeReceiver, feeAmount: expectedFeeAmount
         });
-        expectedFees[1] =
-            FeeRecipient({recipient: BOB, feeAmount: expectedFeeAmount});
+        expectedFees[1] = FeeRecipient({
+            recipient: clientFeeReceiver, feeAmount: expectedFeeAmount
+        });
         vm.expectEmit();
         emit FeesTaken(DAI_ADDR, expectedFees);
         (bool success,) = tychoRouterAddr.call(callData);
@@ -226,8 +215,9 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         expectedFees[0] = FeeRecipient({
             recipient: feeCalculator.getRouterFeeReceiver(), feeAmount: 0
         });
-        expectedFees[1] =
-            FeeRecipient({recipient: BOB, feeAmount: expectedFeeAmount});
+        expectedFees[1] = FeeRecipient({
+            recipient: clientFeeReceiver, feeAmount: expectedFeeAmount
+        });
         vm.expectEmit();
         emit FeesTaken(USDC_ADDR, expectedFees);
         (bool success,) = tychoRouterAddr.call(callData);
@@ -362,8 +352,9 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         expectedFees[0] = FeeRecipient({
             recipient: feeCalculator.getRouterFeeReceiver(), feeAmount: 0
         });
-        expectedFees[1] =
-            FeeRecipient({recipient: BOB, feeAmount: expectedFeeAmount});
+        expectedFees[1] = FeeRecipient({
+            recipient: clientFeeReceiver, feeAmount: expectedFeeAmount
+        });
         vm.expectEmit();
         emit FeesTaken(USDC_ADDR, expectedFees);
         (bool success,) = tychoRouterAddr.call(callData);
