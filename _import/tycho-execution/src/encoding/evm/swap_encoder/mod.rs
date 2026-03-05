@@ -3,6 +3,7 @@ mod balancer_v3;
 mod bebop;
 mod curve;
 mod ekubo;
+mod ekubo_v3;
 mod erc_4626;
 mod fluid_v1;
 mod hashflow;

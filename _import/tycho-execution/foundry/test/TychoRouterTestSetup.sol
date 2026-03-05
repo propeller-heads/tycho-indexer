@@ -7,6 +7,7 @@ import {BalancerV3Executor} from "../src/executors/BalancerV3Executor.sol";
 import {BebopExecutor} from "../src/executors/BebopExecutor.sol";
 import {CurveExecutor} from "../src/executors/CurveExecutor.sol";
 import {EkuboExecutor} from "../src/executors/EkuboExecutor.sol";
+import {EkuboV3Executor} from "../src/executors/EkuboV3Executor.sol";
 import {HashflowExecutor} from "../src/executors/HashflowExecutor.sol";
 import {MaverickV2Executor} from "../src/executors/MaverickV2Executor.sol";
 import {UniswapV2Executor} from "../src/executors/UniswapV2Executor.sol";
@@ -108,6 +109,7 @@ contract TychoRouterTestSetup is
 
     ERC4626Executor public erc4626Executor;
     WethExecutor public wethExecutor;
+    EkuboV3Executor public ekuboV3Executor;
 
     FeeCalculator feeCalculator;
     address routerFeeReceiver;
@@ -200,8 +202,9 @@ contract TychoRouterTestSetup is
         rocketpoolExecutor = new RocketpoolExecutor();
         erc4626Executor = new ERC4626Executor();
         wethExecutor = new WethExecutor(WETH_ADDR);
+        ekuboV3Executor = new EkuboV3Executor();
 
-        address[] memory executors = new address[](16);
+        address[] memory executors = new address[](17);
         executors[0] = address(usv2Executor);
         executors[1] = address(usv3Executor);
         executors[2] = address(pancakev3Executor);
@@ -218,7 +221,7 @@ contract TychoRouterTestSetup is
         executors[13] = address(rocketpoolExecutor);
         executors[14] = address(erc4626Executor);
         executors[15] = address(wethExecutor);
-
+        executors[16] = address(ekuboV3Executor);
         return executors;
     }
 
