@@ -28,6 +28,12 @@ services/
   deltas_buffer.rs          PendingDeltasBuffer — pending-block state for RPC consistency
   cache.rs                  HTTP response cache
   access_control.rs         API-key authentication middleware
+  middlewares/
+    plan_restrictions.rs    Plan-based access enforcement: PlanEnforcement trait, PlanRegistry,
+                            PlanConfig, ConstraintOp, ParamConstraint<T>
+    compression.rs          Response compression (zstd)
+    metrics.rs              Per-endpoint request counters and latency histograms
+    pagination.rs           Pagination parameter validation
 
 substreams/                 gRPC client for Substreams streaming API
 pb/                         Auto-generated protobuf bindings (Substreams + Firehose)

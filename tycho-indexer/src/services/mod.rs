@@ -25,7 +25,7 @@ use crate::{
     services::{
         api_docs::ApiDoc,
         deltas_buffer::PendingDeltas,
-        middleware::{compression_middleware, rpc_metrics_middleware},
+        middlewares::{compression_middleware, rpc_metrics_middleware},
     },
 };
 
@@ -33,9 +33,11 @@ mod access_control;
 mod api_docs;
 mod cache;
 mod deltas_buffer;
-mod middleware;
+pub mod middlewares;
 mod rpc;
 mod ws;
+
+pub use middlewares::PlanRegistry;
 
 /// Helper struct to build Tycho services such as HTTP and WS server.
 pub struct ServicesBuilder<G> {
@@ -46,7 +48,7 @@ pub struct ServicesBuilder<G> {
     api_key: String,
     extractor_handles: ws::MessageSenderMap,
     db_gateway: G,
-    rpc_config: ServerRpcConfig,
+    plan_registry: Arc<PlanRegistry>,
 }
 
 impl<G> ServicesBuilder<G>
@@ -62,7 +64,7 @@ where
             api_key,
             extractor_handles: HashMap::new(),
             db_gateway,
-            rpc_config: ServerRpcConfig::new(),
+            plan_registry: Arc::new(PlanRegistry::empty()),
         }
     }
 
@@ -94,8 +96,8 @@ where
         self
     }
 
-    pub fn server_rpc_config(mut self, v: ServerRpcConfig) -> Self {
-        self.rpc_config = v;
+    pub fn plan_registry(mut self, v: Arc<PlanRegistry>) -> Self {
+        self.plan_registry = v;
         self
     }
 
@@ -174,7 +176,7 @@ where
             self.db_gateway,
             pending_deltas,
             tracer,
-            self.rpc_config,
+            self.plan_registry,
         ));
 
         let server = HttpServer::new(move || {
@@ -266,56 +268,5 @@ where
                 .map_err(|err| ExtractionError::Unknown(err.to_string()))
         });
         Ok((handle, task))
-    }
-}
-
-/// Configuration for RPC filtering thresholds to prevent overly broad queries
-/// that could cause excessive database load.
-#[derive(Default, Debug, Clone)]
-pub struct ServerRpcConfig {
-    /// Minimum TVL threshold for filtering protocol components.
-    /// When set, clients must provide a `tvl_gt` parameter at least this high,
-    /// unless querying specific `component_ids`.
-    min_component_tvl: Option<f64>,
-    /// Minimum token quality threshold for filtering tokens.
-    /// When set, clients must provide a `min_quality` parameter at least this high,
-    /// unless querying specific `token_addresses`.
-    min_token_quality: Option<i32>,
-    /// Maximum traded_n_days_ago threshold for filtering tokens.
-    /// When set, clients must provide a `traded_n_days_ago` parameter at most this value,
-    /// unless querying specific `token_addresses`.
-    max_traded_n_days_ago: Option<u64>,
-}
-
-impl ServerRpcConfig {
-    pub fn new() -> Self {
-        Self { min_component_tvl: None, min_token_quality: None, max_traded_n_days_ago: None }
-    }
-
-    pub fn with_min_tvl(mut self, min_tvl: Option<f64>) -> Self {
-        self.min_component_tvl = min_tvl;
-        self
-    }
-
-    pub fn with_min_quality(mut self, min_quality: Option<i32>) -> Self {
-        self.min_token_quality = min_quality;
-        self
-    }
-
-    pub fn with_max_traded_n_days_ago(mut self, max_traded_n_days_ago: Option<u64>) -> Self {
-        self.max_traded_n_days_ago = max_traded_n_days_ago;
-        self
-    }
-
-    pub fn min_component_tvl(&self) -> Option<f64> {
-        self.min_component_tvl
-    }
-
-    pub fn min_token_quality(&self) -> Option<i32> {
-        self.min_token_quality
-    }
-
-    pub fn max_traded_n_days_ago(&self) -> Option<u64> {
-        self.max_traded_n_days_ago
     }
 }

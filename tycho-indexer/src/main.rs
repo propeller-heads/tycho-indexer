@@ -58,7 +58,7 @@ use tycho_indexer::{
         token_analysis_cron::analyze_tokens,
         ExtractionError,
     },
-    services::ServicesBuilder,
+    services::{PlanRegistry, ServicesBuilder},
 };
 use tycho_storage::postgres::{builder::GatewayBuilder, cache::CachedGateway};
 
@@ -85,6 +85,17 @@ impl ExtractorConfigs {
 
 type ExtractionTasks = Vec<JoinHandle<Result<(), ExtractionError>>>;
 type ServerTasks = Vec<JoinHandle<Result<(), ExtractionError>>>; //TODO: introduce an error type for it
+
+fn load_plan_registry() -> Result<Arc<PlanRegistry>, ExtractionError> {
+    let path = std::path::Path::new("./plans.yaml");
+    if !path.exists() {
+        warn!("No plans.yaml found; all plan restrictions disabled");
+        return Ok(Arc::new(PlanRegistry::empty()));
+    }
+    PlanRegistry::from_file(path)
+        .map(Arc::new)
+        .map_err(|e| ExtractionError::Setup(format!("Failed to load plans config: {e}")))
+}
 
 fn main() -> Result<(), anyhow::Error> {
     let cli: Cli = Cli::parse();
@@ -337,12 +348,13 @@ async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
         ExtractionError::Setup("AUTH_API_KEY environment variable is not set".to_string())
     })?;
 
+    let plan_registry = load_plan_registry()?;
     let (server_handle, server_task) =
         ServicesBuilder::new(direct_gw.clone(), rpc_client.clone(), api_key)
             .prefix(&global_args.server_version_prefix)
             .bind(&global_args.server_ip)
             .port(global_args.server_port)
-            .server_rpc_config(global_args.server.into())
+            .plan_registry(plan_registry)
             .run()?;
     info!(server_url, "Http and Ws server started");
     let shutdown_task = tokio::spawn(shutdown_handler(server_handle, vec![], None));
@@ -399,12 +411,13 @@ async fn create_indexing_tasks(
     let api_key = env::var("AUTH_API_KEY").map_err(|_| {
         ExtractionError::Setup("AUTH_API_KEY environment variable is not set".to_string())
     })?;
+    let plan_registry = load_plan_registry()?;
     let (server_handle, server_task) =
         ServicesBuilder::new(cached_gw.clone(), rpc_client.clone(), api_key)
             .prefix(&global_args.server_version_prefix)
             .bind(&global_args.server_ip)
             .port(global_args.server_port)
-            .server_rpc_config(global_args.server.clone().into())
+            .plan_registry(plan_registry)
             .register_extractors(extractor_handles.clone())
             .run()?;
     info!(server_url, "Http and Ws server started");
