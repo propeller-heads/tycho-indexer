@@ -1,3 +1,19 @@
+## [0.34.0](https://github.com/propeller-heads/tycho-contracts/compare/0.33.0...0.34.0) (2026-03-05)
+
+
+### Features
+
+* Credit output to vault if receiver is TychoRouter ([3458a35](https://github.com/propeller-heads/tycho-contracts/commit/3458a353e7d69553554d13581ebc38d88a623687))
+* Require EIP-712 client signature on fee params ([ef46a57](https://github.com/propeller-heads/tycho-contracts/commit/ef46a574bbbed31f8d4ea3e058d4ce1cb818bbe4))
+
+
+### Bug Fixes
+
+* After rebase fixes ([281b0eb](https://github.com/propeller-heads/tycho-contracts/commit/281b0ebebd95930cccfe941215fdbc8b5aef93f3))
+* After rebase with main fixes ([22fe05d](https://github.com/propeller-heads/tycho-contracts/commit/22fe05d53fa337ccac798d30a7e65bb0bdcd412b))
+* Don't do transfers unnecessarily ([59eb609](https://github.com/propeller-heads/tycho-contracts/commit/59eb609b11076c3f7d9545f5962ef1cd1b8b3f9e))
+* Remove deprecated method encode_full_calldata ([58b6a78](https://github.com/propeller-heads/tycho-contracts/commit/58b6a785d02cfba21984559f403fcf4b9ddb97d5))
+
 ## [0.33.0](https://github.com/propeller-heads/tycho-contracts/compare/0.32.0...0.33.0) (2026-03-04)
 
 
