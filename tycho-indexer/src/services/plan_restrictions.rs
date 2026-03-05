@@ -114,11 +114,13 @@ impl PlanRestrictions {
     ) -> Result<(), RpcError> {
         if let Some(restriction) = restriction {
             match actual {
+                // Plan requires this param but caller didn't provide it
                 None => {
                     return Err(RpcError::PlanRestrictionViolation(format!(
                         "{param_name} parameter is required on this plan"
                     )));
                 }
+                // Param provided but doesn't satisfy the restriction
                 Some(actual) if !restriction.check(actual) => {
                     return Err(RpcError::PlanRestrictionViolation(
                         restriction.violation_message(param_name, actual),
@@ -153,28 +155,17 @@ impl PlansConfig {
     /// Loads the plans config from a YAML file.
     ///
     /// If the file does not exist, returns a default instance (no restrictions).
-    pub fn from_yaml(path: &str) -> Self {
+    /// If the file exists but cannot be read or parsed, returns an error.
+    pub fn from_yaml(path: &str) -> Result<Self, String> {
         let path = Path::new(path);
         if !path.exists() {
             warn!("No plans config found at {}, running without plan restrictions", path.display());
-            return Self::default();
+            return Ok(Self::default());
         }
-        match fs::read_to_string(path) {
-            Ok(contents) => match serde_yaml::from_str(&contents) {
-                Ok(config) => config,
-                Err(e) => {
-                    warn!("Failed to parse plans config at {}: {e}, running without plan restrictions", path.display());
-                    Self::default()
-                }
-            },
-            Err(e) => {
-                warn!(
-                    "Failed to read plans config at {}: {e}, running without plan restrictions",
-                    path.display()
-                );
-                Self::default()
-            }
-        }
+        let contents = fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read plans config at {}: {e}", path.display()))?;
+        serde_yaml::from_str(&contents)
+            .map_err(|e| format!("Failed to parse plans config at {}: {e}", path.display()))
     }
 }
 
@@ -333,8 +324,18 @@ plans:
 
     #[test]
     fn test_missing_file_returns_empty() {
-        let config = PlansConfig::from_yaml("/nonexistent/plans.yaml");
+        let config = PlansConfig::from_yaml("/nonexistent/plans.yaml").unwrap();
         assert!(config.is_empty());
+    }
+
+    #[test]
+    fn test_invalid_yaml_file_returns_error() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("bad_plans.yaml");
+        std::fs::write(&path, "not: [valid: yaml: plans").unwrap();
+        let result = PlansConfig::from_yaml(path.to_str().unwrap());
+        assert!(result.is_err());
+        std::fs::remove_file(&path).ok();
     }
 
     #[test]

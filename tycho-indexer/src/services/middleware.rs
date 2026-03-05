@@ -122,6 +122,7 @@ impl<T: PaginationLimits> RequestPaginationValidation for T {}
 impl ValidateRestrictions for dto::ProtocolComponentsRequestBody {
     fn validate_restrictions(&self, restrictions: &PlanRestrictions) -> Result<(), RpcError> {
         restrictions.check_protocol_system(&self.protocol_system)?;
+        // Skip numeric checks when targeting specific components by ID
         if self.component_ids.is_none() {
             restrictions.check_numeric("tvl_gt", &restrictions.component_tvl, self.tvl_gt)?;
         }
@@ -131,6 +132,7 @@ impl ValidateRestrictions for dto::ProtocolComponentsRequestBody {
 
 impl ValidateRestrictions for dto::TokensRequestBody {
     fn validate_restrictions(&self, restrictions: &PlanRestrictions) -> Result<(), RpcError> {
+        // Skip numeric checks when targeting specific token addresses
         if self.token_addresses.is_none() {
             restrictions.check_numeric(
                 "min_quality",
@@ -148,6 +150,32 @@ impl ValidateRestrictions for dto::TokensRequestBody {
 }
 
 impl ValidateRestrictions for dto::ProtocolStateRequestBody {
+    fn validate_restrictions(&self, restrictions: &PlanRestrictions) -> Result<(), RpcError> {
+        restrictions.check_protocol_system(&self.protocol_system)
+    }
+}
+
+impl ValidateRestrictions for dto::StateRequestBody {
+    fn validate_restrictions(&self, restrictions: &PlanRestrictions) -> Result<(), RpcError> {
+        // protocol_system defaults to "" via serde; skip check when not provided
+        if !self.protocol_system.is_empty() {
+            restrictions.check_protocol_system(&self.protocol_system)?;
+        }
+        Ok(())
+    }
+}
+
+impl ValidateRestrictions for dto::ComponentTvlRequestBody {
+    fn validate_restrictions(&self, restrictions: &PlanRestrictions) -> Result<(), RpcError> {
+        // protocol_system is optional on this endpoint; skip check when absent
+        if let Some(protocol_system) = &self.protocol_system {
+            restrictions.check_protocol_system(protocol_system)?;
+        }
+        Ok(())
+    }
+}
+
+impl ValidateRestrictions for dto::TracedEntryPointRequestBody {
     fn validate_restrictions(&self, restrictions: &PlanRestrictions) -> Result<(), RpcError> {
         restrictions.check_protocol_system(&self.protocol_system)
     }
@@ -595,6 +623,66 @@ mod tests {
             include_balances: true,
             version: Default::default(),
             chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::new(0, 10),
+        };
+        let result = request.validate_restrictions(&plan);
+        assert_eq!(result.is_err(), should_fail);
+    }
+
+    #[rstest]
+    #[case::allowed_system("uniswap_v2", false)]
+    #[case::blocked_system("sushiswap", true)]
+    #[case::empty_system_skips("", false)]
+    #[tokio::test]
+    async fn test_contract_state_restriction(
+        #[case] protocol_system: &str,
+        #[case] should_fail: bool,
+    ) {
+        let plan = restricted_plan();
+        let request = dto::StateRequestBody::new(
+            None,
+            protocol_system.to_string(),
+            Default::default(),
+            dto::Chain::Ethereum,
+            dto::PaginationParams::new(0, 10),
+        );
+        let result = request.validate_restrictions(&plan);
+        assert_eq!(result.is_err(), should_fail);
+    }
+
+    #[rstest]
+    #[case::allowed_system(Some("uniswap_v2".to_string()), false)]
+    #[case::blocked_system(Some("sushiswap".to_string()), true)]
+    #[case::none_skips(None, false)]
+    #[tokio::test]
+    async fn test_component_tvl_protocol_restriction(
+        #[case] protocol_system: Option<String>,
+        #[case] should_fail: bool,
+    ) {
+        let plan = restricted_plan();
+        let request = dto::ComponentTvlRequestBody {
+            chain: dto::Chain::Ethereum,
+            protocol_system,
+            component_ids: None,
+            pagination: dto::PaginationParams::new(0, 10),
+        };
+        let result = request.validate_restrictions(&plan);
+        assert_eq!(result.is_err(), should_fail);
+    }
+
+    #[rstest]
+    #[case::allowed_system("uniswap_v2", false)]
+    #[case::blocked_system("sushiswap", true)]
+    #[tokio::test]
+    async fn test_traced_entry_point_restriction(
+        #[case] protocol_system: &str,
+        #[case] should_fail: bool,
+    ) {
+        let plan = restricted_plan();
+        let request = dto::TracedEntryPointRequestBody {
+            chain: dto::Chain::Ethereum,
+            protocol_system: protocol_system.to_string(),
+            component_ids: None,
             pagination: dto::PaginationParams::new(0, 10),
         };
         let result = request.validate_restrictions(&plan);

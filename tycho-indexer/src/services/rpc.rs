@@ -177,6 +177,8 @@ where
         }
     }
 
+    /// Resolves plan restrictions from the `X-User-Plan` header.
+    /// Returns `None` when no header is present (no restrictions apply).
     fn resolve_plan_restrictions(
         &self,
         req: &actix_web::HttpRequest,
@@ -1115,6 +1117,9 @@ pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("protocol_system", &body.protocol_system);
 
     body.validate_pagination(&req)?;
+    if let Some(restrictions) = handler.resolve_plan_restrictions(&req)? {
+        body.validate_restrictions(restrictions)?;
+    }
 
     // Call the handler to get the state
     let response = handler
@@ -1293,6 +1298,11 @@ pub async fn protocol_systems<G: Gateway, T: EntryPointTracer>(
 
     body.validate_pagination(&req)?;
 
+    // Clone the allowlist before moving `handler` into the DB call
+    let allowed_systems = handler
+        .resolve_plan_restrictions(&req)?
+        .and_then(|r| r.allowed_protocol_systems.clone());
+
     // Call the handler to get protocol systems
     let response = handler
         .into_inner()
@@ -1300,7 +1310,15 @@ pub async fn protocol_systems<G: Gateway, T: EntryPointTracer>(
         .await;
 
     match response {
-        Ok(state) => Ok(HttpResponse::Ok().json(state)),
+        Ok(mut state) => {
+            // Intersect response with plan's allowed protocol systems
+            if let Some(allowed) = &allowed_systems {
+                state
+                    .protocol_systems
+                    .retain(|ps| allowed.contains(ps));
+            }
+            Ok(HttpResponse::Ok().json(state))
+        }
         Err(err) => {
             error!(error = %err, ?body, "Error while getting protocol systems.");
             Err(err)
@@ -1333,6 +1351,9 @@ pub async fn component_tvl<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("page_size", body.pagination.page_size);
 
     body.validate_pagination(&req)?;
+    if let Some(restrictions) = handler.resolve_plan_restrictions(&req)? {
+        body.validate_restrictions(restrictions)?;
+    }
 
     // Call the handler to get component tvl
     let response = handler
@@ -1374,6 +1395,9 @@ pub async fn traced_entry_points<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("page_size", body.pagination.page_size);
 
     body.validate_pagination(&req)?;
+    if let Some(restrictions) = handler.resolve_plan_restrictions(&req)? {
+        body.validate_restrictions(restrictions)?;
+    }
 
     // Call the handler to get traced entry points
     let response = handler

@@ -337,7 +337,7 @@ async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
         ExtractionError::Setup("AUTH_API_KEY environment variable is not set".to_string())
     })?;
 
-    let plans_config = PlansConfig::from_yaml("./plans.yaml");
+    let plans_config = PlansConfig::from_yaml("./plans.yaml").map_err(ExtractionError::Setup)?;
 
     let (server_handle, server_task) =
         ServicesBuilder::new(direct_gw.clone(), rpc_client.clone(), api_key)
@@ -408,7 +408,7 @@ async fn create_indexing_tasks(
     let api_key = env::var("AUTH_API_KEY").map_err(|_| {
         ExtractionError::Setup("AUTH_API_KEY environment variable is not set".to_string())
     })?;
-    let plans_config = PlansConfig::from_yaml("./plans.yaml");
+    let plans_config = PlansConfig::from_yaml("./plans.yaml").map_err(ExtractionError::Setup)?;
 
     let (server_handle, server_task) =
         ServicesBuilder::new(cached_gw.clone(), rpc_client.clone(), api_key)
