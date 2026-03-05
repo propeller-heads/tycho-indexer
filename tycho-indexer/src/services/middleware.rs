@@ -9,7 +9,10 @@ use metrics::{counter, histogram};
 use tracing::instrument;
 use tycho_common::dto::{self, PaginationLimits};
 
-use crate::services::{rpc::RpcError, ServerRpcConfig};
+use crate::services::{
+    plan_restrictions::{PlanRestrictions, ValidateRestrictions},
+    rpc::RpcError,
+};
 
 /// Middleware to record metrics for RPC requests.
 #[instrument(skip_all, fields(user_identity))]
@@ -116,124 +119,43 @@ pub trait RequestPaginationValidation: PaginationLimits {
 
 impl<T: PaginationLimits> RequestPaginationValidation for T {}
 
-/// Trait for validating filter parameters on RPC requests to prevent overly broad queries.
-///
-/// Request types implement this trait to define their validation logic against
-/// configured thresholds. Validation happens at the endpoint level before cache lookups
-/// or database queries, enabling early rejection of invalid requests.
-pub trait ValidateFilter {
-    /// Validates the filter parameters against the provided RPC configuration.
-    ///
-    /// # Errors
-    /// Returns `RpcError::MinimumFilterNotMet` if the request doesn't meet filtering requirements.
-    fn validate_filter(&self, config: &ServerRpcConfig) -> Result<(), RpcError>;
-}
-
-/// Validation implementation for protocol components requests.
-///
-/// When `min_component_tvl` is configured, clients must either:
-/// - Provide specific `component_ids`, OR
-/// - Include a `tvl_gt` parameter that meets or exceeds the minimum threshold
-impl ValidateFilter for dto::ProtocolComponentsRequestBody {
-    fn validate_filter(&self, config: &ServerRpcConfig) -> Result<(), RpcError> {
-        // Allow requests with specific component IDs (targeted queries don't cause broad scans)
-        if self.component_ids.is_some() {
-            return Ok(());
+impl ValidateRestrictions for dto::ProtocolComponentsRequestBody {
+    fn validate_restrictions(&self, restrictions: &PlanRestrictions) -> Result<(), RpcError> {
+        restrictions.check_protocol_system(&self.protocol_system)?;
+        if self.component_ids.is_none() {
+            restrictions.check_numeric("tvl_gt", &restrictions.component_tvl, self.tvl_gt)?;
         }
-        match (config.min_component_tvl(), self.tvl_gt) {
-            (Some(min_tvl), None) => Err(RpcError::MinimumFilterNotMet(
-                "/protocol_components".to_string(),
-                format!(
-                    "tvl_gt parameter is required (minimum: {}) to prevent overly broad queries. \
-                     Alternatively, specify component_ids for targeted queries.",
-                    min_tvl
-                ),
-            )),
-            (Some(min_tvl), Some(requested_tvl)) if requested_tvl < min_tvl => {
-                Err(RpcError::MinimumFilterNotMet(
-                    "/protocol_components".to_string(),
-                    format!(
-                        "tvl_gt must be at least {} (requested: {}) to prevent overly broad queries. \
-                         Alternatively, specify component_ids for targeted queries.",
-                        min_tvl, requested_tvl
-                    ),
-                ))
-            }
-            _ => Ok(()),
-        }
+        Ok(())
     }
 }
 
-/// Validation implementation for tokens requests.
-///
-/// When `min_token_quality` or `max_traded_n_days_ago` is configured, clients must either:
-/// - Provide specific `token_addresses`, OR
-/// - Include a `min_quality` parameter that meets or exceeds the minimum threshold AND/OR
-/// - Include a `traded_n_days_ago` parameter that is at most the maximum threshold
-impl ValidateFilter for dto::TokensRequestBody {
-    fn validate_filter(&self, config: &ServerRpcConfig) -> Result<(), RpcError> {
-        // Allow requests with specific token addresses (targeted queries don't cause broad scans)
-        if self.token_addresses.is_some() {
-            return Ok(());
+impl ValidateRestrictions for dto::TokensRequestBody {
+    fn validate_restrictions(&self, restrictions: &PlanRestrictions) -> Result<(), RpcError> {
+        if self.token_addresses.is_none() {
+            restrictions.check_numeric(
+                "min_quality",
+                &restrictions.token_quality,
+                self.min_quality.map(f64::from),
+            )?;
+            restrictions.check_numeric(
+                "traded_n_days_ago",
+                &restrictions.traded_n_days_ago,
+                self.traded_n_days_ago.map(|v| v as f64),
+            )?;
         }
-
-        // Validate min_quality if configured
-        match (config.min_token_quality(), self.min_quality) {
-            (Some(min_quality), None) => {
-                return Err(RpcError::MinimumFilterNotMet(
-                    "/tokens".to_string(),
-                    format!(
-                        "min_quality parameter is required (minimum: {}) to prevent overly broad queries. \
-                         Alternatively, specify token_addresses for targeted queries.",
-                        min_quality
-                    ),
-                ));
-            }
-            (Some(min_quality), Some(requested_quality)) if requested_quality < min_quality => {
-                return Err(RpcError::MinimumFilterNotMet(
-                    "/tokens".to_string(),
-                    format!(
-                        "min_quality must be at least {} (requested: {}) to prevent overly broad queries. \
-                         Alternatively, specify token_addresses for targeted queries.",
-                        min_quality, requested_quality
-                    ),
-                ));
-            }
-            _ => {}
-        }
-
-        // Validate traded_n_days_ago if configured
-        match (config.max_traded_n_days_ago(), self.traded_n_days_ago) {
-            (Some(max_days), None) => {
-                return Err(RpcError::MinimumFilterNotMet(
-                    "/tokens".to_string(),
-                    format!(
-                        "traded_n_days_ago parameter is required (maximum: {}) to prevent overly broad queries. \
-                         Alternatively, specify token_addresses for targeted queries.",
-                        max_days
-                    ),
-                ));
-            }
-            (Some(max_days), Some(requested_days)) if requested_days > max_days => {
-                return Err(RpcError::MinimumFilterNotMet(
-                    "/tokens".to_string(),
-                    format!(
-                        "traded_n_days_ago must be at most {} (requested: {}) to prevent overly broad queries. \
-                         Alternatively, specify token_addresses for targeted queries.",
-                        max_days, requested_days
-                    ),
-                ));
-            }
-            _ => {}
-        }
-
         Ok(())
+    }
+}
+
+impl ValidateRestrictions for dto::ProtocolStateRequestBody {
+    fn validate_restrictions(&self, restrictions: &PlanRestrictions) -> Result<(), RpcError> {
+        restrictions.check_protocol_system(&self.protocol_system)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, HashMap};
+    use std::collections::{BTreeMap, HashMap, HashSet};
 
     use actix_web::{http::StatusCode, middleware, test, web, App, HttpResponse, ResponseError};
     use metrics_util::{
@@ -245,7 +167,10 @@ mod tests {
     use tycho_common::{dto::PaginationParams, Bytes};
 
     use super::*;
-    use crate::services::rpc::RpcError;
+    use crate::services::{
+        plan_restrictions::{NumericRestriction, Operator},
+        rpc::RpcError,
+    };
 
     // Test struct for pagination validation
     #[derive(Clone)]
@@ -569,184 +494,125 @@ mod tests {
         assert!(!body.is_empty());
     }
 
+    fn restricted_plan() -> PlanRestrictions {
+        PlanRestrictions {
+            allowed_protocol_systems: Some(
+                ["uniswap_v2", "uniswap_v3"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<HashSet<_>>(),
+            ),
+            component_tvl: Some(NumericRestriction { op: Operator::Gte, value: 1000.0 }),
+            token_quality: Some(NumericRestriction { op: Operator::Gte, value: 50.0 }),
+            traded_n_days_ago: Some(NumericRestriction { op: Operator::Lte, value: 30.0 }),
+        }
+    }
+
     #[rstest]
-    #[case::rejects_none_when_min_tvl_set(
-        Some(1000.0),
-        None,
-        None,
-        Some("tvl_gt parameter is required")
-    )]
-    #[case::rejects_below_threshold(
-        Some(1000.0),
-        Some(500.0),
-        None,
-        Some("tvl_gt must be at least")
-    )]
-    #[case::accepts_equal_threshold(Some(1000.0), Some(1000.0), None, None)]
-    #[case::accepts_above_threshold(Some(1000.0), Some(5000.0), None, None)]
-    #[case::accepts_none_when_no_min_tvl(None, None, None, None)]
-    #[case::accepts_any_value_when_no_min_tvl(None, Some(100.0), None, None)]
-    #[case::accepts_specific_component_ids_without_tvl(
-        Some(1000.0),
-        None,
-        Some(vec!["component1".to_string()]),
-        None
-    )]
-    #[case::accepts_specific_component_ids_with_low_tvl(
-        Some(1000.0),
-        Some(100.0),
-        Some(vec!["component1".to_string(), "component2".to_string()]),
-        None
-    )]
+    #[case::rejects_missing_tvl(None, None, true)]
+    #[case::rejects_below_threshold(Some(500.0), None, true)]
+    #[case::accepts_at_threshold(Some(1000.0), None, false)]
+    #[case::accepts_above_threshold(Some(5000.0), None, false)]
+    #[case::skips_with_component_ids(None, Some(vec!["c1".to_string()]), false)]
+    #[case::skips_with_low_tvl_and_ids(Some(1.0), Some(vec!["c1".to_string()]), false)]
     #[tokio::test]
-    async fn test_min_tvl_validation(
-        #[case] min_tvl: Option<f64>,
-        #[case] request_tvl_gt: Option<f64>,
+    async fn test_component_tvl_restriction(
+        #[case] tvl_gt: Option<f64>,
         #[case] component_ids: Option<Vec<String>>,
-        #[case] error_message_contains: Option<&str>,
+        #[case] should_fail: bool,
     ) {
-        let config = ServerRpcConfig::new().with_min_tvl(min_tvl);
-
+        let plan = restricted_plan();
         let request = dto::ProtocolComponentsRequestBody {
-            protocol_system: "ambient".to_string(),
+            protocol_system: "uniswap_v2".to_string(),
             component_ids,
-            tvl_gt: request_tvl_gt,
+            tvl_gt,
             chain: dto::Chain::Ethereum,
             pagination: dto::PaginationParams::new(0, 10),
         };
-
-        // Test validation trait method directly (called at endpoint level before cache lookup)
-        let result = request.validate_filter(&config);
-
-        if error_message_contains.is_none() {
-            assert!(result.is_ok(), "Expected success but got error: {:?}", result);
-        } else {
-            assert!(result.is_err(), "Expected error but got success");
-            let err = result.unwrap_err();
-            assert!(matches!(err, RpcError::MinimumFilterNotMet(_, _)));
-            if let Some(msg) = error_message_contains {
-                assert!(
-                    err.to_string().contains(msg),
-                    "Error message '{}' does not contain '{}'",
-                    err,
-                    msg
-                );
-            }
-        }
+        let result = request.validate_restrictions(&plan);
+        assert_eq!(result.is_err(), should_fail);
     }
 
     #[rstest]
-    #[case::rejects_none_when_min_quality_set(
-        Some(50),
-        None,
-        None,
-        Some("min_quality parameter is required")
-    )]
-    #[case::rejects_below_threshold(Some(50), Some(30), None, Some("min_quality must be at least"))]
-    #[case::accepts_equal_threshold(Some(50), Some(50), None, None)]
-    #[case::accepts_above_threshold(Some(50), Some(80), None, None)]
-    #[case::accepts_none_when_no_min_quality(None, None, None, None)]
-    #[case::accepts_any_value_when_no_min_quality(None, Some(10), None, None)]
-    #[case::accepts_specific_addresses_without_quality(
-        Some(50),
-        None,
-        Some(vec![Bytes::from("0x0123")]),
-        None
-    )]
+    #[case::allowed_system("uniswap_v2", false)]
+    #[case::blocked_system("sushiswap", true)]
     #[tokio::test]
-    async fn test_min_token_quality_validation(
-        #[case] min_token_quality: Option<i32>,
-        #[case] request_min_quality: Option<i32>,
-        #[case] token_addresses: Option<Vec<Bytes>>,
-        #[case] error_message_contains: Option<&str>,
+    async fn test_component_protocol_system_restriction(
+        #[case] protocol_system: &str,
+        #[case] should_fail: bool,
     ) {
-        let config = ServerRpcConfig::new().with_min_quality(min_token_quality);
-
-        let request = dto::TokensRequestBody {
+        let plan = restricted_plan();
+        let request = dto::ProtocolComponentsRequestBody {
+            protocol_system: protocol_system.to_string(),
+            component_ids: Some(vec!["c1".to_string()]),
+            tvl_gt: None,
             chain: dto::Chain::Ethereum,
-            token_addresses,
-            min_quality: request_min_quality,
-            traded_n_days_ago: None,
             pagination: dto::PaginationParams::new(0, 10),
         };
-
-        // Test validation trait method directly (called at endpoint level before cache lookup)
-        let result = request.validate_filter(&config);
-
-        if error_message_contains.is_none() {
-            assert!(result.is_ok(), "Expected success but got error: {:?}", result);
-        } else {
-            assert!(result.is_err(), "Expected error but got success");
-            let err = result.unwrap_err();
-            assert!(matches!(err, RpcError::MinimumFilterNotMet(_, _)));
-            if let Some(msg) = error_message_contains {
-                assert!(
-                    err.to_string().contains(msg),
-                    "Error message '{}' does not contain '{}'",
-                    err,
-                    msg
-                );
-            }
-        }
+        let result = request.validate_restrictions(&plan);
+        assert_eq!(result.is_err(), should_fail);
     }
 
     #[rstest]
-    #[case::rejects_none_when_max_traded_n_days_ago_set(
-        Some(30),
-        None,
-        None,
-        Some("traded_n_days_ago parameter is required")
-    )]
-    #[case::rejects_above_threshold(
-        Some(30),
-        Some(60),
-        None,
-        Some("traded_n_days_ago must be at most")
-    )]
-    #[case::accepts_equal_threshold(Some(30), Some(30), None, None)]
-    #[case::accepts_below_threshold(Some(30), Some(15), None, None)]
-    #[case::accepts_none_when_no_max_traded_n_days_ago(None, None, None, None)]
-    #[case::accepts_any_value_when_no_max_traded_n_days_ago(None, Some(100), None, None)]
-    #[case::accepts_specific_addresses_without_traded_n_days_ago(
-        Some(30),
-        None,
-        Some(vec![Bytes::from("0x0123")]),
-        None
-    )]
+    #[case::rejects_missing_quality(None, Some(15), None, true)]
+    #[case::rejects_below_quality(Some(30), Some(15), None, true)]
+    #[case::accepts_both_valid(Some(50), Some(15), None, false)]
+    #[case::rejects_missing_traded_days(Some(80), None, None, true)]
+    #[case::rejects_above_traded_days(Some(80), Some(60), None, true)]
+    #[case::accepts_within_traded_days(Some(80), Some(15), None, false)]
+    #[case::skips_with_addresses(None, None, Some(vec![Bytes::from("0x01")]), false)]
     #[tokio::test]
-    async fn test_max_traded_n_days_ago_validation(
-        #[case] max_traded_n_days_ago: Option<u64>,
-        #[case] request_traded_n_days_ago: Option<u64>,
+    async fn test_token_restrictions(
+        #[case] min_quality: Option<i32>,
+        #[case] traded_n_days_ago: Option<u64>,
         #[case] token_addresses: Option<Vec<Bytes>>,
-        #[case] error_message_contains: Option<&str>,
+        #[case] should_fail: bool,
     ) {
-        let config = ServerRpcConfig::new().with_max_traded_n_days_ago(max_traded_n_days_ago);
-
+        let plan = restricted_plan();
         let request = dto::TokensRequestBody {
             chain: dto::Chain::Ethereum,
             token_addresses,
-            min_quality: None,
-            traded_n_days_ago: request_traded_n_days_ago,
+            min_quality,
+            traded_n_days_ago,
             pagination: dto::PaginationParams::new(0, 10),
         };
+        let result = request.validate_restrictions(&plan);
+        assert_eq!(result.is_err(), should_fail);
+    }
 
-        // Test validation trait method directly (called at endpoint level before cache lookup)
-        let result = request.validate_filter(&config);
+    #[rstest]
+    #[case::allowed_system("uniswap_v2", false)]
+    #[case::blocked_system("sushiswap", true)]
+    #[tokio::test]
+    async fn test_protocol_state_restriction(
+        #[case] protocol_system: &str,
+        #[case] should_fail: bool,
+    ) {
+        let plan = restricted_plan();
+        let request = dto::ProtocolStateRequestBody {
+            protocol_ids: None,
+            protocol_system: protocol_system.to_string(),
+            include_balances: true,
+            version: Default::default(),
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::new(0, 10),
+        };
+        let result = request.validate_restrictions(&plan);
+        assert_eq!(result.is_err(), should_fail);
+    }
 
-        if error_message_contains.is_none() {
-            assert!(result.is_ok(), "Expected success but got error: {:?}", result);
-        } else {
-            assert!(result.is_err(), "Expected error but got success");
-            let err = result.unwrap_err();
-            assert!(matches!(err, RpcError::MinimumFilterNotMet(_, _)));
-            if let Some(msg) = error_message_contains {
-                assert!(
-                    err.to_string().contains(msg),
-                    "Error message '{}' does not contain '{}'",
-                    err,
-                    msg
-                );
-            }
-        }
+    #[tokio::test]
+    async fn test_no_restrictions_passes_everything() {
+        let plan = PlanRestrictions::default();
+        let request = dto::ProtocolComponentsRequestBody {
+            protocol_system: "anything".to_string(),
+            component_ids: None,
+            tvl_gt: None,
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::new(0, 10),
+        };
+        assert!(request
+            .validate_restrictions(&plan)
+            .is_ok());
     }
 }
