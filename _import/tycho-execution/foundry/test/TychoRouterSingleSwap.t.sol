@@ -4,9 +4,6 @@ pragma solidity ^0.8.26;
 import "@src/executors/UniswapV4Executor.sol";
 import {TychoRouter, ClientFeeParams} from "@src/TychoRouter.sol";
 import "./TychoRouterTestSetup.sol";
-import {
-    RestrictTransferFrom__ExceededTransferFromAllowance
-} from "@src/RestrictTransferFrom.sol";
 import {Vault__InsufficientBalance} from "@src/Vault.sol";
 
 contract TychoRouterSingleSwapTest is TychoRouterTestSetup {

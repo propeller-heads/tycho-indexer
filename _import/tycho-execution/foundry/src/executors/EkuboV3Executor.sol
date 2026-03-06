@@ -23,7 +23,7 @@ import {
     MIN_SQRT_RATIO,
     MAX_SQRT_RATIO
 } from "@ekubo-v3/types/sqrtRatio.sol";
-import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {TransferManager} from "../TransferManager.sol";
 import {PoolKey} from "@ekubo-v3/types/poolKey.sol";
 import {PoolConfig} from "@ekubo-v3/types/poolConfig.sol";
 import {NATIVE_TOKEN_ADDRESS} from "@ekubo-v3/math/constants.sol";
@@ -68,14 +68,14 @@ contract EkuboV3Executor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn
         )
     {
         // Ekubo uses flash accounting: no pre-swap transfer needed.
         // Tokens are paid during the callback in the Dispatcher
-        return (RestrictTransferFrom.TransferType.None, address(0), address(0));
+        return (TransferManager.TransferType.None, address(0), address(0));
     }
 
     function fundsExpectedAddress(
@@ -136,7 +136,7 @@ contract EkuboV3Executor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn,
             uint256 amount
@@ -152,10 +152,9 @@ contract EkuboV3Executor is IExecutor, ICallback {
         if (tokenIn == NATIVE_TOKEN_ADDRESS) {
             // Native ETH: Dispatcher updates delta accounting; actual transfer
             // happens inside _pay() via safeTransferETH.
-            transferType =
-            RestrictTransferFrom.TransferType.TransferNativeInExecutor;
+            transferType = TransferManager.TransferType.TransferNativeInExecutor;
         } else {
-            transferType = RestrictTransferFrom.TransferType.Transfer;
+            transferType = TransferManager.TransferType.Transfer;
         }
     }
 

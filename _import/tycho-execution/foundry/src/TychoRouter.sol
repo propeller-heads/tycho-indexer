@@ -22,7 +22,7 @@ import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Dispatcher} from "./Dispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
-import {RestrictTransferFrom} from "./RestrictTransferFrom.sol";
+import {TransferManager} from "./TransferManager.sol";
 import {FeeRecipient} from "../lib/FeeStructs.sol";
 
 //                                         ✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷

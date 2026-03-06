@@ -93,7 +93,7 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
             osETH_ADDR,
             waEthWETH_ADDR,
             WETH_osETH_pool,
-            RestrictTransferFrom.TransferType.None
+            TransferManager.TransferType.None
         );
 
         vm.expectRevert(BalancerV3Executor__InvalidDataLength.selector);

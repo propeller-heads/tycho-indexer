@@ -11,7 +11,7 @@ import {
     SwapKind,
     VaultSwapParams
 } from "@balancer-labs/v3-interfaces/contracts/vault/VaultTypes.sol";
-import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {TransferManager} from "../TransferManager.sol";
 import {ICallback} from "@interfaces/ICallback.sol";
 
 error BalancerV3Executor__InvalidDataLength();
@@ -130,19 +130,19 @@ contract BalancerV3Executor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn
         )
     {
-        return (RestrictTransferFrom.TransferType.None, address(0), address(0));
+        return (TransferManager.TransferType.None, address(0), address(0));
     }
 
     function getCallbackTransferData(bytes calldata data)
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn,
             uint256 amount
@@ -151,6 +151,6 @@ contract BalancerV3Executor is IExecutor, ICallback {
         receiver = address(_VAULT);
         amount = uint256(bytes32(data[0:32]));
         tokenIn = address(bytes20(data[32:52]));
-        transferType = RestrictTransferFrom.TransferType.Transfer;
+        transferType = TransferManager.TransferType.Transfer;
     }
 }
