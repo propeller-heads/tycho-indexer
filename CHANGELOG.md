@@ -1,3 +1,21 @@
+## [0.146.0](https://github.com/propeller-heads/tycho-indexer/compare/0.145.2...0.146.0) (2026-03-06)
+
+
+### Features
+
+* dynamic dci skip condition ([#863](https://github.com/propeller-heads/tycho-indexer/issues/863)) ([cfe164c](https://github.com/propeller-heads/tycho-indexer/commit/cfe164cc7b88cba943030b1356731c3aa6016467))
+* Dynamic DCI skip condition for entrypoint requests ([3645481](https://github.com/propeller-heads/tycho-indexer/commit/3645481cdab811fbe0b5388baa18d2aca378750f))
+
+
+### Bug Fixes
+
+* add legacy DCI fallback for backward compatibility ([784df4a](https://github.com/propeller-heads/tycho-indexer/commit/784df4add21d63c3bb7d995c702e5b18c2398aa2))
+* Filter dci_protocols against DB-returned protocol systems ([45027a9](https://github.com/propeller-heads/tycho-indexer/commit/45027a91db4472cde04b403a7e71967c3fc2b1d6))
+* Resolve clippy::iter_kv_map lints for nightly 1.95 ([aa47e4e](https://github.com/propeller-heads/tycho-indexer/commit/aa47e4e082e8c3cac49c2b3cea52f7be89b9e560))
+* serve protocol_systems from config instead of DB ([2f6be95](https://github.com/propeller-heads/tycho-indexer/commit/2f6be95d30d2601d5934a27caaab49c5ff664562))
+* Use PaginationLimits trait for protocol_systems page size ([dd7c56a](https://github.com/propeller-heads/tycho-indexer/commit/dd7c56a91fa812df9668541d5e02d64ce1500056))
+* Warn when protocol_systems response is truncated by pagination ([117a9c9](https://github.com/propeller-heads/tycho-indexer/commit/117a9c9a9e5cca133d0cf3ce4db067a97efcfca4))
+
 ## [0.145.2](https://github.com/propeller-heads/tycho-indexer/compare/0.145.1...0.145.2) (2026-03-04)
 
 
