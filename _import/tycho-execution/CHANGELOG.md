@@ -1,3 +1,11 @@
+## [0.36.0](https://github.com/propeller-heads/tycho-contracts/compare/0.35.0...0.36.0) (2026-03-06)
+
+
+### Features
+
+* Support FoT Tokens in USV2 ([e02bcfb](https://github.com/propeller-heads/tycho-contracts/commit/e02bcfbc0e86005d1fef87a2836790a1b48e97ce))
+* Support FoT tokens in USV4 ([1c9786a](https://github.com/propeller-heads/tycho-contracts/commit/1c9786a956deb5c716dcdae5d07498c499dc76c4))
+
 ## [0.35.0](https://github.com/propeller-heads/tycho-contracts/compare/0.34.0...0.35.0) (2026-03-06)
 
 
