@@ -9,7 +9,8 @@ use crate::encoding::{
         swap_encoder::{
             balancer_v2::BalancerV2SwapEncoder, balancer_v3::BalancerV3SwapEncoder,
             bebop::BebopSwapEncoder, curve::CurveSwapEncoder, ekubo::EkuboSwapEncoder,
-            erc_4626::ERC4626SwapEncoder, fluid_v1::FluidV1SwapEncoder,
+            ekubo_v3::EkuboV3SwapEncoder, erc_4626::ERC4626SwapEncoder,
+            etherfi::EtherfiSwapEncoder, fluid_v1::FluidV1SwapEncoder,
             hashflow::HashflowSwapEncoder, maverick_v2::MaverickV2SwapEncoder,
             rocketpool::RocketpoolSwapEncoder, slipstreams::SlipstreamsSwapEncoder,
             uniswap_v2::UniswapV2SwapEncoder, uniswap_v3::UniswapV3SwapEncoder,
@@ -117,6 +118,9 @@ impl SwapEncoderRegistry {
             "ekubo_v2" => {
                 Ok(Box::new(EkuboSwapEncoder::new(executor_address, self.chain, config)?))
             }
+            "ekubo_v3" => {
+                Ok(Box::new(EkuboV3SwapEncoder::new(executor_address, self.chain, config)?))
+            }
             "vm:curve" => {
                 Ok(Box::new(CurveSwapEncoder::new(executor_address, self.chain, config)?))
             }
@@ -148,6 +152,9 @@ impl SwapEncoderRegistry {
                 Ok(Box::new(SlipstreamsSwapEncoder::new(executor_address, self.chain, config)?))
             }
             "weth" => Ok(Box::new(WethSwapEncoder::new(executor_address, self.chain, config)?)),
+            "etherfi" => {
+                Ok(Box::new(EtherfiSwapEncoder::new(executor_address, self.chain, config)?))
+            }
             _ => Err(EncodingError::FatalError(format!(
                 "Unknown protocol system: {}",
                 protocol_system
