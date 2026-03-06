@@ -1,3 +1,10 @@
+## [0.248.1](https://github.com/propeller-heads/tycho-simulation/compare/0.248.0...0.248.1) (2026-03-06)
+
+
+### Bug Fixes
+
+* update dependencies and adjust interfaces with upstream breaking changes ([2953077](https://github.com/propeller-heads/tycho-simulation/commit/295307765362b721be83462b35720b5ab03bb322))
+
 ## [0.248.0](https://github.com/propeller-heads/tycho-simulation/compare/0.247.2...0.248.0) (2026-03-04)
 
 
