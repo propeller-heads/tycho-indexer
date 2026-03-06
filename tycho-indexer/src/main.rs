@@ -58,7 +58,7 @@ use tycho_indexer::{
         token_analysis_cron::analyze_tokens,
         ExtractionError,
     },
-    services::ServicesBuilder,
+    services::{PlansConfig, ServicesBuilder},
 };
 use tycho_storage::postgres::{builder::GatewayBuilder, cache::CachedGateway};
 
@@ -337,12 +337,14 @@ async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
         ExtractionError::Setup("AUTH_API_KEY environment variable is not set".to_string())
     })?;
 
+    let plans_config = PlansConfig::from_yaml("./plans.yaml").map_err(ExtractionError::Setup)?;
+
     let (server_handle, server_task) =
         ServicesBuilder::new(direct_gw.clone(), rpc_client.clone(), api_key)
             .prefix(&global_args.server_version_prefix)
             .bind(&global_args.server_ip)
             .port(global_args.server_port)
-            .server_rpc_config(global_args.server.into())
+            .plans_config(plans_config)
             .run()?;
     info!(server_url, "Http and Ws server started");
     let shutdown_task = tokio::spawn(shutdown_handler(server_handle, vec![], None));
@@ -406,12 +408,14 @@ async fn create_indexing_tasks(
     let api_key = env::var("AUTH_API_KEY").map_err(|_| {
         ExtractionError::Setup("AUTH_API_KEY environment variable is not set".to_string())
     })?;
+    let plans_config = PlansConfig::from_yaml("./plans.yaml").map_err(ExtractionError::Setup)?;
+
     let (server_handle, server_task) =
         ServicesBuilder::new(cached_gw.clone(), rpc_client.clone(), api_key)
             .prefix(&global_args.server_version_prefix)
             .bind(&global_args.server_ip)
             .port(global_args.server_port)
-            .server_rpc_config(global_args.server.clone().into())
+            .plans_config(plans_config)
             .dci_protocols(dci_protocols)
             .protocol_systems(protocol_systems)
             .register_extractors(extractor_handles.clone())
