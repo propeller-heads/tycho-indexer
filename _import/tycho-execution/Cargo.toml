@@ -25,20 +25,19 @@ path = "src/bin/tycho-encode.rs"
 required-features = ["evm"]
 
 [dependencies]
+chrono = "0.4.39"
+clap = { version = "4.5.3", features = ["derive"] }
 dotenv = "0.15.0"
-lazy_static = "1.4.0"
-num-bigint = { version = "0.4.6", features = ["serde"] }
 hex = "0.4.3"
-num-traits = "0.2.19"
+num-bigint = { version = "0.4.6", features = ["serde"] }
+once_cell = "1.20.2"
+reqwest = { version = "0.12", features = ["json", "blocking"], optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.105"
 thiserror = "1.0.69"
 tokio = { version = "1.38.0", features = ["full"] }
-chrono = "0.4.39"
-clap = { version = "4.5.3", features = ["derive"] }
-once_cell = "1.20.2"
-tycho-common = ">=0.113.0"
-reqwest = { version = "0.12", features = ["json", "blocking"], optional = true }
+tycho-common = ">=0.143.0"
+typetag = { version = "0.2", optional = true }
 
 alloy = { version = "1.0.35", features = ["providers", "rpc-types-eth", "eip712", "signer-local", "node-bindings"], optional = true }
 async-trait = { version = "0.1.88", optional = true }
@@ -51,7 +50,7 @@ tycho-contracts = { path = "../tycho-contracts", features = ["test-utils"] }
 default = ["evm"]
 evm = ["alloy", "reqwest"]
 fork-tests = []
-test-utils = ["async-trait"]
+test-utils = ["async-trait", "typetag"]
 
 [profile.bench]
 debug = true

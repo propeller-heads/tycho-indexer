@@ -4937,9 +4937,9 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tycho-common"
-version = "0.113.0"
+version = "0.146.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a5dc8a59ffcf22844d9ed2a6e6707a910f623ab20cd3760da0c3731620b092f"
+checksum = "0f0aefa9705f10521e9d4d5681e373472ec8045584b00e15ebedacd94010e6c5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4947,6 +4947,7 @@ dependencies = [
  "chrono",
  "deepsize",
  "hex",
+ "itertools 0.10.5",
  "num-bigint",
  "rand 0.8.5",
  "serde",
@@ -4971,9 +4972,7 @@ dependencies = [
  "clap",
  "dotenv",
  "hex",
- "lazy_static",
  "num-bigint",
- "num-traits",
  "once_cell",
  "reqwest",
  "rstest",
@@ -4983,6 +4982,7 @@ dependencies = [
  "tokio",
  "tycho-common",
  "tycho-contracts",
+ "typetag",
 ]
 
 [[package]]
