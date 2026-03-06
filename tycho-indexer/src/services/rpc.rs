@@ -544,20 +544,28 @@ where
         ))
     }
 
-    #[instrument(skip(self, request))]
+    #[instrument(skip(self, request, allowed_systems))]
     async fn get_protocol_systems(
         &self,
         request: &dto::ProtocolSystemsRequestBody,
+        allowed_systems: Option<&HashSet<String>>,
     ) -> Result<dto::ProtocolSystemsRequestResponse, RpcError> {
         info!(?request, "Getting protocol systems.");
-        let total = self.protocol_systems.len() as i64;
+        let filtered: Vec<&String> = match allowed_systems {
+            Some(allowed) => self
+                .protocol_systems
+                .iter()
+                .filter(|ps| allowed.contains(ps.as_str()))
+                .collect(),
+            None => self.protocol_systems.iter().collect(),
+        };
+        let total = filtered.len() as i64;
         let page = request.pagination.page;
         let page_size = request.pagination.page_size;
         let skip = (page * page_size) as usize;
         let take = page_size as usize;
-        let systems: Vec<String> = self
-            .protocol_systems
-            .iter()
+        let systems: Vec<String> = filtered
+            .into_iter()
             .skip(skip)
             .take(take)
             .cloned()
@@ -1298,27 +1306,16 @@ pub async fn protocol_systems<G: Gateway, T: EntryPointTracer>(
 
     body.validate_pagination(&req)?;
 
-    // Clone the allowlist before moving `handler` into the DB call
     let allowed_systems = handler
         .resolve_plan_restrictions(&req)?
         .and_then(|r| r.allowed_protocol_systems.clone());
 
-    // Call the handler to get protocol systems
-    let response = handler
+    match handler
         .into_inner()
-        .get_protocol_systems(&body)
-        .await;
-
-    match response {
-        Ok(mut state) => {
-            // Intersect response with plan's allowed protocol systems
-            if let Some(allowed) = &allowed_systems {
-                state
-                    .protocol_systems
-                    .retain(|ps| allowed.contains(ps));
-            }
-            Ok(HttpResponse::Ok().json(state))
-        }
+        .get_protocol_systems(&body, allowed_systems.as_ref())
+        .await
+    {
+        Ok(state) => Ok(HttpResponse::Ok().json(state)),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting protocol systems.");
             Err(err)
@@ -3037,11 +3034,204 @@ plans:
             pagination: dto::PaginationParams { page: 0, page_size: 100 },
         };
         let response = req_handler
-            .get_protocol_systems(&request)
+            .get_protocol_systems(&request, None)
             .await
             .unwrap();
 
         assert_eq!(response.protocol_systems, vec!["uniswap_v2", "vm:curve"]);
         assert_eq!(response.dci_protocols, dci_protocols);
+    }
+
+    #[tokio::test]
+    async fn test_get_protocol_systems_filters_by_allowed() {
+        let gw = MockGateway::new();
+        let protocol_systems = vec![
+            "ambient".to_string(),
+            "sushiswap".to_string(),
+            "uniswap_v2".to_string(),
+            "uniswap_v3".to_string(),
+        ];
+
+        let handler = RpcHandler::new(
+            gw,
+            None,
+            MockEntryPointTracer::new(),
+            PlansConfig::default(),
+            vec![],
+            protocol_systems,
+        );
+
+        let allowed: HashSet<String> =
+            HashSet::from(["uniswap_v2".to_string(), "uniswap_v3".to_string()]);
+        let request = dto::ProtocolSystemsRequestBody {
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams { page: 0, page_size: 100 },
+        };
+        let response = handler
+            .get_protocol_systems(&request, Some(&allowed))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.protocol_systems,
+            vec!["uniswap_v2", "uniswap_v3"]
+        );
+        assert_eq!(response.pagination.total, 2);
+    }
+
+    #[tokio::test]
+    async fn test_get_protocol_systems_allowed_pagination() {
+        let gw = MockGateway::new();
+        let protocol_systems = vec![
+            "ambient".to_string(),
+            "sushiswap".to_string(),
+            "uniswap_v2".to_string(),
+            "uniswap_v3".to_string(),
+            "uniswap_v4".to_string(),
+        ];
+
+        let handler = RpcHandler::new(
+            gw,
+            None,
+            MockEntryPointTracer::new(),
+            PlansConfig::default(),
+            vec![],
+            protocol_systems,
+        );
+
+        let allowed: HashSet<String> = HashSet::from([
+            "uniswap_v2".to_string(),
+            "uniswap_v3".to_string(),
+            "uniswap_v4".to_string(),
+        ]);
+
+        // Page 0, size 2 — should get first 2 of the 3 allowed
+        let request = dto::ProtocolSystemsRequestBody {
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams { page: 0, page_size: 2 },
+        };
+        let response = handler
+            .get_protocol_systems(&request, Some(&allowed))
+            .await
+            .unwrap();
+
+        assert_eq!(response.protocol_systems.len(), 2);
+        assert_eq!(response.pagination.total, 3);
+
+        // Page 1, size 2 — should get the remaining 1
+        let request = dto::ProtocolSystemsRequestBody {
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams { page: 1, page_size: 2 },
+        };
+        let response = handler
+            .get_protocol_systems(&request, Some(&allowed))
+            .await
+            .unwrap();
+
+        assert_eq!(response.protocol_systems.len(), 1);
+        assert_eq!(response.pagination.total, 3);
+    }
+
+    #[tokio::test]
+    async fn test_get_protocol_systems_no_allowed_returns_all() {
+        let gw = MockGateway::new();
+        let protocol_systems = vec![
+            "ambient".to_string(),
+            "uniswap_v2".to_string(),
+            "uniswap_v3".to_string(),
+        ];
+
+        let handler = RpcHandler::new(
+            gw,
+            None,
+            MockEntryPointTracer::new(),
+            PlansConfig::default(),
+            vec![],
+            protocol_systems,
+        );
+
+        let request = dto::ProtocolSystemsRequestBody {
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams { page: 0, page_size: 100 },
+        };
+        let response = handler
+            .get_protocol_systems(&request, None)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.protocol_systems,
+            vec!["ambient", "uniswap_v2", "uniswap_v3"]
+        );
+        assert_eq!(response.pagination.total, 3);
+    }
+
+    #[actix_web::test]
+    async fn test_protocol_systems_endpoint_with_plan_restriction() {
+        let gw = MockGateway::new();
+        let active_systems = vec![
+            "ambient".to_string(),
+            "sushiswap".to_string(),
+            "uniswap_v3".to_string(),
+        ];
+
+        let handler = RpcHandler::new(
+            gw,
+            None,
+            MockEntryPointTracer::new(),
+            plans_config_with_restrictions(),
+            vec![],
+            active_systems,
+        );
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(handler))
+                .route(
+                    "/v1/protocol_systems",
+                    web::post()
+                        .to(super::protocol_systems::<MockGateway, MockEntryPointTracer>),
+                ),
+        )
+        .await;
+
+        let request_body = dto::ProtocolSystemsRequestBody {
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams { page: 0, page_size: 100 },
+        };
+
+        // With plan: should only return ambient and uniswap_v3 (allowed)
+        let resp = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/v1/protocol_systems")
+                .insert_header(("X-User-Plan", "restricted"))
+                .set_json(&request_body)
+                .to_request(),
+        )
+        .await;
+
+        assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+        let body: dto::ProtocolSystemsRequestResponse = test::read_body_json(resp).await;
+        assert_eq!(body.protocol_systems, vec!["ambient", "uniswap_v3"]);
+        assert_eq!(body.pagination.total, 2);
+
+        // Without plan: should return all
+        let resp = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/v1/protocol_systems")
+                .set_json(&request_body)
+                .to_request(),
+        )
+        .await;
+
+        assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+        let body: dto::ProtocolSystemsRequestResponse = test::read_body_json(resp).await;
+        assert_eq!(
+            body.protocol_systems,
+            vec!["ambient", "sushiswap", "uniswap_v3"]
+        );
+        assert_eq!(body.pagination.total, 3);
     }
 }
