@@ -680,4 +680,42 @@ contract TychoRouterUSV4FeeTokenTest is TychoRouterTestSetup {
         assertTrue(success, "TychoRouter swap failed");
         assertGt(twifReceived, 0, "Should receive TWIF");
     }
+
+    function testGroupedSwapTWIFIntermediaryViaV4() public {
+        // Grouped UniswapV4 swap with TWIF (6% fee-on-transfer) as
+        // intermediary. Same pool used in both directions to isolate
+        // the effect of the transfer tax on the intermediate hop.
+        //
+        //   USDC ──(USV4)──> TWIF ──(USV4)──> USDC
+        //
+        // The PoolManager's internal delta accounting means TWIF is
+        // never physically transferred between legs — only deltas
+        // are adjusted. The 6% tax only fires on actual ERC20
+        // transfers (settle/take at the edges), not on intermediate
+        // hops. This test verifies the executor handles that
+        // correctly.
+        uint256 amountIn = 100_000000; // 100 USDC
+
+        deal(USDC_ADDR, ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
+
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_usv4_grouped_twif_intermediary"
+        );
+        (bool success, bytes memory returnData) = tychoRouterAddr.call(callData);
+        vm.stopPrank();
+
+        uint256 usdcReceived = IERC20(USDC_ADDR).balanceOf(ALICE);
+        uint256 reportedAmountOut = abi.decode(returnData, (uint256));
+
+        assertTrue(success, "TychoRouter grouped TWIF swap failed");
+        assertGt(usdcReceived, 0, "Should receive USDC back");
+        assertEq(
+            reportedAmountOut,
+            usdcReceived,
+            "Reported amountOut should match actual balance received"
+        );
+    }
 }
