@@ -107,7 +107,7 @@ impl ProtocolSim for EkuboState {
         delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         if let Some(liquidity) = delta
             .updated_attributes
             .get("liquidity")

@@ -423,7 +423,7 @@ impl ProtocolSim for AerodromeSlipstreamsState {
         delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         if let Some(block_timestamp) = delta
             .updated_attributes
             .get("block_timestamp")

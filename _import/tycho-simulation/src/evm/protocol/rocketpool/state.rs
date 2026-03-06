@@ -354,7 +354,7 @@ impl ProtocolSim for RocketpoolState {
         delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         self.total_eth = delta
             .updated_attributes
             .get("total_eth")

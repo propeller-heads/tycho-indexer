@@ -171,7 +171,7 @@ impl ProtocolSim for HashflowState {
         _delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         todo!()
     }
 

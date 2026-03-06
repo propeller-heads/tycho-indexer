@@ -129,7 +129,7 @@ pub fn cpmm_delta_transition(
     delta: ProtocolStateDelta,
     reserve0_mut: &mut U256,
     reserve1_mut: &mut U256,
-) -> Result<(), TransitionError<String>> {
+) -> Result<(), TransitionError> {
     // reserve0 and reserve1 are considered required attributes and are expected in every delta
     // we process
     let reserve0 = U256::from_be_slice(

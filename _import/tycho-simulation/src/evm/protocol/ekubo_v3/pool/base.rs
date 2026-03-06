@@ -134,7 +134,7 @@ impl EkuboPool for BasePool {
         &mut self,
         updated_attributes: HashMap<String, Bytes>,
         deleted_attributes: HashSet<String>,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         let active_tick_update = updated_attributes
             .get("tick")
             .and_then(|updated_tick| {

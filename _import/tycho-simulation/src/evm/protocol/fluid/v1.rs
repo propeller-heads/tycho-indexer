@@ -367,7 +367,7 @@ impl ProtocolSim for FluidV1 {
         _delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         let engine = create_engine(SHARED_TYCHO_DB.clone(), false).expect("Infallible");
 
         let state = vm::decode_from_vm(

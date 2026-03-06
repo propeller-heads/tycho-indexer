@@ -64,7 +64,7 @@ pub trait HookHandler: Debug + Send + Sync + 'static {
         delta: ProtocolStateDelta,
         tokens: &HashMap<Bytes, Token>,
         balances: &Balances,
-    ) -> Result<(), TransitionError<String>>;
+    ) -> Result<(), TransitionError>;
     fn clone_box(&self) -> Box<dyn HookHandler>;
 
     fn as_any(&self) -> &dyn std::any::Any;

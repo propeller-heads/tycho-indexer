@@ -154,7 +154,7 @@ impl ProtocolSim for ERC4626State {
         _delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         let engine =
             create_engine(SHARED_TYCHO_DB.clone(), false).expect("Failed to create engine");
 

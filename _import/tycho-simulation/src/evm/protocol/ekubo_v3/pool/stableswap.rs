@@ -102,7 +102,7 @@ impl EkuboPool for StableswapPool {
         &mut self,
         _updated_attributes: HashMap<String, Bytes>,
         _deleted_attributes: HashSet<String>,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         Ok(())
     }
 }
