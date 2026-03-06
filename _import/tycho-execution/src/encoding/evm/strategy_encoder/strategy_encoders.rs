@@ -103,7 +103,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
         let mut initial_protocol_data: Vec<u8> = vec![];
         for swap in grouped_swap.swaps.iter() {
             let protocol_data = swap_encoder.encode_swap(swap, &encoding_context)?;
-            if encoding_context.group_token_in == *swap.token_in() {
+            if encoding_context.group_token_in == *swap.token_in().address {
                 initial_protocol_data = protocol_data;
             } else {
                 grouped_protocol_data.push(protocol_data);
@@ -219,7 +219,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
             let mut initial_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
                 let protocol_data = swap_encoder.encode_swap(swap, &encoding_context)?;
-                if encoding_context.group_token_in == *swap.token_in() {
+                if encoding_context.group_token_in == *swap.token_in().address {
                     initial_protocol_data = protocol_data;
                 } else {
                     grouped_protocol_data.push(protocol_data);
@@ -374,7 +374,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             let mut initial_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
                 let protocol_data = swap_encoder.encode_swap(swap, &encoding_context)?;
-                if encoding_context.group_token_in == *swap.token_in() {
+                if encoding_context.group_token_in == *swap.token_in().address {
                     initial_protocol_data = protocol_data;
                 } else {
                     grouped_protocol_data.push(protocol_data);
@@ -460,7 +460,7 @@ mod tests {
 
     mod single {
         use super::*;
-        use crate::encoding::models::Swap;
+        use crate::encoding::models::{default_token, Swap};
         #[test]
         fn test_single_swap_strategy_encoder() {
             // Performs a single swap from WETH to DAI on a USV2 pool, with no grouping
@@ -475,8 +475,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                weth.clone(),
-                dai.clone(),
+                default_token(weth.clone()),
+                default_token(dai.clone()),
             );
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SingleSwapStrategyEncoder::new(
@@ -506,6 +506,7 @@ mod tests {
                 "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id (pool address)
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // tokenIn (WETH)
                 "6b175474e89094c44da98b954eedeac495271d0f", // tokenOut (DAI)
+                "00",                                       // isFoT (false)
             ));
             let hex_calldata = encode(&encoded_solution.swaps);
 
@@ -517,7 +518,7 @@ mod tests {
 
     mod sequential {
         use super::*;
-        use crate::encoding::models::Swap;
+        use crate::encoding::models::{default_token, Swap};
 
         #[test]
         fn test_sequential_swap_strategy_encoder_no_permit2() {
@@ -535,8 +536,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                weth.clone(),
-                wbtc.clone(),
+                default_token(weth.clone()),
+                default_token(wbtc.clone()),
             );
             let swap_wbtc_usdc = Swap::new(
                 ProtocolComponent {
@@ -544,8 +545,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                wbtc.clone(),
-                usdc.clone(),
+                default_token(wbtc.clone()),
+                default_token(usdc.clone()),
             );
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SequentialSwapStrategyEncoder::new(
@@ -573,17 +574,19 @@ mod tests {
 
             let expected = String::from(concat!(
                 // swap 1: WETH -> WBTC
-                "0050", // swap length (80 bytes hex = 60 bytes actual)
+                "0051",                                     // swap length (81 bytes)
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
                 "bb2b8038a1640196fbe3e38816f3e67cba72d940", // component id (pool address)
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // tokenIn (WETH)
                 "2260fac5e5542a773aa44fbcfedf7c193bc2c599", // tokenOut (WBTC)
+                "00",                                       // isFoT (false)
                 // swap 2: WBTC -> USDC
-                "0050", // swap length (80 bytes hex = 60 bytes actual)
+                "0051",                                     // swap length (81 bytes)
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
                 "004375dff511095cc5a197a54140a24efef3a416", // component id (pool address)
                 "2260fac5e5542a773aa44fbcfedf7c193bc2c599", // tokenIn (WBTC)
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // tokenOut (USDC)
+                "00",                                       // isFoT (false)
             ));
 
             assert_eq!(hex_calldata, expected);
@@ -598,7 +601,7 @@ mod tests {
 
     mod split {
         use super::*;
-        use crate::encoding::models::Swap;
+        use crate::encoding::models::{default_token, Swap};
 
         #[test]
         fn test_split_input_cyclic_swap() {
@@ -629,8 +632,8 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                usdc.clone(),
-                weth.clone(),
+                default_token(usdc.clone()),
+                default_token(weth.clone()),
             )
             .split(0.6f64);
 
@@ -650,8 +653,8 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                usdc.clone(),
-                weth.clone(),
+                default_token(usdc.clone()),
+                default_token(weth.clone()),
             );
 
             // WETH -> USDC (Pool 2)
@@ -670,8 +673,8 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                weth.clone(),
-                usdc.clone(),
+                default_token(weth.clone()),
+                default_token(usdc.clone()),
             );
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SplitSwapStrategyEncoder::new(
@@ -721,8 +724,7 @@ mod tests {
                 "000bb8",                                   // pool fee
                 "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
                 "01",                                       // zero2one
-                "0055",                                     /* ple encoded swaps (85 bytes hex =
-                                                             * 65 bytes actual) */
+                "0056",                                     // ple encoded swaps (86 bytes)
                 "01",                                       // token in index
                 "00",                                       // token out index
                 "000000",                                   // split
@@ -730,6 +732,7 @@ mod tests {
                 "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id (pool address)
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // tokenIn (WETH)
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // tokenOut (USDC)
+                "00",                                       // isFoT (false)
             ]
             .join("");
             assert_eq!(hex_calldata, expected_swaps);
@@ -768,8 +771,8 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                usdc.clone(),
-                weth.clone(),
+                default_token(usdc.clone()),
+                default_token(weth.clone()),
             );
 
             let swap_weth_usdc_v3_pool1 = Swap::new(
@@ -787,8 +790,8 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                weth.clone(),
-                usdc.clone(),
+                default_token(weth.clone()),
+                default_token(usdc.clone()),
             )
             .split(0.6f64);
 
@@ -807,8 +810,8 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                weth.clone(),
-                usdc.clone(),
+                default_token(weth.clone()),
+                default_token(usdc.clone()),
             );
 
             let swap_encoder_registry = get_swap_encoder_registry();
@@ -839,7 +842,7 @@ mod tests {
             let hex_calldata = hex::encode(&encoded_solution.swaps);
 
             let expected_swaps = [
-                "0055",                                     // ple encoded swaps (85 bytes)
+                "0056",                                     // ple encoded swaps (86 bytes)
                 "00",                                       // token in index
                 "01",                                       // token out index
                 "000000",                                   // split
@@ -847,6 +850,7 @@ mod tests {
                 "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id (pool address)
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in (USDC)
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out (WETH)
+                "00",                                       // isFoT (false)
                 "0059",                                     // ple encoded swaps (89 bytes)
                 "01",                                       // token in index
                 "00",                                       // token out index

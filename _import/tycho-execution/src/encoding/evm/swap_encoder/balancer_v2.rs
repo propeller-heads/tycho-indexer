@@ -36,8 +36,11 @@ impl SwapEncoder for BalancerV2SwapEncoder {
         let component_id = AlloyBytes::from_str(&swap.component().id)
             .map_err(|_| EncodingError::FatalError("Invalid component ID".to_string()))?;
 
-        let args =
-            (bytes_to_address(swap.token_in())?, bytes_to_address(swap.token_out())?, component_id);
+        let args = (
+            bytes_to_address(&swap.token_in().address)?,
+            bytes_to_address(&swap.token_out().address)?,
+            component_id,
+        );
         Ok(args.abi_encode_packed())
     }
 
@@ -57,7 +60,7 @@ mod tests {
     use super::*;
     use crate::encoding::{
         evm::{swap_encoder::balancer_v2::BalancerV2SwapEncoder, utils::write_calldata_to_file},
-        models::Swap,
+        models::{default_token, Swap},
     };
     #[test]
     fn test_encode_balancer_v2() {
@@ -68,7 +71,11 @@ mod tests {
         };
         let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
         let token_out = Bytes::from("0xba100000625a3754423978a60c9317c58a424e3D");
-        let swap = Swap::new(balancer_pool, token_in.clone(), token_out.clone());
+        let swap = Swap::new(
+            balancer_pool,
+            default_token(token_in.clone()),
+            default_token(token_out.clone()),
+        );
         let encoding_context = EncodingContext {
             exact_out: false,
             router_address: Some(Bytes::zero(20)),

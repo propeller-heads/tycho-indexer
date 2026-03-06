@@ -52,8 +52,8 @@ contract UniswapV4Executor is IExecutor, ICallback {
     using TransientStateLibrary for IPoolManager;
     using LibPrefixLengthEncodedByteArray for bytes;
 
-    bytes4 private constant _SWAP_EXACT_INPUT_SELECTOR = 0xc4881bc7;
-    bytes4 private constant _SWAP_EXACT_INPUT_SINGLE_SELECTOR = 0x105c1b93;
+    bytes4 private immutable _SWAP_EXACT_INPUT_SELECTOR;
+    bytes4 private immutable _SWAP_EXACT_INPUT_SINGLE_SELECTOR;
 
     IPoolManager public immutable poolManager;
     address private immutable _angstromHookAddress;
@@ -74,6 +74,8 @@ contract UniswapV4Executor is IExecutor, ICallback {
         poolManager = poolManager_;
         _angstromHookAddress = angstromHook;
         _self = address(this);
+        _SWAP_EXACT_INPUT_SELECTOR = this.swapExactInput.selector;
+        _SWAP_EXACT_INPUT_SINGLE_SELECTOR = this.swapExactInputSingle.selector;
     }
 
     function fundsExpectedAddress(
@@ -103,8 +105,9 @@ contract UniswapV4Executor is IExecutor, ICallback {
     {
         address tokenIn;
         bool zeroForOne;
+        bool isFoT;
         UniswapV4Executor.UniswapV4Pool[] memory pools;
-        (tokenIn, tokenOut, zeroForOne, pools) = _decodeData(data);
+        (tokenIn, tokenOut, zeroForOne, isFoT, pools) = _decodeData(data);
         bytes memory swapData;
         if (pools.length == 1) {
             PoolKey memory key = PoolKey({
@@ -118,6 +121,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
                 this.swapExactInputSingle.selector,
                 key,
                 zeroForOne,
+                isFoT,
                 amountIn,
                 receiver,
                 pools[0].hookData
@@ -140,6 +144,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
             swapData = abi.encodeWithSelector(
                 this.swapExactInput.selector,
                 currencyIn,
+                isFoT,
                 amountIn,
                 receiver,
                 path
@@ -159,18 +164,20 @@ contract UniswapV4Executor is IExecutor, ICallback {
             address tokenIn,
             address tokenOut,
             bool zeroForOne,
+            bool isFoT,
             UniswapV4Pool[] memory pools
         )
     {
-        if (data.length < 89) {
+        if (data.length < 90) {
             revert UniswapV4Executor__InvalidDataLength();
         }
 
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
         zeroForOne = data[40] != 0;
+        isFoT = data[41] != 0;
 
-        bytes calldata remaining = data[41:];
+        bytes calldata remaining = data[42:];
 
         // Decode first pool with hook data
         if (remaining.length < 48) {
@@ -312,6 +319,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
     function swapExactInputSingle(
         PoolKey memory poolKey,
         bool zeroForOne,
+        bool isFoT,
         uint128 amountIn,
         address receiver,
         bytes calldata hookData
@@ -319,19 +327,29 @@ contract UniswapV4Executor is IExecutor, ICallback {
         Currency currencyIn = zeroForOne ? poolKey.currency0 : poolKey.currency1;
         _settle(currencyIn, amountIn);
 
-        // Use actual settled amount to handle possible fee-on-transfer tokens.
-        uint256 actualIn = _getFullCredit(currencyIn);
+        uint256 swapAmountIn;
+        if (isFoT) {
+            swapAmountIn = _getFullCredit(currencyIn);
+        } else {
+            swapAmountIn = amountIn;
+        }
 
-        uint128 amountOut =
-            _swap(poolKey, zeroForOne, -int256(actualIn), hookData).toUint128();
+        uint128 amountOut = _swap(
+                poolKey, zeroForOne, -int256(swapAmountIn), hookData
+            ).toUint128();
 
         Currency currencyOut =
             zeroForOne ? poolKey.currency1 : poolKey.currency0;
-        // Measure actual received to handle fee-on-transfer output tokens.
-        uint256 balanceBefore = _balanceOf(currencyOut, receiver);
-        _take(currencyOut, receiver, _mapTakeAmount(amountOut, currencyOut));
-        uint256 actualOut = _balanceOf(currencyOut, receiver) - balanceBefore;
-        return actualOut.toUint128();
+
+        if (isFoT) {
+            uint256 balanceBefore = _balanceOf(currencyOut, receiver);
+            _take(currencyOut, receiver, _mapTakeAmount(amountOut, currencyOut));
+            return
+                (_balanceOf(currencyOut, receiver) - balanceBefore).toUint128();
+        } else {
+            _take(currencyOut, receiver, _mapTakeAmount(amountOut, currencyOut));
+            return amountOut;
+        }
     }
 
     /**
@@ -343,6 +361,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
      */
     function swapExactInput(
         Currency currencyIn,
+        bool isFoT,
         uint128 amountIn,
         address receiver,
         PathKey[] calldata path
@@ -351,8 +370,12 @@ contract UniswapV4Executor is IExecutor, ICallback {
         Currency swapCurrencyIn = currencyIn;
         _settle(currencyIn, amountIn);
 
-        // Use actual settled amount to handle fee-on-transfer tokens.
-        uint256 swapAmountIn = _getFullCredit(currencyIn);
+        uint256 swapAmountIn;
+        if (isFoT) {
+            swapAmountIn = _getFullCredit(currencyIn);
+        } else {
+            swapAmountIn = amountIn;
+        }
         unchecked {
             uint256 pathLength = path.length;
             PathKey calldata pathKey;
@@ -361,7 +384,6 @@ contract UniswapV4Executor is IExecutor, ICallback {
                 pathKey = path[i];
                 (PoolKey memory poolKey, bool zeroForOne) =
                     pathKey.getPoolAndSwapDirection(swapCurrencyIn);
-                // The output delta will always be positive, except for when interacting with certain hook pools
                 amountOut = _swap(
                         poolKey,
                         zeroForOne,
@@ -374,16 +396,24 @@ contract UniswapV4Executor is IExecutor, ICallback {
             }
         }
 
-        // Measure actual received to handle fee-on-transfer output tokens.
-        uint256 balanceBefore = _balanceOf(swapCurrencyIn, receiver);
-        _take(
-            swapCurrencyIn, // at the end of the loop this is actually currency out
-            receiver,
-            _mapTakeAmount(amountOut, swapCurrencyIn)
-        );
-        uint256 actualOut = _balanceOf(swapCurrencyIn, receiver) - balanceBefore;
-
-        return actualOut.toUint128();
+        if (isFoT) {
+            uint256 balanceBefore = _balanceOf(swapCurrencyIn, receiver);
+            _take(
+                swapCurrencyIn,
+                receiver,
+                _mapTakeAmount(amountOut, swapCurrencyIn)
+            );
+            return
+                (_balanceOf(swapCurrencyIn, receiver) - balanceBefore)
+                .toUint128();
+        } else {
+            _take(
+                swapCurrencyIn,
+                receiver,
+                _mapTakeAmount(amountOut, swapCurrencyIn)
+            );
+            return amountOut;
+        }
     }
 
     function _swap(
@@ -566,40 +596,30 @@ contract UniswapV4Executor is IExecutor, ICallback {
         bytes4 selector = bytes4(stripped[:4]);
         receiver = address(poolManager);
         if (selector == _SWAP_EXACT_INPUT_SINGLE_SELECTOR) {
-            // swapExactInputSingle(PoolKey memory poolKey, bool zeroForOne, uint128 amountIn, address receiver, bytes calldata hookData)
-            // Data layout: selector(4) + PoolKey(160) + bool(32) + uint128(32) + address(32) + hookData(variable)
-
-            // PoolKey starts at offset 4, each field is 32 bytes:
-            // currency0: data[4:36], currency1: data[36:68], fee: data[68:100], tickSpacing: data[100:132], hooks: data[132:164]
-            // zeroForOne: data[164:196]
-            // amountIn: data[196:228]
-            // receiver: data[228:260]
+            // swapExactInputSingle(PoolKey, bool zeroForOne, bool isFoT, uint128 amountIn, address receiver, bytes hookData)
+            // PoolKey: currency0[4:36] currency1[36:68] fee[68:100] tickSpacing[100:132] hooks[132:164]
+            // zeroForOne[164:196] isFoT[196:228] amountIn[228:260] receiver[260:292]
 
             bool zeroForOne = uint8(stripped[195]) != 0;
-            amount = uint128(bytes16(stripped[212:228]));
-            // Extract tokenIn from PoolKey based on zeroForOne
+            amount = uint128(bytes16(stripped[244:260]));
             if (zeroForOne) {
-                tokenIn = address(bytes20(stripped[16:36])); // currency0
+                tokenIn = address(bytes20(stripped[16:36]));
             } else {
-                tokenIn = address(bytes20(stripped[48:68])); // currency1
+                tokenIn = address(bytes20(stripped[48:68]));
             }
             if (tokenIn == address(0)) {
-                // ETH transfers are handled in the Executor, so we need to set the transferType to
-                // TransferNativeInExecutor to update the delta accounting accordingly.
                 transferType =
                 RestrictTransferFrom.TransferType.TransferNativeInExecutor;
             } else {
                 transferType = RestrictTransferFrom.TransferType.Transfer;
             }
         } else if (selector == _SWAP_EXACT_INPUT_SELECTOR) {
-            // swapExactInput(Currency currencyIn, uint128 amountIn, address receiver, PathKey[] calldata path)
-            // Data layout: selector(4) + Currency(32) + uint128(32) + address(32) + PathKey[](variable)
+            // swapExactInput(Currency, bool isFoT, uint128 amountIn, address receiver, PathKey[])
+            // Currency[4:36] isFoT[36:68] amountIn[68:100] receiver[100:132]
 
             tokenIn = address(bytes20(stripped[16:36]));
-            amount = uint128(bytes16(stripped[52:68]));
+            amount = uint128(bytes16(stripped[84:100]));
             if (tokenIn == address(0)) {
-                // ETH transfers are handled in the Executor, so we need to set the transferType to
-                // TransferNativeInExecutor to update the delta accounting accordingly.
                 transferType =
                 RestrictTransferFrom.TransferType.TransferNativeInExecutor;
             } else {

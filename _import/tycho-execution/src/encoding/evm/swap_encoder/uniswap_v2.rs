@@ -35,14 +35,13 @@ impl SwapEncoder for UniswapV2SwapEncoder {
         swap: &Swap,
         _encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
-        let token_in_address = bytes_to_address(swap.token_in())?;
-        let token_out_address = bytes_to_address(swap.token_out())?;
+        let token_in_address = bytes_to_address(&swap.token_in().address)?;
+        let token_out_address = bytes_to_address(&swap.token_out().address)?;
         let component_id = Address::from_str(&swap.component().id)
             .map_err(|_| EncodingError::FatalError("Invalid USV2 component id".to_string()))?;
 
-        let args = (component_id, token_in_address, token_out_address);
-
-        Ok(args.abi_encode_packed())
+        Ok((component_id, token_in_address, token_out_address, swap.has_fee_on_transfer())
+            .abi_encode_packed())
     }
 
     fn executor_address(&self) -> &Bytes {
@@ -62,7 +61,7 @@ mod tests {
     use super::*;
     use crate::encoding::{
         evm::{swap_encoder::uniswap_v2::UniswapV2SwapEncoder, utils::write_calldata_to_file},
-        models::Swap,
+        models::{default_token, Swap},
     };
     #[test]
     fn test_encode_uniswap_v2() {
@@ -73,7 +72,8 @@ mod tests {
 
         let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
         let token_out = Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f");
-        let swap = Swap::new(usv2_pool, token_in.clone(), token_out.clone());
+        let swap =
+            Swap::new(usv2_pool, default_token(token_in.clone()), default_token(token_out.clone()));
         let encoding_context = EncodingContext {
             exact_out: false,
             router_address: Some(Bytes::zero(20)),
@@ -99,6 +99,8 @@ mod tests {
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                 // tokenOut
                 "6b175474e89094c44da98b954eedeac495271d0f",
+                // isFoT (false)
+                "00",
             ))
         );
         write_calldata_to_file("test_encode_uniswap_v2", hex_swap.as_str());

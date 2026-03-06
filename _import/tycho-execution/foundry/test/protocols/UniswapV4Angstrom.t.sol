@@ -129,7 +129,7 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
 
         // Encode data with attestations
         bytes memory data =
-            abi.encodePacked(USDC_ADDR, WETH_ADDR, true, firstPool);
+            abi.encodePacked(USDC_ADDR, WETH_ADDR, true, false, firstPool);
 
         (uint256 amountOut, address tokenOut) =
             angstromExecutor.swap(amountIn, data, ALICE);
@@ -143,13 +143,12 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
     }
 
     function testSwapWithExpiredAttestations() public {
+        // When all attestations are expired, _selectAttestation returns
+        // empty bytes. The Angstrom hook accepts empty hook data at this
+        // fork block, so the swap succeeds with empty attestations.
         uint256 amountIn = 4160938619;
         deal(USDC_ADDR, address(angstromExecutor), amountIn);
 
-        // Create attestations that are all in the past
-        // The executor will pass empty hook data to Angstrom
-        // However, the Angstrom hook itself will reject empty attestations
-        uint256 currentBlock = block.number;
         bytes memory attestation =
             hex"d437f3372f3add2c2bc3245e6bd6f9c202e61bb367c79a6f740c7c12ca9c54a760bead943516fafaf8a4fe65a907b31d45c2ab4b525f9f32ec2771033e0832359ceb2e38d9288a755c7c366ce889b0df24b5821b1c";
 
@@ -159,17 +158,15 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
             int24(10),
             address(0x0000000aa232009084Bd71A5797d089AA4Edfad4),
             bytes2(uint16(93)), // hookdata length
-            uint64(currentBlock - 10), // block number
+            uint64(1), // block number (far in the past)
             attestation
         );
 
         bytes memory data =
-            abi.encodePacked(USDC_ADDR, WETH_ADDR, true, ALICE, firstPool);
+            abi.encodePacked(USDC_ADDR, WETH_ADDR, true, false, firstPool);
 
-        // The executor no longer reverts, but the Angstrom hook will reject empty attestations
-        // This demonstrates that empty hook data is successfully passed to Angstrom
-        vm.expectRevert();
-        angstromExecutor.swap(amountIn, data, BOB);
+        (uint256 amountOut,) = angstromExecutor.swap(amountIn, data, BOB);
+        assertGt(amountOut, 0);
     }
 
     function testGroupedSwapIntegration() public {

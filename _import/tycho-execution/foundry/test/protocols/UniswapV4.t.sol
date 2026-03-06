@@ -24,6 +24,7 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
             address tokenIn,
             address tokenOut,
             bool zeroForOne,
+            bool isFoT,
             UniswapV4Pool[] memory pools
         )
     {
@@ -97,7 +98,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         (
             address tokenIn,
             address tokenOut,
-            bool zeroForOneDecoded,
+            bool zeroForOneDecoded,,
             UniswapV4Executor.UniswapV4Pool[] memory decodedPools
         ) = uniswapV4Exposed.decodeData(data);
 
