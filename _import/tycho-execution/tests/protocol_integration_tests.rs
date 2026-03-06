@@ -1838,3 +1838,141 @@ fn test_sequential_encoding_strategy_etherfi_wrap_eeth() {
         hex_calldata.as_str(),
     );
 }
+
+#[test]
+fn test_single_encoding_strategy_usv4_twif_fee_token() {
+    // Encodes a single swap of TWIF (a fee-on-transfer token that
+    // actually charges 6% on every transfer) to USDC through a
+    // real UniswapV4 pool on mainnet.
+    //
+    //   TWIF ───(USV4)──> USDC
+    //
+    // Pool key: fee=10000, tickSpacing=200, hooks=0x0
+    let twif = Bytes::from_str("0x2dd636c514bb4705c756d161585ff9ec665f18a2").unwrap();
+    let usdc = usdc();
+
+    let pool_fee = Bytes::from(BigInt::from(10000).to_signed_bytes_be());
+    let tick_spacing = Bytes::from(BigInt::from(200).to_signed_bytes_be());
+    let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
+    static_attributes.insert("key_lp_fee".into(), pool_fee);
+    static_attributes.insert("tick_spacing".into(), tick_spacing);
+
+    let swap = Swap::new(
+        ProtocolComponent {
+            id: "0x66315f75b2071302fa143f44ae0ec79c0c98f837693fa7150f8ac7ed1fa7576e".to_string(),
+            protocol_system: "uniswap_v4".to_string(),
+            static_attributes,
+            ..Default::default()
+        },
+        twif.clone(),
+        usdc.clone(),
+    );
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
+
+    let solution = Solution {
+        exact_out: false,
+        token_in: twif,
+        // TWIF is nearly worthless (~7.6e-10 USDC per TWIF).
+        // Use a large amount so the swap produces >=1 USDC.
+        amount_in: BigUint::from_str("10000000000000000000000000000000000").unwrap(),
+        token_out: usdc,
+        min_amount_out: BigUint::from(1u64),
+        sender: alice_address(),
+        receiver: alice_address(),
+        swaps: vec![swap],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .expect("encoding failed for TWIF fee-on-transfer token")[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        Some(get_signer()),
+    )
+    .expect("calldata generation failed for TWIF fee token")
+    .data;
+
+    let hex_calldata = encode(&calldata);
+    assert!(!hex_calldata.is_empty(), "calldata should not be empty for TWIF fee-token V4 swap");
+    write_calldata_to_file(
+        "test_single_encoding_strategy_usv4_twif_fee_token",
+        hex_calldata.as_str(),
+    );
+}
+
+#[test]
+fn test_single_encoding_strategy_usv4_twif_fee_token_output() {
+    // Encodes a swap of USDC to TWIF (a fee-on-transfer token that
+    // actually charges 6% on every transfer) through a real
+    // UniswapV4 pool on mainnet.
+    //
+    //   USDC ───(USV4)──> TWIF
+    //
+    // Tests the output-side FoT fix: the executor must report
+    // the actual amount received by the user after the fee,
+    // not the pre-fee amount from the V4 pool delta.
+    //
+    // Pool key: fee=10000, tickSpacing=200, hooks=0x0
+    let twif = Bytes::from_str("0x2dd636c514bb4705c756d161585ff9ec665f18a2").unwrap();
+    let usdc = usdc();
+
+    let pool_fee = Bytes::from(BigInt::from(10000).to_signed_bytes_be());
+    let tick_spacing = Bytes::from(BigInt::from(200).to_signed_bytes_be());
+    let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
+    static_attributes.insert("key_lp_fee".into(), pool_fee);
+    static_attributes.insert("tick_spacing".into(), tick_spacing);
+
+    let swap = Swap::new(
+        ProtocolComponent {
+            id: "0x66315f75b2071302fa143f44ae0ec79c0c98f837693fa7150f8ac7ed1fa7576e".to_string(),
+            protocol_system: "uniswap_v4".to_string(),
+            static_attributes,
+            ..Default::default()
+        },
+        usdc.clone(),
+        twif.clone(),
+    );
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
+
+    let solution = Solution {
+        exact_out: false,
+        token_in: usdc,
+        amount_in: BigUint::from_str("100000000").unwrap(), // 100 USDC
+        token_out: twif,
+        min_amount_out: BigUint::from(1u64),
+        sender: alice_address(),
+        receiver: alice_address(),
+        swaps: vec![swap],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .expect("encoding failed for TWIF output fee-on-transfer token")[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        Some(get_signer()),
+    )
+    .expect("calldata generation failed for TWIF output fee token")
+    .data;
+
+    let hex_calldata = encode(&calldata);
+    assert!(!hex_calldata.is_empty(), "calldata should not be empty for TWIF output V4 swap");
+    write_calldata_to_file(
+        "test_single_encoding_strategy_usv4_twif_fee_token_output",
+        hex_calldata.as_str(),
+    );
+}

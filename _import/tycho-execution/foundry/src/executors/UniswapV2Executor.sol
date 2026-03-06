@@ -51,7 +51,7 @@ contract UniswapV2Executor is IExecutor {
     }
 
     // slither-disable-next-line locked-ether
-    function swap(uint256 amountIn, bytes calldata data, address receiver)
+    function swap(uint256, bytes calldata data, address receiver)
         external
         payable
         returns (uint256 calculatedAmount, address tokenOut)
@@ -68,14 +68,28 @@ contract UniswapV2Executor is IExecutor {
 
         _verifyPairAddress(target, token0, token1);
 
-        calculatedAmount = _getAmountOut(target, amountIn, zeroForOne);
-
         IUniswapV2Pair pool = IUniswapV2Pair(target);
+        // slither-disable-next-line unused-return
+        (uint112 reserve0, uint112 reserve1,) = pool.getReserves();
+        uint112 reserveIn = zeroForOne ? reserve0 : reserve1;
+        uint112 reserveOut = zeroForOne ? reserve1 : reserve0;
+
+        // Use actual pool balance to handle fee-on-transfer input tokens
+        uint256 actualAmountIn =
+            IERC20(tokenIn).balanceOf(target) - uint256(reserveIn);
+
+        calculatedAmount = _getAmountOut(actualAmountIn, reserveIn, reserveOut);
+
+        uint256 balanceBefore = IERC20(tokenOut).balanceOf(receiver);
+
         if (zeroForOne) {
             pool.swap(0, calculatedAmount, receiver, "");
         } else {
             pool.swap(calculatedAmount, 0, receiver, "");
         }
+
+        // Use actual received amount to handle fee-on-transfer output tokens
+        calculatedAmount = IERC20(tokenOut).balanceOf(receiver) - balanceBefore;
     }
 
     function _decodeData(bytes calldata data)
@@ -91,22 +105,11 @@ contract UniswapV2Executor is IExecutor {
         tokenOut = address(bytes20(data[40:60]));
     }
 
-    function _getAmountOut(address target, uint256 amountIn, bool zeroForOne)
-        internal
-        view
-        returns (uint256 amount)
-    {
-        IUniswapV2Pair pair = IUniswapV2Pair(target);
-        uint112 reserveIn;
-        uint112 reserveOut;
-        if (zeroForOne) {
-            // slither-disable-next-line unused-return
-            (reserveIn, reserveOut,) = pair.getReserves();
-        } else {
-            // slither-disable-next-line unused-return
-            (reserveOut, reserveIn,) = pair.getReserves();
-        }
-
+    function _getAmountOut(
+        uint256 amountIn,
+        uint112 reserveIn,
+        uint112 reserveOut
+    ) internal view returns (uint256 amount) {
         require(reserveIn > 0 && reserveOut > 0, "L");
         uint256 amountInWithFee = amountIn * (10000 - feeBps);
         uint256 numerator = amountInWithFee * uint256(reserveOut);

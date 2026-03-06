@@ -344,6 +344,67 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
+    function testSingleSwapFeeOnTransferToken() public {
+        // Before fix: reverted with TychoRouter__AmountOutNotFullyReceived
+        // because the executor returned the calculated amount (not accounting
+        // for the transfer fee), but the receiver got less.
+        address ZKML_ADDR = address(0xE92344b4eDF545F3209094B192E46600A19E7C2D);
+        address ZKML_WETH_UNIV2_POOL =
+            0x315Ed60258702F8d159b98dF4C0DBEb1D7D776dF;
+
+        uint256 amountIn = 1 ether;
+
+        deal(WETH_ADDR, ALICE, amountIn);
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
+
+        bytes memory protocolData =
+            encodeUniswapV2Swap(ZKML_WETH_UNIV2_POOL, WETH_ADDR, ZKML_ADDR);
+
+        bytes memory swap =
+            encodeSingleSwap(address(usv2Executor), protocolData);
+
+        uint256 amountOut = tychoRouter.singleSwap(
+            amountIn, WETH_ADDR, ZKML_ADDR, 1, ALICE, noClientFee(), swap
+        );
+
+        assertGt(amountOut, 0);
+        assertEq(IERC20(ZKML_ADDR).balanceOf(ALICE), amountOut);
+        assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), 0);
+
+        vm.stopPrank();
+    }
+
+    function testSingleSwapFeeOnTransferTokenInput() public {
+        // Before fix: reverted with "UniswapV2: K" because the executor
+        // calculated amountOut based on the full amountIn, but the pool
+        // only received amountIn minus the transfer fee.
+        address ZKML_ADDR = address(0xE92344b4eDF545F3209094B192E46600A19E7C2D);
+        address ZKML_WETH_UNIV2_POOL =
+            0x315Ed60258702F8d159b98dF4C0DBEb1D7D776dF;
+
+        uint256 amountIn = 1000 ether;
+
+        deal(ZKML_ADDR, ALICE, amountIn);
+        vm.startPrank(ALICE);
+        IERC20(ZKML_ADDR).approve(address(tychoRouterAddr), amountIn);
+
+        bytes memory protocolData =
+            encodeUniswapV2Swap(ZKML_WETH_UNIV2_POOL, ZKML_ADDR, WETH_ADDR);
+
+        bytes memory swap =
+            encodeSingleSwap(address(usv2Executor), protocolData);
+
+        uint256 amountOut = tychoRouter.singleSwap(
+            amountIn, ZKML_ADDR, WETH_ADDR, 1, ALICE, noClientFee(), swap
+        );
+
+        assertGt(amountOut, 0);
+        assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), amountOut);
+
+        vm.stopPrank();
+    }
+
     function testSingleSwapIntegration() public {
         // Tests swapping WETH -> DAI on a USV2 pool with regular approvals
         deal(WETH_ADDR, ALICE, 1 ether);

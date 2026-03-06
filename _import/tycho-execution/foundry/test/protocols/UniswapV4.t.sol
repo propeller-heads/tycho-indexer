@@ -611,3 +611,72 @@ contract TychoRouterForUniswapV4AndEulerTest is TychoRouterTestSetup {
         assertGt(balanceAfter - balanceBefore, 0.9 ether); // At least 0.9 ETH
     }
 }
+
+contract TychoRouterUSV4FeeTokenTest is TychoRouterTestSetup {
+    function getForkBlock() public view virtual override returns (uint256) {
+        return 23550000;
+    }
+
+    function testSwapTWIFToUSDCViaV4() public {
+        // Full TychoRouter swap of TWIF (6% fee-on-transfer) to
+        // USDC through a real UniswapV4 pool.
+        //
+        //   TWIF ───(USV4, fee=10000, tick=200)──> USDC
+        //
+        // TWIF charges 6% on every transfer, including to the
+        // V4 Pool Manager. Before the fix, the executor passed
+        // the full amountIn to V4's swap, but only 94% arrived
+        // after the fee deduction, causing CurrencyNotSettled().
+        address TWIF = 0x2Dd636C514Bb4705c756D161585Ff9ec665f18A2;
+
+        // TWIF is nearly worthless (~7.6e-10 USDC per token).
+        // Use a large amount so the swap produces >=1 USDC.
+        uint256 amountIn = 1e34;
+
+        deal(TWIF, ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+        IERC20(TWIF).approve(PERMIT2_ADDRESS, type(uint256).max);
+
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_usv4_twif_fee_token"
+        );
+        (bool success,) = tychoRouterAddr.call(callData);
+        vm.stopPrank();
+
+        uint256 usdcReceived = IERC20(USDC_ADDR).balanceOf(ALICE);
+
+        assertTrue(success, "TychoRouter swap failed");
+        assertGt(usdcReceived, 0, "Should receive USDC");
+    }
+
+    function testSwapUSDCToTWIFViaV4() public {
+        // Full TychoRouter swap of USDC to TWIF (6% fee-on-transfer)
+        // through a real UniswapV4 pool.
+        //
+        //   USDC ───(USV4, fee=10000, tick=200)──> TWIF
+        //
+        // TWIF charges 6% on the output transfer from the V4 Pool
+        // Manager to the receiver. Before the fix, the executor
+        // reported the pre-fee amount from the V4 delta, causing
+        // TychoRouter__AmountOutNotFullyReceived(...)
+        address TWIF = 0x2Dd636C514Bb4705c756D161585Ff9ec665f18A2;
+        uint256 amountIn = 100_000000; // 100 USDC
+
+        deal(USDC_ADDR, ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
+
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_usv4_twif_fee_token_output"
+        );
+        (bool success,) = tychoRouterAddr.call(callData);
+        vm.stopPrank();
+
+        uint256 twifReceived = IERC20(TWIF).balanceOf(ALICE);
+
+        assertTrue(success, "TychoRouter swap failed");
+        assertGt(twifReceived, 0, "Should receive TWIF");
+    }
+}
