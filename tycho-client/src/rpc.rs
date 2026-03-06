@@ -1735,29 +1735,30 @@ mod tests {
         assert_eq!(response.pagination, PaginationResponse { page: 0, page_size: 20, total: 10 });
     }
 
+    #[rstest]
+    #[case::with_dci(Some(vec!["system2"]), vec!["system2"])]
+    #[case::backward_compat(None, vec![])]
     #[tokio::test]
-    async fn test_get_protocol_systems() {
-        let mut server = Server::new_async().await;
-        let server_resp = r#"
-        {
-            "protocol_systems": [
-                "system1",
-                "system2"
-            ],
-            "pagination": {
-                "page": 0,
-                "page_size": 20,
-                "total": 10
-            }
-        }
-        "#;
-        // test that the response is deserialized correctly
-        serde_json::from_str::<ProtocolSystemsRequestResponse>(server_resp).expect("deserialize");
+    async fn test_get_protocol_systems(
+        #[case] dci_protocols: Option<Vec<&str>>,
+        #[case] expected_dci: Vec<&str>,
+    ) {
+        use serde_json::json;
 
+        let mut json_value = json!({
+            "protocol_systems": ["system1", "system2"],
+            "pagination": { "page": 0, "page_size": 20, "total": 2 }
+        });
+        if let Some(dci) = dci_protocols {
+            json_value["dci_protocols"] = json!(dci);
+        }
+        let server_resp = serde_json::to_string(&json_value).unwrap();
+
+        let mut server = Server::new_async().await;
         let mocked_server = server
             .mock("POST", "/v1/protocol_systems")
             .expect(1)
-            .with_body(server_resp)
+            .with_body(&server_resp)
             .create_async()
             .await;
         let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
@@ -1767,10 +1768,10 @@ mod tests {
             .get_protocol_systems(&Default::default())
             .await
             .expect("get protocol systems");
-        let protocol_systems = response.protocol_systems;
 
         mocked_server.assert();
-        assert_eq!(protocol_systems, vec!["system1", "system2"]);
+        assert_eq!(response.protocol_systems, vec!["system1", "system2"]);
+        assert_eq!(response.dci_protocols, expected_dci);
     }
 
     #[tokio::test]
