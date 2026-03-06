@@ -379,7 +379,7 @@ impl ProtocolSim for VelodromeSlipstreamsState {
         delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         // apply attribute changes
         if let Some(liquidity) = delta
             .updated_attributes

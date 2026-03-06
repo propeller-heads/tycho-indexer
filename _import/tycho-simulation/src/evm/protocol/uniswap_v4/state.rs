@@ -798,7 +798,7 @@ impl ProtocolSim for UniswapV4State {
         delta: ProtocolStateDelta,
         tokens: &HashMap<Bytes, Token>,
         balances: &Balances,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         if let Some(mut hook) = self.hook.clone() {
             match hook.delta_transition(delta.clone(), tokens, balances) {
                 Ok(()) => self.set_hook_handler(hook),

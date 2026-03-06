@@ -711,7 +711,7 @@ where
         delta: ProtocolStateDelta,
         tokens: &HashMap<Bytes, Token>,
         balances: &Balances,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         if self.manual_updates {
             // Directly check for "update_marker" in `updated_attributes`
             if let Some(marker) = delta

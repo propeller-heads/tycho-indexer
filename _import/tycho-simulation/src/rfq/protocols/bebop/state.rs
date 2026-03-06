@@ -203,7 +203,7 @@ impl ProtocolSim for BebopState {
         _delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         Err(TransitionError::DecodeError("Not implemented".into()))
     }
 

@@ -350,7 +350,7 @@ where
         delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         if let Some(limits_entrypoint_bytes) = delta
             .updated_attributes
             .get("limits_entrypoint")
