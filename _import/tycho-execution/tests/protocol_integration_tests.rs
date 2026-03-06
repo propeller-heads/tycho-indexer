@@ -14,8 +14,8 @@ use tycho_contracts::encoding::{
 
 use crate::common::{
     alice_address, dai, encoding::encode_tycho_router_call, eth, eth_chain,
-    get_base_tycho_router_encoder, get_signer, get_tycho_router_encoder, ondo, pepe, usdc, wbtc,
-    weth,
+    get_base_tycho_router_encoder, get_signer, get_tycho_router_encoder, ondo, pepe, usdc, usdt,
+    wbtc, weth,
 };
 
 #[test]
@@ -1161,10 +1161,10 @@ fn test_sequential_encoding_strategy_fluid() {
 #[test]
 fn test_single_encoding_strategy_rocketpool_deposit() {
     // ETH -> (rocketpool) -> rETH
-    // Based on real tx 0x6213b6c235c52d2132711c18a1c66934832722fd71c098e843bc792ecdbd11b3
-    // where 4.5 ETH was deposited for 3.905847020555141679 rETH
+    // Based on real tx 0xe0f1db165b621cb1e50b629af9d47e064be464fbcc7f2bcba3df1d27dbb916be
+    // at block 24480105 where 85 ETH was deposited for 73382345660413064855 rETH
     let rocketpool_pool = ProtocolComponent {
-        id: String::from("0xdd3f50f8a6cafbe9b31a427582963f465e745af8"),
+        id: String::from("0xae78736Cd615f374D3085123A210448E74Fc6393"),
         protocol_system: String::from("rocketpool"),
         ..Default::default()
     };
@@ -1177,9 +1177,9 @@ fn test_single_encoding_strategy_rocketpool_deposit() {
     let solution = Solution {
         exact_out: false,
         token_in,
-        amount_in: BigUint::from(4_500_000_000_000_000_000_u128),
+        amount_in: BigUint::from(85_000_000_000_000_000_000_u128),
         token_out,
-        min_amount_out: BigUint::from(3_905_847_020_555_141_679_u128),
+        min_amount_out: BigUint::from(73_382_345_660_413_064_855_u128),
         // Alice
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -1206,12 +1206,11 @@ fn test_single_encoding_strategy_rocketpool_deposit() {
 #[test]
 fn test_single_encoding_strategy_rocketpool_burn() {
     // rETH -> (rocketpool) -> ETH
-    // Based on real tx 0xf461ace5ae15d1db7a9f83da2e5a62745e91ecd1908274fb6583f70a29d8f68d
-    // where 1 rETH was burned for 1.151971256664605227 ETH
+    // Block 24481338: user burned 2515686112138065226 rETH and received 2912504376202664754 ETH
     // We use `bob*` address as sender/receiver as Alice's address has a drainer deployed that
     // would interfere with the test when we send ETH back to her.
     let rocketpool_pool = ProtocolComponent {
-        id: String::from("0xdd3f50f8a6cafbe9b31a427582963f465e745af8"),
+        id: String::from("0xae78736Cd615f374D3085123A210448E74Fc6393"),
         protocol_system: String::from("rocketpool"),
         ..Default::default()
     };
@@ -1224,9 +1223,9 @@ fn test_single_encoding_strategy_rocketpool_burn() {
     let solution = Solution {
         exact_out: false,
         token_in,
-        amount_in: BigUint::from(1_000_000_000_000_000_000u128), // 1 rETH
+        amount_in: BigUint::from(2_515_686_112_138_065_226_u128),
         token_out,
-        min_amount_out: BigUint::from(1_151_971_256_664_605_227u128), // 1.151971256664605227 ETH
+        min_amount_out: BigUint::from(2_912_504_376_202_664_754_u128),
         // Bob*
         sender: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
         receiver: Bytes::from_str("0x9964bff29baa37b47604f3f3f51f3b3c5149d6de").unwrap(),
@@ -1612,6 +1611,230 @@ fn test_sequential_encoding_strategy_weth_wrap_added() {
     let hex_calldata = encode(&calldata);
     write_calldata_to_file(
         "test_sequential_encoding_strategy_weth_wrap_added",
+        hex_calldata.as_str(),
+    );
+}
+
+#[test]
+fn test_single_encoding_strategy_ekubo_v3() {
+    //   ETH ──(EKUBO V3)──> USDC
+
+    let token_in = eth();
+    let token_out = usdc(); // USDC
+
+    let static_attributes = HashMap::from([
+        ("fee".to_string(), Bytes::from(0_u64)),
+        ("pool_type_config".to_string(), Bytes::from(0_u32)),
+        ("extension".to_string(), Bytes::from("0x517E506700271AEa091b02f42756F5E174Af5230")), /* Oracle */
+    ]);
+
+    let component = ProtocolComponent {
+        // All Ekubo swaps go through the core contract - not necessary to specify pool
+        // id for test
+        protocol_system: "ekubo_v3".to_string(),
+        static_attributes,
+        ..Default::default()
+    };
+
+    let swap = Swap::new(component, token_in.clone(), token_out.clone());
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        token_in,
+        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
+        token_out,
+        min_amount_out: BigUint::from_str("1000").unwrap(),
+        // Alice
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata =
+        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
+            .unwrap()
+            .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_single_encoding_strategy_ekubo_v3", hex_calldata.as_str());
+}
+
+#[test]
+fn test_single_ekubo_v3_grouped_swap() {
+    // Test multi-hop Ekubo V3 swap (grouped swaps)
+    //
+    //   USDT ──(EKUBO V3)──> USDC ──(EKUBO V3)──> ETH
+
+    // First swap: USDT -> USDC
+    let swap1 = Swap::new(
+        ProtocolComponent {
+            id: "4a619b24ff31bbeae86503d0321898c9cb3f07bc32097749ee0622d5e9b78d6f".to_string(),
+            protocol_system: "ekubo_v3".to_string(),
+            static_attributes: HashMap::from([
+                (
+                    "extension".to_string(),
+                    Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
+                ),
+                ("fee".to_string(), Bytes::from(184467440737096_u64)),
+                ("pool_type_config".to_string(), Bytes::from_str("0x80000032").unwrap()), /* tick spacing = 50 */
+            ]),
+            ..Default::default()
+        },
+        usdt(),
+        usdc(),
+    );
+
+    // Second swap: USDC -> ETH
+    let swap2 = Swap::new(
+        ProtocolComponent {
+            id: "40f28acb8adc041aa51c8db8f21a9ccac0ee359075b01e1b432c238bb4e6c7eb".to_string(),
+            protocol_system: "ekubo_v3".to_string(),
+            static_attributes: HashMap::from([
+                (
+                    "extension".to_string(),
+                    Bytes::from_str("0x517e506700271aea091b02f42756f5e174af5230").unwrap(), /* Oracle */
+                ),
+                ("fee".to_string(), Bytes::from(0_u64)),
+                ("pool_type_config".to_string(), Bytes::from(0_u32)),
+            ]),
+            ..Default::default()
+        },
+        usdc(),
+        eth(),
+    );
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        token_in: usdt(),
+        amount_in: BigUint::from_str("10000_000000").unwrap(),
+        token_out: eth(),
+        min_amount_out: BigUint::from_str("1_000000000000000000").unwrap(),
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap1, swap2],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata =
+        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
+            .unwrap()
+            .data;
+
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_single_ekubo_v3_grouped_swap", hex_calldata.as_str());
+}
+
+#[test]
+fn test_sequential_encoding_strategy_etherfi_unwrap_weeth() {
+    // weeth -> (unwrap) -> eeth -> (RedemptionManager) -> eth
+    let weeth_pool = ProtocolComponent {
+        id: String::from("0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee"),
+        protocol_system: String::from("etherfi"),
+        ..Default::default()
+    };
+    let weeth = Bytes::from("0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee");
+    let eeth = Bytes::from("0x35fA164735182de50811E8e2E824cFb9B6118ac2");
+    let swap1 = Swap::new(weeth_pool, weeth.clone(), eeth.clone());
+    let eeth_pool = ProtocolComponent {
+        id: String::from("0x35fA164735182de50811E8e2E824cFb9B6118ac2"),
+        protocol_system: String::from("etherfi"),
+        ..Default::default()
+    };
+    let swap2 = Swap::new(eeth_pool, eeth.clone(), eth());
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        token_in: weeth.clone(),
+        amount_in: BigUint::from_str("1000000000000000000").unwrap(),
+        token_out: eth(),
+        min_amount_out: BigUint::from_str("1000000000000000000").unwrap(),
+        // Bob
+        // Avoid ALICE (0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2):
+        // it's an EIP-7702 address and RedemptionManager(https://vscode.blockscan.com/ethereum/0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0) only forwards 10k gas for ETH sends.
+        sender: Bytes::from_str("0x9964bFf29BAa37B47604F3F3F51F3B3C5149d6DE").unwrap(),
+        receiver: Bytes::from_str("0x9964bFf29BAa37B47604F3F3F51F3B3C5149d6DE").unwrap(),
+        swaps: vec![swap1, swap2],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata =
+        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
+            .unwrap()
+            .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file(
+        "test_sequential_encoding_strategy_etherfi_unwrap_weeth",
+        hex_calldata.as_str(),
+    );
+}
+
+#[test]
+fn test_sequential_encoding_strategy_etherfi_wrap_eeth() {
+    // eth -> (deposit) -> eeth -> (wrap) -> weeth
+    let eeth = Bytes::from("0x35fA164735182de50811E8e2E824cFb9B6118ac2");
+    let eeth_pool = ProtocolComponent {
+        id: String::from("0x35fA164735182de50811E8e2E824cFb9B6118ac2"),
+        protocol_system: String::from("etherfi"),
+        ..Default::default()
+    };
+    let swap1 = Swap::new(eeth_pool, eth(), eeth.clone());
+
+    let weeth_pool = ProtocolComponent {
+        id: String::from("0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee"),
+        protocol_system: String::from("etherfi"),
+        ..Default::default()
+    };
+    let weeth = Bytes::from("0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee");
+    let swap2 = Swap::new(weeth_pool, eeth.clone(), weeth.clone());
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        token_in: eth(),
+        amount_in: BigUint::from_str("1000000000000000000").unwrap(),
+        token_out: weeth.clone(),
+        min_amount_out: BigUint::from_str("900000000000000000").unwrap(),
+        // Bob
+        sender: Bytes::from_str("0x9964bFf29BAa37B47604F3F3F51F3B3C5149d6DE").unwrap(),
+        receiver: Bytes::from_str("0x9964bFf29BAa37B47604F3F3F51F3B3C5149d6DE").unwrap(),
+        swaps: vec![swap1, swap2],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata =
+        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
+            .unwrap()
+            .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file(
+        "test_sequential_encoding_strategy_etherfi_wrap_eeth",
         hex_calldata.as_str(),
     );
 }

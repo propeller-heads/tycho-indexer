@@ -1,3 +1,18 @@
+## [0.35.0](https://github.com/propeller-heads/tycho-contracts/compare/0.34.0...0.35.0) (2026-03-06)
+
+
+### Features
+
+* Add Ekubo V3 ([9ea4651](https://github.com/propeller-heads/tycho-contracts/commit/9ea4651d41f2a11f5e2835d3e6485183b1783f5d))
+* Add EtherFi ([8da9bcb](https://github.com/propeller-heads/tycho-contracts/commit/8da9bcb4389404b1cdb87850c9d222c900a4063b))
+* Upgrade Rocketpool ([ef16c0f](https://github.com/propeller-heads/tycho-contracts/commit/ef16c0fa0acd456334fdd944791137b7d2510ca5))
+
+
+### Bug Fixes
+
+* Add EkuboV3Executor to deploy-executors.js ([b311328](https://github.com/propeller-heads/tycho-contracts/commit/b311328423c24475a844724ecdb75dd642a3855e))
+* In EtherfiExecutor, return msg.sender instead of address(this) ([2a39ce1](https://github.com/propeller-heads/tycho-contracts/commit/2a39ce1a5836a2f412e7083f07c816767e0f42eb))
+
 ## [0.34.0](https://github.com/propeller-heads/tycho-contracts/compare/0.33.0...0.34.0) (2026-03-05)
 
 

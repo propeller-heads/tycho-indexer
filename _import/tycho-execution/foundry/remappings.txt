@@ -11,3 +11,4 @@
 @uniswap/v4-periphery/=lib/v4-periphery/
 @solady=lib/solady/src/
 @ekubo=lib/ekubo/
+@ekubo-v3=lib/ekubo-v3/src/
