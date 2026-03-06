@@ -168,10 +168,10 @@ contract EtherfiExecutor is IExecutor {
             );
         } else if (direction == EtherfiDirection.WeethToEeth) {
             // weETH.unwrap() burns from router (no transferFrom), so no approval
-            // needed — receiver=address(this) skips _approveIfNeeded
+            // needed — receiver=msg.sender skips _approveIfNeeded
             return (
                 RestrictTransferFrom.TransferType.ProtocolWillDebit,
-                address(this),
+                msg.sender,
                 weethAddress
             );
         } else {

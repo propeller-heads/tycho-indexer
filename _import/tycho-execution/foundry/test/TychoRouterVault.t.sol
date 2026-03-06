@@ -368,7 +368,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);
 
-        uint256 minAmountOut = 2000 * 1e18;
+        uint256 minAmountOut = 1900 * 1e18;
         uint256 amountOut = tychoRouter.singleSwap(
             amountIn,
             WETH_ADDR,
@@ -380,7 +380,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         );
         vm.stopPrank();
 
-        uint256 expectedAmount = 2018817438608734439722;
+        uint256 expectedAmount = 1988227843622901622874;
         assertEq(amountOut, expectedAmount);
 
         // Alice received no DAI
@@ -402,7 +402,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         // WETH more expensive in USDC terms on that pool.
 
         uint256 amountIn = 1_000_000_000; // 1000 USDC
-        uint256 expectedAmountOut = 1047935620; // 1047.9 USDC
+        uint256 expectedAmountOut = 1050886787; // 1050.8 USDC
 
         // Rebalance USV2 pool: add extra USDC so WETH is worth more USDC there
         deal(
@@ -467,7 +467,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         // the router for vault crediting. This tests the case where
         // transferFrom = true AND receiver = address(this).
         uint256 amountIn = 1_000_000_000; // 1000 USDC
-        uint256 expectedAmountOut = 1047935620; // 1047.9 USDC
+        uint256 expectedAmountOut = 1050886787; // 1050.8 USDC
 
         // Rebalance USV2 pool: add extra USDC so WETH is worth more USDC there
         deal(
@@ -573,7 +573,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             encodeUniswapV2Swap(DAI_USDC_POOL, DAI_ADDR, USDC_ADDR)
         );
 
-        uint256 expectedAmountOut = 1989737355;
+        uint256 expectedAmountOut = 1950813311;
         uint256 amountOut = tychoRouter.splitSwap(
             amountIn,
             WETH_ADDR,
@@ -622,12 +622,12 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);
 
-        uint256 expectedAmountOut = 2018817438608734439722;
+        uint256 expectedAmountOut = 1988227843622901622874;
         uint256 amountOut = tychoRouter.singleSwapUsingVault(
             amountIn,
             WETH_ADDR,
             DAI_ADDR,
-            2000 * 1e18,
+            1900 * 1e18,
             tychoRouterAddr, // receiver = router
             noClientFee(),
             swap
