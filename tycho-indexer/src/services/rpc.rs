@@ -1614,8 +1614,8 @@ mod tests {
             .version
             .timestamp
             .unwrap()
-            .timestamp_millis()
-            - result
+            .timestamp_millis() -
+            result
                 .version
                 .timestamp
                 .unwrap()
@@ -2894,10 +2894,10 @@ mod tests {
         #[case] traded_n_days_ago: Option<u64>,
         #[case] should_pass: bool,
     ) {
-        let use_addresses = plan_header == Some("restricted")
-            && request_quality.is_none()
-            && traded_n_days_ago.is_none()
-            && should_pass;
+        let use_addresses = plan_header == Some("restricted") &&
+            request_quality.is_none() &&
+            traded_n_days_ago.is_none() &&
+            should_pass;
 
         let mut gw = MockGateway::new();
         if should_pass {
@@ -3072,10 +3072,7 @@ plans:
             .await
             .unwrap();
 
-        assert_eq!(
-            response.protocol_systems,
-            vec!["uniswap_v2", "uniswap_v3"]
-        );
+        assert_eq!(response.protocol_systems, vec!["uniswap_v2", "uniswap_v3"]);
         assert_eq!(response.pagination.total, 2);
     }
 
@@ -3135,11 +3132,8 @@ plans:
     #[tokio::test]
     async fn test_get_protocol_systems_no_allowed_returns_all() {
         let gw = MockGateway::new();
-        let protocol_systems = vec![
-            "ambient".to_string(),
-            "uniswap_v2".to_string(),
-            "uniswap_v3".to_string(),
-        ];
+        let protocol_systems =
+            vec!["ambient".to_string(), "uniswap_v2".to_string(), "uniswap_v3".to_string()];
 
         let handler = RpcHandler::new(
             gw,
@@ -3159,21 +3153,15 @@ plans:
             .await
             .unwrap();
 
-        assert_eq!(
-            response.protocol_systems,
-            vec!["ambient", "uniswap_v2", "uniswap_v3"]
-        );
+        assert_eq!(response.protocol_systems, vec!["ambient", "uniswap_v2", "uniswap_v3"]);
         assert_eq!(response.pagination.total, 3);
     }
 
     #[actix_web::test]
     async fn test_protocol_systems_endpoint_with_plan_restriction() {
         let gw = MockGateway::new();
-        let active_systems = vec![
-            "ambient".to_string(),
-            "sushiswap".to_string(),
-            "uniswap_v3".to_string(),
-        ];
+        let active_systems =
+            vec!["ambient".to_string(), "sushiswap".to_string(), "uniswap_v3".to_string()];
 
         let handler = RpcHandler::new(
             gw,
@@ -3189,8 +3177,7 @@ plans:
                 .app_data(web::Data::new(handler))
                 .route(
                     "/v1/protocol_systems",
-                    web::post()
-                        .to(super::protocol_systems::<MockGateway, MockEntryPointTracer>),
+                    web::post().to(super::protocol_systems::<MockGateway, MockEntryPointTracer>),
                 ),
         )
         .await;
@@ -3228,10 +3215,7 @@ plans:
 
         assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
         let body: dto::ProtocolSystemsRequestResponse = test::read_body_json(resp).await;
-        assert_eq!(
-            body.protocol_systems,
-            vec!["ambient", "sushiswap", "uniswap_v3"]
-        );
+        assert_eq!(body.protocol_systems, vec!["ambient", "sushiswap", "uniswap_v3"]);
         assert_eq!(body.pagination.total, 3);
     }
 }
