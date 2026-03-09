@@ -1,5 +1,4 @@
 //! This module contains Tycho RPC implementation
-#![allow(deprecated)]
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -31,8 +30,9 @@ use crate::{
     services::{
         cache::RpcCache,
         deltas_buffer::{PendingDeltasBuffer, PendingDeltasError},
-        middleware::{RequestPaginationValidation, ValidateFilter},
-        ServerRpcConfig,
+        middleware::{
+            PlanRestrictions, PlansConfig, RequestPaginationValidation, ValidateRestrictions,
+        },
     },
 };
 
@@ -56,8 +56,8 @@ pub enum RpcError {
     #[error("Unknown error: {0}")]
     Unknown(String),
 
-    #[error("Minimum filtering requirements for {0} not met: {1}")]
-    MinimumFilterNotMet(String, String),
+    #[error("Plan restriction violated: {0}")]
+    PlanRestrictionViolation(String),
 }
 
 impl From<anyhow::Error> for RpcError {
@@ -75,7 +75,7 @@ impl ResponseError for RpcError {
             RpcError::DeltasError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             RpcError::Pagination(_) => StatusCode::BAD_REQUEST,
             RpcError::Unknown(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            RpcError::MinimumFilterNotMet(_, _) => StatusCode::BAD_REQUEST,
+            RpcError::PlanRestrictionViolation(_) => StatusCode::BAD_REQUEST,
         }
     }
 
@@ -88,7 +88,7 @@ impl ResponseError for RpcError {
             RpcError::Pagination(e) => HttpResponse::BadRequest()
                 .body(format!("Page size must be less than or equal to {e}.")),
             RpcError::Unknown(e) => HttpResponse::InternalServerError().body(e.to_string()),
-            RpcError::MinimumFilterNotMet(_, e) => HttpResponse::BadRequest().body(e.to_owned()),
+            RpcError::PlanRestrictionViolation(e) => HttpResponse::BadRequest().body(e.to_owned()),
         }
     }
 }
@@ -109,7 +109,7 @@ pub struct RpcHandler<G, T> {
         RpcCache<dto::TracedEntryPointRequestBody, dto::TracedEntryPointRequestResponse>,
     #[allow(dead_code)]
     tracer: T,
-    rpc_config: ServerRpcConfig,
+    plans_config: PlansConfig,
     /// Protocol systems that use Dynamic Contract Indexing (DCI). Included in the
     /// `protocol_systems` response so clients can skip entrypoint requests for non-DCI protocols.
     dci_protocols: Vec<String>,
@@ -125,7 +125,7 @@ where
         db_gateway: G,
         pending_deltas: Option<Arc<dyn PendingDeltasBuffer + Send + Sync>>,
         tracer: T,
-        rpc_config: ServerRpcConfig,
+        plans_config: PlansConfig,
         dci_protocols: Vec<String>,
         protocol_systems: Vec<String>,
     ) -> Self {
@@ -171,9 +171,28 @@ where
             component_cache,
             traced_entry_point_cache,
             tracer,
-            rpc_config,
+            plans_config,
             dci_protocols,
             protocol_systems,
+        }
+    }
+
+    /// Resolves plan restrictions from the `X-User-Plan` header.
+    /// Returns `None` when no header is present (no restrictions apply).
+    fn resolve_plan_restrictions(
+        &self,
+        req: &actix_web::HttpRequest,
+    ) -> Result<Option<&PlanRestrictions>, RpcError> {
+        match req
+            .headers()
+            .get("X-User-Plan")
+            .and_then(|v| v.to_str().ok())
+        {
+            Some(plan_name) => self
+                .plans_config
+                .resolve(plan_name)
+                .map(Some),
+            None => Ok(None),
         }
     }
 
@@ -525,20 +544,28 @@ where
         ))
     }
 
-    #[instrument(skip(self, request))]
+    #[instrument(skip(self, request, allowed_systems))]
     async fn get_protocol_systems(
         &self,
         request: &dto::ProtocolSystemsRequestBody,
+        allowed_systems: Option<&HashSet<String>>,
     ) -> Result<dto::ProtocolSystemsRequestResponse, RpcError> {
         info!(?request, "Getting protocol systems.");
-        let total = self.protocol_systems.len() as i64;
+        let filtered: Vec<&String> = match allowed_systems {
+            Some(allowed) => self
+                .protocol_systems
+                .iter()
+                .filter(|ps| allowed.contains(ps.as_str()))
+                .collect(),
+            None => self.protocol_systems.iter().collect(),
+        };
+        let total = filtered.len() as i64;
         let page = request.pagination.page;
         let page_size = request.pagination.page_size;
         let skip = (page * page_size) as usize;
         let take = page_size as usize;
-        let systems: Vec<String> = self
-            .protocol_systems
-            .iter()
+        let systems: Vec<String> = filtered
+            .into_iter()
             .skip(skip)
             .take(take)
             .cloned()
@@ -1098,6 +1125,9 @@ pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("protocol_system", &body.protocol_system);
 
     body.validate_pagination(&req)?;
+    if let Some(restrictions) = handler.resolve_plan_restrictions(&req)? {
+        body.validate_restrictions(restrictions)?;
+    }
 
     // Call the handler to get the state
     let response = handler
@@ -1140,7 +1170,9 @@ pub async fn tokens<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("page_size", body.pagination.page_size);
 
     body.validate_pagination(&req)?;
-    body.validate_filter(&handler.rpc_config)?;
+    if let Some(restrictions) = handler.resolve_plan_restrictions(&req)? {
+        body.validate_restrictions(restrictions)?;
+    }
 
     // Call the handler to get tokens
     let response = handler
@@ -1184,7 +1216,9 @@ pub async fn protocol_components<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("protocol_system", &body.protocol_system);
 
     body.validate_pagination(&req)?;
-    body.validate_filter(&handler.rpc_config)?;
+    if let Some(restrictions) = handler.resolve_plan_restrictions(&req)? {
+        body.validate_restrictions(restrictions)?;
+    }
 
     // Call the handler to get protocol components
     let response = handler
@@ -1227,6 +1261,9 @@ pub async fn protocol_state<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("protocol_system", &body.protocol_system);
 
     body.validate_pagination(&req)?;
+    if let Some(restrictions) = handler.resolve_plan_restrictions(&req)? {
+        body.validate_restrictions(restrictions)?;
+    }
 
     // Call the handler to get protocol states
     let response = handler
@@ -1269,13 +1306,15 @@ pub async fn protocol_systems<G: Gateway, T: EntryPointTracer>(
 
     body.validate_pagination(&req)?;
 
-    // Call the handler to get protocol systems
-    let response = handler
-        .into_inner()
-        .get_protocol_systems(&body)
-        .await;
+    let allowed_systems = handler
+        .resolve_plan_restrictions(&req)?
+        .and_then(|r| r.allowed_protocol_systems.clone());
 
-    match response {
+    match handler
+        .into_inner()
+        .get_protocol_systems(&body, allowed_systems.as_ref())
+        .await
+    {
         Ok(state) => Ok(HttpResponse::Ok().json(state)),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting protocol systems.");
@@ -1309,6 +1348,9 @@ pub async fn component_tvl<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("page_size", body.pagination.page_size);
 
     body.validate_pagination(&req)?;
+    if let Some(restrictions) = handler.resolve_plan_restrictions(&req)? {
+        body.validate_restrictions(restrictions)?;
+    }
 
     // Call the handler to get component tvl
     let response = handler
@@ -1350,6 +1392,9 @@ pub async fn traced_entry_points<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("page_size", body.pagination.page_size);
 
     body.validate_pagination(&req)?;
+    if let Some(restrictions) = handler.resolve_plan_restrictions(&req)? {
+        body.validate_restrictions(restrictions)?;
+    }
 
     // Call the handler to get traced entry points
     let response = handler
@@ -1657,7 +1702,7 @@ mod tests {
             gw,
             Some(Arc::new(mock_buffer)),
             MockEntryPointTracer::new(),
-            ServerRpcConfig::new(),
+            PlansConfig::default(),
             vec![],
             vec![],
         );
@@ -1967,7 +2012,7 @@ mod tests {
             gw,
             None,
             mock_entrypoint_tracer,
-            ServerRpcConfig::new(),
+            PlansConfig::default(),
             vec![],
             vec![],
         );
@@ -2044,7 +2089,7 @@ mod tests {
             expected_upserted_tracing_results,
         );
 
-        let req_handler = RpcHandler::new(gw, None, tracer, ServerRpcConfig::new(), vec![], vec![]);
+        let req_handler = RpcHandler::new(gw, None, tracer, PlansConfig::default(), vec![], vec![]);
         let response = req_handler
             .add_entry_points(&req_body)
             .await
@@ -2167,7 +2212,7 @@ mod tests {
             gw,
             None,
             MockEntryPointTracer::new(),
-            ServerRpcConfig::new(),
+            PlansConfig::default(),
             vec![],
             vec![],
         );
@@ -2372,7 +2417,7 @@ mod tests {
             gw,
             None,
             MockEntryPointTracer::new(),
-            ServerRpcConfig::new(),
+            PlansConfig::default(),
             vec![],
             vec![],
         );
@@ -2448,7 +2493,7 @@ mod tests {
             gw,
             None,
             MockEntryPointTracer::new(),
-            ServerRpcConfig::new(),
+            PlansConfig::default(),
             vec![],
             vec![],
         );
@@ -2525,7 +2570,7 @@ mod tests {
             gw,
             Some(Arc::new(mock_buffer)),
             MockEntryPointTracer::new(),
-            ServerRpcConfig::new(),
+            PlansConfig::default(),
             vec![],
             vec![],
         );
@@ -2613,7 +2658,7 @@ mod tests {
             gw,
             Some(Arc::new(mock_buffer)),
             MockEntryPointTracer::new(),
-            ServerRpcConfig::new(),
+            PlansConfig::default(),
             vec![],
             vec![],
         );
@@ -2713,7 +2758,7 @@ mod tests {
             gw,
             Some(Arc::new(mock_buffer)),
             MockEntryPointTracer::new(),
-            ServerRpcConfig::new(),
+            PlansConfig::default(),
             vec![],
             vec![],
         );
@@ -2754,26 +2799,54 @@ mod tests {
         assert_eq!(response2.pagination.total, 3);
     }
 
+    fn plans_config_with_restrictions() -> PlansConfig {
+        use std::collections::HashSet;
+
+        use crate::services::middleware::{NumericRestriction, Operator, PlanRestrictions};
+
+        let restrictions = PlanRestrictions {
+            allowed_protocol_systems: Some(HashSet::from([
+                "ambient".to_string(),
+                "uniswap_v3".to_string(),
+            ])),
+            component_tvl: Some(NumericRestriction { op: Operator::Gte, value: 1000.0 }),
+            token_quality: Some(NumericRestriction { op: Operator::Gte, value: 50.0 }),
+            traded_n_days_ago: Some(NumericRestriction { op: Operator::Lte, value: 30.0 }),
+        };
+        let mut plans = std::collections::HashMap::new();
+        plans.insert("restricted".to_string(), restrictions);
+        serde_yaml::from_str(
+            &serde_yaml::to_string(&std::collections::HashMap::from([("plans", plans)])).unwrap(),
+        )
+        .unwrap()
+    }
+
     #[rstest]
-    #[case::config_set_no_filter_rejects(Some(1000.0), None, false)]
-    #[case::config_set_below_threshold_rejects(Some(1000.0), Some(500.0), false)]
-    #[case::config_set_above_threshold_accepts(Some(1000.0), Some(1500.0), true)]
+    #[case::no_plan_header_passes(None, None, true)]
+    #[case::plan_rejects_missing_tvl(Some("restricted"), None, false)]
+    #[case::plan_rejects_below_threshold(Some("restricted"), Some(500.0), false)]
+    #[case::plan_accepts_above_threshold(Some("restricted"), Some(1500.0), true)]
+    #[case::unknown_plan_rejects(Some("nonexistent"), Some(5000.0), false)]
     #[actix_web::test]
-    async fn test_protocol_components_endpoint_rejects_invalid_filters(
-        #[case] min_tvl: Option<f64>,
+    async fn test_protocol_components_plan_restrictions(
+        #[case] plan_header: Option<&str>,
         #[case] tvl_gt: Option<f64>,
         #[case] should_pass: bool,
     ) {
         let mut gw = MockGateway::new();
         if should_pass {
-            // Set up mock expectation for successful validation
             let mock_response = Ok(WithTotal { entity: vec![], total: Some(0) });
             gw.expect_get_protocol_components()
                 .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
         }
-        let config = ServerRpcConfig::new().with_min_tvl(min_tvl);
-        let handler =
-            RpcHandler::new(gw, None, MockEntryPointTracer::new(), config, vec![], vec![]);
+        let handler = RpcHandler::new(
+            gw,
+            None,
+            MockEntryPointTracer::new(),
+            plans_config_with_restrictions(),
+            vec![],
+            vec![],
+        );
 
         let app = test::init_service(
             App::new()
@@ -2793,61 +2866,53 @@ mod tests {
             pagination: dto::PaginationParams::new(0, 10),
         };
 
-        let req = test::TestRequest::post()
+        let mut req_builder = test::TestRequest::post()
             .uri("/v1/protocol_components")
-            .set_json(&request_body)
-            .to_request();
-
-        let resp = test::call_service(&app, req).await;
+            .set_json(&request_body);
+        if let Some(plan) = plan_header {
+            req_builder = req_builder.insert_header(("X-User-Plan", plan));
+        }
+        let resp = test::call_service(&app, req_builder.to_request()).await;
 
         if should_pass {
-            // Should succeed with 200 OK
-            assert_eq!(
-                resp.status(),
-                actix_web::http::StatusCode::OK,
-                "Expected validation to accept request"
-            );
+            assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
         } else {
-            // Should fail with 400 Bad Request due to filter validation
-            assert_eq!(
-                resp.status(),
-                actix_web::http::StatusCode::BAD_REQUEST,
-                "Expected validation to reject request"
-            );
-
-            let body = test::read_body(resp).await;
-            let body_str = std::str::from_utf8(&body).unwrap_or("");
-            assert!(
-                body_str.contains("tvl_gt parameter is required") ||
-                    body_str.contains("tvl_gt must be at least"),
-                "Should fail with filter validation error. Body: {}",
-                body_str
-            );
+            assert_eq!(resp.status(), actix_web::http::StatusCode::BAD_REQUEST);
         }
     }
 
     #[rstest]
-    #[case::config_set_no_filter_rejects(Some(50), None, None, false)]
-    #[case::config_set_below_threshold_rejects(Some(50), Some(30), None, false)]
-    #[case::config_set_token_addresses_accepts(Some(50), None, Some(vec![Bytes::from_str("0x01").unwrap()]), true)]
-    #[case::config_set_above_threshold_accepts(Some(50), Some(75), None, true)]
+    #[case::no_plan_header_passes(None, None, None, true)]
+    #[case::plan_rejects_missing_quality(Some("restricted"), None, None, false)]
+    #[case::plan_rejects_below_quality(Some("restricted"), Some(30), None, false)]
+    #[case::plan_accepts_above_quality(Some("restricted"), Some(75), Some(15), true)]
+    #[case::plan_skips_with_addresses(Some("restricted"), None, None, true)]
     #[actix_web::test]
-    async fn test_tokens_endpoint_rejects_invalid_filters(
-        #[case] min_quality: Option<i32>,
+    async fn test_tokens_plan_restrictions(
+        #[case] plan_header: Option<&str>,
         #[case] request_quality: Option<i32>,
-        #[case] token_addresses: Option<Vec<tycho_common::Bytes>>,
+        #[case] traded_n_days_ago: Option<u64>,
         #[case] should_pass: bool,
     ) {
+        let use_addresses = plan_header == Some("restricted") &&
+            request_quality.is_none() &&
+            traded_n_days_ago.is_none() &&
+            should_pass;
+
         let mut gw = MockGateway::new();
         if should_pass {
-            // Set up mock expectation for successful validation
             let mock_response = Ok(WithTotal { entity: vec![], total: Some(0) });
             gw.expect_get_tokens()
                 .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
         }
-        let config = ServerRpcConfig::new().with_min_quality(min_quality);
-        let handler =
-            RpcHandler::new(gw, None, MockEntryPointTracer::new(), config, vec![], vec![]);
+        let handler = RpcHandler::new(
+            gw,
+            None,
+            MockEntryPointTracer::new(),
+            plans_config_with_restrictions(),
+            vec![],
+            vec![],
+        );
 
         let app = test::init_service(
             App::new()
@@ -2856,45 +2921,95 @@ mod tests {
         )
         .await;
 
+        let token_addresses =
+            if use_addresses { Some(vec![Bytes::from_str("0x01").unwrap()]) } else { None };
+
         let request_body = dto::TokensRequestBody {
             chain: dto::Chain::Ethereum,
             token_addresses,
             min_quality: request_quality,
-            traded_n_days_ago: None,
+            traded_n_days_ago,
             pagination: dto::PaginationParams::new(0, 10),
         };
 
-        let req = test::TestRequest::post()
+        let mut req_builder = test::TestRequest::post()
             .uri("/v1/tokens")
-            .set_json(&request_body)
-            .to_request();
-
-        let resp = test::call_service(&app, req).await;
+            .set_json(&request_body);
+        if let Some(plan) = plan_header {
+            req_builder = req_builder.insert_header(("X-User-Plan", plan));
+        }
+        let resp = test::call_service(&app, req_builder.to_request()).await;
 
         if should_pass {
-            // Should succeed with 200 OK
-            assert_eq!(
-                resp.status(),
-                actix_web::http::StatusCode::OK,
-                "Expected validation to accept request"
-            );
+            assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
         } else {
-            // Should fail with 400 Bad Request due to filter validation
-            assert_eq!(
-                resp.status(),
-                actix_web::http::StatusCode::BAD_REQUEST,
-                "Expected validation to reject request"
-            );
-
-            let body = test::read_body(resp).await;
-            let body_str = std::str::from_utf8(&body).unwrap_or("");
-            assert!(
-                body_str.contains("min_quality parameter is required") ||
-                    body_str.contains("min_quality must be at least"),
-                "Should fail with filter validation error. Body: {}",
-                body_str
-            );
+            assert_eq!(resp.status(), actix_web::http::StatusCode::BAD_REQUEST);
         }
+    }
+
+    #[actix_web::test]
+    async fn test_x_user_plan_header_routes_to_correct_plan() {
+        let yaml = r#"
+plans:
+  free:
+    component_tvl:
+      op: gte
+      value: 10000.0
+  pro:
+    component_tvl:
+      op: gte
+      value: 100.0
+"#;
+        let config: PlansConfig = serde_yaml::from_str(yaml).unwrap();
+
+        let gw_free = MockGateway::new();
+        let handler_free = RpcHandler::new(
+            gw_free,
+            None,
+            MockEntryPointTracer::new(),
+            config.clone(),
+            vec![],
+            vec![],
+        );
+
+        let restrictions = handler_free
+            .resolve_plan_restrictions(
+                &test::TestRequest::default()
+                    .insert_header(("X-User-Plan", "free"))
+                    .to_http_request(),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            restrictions
+                .component_tvl
+                .as_ref()
+                .unwrap()
+                .value,
+            10000.0
+        );
+
+        let restrictions = handler_free
+            .resolve_plan_restrictions(
+                &test::TestRequest::default()
+                    .insert_header(("X-User-Plan", "pro"))
+                    .to_http_request(),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            restrictions
+                .component_tvl
+                .as_ref()
+                .unwrap()
+                .value,
+            100.0
+        );
+
+        let no_plan = handler_free
+            .resolve_plan_restrictions(&test::TestRequest::default().to_http_request())
+            .unwrap();
+        assert!(no_plan.is_none());
     }
 
     #[rstest]
@@ -2909,7 +3024,7 @@ mod tests {
             gw,
             None,
             MockEntryPointTracer::new(),
-            ServerRpcConfig::new(),
+            PlansConfig::default(),
             dci_protocols.clone(),
             protocol_systems,
         );
@@ -2919,11 +3034,188 @@ mod tests {
             pagination: dto::PaginationParams { page: 0, page_size: 100 },
         };
         let response = req_handler
-            .get_protocol_systems(&request)
+            .get_protocol_systems(&request, None)
             .await
             .unwrap();
 
         assert_eq!(response.protocol_systems, vec!["uniswap_v2", "vm:curve"]);
         assert_eq!(response.dci_protocols, dci_protocols);
+    }
+
+    #[tokio::test]
+    async fn test_get_protocol_systems_filters_by_allowed() {
+        let gw = MockGateway::new();
+        let protocol_systems = vec![
+            "ambient".to_string(),
+            "sushiswap".to_string(),
+            "uniswap_v2".to_string(),
+            "uniswap_v3".to_string(),
+        ];
+
+        let handler = RpcHandler::new(
+            gw,
+            None,
+            MockEntryPointTracer::new(),
+            PlansConfig::default(),
+            vec![],
+            protocol_systems,
+        );
+
+        let allowed: HashSet<String> =
+            HashSet::from(["uniswap_v2".to_string(), "uniswap_v3".to_string()]);
+        let request = dto::ProtocolSystemsRequestBody {
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams { page: 0, page_size: 100 },
+        };
+        let response = handler
+            .get_protocol_systems(&request, Some(&allowed))
+            .await
+            .unwrap();
+
+        assert_eq!(response.protocol_systems, vec!["uniswap_v2", "uniswap_v3"]);
+        assert_eq!(response.pagination.total, 2);
+    }
+
+    #[tokio::test]
+    async fn test_get_protocol_systems_allowed_pagination() {
+        let gw = MockGateway::new();
+        let protocol_systems = vec![
+            "ambient".to_string(),
+            "sushiswap".to_string(),
+            "uniswap_v2".to_string(),
+            "uniswap_v3".to_string(),
+            "uniswap_v4".to_string(),
+        ];
+
+        let handler = RpcHandler::new(
+            gw,
+            None,
+            MockEntryPointTracer::new(),
+            PlansConfig::default(),
+            vec![],
+            protocol_systems,
+        );
+
+        let allowed: HashSet<String> = HashSet::from([
+            "uniswap_v2".to_string(),
+            "uniswap_v3".to_string(),
+            "uniswap_v4".to_string(),
+        ]);
+
+        // Page 0, size 2 — should get first 2 of the 3 allowed
+        let request = dto::ProtocolSystemsRequestBody {
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams { page: 0, page_size: 2 },
+        };
+        let response = handler
+            .get_protocol_systems(&request, Some(&allowed))
+            .await
+            .unwrap();
+
+        assert_eq!(response.protocol_systems.len(), 2);
+        assert_eq!(response.pagination.total, 3);
+
+        // Page 1, size 2 — should get the remaining 1
+        let request = dto::ProtocolSystemsRequestBody {
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams { page: 1, page_size: 2 },
+        };
+        let response = handler
+            .get_protocol_systems(&request, Some(&allowed))
+            .await
+            .unwrap();
+
+        assert_eq!(response.protocol_systems.len(), 1);
+        assert_eq!(response.pagination.total, 3);
+    }
+
+    #[tokio::test]
+    async fn test_get_protocol_systems_no_allowed_returns_all() {
+        let gw = MockGateway::new();
+        let protocol_systems =
+            vec!["ambient".to_string(), "uniswap_v2".to_string(), "uniswap_v3".to_string()];
+
+        let handler = RpcHandler::new(
+            gw,
+            None,
+            MockEntryPointTracer::new(),
+            PlansConfig::default(),
+            vec![],
+            protocol_systems,
+        );
+
+        let request = dto::ProtocolSystemsRequestBody {
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams { page: 0, page_size: 100 },
+        };
+        let response = handler
+            .get_protocol_systems(&request, None)
+            .await
+            .unwrap();
+
+        assert_eq!(response.protocol_systems, vec!["ambient", "uniswap_v2", "uniswap_v3"]);
+        assert_eq!(response.pagination.total, 3);
+    }
+
+    #[actix_web::test]
+    async fn test_protocol_systems_endpoint_with_plan_restriction() {
+        let gw = MockGateway::new();
+        let active_systems =
+            vec!["ambient".to_string(), "sushiswap".to_string(), "uniswap_v3".to_string()];
+
+        let handler = RpcHandler::new(
+            gw,
+            None,
+            MockEntryPointTracer::new(),
+            plans_config_with_restrictions(),
+            vec![],
+            active_systems,
+        );
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(handler))
+                .route(
+                    "/v1/protocol_systems",
+                    web::post().to(super::protocol_systems::<MockGateway, MockEntryPointTracer>),
+                ),
+        )
+        .await;
+
+        let request_body = dto::ProtocolSystemsRequestBody {
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams { page: 0, page_size: 100 },
+        };
+
+        // With plan: should only return ambient and uniswap_v3 (allowed)
+        let resp = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/v1/protocol_systems")
+                .insert_header(("X-User-Plan", "restricted"))
+                .set_json(&request_body)
+                .to_request(),
+        )
+        .await;
+
+        assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+        let body: dto::ProtocolSystemsRequestResponse = test::read_body_json(resp).await;
+        assert_eq!(body.protocol_systems, vec!["ambient", "uniswap_v3"]);
+        assert_eq!(body.pagination.total, 2);
+
+        // Without plan: should return all
+        let resp = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/v1/protocol_systems")
+                .set_json(&request_body)
+                .to_request(),
+        )
+        .await;
+
+        assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+        let body: dto::ProtocolSystemsRequestResponse = test::read_body_json(resp).await;
+        assert_eq!(body.protocol_systems, vec!["ambient", "sushiswap", "uniswap_v3"]);
+        assert_eq!(body.pagination.total, 3);
     }
 }
