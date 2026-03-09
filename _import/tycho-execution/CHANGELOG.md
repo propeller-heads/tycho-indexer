@@ -1,3 +1,10 @@
+## [0.38.0](https://github.com/propeller-heads/tycho-contracts/compare/0.37.0...0.38.0) (2026-03-09)
+
+
+### Features
+
+* Add UserTransferType to Solution instead of Encoder ([9d5dc37](https://github.com/propeller-heads/tycho-contracts/commit/9d5dc3788e4b0941df024b066a837d816b80c279))
+
 ## [0.37.0](https://github.com/propeller-heads/tycho-contracts/compare/0.36.0...0.37.0) (2026-03-09)
 
 
