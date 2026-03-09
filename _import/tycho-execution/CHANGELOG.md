@@ -1,3 +1,10 @@
+## [0.39.0](https://github.com/propeller-heads/tycho-contracts/compare/0.38.0...0.39.0) (2026-03-09)
+
+
+### Features
+
+* Flag if FoT token for USV2/4 ([b16fbdb](https://github.com/propeller-heads/tycho-contracts/commit/b16fbdb3770141ffac17e48eb3c5bf1e1ef3d975))
+
 ## [0.38.0](https://github.com/propeller-heads/tycho-contracts/compare/0.37.0...0.38.0) (2026-03-09)
 
 
