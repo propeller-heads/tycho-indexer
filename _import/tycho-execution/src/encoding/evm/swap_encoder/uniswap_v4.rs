@@ -175,9 +175,9 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         let hook_data_length = (hook_data.len() as u16).to_be_bytes();
 
         // Early check if this is not the first swap
-        if encoding_context.group_token_in != *swap.token_in() {
+        if encoding_context.group_token_in != *swap.token_in().address {
             return Ok((
-                bytes_to_address(swap.token_out())?,
+                bytes_to_address(&swap.token_out().address)?,
                 pool_fee_u24,
                 pool_tick_spacing_u24,
                 hook_address,
@@ -188,8 +188,8 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         }
 
         // This is the first swap, compute all necessary values
-        let token_in_address = bytes_to_address(swap.token_in())?;
-        let token_out_address = bytes_to_address(swap.token_out())?;
+        let token_in_address = bytes_to_address(&swap.token_in().address)?;
+        let token_out_address = bytes_to_address(&swap.token_out().address)?;
         let group_token_in_address = bytes_to_address(&encoding_context.group_token_in)?;
         let group_token_out_address = bytes_to_address(&encoding_context.group_token_out)?;
 
@@ -205,7 +205,13 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         )
             .abi_encode_packed();
 
-        let args = (group_token_in_address, group_token_out_address, zero_to_one, pool_params);
+        let args = (
+            group_token_in_address,
+            group_token_out_address,
+            zero_to_one,
+            swap.has_fee_on_transfer(),
+            pool_params,
+        );
 
         Ok(args.abi_encode_packed())
     }
@@ -249,7 +255,7 @@ mod tests {
     use super::*;
     use crate::encoding::{
         evm::utils::{ple_encode, write_calldata_to_file},
-        models::Swap,
+        models::{default_token, Swap},
     };
 
     #[test]
@@ -270,7 +276,8 @@ mod tests {
             static_attributes,
             ..Default::default()
         };
-        let swap = Swap::new(usv4_pool, token_in.clone(), token_out.clone());
+        let swap =
+            Swap::new(usv4_pool, default_token(token_in.clone()), default_token(token_out.clone()));
         let encoding_context = EncodingContext {
             exact_out: false,
             // Same as the executor address
@@ -298,6 +305,8 @@ mod tests {
                 "dac17f958d2ee523a2206206994597c13d831ec7",
                 // zero for one
                 "01",
+                // isFoT (false)
+                "00",
                 // pool params:
                 // - intermediary token
                 "dac17f958d2ee523a2206206994597c13d831ec7",
@@ -333,7 +342,8 @@ mod tests {
             ..Default::default()
         };
 
-        let swap = Swap::new(usv4_pool, token_in.clone(), token_out.clone());
+        let swap =
+            Swap::new(usv4_pool, default_token(token_in.clone()), default_token(token_out.clone()));
 
         let encoding_context = EncodingContext {
             exact_out: false,
@@ -423,10 +433,16 @@ mod tests {
             ..Default::default()
         };
 
-        let initial_swap =
-            Swap::new(usde_usdt_component, usde_address.clone(), usdt_address.clone());
-        let second_swap =
-            Swap::new(usdt_wbtc_component, usdt_address.clone(), wbtc_address.clone());
+        let initial_swap = Swap::new(
+            usde_usdt_component,
+            default_token(usde_address.clone()),
+            default_token(usdt_address.clone()),
+        );
+        let second_swap = Swap::new(
+            usdt_wbtc_component,
+            default_token(usdt_address.clone()),
+            default_token(wbtc_address.clone()),
+        );
 
         let encoder = UniswapV4SwapEncoder::new(
             Bytes::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
@@ -456,6 +472,8 @@ mod tests {
                 "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
                 // zero for one
                 "01",
+                // isFoT (false)
+                "00",
                 // pool params:
                 // - intermediary token USDT
                 "dac17f958d2ee523a2206206994597c13d831ec7",
@@ -580,8 +598,16 @@ mod tests {
                 ..Default::default()
             };
 
-            let first_swap = Swap::new(usdc_weth_pool, usdc_address.clone(), weth_address.clone());
-            let second_swap = Swap::new(weth_usdt_pool, weth_address.clone(), usdt_address.clone());
+            let first_swap = Swap::new(
+                usdc_weth_pool,
+                default_token(usdc_address.clone()),
+                default_token(weth_address.clone()),
+            );
+            let second_swap = Swap::new(
+                weth_usdt_pool,
+                default_token(weth_address.clone()),
+                default_token(usdt_address.clone()),
+            );
 
             // Encoder reads Angstrom config from environment variables:
             // - ANGSTROM_API_KEY (required)
@@ -609,7 +635,8 @@ mod tests {
 
             write_calldata_to_file("test_encode_angstrom_grouped_swap", combined_hex.as_str());
             // Any different length could indicate we didn't encode attestation data
-            assert!(combined_hex.len() == 2510);
+            // +2 hex chars for the isFoT byte
+            assert!(combined_hex.len() == 2512);
         }
     }
 }

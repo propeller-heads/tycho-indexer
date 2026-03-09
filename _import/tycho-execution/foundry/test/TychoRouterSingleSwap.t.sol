@@ -355,8 +355,9 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
 
-        bytes memory protocolData =
-            encodeUniswapV2Swap(ZKML_WETH_UNIV2_POOL, WETH_ADDR, ZKML_ADDR);
+        bytes memory protocolData = encodeUniswapV2Swap(
+            ZKML_WETH_UNIV2_POOL, WETH_ADDR, ZKML_ADDR, true
+        );
 
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);
@@ -386,8 +387,9 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         IERC20(ZKML_ADDR).approve(address(tychoRouterAddr), amountIn);
 
-        bytes memory protocolData =
-            encodeUniswapV2Swap(ZKML_WETH_UNIV2_POOL, ZKML_ADDR, WETH_ADDR);
+        bytes memory protocolData = encodeUniswapV2Swap(
+            ZKML_WETH_UNIV2_POOL, ZKML_ADDR, WETH_ADDR, true
+        );
 
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);

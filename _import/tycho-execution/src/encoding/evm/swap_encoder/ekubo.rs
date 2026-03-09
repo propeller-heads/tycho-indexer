@@ -59,11 +59,11 @@ impl SwapEncoder for EkuboSwapEncoder {
 
         let mut encoded = vec![];
 
-        if encoding_context.group_token_in == *swap.token_in() {
-            encoded.extend(bytes_to_address(swap.token_in())?);
+        if encoding_context.group_token_in == *swap.token_in().address {
+            encoded.extend(bytes_to_address(&swap.token_in().address)?);
         }
 
-        encoded.extend(bytes_to_address(swap.token_out())?);
+        encoded.extend(bytes_to_address(&swap.token_out().address)?);
         encoded.extend((extension, fee, tick_spacing).abi_encode_packed());
 
         Ok(encoded)
@@ -84,8 +84,9 @@ mod tests {
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
-    use crate::encoding::evm::{
-        swap_encoder::ekubo::EkuboSwapEncoder, utils::write_calldata_to_file,
+    use crate::encoding::{
+        evm::{swap_encoder::ekubo::EkuboSwapEncoder, utils::write_calldata_to_file},
+        models::default_token,
     };
 
     #[test]
@@ -101,7 +102,8 @@ mod tests {
 
         let component = ProtocolComponent { static_attributes, ..Default::default() };
 
-        let swap = Swap::new(component, token_in.clone(), token_out.clone());
+        let swap =
+            Swap::new(component, default_token(token_in.clone()), default_token(token_out.clone()));
 
         let encoding_context = EncodingContext {
             group_token_in: token_in.clone(),
@@ -158,8 +160,8 @@ mod tests {
                 ]),
                 ..Default::default()
             },
-            group_token_in.clone(),
-            intermediary_token.clone(),
+            default_token(group_token_in.clone()),
+            default_token(intermediary_token.clone()),
         );
 
         let second_swap = Swap::new(
@@ -172,8 +174,8 @@ mod tests {
                 ]),
                 ..Default::default()
             },
-            intermediary_token.clone(),
-            group_token_out.clone(),
+            default_token(intermediary_token.clone()),
+            default_token(group_token_out.clone()),
         );
 
         let first_encoded_swap = encoder

@@ -4,7 +4,9 @@ use clap::ValueEnum;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use tycho_common::{
-    models::protocol::ProtocolComponent, simulation::protocol_sim::ProtocolSim, Bytes,
+    models::{protocol::ProtocolComponent, token::Token},
+    simulation::protocol_sim::ProtocolSim,
+    Bytes,
 };
 
 use crate::encoding::serde_primitives::biguint_string;
@@ -77,9 +79,9 @@ pub struct Swap {
     /// Protocol component from tycho indexer
     component: ProtocolComponent,
     /// Token being input into the pool.
-    token_in: Bytes,
+    token_in: Token,
     /// Token being output from the pool.
-    token_out: Bytes,
+    token_out: Token,
     /// Decimal of the amount to be swapped in this operation (for example, 0.5 means 50%)
     #[serde(default)]
     split: f64,
@@ -94,11 +96,10 @@ pub struct Swap {
 }
 
 impl Swap {
-    /// Creates a new Swap with the required fields. Optional fields are set to their defaults.
     pub fn new<T: Into<ProtocolComponent>>(
         component: T,
-        token_in: Bytes,
-        token_out: Bytes,
+        token_in: Token,
+        token_out: Token,
     ) -> Self {
         Self {
             component: component.into(),
@@ -135,16 +136,15 @@ impl Swap {
         self
     }
 
-    // Getter methods for accessing private fields
     pub fn component(&self) -> &ProtocolComponent {
         &self.component
     }
 
-    pub fn token_in(&self) -> &Bytes {
+    pub fn token_in(&self) -> &Token {
         &self.token_in
     }
 
-    pub fn token_out(&self) -> &Bytes {
+    pub fn token_out(&self) -> &Token {
         &self.token_out
     }
 
@@ -163,13 +163,18 @@ impl Swap {
     pub fn get_estimated_amount_in(&self) -> &Option<BigUint> {
         &self.estimated_amount_in
     }
+
+    /// Returns true if either token has a non-zero transfer tax.
+    pub fn has_fee_on_transfer(&self) -> bool {
+        self.token_in.tax > 0 || self.token_out.tax > 0
+    }
 }
 
 impl PartialEq for Swap {
     fn eq(&self, other: &Self) -> bool {
         self.component() == other.component() &&
-            self.token_in() == other.token_in() &&
-            self.token_out() == other.token_out() &&
+            self.token_in().address == other.token_in().address &&
+            self.token_out().address == other.token_out().address &&
             self.get_split() == other.get_split() &&
             self.get_user_data() == other.get_user_data() &&
             self.get_estimated_amount_in() == other.get_estimated_amount_in()
@@ -252,6 +257,13 @@ pub struct EncodingContext {
     pub group_token_out: Bytes,
 }
 
+/// Creates a minimal `Token` from just an address, with zero-value defaults for other fields.
+/// Only available in tests and when the `test-utils` feature is enabled.
+#[cfg(any(test, feature = "test-utils"))]
+pub fn default_token(address: Bytes) -> Token {
+    Token::new(&address, "", 0, 0, &[], Default::default(), 100)
+}
+
 mod tests {
     use super::*;
 
@@ -284,12 +296,16 @@ mod tests {
             protocol_system: "uniswap_v2".to_string(),
         };
         let user_data = Bytes::from("0x1234");
-        let swap = Swap::new(component, Bytes::from("0x12"), Bytes::from("0x34"))
-            .split(0.5)
-            .user_data(user_data.clone());
+        let swap = Swap::new(
+            component,
+            default_token(Bytes::from("0x12")),
+            default_token(Bytes::from("0x34")),
+        )
+        .split(0.5)
+        .user_data(user_data.clone());
 
-        assert_eq!(swap.token_in(), &Bytes::from("0x12"));
-        assert_eq!(swap.token_out(), &Bytes::from("0x34"));
+        assert_eq!(swap.token_in().address, Bytes::from("0x12"));
+        assert_eq!(swap.token_out().address, Bytes::from("0x34"));
         assert_eq!(swap.component().protocol_system, "uniswap_v2");
         assert_eq!(swap.component().id, "i-am-an-id");
         assert_eq!(swap.get_split(), 0.5);

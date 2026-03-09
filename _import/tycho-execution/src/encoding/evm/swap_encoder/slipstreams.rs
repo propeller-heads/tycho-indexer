@@ -39,8 +39,8 @@ impl SwapEncoder for SlipstreamsSwapEncoder {
         swap: &Swap,
         _encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
-        let token_in_address = bytes_to_address(swap.token_in())?;
-        let token_out_address = bytes_to_address(swap.token_out())?;
+        let token_in_address = bytes_to_address(&swap.token_in().address)?;
+        let token_out_address = bytes_to_address(&swap.token_out().address)?;
 
         let zero_to_one = Self::get_zero_to_one(token_in_address, token_out_address);
         let component_id = Address::from_str(&swap.component().id).map_err(|_| {

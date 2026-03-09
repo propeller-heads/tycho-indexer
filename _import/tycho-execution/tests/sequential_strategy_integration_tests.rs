@@ -6,7 +6,7 @@ use num_bigint::{BigInt, BigUint};
 use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 use tycho_contracts::encoding::{
     evm::utils::write_calldata_to_file,
-    models::{Solution, Swap, UserTransferType},
+    models::{default_token, Solution, Swap, UserTransferType},
 };
 
 use crate::common::{
@@ -33,8 +33,8 @@ fn test_sequential_swap_strategy_encoder() {
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        weth.clone(),
-        wbtc.clone(),
+        default_token(weth.clone()),
+        default_token(wbtc.clone()),
     );
     let swap_wbtc_usdc = Swap::new(
         ProtocolComponent {
@@ -42,8 +42,8 @@ fn test_sequential_swap_strategy_encoder() {
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        wbtc.clone(),
-        usdc.clone(),
+        default_token(wbtc.clone()),
+        default_token(usdc.clone()),
     );
     let encoder = get_tycho_router_encoder();
 
@@ -95,8 +95,8 @@ fn test_sequential_swap_strategy_encoder_transfer_from_integration() {
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        weth.clone(),
-        wbtc.clone(),
+        default_token(weth.clone()),
+        default_token(wbtc.clone()),
     );
     let swap_wbtc_usdc = Swap::new(
         ProtocolComponent {
@@ -104,8 +104,8 @@ fn test_sequential_swap_strategy_encoder_transfer_from_integration() {
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        wbtc.clone(),
-        usdc.clone(),
+        default_token(wbtc.clone()),
+        default_token(usdc.clone()),
     );
     let encoder = get_tycho_router_encoder();
 
@@ -156,21 +156,23 @@ fn test_sequential_swap_strategy_encoder_transfer_from_integration() {
         "0000000000000000000000000000000000000000000000000000000000000000", /* clientSignature
                                                                              * length = 0 */
         // swapData:
-        "00000000000000000000000000000000000000000000000000000000000000a4", /* len swaps (164
+        "00000000000000000000000000000000000000000000000000000000000000a6", /* len swaps (166
                                                                              * bytes) */
         // swap 1: WETH -> WBTC
-        "0050",                                     // swap length (80 hex = 64 bytes)
+        "0051",                                     // swap length (81 bytes)
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
         "bb2b8038a1640196fbe3e38816f3e67cba72d940", // component id (pool address)
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // tokenIn (WETH)
         "2260fac5e5542a773aa44fbcfedf7c193bc2c599", // tokenOut (WBTC)
+        "00",                                       // isFoT (false)
         // swap 2: WBTC -> USDC
-        "0050",                                     // swap length (80 hex = 64 bytes)
-        "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
-        "004375dff511095cc5a197a54140a24efef3a416", // component id (pool address)
-        "2260fac5e5542a773aa44fbcfedf7c193bc2c599", // tokenIn (WBTC)
-        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // tokenOut (USDC)
-        "00000000000000000000000000000000000000000000000000000000", // padding to 32-byte boundary
+        "0051",                                                 // swap length (81 bytes)
+        "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f",             // executor address
+        "004375dff511095cc5a197a54140a24efef3a416",             // component id (pool address)
+        "2260fac5e5542a773aa44fbcfedf7c193bc2c599",             // tokenIn (WBTC)
+        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",             // tokenOut (USDC)
+        "00",                                                   // isFoT (false)
+        "0000000000000000000000000000000000000000000000000000", // padding to 32-byte boundary
     ));
 
     assert_eq!(hex_calldata, expected);
@@ -204,8 +206,8 @@ fn test_sequential_strategy_cyclic_swap() {
             },
             ..Default::default()
         },
-        usdc.clone(),
-        weth.clone(),
+        default_token(usdc.clone()),
+        default_token(weth.clone()),
     );
 
     // WETH -> USDC (Pool 2)
@@ -224,8 +226,8 @@ fn test_sequential_strategy_cyclic_swap() {
             },
             ..Default::default()
         },
-        weth.clone(),
-        usdc.clone(),
+        default_token(weth.clone()),
+        default_token(usdc.clone()),
     );
 
     let encoder = get_tycho_router_encoder();
@@ -327,8 +329,8 @@ fn test_sequential_strategy_cyclic_swap_and_vault() {
             },
             ..Default::default()
         },
-        usdc.clone(),
-        weth.clone(),
+        default_token(usdc.clone()),
+        default_token(weth.clone()),
     );
 
     // WETH -> USDC (Pool 2)
@@ -347,8 +349,8 @@ fn test_sequential_strategy_cyclic_swap_and_vault() {
             },
             ..Default::default()
         },
-        weth.clone(),
-        usdc.clone(),
+        default_token(weth.clone()),
+        default_token(usdc.clone()),
     );
 
     let encoder = get_tycho_router_encoder();
@@ -440,8 +442,8 @@ fn test_sequential_swap_strategy_encoder_with_fees() {
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        weth.clone(),
-        wbtc.clone(),
+        default_token(weth.clone()),
+        default_token(wbtc.clone()),
     );
     let swap_wbtc_usdc = Swap::new(
         ProtocolComponent {
@@ -449,8 +451,8 @@ fn test_sequential_swap_strategy_encoder_with_fees() {
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        wbtc.clone(),
-        usdc.clone(),
+        default_token(wbtc.clone()),
+        default_token(usdc.clone()),
     );
     let encoder = get_tycho_router_encoder();
 

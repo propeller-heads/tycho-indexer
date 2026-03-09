@@ -51,17 +51,17 @@ contract UniswapV2Executor is IExecutor {
     }
 
     // slither-disable-next-line locked-ether
-    function swap(uint256, bytes calldata data, address receiver)
+    function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
         returns (uint256 calculatedAmount, address tokenOut)
     {
         address target;
         address tokenIn;
+        bool isFoT;
 
-        (target, tokenIn, tokenOut) = _decodeData(data);
+        (target, tokenIn, tokenOut, isFoT) = _decodeData(data);
 
-        // Determine zeroForOne and token ordering (UniswapV2 uses token0 < token1)
         bool zeroForOne = (tokenIn < tokenOut);
         address token0 = zeroForOne ? tokenIn : tokenOut;
         address token1 = zeroForOne ? tokenOut : tokenIn;
@@ -69,14 +69,50 @@ contract UniswapV2Executor is IExecutor {
         _verifyPairAddress(target, token0, token1);
 
         IUniswapV2Pair pool = IUniswapV2Pair(target);
+
+        if (isFoT) {
+            calculatedAmount =
+                _swapFoT(pool, tokenIn, tokenOut, zeroForOne, receiver);
+        } else {
+            calculatedAmount = _swap(pool, amountIn, zeroForOne, receiver);
+        }
+    }
+
+    function _swap(
+        IUniswapV2Pair pool,
+        uint256 amountIn,
+        bool zeroForOne,
+        address receiver
+    ) internal returns (uint256 calculatedAmount) {
         // slither-disable-next-line unused-return
         (uint112 reserve0, uint112 reserve1,) = pool.getReserves();
         uint112 reserveIn = zeroForOne ? reserve0 : reserve1;
         uint112 reserveOut = zeroForOne ? reserve1 : reserve0;
 
-        // Use actual pool balance to handle fee-on-transfer input tokens
+        calculatedAmount = _getAmountOut(amountIn, reserveIn, reserveOut);
+
+        if (zeroForOne) {
+            pool.swap(0, calculatedAmount, receiver, "");
+        } else {
+            pool.swap(calculatedAmount, 0, receiver, "");
+        }
+    }
+
+    function _swapFoT(
+        IUniswapV2Pair pool,
+        address tokenIn,
+        address tokenOut,
+        bool zeroForOne,
+        address receiver
+    ) internal returns (uint256 calculatedAmount) {
+        // slither-disable-next-line unused-return
+        (uint112 reserve0, uint112 reserve1,) = pool.getReserves();
+        uint112 reserveIn = zeroForOne ? reserve0 : reserve1;
+        uint112 reserveOut = zeroForOne ? reserve1 : reserve0;
+
+        // Measure actual balance to handle input transfer tax
         uint256 actualAmountIn =
-            IERC20(tokenIn).balanceOf(target) - uint256(reserveIn);
+            IERC20(tokenIn).balanceOf(address(pool)) - uint256(reserveIn);
 
         calculatedAmount = _getAmountOut(actualAmountIn, reserveIn, reserveOut);
 
@@ -88,21 +124,22 @@ contract UniswapV2Executor is IExecutor {
             pool.swap(calculatedAmount, 0, receiver, "");
         }
 
-        // Use actual received amount to handle fee-on-transfer output tokens
+        // Measure actual received to handle output transfer tax
         calculatedAmount = IERC20(tokenOut).balanceOf(receiver) - balanceBefore;
     }
 
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (address target, address tokenIn, address tokenOut)
+        returns (address target, address tokenIn, address tokenOut, bool isFoT)
     {
-        if (data.length != 60) {
+        if (data.length != 61) {
             revert UniswapV2Executor__InvalidDataLength();
         }
         target = address(bytes20(data[0:20]));
         tokenIn = address(bytes20(data[20:40]));
         tokenOut = address(bytes20(data[40:60]));
+        isFoT = data[60] != 0;
     }
 
     function _getAmountOut(
@@ -145,7 +182,7 @@ contract UniswapV2Executor is IExecutor {
             address tokenIn
         )
     {
-        if (data.length != 60) {
+        if (data.length != 61) {
             revert UniswapV2Executor__InvalidDataLength();
         }
         address target = address(bytes20(data[0:20]));

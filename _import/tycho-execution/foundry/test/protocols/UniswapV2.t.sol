@@ -25,7 +25,7 @@ contract UniswapV2ExecutorExposed is UniswapV2Executor {
     function decodeParams(bytes calldata data)
         external
         pure
-        returns (address target, address tokenIn, address tokenOut)
+        returns (address target, address tokenIn, address tokenOut, bool isFoT)
     {
         return _decodeData(data);
     }
@@ -84,9 +84,9 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
     function testDecodeParams() public view {
         bytes memory params =
-            abi.encodePacked(address(2), address(3), address(4));
+            abi.encodePacked(address(2), address(3), address(4), false);
 
-        (address target, address tokenIn, address tokenOut) =
+        (address target, address tokenIn, address tokenOut,) =
             uniswapV2Exposed.decodeParams(params);
 
         assertEq(target, address(2));
@@ -103,7 +103,7 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
     function testGetTransferData() public {
         bytes memory params =
-            abi.encodePacked(DAI_WETH_UNIV2_POOL, DAI_ADDR, WETH_ADDR);
+            abi.encodePacked(DAI_WETH_UNIV2_POOL, DAI_ADDR, WETH_ADDR, false);
 
         (, address receiver, address tokenIn) =
             uniswapV2Exposed.getTransferData(params);
@@ -152,7 +152,7 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 amountIn = 10 ** 18;
         uint256 amountOut = 1847751195973566072891;
         bytes memory protocolData =
-            abi.encodePacked(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR);
+            abi.encodePacked(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR, false);
 
         deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
         // transfer funds into the pool - this is taken cared of by the Dispatcher now
@@ -169,7 +169,7 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 amountIn = 10 ** 18;
         uint256 amountOut = 1847751195973566072891;
         bytes memory protocolData =
-            abi.encodePacked(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR);
+            abi.encodePacked(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR, false);
 
         deal(WETH_ADDR, address(this), amountIn);
         IERC20(WETH_ADDR).transfer(address(DAI_WETH_UNIV2_POOL), amountIn);
@@ -181,9 +181,9 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
     function testDecodeIntegration() public view {
         bytes memory protocolData =
-            hex"88e6a0c2ddd26feeb64f039a2c41296fcb3f5640c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+            hex"88e6a0c2ddd26feeb64f039a2c41296fcb3f5640c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2a0b86991c6218b36c1d19d4a2e9eb0ce3606eb4800";
 
-        (address target, address tokenIn, address tokenOut) =
+        (address target, address tokenIn, address tokenOut,) =
             uniswapV2Exposed.decodeParams(protocolData);
 
         assertEq(target, 0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640);
@@ -192,7 +192,7 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
     }
 
     function testSwapIntegration() public {
-        // Load executor protocol data from file (pool + tokenIn + tokenOut = 60 bytes)
+        // Load executor protocol data from file (pool + tokenIn + tokenOut + isFoT = 61 bytes)
         bytes memory protocolData =
             loadCallDataFromFile("test_encode_uniswap_v2");
 
@@ -212,7 +212,7 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 amountIn = 10 ** 18;
         address fakePool = address(new FakeUniswapV2Pool(WETH_ADDR, DAI_ADDR));
         bytes memory protocolData =
-            abi.encodePacked(fakePool, WETH_ADDR, DAI_ADDR);
+            abi.encodePacked(fakePool, WETH_ADDR, DAI_ADDR, false);
 
         deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
         vm.expectRevert(UniswapV2Executor__InvalidTarget.selector);
@@ -226,7 +226,7 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
         vm.rollFork(26857267);
         uint256 amountIn = 10 * 10 ** 6;
         bytes memory protocolData =
-            abi.encodePacked(USDC_MAG7_POOL, BASE_USDC, BASE_MAG7);
+            abi.encodePacked(USDC_MAG7_POOL, BASE_USDC, BASE_MAG7, false);
 
         deal(BASE_USDC, address(uniswapV2Exposed), amountIn);
 

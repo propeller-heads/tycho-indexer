@@ -10,7 +10,7 @@ use tycho_contracts::encoding::{
         encoder_builders::TychoRouterEncoderBuilder,
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
     },
-    models::{Solution, Swap},
+    models::{default_token, Solution, Swap},
 };
 
 fn main() {
@@ -44,8 +44,8 @@ fn main() {
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        weth.clone(),
-        usdc.clone(),
+        default_token(weth.clone()),
+        default_token(usdc.clone()),
     );
     // Split defines the fraction of the amount to be swapped. A value of 0 indicates 100% of
     // the amount or the total remaining balance. (0 is default, so no need to set it)
@@ -97,8 +97,8 @@ fn main() {
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        weth.clone(),
-        dai.clone(),
+        default_token(weth.clone()),
+        default_token(dai.clone()),
     )
     .split(0.5);
 
@@ -110,8 +110,8 @@ fn main() {
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        weth.clone(),
-        wbtc.clone(),
+        default_token(weth.clone()),
+        default_token(wbtc.clone()),
     );
 
     let swap_dai_usdc = Swap::new(
@@ -120,8 +120,8 @@ fn main() {
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        dai.clone(),
-        usdc.clone(),
+        default_token(dai.clone()),
+        default_token(usdc.clone()),
     );
     let swap_wbtc_usdc = Swap::new(
         ProtocolComponent {
@@ -129,8 +129,8 @@ fn main() {
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        wbtc.clone(),
-        usdc.clone(),
+        default_token(wbtc.clone()),
+        default_token(usdc.clone()),
     );
     let mut complex_solution = solution.clone();
     complex_solution.swaps = vec![swap_weth_dai, swap_weth_wbtc, swap_dai_usdc, swap_wbtc_usdc];
