@@ -1,3 +1,17 @@
+## [0.37.0](https://github.com/propeller-heads/tycho-contracts/compare/0.36.0...0.37.0) (2026-03-09)
+
+
+### Features
+
+* Bring back Uniswap X code and docs (from tycho-execution) ([53014ec](https://github.com/propeller-heads/tycho-contracts/commit/53014ec568937dd510d8d44e8a9e56318769fb68))
+* port changes from tycho-execution post-fork ([cc36b1f](https://github.com/propeller-heads/tycho-contracts/commit/cc36b1ff320b765d2e4c02d77e60a40acd49a47e))
+
+
+### Bug Fixes
+
+* Update calldata.txt after rebase with main ([bb3f4ef](https://github.com/propeller-heads/tycho-contracts/commit/bb3f4efef5b29089afdbd2c806f0fd6887311d12))
+* Upgrade dependencies to make cargo audit happy ([218c76b](https://github.com/propeller-heads/tycho-contracts/commit/218c76be7df7771e91b570ba84e3071bcc40d4a6))
+
 ## [0.36.0](https://github.com/propeller-heads/tycho-contracts/compare/0.35.0...0.36.0) (2026-03-06)
 
 
