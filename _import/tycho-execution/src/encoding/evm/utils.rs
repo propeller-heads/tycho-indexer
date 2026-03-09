@@ -116,7 +116,7 @@ pub type EVMProvider = Arc<
 
 /// Gets the client used for interacting with the EVM-compatible network.
 pub async fn get_client() -> Result<EVMProvider, EncodingError> {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
     let eth_rpc_url = env::var("RPC_URL")
         .map_err(|_| EncodingError::FatalError("Missing RPC_URL in environment".to_string()))?;
     let client = ProviderBuilder::new()
