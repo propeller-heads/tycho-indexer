@@ -17,7 +17,7 @@ use tycho_contracts::encoding::{
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         utils::{biguint_to_u256, bytes_to_address},
     },
-    models::{Solution, Swap, UserTransferType},
+    models::{Solution, Swap},
 };
 
 /// Encodes the input data for a function call to the given function selector.
@@ -53,7 +53,6 @@ fn main() {
         .expect("Failed to get default SwapEncoderRegistry");
     let encoder = TychoRouterEncoderBuilder::new()
         .chain(tycho_common::models::Chain::Ethereum)
-        .user_transfer_type(UserTransferType::TransferFrom)
         .swap_encoder_registry(swap_encoder_registry)
         .router_address(router_address.clone())
         .build()

@@ -8,7 +8,7 @@ use tycho_contracts::encoding::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,
         utils::{bytes_to_address, write_calldata_to_file},
     },
-    models::{Solution, Swap, UserTransferType},
+    models::{Solution, Swap},
 };
 
 use crate::common::{
@@ -65,7 +65,7 @@ fn test_sequential_swap_usx() {
         usdc.clone(),
         usdt.clone(),
     );
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
