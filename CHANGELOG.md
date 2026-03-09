@@ -1,3 +1,17 @@
+## [0.147.0](https://github.com/propeller-heads/tycho-indexer/compare/0.146.0...0.147.0) (2026-03-09)
+
+
+### Features
+
+* extend plan restrictions to all RPC endpoints ([f5d3630](https://github.com/propeller-heads/tycho-indexer/commit/f5d36304bcfc47f67c0fd6fab6ee5fefd3b49372))
+* Implement plan-based request restrictions ([#868](https://github.com/propeller-heads/tycho-indexer/issues/868)) ([9a186ad](https://github.com/propeller-heads/tycho-indexer/commit/9a186ad36db56ce812673b2ce3563cc4194b06ea))
+* replace ServerRpcConfig with per-plan YAML-based restrictions ([7a8c074](https://github.com/propeller-heads/tycho-indexer/commit/7a8c0743deb6abeafa0548f93984a32cc37f9516))
+
+
+### Bug Fixes
+
+* filter protocol_systems by plan's allowed protocols ([16788d5](https://github.com/propeller-heads/tycho-indexer/commit/16788d5bdd3f976b9e0d2bc88850344dbd0ae839))
+
 ## [0.146.0](https://github.com/propeller-heads/tycho-indexer/compare/0.145.2...0.146.0) (2026-03-06)
 
 
