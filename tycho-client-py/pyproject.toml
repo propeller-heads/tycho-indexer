@@ -43,8 +43,5 @@ where = ["./python"]
 [tool.maturin]
 python-source = "python"
 python-packages = ["tycho_indexer_client"]
-bindings = "bin"
-
-[[tool.maturin.targets]]
-name = "tycho-client-cli"
+module-name = "tycho_indexer_client"
 bindings = "bin"
