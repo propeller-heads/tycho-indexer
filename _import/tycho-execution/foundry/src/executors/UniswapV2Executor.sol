@@ -74,11 +74,11 @@ contract UniswapV2Executor is IExecutor {
             calculatedAmount =
                 _swapFoT(pool, tokenIn, tokenOut, zeroForOne, receiver);
         } else {
-            calculatedAmount = _swapNormal(pool, amountIn, zeroForOne, receiver);
+            calculatedAmount = _swap(pool, amountIn, zeroForOne, receiver);
         }
     }
 
-    function _swapNormal(
+    function _swap(
         IUniswapV2Pair pool,
         uint256 amountIn,
         bool zeroForOne,
