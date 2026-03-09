@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "../src/RestrictTransferFrom.sol";
+import "../src/TransferManager.sol";
 
 interface ICallback {
     /**
@@ -41,5 +41,5 @@ interface ICallback {
     function getCallbackTransferData(bytes calldata data)
     external
     payable
-    returns (RestrictTransferFrom.TransferType transferType, address receiver, address tokenIn, uint256 amountIn);
+    returns (TransferManager.TransferType transferType, address receiver, address tokenIn, uint256 amountIn);
 }

@@ -33,7 +33,7 @@ fn test_single_swap_strategy_encoder() {
         default_token(dai.clone()),
     );
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -44,6 +44,7 @@ fn test_single_swap_strategy_encoder() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap],
+        user_transfer_type: UserTransferType::TransferFromPermit2,
         ..Default::default()
     };
 
@@ -113,7 +114,7 @@ fn test_single_swap_strategy_encoder_transfer_from() {
         default_token(weth.clone()),
         default_token(dai.clone()),
     );
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -191,7 +192,7 @@ fn test_single_swap_with_client_fees() {
         default_token(weth.clone()),
         default_token(dai.clone()),
     );
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -205,6 +206,7 @@ fn test_single_swap_with_client_fees() {
         client_fee_bps: 100, // 1% fee
         client_fee_receiver: client_fee_receiver(),
         max_client_contribution: BigUint::ZERO,
+        user_transfer_type: UserTransferType::TransferFrom,
     };
 
     let encoded_solutions = encoder
@@ -246,7 +248,7 @@ fn test_single_swap_with_fees_and_client_contribution() {
         default_token(weth.clone()),
         default_token(dai.clone()),
     );
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -260,6 +262,7 @@ fn test_single_swap_with_fees_and_client_contribution() {
         client_fee_bps: 100, // 1% fee
         client_fee_receiver: client_fee_receiver(),
         max_client_contribution: BigUint::from_str("22_000000000000000000").unwrap(),
+        user_transfer_type: UserTransferType::TransferFrom,
     };
 
     let encoded_solutions = encoder

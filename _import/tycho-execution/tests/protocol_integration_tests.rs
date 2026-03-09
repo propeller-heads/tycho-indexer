@@ -45,7 +45,7 @@ fn test_single_encoding_strategy_ekubo() {
     let swap =
         Swap::new(component, default_token(token_in.clone()), default_token(token_out.clone()));
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -97,7 +97,7 @@ fn test_single_encoding_strategy_ekubo_erc20() {
     let swap =
         Swap::new(component, default_token(token_in.clone()), default_token(token_out.clone()));
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -149,7 +149,7 @@ fn test_single_encoding_strategy_ekubo_mev_resist() {
     let swap =
         Swap::new(component, default_token(token_in.clone()), default_token(token_out.clone()));
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -190,7 +190,7 @@ fn test_single_encoding_strategy_maverick() {
     let swap =
         Swap::new(maverick_pool, default_token(token_in.clone()), default_token(token_out.clone()));
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -245,7 +245,7 @@ fn test_single_encoding_strategy_usv4_eth_in() {
         default_token(eth.clone()),
         default_token(pepe.clone()),
     );
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -309,7 +309,7 @@ fn test_single_encoding_strategy_usv4_eth_out() {
         default_token(eth.clone()),
     );
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -320,6 +320,7 @@ fn test_single_encoding_strategy_usv4_eth_out() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_usdc_eth],
+        user_transfer_type: UserTransferType::TransferFromPermit2,
         ..Default::default()
     };
 
@@ -390,7 +391,7 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
         default_token(eth.clone()),
         default_token(pepe.clone()),
     );
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -401,6 +402,7 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_usdc_eth, swap_eth_pepe],
+        user_transfer_type: UserTransferType::TransferFromPermit2,
         ..Default::default()
     };
 
@@ -518,7 +520,7 @@ fn test_single_encoding_strategy_usv4_and_hooks_grouped_swap() {
         default_token(eth.clone()),
     );
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -529,6 +531,7 @@ fn test_single_encoding_strategy_usv4_and_hooks_grouped_swap() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_usdc, swap_usdc_eth],
+        user_transfer_type: UserTransferType::TransferFromPermit2,
         ..Default::default()
     };
 
@@ -602,7 +605,7 @@ fn test_single_encoding_strategy_ekubo_grouped_swap() {
         default_token(usdt.clone()),
     );
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -657,7 +660,7 @@ fn test_single_encoding_strategy_curve() {
     let swap =
         Swap::new(component, default_token(token_in.clone()), default_token(token_out.clone()));
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -713,7 +716,7 @@ fn test_single_encoding_strategy_curve_st_eth() {
     let swap =
         Swap::new(component, default_token(token_in.clone()), default_token(token_out.clone()));
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -777,7 +780,7 @@ fn test_single_encoding_strategy_curve_protocol_will_debit_from_vault() {
 
     let swap = Swap::new(curve_tripool, default_token(dai.clone()), default_token(usdc.clone()));
 
-    let encoder = get_tycho_router_encoder(UserTransferType::UseVaultsFunds);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -789,6 +792,7 @@ fn test_single_encoding_strategy_curve_protocol_will_debit_from_vault() {
         sender: alice_address(),
         receiver: alice_address(),
         swaps: vec![swap],
+        user_transfer_type: UserTransferType::UseVaultsFunds,
         ..Default::default()
     };
 
@@ -822,7 +826,7 @@ fn test_single_encoding_strategy_balancer_v3() {
     let swap =
         Swap::new(balancer_pool, default_token(token_in.clone()), default_token(token_out.clone()));
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -894,7 +898,7 @@ fn test_single_encoding_strategy_bebop() {
     .estimated_amount_in(BigUint::from_str("200000000").unwrap())
     .protocol_state(Arc::new(bebop_state));
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -965,7 +969,7 @@ fn test_single_encoding_strategy_bebop_aggregate() {
     .estimated_amount_in(BigUint::from_str("20000000000").unwrap())
     .protocol_state(Arc::new(bebop_state));
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -1062,7 +1066,7 @@ fn test_single_encoding_strategy_hashflow() {
         Swap::new(hashflow_component, default_token(usdc.clone()), default_token(wbtc.clone()))
             .estimated_amount_in(BigUint::from_str("4308094737").unwrap())
             .protocol_state(Arc::new(hashflow_state));
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -1103,7 +1107,7 @@ fn test_single_encoding_strategy_fluid() {
     let swap =
         Swap::new(fluid_dex, default_token(token_in.clone()), default_token(token_out.clone()));
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -1152,7 +1156,7 @@ fn test_sequential_encoding_strategy_fluid() {
     let swap_2 =
         Swap::new(fluid_dex_2, default_token(usdt.clone()), default_token(token_out.clone()));
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -1198,7 +1202,7 @@ fn test_single_encoding_strategy_rocketpool_deposit() {
         default_token(token_out.clone()),
     );
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -1248,7 +1252,7 @@ fn test_single_encoding_strategy_rocketpool_burn() {
         default_token(token_out.clone()),
     );
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -1298,7 +1302,7 @@ fn test_single_encoding_strategy_slipstreams() {
         default_token(token_out.clone()),
     );
 
-    let encoder = get_base_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_base_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -1361,7 +1365,7 @@ fn test_sequential_encoding_strategy_slipstreams() {
         default_token(btc.clone()),
     );
 
-    let encoder = get_base_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_base_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -1402,7 +1406,7 @@ fn test_single_encoding_strategy_erc4626() {
     let swap =
         Swap::new(erc4626_pool, default_token(token_in.clone()), default_token(token_out.clone()));
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -1449,7 +1453,7 @@ fn test_sequential_encoding_strategy_erc4626() {
     let susdc = Bytes::from("0xbc65ad17c5c0a2a4d159fa5a503f4992c7b545fe");
     let swap2 = Swap::new(susdc_pool, default_token(usdc.clone()), default_token(susdc.clone()));
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -1482,7 +1486,7 @@ fn test_sequential_encoding_strategy_erc4626() {
 fn test_single_swap_with_univ4_angstrom() {
     //  USDC ─── (USV4-angstrom) ──> WETH
 
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
 
     let weth = weth();
     let usdc = usdc();
@@ -1504,7 +1508,7 @@ fn test_single_swap_with_univ4_angstrom() {
         default_token(weth.clone()),
     );
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -1549,7 +1553,7 @@ fn test_single_encoding_strategy_weth_wrap() {
     let swap =
         Swap::new(weth_executor, default_token(token_in.clone()), default_token(token_out.clone()));
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -1586,7 +1590,7 @@ fn test_single_encoding_strategy_weth_unwrap() {
     let swap =
         Swap::new(weth_executor, default_token(token_in.clone()), default_token(token_out.clone()));
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -1629,7 +1633,7 @@ fn test_sequential_encoding_strategy_weth_wrap_added() {
         default_token(weth().clone()),
         default_token(dai().clone()),
     );
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -1684,7 +1688,7 @@ fn test_single_encoding_strategy_ekubo_v3() {
     let swap =
         Swap::new(component, default_token(token_in.clone()), default_token(token_out.clone()));
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -1756,7 +1760,7 @@ fn test_single_ekubo_v3_grouped_swap() {
         default_token(eth()),
     );
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -1802,7 +1806,7 @@ fn test_sequential_encoding_strategy_etherfi_unwrap_weeth() {
     };
     let swap2 = Swap::new(eeth_pool, default_token(eeth.clone()), default_token(eth()));
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -1854,7 +1858,7 @@ fn test_sequential_encoding_strategy_etherfi_wrap_eeth() {
     let weeth = Bytes::from("0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee");
     let swap2 = Swap::new(weeth_pool, default_token(eeth.clone()), default_token(weeth.clone()));
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -1917,7 +1921,7 @@ fn test_single_encoding_strategy_usv4_twif_fee_token() {
         usdc_token,
     );
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -1930,6 +1934,7 @@ fn test_single_encoding_strategy_usv4_twif_fee_token() {
         sender: alice_address(),
         receiver: alice_address(),
         swaps: vec![swap],
+        user_transfer_type: UserTransferType::TransferFromPermit2,
         ..Default::default()
     };
 
@@ -1992,7 +1997,7 @@ fn test_single_encoding_strategy_usv4_twif_fee_token_output() {
         twif_token,
     );
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -2003,6 +2008,7 @@ fn test_single_encoding_strategy_usv4_twif_fee_token_output() {
         sender: alice_address(),
         receiver: alice_address(),
         swaps: vec![swap],
+        user_transfer_type: UserTransferType::TransferFromPermit2,
         ..Default::default()
     };
 

@@ -26,9 +26,10 @@ use crate::encoding::serde_primitives::biguint_string;
 /// - `UseVaultsFunds`: No transfer will be performed and the Vault's funds will be used
 ///     - Assumes the tokens are already present in the Tycho Router.
 ///     - The tokens must be deposited into the TychoRouter before performing the swap
-#[derive(Clone, Debug, PartialEq, ValueEnum)]
+#[derive(Clone, Debug, PartialEq, ValueEnum, Serialize, Deserialize, Default)]
 pub enum UserTransferType {
     TransferFromPermit2,
+    #[default]
     TransferFrom,
     UseVaultsFunds,
 }
@@ -68,6 +69,8 @@ pub struct Solution {
     /// If (min_amount_out - actual_swap_output) > max_client_contribution, the tx reverts.
     #[serde(with = "biguint_string")]
     pub max_client_contribution: BigUint,
+    /// The transfer type to be used in this swap for user's funds (token in)
+    pub user_transfer_type: UserTransferType,
 }
 
 /// Represents a swap operation to be performed on a pool.

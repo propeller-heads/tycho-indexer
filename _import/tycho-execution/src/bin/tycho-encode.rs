@@ -101,9 +101,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(router_address) = cli.router_address {
                 builder = builder.router_address(router_address);
             }
-            if let Some(user_transfer_type) = cli.user_transfer_type {
-                builder = builder.user_transfer_type(user_transfer_type);
-            }
             builder.build()?
         }
         Commands::TychoExecutor => TychoExecutorEncoderBuilder::new().build()?,

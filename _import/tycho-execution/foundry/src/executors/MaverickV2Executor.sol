@@ -7,7 +7,7 @@ import {
     IERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {TransferManager} from "../TransferManager.sol";
 import {
     RefundEscrow
 } from "../../lib/permit2/lib/openzeppelin-contracts/contracts/utils/escrow/RefundEscrow.sol";
@@ -88,7 +88,7 @@ contract MaverickV2Executor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -98,7 +98,7 @@ contract MaverickV2Executor is IExecutor {
         }
         receiver = address(bytes20(data[0:20]));
         tokenIn = address(bytes20(data[20:40]));
-        transferType = RestrictTransferFrom.TransferType.Transfer;
+        transferType = TransferManager.TransferType.Transfer;
     }
 }
 

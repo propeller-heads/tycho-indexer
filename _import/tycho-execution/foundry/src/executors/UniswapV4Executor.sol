@@ -28,7 +28,7 @@ import {
 import {
     TransientStateLibrary
 } from "@uniswap/v4-core/src/libraries/TransientStateLibrary.sol";
-import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {TransferManager} from "../TransferManager.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {
     LibPrefixLengthEncodedByteArray
@@ -574,19 +574,19 @@ contract UniswapV4Executor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn
         )
     {
-        return (RestrictTransferFrom.TransferType.None, address(0), address(0));
+        return (TransferManager.TransferType.None, address(0), address(0));
     }
 
     function getCallbackTransferData(bytes calldata data)
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn,
             uint256 amount
@@ -609,9 +609,9 @@ contract UniswapV4Executor is IExecutor, ICallback {
             }
             if (tokenIn == address(0)) {
                 transferType =
-                RestrictTransferFrom.TransferType.TransferNativeInExecutor;
+                TransferManager.TransferType.TransferNativeInExecutor;
             } else {
-                transferType = RestrictTransferFrom.TransferType.Transfer;
+                transferType = TransferManager.TransferType.Transfer;
             }
         } else if (selector == _swapExactInputSelector) {
             // swapExactInput(Currency, bool isFoT, uint128 amountIn, address receiver, PathKey[])
@@ -621,9 +621,9 @@ contract UniswapV4Executor is IExecutor, ICallback {
             amount = uint128(bytes16(stripped[84:100]));
             if (tokenIn == address(0)) {
                 transferType =
-                RestrictTransferFrom.TransferType.TransferNativeInExecutor;
+                TransferManager.TransferType.TransferNativeInExecutor;
             } else {
-                transferType = RestrictTransferFrom.TransferType.Transfer;
+                transferType = TransferManager.TransferType.Transfer;
             }
         } else {
             revert UniswapV4Executor__UnknownCallback(selector);

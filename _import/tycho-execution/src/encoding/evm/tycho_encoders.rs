@@ -30,8 +30,6 @@ use crate::encoding::{
 /// * `sequential_swap_strategy`: Encoder for sequential swaps
 /// * `split_swap_strategy`: Encoder for split swaps
 /// * `router_address`: Address of the Tycho router contract
-/// * `permit2`: Optional Permit2 instance for permit transfers
-/// * `signer`: Optional signer (used only for permit2 and full calldata encoding)
 #[derive(Clone)]
 pub struct TychoRouterEncoder {
     chain: Chain,
@@ -39,7 +37,6 @@ pub struct TychoRouterEncoder {
     sequential_swap_strategy: SequentialSwapStrategyEncoder,
     split_swap_strategy: SplitSwapStrategyEncoder,
     router_address: Bytes,
-    permit2: Option<Permit2>,
 }
 
 impl TychoRouterEncoder {
@@ -47,31 +44,21 @@ impl TychoRouterEncoder {
         chain: Chain,
         swap_encoder_registry: SwapEncoderRegistry,
         router_address: Bytes,
-        user_transfer_type: UserTransferType,
     ) -> Result<Self, EncodingError> {
-        let permit2 = if user_transfer_type == UserTransferType::TransferFromPermit2 {
-            Some(Permit2::new()?)
-        } else {
-            None
-        };
         Ok(TychoRouterEncoder {
             single_swap_strategy: SingleSwapStrategyEncoder::new(
                 swap_encoder_registry.clone(),
-                user_transfer_type.clone(),
                 router_address.clone(),
             )?,
             sequential_swap_strategy: SequentialSwapStrategyEncoder::new(
                 swap_encoder_registry.clone(),
-                user_transfer_type.clone(),
                 router_address.clone(),
             )?,
             split_swap_strategy: SplitSwapStrategyEncoder::new(
                 swap_encoder_registry,
-                user_transfer_type,
                 router_address.clone(),
             )?,
             router_address,
-            permit2,
             chain,
         })
     }
@@ -110,7 +97,8 @@ impl TychoRouterEncoder {
                 .encode_strategy(&solution)?
         };
 
-        if let Some(permit2) = &self.permit2 {
+        if solution.user_transfer_type == UserTransferType::TransferFromPermit2 {
+            let permit2 = Permit2::new()?;
             let permit = permit2.get_permit(
                 &self.router_address,
                 &solution.sender,
@@ -118,7 +106,7 @@ impl TychoRouterEncoder {
                 &solution.amount_in,
             )?;
             encoded_solution.permit = Some(permit);
-        }
+        };
         Ok(encoded_solution)
     }
 
@@ -448,21 +436,15 @@ mod tests {
             .unwrap()
     }
 
-    fn get_tycho_router_encoder(user_transfer_type: UserTransferType) -> TychoRouterEncoder {
-        TychoRouterEncoder::new(
-            eth_chain(),
-            get_swap_encoder_registry(),
-            router_address(),
-            user_transfer_type,
-        )
-        .unwrap()
+    fn get_tycho_router_encoder() -> TychoRouterEncoder {
+        TychoRouterEncoder::new(eth_chain(), get_swap_encoder_registry(), router_address()).unwrap()
     }
 
     mod router_encoder {
         use super::*;
         #[test]
         fn test_encode_router_calldata_split_swap_group() {
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+            let encoder = get_tycho_router_encoder();
             let mut swap_usdc_eth = swap_usdc_eth_univ4();
             swap_usdc_eth = swap_usdc_eth.split(0.5); // Set split to 50%
             let solution = Solution {
@@ -490,7 +472,7 @@ mod tests {
             // before adding swap: DAI -> USDC -> ETH (no swap) WETH -> DAI
             // after adding swap:  DAI -> USDC -> ETH -> WETH -> DAI
 
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+            let encoder = get_tycho_router_encoder();
 
             let swap_dai_usdc = Swap::new(
                 ProtocolComponent {
@@ -540,7 +522,7 @@ mod tests {
             // before adding swap: ETH is the solution token_in, WETH -> DAI
             // after adding swap:  ETH -> WETH -> DAI
 
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+            let encoder = get_tycho_router_encoder();
 
             let swap_weth_dai = Swap::new(
                 ProtocolComponent {
@@ -580,7 +562,7 @@ mod tests {
             // before adding swap: USDC -> ETH, WETH is the solution token_out
             // after adding swap:  USDC -> ETH -> WETH
 
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+            let encoder = get_tycho_router_encoder();
             let solution = Solution {
                 exact_out: false,
                 token_in: usdc(),
@@ -611,7 +593,7 @@ mod tests {
 
             let input_swaps = vec![swap_usdc_eth_univ4(), eth_weth_swap];
 
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+            let encoder = get_tycho_router_encoder();
             let solution = Solution {
                 exact_out: false,
                 token_in: usdc(),
@@ -630,7 +612,7 @@ mod tests {
 
         #[test]
         fn test_validate_fails_for_exact_out() {
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+            let encoder = get_tycho_router_encoder();
             let solution = Solution {
                 exact_out: true, // This should cause an error
                 ..Default::default()
@@ -648,7 +630,7 @@ mod tests {
 
         #[test]
         fn test_validate_fails_no_swaps() {
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+            let encoder = get_tycho_router_encoder();
             let solution =
                 Solution { exact_out: false, token_in: eth(), swaps: vec![], ..Default::default() };
 
@@ -668,7 +650,7 @@ mod tests {
             // DAI -              -> DAI
             //      50% -> WETH
             // (some of the pool addresses in this test are fake)
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+            let encoder = get_tycho_router_encoder();
             let swaps = vec![
                 Swap::new(
                     ProtocolComponent {
@@ -717,7 +699,7 @@ mod tests {
             // This test should fail because the cyclical swap is not the first and last token
             // DAI -> WETH -> USDC -> DAI -> WBTC
             // (some of the pool addresses in this test are fake)
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+            let encoder = get_tycho_router_encoder();
             let swaps = vec![
                 Swap::new(
                     ProtocolComponent {
@@ -782,7 +764,7 @@ mod tests {
             // WETH -> DAI
             //             -> WETH
             // (some of the pool addresses in this test are fake)
-            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+            let encoder = get_tycho_router_encoder();
             let swaps = vec![
                 Swap::new(
                     ProtocolComponent {

@@ -45,7 +45,7 @@ fn test_sequential_swap_strategy_encoder() {
         default_token(wbtc.clone()),
         default_token(usdc.clone()),
     );
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -56,6 +56,7 @@ fn test_sequential_swap_strategy_encoder() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
+        user_transfer_type: UserTransferType::TransferFromPermit2,
         ..Default::default()
     };
 
@@ -106,7 +107,7 @@ fn test_sequential_swap_strategy_encoder_transfer_from_integration() {
         default_token(wbtc.clone()),
         default_token(usdc.clone()),
     );
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -229,7 +230,7 @@ fn test_sequential_strategy_cyclic_swap() {
         default_token(usdc.clone()),
     );
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -241,6 +242,7 @@ fn test_sequential_strategy_cyclic_swap() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_usdc_weth, swap_weth_usdc],
+        user_transfer_type: UserTransferType::TransferFromPermit2,
         ..Default::default()
     };
 
@@ -351,7 +353,7 @@ fn test_sequential_strategy_cyclic_swap_and_vault() {
         default_token(usdc.clone()),
     );
 
-    let encoder = get_tycho_router_encoder(UserTransferType::UseVaultsFunds);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -363,6 +365,7 @@ fn test_sequential_strategy_cyclic_swap_and_vault() {
         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
         swaps: vec![swap_usdc_weth, swap_weth_usdc],
+        user_transfer_type: UserTransferType::UseVaultsFunds,
         ..Default::default()
     };
 
@@ -451,7 +454,7 @@ fn test_sequential_swap_strategy_encoder_with_fees() {
         default_token(wbtc.clone()),
         default_token(usdc.clone()),
     );
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,

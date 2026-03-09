@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {IExecutor} from "@interfaces/IExecutor.sol";
-import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {TransferManager} from "../TransferManager.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {
     IERC20,
@@ -181,7 +181,7 @@ contract BebopExecutor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -191,7 +191,7 @@ contract BebopExecutor is IExecutor {
         }
 
         tokenIn = address(bytes20(data[0:20]));
-        transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
+        transferType = TransferManager.TransferType.ProtocolWillDebit;
         receiver = bebopSettlement;
     }
 }

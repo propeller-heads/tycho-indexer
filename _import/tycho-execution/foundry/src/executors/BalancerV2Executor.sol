@@ -10,7 +10,7 @@ import {
 import {IAsset} from "@balancer-labs/v2-interfaces/contracts/vault/IAsset.sol";
 // slither-disable-next-line solc-version
 import {IVault} from "@balancer-labs/v2-interfaces/contracts/vault/IVault.sol";
-import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {TransferManager} from "../TransferManager.sol";
 
 error BalancerV2Executor__InvalidDataLength();
 
@@ -83,7 +83,7 @@ contract BalancerV2Executor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -94,6 +94,6 @@ contract BalancerV2Executor is IExecutor {
 
         tokenIn = address(bytes20(data[0:20]));
         receiver = _VAULT;
-        transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
+        transferType = TransferManager.TransferType.ProtocolWillDebit;
     }
 }

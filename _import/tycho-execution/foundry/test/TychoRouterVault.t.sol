@@ -8,9 +8,7 @@ import {
     Vault__UnexpectedNonZeroCount,
     ERC6909
 } from "@src/Vault.sol";
-import {
-    RestrictTransferFrom__DifferentTokenIn
-} from "@src/RestrictTransferFrom.sol";
+import {TransferManager__DifferentTokenIn} from "@src/TransferManager.sol";
 import {IExecutor} from "@interfaces/IExecutor.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {

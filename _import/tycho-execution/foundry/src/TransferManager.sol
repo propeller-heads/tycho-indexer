@@ -11,44 +11,59 @@ import {
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Vault} from "./Vault.sol";
 
-error RestrictTransferFrom__AddressZero();
-error RestrictTransferFrom__NotAContract(address addr);
-error RestrictTransferFrom__ExceededTransferFromAllowance(
+error TransferManager__AddressZero();
+error TransferManager__NotAContract(address addr);
+error TransferManager__ExceededTransferFromAllowance(
     uint256 allowedAmount, uint256 amountAttempted
 );
-error RestrictTransferFrom__DifferentTokenIn(
+error TransferManager__DifferentTokenIn(
     address tokenIn, address tokenInStorage
 );
-error RestrictTransferFrom__UnknownTransferType();
+error TransferManager__UnknownTransferType();
 
 /**
- * @title RestrictTransferFrom - Restrict transferFrom upto allowed amount of token
- * @dev Restricts `transferFrom` (using `permit2` or regular `transferFrom`) upto
- * allowed amount of token in per swap, while ensuring that the `transferFrom` is
- * only performed on the input token upto input amount, from the msg.sender's wallet
- * that calls the main swap method. Reverts if `transferFrom`s are attempted above
- * this allowed amount.
+ * @title TransferManager
+ * @dev Orchestrates all token transfers during swap execution. Inherits from Vault
+ * (ERC6909) and sits between TychoRouter and Dispatcher in the inheritance chain.
+ *
+ * Responsibilities:
+ * - Routes each transfer through one of 6 scenarios based on: TransferType returned
+ *   by the executor, whether it is the first swap, whether it is a split swap,
+ *   whether the call is inside a callback, and whether vault funds are in use.
+ * - Caps `transferFrom` to the declared input amount (stored in transient storage at
+ *   swap start). This prevents maliciously encoded split swaps from withdrawing more
+ *   than the user authorised. Reverts if the cap is exceeded or a different token is
+ *   attempted.
+ * - Supports both standard ERC20 `transferFrom` and Permit2's `transferFrom`.
+ * - Handles native ETH accounting for executors that forward ETH as `msg.value`
+ *   directly to the protocol (e.g. Fluid, Rocketpool, Lido).
+ * - When vault-funded, skips `transferFrom` entirely and relies on vault delta
+ *   accounting (`_updateDeltaAccounting`) to settle balances at the end of the swap.
+ *
+ * Per-swap state is kept in transient storage (EIP-1153): token in, allowed amount,
+ * Permit2 flag, original sender, and vault-in-use flag. These are written once at
+ * swap entry (`_tstoreTransferFromInfo`) and consumed throughout the swap.
  */
-contract RestrictTransferFrom is Vault {
+contract TransferManager is Vault {
     using SafeERC20 for IERC20;
 
     IAllowanceTransfer public immutable permit2;
-    // keccak256("RestrictTransferFrom#TOKEN_IN_SLOT")
+    // keccak256("TransferManager#TOKEN_IN_SLOT")
     uint256 private constant _TOKEN_IN_SLOT =
-        0x25712b2458c26c244401cacab2c4d40a337e6c15af51d98c87ca8c05ed74935f;
-    // keccak256("RestrictTransferFrom#AMOUNT_ALLOWED_SLOT")
+        0xaf58e9f1b0923d55d0ec6a57763d43cd9bb1d6bd8bad5ce9522fbe772c6ec42b;
+    // keccak256("TransferManager#AMOUNT_ALLOWED_SLOT")
     uint256 private constant _AMOUNT_ALLOWED_SLOT =
-        0x9042309497172c3d7a894cb22c754029d2b44522a8039afc41f7d5ad87a35cb5;
-    // keccak256("RestrictTransferFrom#IS_PERMIT2_SLOT")
+        0x28d0e2684c9341fec58f816e0c375a4e51f9f34ec034a29c97467df00497c8d9;
+    // keccak256("TransferManager#IS_PERMIT2_SLOT")
     uint256 private constant _IS_PERMIT2_SLOT =
-        0x8b09772a37ddaa0009affae61f4c227f5ae294cb166289f28313bcce05ea5358;
-    // keccak256("RestrictTransferFrom#SENDER_SLOT")
+        0xd847dc13274ab371f6244234290f56fa8650ec9dceff86e20efe1ddc141bdb03;
+    // keccak256("TransferManager#SENDER_SLOT")
     uint256 private constant _SENDER_SLOT =
-        0x6249046ac25ba4612871a1715b1abd1de7cf9c973c5045a9b08ce3f441ce6e3a;
+        0x99298391997747e556e81b2d36d99151315b6c1b92e826ca8d37acad5fddaf70;
 
     constructor(address permit2_) {
         if (permit2_.code.length == 0) {
-            revert RestrictTransferFrom__NotAContract(permit2_);
+            revert TransferManager__NotAContract(permit2_);
         }
         permit2 = IAllowanceTransfer(permit2_);
     }
@@ -184,7 +199,7 @@ contract RestrictTransferFrom is Vault {
             return;
         }
 
-        revert RestrictTransferFrom__UnknownTransferType();
+        revert TransferManager__UnknownTransferType();
     }
 
     /**
@@ -224,12 +239,12 @@ contract RestrictTransferFrom is Vault {
         }
 
         if (amount > amountAllowed) {
-            revert RestrictTransferFrom__ExceededTransferFromAllowance(
+            revert TransferManager__ExceededTransferFromAllowance(
                 amountAllowed, amount
             );
         }
         if (token != tokenInStorage) {
-            revert RestrictTransferFrom__DifferentTokenIn(token, tokenInStorage);
+            revert TransferManager__DifferentTokenIn(token, tokenInStorage);
         }
 
         // Update remaining allowance

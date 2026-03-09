@@ -56,7 +56,7 @@ fn test_uniswap_v3_uniswap_v2() {
         default_token(wbtc.clone()),
         default_token(usdc.clone()),
     );
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -133,7 +133,7 @@ fn test_uniswap_v3_uniswap_v3() {
         default_token(wbtc.clone()),
         default_token(usdc.clone()),
     );
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -219,7 +219,7 @@ fn test_uniswap_v3_curve() {
         default_token(wbtc.clone()),
         default_token(usdt.clone()),
     );
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -280,7 +280,7 @@ fn test_balancer_v2_uniswap_v2() {
         default_token(wbtc.clone()),
         default_token(usdc.clone()),
     );
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,
@@ -410,7 +410,7 @@ fn test_multi_protocol() {
         default_token(eth.clone()),
     );
 
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
+    let encoder = get_tycho_router_encoder();
 
     // Put all components together
     let solution = Solution {
@@ -428,6 +428,7 @@ fn test_multi_protocol() {
             ekubo_swap_usdt_usdc,
             usv4_swap_usdc_eth,
         ],
+        user_transfer_type: UserTransferType::TransferFromPermit2,
         ..Default::default()
     };
 
@@ -487,7 +488,7 @@ fn test_uniswap_v3_balancer_v3() {
         default_token(wbtc.clone()),
         default_token(qnt.clone()),
     );
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+    let encoder = get_tycho_router_encoder();
 
     let solution = Solution {
         exact_out: false,

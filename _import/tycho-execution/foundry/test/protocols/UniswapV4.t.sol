@@ -38,12 +38,12 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
         returns (bytes memory)
     {
         (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn,
             uint256 amount
         ) = this.getCallbackTransferData(msg.data);
-        if (transferType == RestrictTransferFrom.TransferType.Transfer) {
+        if (transferType == TransferManager.TransferType.Transfer) {
             IERC20(tokenIn).safeTransfer(receiver, amount);
         }
         bytes calldata stripped = msg.data[68:];

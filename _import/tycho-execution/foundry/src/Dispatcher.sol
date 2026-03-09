@@ -5,7 +5,7 @@ import {IExecutor} from "@interfaces/IExecutor.sol";
 import {ICallback} from "@interfaces/ICallback.sol";
 import {IFeeCalculator} from "@interfaces/IFeeCalculator.sol";
 import {FeeRecipient} from "../lib/FeeStructs.sol";
-import {RestrictTransferFrom} from "./RestrictTransferFrom.sol";
+import {TransferManager} from "./TransferManager.sol";
 
 error Dispatcher__UnapprovedExecutor(address executor);
 error Dispatcher__ExecutorIsTimelocked(address executor);
@@ -25,7 +25,7 @@ error Dispatcher__ExecutorAlreadyExists(address executor);
  *  Note: Executor contracts need to implement the IExecutor interface unless
  *  an alternate selector is specified.
  */
-contract Dispatcher is RestrictTransferFrom {
+contract Dispatcher is TransferManager {
     mapping(address => uint256) public executorsActivationTimestamp;
 
     // keccak256("Dispatcher#CURRENTLY_SWAPPING_EXECUTOR_SLOT")
@@ -43,7 +43,7 @@ contract Dispatcher is RestrictTransferFrom {
     event ExecutorSet(address indexed executor, uint256 timelockExpiresAt);
     event ExecutorRemoved(address indexed executor);
 
-    constructor(address permit2_) RestrictTransferFrom(permit2_) {}
+    constructor(address permit2_) TransferManager(permit2_) {}
 
     /**
      * @dev Adds or replaces an approved executor contract address if it is a
@@ -120,11 +120,11 @@ contract Dispatcher is RestrictTransferFrom {
         }
 
         (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address transferReceiver,
             address tokenIn
         ) = abi.decode(
-            transferData, (RestrictTransferFrom.TransferType, address, address)
+            transferData, (TransferManager.TransferType, address, address)
         );
 
         _transfer(
@@ -213,13 +213,13 @@ contract Dispatcher is RestrictTransferFrom {
         }
 
         (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn,
             uint256 amount
         ) = abi.decode(
             transferData,
-            (RestrictTransferFrom.TransferType, address, address, uint256)
+            (TransferManager.TransferType, address, address, uint256)
         );
 
         _transfer(

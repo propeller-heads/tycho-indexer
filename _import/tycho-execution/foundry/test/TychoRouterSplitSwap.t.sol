@@ -4,14 +4,14 @@ pragma solidity ^0.8.26;
 import "@src/executors/UniswapV4Executor.sol";
 import {
     TychoRouter,
-    RestrictTransferFrom,
+    TransferManager,
     ClientFeeParams
 } from "@src/TychoRouter.sol";
 import "./TychoRouterTestSetup.sol";
 
 import {
-    RestrictTransferFrom__ExceededTransferFromAllowance
-} from "@src/RestrictTransferFrom.sol";
+    TransferManager__ExceededTransferFromAllowance
+} from "@src/TransferManager.sol";
 
 contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
     function _getSplitSwaps() private view returns (bytes[] memory) {
@@ -247,7 +247,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                RestrictTransferFrom__ExceededTransferFromAllowance.selector,
+                TransferManager__ExceededTransferFromAllowance.selector,
                 40000000000000000000,
                 60000000000000000000
             )

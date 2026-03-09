@@ -9,7 +9,7 @@ import {
 import {
     IUniswapV2Pair
 } from "@uniswap-v2/contracts/interfaces/IUniswapV2Pair.sol";
-import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {TransferManager} from "../TransferManager.sol";
 
 error UniswapV2Executor__InvalidDataLength();
 error UniswapV2Executor__InvalidTarget();
@@ -177,7 +177,7 @@ contract UniswapV2Executor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -189,6 +189,6 @@ contract UniswapV2Executor is IExecutor {
         tokenIn = address(bytes20(data[20:40]));
 
         receiver = target;
-        transferType = RestrictTransferFrom.TransferType.Transfer;
+        transferType = TransferManager.TransferType.Transfer;
     }
 }

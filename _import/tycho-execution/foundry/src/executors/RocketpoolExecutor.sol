@@ -7,7 +7,7 @@ import {
     SafeERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {TransferManager} from "../TransferManager.sol";
 
 error RocketpoolExecutor__InvalidDataLength();
 
@@ -85,7 +85,7 @@ contract RocketpoolExecutor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -98,11 +98,10 @@ contract RocketpoolExecutor is IExecutor {
         if (isDeposit) {
             // ETH transfers are handled in the Executor
             tokenIn = address(0);
-            transferType =
-            RestrictTransferFrom.TransferType.TransferNativeInExecutor;
+            transferType = TransferManager.TransferType.TransferNativeInExecutor;
         } else {
             tokenIn = address(RETH);
-            transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
+            transferType = TransferManager.TransferType.ProtocolWillDebit;
         }
         // Since burning withdraws the funds from the msg.sender, the user's funds need to be sent to the
         // TychoRouter initially. This does not require an actual approval since our

@@ -18,7 +18,7 @@ import {
     MIN_SQRT_RATIO,
     SqrtRatio
 } from "@ekubo/types/sqrtRatio.sol";
-import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {TransferManager} from "../TransferManager.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
@@ -290,19 +290,19 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn
         )
     {
-        return (RestrictTransferFrom.TransferType.None, address(0), address(0));
+        return (TransferManager.TransferType.None, address(0), address(0));
     }
 
     function getCallbackTransferData(bytes calldata data)
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn,
             uint256 amount
@@ -313,7 +313,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         if (selector == _PAY_CALLBACK_SELECTOR) {
             tokenIn = address(bytes20(payData[12:32]));
             amount = uint256(uint128(bytes16(payData[32:48])));
-            transferType = RestrictTransferFrom.TransferType.Transfer;
+            transferType = TransferManager.TransferType.Transfer;
             receiver = address(_core);
         } else {
             // _LOCKED_SELECTOR
@@ -323,10 +323,10 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
                 // TransferNativeInExecutor to update the delta accounting accordingly.
                 tokenIn = address(0);
                 transferType =
-                RestrictTransferFrom.TransferType.TransferNativeInExecutor;
+                TransferManager.TransferType.TransferNativeInExecutor;
                 amount = uint256(uint128(bytes16(payData[0:16])));
             } else {
-                transferType = RestrictTransferFrom.TransferType.None;
+                transferType = TransferManager.TransferType.None;
                 receiver = address(0);
                 tokenIn = address(0);
                 amount = 0;

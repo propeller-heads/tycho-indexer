@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import {TestUtils} from "../TestUtils.sol";
 import {
     UniswapV2Executor,
-    RestrictTransferFrom,
+    TransferManager,
     UniswapV2Executor__InvalidDataLength,
     UniswapV2Executor__InvalidTarget,
     IUniswapV2Pair
