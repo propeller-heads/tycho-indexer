@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../src/RestrictTransferFrom.sol";
+import "../src/TransferManager.sol";
 
 pragma abicoder v2;
 
@@ -44,7 +44,7 @@ interface IExecutor {
     function getTransferData(bytes calldata data)
         external
         payable
-        returns (RestrictTransferFrom.TransferType transferType, address receiver, address tokenIn);
+        returns (TransferManager.TransferType transferType, address receiver, address tokenIn);
 
     /**
      * @dev Returns where funds from the previous swap should be sent in a sequential swap case.

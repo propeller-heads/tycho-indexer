@@ -6,7 +6,7 @@ import {
     IERC20,
     SafeERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {TransferManager} from "../TransferManager.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 interface IWETH is IERC20 {
@@ -90,7 +90,7 @@ contract WethExecutor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -104,12 +104,11 @@ contract WethExecutor is IExecutor {
         if (isWrapping) {
             // ETH -> WETH: Wrap
             tokenIn = address(0);
-            transferType =
-            RestrictTransferFrom.TransferType.TransferNativeInExecutor;
+            transferType = TransferManager.TransferType.TransferNativeInExecutor;
         } else {
             // WETH -> ETH: Unwrap
             tokenIn = address(weth);
-            transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
+            transferType = TransferManager.TransferType.ProtocolWillDebit;
         }
 
         // Since unwrapping withdraws the funds from the msg.sender, the user's funds need to be sent to the

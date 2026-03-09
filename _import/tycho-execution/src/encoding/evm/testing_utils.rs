@@ -14,11 +14,12 @@ use tycho_common::{
     Bytes,
 };
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct MockRFQState {
     pub quote_amount_out: BigUint,
     pub quote_data: HashMap<String, Bytes>,
 }
+#[typetag::serde]
 impl ProtocolSim for MockRFQState {
     fn fee(&self) -> f64 {
         panic!("MockRFQState does not implement fee")
@@ -50,7 +51,7 @@ impl ProtocolSim for MockRFQState {
         _delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         panic!("MockRFQState does not implement fee")
     }
 

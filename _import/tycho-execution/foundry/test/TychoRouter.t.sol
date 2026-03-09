@@ -6,7 +6,7 @@ import {FeeCalculator} from "@src/FeeCalculator.sol";
 import {
     IAccessControl
 } from "@openzeppelin/contracts/access/IAccessControl.sol";
-import "@src/RestrictTransferFrom.sol";
+import "@src/TransferManager.sol";
 import "./TychoRouterTestSetup.sol";
 
 contract TychoRouterTest is TychoRouterTestSetup {
@@ -154,7 +154,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         address nonContract = address(0x999);
         vm.expectRevert(
             abi.encodeWithSelector(
-                RestrictTransferFrom__NotAContract.selector, nonContract
+                TransferManager__NotAContract.selector, nonContract
             )
         );
         new TychoRouterExposed(

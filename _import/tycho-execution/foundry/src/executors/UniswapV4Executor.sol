@@ -28,7 +28,7 @@ import {
 import {
     TransientStateLibrary
 } from "@uniswap/v4-core/src/libraries/TransientStateLibrary.sol";
-import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {TransferManager} from "../TransferManager.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {
     LibPrefixLengthEncodedByteArray
@@ -544,19 +544,19 @@ contract UniswapV4Executor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn
         )
     {
-        return (RestrictTransferFrom.TransferType.None, address(0), address(0));
+        return (TransferManager.TransferType.None, address(0), address(0));
     }
 
     function getCallbackTransferData(bytes calldata data)
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn,
             uint256 amount
@@ -587,9 +587,9 @@ contract UniswapV4Executor is IExecutor, ICallback {
                 // ETH transfers are handled in the Executor, so we need to set the transferType to
                 // TransferNativeInExecutor to update the delta accounting accordingly.
                 transferType =
-                RestrictTransferFrom.TransferType.TransferNativeInExecutor;
+                TransferManager.TransferType.TransferNativeInExecutor;
             } else {
-                transferType = RestrictTransferFrom.TransferType.Transfer;
+                transferType = TransferManager.TransferType.Transfer;
             }
         } else if (selector == _SWAP_EXACT_INPUT_SELECTOR) {
             // swapExactInput(Currency currencyIn, uint128 amountIn, address receiver, PathKey[] calldata path)
@@ -601,9 +601,9 @@ contract UniswapV4Executor is IExecutor, ICallback {
                 // ETH transfers are handled in the Executor, so we need to set the transferType to
                 // TransferNativeInExecutor to update the delta accounting accordingly.
                 transferType =
-                RestrictTransferFrom.TransferType.TransferNativeInExecutor;
+                TransferManager.TransferType.TransferNativeInExecutor;
             } else {
-                transferType = RestrictTransferFrom.TransferType.Transfer;
+                transferType = TransferManager.TransferType.Transfer;
             }
         } else {
             revert UniswapV4Executor__UnknownCallback(selector);

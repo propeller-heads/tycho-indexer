@@ -8,7 +8,7 @@ import {
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
-import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {TransferManager} from "../TransferManager.sol";
 
 error ERC4626Executor__InvalidDataLength();
 error ERC4626Executor__InvalidTarget();
@@ -69,7 +69,7 @@ contract ERC4626Executor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -79,6 +79,6 @@ contract ERC4626Executor is IExecutor {
         }
         tokenIn = address(bytes20(data[0:20]));
         receiver = address(bytes20(data[20:40]));
-        transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
+        transferType = TransferManager.TransferType.ProtocolWillDebit;
     }
 }

@@ -1439,7 +1439,7 @@ fn test_sequential_encoding_strategy_erc4626() {
 fn test_single_swap_with_univ4_angstrom() {
     //  USDC ─── (USV4-angstrom) ──> WETH
 
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
 
     let weth = weth();
     let usdc = usdc();

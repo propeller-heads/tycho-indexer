@@ -10,7 +10,7 @@ DeFi swap execution framework: Solidity smart contracts (TychoRouter) + Rust enc
 ```
 TychoRouter (entry point)
   inherits Dispatcher              -- executor dispatch via delegatecall
-    inherits RestrictTransferFrom  -- transfer limits, Permit2/ERC20/Vault funding
+    inherits TransferManager  -- transfer limits, Permit2/ERC20/Vault funding
       inherits Vault (ERC6909)     -- multi-token vault, transient storage deltas
 
 FeeCalculator (separate contract, called via staticcall -- read only)
@@ -23,7 +23,7 @@ FeeCalculator (separate contract, called via staticcall -- read only)
 | `TychoRouter.sol` | Entry point. 3 swap strategies (single/sequential/split) x 3 funding modes (transferFrom/Permit2/vault) = 9 public methods |
 | `Vault.sol` | ERC6909 multi-token vault (see subsection below) |
 | `Dispatcher.sol` | Executor dispatch. 3-day timelock on new executors. Queries transfer data via staticcall, executes swaps via delegatecall |
-| `RestrictTransferFrom.sol` | Caps transferFrom to the declared input amount. 6 transfer scenarios depending on context |
+| `TransferManager.sol` | Caps transferFrom to the declared input amount. 6 transfer scenarios depending on context |
 | `FeeCalculator.sol` | Dual fee system: router fee on output + router fee on client fee. Per-user custom rates. Upgradeable without redeploying router |
 
 Interfaces (`foundry/interfaces/`): `IExecutor` (swap, getTransferData, fundsExpectedAddress), `ICallback` (handleCallback, verifyCallback, getCallbackTransferData), `IFeeCalculator` (calculateFee, getEffectiveRouterFeeOnOutput).

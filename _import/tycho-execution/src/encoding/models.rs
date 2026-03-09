@@ -24,7 +24,7 @@ use crate::encoding::serde_primitives::biguint_string;
 /// - `UseVaultsFunds`: No transfer will be performed and the Vault's funds will be used
 ///     - Assumes the tokens are already present in the Tycho Router.
 ///     - The tokens must be deposited into the TychoRouter before performing the swap
-#[derive(Clone, Debug, PartialEq, ValueEnum)]
+#[derive(Clone, Debug, PartialEq, ValueEnum, Serialize, Deserialize)]
 pub enum UserTransferType {
     TransferFromPermit2,
     TransferFrom,

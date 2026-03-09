@@ -158,7 +158,7 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
             WETH_ADDR,
             DAI_ADDR,
             uint24(500),
-            RestrictTransferFrom.TransferType.Transfer,
+            TransferManager.TransferType.Transfer,
             address(3),
             false
         );

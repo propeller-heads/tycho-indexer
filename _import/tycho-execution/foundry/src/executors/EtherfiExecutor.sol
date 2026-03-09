@@ -6,7 +6,7 @@ import {
     SafeERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IExecutor} from "@interfaces/IExecutor.sol";
-import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {TransferManager} from "../TransferManager.sol";
 
 error EtherfiExecutor__InvalidDataLength();
 error EtherfiExecutor__InvalidDirection();
@@ -139,7 +139,7 @@ contract EtherfiExecutor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -148,21 +148,21 @@ contract EtherfiExecutor is IExecutor {
 
         if (direction == EtherfiDirection.EthToEeth) {
             return (
-                RestrictTransferFrom.TransferType.TransferNativeInExecutor,
+                TransferManager.TransferType.TransferNativeInExecutor,
                 address(0),
                 address(0)
             );
         } else if (direction == EtherfiDirection.EethToEth) {
             // redemptionManager pulls eETH from router via transferFrom
             return (
-                RestrictTransferFrom.TransferType.ProtocolWillDebit,
+                TransferManager.TransferType.ProtocolWillDebit,
                 redemptionManagerAddress,
                 eethAddress
             );
         } else if (direction == EtherfiDirection.EethToWeeth) {
             // weETH.wrap() pulls eETH from router via transferFrom
             return (
-                RestrictTransferFrom.TransferType.ProtocolWillDebit,
+                TransferManager.TransferType.ProtocolWillDebit,
                 weethAddress,
                 eethAddress
             );
@@ -170,7 +170,7 @@ contract EtherfiExecutor is IExecutor {
             // weETH.unwrap() burns from router (no transferFrom), so no approval
             // needed — receiver=msg.sender skips _approveIfNeeded
             return (
-                RestrictTransferFrom.TransferType.ProtocolWillDebit,
+                TransferManager.TransferType.ProtocolWillDebit,
                 msg.sender,
                 weethAddress
             );

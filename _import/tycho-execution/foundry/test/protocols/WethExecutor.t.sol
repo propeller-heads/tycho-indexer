@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import "../TychoRouterTestSetup.sol";
 import {CommonBase} from "../../lib/forge-std/src/Base.sol";
 import {Constants} from "../Constants.sol";
-import {RestrictTransferFrom} from "../../src/RestrictTransferFrom.sol";
+import {TransferManager} from "../../src/TransferManager.sol";
 import {
     WethExecutor,
     WethExecutor__InvalidDataLength,
@@ -69,7 +69,7 @@ contract WethExecutorTest is TestUtils, Constants {
         );
 
         (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn
         ) = wethExecutor.getTransferData(params);
@@ -77,7 +77,7 @@ contract WethExecutorTest is TestUtils, Constants {
         assertEq(receiver, address(this));
         assertEq(
             uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.TransferNativeInExecutor)
+            uint8(TransferManager.TransferType.TransferNativeInExecutor)
         );
         assertEq(tokenIn, address(0));
     }
@@ -88,7 +88,7 @@ contract WethExecutorTest is TestUtils, Constants {
         );
 
         (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn
         ) = wethExecutor.getTransferData(params);
@@ -96,7 +96,7 @@ contract WethExecutorTest is TestUtils, Constants {
         assertEq(receiver, address(this));
         assertEq(
             uint8(transferType),
-            uint8(RestrictTransferFrom.TransferType.ProtocolWillDebit)
+            uint8(TransferManager.TransferType.ProtocolWillDebit)
         );
         assertEq(tokenIn, WETH_ADDR);
     }

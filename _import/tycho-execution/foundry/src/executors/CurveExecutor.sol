@@ -7,7 +7,7 @@ import {
     IERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {TransferManager} from "../TransferManager.sol";
 import {TychoRouter} from "../TychoRouter.sol";
 
 error CurveExecutor__AddressZero();
@@ -177,7 +177,7 @@ contract CurveExecutor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -187,10 +187,9 @@ contract CurveExecutor is IExecutor {
             // ETH transfers are handled in the Executor, so we need to set the transferType to TransferNativeInExecutor
             // to update the delta accounting accordingly.
             tokenIn = address(0);
-            transferType =
-            RestrictTransferFrom.TransferType.TransferNativeInExecutor;
+            transferType = TransferManager.TransferType.TransferNativeInExecutor;
         } else {
-            transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
+            transferType = TransferManager.TransferType.ProtocolWillDebit;
         }
         // The receiver of the funds will be the pool contract. This is only relevant
         // for performing an approval in the case of ProtocolWillDebit.

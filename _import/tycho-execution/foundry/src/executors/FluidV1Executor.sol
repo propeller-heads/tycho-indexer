@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 import {IExecutor} from "@interfaces/IExecutor.sol";
 import {ICallback} from "@interfaces/ICallback.sol";
-import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {TransferManager} from "../TransferManager.sol";
 
 interface IFluidV1Dex {
     function swapInWithCallback(
@@ -138,19 +138,19 @@ contract FluidV1Executor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn
         )
     {
-        return (RestrictTransferFrom.TransferType.None, address(0), address(0));
+        return (TransferManager.TransferType.None, address(0), address(0));
     }
 
     function getCallbackTransferData(bytes calldata data)
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn,
             uint256 amount
@@ -160,10 +160,9 @@ contract FluidV1Executor is IExecutor, ICallback {
         if (tokenIn == address(0)) {
             // ETH transfers are handled in the Executor, so we need to set the transferType to TransferNativeInExecutor
             // to update the delta accounting accordingly.
-            transferType =
-            RestrictTransferFrom.TransferType.TransferNativeInExecutor;
+            transferType = TransferManager.TransferType.TransferNativeInExecutor;
         } else {
-            transferType = RestrictTransferFrom.TransferType.Transfer;
+            transferType = TransferManager.TransferType.Transfer;
         }
         receiver = liquidity;
     }

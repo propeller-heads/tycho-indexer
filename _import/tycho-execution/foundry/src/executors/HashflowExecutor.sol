@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {TransferManager} from "../TransferManager.sol";
 import {IExecutor} from "@interfaces/IExecutor.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {
@@ -133,7 +133,7 @@ contract HashflowExecutor is IExecutor {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn
         )
@@ -142,7 +142,7 @@ contract HashflowExecutor is IExecutor {
             revert HashflowExecutor__InvalidDataLength();
         }
 
-        transferType = RestrictTransferFrom.TransferType.ProtocolWillDebit;
+        transferType = TransferManager.TransferType.ProtocolWillDebit;
         tokenIn = address(bytes20(data[60:80]));
         // The receiver of the funds will be the Hashflow Router.
         receiver = hashflowRouter;

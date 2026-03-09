@@ -11,7 +11,7 @@ import {ICallback} from "@interfaces/ICallback.sol";
 import {
     IUniswapV3Pool
 } from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {TransferManager} from "../TransferManager.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 error SlipstreamsExecutor__InvalidDataLength();
@@ -194,19 +194,19 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn
         )
     {
-        return (RestrictTransferFrom.TransferType.None, address(0), address(0));
+        return (TransferManager.TransferType.None, address(0), address(0));
     }
 
     function getCallbackTransferData(bytes calldata data)
         external
         payable
         returns (
-            RestrictTransferFrom.TransferType transferType,
+            TransferManager.TransferType transferType,
             address receiver,
             address tokenIn,
             uint256 amount
@@ -217,7 +217,7 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         amount =
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
         tokenIn = address(bytes20(data[132:152]));
-        transferType = RestrictTransferFrom.TransferType.Transfer;
+        transferType = TransferManager.TransferType.Transfer;
         receiver = msg.sender;
     }
 }
