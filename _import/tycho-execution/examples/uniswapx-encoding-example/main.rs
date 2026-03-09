@@ -7,7 +7,7 @@ use alloy::{
 };
 use num_bigint::{BigInt, BigUint};
 use tycho_common::{
-    models::{protocol::ProtocolComponent, Chain},
+    models::{protocol::ProtocolComponent, token::Token, Chain},
     Bytes,
 };
 use tycho_contracts::encoding::{
@@ -70,9 +70,13 @@ fn main() {
     //
     // First we need to create swap objects
 
-    let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
-    let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
-    let usdt = Bytes::from_str("0xdAC17F958D2ee523a2206206994597C13D831ec7").unwrap();
+    let dai_addr = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+    let usdc_addr = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+    let usdt_addr = Bytes::from_str("0xdAC17F958D2ee523a2206206994597C13D831ec7").unwrap();
+
+    let dai = Token::new(&dai_addr, "DAI", 18, 0, &[], Chain::Ethereum, 100);
+    let usdc = Token::new(&usdc_addr, "USDC", 6, 0, &[], Chain::Ethereum, 100);
+    let usdt = Token::new(&usdt_addr, "USDT", 6, 0, &[], Chain::Ethereum, 100);
 
     let swap_dai_usdc = Swap::new(
         ProtocolComponent {
@@ -108,9 +112,9 @@ fn main() {
     // Then we create a solution object with the previous swaps
     let solution = Solution {
         exact_out: false,
-        token_in: dai.clone(),
+        token_in: dai_addr.clone(),
         amount_in: BigUint::from_str("2_000_000000000000000000").unwrap(),
-        token_out: usdt.clone(),
+        token_out: usdt_addr.clone(),
         min_amount_out: BigUint::from_str("1_990_000000").unwrap(),
         sender: filler.clone(),
         receiver: filler.clone(),
@@ -154,14 +158,14 @@ fn main() {
 
     let token_in_approval_needed = token_approvals_manager
         .approval_needed(
-            bytes_to_address(&dai).unwrap(),
+            bytes_to_address(&dai_addr).unwrap(),
             filler_address,
             bytes_to_address(&router_address).unwrap(),
         )
         .unwrap();
 
     let token_out_approval_needed = token_approvals_manager
-        .approval_needed(bytes_to_address(&usdc).unwrap(), filler_address, usx_reactor)
+        .approval_needed(bytes_to_address(&usdc_addr).unwrap(), filler_address, usx_reactor)
         .unwrap();
 
     let full_calldata =
