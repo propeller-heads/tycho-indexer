@@ -1,3 +1,11 @@
+## [0.147.1](https://github.com/propeller-heads/tycho-indexer/compare/0.147.0...0.147.1) (2026-03-09)
+
+
+### Bug Fixes
+
+* skip claude-review job instead of failing for non-review comments ([f918d52](https://github.com/propeller-heads/tycho-indexer/commit/f918d528e2909c016f3d67ed9d4af050525b2e6e))
+* skip claude-review job instead of failing for non-review comments ([#870](https://github.com/propeller-heads/tycho-indexer/issues/870)) ([281adab](https://github.com/propeller-heads/tycho-indexer/commit/281adab37b51be3b1e05d829ca8cc4fa764a4a63))
+
 ## [0.147.0](https://github.com/propeller-heads/tycho-indexer/compare/0.146.0...0.147.0) (2026-03-09)
 
 
