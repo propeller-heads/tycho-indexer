@@ -19,20 +19,16 @@ jobs:
 
   review:
     runs-on: ubuntu-latest
-    if: github.event_name == 'issue_comment' && github.event.issue.pull_request
+    if: >-
+      github.event_name == 'issue_comment'
+      && github.event.issue.pull_request
+      && (contains(github.event.comment.body, '/review')
+          || contains(github.event.comment.body, '/claude-review'))
     permissions:
       contents: read
       pull-requests: write
       id-token: write
     steps:
-      - name: Require /review to run
-        run: |
-          comment="${{ github.event.comment.body }}"
-          if [[ "${comment,,}" != *"/review"* && "${comment,,}" != *"/claude-review"* ]]; then
-            echo "::notice::To run Claude review, comment '/review' or '/claude-review' on the PR."
-            exit 1
-          fi
-
       - uses: actions/checkout@v6
         with:
           fetch-depth: 1
