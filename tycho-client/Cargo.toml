@@ -39,7 +39,7 @@ tracing-subscriber = { version = "0.3.17", default-features = false, features = 
     "fmt",
     "json",
 ] }
-hyper = "0.14.27"
+hyper = { version = "0.14.27", default-features = false }
 backoff = { version = "0.4.0", features = ["tokio", "futures"] }
 time = "0.3.41"
 zstd = "0.13"

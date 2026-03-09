@@ -76,7 +76,7 @@ tracing-appender = "0.2"
 reqwest = "0.11"
 lru = "0.12.2"
 typetag = "0.2.16"
-rand = "0.8.5"
+rand = { version = "0.8.5", default-features = false, features = ["std", "std_rng"] }
 # test dependencies
 pretty_assertions = "1.4.0"
 rstest = "0.18.2"

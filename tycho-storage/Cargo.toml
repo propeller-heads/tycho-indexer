@@ -26,7 +26,6 @@ lru.workspace = true
 diesel-derive-enum = { version = "2.1.0", features = ["postgres"] }
 diesel_migrations = "2.1.0"
 itertools = "0.12.1"
-lazy_static = "1.4.0"
 
 
 [dev-dependencies]
