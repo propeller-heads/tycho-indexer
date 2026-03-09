@@ -10,7 +10,7 @@ use tycho_contracts::encoding::{
         encoder_builders::TychoRouterEncoderBuilder,
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
     },
-    models::{Solution, Swap, UserTransferType},
+    models::{Solution, Swap},
 };
 
 fn main() {
@@ -24,7 +24,6 @@ fn main() {
         .expect("Failed to get default SwapEncoderRegistry");
     let encoder = TychoRouterEncoderBuilder::new()
         .chain(Chain::Ethereum)
-        .user_transfer_type(UserTransferType::TransferFrom)
         .swap_encoder_registry(swap_encoder_registry)
         .build()
         .expect("Failed to build encoder");

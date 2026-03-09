@@ -9,7 +9,6 @@ use crate::encoding::{
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         tycho_encoders::{TychoExecutorEncoder, TychoRouterEncoder},
     },
-    models::UserTransferType,
     tycho_encoder::TychoEncoder,
 };
 
@@ -18,7 +17,6 @@ use crate::encoding::{
 /// This struct allows setting a chain and strategy encoder before building the final encoder.
 pub struct TychoRouterEncoderBuilder {
     chain: Option<Chain>,
-    user_transfer_type: Option<UserTransferType>,
     swap_encoder_registry: Option<SwapEncoderRegistry>,
     router_address: Option<Bytes>,
 }
@@ -31,20 +29,10 @@ impl Default for TychoRouterEncoderBuilder {
 
 impl TychoRouterEncoderBuilder {
     pub fn new() -> Self {
-        TychoRouterEncoderBuilder {
-            chain: None,
-            swap_encoder_registry: None,
-            router_address: None,
-            user_transfer_type: None,
-        }
+        TychoRouterEncoderBuilder { chain: None, swap_encoder_registry: None, router_address: None }
     }
     pub fn chain(mut self, chain: Chain) -> Self {
         self.chain = Some(chain);
-        self
-    }
-
-    pub fn user_transfer_type(mut self, user_transfer_type: UserTransferType) -> Self {
-        self.user_transfer_type = Some(user_transfer_type);
         self
     }
 
@@ -63,8 +51,7 @@ impl TychoRouterEncoderBuilder {
     /// Builds the `TychoRouterEncoder` instance using the configured chain.
     /// Returns an error if either the chain has not been set.
     pub fn build(self) -> Result<Box<dyn TychoEncoder>, EncodingError> {
-        if let (Some(chain), Some(user_transfer_type), Some(swap_encoder_registry)) =
-            (self.chain, self.user_transfer_type, self.swap_encoder_registry)
+        if let (Some(chain), Some(swap_encoder_registry)) = (self.chain, self.swap_encoder_registry)
         {
             let tycho_router_address;
             if let Some(address) = self.router_address {
@@ -84,11 +71,10 @@ impl TychoRouterEncoderBuilder {
                 chain,
                 swap_encoder_registry,
                 tycho_router_address,
-                user_transfer_type,
             )?))
         } else {
             Err(EncodingError::FatalError(
-                "Please set the chain, user transfer type and swap encoder registry before building the encoder"
+                "Please set the chain and swap encoder registry before building the encoder"
                     .to_string(),
             ))
         }

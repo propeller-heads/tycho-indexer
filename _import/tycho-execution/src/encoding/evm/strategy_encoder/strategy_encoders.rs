@@ -23,34 +23,19 @@ use crate::encoding::{
 ///
 /// # Fields
 /// * `swap_encoder_registry`: SwapEncoderRegistry, containing all possible swap encoders
-/// * `function_signature`: String, the signature for the swap function in the router contract
 /// * `router_address`: Address of the router to be used to execute swaps
 #[derive(Clone)]
 pub struct SingleSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
-    function_signature: String,
     router_address: Bytes,
 }
 
 impl SingleSwapStrategyEncoder {
     pub fn new(
         swap_encoder_registry: SwapEncoderRegistry,
-        user_transfer_type: UserTransferType,
         router_address: Bytes,
     ) -> Result<Self, EncodingError> {
-        let function_signature = if user_transfer_type == UserTransferType::TransferFromPermit2 {
-            "singleSwapPermit2(uint256,address,address,uint256,address,(uint16,address,uint256,uint256,bytes),((address,uint160,uint48,uint48),address,uint256),bytes,bytes)"
-        } else if user_transfer_type == UserTransferType::UseVaultsFunds {
-            "singleSwapUsingVault(uint256,address,address,uint256,address,(uint16,address,uint256,uint256,bytes),bytes)"
-        } else {
-            "singleSwap(uint256,address,address,uint256,address,(uint16,address,uint256,uint256,bytes),bytes)"
-        }.to_string();
-
-        Ok(Self {
-            function_signature,
-            swap_encoder_registry,
-            router_address: router_address.clone(),
-        })
+        Ok(Self { swap_encoder_registry, router_address: router_address.clone() })
     }
 
     /// Encodes information necessary for performing a single hop against a given executor for
@@ -65,6 +50,12 @@ impl SingleSwapStrategyEncoder {
 
 impl StrategyEncoder for SingleSwapStrategyEncoder {
     fn encode_strategy(&self, solution: &Solution) -> Result<EncodedSolution, EncodingError> {
+        let function_signature = match solution.user_transfer_type{
+            UserTransferType::TransferFromPermit2 => {"singleSwapPermit2(uint256,address,address,uint256,address,(uint16,address,uint256,uint256,bytes),((address,uint160,uint48,uint48),address,uint256),bytes,bytes)"}
+            UserTransferType::TransferFrom => {"singleSwap(uint256,address,address,uint256,address,(uint16,address,uint256,uint256,bytes),bytes)"}
+            UserTransferType::UseVaultsFunds => {"singleSwapUsingVault(uint256,address,address,uint256,address,(uint16,address,uint256,uint256,bytes),bytes)"}
+        }.to_string();
+
         let grouped_swaps = group_swaps(&solution.swaps);
         let number_of_groups = grouped_swaps.len();
         if number_of_groups != 1 {
@@ -123,7 +114,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
         let swap_data =
             self.encode_swap_header(swap_encoder.executor_address().clone(), initial_protocol_data);
         Ok(EncodedSolution {
-            function_signature: self.function_signature.clone(),
+            function_signature,
             interacting_with: self.router_address.clone(),
             swaps: swap_data,
             permit: None,
@@ -154,7 +145,6 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
 #[derive(Clone)]
 pub struct SequentialSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
-    function_signature: String,
     router_address: Bytes,
     sequential_swap_validator: SequentialSwapValidator,
 }
@@ -162,18 +152,9 @@ pub struct SequentialSwapStrategyEncoder {
 impl SequentialSwapStrategyEncoder {
     pub fn new(
         swap_encoder_registry: SwapEncoderRegistry,
-        user_transfer_type: UserTransferType,
         router_address: Bytes,
     ) -> Result<Self, EncodingError> {
-        let function_signature = if user_transfer_type == UserTransferType::TransferFromPermit2 {
-            "sequentialSwapPermit2(uint256,address,address,uint256,address,(uint16,address,uint256,uint256,bytes),((address,uint160,uint48,uint48),address,uint256),bytes,bytes)"
-        } else if user_transfer_type == UserTransferType::UseVaultsFunds {
-            "sequentialSwapUsingVault(uint256,address,address,uint256,address,(uint16,address,uint256,uint256,bytes),bytes)"
-        } else {
-            "sequentialSwap(uint256,address,address,uint256,address,(uint16,address,uint256,uint256,bytes),bytes)"
-        }.to_string();
         Ok(Self {
-            function_signature,
             swap_encoder_registry,
             router_address: router_address.clone(),
             sequential_swap_validator: SequentialSwapValidator,
@@ -192,6 +173,11 @@ impl SequentialSwapStrategyEncoder {
 
 impl StrategyEncoder for SequentialSwapStrategyEncoder {
     fn encode_strategy(&self, solution: &Solution) -> Result<EncodedSolution, EncodingError> {
+        let function_signature = match solution.user_transfer_type {
+            UserTransferType::TransferFromPermit2 => { "sequentialSwapPermit2(uint256,address,address,uint256,address,(uint16,address,uint256,uint256,bytes),((address,uint160,uint48,uint48),address,uint256),bytes,bytes)" }
+            UserTransferType::TransferFrom => { "sequentialSwap(uint256,address,address,uint256,address,(uint16,address,uint256,uint256,bytes),bytes)" }
+            UserTransferType::UseVaultsFunds => { "sequentialSwapUsingVault(uint256,address,address,uint256,address,(uint16,address,uint256,uint256,bytes),bytes)" }
+        }.to_string();
         self.sequential_swap_validator
             .validate_swap_path(&solution.swaps, &solution.token_in, &solution.token_out)?;
 
@@ -244,7 +230,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
         let encoded_swaps = ple_encode(swaps);
         Ok(EncodedSolution {
             interacting_with: self.router_address.clone(),
-            function_signature: self.function_signature.clone(),
+            function_signature,
             swaps: encoded_swaps,
             permit: None,
             n_tokens: 0,
@@ -265,7 +251,6 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
 ///
 /// # Fields
 /// * `swap_encoder_registry`: SwapEncoderRegistry, containing all possible swap encoders
-/// * `function_signature`: String, the signature for the swap function in the router contract
 /// * `native_address`: Address of the chain's native token
 /// * `wrapped_address`: Address of the chain's wrapped token
 /// * `split_swap_validator`: SplitSwapValidator, responsible for checking validity of split swap
@@ -274,7 +259,6 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
 #[derive(Clone)]
 pub struct SplitSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
-    function_signature: String,
     split_swap_validator: SplitSwapValidator,
     router_address: Bytes,
 }
@@ -282,18 +266,9 @@ pub struct SplitSwapStrategyEncoder {
 impl SplitSwapStrategyEncoder {
     pub fn new(
         swap_encoder_registry: SwapEncoderRegistry,
-        user_transfer_type: UserTransferType,
         router_address: Bytes,
     ) -> Result<Self, EncodingError> {
-        let function_signature = if user_transfer_type == UserTransferType::TransferFromPermit2 {
-            "splitSwapPermit2(uint256,address,address,uint256,uint256,address,(uint16,address,uint256,uint256,bytes),((address,uint160,uint48,uint48),address,uint256),bytes,bytes)"
-        } else if user_transfer_type == UserTransferType::UseVaultsFunds {
-            "splitSwapUsingVault(uint256,address,address,uint256,uint256,address,(uint16,address,uint256,uint256,bytes),bytes)"
-        } else {
-            "splitSwap(uint256,address,address,uint256,uint256,address,(uint16,address,uint256,uint256,bytes),bytes)"
-        }.to_string();
         Ok(Self {
-            function_signature,
             swap_encoder_registry,
             split_swap_validator: SplitSwapValidator,
             router_address: router_address.clone(),
@@ -322,6 +297,11 @@ impl SplitSwapStrategyEncoder {
 
 impl StrategyEncoder for SplitSwapStrategyEncoder {
     fn encode_strategy(&self, solution: &Solution) -> Result<EncodedSolution, EncodingError> {
+        let function_signature = match solution.user_transfer_type {
+            UserTransferType::TransferFromPermit2 => { "splitSwapPermit2(uint256,address,address,uint256,uint256,address,(uint16,address,uint256,uint256,bytes),((address,uint160,uint48,uint48),address,uint256),bytes,bytes)" }
+            UserTransferType::TransferFrom => { "splitSwap(uint256,address,address,uint256,uint256,address,(uint16,address,uint256,uint256,bytes),bytes)" }
+            UserTransferType::UseVaultsFunds => { "splitSwapUsingVault(uint256,address,address,uint256,uint256,address,(uint16,address,uint256,uint256,bytes),bytes)" }
+        }.to_string();
         self.split_swap_validator
             .validate_split_percentages(&solution.swaps)?;
         self.split_swap_validator
@@ -406,7 +386,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             if solution.token_in == solution.token_out { tokens.len() - 1 } else { tokens.len() };
         Ok(EncodedSolution {
             interacting_with: self.router_address.clone(),
-            function_signature: self.function_signature.clone(),
+            function_signature,
             swaps: encoded_swaps,
             permit: None,
             n_tokens: tokens_len,
@@ -479,12 +459,8 @@ mod tests {
                 dai.clone(),
             );
             let swap_encoder_registry = get_swap_encoder_registry();
-            let encoder = SingleSwapStrategyEncoder::new(
-                swap_encoder_registry,
-                UserTransferType::TransferFromPermit2,
-                router_address(),
-            )
-            .unwrap();
+            let encoder =
+                SingleSwapStrategyEncoder::new(swap_encoder_registry, router_address()).unwrap();
             let solution = Solution {
                 exact_out: false,
                 token_in: weth,
@@ -493,6 +469,7 @@ mod tests {
                 min_amount_out: checked_amount.clone(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap],
+                user_transfer_type: UserTransferType::TransferFromPermit2,
                 ..Default::default()
             };
 
@@ -548,12 +525,9 @@ mod tests {
                 usdc.clone(),
             );
             let swap_encoder_registry = get_swap_encoder_registry();
-            let encoder = SequentialSwapStrategyEncoder::new(
-                swap_encoder_registry,
-                UserTransferType::TransferFrom,
-                router_address(),
-            )
-            .unwrap();
+            let encoder =
+                SequentialSwapStrategyEncoder::new(swap_encoder_registry, router_address())
+                    .unwrap();
             let solution = Solution {
                 exact_out: false,
                 token_in: weth,
@@ -676,7 +650,6 @@ mod tests {
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SplitSwapStrategyEncoder::new(
                 swap_encoder_registry,
-                UserTransferType::TransferFromPermit2,
                 Bytes::from("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2"),
             )
             .unwrap();
@@ -691,6 +664,7 @@ mod tests {
                                                                          * test */
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_weth_pool1, swap_usdc_weth_pool2, swap_weth_usdc_pool2],
+                user_transfer_type: UserTransferType::TransferFromPermit2,
                 ..Default::default()
             };
 
@@ -814,7 +788,6 @@ mod tests {
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SplitSwapStrategyEncoder::new(
                 swap_encoder_registry,
-                UserTransferType::TransferFrom,
                 Bytes::from("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2"),
             )
             .unwrap();
