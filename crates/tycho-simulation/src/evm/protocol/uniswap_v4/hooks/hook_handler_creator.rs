@@ -1,7 +1,10 @@
-use std::{collections::HashMap, str::FromStr, sync::RwLock};
+use std::{
+    collections::HashMap,
+    str::FromStr,
+    sync::{LazyLock, RwLock},
+};
 
 use alloy::primitives::{Address, U256};
-use lazy_static::lazy_static;
 use revm::{primitives::KECCAK_EMPTY, state::AccountInfo};
 use tycho_common::{models::token::Token, simulation::errors::SimulationError, Bytes};
 
@@ -132,15 +135,11 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
 
 // Workaround for stateless decoder trait.
 // Mapping from hook address to the handler creator.
-lazy_static! {
-    static ref HANDLER_FACTORY: RwLock<HashMap<Address, Box<dyn HookHandlerCreator>>> =
-        RwLock::new(HashMap::new());
-}
+static HANDLER_FACTORY: LazyLock<RwLock<HashMap<Address, Box<dyn HookHandlerCreator>>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
 
-lazy_static! {
-    static ref DEFAULT_HANDLER: Box<dyn HookHandlerCreator> =
-        Box::new(GenericVMHookHandlerCreator {});
-}
+static DEFAULT_HANDLER: LazyLock<Box<dyn HookHandlerCreator>> =
+    LazyLock::new(|| Box::new(GenericVMHookHandlerCreator {}));
 
 pub fn initialize_hook_handlers() -> Result<(), SimulationError> {
     let angstrom_hook_address = Address::from_str("0x0000000aa232009084Bd71A5797d089AA4Edfad4")

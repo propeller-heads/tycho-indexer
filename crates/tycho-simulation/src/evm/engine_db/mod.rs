@@ -1,7 +1,6 @@
 use std::{collections::HashMap, fmt::Debug};
 
 use alloy::primitives::{Address, U160};
-use lazy_static::lazy_static;
 use revm::{primitives::KECCAK_EMPTY, state::AccountInfo, DatabaseRef};
 use tycho_client::feed::BlockHeader;
 use tycho_common::simulation::errors::SimulationError;
@@ -20,10 +19,9 @@ pub mod simulation_db;
 pub mod tycho_db;
 pub mod utils;
 
-lazy_static! {
-    pub static ref SHARED_TYCHO_DB: PreCachedDB =
-        PreCachedDB::new().unwrap_or_else(|err| panic!("Failed to create PreCachedDB: {err}"));
-}
+pub static SHARED_TYCHO_DB: std::sync::LazyLock<PreCachedDB> = std::sync::LazyLock::new(|| {
+    PreCachedDB::new().unwrap_or_else(|err| panic!("Failed to create PreCachedDB: {err}"))
+});
 
 /// Creates a simulation engine.
 ///
