@@ -75,20 +75,22 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, HashMap};
+    use std::{
+        collections::{BTreeMap, HashMap},
+        sync::OnceLock,
+    };
 
     use actix_web::{http::StatusCode, middleware, test, web, App, HttpResponse, ResponseError};
     use metrics_util::{
         debugging::{DebugValue, DebuggingRecorder, Snapshotter},
         MetricKind,
     };
-    use once_cell::sync::OnceCell;
 
     use super::*;
     use crate::services::rpc::RpcError;
 
     fn init_metrics() -> Snapshotter {
-        static SNAPSHOTTER: OnceCell<Snapshotter> = OnceCell::new();
+        static SNAPSHOTTER: OnceLock<Snapshotter> = OnceLock::new();
         SNAPSHOTTER
             .get_or_init(|| {
                 let recorder = DebuggingRecorder::new();

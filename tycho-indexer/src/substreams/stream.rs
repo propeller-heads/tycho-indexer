@@ -1,6 +1,6 @@
 use std::{
     pin::Pin,
-    sync::Arc,
+    sync::{Arc, LazyLock},
     task::{Context, Poll},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -9,7 +9,6 @@ use anyhow::{anyhow, Error};
 use async_stream::try_stream;
 use futures03::{Stream, StreamExt};
 use metrics::{counter, gauge};
-use once_cell::sync::Lazy;
 use prost::Message as ProstMessage;
 use tokio::time::sleep;
 use tokio_retry::strategy::ExponentialBackoff;
@@ -66,8 +65,8 @@ impl SubstreamsStream {
     }
 }
 
-static DEFAULT_BACKOFF: Lazy<ExponentialBackoff> =
-    Lazy::new(|| ExponentialBackoff::from_millis(500).max_delay(Duration::from_secs(45)));
+static DEFAULT_BACKOFF: LazyLock<ExponentialBackoff> =
+    LazyLock::new(|| ExponentialBackoff::from_millis(500).max_delay(Duration::from_secs(45)));
 
 async fn wait_for_next_retry(
     backoff: &mut ExponentialBackoff,

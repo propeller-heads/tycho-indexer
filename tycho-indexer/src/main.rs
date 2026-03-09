@@ -659,12 +659,13 @@ async fn run_analyze_tokens(
 
 #[cfg(test)]
 mod test_serial_db {
-    use once_cell::sync::Lazy;
+    use std::sync::LazyLock;
+
     use tycho_storage::postgres::testing::run_against_db;
 
     use super::*;
 
-    static RPC: Lazy<EthereumRpcClient> = Lazy::new(|| {
+    static RPC: LazyLock<EthereumRpcClient> = LazyLock::new(|| {
         let rpc_url = std::env::var("RPC_URL").expect("RPC URL must be set for testing");
         EthereumRpcClient::new(&rpc_url).expect("Failed to create RPC client")
     });

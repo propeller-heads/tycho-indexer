@@ -161,19 +161,18 @@ const MIGRATIONS: EmbeddedMigrations = embed_migrations!("./migrations/");
 // +262142-12-31T23:59:59.999999999
 const MAX_TS: NaiveDateTime = NaiveDateTime::MAX;
 
-lazy_static! {
-    /// Simplifies querying current and historical versions by introducing a special marker version.
-    ///
-    /// By setting `valid_to` to `MAX_TS = max_version_ts + 1s` for the latest versions, this approach
-    /// collapses the query predicates from
-    /// `valid_from <= target_version < valid_to or valid_to is "latest"`
-    /// to a more streamlined
-    /// `valid_from <= target_version < valid_to`.
-    /// This enables `max_version_ts` queries to include `MAX_TS` entries (current versions),
-    /// while excluding them from other version queries, effectively differentiating between
-    /// current and historical data without additional predicates.
-    static ref MAX_VERSION_TS: NaiveDateTime = NaiveDateTime::MAX - Duration::from_secs(1);
-}
+/// Simplifies querying current and historical versions by introducing a special marker version.
+///
+/// By setting `valid_to` to `MAX_TS = max_version_ts + 1s` for the latest versions, this approach
+/// collapses the query predicates from
+/// `valid_from <= target_version < valid_to or valid_to is "latest"`
+/// to a more streamlined
+/// `valid_from <= target_version < valid_to`.
+/// This enables `max_version_ts` queries to include `MAX_TS` entries (current versions),
+/// while excluding them from other version queries, effectively differentiating between
+/// current and historical data without additional predicates.
+static MAX_VERSION_TS: std::sync::LazyLock<NaiveDateTime> =
+    std::sync::LazyLock::new(|| NaiveDateTime::MAX - Duration::from_secs(1));
 
 pub(crate) struct ValueIdTableCache<E> {
     map_id: HashMap<E, i64>,
