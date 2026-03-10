@@ -1,4 +1,7 @@
-use substreams::store::{StoreGet as _, StoreGetProto, StoreSetSum};
+use substreams::{
+    log::debug,
+    store::{StoreGet as _, StoreGetProto, StoreSetSum},
+};
 
 use crate::pb::ekubo::{ChangeType, PoolDetails};
 
@@ -11,10 +14,15 @@ pub fn store_method_from_change_type<T, S: StoreSetSum<T>>(
     }
 }
 
-pub fn get_pool_details(store: &StoreGetProto<PoolDetails>, component_id: &str) -> PoolDetails {
-    let Some(pool_details) = store.get_last(component_id) else {
-        panic!("expect pool details for {component_id} to exist")
-    };
+pub fn get_pool_details(
+    store: &StoreGetProto<PoolDetails>,
+    component_id: &str,
+) -> Option<PoolDetails> {
+    let opt = store.get_last(component_id);
 
-    pool_details
+    if opt.is_none() {
+        debug!("Ignoring missing pool details for pool {}", component_id);
+    }
+
+    opt
 }

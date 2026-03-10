@@ -62,7 +62,7 @@ fn maybe_active_liquidity_change(
             let pool_id = log.pool_id.to_hex();
 
             let update_active_liquidity =
-                if get_pool_details(pool_details_store, &pool_id).is_stableswap {
+                if get_pool_details(pool_details_store, &pool_id)?.is_stableswap {
                     true
                 } else {
                     let current_tick = current_tick_store

@@ -32,7 +32,7 @@ fn map_balance_changes(
 
                         let (delta0, delta1) = maybe_balance_deltas(log.event.unwrap())?;
                         let pool_id = log.pool_id.to_hex();
-                        let pool_details = get_pool_details(store, &pool_id);
+                        let pool_details = get_pool_details(store, &pool_id)?;
 
                         Some(
                             [(delta0, pool_details.token0), (delta1, pool_details.token1)]
