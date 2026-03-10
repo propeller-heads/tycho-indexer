@@ -209,49 +209,8 @@ pub mod block_transaction_events {
                 /// uint192
                 #[prost(bytes="vec", tag="5")]
                 pub sqrt_ratio: ::prost::alloc::vec::Vec<u8>,
-                #[prost(enumeration="pool_initialized::Extension", tag="6")]
-                pub extension: i32,
-            }
-            /// Nested message and enum types in `PoolInitialized`.
-            pub mod pool_initialized {
-                #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-                #[repr(i32)]
-                pub enum Extension {
-                    Unknown = 0,
-                    NoSwapCallPoints = 1,
-                    Oracle = 2,
-                    Twamm = 3,
-                    MevCapture = 4,
-                    BoostedFeesConcentrated = 5,
-                }
-                impl Extension {
-                    /// String value of the enum field names used in the ProtoBuf definition.
-                    ///
-                    /// The values are not transformed in any way and thus are considered stable
-                    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-                    pub fn as_str_name(&self) -> &'static str {
-                        match self {
-                            Extension::Unknown => "EXTENSION_UNKNOWN",
-                            Extension::NoSwapCallPoints => "EXTENSION_NO_SWAP_CALL_POINTS",
-                            Extension::Oracle => "EXTENSION_ORACLE",
-                            Extension::Twamm => "EXTENSION_TWAMM",
-                            Extension::MevCapture => "EXTENSION_MEV_CAPTURE",
-                            Extension::BoostedFeesConcentrated => "EXTENSION_BOOSTED_FEES_CONCENTRATED",
-                        }
-                    }
-                    /// Creates an enum from field names used in the ProtoBuf definition.
-                    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-                        match value {
-                            "EXTENSION_UNKNOWN" => Some(Self::Unknown),
-                            "EXTENSION_NO_SWAP_CALL_POINTS" => Some(Self::NoSwapCallPoints),
-                            "EXTENSION_ORACLE" => Some(Self::Oracle),
-                            "EXTENSION_TWAMM" => Some(Self::Twamm),
-                            "EXTENSION_MEV_CAPTURE" => Some(Self::MevCapture),
-                            "EXTENSION_BOOSTED_FEES_CONCENTRATED" => Some(Self::BoostedFeesConcentrated),
-                            _ => None,
-                        }
-                    }
-                }
+                #[prost(bool, tag="6")]
+                pub has_time_rate_deltas: bool,
             }
             #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

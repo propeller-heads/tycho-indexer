@@ -11,13 +11,10 @@ pub fn store_method_from_change_type<T, S: StoreSetSum<T>>(
     }
 }
 
-pub fn get_pool_details(
-    store: &StoreGetProto<PoolDetails>,
-    component_id: &str,
-) -> Option<PoolDetails> {
-    store.get_last(component_id)
-}
+pub fn get_pool_details(store: &StoreGetProto<PoolDetails>, component_id: &str) -> PoolDetails {
+    let Some(pool_details) = store.get_last(component_id) else {
+        panic!("expect pool details for {component_id} to exist")
+    };
 
-pub fn is_pool_tracked(store: &StoreGetProto<PoolDetails>, component_id: &str) -> bool {
-    store.has_last(component_id)
+    pool_details
 }

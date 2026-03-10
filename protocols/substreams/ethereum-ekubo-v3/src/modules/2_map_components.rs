@@ -11,10 +11,7 @@ use tycho_substreams::models::{
 use crate::{
     addresses::CORE_ADDRESS,
     pb::ekubo::{
-        block_transaction_events::transaction_events::{
-            pool_log::{pool_initialized::Extension, Event},
-            PoolLog,
-        },
+        block_transaction_events::transaction_events::{pool_log::Event, PoolLog},
         BlockTransactionEvents,
     },
 };
@@ -58,8 +55,6 @@ fn maybe_create_component(
         return None;
     };
 
-    let extension_type = pi.extension();
-
     let mut entity_attributes = vec![
         Attribute {
             change: ChangeType::Creation.into(),
@@ -84,30 +79,24 @@ fn maybe_create_component(
         },
     ];
 
-    match extension_type {
-        Extension::Twamm | Extension::BoostedFeesConcentrated => {
-            entity_attributes.extend([
-                Attribute {
-                    change: ChangeType::Creation.into(),
-                    name: "rate_token0".to_string(),
-                    value: vec![],
-                },
-                Attribute {
-                    change: ChangeType::Creation.into(),
-                    name: "rate_token1".to_string(),
-                    value: vec![],
-                },
-                Attribute {
-                    change: ChangeType::Creation.into(),
-                    name: "last_time".to_string(),
-                    value: timestamp.to_be_bytes().to_vec(),
-                },
-            ]);
-        }
-        Extension::Unknown |
-        Extension::NoSwapCallPoints |
-        Extension::Oracle |
-        Extension::MevCapture => {}
+    if pi.has_time_rate_deltas {
+        entity_attributes.extend([
+            Attribute {
+                change: ChangeType::Creation.into(),
+                name: "rate_token0".to_string(),
+                value: vec![],
+            },
+            Attribute {
+                change: ChangeType::Creation.into(),
+                name: "rate_token1".to_string(),
+                value: vec![],
+            },
+            Attribute {
+                change: ChangeType::Creation.into(),
+                name: "last_time".to_string(),
+                value: timestamp.to_be_bytes().to_vec(),
+            },
+        ]);
     }
 
     let pool_config = EvmPoolConfig::try_from(
@@ -142,6 +131,11 @@ fn maybe_create_component(
                 },
                 Attribute {
                     change: ChangeType::Creation.into(),
+                    name: "extension".to_string(),
+                    value: pool_config.extension.to_vec(),
+                },
+                Attribute {
+                    change: ChangeType::Creation.into(),
                     name: "fee".to_string(),
                     value: pool_config.fee.to_be_bytes().to_vec(),
                 },
@@ -149,16 +143,6 @@ fn maybe_create_component(
                     change: ChangeType::Creation.into(),
                     name: "pool_type_config".to_string(),
                     value: B32::from(pool_config.pool_type_config).to_vec(),
-                },
-                Attribute {
-                    change: ChangeType::Creation.into(),
-                    name: "extension".to_string(),
-                    value: pool_config.extension.to_vec(),
-                },
-                Attribute {
-                    change: ChangeType::Creation.into(),
-                    name: "extension_type".to_string(),
-                    value: pi.extension.to_be_bytes().to_vec(),
                 },
             ],
         },

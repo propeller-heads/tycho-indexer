@@ -13,16 +13,12 @@ use crate::{
         boosted_fees::events as boosted_fees_events, core::events as core_events,
         twamm::events as twamm_events,
     },
-    addresses::{
-        BOOSTED_FEES_CONCENTRATED_ADDRESS, CORE_ADDRESS, MEV_CAPTURE_ADDRESS, ORACLE_ADDRESS,
-        TWAMM_ADDRESS,
-    },
+    addresses::{BOOSTED_FEES_CONCENTRATED_ADDRESS, CORE_ADDRESS, TWAMM_ADDRESS},
     pb::ekubo::{
         block_transaction_events::{
             transaction_events::{
                 pool_log::{
-                    pool_initialized::Extension, Event, PoolInitialized, PositionUpdated,
-                    RateUpdated, Swapped, VirtualExecution,
+                    Event, PoolInitialized, PositionUpdated, RateUpdated, Swapped, VirtualExecution,
                 },
                 PoolLog,
             },
@@ -108,25 +104,9 @@ fn maybe_pool_log(log: &Log) -> Option<PoolLog> {
                 }),
             )
         } else if let Some(ev) = core_events::PoolInitialized::match_and_decode(log) {
-            let extension = {
-                let extension = EvmPoolConfig::try_from(FixedBytes(ev.pool_key.2))
-                    .expect("pool config to parse successfully")
-                    .extension;
-
-                if has_no_swap_call_points(extension) {
-                    Extension::NoSwapCallPoints
-                } else if extension == ORACLE_ADDRESS {
-                    Extension::Oracle
-                } else if extension == TWAMM_ADDRESS {
-                    Extension::Twamm
-                } else if extension == MEV_CAPTURE_ADDRESS {
-                    Extension::MevCapture
-                } else if extension == BOOSTED_FEES_CONCENTRATED_ADDRESS {
-                    Extension::BoostedFeesConcentrated
-                } else {
-                    return None;
-                }
-            };
+            let extension = EvmPoolConfig::try_from(FixedBytes(ev.pool_key.2))
+                .expect("pool config to parse successfully")
+                .extension;
 
             (
                 ev.pool_id.to_vec(),
@@ -139,7 +119,8 @@ fn maybe_pool_log(log: &Log) -> Option<PoolLog> {
                         &ev.sqrt_ratio.to_bytes_be().1,
                     ))
                     .to_be_bytes_trimmed_vec(),
-                    extension: extension.into(),
+                    has_time_rate_deltas: [TWAMM_ADDRESS, BOOSTED_FEES_CONCENTRATED_ADDRESS]
+                        .contains(&extension),
                 }),
             )
         } else {
@@ -217,10 +198,4 @@ fn maybe_pool_log(log: &Log) -> Option<PoolLog> {
     };
 
     Some(PoolLog { ordinal: log.ordinal, pool_id, event: Some(ev) })
-}
-
-fn has_no_swap_call_points(extension: Address) -> bool {
-    // Call points are encoded in the first byte of the extension address.
-    // Bit 6 == beforeSwap, bit 5 == afterSwap.
-    extension[0] & 0b0110_0000 == 0
 }

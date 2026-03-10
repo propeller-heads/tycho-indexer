@@ -18,7 +18,6 @@ tests:
           extension: "0x0000000000000000000000000000000000000000"
           fee: "0x0000a7c5ac471b48"
           pool_type_config: "0x80000032"
-          extension_type: "0x00000001"
         creation_tx: "0xfdc4c3c3ad5b613469effa7c2ab9796d6b76f5fb25258f648ff211687697aee7"
 
   - name: oracle
@@ -35,7 +34,6 @@ tests:
           extension: "0x517e506700271aea091b02f42756f5e174af5230"
           fee: "0x0000000000000000"
           pool_type_config: "0x00000000"
-          extension_type: "0x00000002"
         creation_tx: "0x8b60940efaf9fa8580a7b20b05682b5530634451becb465091c77093eb8a75e3"
 
   - name: twamm
@@ -52,7 +50,6 @@ tests:
           extension: "0xd4f1060cb9c1a13e1d2d20379b8aa2cf7541ed9b"
           fee: "0x00c49ba5e353f7ce"
           pool_type_config: "0x00000000"
-          extension_type: "0x00000003"
         creation_tx: "0xa0460837160c3e74c14a56fe8af78ea81458c11f44bf23b317123e6629f9c529"
 
   - name: mev_capture
@@ -69,10 +66,9 @@ tests:
           extension: "0x5555ff9ff2757500bf4ee020dcfd0210cffa41be"
           fee: "0x00068db8bac710cb"
           pool_type_config: "0x80000064"
-          extension_type: "0x00000004"
         creation_tx: "0x672de3c0f48ee967812cc85310581fbc22e3b1d54e0ba33f9fc549eb09a56c2e"
 
-  # Tracked via the generic support for extensions without `beforeSwap` & `afterSwap` call points
+  # Via the generic support for extensions without `beforeSwap` & `afterSwap` call points
   - name: stableswap_boosted_fees
     start_block: 24379171
     stop_block: 24379171
@@ -87,7 +83,6 @@ tests:
           extension: "0x948b9c2c99718034954110cb61a6e08e107745f9"
           fee: "0x000d1b71758e2196"
           pool_type_config: "0x0ee5a624"
-          extension_type: "0x00000001"
         creation_tx: "0x25b334854a8a957468ab972f99ba3dd6777feac617150024753297b0e9967783"
 
   - name: concentrated_boosted_fees
@@ -104,5 +99,4 @@ tests:
           extension: "0xd4b54d0ca6979da05f25895e6e269e678ba00f9e"
           fee: "0x028f5c28f5c28f5c"
           pool_type_config: "0x80004d5a"
-          extension_type: "0x00000005"
         creation_tx: "0xf394db915b31b99b2f8683e2d888e9406ea98211b8f87e4fb22079dbc0110afd"

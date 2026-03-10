@@ -71,7 +71,6 @@ modules:
     kind: map
     inputs:
       - map: map_events
-      - store: store_pool_details
     output:
       type: proto:ekubo.TickDeltas
 
@@ -88,7 +87,6 @@ modules:
     updatePolicy: set
     inputs:
       - map: map_events
-      - store: store_pool_details
 
   - name: store_rate_deltas
     kind: store

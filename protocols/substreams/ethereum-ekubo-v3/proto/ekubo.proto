@@ -106,16 +106,7 @@ message BlockTransactionEvents {
         bytes config = 3;     // bytes32
         sint32 tick = 4;      // int32
         bytes sqrt_ratio = 5; // uint192
-        Extension extension = 6;
-
-        enum Extension {
-          EXTENSION_UNKNOWN = 0;
-          EXTENSION_NO_SWAP_CALL_POINTS = 1;
-          EXTENSION_ORACLE = 2;
-          EXTENSION_TWAMM = 3;
-          EXTENSION_MEV_CAPTURE = 4;
-          EXTENSION_BOOSTED_FEES_CONCENTRATED = 5;
-        }
+        bool has_time_rate_deltas = 6;
       }
 
       message VirtualExecution {
