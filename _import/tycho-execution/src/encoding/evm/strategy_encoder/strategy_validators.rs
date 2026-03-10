@@ -91,10 +91,10 @@ impl SplitSwapValidator {
     pub fn validate_split_percentages(&self, swaps: &[Swap]) -> Result<(), EncodingError> {
         let mut swaps_by_token: HashMap<&Bytes, Vec<&Swap>> = HashMap::new();
         for swap in swaps {
-            if swap.get_split() >= 1.0 {
+            if swap.split() >= 1.0 {
                 return Err(EncodingError::InvalidInput(format!(
                     "Split percentage must be less than 1 (100%), got {}",
-                    swap.get_split()
+                    swap.split()
                 )));
             }
             swaps_by_token
@@ -106,7 +106,7 @@ impl SplitSwapValidator {
         for (token, token_swaps) in swaps_by_token {
             // Single swaps don't need remainder handling
             if token_swaps.len() == 1 {
-                if token_swaps[0].get_split() != 0.0 {
+                if token_swaps[0].split() != 0.0 {
                     return Err(EncodingError::InvalidInput(format!(
                         "Single swap must have 0% split for token {token}",
                     )));
@@ -117,7 +117,7 @@ impl SplitSwapValidator {
             let mut found_zero_split = false;
             let mut total_percentage = 0.0;
             for (i, swap) in token_swaps.iter().enumerate() {
-                match (swap.get_split() == 0.0, i == token_swaps.len() - 1) {
+                match (swap.split() == 0.0, i == token_swaps.len() - 1) {
                     (true, false) => {
                         return Err(EncodingError::InvalidInput(format!(
                             "The 0% split for token {token} must be the last swap",
@@ -125,12 +125,12 @@ impl SplitSwapValidator {
                     }
                     (true, true) => found_zero_split = true,
                     (false, _) => {
-                        if swap.get_split() < 0.0 {
+                        if swap.split() < 0.0 {
                             return Err(EncodingError::InvalidInput(format!(
                                 "All splits must be >= 0% for token {token}"
                             )));
                         }
-                        total_percentage += swap.get_split();
+                        total_percentage += swap.split();
                     }
                 }
             }
@@ -204,7 +204,7 @@ mod tests {
                 default_token(weth.clone()),
                 default_token(dai.clone()),
             )
-            .split(0.5f64),
+            .with_split(0.5f64),
             Swap::new(
                 ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
@@ -237,7 +237,7 @@ mod tests {
                 default_token(weth.clone()),
                 default_token(dai.clone()),
             )
-            .split(0.5f64),
+            .with_split(0.5f64),
             // This swap is disconnected from the WETH->DAI path
             Swap::new(
                 ProtocolComponent {
@@ -304,7 +304,7 @@ mod tests {
             default_token(weth.clone()),
             default_token(dai.clone()),
         )
-        .split(1.0)];
+        .with_split(1.0)];
         let result = validator.validate_swap_path(&unreachable_swaps, &weth, &usdc);
         assert!(matches!(
             result,
@@ -361,7 +361,7 @@ mod tests {
                 default_token(weth.clone()),
                 default_token(dai.clone()),
             )
-            .split(0.5),
+            .with_split(0.5),
             Swap::new(
                 ProtocolComponent {
                     id: "pool2".to_string(),
@@ -371,7 +371,7 @@ mod tests {
                 default_token(weth.clone()),
                 default_token(dai.clone()),
             )
-            .split(0.3),
+            .with_split(0.3),
             Swap::new(
                 ProtocolComponent {
                     id: "pool3".to_string(),
@@ -403,7 +403,7 @@ mod tests {
                 default_token(weth.clone()),
                 default_token(dai.clone()),
             )
-            .split(0.7),
+            .with_split(0.7),
             Swap::new(
                 ProtocolComponent {
                     id: "pool2".to_string(),
@@ -413,7 +413,7 @@ mod tests {
                 default_token(weth.clone()),
                 default_token(dai.clone()),
             )
-            .split(0.3),
+            .with_split(0.3),
         ];
         assert!(matches!(
             validator.validate_split_percentages(&invalid_total_swaps),
@@ -446,7 +446,7 @@ mod tests {
                 default_token(weth.clone()),
                 default_token(dai.clone()),
             )
-            .split(0.5),
+            .with_split(0.5),
         ];
         assert!(matches!(
             validator.validate_split_percentages(&invalid_zero_position_swaps),
@@ -470,7 +470,7 @@ mod tests {
                 default_token(weth.clone()),
                 default_token(dai.clone()),
             )
-            .split(0.6),
+            .with_split(0.6),
             Swap::new(
                 ProtocolComponent {
                     id: "pool2".to_string(),
@@ -480,7 +480,7 @@ mod tests {
                 default_token(weth.clone()),
                 default_token(dai.clone()),
             )
-            .split(0.5),
+            .with_split(0.5),
             Swap::new(
                 ProtocolComponent {
                     id: "pool3".to_string(),

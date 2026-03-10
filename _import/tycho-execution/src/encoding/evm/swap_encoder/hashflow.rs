@@ -42,13 +42,13 @@ impl SwapEncoder for HashflowSwapEncoder {
     ) -> Result<Vec<u8>, EncodingError> {
         // Get quote
         let protocol_state = swap
-            .get_protocol_state()
+            .protocol_state()
             .as_ref()
             .ok_or_else(|| {
                 EncodingError::FatalError("protocol_state is required for Hashflow".to_string())
             })?;
         let amount_in = swap
-            .get_estimated_amount_in()
+            .estimated_amount_in()
             .as_ref()
             .ok_or(EncodingError::FatalError(
                 "Estimated amount in is mandatory for a Hashflow swap".to_string(),
@@ -154,7 +154,7 @@ mod test {
             default_token(token_in.clone()),
             default_token(token_out.clone()),
         )
-        .estimated_amount_in(BigUint::from_str("3000000000").unwrap());
+        .with_estimated_amount_in(BigUint::from_str("3000000000").unwrap());
 
         let encoding_context = EncodingContext {
             exact_out: false,
@@ -247,8 +247,8 @@ mod test {
             default_token(token_in.clone()),
             default_token(token_out.clone()),
         )
-        .estimated_amount_in(BigUint::from_str("3000000000").unwrap())
-        .protocol_state(Arc::new(hashflow_state));
+        .with_estimated_amount_in(BigUint::from_str("3000000000").unwrap())
+        .with_protocol_state(Arc::new(hashflow_state));
 
         let encoding_context = EncodingContext {
             exact_out: false,

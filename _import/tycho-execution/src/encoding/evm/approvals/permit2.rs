@@ -27,7 +27,7 @@ use crate::encoding::{
 /// Struct for managing Permit2 operations, including encoding approvals and fetching allowance
 /// data.
 #[derive(Clone)]
-pub struct Permit2 {
+pub(crate) struct Permit2 {
     address: Address,
     client: EVMProvider,
     runtime_handle: Handle,
@@ -64,20 +64,20 @@ impl TryFrom<&PermitSingle> for models::PermitSingle {
     type Error = EncodingError;
 
     fn try_from(sol: &PermitSingle) -> Result<Self, EncodingError> {
-        Ok(models::PermitSingle {
-            details: models::PermitDetails {
-                token: Bytes::from(sol.details.token.to_vec()),
-                amount: BigUint::from_bytes_be(&sol.details.amount.to_be_bytes::<20>()),
-                expiration: BigUint::from_bytes_be(
+        Ok(models::PermitSingle::new(
+            models::PermitDetails::new(
+                Bytes::from(sol.details.token.to_vec()),
+                BigUint::from_bytes_be(&sol.details.amount.to_be_bytes::<20>()),
+                BigUint::from_bytes_be(
                     &sol.details
                         .expiration
                         .to_be_bytes::<6>(),
                 ),
-                nonce: BigUint::from_bytes_be(&sol.details.nonce.to_be_bytes::<6>()),
-            },
-            spender: Bytes::from(sol.spender.to_vec()),
-            sig_deadline: BigUint::from_bytes_be(&sol.sigDeadline.to_be_bytes::<32>()),
-        })
+                BigUint::from_bytes_be(&sol.details.nonce.to_be_bytes::<6>()),
+            ),
+            Bytes::from(sol.spender.to_vec()),
+            BigUint::from_bytes_be(&sol.sigDeadline.to_be_bytes::<32>()),
+        ))
     }
 }
 
@@ -87,13 +87,13 @@ impl TryFrom<&models::PermitSingle> for PermitSingle {
     fn try_from(p: &models::PermitSingle) -> Result<Self, EncodingError> {
         Ok(PermitSingle {
             details: PermitDetails {
-                token: bytes_to_address(&p.details.token)?,
-                amount: U160::from(biguint_to_u256(&p.details.amount)),
-                expiration: U48::from(biguint_to_u256(&p.details.expiration)),
-                nonce: U48::from(biguint_to_u256(&p.details.nonce)),
+                token: bytes_to_address(p.details().token())?,
+                amount: U160::from(biguint_to_u256(p.details().amount())),
+                expiration: U48::from(biguint_to_u256(p.details().expiration())),
+                nonce: U48::from(biguint_to_u256(p.details().nonce())),
             },
-            spender: bytes_to_address(&p.spender)?,
-            sigDeadline: biguint_to_u256(&p.sig_deadline),
+            spender: bytes_to_address(p.spender())?,
+            sigDeadline: biguint_to_u256(p.sig_deadline()),
         })
     }
 }
@@ -253,17 +253,17 @@ mod tests {
             .get_permit(&spender, &owner, &token, &amount)
             .unwrap();
 
-        let expected_details = models::PermitDetails {
+        let expected_details = models::PermitDetails::new(
             token,
             amount,
-            expiration: BigUint::from(Utc::now().timestamp() as u64 + PERMIT_EXPIRATION),
-            nonce: BigUint::from(0u64),
-        };
-        let expected_permit_single = models::PermitSingle {
-            details: expected_details,
-            spender: Bytes::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8").unwrap(),
-            sig_deadline: BigUint::from(Utc::now().timestamp() as u64 + PERMIT_SIG_EXPIRATION),
-        };
+            BigUint::from(Utc::now().timestamp() as u64 + PERMIT_EXPIRATION),
+            BigUint::from(0u64),
+        );
+        let expected_permit_single = models::PermitSingle::new(
+            expected_details,
+            Bytes::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8").unwrap(),
+            BigUint::from(Utc::now().timestamp() as u64 + PERMIT_SIG_EXPIRATION),
+        );
 
         assert_eq!(
             permit, expected_permit_single,

@@ -45,14 +45,13 @@ pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
 fn main() {
     let router_address = Bytes::from_str("0xfD0b31d2E955fA55e3fa641Fe90e08b677188d35")
         .expect("Failed to create router address");
-    let chain = Chain::Ethereum;
 
     // Initialize the encoder
-    let swap_encoder_registry = SwapEncoderRegistry::new(chain)
+    let swap_encoder_registry = SwapEncoderRegistry::new(Chain::Ethereum)
         .add_default_encoders(None)
         .expect("Failed to get default SwapEncoderRegistry");
     let encoder = TychoRouterEncoderBuilder::new()
-        .chain(tycho_common::models::Chain::Ethereum)
+        .chain(Chain::Ethereum)
         .swap_encoder_registry(swap_encoder_registry)
         .router_address(router_address.clone())
         .build()
@@ -110,17 +109,15 @@ fn main() {
     );
 
     // Then we create a solution object with the previous swaps
-    let solution = Solution {
-        exact_out: false,
-        token_in: dai_addr.clone(),
-        amount_in: BigUint::from_str("2_000_000000000000000000").unwrap(),
-        token_out: usdt_addr.clone(),
-        min_amount_out: BigUint::from_str("1_990_000000").unwrap(),
-        sender: filler.clone(),
-        receiver: filler.clone(),
-        swaps: vec![swap_dai_usdc, swap_usdc_usdt],
-        ..Default::default()
-    };
+    let solution = Solution::new(
+        filler.clone(),
+        filler.clone(),
+        dai_addr.clone(),
+        usdt_addr.clone(),
+        BigUint::from_str("2_000_000000000000000000").unwrap(),
+        BigUint::from_str("1_990_000000").unwrap(),
+        vec![swap_dai_usdc, swap_usdc_usdt],
+    );
 
     // Encode the solution using appropriate safety checks
     let encoded_solution = encoder
@@ -128,11 +125,11 @@ fn main() {
         .unwrap()[0]
         .clone();
 
-    let given_amount = biguint_to_u256(&solution.amount_in);
-    let min_amount_out = biguint_to_u256(&solution.min_amount_out);
-    let given_token = bytes_to_address(&solution.token_in).unwrap();
-    let checked_token = bytes_to_address(&solution.token_out).unwrap();
-    let receiver = bytes_to_address(&solution.receiver).unwrap();
+    let given_amount = biguint_to_u256(solution.amount_in());
+    let min_amount_out = biguint_to_u256(solution.min_amount_out());
+    let given_token = bytes_to_address(solution.token_in()).unwrap();
+    let checked_token = bytes_to_address(solution.token_out()).unwrap();
+    let receiver = bytes_to_address(solution.receiver()).unwrap();
 
     // Empty ClientFeeParams: (clientFeeBps, clientFeeReceiver, maxClientContribution, deadline,
     // sig)
@@ -146,11 +143,11 @@ fn main() {
         min_amount_out,
         receiver,
         client_fee_params,
-        encoded_solution.swaps,
+        encoded_solution.swaps(),
     )
         .abi_encode();
 
-    let tycho_calldata = encode_input(&encoded_solution.function_signature, method_calldata);
+    let tycho_calldata = encode_input(encoded_solution.function_signature(), method_calldata);
 
     // Uniswap X specific part (check necessary approvals)
     let filler_address = bytes_to_address(&filler).unwrap();

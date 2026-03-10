@@ -16,10 +16,8 @@ use tycho_contracts::encoding::{
 fn main() {
     let user_address = Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
         .expect("Failed to create user address");
-    let chain = Chain::Ethereum;
-
     // Initialize the encoder
-    let swap_encoder_registry = SwapEncoderRegistry::new(chain)
+    let swap_encoder_registry = SwapEncoderRegistry::new(Chain::Ethereum)
         .add_default_encoders(None)
         .expect("Failed to get default SwapEncoderRegistry");
     let encoder = TychoRouterEncoderBuilder::new()
@@ -51,17 +49,15 @@ fn main() {
     // the amount or the total remaining balance. (0 is default, so no need to set it)
 
     // Then we create a solution object with the previous swap
-    let solution = Solution {
-        sender: user_address.clone(),
-        receiver: user_address.clone(),
-        token_in: weth.clone(),
-        amount_in: BigUint::from_str("1_000000000000000000").expect("Failed to create amount"),
-        token_out: usdc.clone(),
-        exact_out: false, // it's an exact in solution
-        min_amount_out: BigUint::from(1u64),
-        swaps: vec![simple_swap],
-        ..Default::default()
-    };
+    let solution = Solution::new(
+        user_address.clone(),
+        user_address.clone(),
+        weth.clone(),
+        usdc.clone(),
+        BigUint::from_str("1_000000000000000000").expect("Failed to create amount"),
+        BigUint::from(1u64),
+        vec![simple_swap],
+    );
 
     // Encode the solution
     let encoded_solution = encoder
@@ -72,9 +68,9 @@ fn main() {
     println!(
         "The simple swap encoded solution should be sent to address {:?} with function signature {:?} and the \
     following encoded swaps: {:?}",
-        encoded_solution.interacting_with,
-        encoded_solution.function_signature,
-        hex::encode(encoded_solution.swaps)
+        encoded_solution.interacting_with(),
+        encoded_solution.function_signature(),
+        hex::encode(encoded_solution.swaps())
     );
 
     // ------------------- Encode a swap with multiple splits -------------------
@@ -100,7 +96,7 @@ fn main() {
         default_token(weth.clone()),
         default_token(dai.clone()),
     )
-    .split(0.5);
+    .with_split(0.5);
 
     // Split 0 represents the remaining 50%, but to avoid any rounding errors we set this to
     // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
@@ -132,8 +128,12 @@ fn main() {
         default_token(wbtc.clone()),
         default_token(usdc.clone()),
     );
-    let mut complex_solution = solution.clone();
-    complex_solution.swaps = vec![swap_weth_dai, swap_weth_wbtc, swap_dai_usdc, swap_wbtc_usdc];
+    let complex_solution = solution.clone().with_swaps(vec![
+        swap_weth_dai,
+        swap_weth_wbtc,
+        swap_dai_usdc,
+        swap_wbtc_usdc,
+    ]);
 
     // Encode the solution
     let complex_encoded_solution = encoder
@@ -145,8 +145,8 @@ fn main() {
     println!(
         "The complex swaps encoded solution should be sent to address {:?} with function signature {:?} and the \
     following encoded swaps: {:?}",
-        complex_encoded_solution.interacting_with,
-        complex_encoded_solution.function_signature,
-        hex::encode(complex_encoded_solution.swaps)
+        complex_encoded_solution.interacting_with(),
+        complex_encoded_solution.function_signature(),
+        hex::encode(complex_encoded_solution.swaps())
     );
 }

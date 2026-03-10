@@ -34,7 +34,7 @@ impl PartialEq for SwapGroup {
 ///
 /// An example where this applies is the case of USV4, which uses a PoolManager contract
 /// to save token transfers on consecutive swaps.
-pub fn group_swaps(swaps: &Vec<Swap>) -> Vec<SwapGroup> {
+pub fn group_swaps(swaps: &[Swap]) -> Vec<SwapGroup> {
     let mut grouped_swaps: Vec<SwapGroup> = Vec::new();
     let mut current_group: Option<SwapGroup> = None;
     let mut last_swap_protocol = "".to_string();
@@ -50,7 +50,7 @@ pub fn group_swaps(swaps: &Vec<Swap>) -> Vec<SwapGroup> {
 
         // Split 0 can also mean that the swap is the remaining part of a branch of splits,
         // so we need to check the last swap's out token as well
-        let no_split = swap.get_split() == 0.0 && swap.token_in().address == last_swap_out_token;
+        let no_split = swap.split() == 0.0 && swap.token_in().address == last_swap_out_token;
 
         if current_swap_protocol == last_swap_protocol && groupable_protocol && no_split {
             // Second or later groupable pool in a sequence of groupable pools. Merge to the
@@ -71,7 +71,7 @@ pub fn group_swaps(swaps: &Vec<Swap>) -> Vec<SwapGroup> {
                 token_out: swap.token_out().address.clone(),
                 protocol_system: current_swap_protocol.clone(),
                 swaps: vec![swap.clone()],
-                split: swap.get_split(),
+                split: swap.split(),
             });
         }
         last_swap_protocol = current_swap_protocol;
@@ -175,7 +175,7 @@ mod tests {
             default_token(weth.clone()),
             default_token(usdc.clone()),
         )
-        .split(0.5f64);
+        .with_split(0.5f64);
         let swap_weth_dai = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
             default_token(weth.clone()),
@@ -247,7 +247,7 @@ mod tests {
             default_token(weth.clone()),
             default_token(wbtc.clone()),
         )
-        .split(0.5f64);
+        .with_split(0.5f64);
 
         let swap_wbtc_usdc = Swap::new(
             ProtocolComponent {

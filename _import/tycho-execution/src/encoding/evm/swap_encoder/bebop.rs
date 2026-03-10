@@ -51,7 +51,7 @@ impl SwapEncoder for BebopSwapEncoder {
         let token_out = bytes_to_address(&swap.token_out().address)?;
 
         let protocol_state = swap
-            .get_protocol_state()
+            .protocol_state()
             .as_ref()
             .ok_or_else(|| {
                 EncodingError::FatalError("protocol_state is required for Bebop".to_string())
@@ -63,7 +63,7 @@ impl SwapEncoder for BebopSwapEncoder {
                     EncodingError::FatalError(format!("State is not indicatively priced {e}"))
                 })?;
             let estimated_amount_in = swap
-                .get_estimated_amount_in()
+                .estimated_amount_in()
                 .clone()
                 .ok_or(EncodingError::FatalError(
                     "Estimated amount in is mandatory for a Bebop swap".to_string(),
@@ -184,8 +184,8 @@ mod tests {
             default_token(token_in.clone()),
             default_token(token_out.clone()),
         )
-        .estimated_amount_in(BigUint::from_str("3000000000").unwrap())
-        .protocol_state(Arc::new(bebop_state));
+        .with_estimated_amount_in(BigUint::from_str("3000000000").unwrap())
+        .with_protocol_state(Arc::new(bebop_state));
 
         let encoding_context = EncodingContext {
             exact_out: false,
