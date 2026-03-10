@@ -1,3 +1,11 @@
+## [0.39.1](https://github.com/propeller-heads/tycho-contracts/compare/0.39.0...0.39.1) (2026-03-10)
+
+
+### Bug Fixes
+
+* Remove profile_encoding.rs ([e87a925](https://github.com/propeller-heads/tycho-contracts/commit/e87a9258e961fe38022bd1e3c2fa4b6de1460f8a))
+* upgrade quinn-proto to 0.11.14 to fix DoS vulnerability ([dccc041](https://github.com/propeller-heads/tycho-contracts/commit/dccc0416d157af839b3cd4400fb2dcda241b5e5e))
+
 ## [0.39.0](https://github.com/propeller-heads/tycho-contracts/compare/0.38.0...0.39.0) (2026-03-09)
 
 
