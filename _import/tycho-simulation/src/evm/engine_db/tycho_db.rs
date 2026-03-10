@@ -125,11 +125,8 @@ impl PreCachedDB {
                     // If the balance is not present, we set it to zero.
                     let balance = update.balance.unwrap_or(U256::ZERO);
 
-                    // Overwrite the account unconditionally. A Creation update carries the
-                    // latest snapshot data and must always win over any previously inserted
-                    // placeholder (e.g. an empty ERC-20 proxy written by a non-VM protocol's
-                    // snapshot loop before the real contract storage arrived via vm_storage).
-                    write_guard.accounts.overwrite_account(
+                    // Initialize the account.
+                    write_guard.accounts.init_account(
                         update.address,
                         AccountInfo::new(balance, 0, code.hash_slow(), code),
                         Some(update.slots.clone()),
@@ -140,6 +137,38 @@ impl PreCachedDB {
                 ChangeType::Unspecified => {
                     warn!(%update.address, "Unspecified change type");
                 }
+            }
+        }
+        Ok(())
+    }
+
+    /// Like [`update`] but unconditionally overwrites existing accounts on `Creation` updates.
+    ///
+    /// Use only for authoritative proxy-token accounts that must win over placeholder entries
+    /// inserted by other decoders' snapshot loops. Generic callers should use [`update`].
+    pub fn force_update_accounts(
+        &self,
+        account_updates: Vec<AccountUpdate>,
+    ) -> Result<(), PreCachedDBError> {
+        let mut write_guard = self.write_inner()?;
+
+        for update in account_updates {
+            if matches!(update.change, ChangeType::Creation) {
+                let code =
+                    Bytecode::new_raw(AlloyBytes::from(update.code.clone().ok_or_else(|| {
+                        error!(%update.address, "MissingCode");
+                        PreCachedDBError::BadUpdate("MissingCode".into(), Box::new(update.clone()))
+                    })?));
+                let balance = update.balance.unwrap_or(U256::ZERO);
+
+                write_guard.accounts.overwrite_account(
+                    update.address,
+                    AccountInfo::new(balance, 0, code.hash_slow(), code),
+                    Some(update.slots.clone()),
+                    true,
+                );
+            } else {
+                warn!(%update.address, "force_update_accounts called with non-Creation update; ignoring");
             }
         }
         Ok(())
