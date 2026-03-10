@@ -31,7 +31,6 @@ cargo run --example use_serialized_state
 | PancakeSwap V2 | `PancakeswapV2State` |
 | Aerodrome Slipstreams | `AerodromeSlipstreamsState` |
 | Velodrome Slipstreams | `VelodromeSlipstreamsState` |
-| Lido | `LidoState` |
 | RocketPool | `RocketPoolState` |
 | ERC4626 Vaults | `ERC4626State` |
 | Fluid V1 | `FluidV1` |

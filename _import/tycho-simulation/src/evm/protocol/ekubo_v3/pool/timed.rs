@@ -42,7 +42,7 @@ pub fn finish_transition(
     deltas: &[TimeRateDelta],
     mut updated_attributes: HashMap<String, Bytes>,
     deleted_attributes: HashSet<String>,
-) -> Result<TimedTransition, TransitionError<String>> {
+) -> Result<TimedTransition, TransitionError> {
     let (rate_token0, rate_token1, new_last_time) = (
         updated_attributes
             .remove("rate_token0")

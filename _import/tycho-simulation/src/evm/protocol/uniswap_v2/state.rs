@@ -101,7 +101,7 @@ impl ProtocolSim for UniswapV2State {
         delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         let (reserve0_mut, reserve1_mut) = (&mut self.reserve0, &mut self.reserve1);
         cpmm_delta_transition(delta, reserve0_mut, reserve1_mut)
     }

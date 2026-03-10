@@ -204,7 +204,7 @@ impl EkuboPool for TwammPool {
         &mut self,
         updated_attributes: HashMap<String, Bytes>,
         deleted_attributes: HashSet<String>,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         let TimedTransition {
             rate_token0,
             rate_token1,

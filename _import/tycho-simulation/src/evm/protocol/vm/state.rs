@@ -711,7 +711,7 @@ where
         delta: ProtocolStateDelta,
         tokens: &HashMap<Bytes, Token>,
         balances: &Balances,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         if self.manual_updates {
             // Directly check for "update_marker" in `updated_attributes`
             if let Some(marker) = delta
@@ -728,6 +728,13 @@ where
         }
 
         Ok(())
+    }
+
+    fn query_pool_swap(
+        &self,
+        params: &tycho_common::simulation::protocol_sim::QueryPoolSwapParams,
+    ) -> Result<tycho_common::simulation::protocol_sim::PoolSwap, SimulationError> {
+        crate::evm::query_pool_swap::query_pool_swap(self, params)
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {

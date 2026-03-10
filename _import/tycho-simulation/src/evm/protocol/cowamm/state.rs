@@ -768,7 +768,7 @@ impl ProtocolSim for CowAMMState {
         delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         // liquidity_a, liquidity_b and lp_token_supply are considered required attributes and are
         // expected in every delta we process
         let liquidity_a = U256::from_be_slice(
@@ -797,6 +797,13 @@ impl ProtocolSim for CowAMMState {
         self.lp_token_supply = lp_token_supply;
 
         Ok(())
+    }
+
+    fn query_pool_swap(
+        &self,
+        params: &tycho_common::simulation::protocol_sim::QueryPoolSwapParams,
+    ) -> Result<tycho_common::simulation::protocol_sim::PoolSwap, SimulationError> {
+        crate::evm::query_pool_swap::query_pool_swap(self, params)
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {

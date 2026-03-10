@@ -143,7 +143,7 @@ impl HookHandler for AngstromHookHandler {
         delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         // Handle fee updates
         if let Some(unlocked_fee) = delta
             .updated_attributes

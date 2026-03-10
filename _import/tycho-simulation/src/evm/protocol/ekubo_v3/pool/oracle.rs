@@ -127,7 +127,7 @@ impl EkuboPool for OraclePool {
         &mut self,
         _updated_attributes: HashMap<String, Bytes>,
         _deleted_attributes: HashSet<String>,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         self.swap_state.swapped_this_block = false;
 
         Ok(())

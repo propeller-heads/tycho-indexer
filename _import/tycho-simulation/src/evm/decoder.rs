@@ -1012,7 +1012,7 @@ mock! {
             delta: ProtocolStateDelta,
             tokens: &HashMap<Bytes, Token>,
             balances: &Balances,
-        ) -> Result<(), TransitionError<String>>;
+        ) -> Result<(), TransitionError>;
         pub fn clone_box(&self) -> Box<dyn ProtocolSim>;
         pub fn eq(&self, other: &dyn ProtocolSim) -> bool;
     }
@@ -1053,7 +1053,7 @@ impl ProtocolSim for MockProtocolSim {
         delta: ProtocolStateDelta,
         tokens: &HashMap<Bytes, Token>,
         balances: &Balances,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         self.delta_transition(delta, tokens, balances)
     }
 

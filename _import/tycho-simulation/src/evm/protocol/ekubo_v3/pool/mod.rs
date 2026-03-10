@@ -39,7 +39,7 @@ pub trait EkuboPool {
         &mut self,
         updated_attributes: HashMap<String, Bytes>,
         deleted_attributes: HashSet<String>,
-    ) -> Result<(), TransitionError<String>>;
+    ) -> Result<(), TransitionError>;
 
     fn quote(
         &self,

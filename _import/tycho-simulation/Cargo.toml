@@ -1,5 +1,5 @@
 [workspace.package]
-version = "0.243.0"
+version = "0.248.1"
 
 [package]
 name = "tycho-simulation"
@@ -13,6 +13,7 @@ keywords = ["propellerheads", "solver", "defi", "dex", "mev"]
 license = "MIT"
 categories = ["finance", "cryptography::cryptocurrencies"]
 readme = "README.md"
+rust-version = "1.91.0"
 
 [workspace]
 members = ["tycho-integration-test", "tycho-test", "tycho_simulation_py"]
@@ -42,10 +43,10 @@ hex = "0.4.3"
 async-trait = "0.1.88"
 
 # Tycho dependencies
-tycho-client = ">=0.143.0"
-tycho-common = ">=0.143.0"
-tycho-ethereum = ">=0.143.0"
-tycho-execution = ">=0.160.0"
+tycho-client = ">=0.144.0"
+tycho-common = ">=0.144.0"
+tycho-ethereum = ">=0.144.0"
+tycho-execution = ">=0.165.0"
 
 # EVM dependencies
 # Alloy's dyn-abi 1.4.0 has a security vulnerability, so we require at least 1.4.1

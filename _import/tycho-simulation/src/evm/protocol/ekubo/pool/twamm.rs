@@ -206,7 +206,7 @@ impl EkuboPool for TwammPool {
         &mut self,
         updated_attributes: HashMap<String, Bytes>,
         deleted_attributes: HashSet<String>,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         if let Some(token0_sale_rate) = updated_attributes.get("token0_sale_rate") {
             self.state.token0_sale_rate = token0_sale_rate.clone().into();
         }

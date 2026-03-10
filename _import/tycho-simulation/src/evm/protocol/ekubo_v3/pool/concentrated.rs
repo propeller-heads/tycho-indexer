@@ -115,7 +115,7 @@ impl EkuboPool for ConcentratedPool {
         &mut self,
         updated_attributes: HashMap<String, Bytes>,
         deleted_attributes: HashSet<String>,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         let updated_ticks = finish_transition(
             &mut self.swap_state.active_tick,
             &mut self.swap_state.sdk_state,
@@ -243,7 +243,7 @@ pub(super) fn finish_transition(
     ticks: &[Tick],
     updated_attributes: &HashMap<String, Bytes>,
     deleted_attributes: &HashSet<String>,
-) -> Result<Option<Vec<Tick>>, TransitionError<String>> {
+) -> Result<Option<Vec<Tick>>, TransitionError> {
     let active_tick_update = updated_attributes
         .get("tick")
         .and_then(|updated_tick| {

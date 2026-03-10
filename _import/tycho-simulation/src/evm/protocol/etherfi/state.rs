@@ -365,7 +365,7 @@ impl ProtocolSim for EtherfiState {
         delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         if let Some(block_timestamp) = delta
             .updated_attributes
             .get("block_timestamp")
@@ -443,6 +443,13 @@ impl ProtocolSim for EtherfiState {
         }
 
         Ok(())
+    }
+
+    fn query_pool_swap(
+        &self,
+        params: &tycho_common::simulation::protocol_sim::QueryPoolSwapParams,
+    ) -> Result<tycho_common::simulation::protocol_sim::PoolSwap, SimulationError> {
+        crate::evm::query_pool_swap::query_pool_swap(self, params)
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {

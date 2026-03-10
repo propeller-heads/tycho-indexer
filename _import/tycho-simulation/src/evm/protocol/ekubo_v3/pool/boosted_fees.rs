@@ -162,7 +162,7 @@ impl EkuboPool for BoostedFeesPool {
         &mut self,
         updated_attributes: HashMap<String, Bytes>,
         deleted_attributes: HashSet<String>,
-    ) -> Result<(), TransitionError<String>> {
+    ) -> Result<(), TransitionError> {
         let ticks = concentrated::finish_transition(
             &mut self.swap_state.active_tick,
             &mut self
