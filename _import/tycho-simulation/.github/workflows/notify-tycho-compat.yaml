@@ -1,0 +1,37 @@
+# ---------------------------------------------------------------------------
+# Template: copy this file into .github/workflows/ of any Tycho crate repo
+# and fill in the two placeholder values marked with <EDIT>.
+#
+# This workflow fires after a GitHub Release is published, then dispatches
+# the compatibility-check workflow in propeller-heads/tycho so the meta-crate
+# is kept in sync automatically.
+#
+# Required repository secret: TYCHO_COMPAT_TOKEN
+#   A fine-grained PAT or GitHub App token with:
+#     - Actions: write  (to trigger workflow_dispatch on propeller-heads/tycho)
+#     - Pull requests: write  (so the receiving workflow can open a PR)
+# ---------------------------------------------------------------------------
+
+name: Notify Tycho Compat
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    name: Trigger compatibility check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch compatibility-check workflow
+        env:
+          GH_TOKEN: ${{ secrets.TYCHO_COMPAT_TOKEN }}
+        run: |
+          gh workflow run compatibility-check.yaml \
+            --repo propeller-heads/tycho \
+            --field crate=tycho-simulation \
+            --field version="${{ github.event.release.tag_name }}" \
+            --field release_url="${{ github.event.release.html_url }}"
