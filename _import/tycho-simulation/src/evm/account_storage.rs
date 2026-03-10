@@ -74,7 +74,46 @@ impl AccountStorage {
                 if mocked { "mocked" } else { "non-mocked" },
                 address
             );
+        } else {
+            debug!("Skipped init for already-existing account {:x?}", address);
         }
+    }
+
+    /// Inserts account data into the current instance, replacing any existing entry.
+    ///
+    /// # Arguments
+    ///
+    /// * `address` - The address of the account to insert.
+    /// * `info` - The account information to insert.
+    /// * `permanent_storage` - Optional storage information associated with the account.
+    /// * `mocked` - Whether this account should be considered mocked.
+    ///
+    /// # Notes
+    ///
+    /// Unlike `init_account`, this function always replaces the account at the given address,
+    /// even if one already exists. Use this for `ChangeType::Creation` updates where the latest
+    /// snapshot data must win over any previously inserted placeholder.
+    pub fn overwrite_account(
+        &mut self,
+        address: Address,
+        info: AccountInfo,
+        permanent_storage: Option<HashMap<U256, U256>>,
+        mocked: bool,
+    ) {
+        self.accounts.insert(
+            address,
+            Account {
+                info,
+                permanent_storage: permanent_storage.unwrap_or_default(),
+                temp_storage: HashMap::new(),
+                mocked,
+            },
+        );
+        debug!(
+            "Overwrote a {} account {:x?}",
+            if mocked { "mocked" } else { "non-mocked" },
+            address
+        );
     }
 
     /// Updates the account information and storage associated with the given address.

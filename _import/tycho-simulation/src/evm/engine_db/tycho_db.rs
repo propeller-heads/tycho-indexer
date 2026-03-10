@@ -125,8 +125,11 @@ impl PreCachedDB {
                     // If the balance is not present, we set it to zero.
                     let balance = update.balance.unwrap_or(U256::ZERO);
 
-                    // Initialize the account.
-                    write_guard.accounts.init_account(
+                    // Overwrite the account unconditionally. A Creation update carries the
+                    // latest snapshot data and must always win over any previously inserted
+                    // placeholder (e.g. an empty ERC-20 proxy written by a non-VM protocol's
+                    // snapshot loop before the real contract storage arrived via vm_storage).
+                    write_guard.accounts.overwrite_account(
                         update.address,
                         AccountInfo::new(balance, 0, code.hash_slow(), code),
                         Some(update.slots.clone()),
