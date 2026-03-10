@@ -19,6 +19,11 @@ use tycho_simulation::rfq::{
         hashflow::{
             client::HashflowClient, client_builder::HashflowClientBuilder, state::HashflowState,
         },
+        liquorice::{
+            client::LiquoriceClient,
+            client_builder::LiquoriceClientBuilder,
+            state::LiquoriceState,
+        },
     },
     stream::RFQStreamBuilder,
 };
@@ -29,6 +34,7 @@ use crate::stream_processor::{StreamUpdate, UpdateType};
 pub enum RFQProtocol {
     Bebop,
     Hashflow,
+    Liquorice,
 }
 
 impl Display for RFQProtocol {
@@ -36,6 +42,7 @@ impl Display for RFQProtocol {
         match self {
             RFQProtocol::Bebop => write!(f, "{}", BebopClient::PROTOCOL_SYSTEM),
             RFQProtocol::Hashflow => write!(f, "{}", HashflowClient::PROTOCOL_SYSTEM),
+            RFQProtocol::Liquorice => write!(f, "{}", LiquoriceClient::PROTOCOL_SYSTEM),
         }
     }
 }
@@ -72,8 +79,17 @@ impl RFQStreamProcessor {
         } else {
             info!("Hashflow RFQ credentials not found. Expected environment variables: HASHFLOW_USER, HASHFLOW_KEY");
         }
+        let (liquorice_user, liquorice_key) =
+            (env::var("LIQUORICE_USER").ok(), env::var("LIQUORICE_KEY").ok());
+        if let (Some(user), Some(key)) = (liquorice_user, liquorice_key) {
+            info!("Liquorice RFQ credentials found");
+            rfq_credentials.insert(RFQProtocol::Liquorice, (user, key));
+        } else {
+            info!("Liquorice RFQ credentials not found. Expected environment variables: LIQUORICE_USER, LIQUORICE_KEY");
+        }
+
         if rfq_credentials.is_empty() {
-            return Err(miette!("No RFQ credentials found. Please set BEBOP_USER and BEBOP_KEY or HASHFLOW_USER and HASHFLOW_KEY environment variables"));
+            return Err(miette!("No RFQ credentials found. Please set BEBOP_USER and BEBOP_KEY, HASHFLOW_USER and HASHFLOW_KEY, or LIQUORICE_USER and LIQUORICE_KEY environment variables"));
         }
         Ok(Self { chain, tvl_threshold, rfq_credentials, sample_size, skip_messages_duration })
     }
@@ -114,6 +130,18 @@ impl RFQStreamProcessor {
                             .wrap_err("Failed to create Hashflow RFQ client")?;
                     rfq_stream_builder = rfq_stream_builder
                         .add_client::<HashflowState>("hashflow", Box::new(hashflow_client))
+                }
+                RFQProtocol::Liquorice => {
+                    let liquorice_client =
+                        LiquoriceClientBuilder::new(self.chain, user.clone(), key.clone())
+                            .tokens(rfq_tokens.clone())
+                            .tvl_threshold(self.tvl_threshold)
+                            .poll_time(Duration::from_secs(30))
+                            .build()
+                            .into_diagnostic()
+                            .wrap_err("Failed to create Liquorice RFQ client")?;
+                    rfq_stream_builder = rfq_stream_builder
+                        .add_client::<LiquoriceState>("liquorice", Box::new(liquorice_client))
                 }
             }
         }
