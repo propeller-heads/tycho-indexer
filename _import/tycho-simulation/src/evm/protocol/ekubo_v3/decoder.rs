@@ -31,8 +31,13 @@ use super::{
     state::EkuboV3State,
 };
 use crate::{
-    evm::protocol::ekubo_v3::pool::{
-        boosted_fees::BoostedFeesPool, mev_capture::MevCapturePool, stableswap::StableswapPool,
+    evm::protocol::ekubo_v3::{
+        addresses::{
+            BOOSTED_FEES_CONCENTRATED_ADDRESS, MEV_CAPTURE_ADDRESS, ORACLE_ADDRESS, TWAMM_ADDRESS,
+        },
+        pool::{
+            boosted_fees::BoostedFeesPool, mev_capture::MevCapturePool, stableswap::StableswapPool,
+        },
     },
     protocol::{
         errors::InvalidSnapshotError,
@@ -40,38 +45,11 @@ use crate::{
     },
 };
 
-enum ExtensionType {
-    NoSwapCallPoints,
-    Oracle,
-    Twamm,
-    MevCapture,
-    BoostedFeesConcentrated,
-}
-
 struct TimedStateDetails {
     rate_token0: u128,
     rate_token1: u128,
     last_time: u64,
     rate_deltas: Vec<TimeRateDelta>,
-}
-
-impl TryFrom<Bytes> for ExtensionType {
-    type Error = InvalidSnapshotError;
-
-    fn try_from(value: Bytes) -> Result<Self, Self::Error> {
-        // See extension ID encoding in tycho-protocol-sdk
-        match i32::from(value) {
-            0 => Err(InvalidSnapshotError::ValueError("Unknown Ekubo extension".to_string())),
-            1 => Ok(Self::NoSwapCallPoints),
-            2 => Ok(Self::Oracle),
-            3 => Ok(Self::Twamm),
-            4 => Ok(Self::MevCapture),
-            5 => Ok(Self::BoostedFeesConcentrated),
-            discriminant => Err(InvalidSnapshotError::ValueError(format!(
-                "Unknown Ekubo extension type discriminant {discriminant}"
-            ))),
-        }
-    }
 }
 
 impl TryFromWithBlock<ComponentWithState, BlockHeader> for EkuboV3State {
@@ -86,10 +64,6 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EkuboV3State {
     ) -> Result<Self, Self::Error> {
         let static_attrs = snapshot.component.static_attributes;
         let state_attrs = snapshot.state.attributes;
-
-        let extension_type = attribute(&static_attrs, "extension_type")?
-            .clone()
-            .try_into()?;
 
         let (token0, token1) = (
             parse_address(attribute(&static_attrs, "token0")?, "token0")?,
@@ -162,8 +136,8 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EkuboV3State {
             ))
         };
 
-        Ok(match extension_type {
-            ExtensionType::NoSwapCallPoints => match pool_type_config {
+        Ok(if has_no_swap_call_points(extension) {
+            match pool_type_config {
                 EvmPoolTypeConfig::FullRange(pool_type_config) => {
                     Self::FullRange(FullRangePool::new(
                         FullRangePoolKey {
@@ -190,8 +164,9 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EkuboV3State {
 
                     Self::Concentrated(ConcentratedPool::new(key, state, tick, ticks)?)
                 }
-            },
-            ExtensionType::Oracle => Self::Oracle(OraclePool::new(
+            }
+        } else if extension == ORACLE_ADDRESS {
+            Self::Oracle(OraclePool::new(
                 EvmOraclePoolKey {
                     token0,
                     token1,
@@ -202,74 +177,75 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EkuboV3State {
                     },
                 },
                 EvmFullRangePoolState { sqrt_ratio, liquidity },
-            )?),
-            ExtensionType::Twamm => {
-                let TimedStateDetails {
-                    rate_token0: token0_sale_rate,
-                    rate_token1: token1_sale_rate,
-                    last_time: last_execution_time,
-                    rate_deltas: virtual_order_deltas,
-                } = timed_state_details(state_attrs)?;
+            )?)
+        } else if extension == TWAMM_ADDRESS {
+            let TimedStateDetails {
+                rate_token0: token0_sale_rate,
+                rate_token1: token1_sale_rate,
+                last_time: last_execution_time,
+                rate_deltas: virtual_order_deltas,
+            } = timed_state_details(state_attrs)?;
 
-                Self::Twamm(TwammPool::new(
-                    EvmTwammPoolKey {
-                        token0,
-                        token1,
-                        config: PoolConfig {
-                            extension,
-                            fee,
-                            pool_type_config: FullRangePoolTypeConfig,
-                        },
+            Self::Twamm(TwammPool::new(
+                EvmTwammPoolKey {
+                    token0,
+                    token1,
+                    config: PoolConfig {
+                        extension,
+                        fee,
+                        pool_type_config: FullRangePoolTypeConfig,
                     },
-                    TwammPoolState {
-                        full_range_pool_state: FullRangePoolState { sqrt_ratio, liquidity },
-                        token0_sale_rate,
-                        token1_sale_rate,
-                        last_execution_time,
-                    },
-                    virtual_order_deltas,
-                )?)
-            }
-            ExtensionType::MevCapture => {
-                let EvmPoolTypeConfig::Concentrated(pool_type_config) = pool_type_config else {
-                    return Err(InvalidSnapshotError::ValueError(
-                        "expected concentrated pool type config for MEVCapture pool".to_string(),
-                    ));
-                };
+                },
+                TwammPoolState {
+                    full_range_pool_state: FullRangePoolState { sqrt_ratio, liquidity },
+                    token0_sale_rate,
+                    token1_sale_rate,
+                    last_execution_time,
+                },
+                virtual_order_deltas,
+            )?)
+        } else if extension == MEV_CAPTURE_ADDRESS {
+            let EvmPoolTypeConfig::Concentrated(pool_type_config) = pool_type_config else {
+                return Err(InvalidSnapshotError::ValueError(
+                    "expected concentrated pool type config for MEVCapture pool".to_string(),
+                ));
+            };
 
-                let (key, concentrated_state, tick, ticks) =
-                    concentrated_pool(&state_attrs, pool_type_config)?;
+            let (key, concentrated_state, tick, ticks) =
+                concentrated_pool(&state_attrs, pool_type_config)?;
 
-                Self::MevCapture(MevCapturePool::new(key, tick, concentrated_state, ticks)?)
-            }
-            ExtensionType::BoostedFeesConcentrated => {
-                let EvmPoolTypeConfig::Concentrated(pool_type_config) = pool_type_config else {
-                    return Err(InvalidSnapshotError::ValueError(
-                        "expected concentrated pool type config for BoostedFees pool".to_string(),
-                    ));
-                };
+            Self::MevCapture(MevCapturePool::new(key, tick, concentrated_state, ticks)?)
+        } else if extension == BOOSTED_FEES_CONCENTRATED_ADDRESS {
+            let EvmPoolTypeConfig::Concentrated(pool_type_config) = pool_type_config else {
+                return Err(InvalidSnapshotError::ValueError(
+                    "expected concentrated pool type config for BoostedFees pool".to_string(),
+                ));
+            };
 
-                let (key, concentrated_pool_state, tick, ticks) =
-                    concentrated_pool(&state_attrs, pool_type_config)?;
+            let (key, concentrated_pool_state, tick, ticks) =
+                concentrated_pool(&state_attrs, pool_type_config)?;
 
-                let TimedStateDetails {
-                    rate_token0: donate_rate0,
-                    rate_token1: donate_rate1,
-                    last_time: last_donate_time,
-                    rate_deltas: donate_rate_deltas,
-                } = timed_state_details(state_attrs)?;
+            let TimedStateDetails {
+                rate_token0: donate_rate0,
+                rate_token1: donate_rate1,
+                last_time: last_donate_time,
+                rate_deltas: donate_rate_deltas,
+            } = timed_state_details(state_attrs)?;
 
-                Self::BoostedFees(BoostedFeesPool::new(
-                    key,
-                    concentrated_pool_state,
-                    donate_rate0,
-                    donate_rate1,
-                    last_donate_time,
-                    donate_rate_deltas,
-                    ticks,
-                    tick,
-                )?)
-            }
+            Self::BoostedFees(BoostedFeesPool::new(
+                key,
+                concentrated_pool_state,
+                donate_rate0,
+                donate_rate1,
+                last_donate_time,
+                donate_rate_deltas,
+                ticks,
+                tick,
+            )?)
+        } else {
+            return Err(InvalidSnapshotError::ValueError(format!(
+                "unsupported extension {extension:x}"
+            )))
         })
     }
 }
@@ -312,6 +288,12 @@ fn timed_state_details(
         .sorted_unstable_by_key(|delta| delta.time)
         .collect(),
     })
+}
+
+fn has_no_swap_call_points(extension: Address) -> bool {
+    // Call points are encoded in the first byte of the extension address.
+    // Bit 6 == beforeSwap, bit 5 == afterSwap.
+    extension[0] & 0b0110_0000 == 0
 }
 
 #[cfg(test)]

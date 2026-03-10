@@ -33,14 +33,20 @@ use tycho_common::{
 };
 
 use super::{pool::concentrated::ConcentratedPool, state::EkuboV3State};
-use crate::evm::protocol::ekubo_v3::pool::{
-    boosted_fees::BoostedFeesPool, full_range::FullRangePool, mev_capture::MevCapturePool,
-    oracle::OraclePool, stableswap::StableswapPool, twamm::TwammPool, EkuboPool as _,
+use crate::evm::protocol::ekubo_v3::{
+    addresses::{
+        BOOSTED_FEES_CONCENTRATED_ADDRESS, MEV_CAPTURE_ADDRESS, ORACLE_ADDRESS, TWAMM_ADDRESS,
+    },
+    pool::{
+        boosted_fees::BoostedFeesPool, full_range::FullRangePool, mev_capture::MevCapturePool,
+        oracle::OraclePool, stableswap::StableswapPool, twamm::TwammPool, EkuboPool as _,
+    },
 };
+
+pub const TEST_TIMESTAMP: u64 = 1_000;
 
 const TOKEN0: Address = Address::ZERO;
 const TOKEN1: Address = address!("0x0000000000000000000000000000000000000001");
-const NON_ZERO_ADDRESS: Address = address!("0x0000000000000000000000000000000000000002");
 
 pub struct TestCase {
     pub component: ProtocolComponent,
@@ -114,7 +120,6 @@ pub fn concentrated() -> TestCase {
 
     TestCase {
         component: component([
-            ("extension_type".to_string(), 1_i32.to_be_bytes().into()), // Concentrated pool
             ("token0".to_string(), POOL_KEY.token0.into_array().into()),
             ("token1".to_string(), POOL_KEY.token1.into_array().into()),
             ("fee".to_string(), POOL_KEY.config.fee.into()),
@@ -160,7 +165,6 @@ pub fn concentrated() -> TestCase {
             .unwrap(),
         ),
         required_attributes: [
-            "extension_type".to_string(),
             "token0".to_string(),
             "token1".to_string(),
             "fee".to_string(),
@@ -222,7 +226,6 @@ pub fn full_range() -> TestCase {
 
     TestCase {
         component: component([
-            ("extension_type".to_string(), 1_i32.to_be_bytes().into()), // Base pool
             ("token0".to_string(), POOL_KEY.token0.into_array().into()),
             ("token1".to_string(), POOL_KEY.token1.into_array().into()),
             ("fee".to_string(), POOL_KEY.config.fee.into()),
@@ -256,7 +259,6 @@ pub fn full_range() -> TestCase {
             .unwrap(),
         ),
         required_attributes: [
-            "extension_type".to_string(),
             "token0".to_string(),
             "token1".to_string(),
             "fee".to_string(),
@@ -303,7 +305,6 @@ pub fn stableswap() -> TestCase {
 
     TestCase {
         component: component([
-            ("extension_type".to_string(), 1_i32.to_be_bytes().into()), // Base pool
             ("token0".to_string(), POOL_KEY.token0.into_array().into()),
             ("token1".to_string(), POOL_KEY.token1.into_array().into()),
             ("fee".to_string(), POOL_KEY.config.fee.into()),
@@ -337,7 +338,6 @@ pub fn stableswap() -> TestCase {
             .unwrap(),
         ),
         required_attributes: [
-            "extension_type".to_string(),
             "token0".to_string(),
             "token1".to_string(),
             "fee".to_string(),
@@ -371,7 +371,7 @@ pub fn oracle() -> TestCase {
         config: EvmOraclePoolConfig {
             fee: 0,
             pool_type_config: FullRangePoolTypeConfig,
-            extension: NON_ZERO_ADDRESS,
+            extension: ORACLE_ADDRESS,
         },
     };
 
@@ -380,7 +380,6 @@ pub fn oracle() -> TestCase {
 
     TestCase {
         component: component([
-            ("extension_type".to_string(), 2_i32.to_be_bytes().into()), // Oracle pool
             ("token0".to_string(), POOL_KEY.token0.into_array().into()),
             ("token1".to_string(), POOL_KEY.token1.into_array().into()),
             ("fee".to_string(), POOL_KEY.config.fee.into()),
@@ -414,7 +413,6 @@ pub fn oracle() -> TestCase {
             .unwrap(),
         ),
         required_attributes: [
-            "extension_type".to_string(),
             "token0".to_string(),
             "token1".to_string(),
             "fee".to_string(),
@@ -444,8 +442,6 @@ pub fn oracle() -> TestCase {
     }
 }
 
-pub const TEST_TIMESTAMP: u64 = 1_000;
-
 pub fn twamm() -> TestCase {
     const POOL_KEY: EvmTwammPoolKey = EvmTwammPoolKey {
         token0: TOKEN0,
@@ -453,7 +449,7 @@ pub fn twamm() -> TestCase {
         config: EvmTwammPoolConfig {
             fee: 0,
             pool_type_config: FullRangePoolTypeConfig,
-            extension: NON_ZERO_ADDRESS,
+            extension: TWAMM_ADDRESS,
         },
     };
 
@@ -469,7 +465,6 @@ pub fn twamm() -> TestCase {
 
     TestCase {
         component: component([
-            ("extension_type".to_string(), 3_i32.to_be_bytes().into()), // TWAMM pool
             ("token0".to_string(), POOL_KEY.token0.into_array().into()),
             ("token1".to_string(), POOL_KEY.token1.into_array().into()),
             ("fee".to_string(), POOL_KEY.config.fee.into()),
@@ -548,7 +543,6 @@ pub fn twamm() -> TestCase {
             .unwrap(),
         ),
         required_attributes: [
-            "extension_type".to_string(),
             "token0".to_string(),
             "token1".to_string(),
             "fee".to_string(),
@@ -650,7 +644,7 @@ pub fn boosted_fees() -> TestCase {
         config: EvmConcentratedPoolConfig {
             fee: u64::MAX / 10,
             pool_type_config: TickSpacing(10),
-            extension: NON_ZERO_ADDRESS,
+            extension: BOOSTED_FEES_CONCENTRATED_ADDRESS,
         },
     };
 
@@ -672,7 +666,6 @@ pub fn boosted_fees() -> TestCase {
 
     TestCase {
         component: component([
-            ("extension_type".to_string(), 5_i32.to_be_bytes().into()), // BoostedFees pool
             ("token0".to_string(), POOL_KEY.token0.into_array().into()),
             ("token1".to_string(), POOL_KEY.token1.into_array().into()),
             ("fee".to_string(), POOL_KEY.config.fee.into()),
@@ -753,7 +746,6 @@ pub fn boosted_fees() -> TestCase {
             .unwrap(),
         ),
         required_attributes: [
-            "extension_type".to_string(),
             "token0".to_string(),
             "token1".to_string(),
             "fee".to_string(),
@@ -871,7 +863,7 @@ pub fn mev_capture() -> TestCase {
         config: EvmMevCapturePoolConfig {
             fee: u64::MAX / 10,
             pool_type_config: TickSpacing(10),
-            extension: NON_ZERO_ADDRESS,
+            extension: MEV_CAPTURE_ADDRESS,
         },
     };
 
@@ -885,7 +877,6 @@ pub fn mev_capture() -> TestCase {
 
     TestCase {
         component: component([
-            ("extension_type".to_string(), 4_i32.to_be_bytes().into()), // MEVCapture pool
             ("token0".to_string(), POOL_KEY.token0.into_array().into()),
             ("token1".to_string(), POOL_KEY.token1.into_array().into()),
             ("fee".to_string(), POOL_KEY.config.fee.into()),
@@ -931,7 +922,6 @@ pub fn mev_capture() -> TestCase {
             .unwrap(),
         ),
         required_attributes: [
-            "extension_type".to_string(),
             "token0".to_string(),
             "token1".to_string(),
             "fee".to_string(),

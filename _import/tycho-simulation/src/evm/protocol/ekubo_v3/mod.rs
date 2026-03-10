@@ -1,3 +1,4 @@
+mod addresses;
 mod attributes;
 mod decoder;
 mod pool;
